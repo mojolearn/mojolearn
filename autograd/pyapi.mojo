@@ -72,14 +72,17 @@ def model_predict_py[E: Exec](
     mut ex: E, addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject,
 ) raises -> PythonObject:
     """addrs = [X (N, D), params, out (N, out)]; ptab = one float per layer;
-    ip = [N, chunk, transform (0 none, 1 softmax, 2 sigmoid)]. Returns the
-    number of values written."""
+    ip = [N, chunk, transform (0 none, 1 softmax, 2 sigmoid, 3 the (N, 2)
+    [1 - p, p] of a one-output sigmoid)]. Returns the number of values
+    written."""
     if len(addrs) != 3 or len(ip) != 3:
         raise Error("model_predict: requires 3 addresses and 3 integer parameters")
     var spec = parse_model(_ints(prog), _floats(ptab, 0))
     var N = ival(ip, 0)
     model_predict(ex, spec, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"),
                   ival(ip, 1), ival(ip, 2))
+    if ival(ip, 2) == 3:
+        return PythonObject(N * 2)
     return PythonObject(N * spec.out_features())
 
 

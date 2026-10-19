@@ -12,7 +12,7 @@ and AMD. Host loops run over layers, batches and epochs only.
 from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
 from sequence.ops import (
-    FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_SEQ_IOTA,
+    FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
     OPT_ADAM, OPT_ADAMW, OPT_SGD,
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
@@ -50,6 +50,7 @@ comptime LOSS_HUBER = 3
 
 comptime TARGET_DENSE = 0        # Y is (N, out) float32
 comptime TARGET_CODES = 1        # Y is N int32 class codes; one-hot built on the executor
+comptime TARGET_CODE_VALUES = 2  # Y is N int32 codes; the (N, 1) target is the codes as floats
 
 comptime SCHED_CONSTANT = 0
 comptime SCHED_STEP = 1          # lr * gamma^(epoch // step)
@@ -58,6 +59,7 @@ comptime SCHED_EXPONENTIAL = 2   # lr * gamma^epoch
 comptime OUT_RAW = 0
 comptime OUT_SOFTMAX = 1
 comptime OUT_SIGMOID = 2
+comptime OUT_PROBA2 = 3          # one output: sigmoid p, written as the (N, 2) [1 - p, p]
 
 # Row indices travel as float32 words (the shuffle and the gather), exact
 # below 2^24; the parameter counter of the initialisation is an Int32 slot.
@@ -217,10 +219,12 @@ def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
         raise Error("model fit: the number of samples must be between 1 and 2^24 - 1")
     if cfg.loss < LOSS_MSE or cfg.loss > LOSS_HUBER:
         raise Error("model fit: unknown loss code " + String(cfg.loss))
-    if cfg.target != TARGET_DENSE and cfg.target != TARGET_CODES:
+    if cfg.target < TARGET_DENSE or cfg.target > TARGET_CODE_VALUES:
         raise Error("model fit: unknown target code " + String(cfg.target))
     if cfg.target == TARGET_CODES and cfg.loss != LOSS_CROSS_ENTROPY:
         raise Error("model fit: class-code targets need the cross_entropy loss")
+    if cfg.target == TARGET_CODE_VALUES and O != 1:
+        raise Error("model fit: code-value targets need a model with one output")
     if cfg.loss == LOSS_CROSS_ENTROPY and O < 2:
         raise Error("model fit: cross_entropy needs at least two outputs")
     if (cfg.loss == LOSS_CROSS_ENTROPY or cfg.loss == LOSS_BCE_WITH_LOGITS) and (
@@ -406,7 +410,8 @@ def model_fit[E: Exec](
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
 
     Y is (N, out) float32 for TARGET_DENSE, or N int32 class codes (their
-    bits in float32 words) for TARGET_CODES. Pio holds the starting
+    bits in float32 words) for TARGET_CODES (one-hot target) and
+    TARGET_CODE_VALUES (the codes as the (N, 1) float target). Pio holds the starting
     parameters when cfg.init is False and receives the trained ones;
     curve[0:epochs run] receives each epoch's mean loss (the batch losses
     weighted by their row counts, a blocked fold, divided by N).
@@ -427,14 +432,15 @@ def model_fit[E: Exec](
     var dX = ex.alloc(N * D)
     ex.upload(dX, X, N * D)
     var dY = ex.alloc(N * O)
-    if cfg.target == TARGET_CODES:
+    if cfg.target == TARGET_CODES or cfg.target == TARGET_CODE_VALUES:
+        # the codes' int32 bits travel in float32 words (op_one_hot reads them)
         var dC = ex.alloc(N)
         ex.upload(dC, Y, N)
         var oh = Args()
         oh.p0 = dC
         oh.p1 = dY
         oh.i0 = O
-        oh.i1 = 0
+        oh.i1 = 1 if cfg.target == TARGET_CODE_VALUES else 0
         ex.launch[OP_ONE_HOT](oh, N * O)
     else:
         ex.upload(dY, Y, N * O)
@@ -527,12 +533,15 @@ def model_predict[E: Exec](
 ) raises:
     """dst (N, out) = the model's output on X (N, n_inputs), optionally
     through a row softmax (OUT_SOFTMAX) or an elementwise sigmoid
-    (OUT_SIGMOID). Dropout is the identity. Rows run in chunks of `chunk`
+    (OUT_SIGMOID); OUT_PROBA2 (one output) writes the (N, 2) [1 - p, p] of
+    the sigmoid p into dst instead. Dropout is the identity. Rows run in chunks of `chunk`
     so the tape's scratch stays bounded."""
     if N < 1 or N >= MODEL_MAX_ROWS or chunk < 1:
         raise Error("model predict: the number of samples must be between 1 and 2^24 - 1 and chunk >= 1")
-    if transform < OUT_RAW or transform > OUT_SIGMOID:
+    if transform < OUT_RAW or transform > OUT_PROBA2:
         raise Error("model predict: unknown output transform " + String(transform))
+    if transform == OUT_PROBA2 and spec.out_features() != 1:
+        raise Error("model predict: two-column probabilities need a model with one output")
     var D = spec.n_inputs
     var O = spec.out_features()
     var bs = chunk if chunk < N else N
@@ -552,12 +561,21 @@ def model_predict[E: Exec](
         var out = model_forward(tape, ex, spec, P, P, x, False, UInt64(0), 0)
         if transform == OUT_SOFTMAX:
             out = tape.softmax(ex, out)
-        elif transform == OUT_SIGMOID:
+        elif transform == OUT_SIGMOID or transform == OUT_PROBA2:
             out = tape.sigmoid(ex, out)
         _copy(ex, dout + b0 * O, tape.value(out), B * O)
         comptime if HAS_INFERENCE:
             tape.record()
         b0 += B
-    ex.sync()
-    ex.download(dst, dout, N * O)
+    if transform == OUT_PROBA2:
+        var two = ex.alloc(N * 2)
+        var q = Args()
+        q.p0 = dout
+        q.p1 = two
+        ex.launch[OP_PROBA2](q, N * 2)
+        ex.sync()
+        ex.download(dst, two, N * 2)
+    else:
+        ex.sync()
+        ex.download(dst, dout, N * O)
     tape.release(ex)
