@@ -545,16 +545,8 @@ struct Mamba1Rules(BackwardRules, Copyable, Movable):
     # MutAnyOrigin); the driver keeps the stack alive through the backward.
     var s: MutPointer[Mamba1TapeStack, MutUntrackedOrigin]
 
-    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        # Every rule here reads a zero-filled destination and accumulates into it.
-        return True
-
     def supports(self, tag: Int) -> Bool:
         return tag >= M1_NORM and tag <= M1_PROJ_OUT
-
-    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        # Every rule here reads a zero-filled destination and accumulates into it.
-        return True
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
@@ -881,16 +873,8 @@ struct Mamba2Rules(BackwardRules, Copyable, Movable):
     # MutAnyOrigin); the driver keeps the stack alive through the backward.
     var s: MutPointer[Mamba2TapeStack, MutUntrackedOrigin]
 
-    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        # Every rule here reads a zero-filled destination and accumulates into it.
-        return True
-
     def supports(self, tag: Int) -> Bool:
         return tag >= M2_NORM and tag <= M2_PROJ_OUT
-
-    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        # Every rule here reads a zero-filled destination and accumulates into it.
-        return True
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
