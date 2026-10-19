@@ -38,8 +38,9 @@ comptime HAS_INFERENCE = is_defined["MOJOLEARN_AUTOGRAD_HAS_INFERENCE"]()
 #   Linear(+bias)+activation, per layer: forward 1 (gemm_epi; + the row
 #     softmax for Softmax), backward 3 (dW, db, dX with the activation
 #     derivative of the layer below in its epilogue; 2 when the input needs
-#     no gradient); was forward 3, backward 7 (activation VJP, add VJP 1,
-#     bias fold 2, 2 GEMMs; 6 for the first layer).
+#     no gradient); was forward 3, backward 7 (activation VJP 1, add VJP
+#     1, bias VJP 3, 2 GEMMs; 6 for the first layer), and the unfused
+#     composition is now 6 (the bias fold reads the upstream directly).
 #   cross_entropy on codes: forward 3, backward 1; was the dense one-hot
 #     composition, forward 7, backward 5 (and a one-hot target of N x out
 #     floats where the codes take N).
