@@ -2,7 +2,7 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased
+## 0.8.54 (published 2026-10-20)
 
 - A native autograd engine: every operation records its gradient, and the backward pass runs on the GPU. In
   `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs, and models you build on the
@@ -15,7 +15,11 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - The engine's optimizers (SGD with momentum and Nesterov, Adam, AdamW), losses (squared, absolute, Huber, binary
   and multiclass cross-entropy), metrics (accuracy, log loss, ROC AUC) and data steps (seeded shuffling, batching
   and dropout) give the same results on every vendor.
-- The MLP, recurrent, transformer, Mamba and language-model trainers now train through the engine.
+- The MLP, recurrent, transformer, Mamba, Samba, convolutional and language-model trainers train through the engine;
+  it is their only backward pass. Their results are unchanged.
+- MLP training is faster on NVIDIA and AMD GPUs through a split-K matrix product and a fused loss block.
+- The VAR Cholesky solve returns the partial factor when a pivot is not positive, and the layer-norm statistics seam
+  check matches the kernel again.
 - New guide: Build your own model.
 
 ## 0.8.53 (published 2026-10-19)
