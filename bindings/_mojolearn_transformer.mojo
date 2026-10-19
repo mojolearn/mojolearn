@@ -1150,8 +1150,12 @@ def transformer_forward_tape_binding(addrs: PythonObject, params: PythonObject) 
     comptime if not IDN_SAMBA_FORWARD_TAPE:
         raise Error("transformer forward tape: IDENTICAL opt-in is disabled")
     var incoming = _read_addrs_tail(addrs, 11, String("transformer_forward_tape"))
-    if len(incoming) != 11:
-        raise Error("transformer forward tape: default options require 11 addresses")
+    # _read_addrs_tail always returns 11 + BLOCK_OPTION_ADDRS slots (zeros
+    # where no options tail was sent), so the old `len(incoming) != 11` test
+    # refused every call. Default options means the tail slots are all zero.
+    for i in range(11, len(incoming)):  # small-loop(incoming: the block options tail slots): validated tensor addresses, not data
+        if incoming[i] != 0:
+            raise Error("transformer forward tape: default options only (no block options tail)")
     var p = _read_params(params, 8, String("transformer_forward_tape"))
     if len(p) != 8:
         raise Error("transformer forward tape: expected 8 shape scalars")

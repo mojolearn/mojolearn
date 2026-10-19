@@ -93,7 +93,12 @@ def profile_report(prof: Bool, last: Bool, arm: String, counted: Bool) raises:
     var total = 0
     for i in range(len(p.ops)):  # driver-loop: over profiled operation codes
         total += p.op_launches[i]
-    print("LAUNCHES " + arm + " " + String(total))
+    # The Mamba tape issues no DeviceExec launch of its own (its rule copies
+    # are skipped when source and destination are the same buffer, which
+    # they are since the pass that matched the hand path's launches); every
+    # kernel it runs is a hand kernel enqueued on the context, which the
+    # profile does not count. 0 here is that, not a missed profile.
+    print("LAUNCHES " + arm + " " + String(total) + " (DeviceExec only; context-enqueued hand kernels not counted)")
 
 
 def main() raises:
