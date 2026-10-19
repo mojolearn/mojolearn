@@ -128,7 +128,7 @@ from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI, OP_GEMM_SPLITK, add, fm
 from autograd.ops import OP_AGK_GEMM_EPI
 from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_IDENTITY, ACT_RELU
 from sequence.mlp import ACT_LOGISTIC, ACT_TANH
-from sequence.gemm_split import SK_MAX_S, gemm_split_block, gemm_split_lanes, gemm_split_on, gemm_split_partial
+from sequence.gemm_split import SK_MAX_S, gemm_split_block, gemm_split_lanes, gemm_split_on, gemm_split_partial, gemm_split_shape
 
 comptime GT_V2 = not (
     is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -394,8 +394,15 @@ comptime GR_TILE = 1
 comptime GR_THIN_N = 2
 comptime GR_THIN_M = 3
 #: lane ag-pass6-gemm (PASS6_IDEAS idea A): the 64 x 64 block tile of 4 x 4
-#: register micro-tiles (seq_gemm_micro_kernel below)
+#: register micro-tiles (seq_gemm_micro_kernel below) and the 16 x 16 tile,
+#: as FORCED routes (gemm_launch_route; the GEMM check). seq_gemm_route
+#: itself returns GR_TILE for the whole tiled family, and gemm_launch_route
+#: resolves GR_TILE to the micro-tile or the 16 x 16 tile by
+#: seq_gemm_micro_on, so a caller that asks "is this product tiled?"
+#: (autograd/tape.mojo's pair rule: a tiled product keeps its own launch)
+#: reads the same answer for both kernels.
 comptime GR_MICRO = 4
+comptime GR_TILE16 = 5
 
 # ---------------------------------------------------------------- pass 6 (lane ag-pass6-gemm, 2026-10-19)
 # IDEA A, GT_MICRO (default on, IDENTICAL, same bits): products with both
@@ -423,6 +430,14 @@ comptime GT_MICRO = not (
     is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GT_MICRO_EDGE = 64
+
+
+@always_inline
+def seq_gemm_micro_on(M: Int, N: Int) -> Bool:
+    """GR_TILE runs the micro-tile (both edges >= GT_MICRO_EDGE)."""
+    comptime if not GT_MICRO:
+        return False
+    return M >= GT_MICRO_EDGE and N >= GT_MICRO_EDGE
 comptime GM_M = 64
 comptime GM_N = 64
 comptime GM_K = 32
@@ -482,10 +497,16 @@ def seq_gemm_route(M: Int, N: Int, K: Int, fused: Bool) -> Int:
         return GR_TILE if seq_gemm_tiled_on(M, N) else GR_CELL
     if K < GT_MIN_K:
         return GR_CELL
+    # lane ag-pass6-gemm: a product the split-K rule selects is never one
+    # thread a cell (DeviceExec._launch and HostExec take the split launch
+    # before asking this rule), so it reports GR_TILE: the tape's pair rule
+    # then keeps its own launch, and the split order, on every arm (hand,
+    # fused, composed: the same words). Only an epilogue opcode with a
+    # non-dense C, which no caller launches, would run the tile itself (on
+    # dead cells, the same words).
+    if gemm_split_shape(M, N, K):
+        return GR_TILE
     if M >= GT_MIN_EDGE and N >= GT_MIN_EDGE:
-        comptime if GT_MICRO:
-            if M >= GT_MICRO_EDGE and N >= GT_MICRO_EDGE:
-                return GR_MICRO
         return GR_TILE
     comptime if GEMM_ROUTE_P6:
         # the interim rule (pass 6, above): the cell count decides
@@ -549,6 +570,8 @@ def seq_gemm_tile_blocks(route: Int, M: Int, N: Int) -> Int:
     if route == GR_THIN_M:
         return M * ((N + GT_THIN - 1) // GT_THIN)
     if route == GR_MICRO:
+        return ((M + GM_M - 1) // GM_M) * ((N + GM_N - 1) // GM_N)
+    if route == GR_TILE and seq_gemm_micro_on(M, N):
         return ((M + GM_M - 1) // GM_M) * ((N + GM_N - 1) // GM_N)
     return seq_gemm_tiled_blocks(M, N)
 
@@ -906,18 +929,33 @@ def seq_gemm_micro_kernel[EK: Int](
 
 
 # ---------------------------------------------------------------- the split-K launch (lane ag-pass6-gemm, idea B)
+#: column-sum loads staged a round in the split launch's column blocks
+#: (op_colsum's COLSUM_STAGE pattern: the loads first, then the adds in order)
+comptime GS_CS_STAGE = 32
+
+
 @always_inline
-def seq_gemm_split_blocks(M: Int, N: Int, K: Int) -> Int:
-    """Blocks of seq_gemm_split_kernel: GT_TPB / lanes cells a block."""
+def seq_gemm_split_cell_blocks(M: Int, N: Int, K: Int) -> Int:
+    """The cell blocks of seq_gemm_split_kernel: GT_TPB / lanes cells a block."""
     var cpb = GT_TPB // gemm_split_lanes((K + gemm_split_block(K) - 1) // gemm_split_block(K))
     return (M * N + cpb - 1) // cpb
 
 
+@always_inline
+def seq_gemm_split_blocks(M: Int, N: Int, K: Int, colsum: Int) -> Int:
+    """Every block of seq_gemm_split_kernel: the cell blocks, then (colsum
+    != 0) one thread a column of B in GT_TPB-thread blocks."""
+    var nb = seq_gemm_split_cell_blocks(M, N, K)
+    if colsum != 0:
+        nb += (N + GT_TPB - 1) // GT_TPB
+    return nb
+
+
 def seq_gemm_split_kernel[EK: Int](
-    pa: FP, pb: FP, pc: FP, p3: FP,
+    pa: FP, pb: FP, pc: FP, p3: FP, p4: FP,
     m_rows: Int32, n_cols: Int32, k_len: Int32,
     sam: Int32, sak: Int32, sbk: Int32, sbn: Int32,
-    accumulate: Int32, ldc: Int32, epi_arg: Int32, f0: Float32, f1: Float32,
+    accumulate: Int32, ldc: Int32, epi_arg: Int32, colsum: Int32, f0: Float32, f1: Float32,
 ):
     """OP_GK_SPLIT on every GPU column (sequence/gemm_split.mojo, BIT
     VERSION): w = gemm_split_lanes(S) threads a cell, GT_TPB / w cells a
@@ -925,16 +963,41 @@ def seq_gemm_split_kernel[EK: Int](
     +0.0) into threadgroup memory; after the barrier the cell's thread 0
     adds the S partials in ascending order onto (accumulate ? C : +0.0),
     applies the epilogue kind EK (op_gemm_epi's follower, the same word as
-    gemm_epi_value) and stores once: op_gk_split's word on the host."""
+    gemm_epi_value) and stores once: op_gk_split's word on the host.
+    colsum != 0 (OP_AGK_GEMM_EPI's i11): the blocks past the cell blocks
+    run one thread a column n of B: p4[n] = div(sum_k B(k, n), f1), k
+    ascending from +0.0, B read as OP_COLSUM_DIV reads it (row stride sbk,
+    unit column stride: B dense), the same word as the host's OP_COLSUM_DIV
+    launch (the tile's column sums make the same claim)."""
     comptime assert SK_MAX_S <= GT_TPB, "seq_gemm_split: a cell's partials must fit one block"
     var M = Int(m_rows)
     var N = Int(n_cols)
     var K = Int(k_len)
+    var tid = Int(thread_idx.x)
+    var cb = seq_gemm_split_cell_blocks(M, N, K)
+    if Int(block_idx.x) >= cb:
+        # a column block (block-uniform: no barrier below is reached)
+        var col = (Int(block_idx.x) - cb) * GT_TPB + tid
+        if colsum != 0 and col < N:
+            var SBKc = Int(sbk)
+            var cs = Float32(0.0)
+            var r = 0
+            while r + GS_CS_STAGE <= K:
+                var v = SIMD[DType.float32, GS_CS_STAGE]()
+                comptime for i in range(GS_CS_STAGE):
+                    v[i] = ld(pb, (r + i) * SBKc + col)
+                comptime for i in range(GS_CS_STAGE):
+                    cs = add(cs, v[i])
+                r += GS_CS_STAGE
+            while r < K:
+                cs = add(cs, ld(pb, r * SBKc + col))
+                r += 1
+            st(p4, col, div(cs, f1))
+        return
     var R = gemm_split_block(K)
     var S = (K + R - 1) // R
     var w = gemm_split_lanes(S)
     var cpb = GT_TPB // w
-    var tid = Int(thread_idx.x)
     var cl = tid // w
     var j = tid - cl * w
     var cell = Int(block_idx.x) * cpb + cl
@@ -1011,4 +1074,6 @@ def seq_gemm_profile_route[OP: Int](a: Args, coop_on: Bool, coop_i11: Bool) -> I
         # gemm_launch_route: a tile on an epilogue opcode needs a dense C
         if route != GR_CELL and not (a.i7 == 0 and a.i8 == a.i1):
             return GR_CELL
+    if route == GR_TILE and seq_gemm_micro_on(a.i0, a.i1):
+        return GR_MICRO
     return route

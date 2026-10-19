@@ -283,9 +283,15 @@ struct HostExec(Exec, Movable):
         comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
             if gemm_split_on[OP](a):
                 self._launch[OP_GK_SPLIT](gemm_split_args[OP](a), a.i0 * a.i1)
-                comptime if OP == OP_AGK_GEMM_EPI:
-                    if a.i11 != 0:
-                        self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
+                return
+        # OP_GK_SPLIT with i11 = 1: the cells, then B's column sums as the
+        # hand path's OP_COLSUM_DIV (the device runs them in the same launch)
+        comptime if OP == OP_GK_SPLIT:
+            if a.i11 != 0:
+                var g = a
+                g.i11 = 0
+                self._launch[OP_GK_SPLIT](g, n)
+                self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
                 return
         comptime if OP == OP_GEMM:
             self._gemm(a)

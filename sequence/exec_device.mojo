@@ -1225,17 +1225,13 @@ struct DeviceExec(Exec, Movable):
 
     def _gemm_split[OP: Int](mut self, a: Args) raises:
         """OP_GEMM, OP_GEMM_EPI or OP_AGK_GEMM_EPI in the split-K order (lane
-        ag-pass6-gemm, idea B): one OP_GK_SPLIT launch, then for
-        OP_AGK_GEMM_EPI with i11 = 1 the column sums' own OP_COLSUM_DIV
-        launch (not split), as HostExec runs them."""
+        ag-pass6-gemm, idea B): one OP_GK_SPLIT launch (for OP_AGK_GEMM_EPI
+        with i11 = 1 the column sums ride in it, OP_COLSUM_DIV's words)."""
         self._launch[OP_GK_SPLIT](gemm_split_args[OP](a), a.i0 * a.i1)
-        comptime if OP == OP_AGK_GEMM_EPI:
-            if a.i11 != 0:
-                self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
 
     def _gemm_split_kernel(mut self, a: Args) raises:
         """seq_gemm_split_kernel[kind] for OP_GK_SPLIT's arguments (i9 / i10
-        the epilogue, as op_gemm_epi's)."""
+        the epilogue, as op_gemm_epi's; i11 the column sums into p4)."""
         var ek = seq_gemm_epi_kind(a.i9, a.i10)
         if ek == GK_BIAS:
             self._gemm_split_k[GK_BIAS](a)
@@ -1257,11 +1253,11 @@ struct DeviceExec(Exec, Movable):
     def _gemm_split_k[EK: Int](mut self, a: Args) raises:
         comptime kern = seq_gemm_split_kernel[EK]
         self.ctx.enqueue_function[kern](
-            a.p0, a.p1, a.p2, a.p3,
+            a.p0, a.p1, a.p2, a.p3, a.p4,
             Int32(a.i0), Int32(a.i1), Int32(a.i2),
             Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
-            Int32(a.i7), Int32(a.i8), Int32(a.i10), a.f0, a.f1,
-            grid_dim=(seq_gemm_split_blocks(a.i0, a.i1, a.i2), 1, 1),
+            Int32(a.i7), Int32(a.i8), Int32(a.i10), Int32(a.i11), a.f0, a.f1,
+            grid_dim=(seq_gemm_split_blocks(a.i0, a.i1, a.i2, a.i11), 1, 1),
             block_dim=(GT_TPB, 1, 1),
         )
 

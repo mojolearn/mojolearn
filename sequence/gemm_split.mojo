@@ -26,8 +26,11 @@ folded accumulator. The rule reads the shape only, so the host column
 (`DeviceExec`, sequence/gemm_tiled.mojo `seq_gemm_split_kernel`, one
 launch, the partials in threadgroup memory) choose the same order and
 store the same words; the bits move once, on NVIDIA, AMD, Apple and the
-host together. The column sums of OP_AGK_GEMM_EPI (i11) are not split:
-they stay OP_COLSUM_DIV's chain, launched after the product.
+host together. The column sums of OP_AGK_GEMM_EPI (i11 = 1, the fused
+linear node's bias gradient) are not split: they stay OP_COLSUM_DIV's
+chain, k ascending from +0.0 (OP_GK_SPLIT with i11 = 1 runs them in its
+own launch on the device, extra blocks one thread a column; the host runs
+OP_COLSUM_DIV after the cells), the same word as every other route.
 
 -D MOJOLEARN_IDN_GEMM_SPLITK_OFF (or MOJOLEARN_IDN_ALL_OFF) restores the
 one chain a cell on every column (arm A: today's digests). FAST keeps its
@@ -131,13 +134,16 @@ def gemm_split_on[OP: Int](a: Args) -> Bool:
 @always_inline
 def gemm_split_args[OP: Int](a: Args) -> Args:
     """OP_GK_SPLIT's arguments for a launch of OP: the GEMM's own (i0..i8,
-    p0..p3, i9 / i10 the epilogue, f0 / f1); OP_GEMM carries no epilogue,
-    so its i9 / i10 are cleared (op_gemm never reads them)."""
+    p0..p4, i9 / i10 the epilogue, f0 / f1, and for OP_AGK_GEMM_EPI i11 the
+    column sums into p4); OP_GEMM carries no epilogue and no column sums,
+    so its i9..i11 are cleared (op_gemm never reads them; FAST VAR's coop
+    flag lives in i11), and OP_GEMM_EPI has no column sums."""
     var g = a
     comptime if OP == OP_GEMM:
         g.i9 = 0
         g.i10 = 0
-    g.i11 = 0
+    comptime if OP != OP_AGK_GEMM_EPI:
+        g.i11 = 0
     return g
 
 
@@ -157,7 +163,8 @@ def gemm_split_partial(
 def op_gk_split(t: Int, a: Args):
     """OP_GK_SPLIT, cell t = m N + n: the split order (module docstring),
     then gemm_epi_value (i9 = epi, i10 = its argument, p3, f0, f1) and one
-    store at C[m i8 + n]. The host column's body; the device runs
+    store at C[m i8 + n]. The host column's body (i11's column sums are
+    HostExec's OP_COLSUM_DIV launch after the cells); the device runs
     sequence/gemm_tiled.mojo seq_gemm_split_kernel (the same partials and
     the same ascending fold)."""
     var N = a.i1

@@ -203,6 +203,10 @@ def _run[OP: Int](
     tally.launches += 1
     var split_dev = List[Float32](length=M * ldc, fill=0)
     dev.download(_hp(split_dev), dC, M * ldc)
+    # OP_AGK_GEMM_EPI's column sums ride in the split launch (i11)
+    var split_cs = List[Float32](length=N, fill=0)
+    if colsum:
+        dev.download(_hp(split_cs), d4, N)
     var first = List[Float32]()
     var first_cs = List[Float32]()
     for route in range(N_ROUTES):  # driver-loop: over the routes compared
@@ -237,6 +241,8 @@ def _run[OP: Int](
             _same_bits(name, route, got, first)
             if colsum:
                 _same_bits(name + "/colsum", route, got_cs, first_cs)
+    if colsum:
+        _same_bits(name + "/split_colsum", N_ROUTES, split_cs, first_cs)
     dev.free(dA)
     dev.free(dB)
     dev.free(dC)
