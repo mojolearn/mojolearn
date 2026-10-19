@@ -76,6 +76,14 @@ def var_chol_block_kernel(G: FP, Bm: FP, status: FP, m_in: Int32, K_in: Int32):
                 sh[j * m + j] = ftz(ftz(identical_sqrt(d)))
         barrier()
         if flag[0] != Int32(0):
+            # The one-thread op factors G in place, so on a non-positive
+            # pivot columns 0..j-1 already hold the factor: copy them back
+            # too (seam 5512 indefinite case). B is untouched in either op.
+            # Every write to sh ended before the barrier above.
+            q = tid
+            while q < mm:
+                G.unsafe_store(q, sh[q])
+                q += nt
             if tid == 0:
                 st(status, 0, Float32(Int(flag[0])))
             return
