@@ -63,6 +63,8 @@ from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
 from autograd.optim import OptimizerState, optimizer_config, step_lr
+from autograd.optim import AUTOGRAD_OPT_FUSE, GradFinish, launch_opt_finish, step_lr_finish
+from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.fold import fold_partials_bound
 from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_SUM
 from autograd.loss_ops import LS_MSE, LS_LOG_PROB, LS_BINARY_LOG_PROB
@@ -106,6 +108,11 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # tape graph below, untouched), arm B this default; -D MOJOLEARN_AUTOGRAD_MLP_OFF
 # keeps the hand path.
 comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"]()
+# Lane ag-pass5-composed (PASS5_IDEAS idea 5): the composed graph's export
+# (OP_L2GRAD + OP_DIVS a layer) rides in the optimizer launch
+# (autograd/optim.mojo AUTOGRAD_OPT_FUSE, -D MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF
+# for arm A). Identical by construction; the fused default has no export.
+comptime MLP_COMPOSED_OPT_FUSE = AUTOGRAD_MLP and not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
 # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
 # It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
@@ -330,6 +337,11 @@ def mlp_backward_autograd[E: Exec](
         tape.backward_from_preactivation(ex, logits, seed)
         return
     tape.backward_from(ex, logits, seed)
+    comptime if MLP_COMPOSED_OPT_FUSE:
+        # Gr holds the raw gradients; the optimizer launch finishes each
+        # word as the loop below would (mlp_grad_finish, OP_AGC_OPT_FINISH)
+        # before its update: 2 launches a layer fewer, the same words.
+        return
     # Preserve sklearn's parameter-gradient convention: add alpha*W then
     # divide by batch size. Output-width normalization of reported squared
     # loss is intentionally separate, as in the existing estimator. The
@@ -346,6 +358,17 @@ def mlp_backward_autograd[E: Exec](
         scale.p0 = Gr + net.b_off(i)
         scale.f0 = Float32(B)
         ex.launch[OP_DIVS](scale, net.sizes[i + 1])
+
+
+def mlp_grad_finish(net: MLPNet, alpha: Float32, B: Int) -> GradFinish:
+    """mlp_backward_autograd's export as a GradFinish: each layer's
+    weights (g + alpha W) / B, its intercepts g / B."""
+    var starts = List[Int]()
+    var ends = List[Int]()
+    for i in range(net.n_layers()):  # driver-loop: over layers
+        starts.append(net.b_off(i))
+        ends.append(net.w_off(i + 1))
+    return GradFinish(starts^, ends^, alpha, Float32(B))
 
 
 def _l2_blocked[E: Exec](mut ex: E, net: MLPNet, P: FP, l2: FP, parts: FP) raises:
@@ -589,6 +612,20 @@ def mlp_fit[E: Exec](
         acts.append(ex.alloc(bs * net.sizes[i]))
         deltas.append(ex.alloc(bs * net.sizes[i]))
     var yb = ex.alloc(bs * O)
+    # Lane ag-pass5-composed (PASS5_IDEAS idea 6), AUTOGRAD_GATHER_EPOCH: when
+    # the permuted copy of X and y fits (autograd/data.mojo
+    # gather_epoch_fits, a memory rule), one gather per epoch writes it and
+    # each batch reads its rows as a contiguous slice: acts[0] and yb point
+    # into the copy. The same words (op_gather_rows either way).
+    var epoch_gather = False
+    var Xp = dummy_ptr()
+    var Yp = dummy_ptr()
+    comptime if AUTOGRAD_GATHER_EPOCH:
+        epoch_gather = gather_epoch_fits(N, D + O)
+        if epoch_gather:
+            Xp = ex.alloc(N * D)
+            Yp = ex.alloc(N * O)
+    var finish = mlp_grad_finish(net, alpha, bs)
     var rowloss = ex.alloc(bs)
     var l2 = ex.alloc(L)
     var n_batches = (N + bs - 1) // bs
@@ -643,21 +680,32 @@ def mlp_fit[E: Exec](
             if shuffle:
                 fisher_yates(rng, perm)
             ex.upload(didx, FP(unsafe_from_address=Int(perm.unsafe_ptr())), N)
+        comptime if AUTOGRAD_GATHER_EPOCH:
+            # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
+            if epoch_gather and (shuffle or it == 0):
+                gather_epoch(ex, dX, dY, didx, N, D, O, Xp, Yp)
         for bi in range(n_batches):
             var off = bi * bs
             var B = bs if off + bs <= N else N - off
-            # X and y rows in one launch (apple2; the same copies)
-            var gx = Args()
-            gx.p0 = dX
-            gx.p1 = didx
-            gx.p2 = acts[0]
-            gx.p3 = dY
-            gx.p4 = yb
-            gx.i0 = B
-            gx.i1 = D
-            gx.i2 = off
-            gx.i3 = O
-            ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
+            var gathered = False
+            comptime if AUTOGRAD_GATHER_EPOCH:
+                if epoch_gather:
+                    acts[0] = Xp + off * D
+                    yb = Yp + off * O
+                    gathered = True
+            if not gathered:
+                # X and y rows in one launch (apple2; the same copies)
+                var gx = Args()
+                gx.p0 = dX
+                gx.p1 = didx
+                gx.p2 = acts[0]
+                gx.p3 = dY
+                gx.p4 = yb
+                gx.i0 = B
+                gx.i1 = D
+                gx.i2 = off
+                gx.i3 = O
+                ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
             comptime if AUTOGRAD_MLP:
                 tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
             else:
@@ -763,7 +811,11 @@ def mlp_fit[E: Exec](
             comptime if AUTOGRAD_OPTIM:
                 # one OP_OPT launch through autograd/optim.mojo (same words)
                 t_upd += 1
-                step_lr(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr)
+                comptime if MLP_COMPOSED_OPT_FUSE:
+                    finish.divisor = Float32(B)
+                    step_lr_finish(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr, finish)
+                else:
+                    step_lr(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr)
             else:
                 var o = Args()
                 o.p0 = P
@@ -786,7 +838,12 @@ def mlp_fit[E: Exec](
                     o.i2 = 1 if nesterov else 0
                     o.f0 = lr
                     o.f1 = momentum
-                ex.launch[OP_OPT](o, np_)
+                comptime if MLP_COMPOSED_OPT_FUSE:
+                    # the composed graph's raw gradients finished in this launch
+                    finish.divisor = Float32(B)
+                    launch_opt_finish(ex, o, finish, np_, True, True, True)
+                else:
+                    ex.launch[OP_OPT](o, np_)
         var loss: Float64
         comptime if MLP_EPOCH_DEV:
             comptime if MLP_LOSSBLOCK:
