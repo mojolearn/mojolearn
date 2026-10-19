@@ -2154,6 +2154,168 @@ class OursResidualDropout(Ours):
         return {"y": self.np.asarray(self.out), "d_values": self.np.asarray(self.dx), "d_residual": self.np.asarray(self.dr)}
 
 
+# ---------------------------------------------------------------------------
+# The fit lanes (2026-10-19, lane ag-bench): one round = one whole fit
+# ---------------------------------------------------------------------------
+
+#: tape-user-model's loss, by its name in the model API (lane ag-pyapi)
+TAPE_LOSS = "bce_with_logits"
+#: rows per prediction chunk on the opponents' held-out pass (after the clock)
+FIT_PREDICT_CHUNK = 65536
+
+
+def _ours_sequential(ml, d_in):
+    """tape-user-model's network through mojolearn.Sequential (lane ag-pyapi's model API): Linear,
+    ReLU, ..., Linear(., 1), compiled with BCE with logits and Adam. The layer builders are the classes
+    of Sequential's own module when it defines them (model.add(Linear(fi, fo))), else add(name, *args).
+    Refuses by name when this mojolearn has no Sequential. Returns (model, the settings it accepted)."""
+    Seq = getattr(ml, "Sequential", None)
+    if Seq is None:
+        raise ImportError("REFUSED: tape-user-model races mojolearn.Sequential, the model-description API "
+                          "over the autograd tape; this mojolearn (%s, %s) has no Sequential"
+                          % (getattr(ml, "__version__", "?"), getattr(ml, "__file__", "?")))
+    model = Seq()
+    home = sys.modules.get(Seq.__module__)
+
+    def add(kind, *args):
+        cls = getattr(home, kind, None)
+        if cls is not None:
+            model.add(cls(*args))
+        else:
+            model.add(kind.lower(), *args)
+    sizes = [int(d_in)] + [int(h) for h in FIT_TAPE_HIDDEN] + [1]
+    for i in range(len(sizes) - 1):
+        add("Linear", sizes[i], sizes[i + 1])
+        if i < len(sizes) - 2:
+            add("ReLU")
+    accepted = dict(loss=TAPE_LOSS, optimizer="adam", lr=FIT_ADAM["lr"], betas=tuple(FIT_ADAM["betas"]),
+                    eps=FIT_ADAM["eps"], weight_decay=FIT_ADAM["weight_decay"])
+    try:
+        model.compile(**accepted)
+    except TypeError as exc:
+        raise RuntimeError("REFUSED: tape-user-model: mojolearn.Sequential.compile does not take the lane's "
+                           "explicit Adam settings %s (%r); every work setting is passed on every arm"
+                           % (sorted(accepted), exc))
+    return model, accepted
+
+
+class OursFit(Ours):
+    """The fit lanes through the public estimators: MLPClassifier (the tape path is the MLP's default),
+    LSTM/GRU/RNNRegressor (the tape path when the binding is built with -D MOJOLEARN_AUTOGRAD_RNN) and
+    mojolearn.Sequential. call() is one whole fit from random_state=SEED; outputs() predicts the
+    held-out rows after the clock."""
+
+    def __init__(self, lane, shape, data):
+        import numpy as np
+        self.np, self.lane = np, lane
+        ml = _ours_module()
+        self.ml = ml
+        self.Xtr = np.ascontiguousarray(data["X_train"], dtype=np.float32)
+        self.Xte = np.ascontiguousarray(data["X_test"], dtype=np.float32)
+        ytr = np.asarray(data["y_train"])
+        # the classifier takes class labels, the regressors the float target (prepared before the clock)
+        self.ytr = (np.ascontiguousarray((ytr > 0.5).astype(np.int64)) if FIT_TASK[lane] == "classification"
+                    and lane != "tape-user-model" else np.ascontiguousarray(ytr, dtype=np.float32))
+        d_in = int(self.Xtr.shape[-1])
+        self.model = None
+        self._score = None
+        if lane == "tape-user-model":
+            probe, accepted = _ours_sequential(ml, d_in)
+            cls = type(probe)
+            readback = dict(learning_rate=accepted["lr"], betas=list(accepted["betas"]), eps=accepted["eps"],
+                            weight_decay=accepted["weight_decay"], loss=accepted["loss"])
+        elif lane == "mlp-fit":
+            cls = ml.MLPClassifier
+            self.kwargs = dict(hidden_layer_sizes=FIT_MLP_HIDDEN, activation="relu", solver="adam", alpha=0.0,
+                               batch_size=FIT_BATCH, learning_rate="constant", learning_rate_init=FIT_ADAM["lr"],
+                               max_iter=FIT_EPOCHS, shuffle=True, random_state=SEED, tol=0.0,
+                               n_iter_no_change=1000, beta_1=FIT_ADAM["betas"][0], beta_2=FIT_ADAM["betas"][1],
+                               epsilon=FIT_ADAM["eps"])
+            probe = cls(**self.kwargs)
+            g = probe.get_params()
+            readback = dict(optimizer=g["solver"], learning_rate=g["learning_rate_init"],
+                            betas=[g["beta_1"], g["beta_2"]], eps=g["epsilon"], batch_size=g["batch_size"],
+                            epochs=g["max_iter"], shuffle=g["shuffle"], seed=g["random_state"], alpha=g["alpha"],
+                            layers=fit_layers(lane, d_in, list(g["hidden_layer_sizes"])))
+            if g["activation"] != "relu":
+                readback["layers"] = [l.replace("relu", g["activation"]) for l in readback["layers"]]
+        else:
+            cls = {"lstm-fit": ml.LSTMRegressor, "gru-fit": ml.GRURegressor, "rnn-fit": ml.RNNRegressor}[lane]
+            self.kwargs = dict(hidden_size=FIT_RNN_HIDDEN, num_layers=1, optimizer="adam",
+                               learning_rate=FIT_ADAM["lr"], batch_size=FIT_BATCH, max_epochs=FIT_EPOCHS,
+                               shuffle=True, random_state=SEED,
+                               optimizer_options=dict(betas=tuple(FIT_ADAM["betas"]), eps=FIT_ADAM["eps"],
+                                                      weight_decay=FIT_ADAM["weight_decay"]))
+            if lane == "rnn-fit":
+                self.kwargs["nonlinearity"] = "tanh"
+            probe = cls(**self.kwargs)
+            g = probe.get_params()
+            opts = g.get("optimizer_options") or {}
+            readback = dict(optimizer=g["optimizer"], learning_rate=g["learning_rate"],
+                            betas=list(opts.get("betas", (None, None))), eps=opts.get("eps"),
+                            weight_decay=opts.get("weight_decay"), batch_size=g["batch_size"],
+                            epochs=g["max_epochs"], shuffle=g["shuffle"], seed=g["random_state"],
+                            num_layers=g["num_layers"], timesteps=int(self.Xtr.shape[1]),
+                            layers=fit_layers(lane, d_in, [g["hidden_size"]]))
+            if lane == "rnn-fit":
+                readback["nonlinearity"] = g["nonlinearity"]
+        self.cls = cls
+        self.info = _ours_info(ml, getattr(sys.modules[cls.__module__], "__file__", None), ml.numeric_mode(), "gpu")
+        self.info.update(call=LANE_TEXT[lane][0], fit_rows=int(self.Xtr.shape[0]), held_out_rows=int(self.Xte.shape[0]),
+                         training_path=("the autograd tape (MLPClassifier's default since 9542fadae)" if lane == "mlp-fit"
+                                        else "the autograd tape (mojolearn.Sequential)" if lane == "tape-user-model"
+                                        else "the tape when the binding was built with -D MOJOLEARN_AUTOGRAD_RNN, "
+                                             "else the hand-written backward (a build setting, not read back)"))
+        self.record = fit_record(lane, "mojolearn", cls, d_in, **readback)
+
+    def call(self):
+        import warnings
+        if self.lane == "tape-user-model":
+            m, _ = _ours_sequential(self.ml, int(self.Xtr.shape[-1]))
+            m.fit(self.Xtr, self.ytr, epochs=FIT_EPOCHS, batch_size=FIT_BATCH, shuffle=True, seed=SEED)
+        else:
+            m = self.cls(**self.kwargs)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")      # one epoch: scikit-learn's ConvergenceWarning
+                m.fit(self.Xtr, self.ytr)
+        self.model = m
+        self._score = None
+
+    def _predict(self):
+        np = self.np
+        if self._score is None:
+            m = self.model
+            if self.lane == "mlp-fit":
+                p = np.asarray(m.predict_proba(self.Xte))[:, 1]
+            elif self.lane == "tape-user-model":
+                p = np.asarray(m.predict_proba(self.Xte) if hasattr(m, "predict_proba") else m.predict(self.Xte))
+                if p.ndim == 2 and p.shape[1] == 2:
+                    p = p[:, 1]
+            else:
+                p = np.asarray(m.predict(self.Xte))
+            self._score = np.ascontiguousarray(np.asarray(p, dtype=np.float32).ravel())
+        return self._score
+
+    def _loss_curve(self):
+        return self.np.asarray(getattr(self.model, "loss_curve_", None) or [], dtype=self.np.float64).ravel()
+
+    def outputs(self):
+        return {"score": self._predict(), "loss_curve": self._loss_curve()}
+
+    def digest(self):
+        np = self.np
+        parts = [self._predict()]
+        m = self.model
+        if self.lane == "mlp-fit":
+            parts += [np.asarray(a) for a in m.coefs_] + [np.asarray(a) for a in m.intercepts_]
+        elif self.lane in FIT_CELL:
+            parts.append(np.asarray(m.params_))
+        h = hashlib.sha256()
+        for a in parts:
+            h.update(np.ascontiguousarray(a).tobytes())
+        return h.hexdigest()[:16]
+
+
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
         "mamba2": OursBlock, "mamba3": OursBlock, "samba": OursSamba, "mlp": OursMLP}
 
