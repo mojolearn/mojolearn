@@ -1,0 +1,52 @@
+{
+  "schema": "mojolearn.pypi-dependency-resolution.v1",
+  "status": "PASSED",
+  "checked_at": "2026-10-19T18:45:48.725877+00:00",
+  "version": "0.8.53",
+  "source_commit": "fdf04b801ca818639e9f5cf1e68a46019ce0b338",
+  "index": "https://pypi.org/simple",
+  "requirement": "mojolearn==0.8.53",
+  "platform": "manylinux_2_35_x86_64",
+  "command": "python -m pip --isolated download --no-cache-dir --index-url https://pypi.org/simple --only-binary=:all: --platform manylinux_2_35_x86_64 --dest pypi-resolved mojolearn==0.8.53",
+  "resolved_packages": 4,
+  "all_downloaded_hashes_match_audited_wheels": true,
+  "scope": "Dependency resolution and distribution integrity; no GPU execution in this check.",
+  "wheels": [
+    {
+      "file": "mojolearn-0.8.53-py3-none-manylinux_2_35_x86_64.whl",
+      "bytes": 14932908,
+      "sha256": "a66c137db63d25a31f97e6e6317a1c9ef32bbac953b42db4ae44db5b7b2ca291",
+      "requires_dist": [
+        "numpy>=1.26.4; extra == \"numpy\"",
+        "numpy>=1.26.4; extra == \"verify\"",
+        "mojolearn-nvidia==0.8.53",
+        "mojolearn-amd==0.8.53"
+      ]
+    },
+    {
+      "file": "mojolearn_amd-0.8.53-py3-none-manylinux_2_35_x86_64.whl",
+      "bytes": 52295887,
+      "sha256": "238ca266afea382136bd22f37550440ab134e90e1f97b347a92088262e74aad1",
+      "requires_dist": [
+        "mojolearn==0.8.53"
+      ]
+    },
+    {
+      "file": "mojolearn_nvidia-0.8.53-py3-none-manylinux_2_35_x86_64.whl",
+      "bytes": 67637526,
+      "sha256": "824047b5fa623f1e2c0b70d01f67cec69391973fb437e4db0502d26e19ee3e6c",
+      "requires_dist": [
+        "mojolearn==0.8.53",
+        "mojolearn-nvidia-ptx==0.8.53"
+      ]
+    },
+    {
+      "file": "mojolearn_nvidia_ptx-0.8.53-py3-none-manylinux_2_35_x86_64.whl",
+      "bytes": 67529116,
+      "sha256": "3727c10bf1bb3062705312acf4cc2f0d849ba2d4586f64d577a5834cb0d93f2e",
+      "requires_dist": [
+        "mojolearn==0.8.53"
+      ]
+    }
+  ]
+}
