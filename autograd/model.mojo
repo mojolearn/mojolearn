@@ -23,6 +23,8 @@ from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, AUTOGRAD_CURVE_WORD
 from autograd.layers import NeuralRules, layer_norm
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
+from core.cast_in import CAST_KIND_SIGNED, CastIn
+from autograd.cast_ops import upload_cast
 
 # Lane ag-data adds `Tape.dropout`; lane ag-forward adds the tape's
 # inference mode. Until they land these stay off and the model trainer does
@@ -477,13 +479,16 @@ def model_lr(cfg: FitConfig, epoch: Int) -> Float32:
 
 # ---------------------------------------------------------------- fit / predict
 def model_fit[E: Exec](
-    mut ex: E, spec: ModelSpec, cfg: FitConfig, X: FP, Y: FP, N: Int, Pio: FP, curve: FP,
+    mut ex: E, spec: ModelSpec, cfg: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
 ) raises -> Int:
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
 
-    Y is (N, out) float32 for TARGET_DENSE, or N int32 class codes (their
-    bits in float32 words) for TARGET_CODES (one-hot target) and
-    TARGET_CODE_VALUES (the codes as the (N, 1) float target). Pio holds the starting
+    X and Y are the caller's arrays as they are (core/cast_in.mojo): any
+    accepted dtype in C or Fortran order, cast to row-major float32 on the
+    executor (autograd/cast_ops.mojo upload_cast; float32 C order is the
+    plain upload). Y is (N, out) for TARGET_DENSE, or N C-contiguous int32
+    class codes (their bits in float32 words) for TARGET_CODES (one-hot
+    target) and TARGET_CODE_VALUES (the codes as the (N, 1) float target). Pio holds the starting
     parameters when cfg.init is False and receives the trained ones;
     curve[0:epochs run] receives each epoch's mean loss (the batch losses
     weighted by their row counts, a blocked fold, divided by N).
@@ -501,16 +506,20 @@ def model_fit[E: Exec](
     var O = spec.out_features()
     var np_ = spec.n_params
     var bs = cfg.batch if cfg.batch < N else N
+    if X.rows != N or X.cols != D:
+        raise Error("model fit: X must be (n_samples, " + String(D) + ")")
     var dX = ex.alloc(N * D)
-    ex.upload(dX, X, N * D)
+    upload_cast(ex, dX, X)
     # the batch target's width: the outputs, or 1 for the class codes of the
     # fused cross-entropy (no one-hot target)
     var TW = 1 if _fused_codes(cfg) else O
     var dY = ex.alloc(N * TW)
     if cfg.target == TARGET_CODES or cfg.target == TARGET_CODE_VALUES:
         # the codes' int32 bits travel in float32 words (op_one_hot reads them)
+        if Y.count() != N or Y.kind != CAST_KIND_SIGNED or Y.itemsize != 4 or not Y.is_c_order():
+            raise Error("model fit: the class codes must be N C-contiguous int32")
         var dC = ex.alloc(N)
-        ex.upload(dC, Y, N)
+        ex.upload(dC, FP(unsafe_from_address=Y.addr), N)
         var oh = Args()
         oh.p0 = dC
         oh.p1 = dY
@@ -518,7 +527,9 @@ def model_fit[E: Exec](
         oh.i1 = 1 if (cfg.target == TARGET_CODE_VALUES or TW == 1) else 0
         ex.launch[OP_ONE_HOT](oh, N * TW)
     else:
-        ex.upload(dY, Y, N * O)
+        if Y.rows != N or Y.cols != O:
+            raise Error("model fit: y must have " + String(O) + " outputs per row")
+        upload_cast(ex, dY, Y)
     var P = ex.alloc(np_)
     if cfg.init:
         model_init_params(ex, spec, P, cfg.seed)
@@ -635,7 +646,7 @@ def model_fit[E: Exec](
 
 
 def model_predict[E: Exec](
-    mut ex: E, spec: ModelSpec, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int, transform: Int,
+    mut ex: E, spec: ModelSpec, X: CastIn, N: Int, Pin: FP, dst: FP, chunk: Int, transform: Int,
 ) raises:
     """dst (N, out) = the model's output on X (N, n_inputs), optionally
     through a row softmax (OUT_SOFTMAX) or an elementwise sigmoid
@@ -653,8 +664,10 @@ def model_predict[E: Exec](
     var D = spec.n_inputs
     var O = spec.out_features()
     var bs = chunk if chunk < N else N
+    if X.rows != N or X.cols != D:
+        raise Error("model predict: X must be (n_samples, " + String(D) + ")")
     var dX = ex.alloc(N * D)
-    ex.upload(dX, X, N * D)
+    upload_cast(ex, dX, X)  # the caller's array as it is (autograd/cast_ops.mojo)
     var P = ex.alloc(spec.n_params)
     ex.upload(P, Pin, spec.n_params)
     var dout = ex.alloc(N * O)

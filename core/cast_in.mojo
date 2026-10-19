@@ -109,14 +109,14 @@ struct CastIn(ImplicitlyCopyable, Movable):
 
     def is_f32_c(self) -> Bool:
         """float32 in C order: uploaded as it is, no cast launch."""
-        return self.kind == CAST_KIND_FLOAT and self.itemsize == 4 and self._c_order()
+        return self.kind == CAST_KIND_FLOAT and self.itemsize == 4 and self.is_c_order()
 
-    def _c_order(self) -> Bool:
+    def is_c_order(self) -> Bool:
         return (self.cols == 1 or self.s1 == self.itemsize) and (
             self.rows == 1 or self.s0 == self.cols * self.itemsize
         )
 
-    def _f_order(self) -> Bool:
+    def is_f_order(self) -> Bool:
         return (self.rows == 1 or self.s0 == self.itemsize) and (
             self.cols == 1 or self.s1 == self.rows * self.itemsize
         )
@@ -128,7 +128,7 @@ struct CastIn(ImplicitlyCopyable, Movable):
             raise Error(what + ": null buffer address")
         if self.rows < 1 or self.cols < 1 or self.rows > ((1 << 40) // self.cols):
             raise Error(what + ": the array must not be empty")
-        if not (self._c_order() or self._f_order()):
+        if not (self.is_c_order() or self.is_f_order()):
             raise Error(
                 what + ": the array must be C- or Fortran-contiguous; pass numpy.ascontiguousarray of it"
             )
