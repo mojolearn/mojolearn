@@ -246,6 +246,8 @@ TS = dict(stl=(10000, 100), theta=(10000, 100), croston=(10000, 100), ets=(10000
           autoarima=(2000, 100), var=(0, 0), prophet=(0, 0))
 #: every case; ALL is the default --algos
 NEURAL = ["lstm", "gru", "rnn", "mlp", "moe", "layernorm"]
+#: the cases whose binding prints the AG_PROFILE table (mlp_fit_py, rnn_fit_py)
+PROFILED = ("mlp", "lstm", "gru", "rnn")
 OPTIM = ["rmsprop", "adagrad", "lion", "adamax", "nadam", "lamb", "adafactor"]
 ALL = NEURAL + OPTIM + list(TS)
 
@@ -303,9 +305,12 @@ def main():
     ap.add_argument("--out", default="")
     ap.add_argument("--compare", nargs=2)
     ap.add_argument("--profile", nargs="?", const="1", default="", choices=["1", "2"],
-                    help="mlp case: MOJOLEARN_AG_PROFILE for the measured fit (1 launch counts, 2 also "
-                         "host-clock times between syncs: a relative profile, its fit_s is not a timing); "
-                         "the binding prints the AG_PROFILE table")
+                    help="mlp, lstm, gru, rnn cases: MOJOLEARN_AG_PROFILE for the measured fit (1 launch "
+                         "counts, 2 also host-clock times between syncs: a relative profile); the binding "
+                         "prints the AG_PROFILE table. At 2 the case first runs once unprofiled (its fit_s "
+                         "is the timing) and passes that wall to the profiled run "
+                         "(MOJOLEARN_AG_PROFILE_WALL_US), so the table carries the DRAIN line and "
+                         "wall-equivalent we_ms rows")
     args = ap.parse_args()
     if args.compare:
         return compare(*args.compare)
@@ -337,22 +342,34 @@ def main():
                 s = io.StringIO()
                 pstats.Stats(pr, stream=s).sort_stats("tottime").print_stats(18)
                 print("\n".join("PROF " + name + " " + l for l in s.getvalue().splitlines() if l.strip()), flush=True)
-            profiled = bool(args.profile) and name == "mlp"
+            profiled = bool(args.profile) and name in PROFILED
+            wall = None
+            if profiled and args.profile == "2":
+                # the unprofiled fit first: its fit_s is this record's timing
+                # and the wall the profile's drain is measured against
+                r0 = run_case(ml, X, y, name, True)
+                wall = r0["fit_s"]
             if profiled:
                 # the counting and the table are Mojo's (the executor and the
                 # tape read the variable when they are built); this only sets it
                 os.environ["MOJOLEARN_AG_PROFILE"] = args.profile
+                if wall is not None:
+                    os.environ["MOJOLEARN_AG_PROFILE_WALL_US"] = str(int(wall * 1e6))
             try:
                 r = run_case(ml, X, y, name, True)
             finally:
                 if profiled:
                     os.environ.pop("MOJOLEARN_AG_PROFILE", None)
-            rec.update({k: v for k, v in r.items() if not (host and k.endswith("_s"))})
+                    os.environ.pop("MOJOLEARN_AG_PROFILE_WALL_US", None)
+            if wall is not None:
+                # the profiled fit's synced times are not a timing: keep the
+                # unprofiled run's *_s and digest, and say whether the bits agree
+                rec.update({k: v for k, v in r0.items() if not (host and k.endswith("_s"))})
+                rec["ag_profile_digest_same"] = r0["digest"] == r["digest"]
+            else:
+                rec.update({k: v for k, v in r.items() if not (host and k.endswith("_s"))})
             if profiled:
                 rec["ag_profile"] = int(args.profile)
-                if args.profile == "2":
-                    # synced launches: not a speed measurement
-                    rec = {k: v for k, v in rec.items() if not k.endswith("_s")}
         except Exception as e:                       # recorded, never hidden
             rec["error"] = f"{type(e).__name__}: {e}"
         print(json.dumps(rec), flush=True)
