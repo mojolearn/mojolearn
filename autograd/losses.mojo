@@ -6,8 +6,8 @@
 # extent and factor, so both give the same bits on Apple, NVIDIA, AMD and
 # the host.
 from autograd.tape import Tape, Tensor
-from autograd.fold import blocked_fold, fold_partials_bound
-from autograd.ops import AXIS_ALL
+from autograd.fold import blocked_fold, fold_partials_bound, loss_fold
+from autograd.ops import AXIS_ALL, AUTOGRAD_LOSS_REDUCED
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_CE_FWD, LS_MSE, LS_MAE, LS_HUBER, LS_BCE_LOGITS, LS_LOG_PROB,
     LS_BINARY_LOG_PROB, LS_CROSS_ENTROPY,
@@ -38,6 +38,21 @@ def _reduce[E: Exec](mut tape: Tape, mut ex: E, terms: Tensor, reduction: Int) r
     raise Error("reduction must be REDUCTION_MEAN or REDUCTION_SUM")
 
 
+def _elem_loss[E: Exec](
+    mut tape: Tape, mut ex: E, prediction: Tensor, target: Tensor, kind: Int, delta: Float32, reduction: Int,
+) raises -> Tensor:
+    # Lane ag-pass6-fold (AUTOGRAD_LOSS_REDUCED, default on): the terms and
+    # their mean / sum as one node (Tape.loss_reduced), the terms folded in
+    # the leaf chain; the same value and gradients as loss_terms + mean /
+    # sum. -D MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF records the two nodes.
+    comptime if AUTOGRAD_LOSS_REDUCED:
+        if reduction != REDUCTION_MEAN and reduction != REDUCTION_SUM:
+            raise Error("reduction must be REDUCTION_MEAN or REDUCTION_SUM")
+        return tape.loss_reduced(ex, prediction, target, kind, delta, reduction == REDUCTION_MEAN)
+    else:
+        return _reduce(tape, ex, tape.loss_terms(ex, prediction, target, kind, delta), reduction)
+
+
 def mse[E: Exec](
     mut tape: Tape, mut ex: E, prediction: Tensor, target: Tensor, reduction: Int = REDUCTION_MEAN,
 ) raises -> Tensor:
@@ -46,7 +61,7 @@ def mse[E: Exec](
     Both inputs have the same shape; both receive gradients. For same-shape
     inputs the value and the gradients equal Tape.mse_loss bit for bit.
     """
-    return _reduce(tape, ex, tape.loss_terms(ex, prediction, target, LS_MSE), reduction)
+    return _elem_loss(tape, ex, prediction, target, LS_MSE, Float32(1), reduction)
 
 
 def mae[E: Exec](
@@ -54,7 +69,7 @@ def mae[E: Exec](
 ) raises -> Tensor:
     """Absolute error |prediction - target|, averaged or summed. The
     gradient at a zero difference is zero."""
-    return _reduce(tape, ex, tape.loss_terms(ex, prediction, target, LS_MAE), reduction)
+    return _elem_loss(tape, ex, prediction, target, LS_MAE, Float32(1), reduction)
 
 
 def huber[E: Exec](
@@ -63,7 +78,7 @@ def huber[E: Exec](
 ) raises -> Tensor:
     """Huber loss: 0.5 d^2 where |d| < delta, else delta (|d| - delta / 2),
     d = prediction - target; averaged or summed."""
-    return _reduce(tape, ex, tape.loss_terms(ex, prediction, target, LS_HUBER, delta), reduction)
+    return _elem_loss(tape, ex, prediction, target, LS_HUBER, delta, reduction)
 
 
 def binary_cross_entropy_with_logits[E: Exec](
@@ -71,7 +86,7 @@ def binary_cross_entropy_with_logits[E: Exec](
 ) raises -> Tensor:
     """Binary cross-entropy of sigmoid(logits) against targets in [0, 1],
     computed stably from the logits: max(x, 0) - x y + log(1 + exp(-|x|))."""
-    return _reduce(tape, ex, tape.loss_terms(ex, logits, target, LS_BCE_LOGITS), reduction)
+    return _elem_loss(tape, ex, logits, target, LS_BCE_LOGITS, Float32(1), reduction)
 
 
 def cross_entropy[E: Exec](
@@ -140,6 +155,12 @@ def loss_value_into[E: Exec](
         return
     if kind < LS_MSE or kind > LS_BINARY_LOG_PROB:
         raise Error("unknown loss kind")
+    comptime if AUTOGRAD_LOSS_REDUCED:
+        # the terms folded in the leaf chain (lane ag-pass6-fold): the same
+        # word as the stored terms then the fold, no terms pass
+        loss_fold(ex, dst, prediction, target, rows, cols, kind, delta, reduction_factor(count, reduction),
+                  scratch.partials)
+        return
     a.i0 = kind
     a.f0 = delta
     ex.launch[OP_LS_ELEM_FWD](a, count)
