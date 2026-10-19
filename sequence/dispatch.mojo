@@ -133,6 +133,7 @@ from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
 from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
 from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
 from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
+from autograd.model_ops import OP_AGM_FIRST, OP_AGM_LAST, apply_model_ops
 
 
 @always_inline
@@ -166,6 +167,16 @@ def apply[OP: Int](t: Int, a: Args):
     ), "loss opcode collides with recurrent scan"
     comptime assert OP_LS_LAST < OP_AGD_FIRST or OP_LS_FIRST > OP_AGD_LAST, "loss opcodes overlap the data family"
     comptime assert OP_LS_LAST < OP_AGO_FIRST or OP_LS_FIRST > OP_AGO_LAST, "loss opcodes overlap the optim family"
+    # The model trainer's family (autograd/model_ops.mojo) is a second range
+    # that must not overlap the tape's or the scan codes.
+    comptime assert OP_AGM_FIRST <= OP_AGM_LAST, "model opcode range is empty"
+    comptime assert OP_AGM_FIRST > OP_AG_LAST or OP_AGM_LAST < OP_AG_FIRST, "model opcodes collide with autograd"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGM_FIRST or OP_CELL_FWD_SCAN > OP_AGM_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGM_FIRST or OP_CELL_BWD_SCAN > OP_AGM_LAST
+    ), "model opcode collides with recurrent scan"
+    comptime assert OP_AGM_LAST < OP_AGD_FIRST or OP_AGM_FIRST > OP_AGD_LAST, "model opcodes overlap the data family"
+    comptime assert OP_AGM_LAST < OP_AGO_FIRST or OP_AGM_FIRST > OP_AGO_LAST, "model opcodes overlap the optim family"
+    comptime assert OP_AGM_LAST < OP_LS_FIRST or OP_AGM_FIRST > OP_LS_LAST, "model opcodes overlap the loss family"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
@@ -174,6 +185,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_optim[OP](t, a)
     elif OP >= OP_LS_FIRST and OP <= OP_LS_LAST:
         apply_losses[OP](t, a)
+    elif OP >= OP_AGM_FIRST and OP <= OP_AGM_LAST:
+        apply_model_ops[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

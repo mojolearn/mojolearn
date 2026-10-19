@@ -51,6 +51,8 @@ NOT_SKLEARN_STYLE = {
     "BatchNorm2d", "CNNClassifier", "Conv1d", "Conv2d", "Dropout2d", "MaxPool1d", "MaxPool2d",
     # statsmodels-style: the series is a constructor argument, as in statsmodels
     "ExponentialSmoothing",
+    # a model assembled layer by layer (add/compile/fit; docs-site/api_exclude.txt)
+    "Sequential",
 }
 
 #: Public names left out of the docs as unverified (docs-site/api_exclude.txt).

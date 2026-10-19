@@ -543,6 +543,10 @@ struct Mamba1Rules(BackwardRules, Copyable, Movable):
     """Backward adapters for a Mamba-1 stack's custom nodes."""
     var s: MutPointer[Mamba1TapeStack, MutAnyOrigin]
 
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # Every rule here reads a zero-filled destination and accumulates into it.
+        return True
+
     def supports(self, tag: Int) -> Bool:
         return tag >= M1_NORM and tag <= M1_PROJ_OUT
 
@@ -870,6 +874,10 @@ def _m2_ssd_bwd[E: Exec](mut ex: E, mut S: Mamba2TapeStack, k: Int, up: FP, grad
 struct Mamba2Rules(BackwardRules, Copyable, Movable):
     """Backward adapters for a Mamba-2 stack's custom nodes."""
     var s: MutPointer[Mamba2TapeStack, MutAnyOrigin]
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # Every rule here reads a zero-filled destination and accumulates into it.
+        return True
 
     def supports(self, tag: Int) -> Bool:
         return tag >= M2_NORM and tag <= M2_PROJ_OUT
