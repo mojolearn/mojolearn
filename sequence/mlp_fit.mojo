@@ -660,6 +660,10 @@ def mlp_fit[E: Exec](
     dense (N, O) target; 1, `Y` holds N int32 class codes and the (N, O)
     one-hot target is built on the executor (`OP_ONE_HOT`); 2 (O = 1), the
     codes themselves as the float target. Not in host NumPy either way."""
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
+    # The removed refusal lives here, not in core/six_lane_experiment_guards.mojo: a core line rebuilds 76 bindings (rebuild fence).
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"](), "removed 2026-10-19 (lane/del-mlp, 6784245b2): AUTOGRAD_MLP_OFF (the hand-assembled MLP backward) was superseded by the tape: same 48 check digests on host, Metal, NVIDIA and AMD; HIGGS 1M (256,) b512 hand -> fused tape NV 0.476 -> 0.526 s, AMD 0.408 -> 0.366 s, digest 8f410a4ae2d620af on both arms; recoverable at 6784245b2^"
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]

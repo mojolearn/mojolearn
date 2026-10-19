@@ -381,7 +381,8 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch`, the lane's whole `sequence/mlp_fit.mojo` change reversed (the
   deletion plus its tombstone comments), so `git apply` on the lane head restores main `66e0842f8`'s file; `git apply -3` after main moves.
   Restoring it does not bring back the old two-build check in `tools/check_autograd.py`; the stored digests still apply.
-- Guard: `removed` refusal in `core/six_lane_experiment_guards.mojo` (lane del-mlp block). No grid_controls entry existed.
+- Guard: `removed` refusal at the top of `sequence/mlp_fit.mojo` `mlp_fit`, not in core: a core line rebuilds 76 bindings (the
+  pre-push rebuild fence). No grid_controls entry existed.
 - EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_MLP_OFF`, **DELETED-superseded**.
 
 ### MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE
