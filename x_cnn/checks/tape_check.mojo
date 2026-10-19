@@ -248,7 +248,8 @@ def stored_rows() raises -> List[String]:
     var text = f.read()
     f.close()
     var rows = List[String]()
-    for line in text.splitlines():
+    # split on "\n" only: this Mojo's String.splitlines() also breaks a row at its tabs (seen 2026-10-19, every row DIFFER).
+    for line in text.split("\n"):
         var r = String(String(line).strip())
         if r.byte_length() > 0 and not r.startswith("#"):
             rows.append(r^)
