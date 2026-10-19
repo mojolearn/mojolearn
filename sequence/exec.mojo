@@ -173,7 +173,9 @@ def _host_apply[OP: Int](t: Int, a: Args):
             return
     apply[OP](t, a)
 
-struct HostExec(Exec):
+# Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
+# owns its executor across binding calls; moving changes no value.
+struct HostExec(Exec, Movable):
     var bufs: List[FP]
     #: The task ceiling, read once per Exec (one entry call).
     var workers: Int

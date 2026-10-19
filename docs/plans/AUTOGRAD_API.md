@@ -284,6 +284,121 @@ Checks: `python/mojolearn/tests/test_autograd_model.py` (loss falls, shapes,
 same digest for the same seed across two fits, refusals). Cross-vendor
 identity: its `MODEL_DIGEST` lines must be equal on Apple, NVIDIA and AMD.
 
+## (b2) Operation session: the ops for composition (implemented, lane ag-ops-api)
+
+`mojolearn.ops.Session` (`python/mojolearn/ops.py`) exposes the tape's
+forward operations one call each, so a developer can build an inference or
+hybrid algorithm (branching, compositions of model families, custom
+transforms, dynamic ensembles / mixture-of-experts routing, statistics plus
+learned representations) from mojolearn's operations and get the same bits
+on Apple, NVIDIA and AMD, without autograd. `Session(record=True)` is the
+same composition recorded: `backward(loss)` and `grad(h)` make it
+trainable. Listed in `docs-site/api_exclude.txt` until
+`test_ops_session.py` passes on CPU, Metal, NVIDIA and AMD with equal
+`OPS_DIGEST` lines.
+
+Mojo: `autograd/ops_api.mojo` `OpsSession[E: Exec & Movable]` owns one
+executor, one `Tape` (inference mode unless recording) and the live tensors
+by handle (`(generation << 24) | (slot + 1)`; shapes travel with handles).
+Sessions live in a process-wide table (`std.ffi._Global`, one per numeric
+tier) tagged with the executor kind, so the host binding never reaches a
+device session. `DeviceExec` and `HostExec` conform to `Movable` for this
+(no value change). Entries (`autograd/pyapi.mojo` `ops_*_py[E, KIND]`,
+registered in `bindings/_mojolearn_x_sequence.mojo` and the host twin):
+`ops_open(record)`, `ops_close(sid)`, `ops_upload(sid, addr, [rows, cols,
+requires_grad])`, `ops_download(sid, h, addr)`, `ops_op(sid, code, handles,
+ints, floats)`, `ops_scalar(sid, h)` (one value read back, for a Python
+branch), `ops_shape`, `ops_free`, `ops_reset` (drops computed tensors and
+the graph; uploads stay as fresh leaves), `ops_metric(sid, kind, [y_true,
+prediction])`, `ops_backward(sid, loss, accumulate)`, `ops_grad(sid, h,
+addr)`. One Mojo call per op; all arithmetic in Mojo; no new kernels.
+
+### Ops
+
+Identity: "yes" = the op's kernels are in the autograd check suites whose
+digests match on CPU, Metal, NVIDIA and AMD (`autograd/checks/*_cpu.mojo` /
+`*_gpu.mojo`, plus the trainers that run them); the session adds no kernel,
+only calls.
+
+| Code | Op | Tape / module call | Kernels | Identity | VJP |
+|---|---|---|---|---|---|
+| 1 | matmul | `Tape.matmul` | OP_GEMM | yes (cpu/gpu, gradients) | yes |
+| 2-5 | add, sub, mul, div (scalar, row, column broadcast) | `Tape.add/subtract/multiply/divide` | OP_AG_BIN_FWD | yes | yes (broadcast folds) |
+| 6-11 | relu, sigmoid, tanh, exp, log, sqrt | `Tape.relu/...` | OP_AG_UNARY_FWD | yes | yes |
+| 12 | scale | `Tape.scale` | OP_AG_UNARY_FWD | yes | yes |
+| 13 | transpose | `Tape.transpose` | OP_AG_TRANSPOSE | yes | yes |
+| 14 | reshape | `Tape.reshape` (a view) | none | yes | yes |
+| 15-16 | sum, mean (all, axis 0, axis 1) | `Tape.sum/mean` | OP_AG_REDUCE_PART/FOLD (blocked fold) | yes | yes |
+| 17-18 | softmax, log_softmax (rows) | `Tape.softmax/log_softmax` | OP_AG_SOFTMAX_FWD | yes | yes |
+| 19 | linear (+ bias, activation none/relu/sigmoid/tanh/softmax) | `Tape.linear` | OP_GEMM_EPI, OP_SOFTMAX | yes (fused, mlp) | yes (3 launches) |
+| 20 | layer_norm | `autograd/layers.mojo layer_norm` | layer_norm_fwd_core | yes (gradients) | yes (NeuralRules) |
+| 21 | dropout (seed, counter) | `Tape.dropout` | OP_AG_DROPOUT_FWD (Philox) | yes (data) | yes |
+| 22 | gather_rows (permutation indices, start, count) | `autograd/data.mojo gather_rows` | OP_GATHER_ROWS | yes (data) | no: needs a scatter-add VJP; refused on a tensor that requires a gradient |
+| 23 | permutation (n, seed, epoch) | `autograd/data.mojo permutation` | OP_MLP_PERM | yes (data, mlp) | none (indices) |
+| 24-28 | mse, mae, huber, bce_with_logits, cross_entropy (mean or sum) | `autograd/losses.mojo` | OP_LS_ELEM_FWD / OP_LS_CE_FWD + blocked fold | yes (loss) | yes |
+| 29 | detach | `Tape.detach` | none | yes | stops |
+| 30 | full (shape, value) | executor fill | OP_FILL | yes | constant |
+| 31 | copy | executor copy | OP_COPY | yes | constant |
+| m1 | accuracy (codes or first-max scores) | `autograd/metrics.mojo` | OP_LS_METRIC_TERM + fold | yes (loss) | forward only |
+| m2 | log_loss | `autograd/metrics.mojo` | OP_LS_METRIC_TERM + fold | yes (loss) | forward only |
+| m3 | roc_auc | `autograd/metrics.mojo` | bitonic sort, blocked scan, fold | yes (loss) | forward only |
+| - | upload, download, scalar | `Exec.upload/download` | copies | bit copies | - |
+
+The gather's kernel reads `X[idx]` unchecked, so the session accepts only
+indices made by `permutation` (it tracks each handle's index bound) whose
+row count does not exceed X's: no download to validate.
+
+Checks: `python/mojolearn/tests/test_ops_session.py` (a two-expert mixture
+with a scalar-routed hard branch and a gate-weighted soft branch; losses and
+metrics on frozen predictions; permutation gather; a recording session's
+gradient against the closed form; refusals). Its `OPS_DIGEST` lines must be
+equal on CPU, Metal, NVIDIA and AMD.
+
+## Program form (design note, not implemented)
+
+The session runs one Mojo call per op and a Python branch costs one
+read-back (`scalar`). For training loops and MoE routing over many batches
+the composition should be handed to Mojo once, as the `Sequential`
+description is, so the GPU path stays pure and nothing returns to Python
+between steps.
+
+Generalise the description to an op program: a list of instructions
+`(opcode, destination register, input registers, int args, float args)`
+over the `OPS_*` codes above, plus three control words evaluated in Mojo:
+
+- `IF reg, else_target, end_target`: switch on a device scalar. The
+  driver reads the (1, 1) register with one word download (the same cost as
+  today's `n_iter_no_change` word) and runs one arm; a `# driver-loop: over
+  program instructions` interpreter. A data-dependent branch per row is not
+  an `IF`: it is a gate times both arms (the soft route) or a routing op
+  below, both parallel.
+- `LOOP count, body_end`: repeat a body a fixed number of times (epochs,
+  batches, refinement steps) with an iteration register the body can read
+  (dropout counter, permutation epoch).
+- `ROUTE gate, k`: top-k routing of rows to experts, producing per-expert
+  row index lists and weights on the device (sequence/moe.mojo already
+  routes this way for MoEBlock), followed by per-expert `gather_rows`, the
+  expert ops, and a weighted scatter-add back to the output rows.
+
+Program inputs are uploaded tensors (data and parameters); outputs are named
+registers downloaded once at the end. Training is the same program with
+recording on: the loss register is differentiated by
+`backward_scalar_with_rules(NeuralRules)` and an optimizer instruction
+(`autograd/optim.mojo`) updates the parameter registers; `tape.reset()`
+between iterations of a `LOOP`.
+
+VJPs needed for a trainable program: every tape op above has one. Missing:
+`gather_rows` (its VJP is a scatter-add of the upstream rows into the
+source rows; with a permutation the rows are distinct, so it is a parallel
+scatter with no collisions; with routing a row can go to k experts, so the
+scatter-add needs a fixed-order fold per destination row, e.g. sort the
+(destination, source) pairs and fold each destination's contributions in
+ascending source order, to keep identical bits), the `ROUTE` weights (the
+gate's VJP through the selected softmax values; the top-k selection itself
+is piecewise constant and passes no gradient), and the weighted scatter-add
+(a gather of the upstream rows times the weights). The metrics stay forward
+only.
+
 ## (c) Migration order
 
 What moves is model-level assembly: the hand-chained order of head GEMMs,
