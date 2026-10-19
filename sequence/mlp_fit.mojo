@@ -80,6 +80,11 @@ from sequence.ops import dummy_ptr
 # held-out rows: acc 0.68186 -> 0.68230, logloss 0.59475 -> 0.59462, AUC
 # 0.74755 -> 0.74781. Same digest on NVIDIA and AMD for each arm
 # (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
+# It was the hand-assembled backward (arm A above): per layer gemm_epi EPI_L2GRAD
+# (dW), OP_COLSUM_DIV (db), gemm_epi EPI_ACT_BWD (dX); the tape trains every MLP
+# with the same 48 check digests (autograd/checks/mlp_cases_digests.tsv).
 # -D MOJOLEARN_AUTOGRAD_PREDICT (lane ag-forward, default off, A/B owed):
 # mlp_predict_py predicts through the tape's forward in inference mode
 # (mlp_predict_autograd) instead of the fused hand forward (mlp_predict).
@@ -99,13 +104,12 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # aee3b17ef66dc060 on the HIGGS recipe: tools/sequence_speed.py case_mlp,
 # HIGGS 1M x 28, (256,) b512 1 epoch adam, identical): act' is op_act_bwd's
 # body instead of op_ag_unary_vjp's and db is OP_COLSUM_DIV's chain instead
-# of the blocked fold. Expected digest: the hand path's (2c2662ecb00cceed,
+# of the blocked fold. Expected digest: the deleted hand path's (2c2662ecb00cceed,
 # -D MOJOLEARN_AUTOGRAD_MLP_OFF) on every column (host, Metal, NVIDIA, AMD),
 # since every launch is a hand-path body with the hand path's fold order
 # (the tiled GEMM is op_gemm's chain term for term). A/B owed: arm A
 # -D MOJOLEARN_AUTOGRAD_MLP_UNFUSED (the composed matmul + add + activation
-# tape graph below, untouched), arm B this default; -D MOJOLEARN_AUTOGRAD_MLP_OFF
-# keeps the hand path.
+# tape graph below, untouched), arm B this default.
 comptime AUTOGRAD_MLP_FUSED = not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"]()
 # Lane ag-pass5-composed (PASS5_IDEAS idea 5): the composed graph's export
 # (OP_L2GRAD + OP_DIVS a layer) rides in the optimizer launch
@@ -331,7 +335,7 @@ def mlp_backward_autograd[E: Exec](
         #     the tile: one-thread gemm_epi + OP_COLSUM_DIV) 2, dH (gemm_epi
         #     EPI_ACT_BWD, tiled) 1, layer 1 dW + db (tiled, column-sum
         #     epilogue) 1, no dX; optimizer 1.
-        #   hand path (AUTOGRAD_MLP_OFF): 14 (gather 1, forward 2, loss 5,
+        #   deleted hand path (AUTOGRAD_MLP_OFF): 14 (gather 1, forward 2, loss 5,
         #     backward 5, optimizer 1); the tape now issues one launch fewer
         #     (db rides in the tiled dW1 launch).
         # Per layer: backward 1 on the tile (dW with db) + 1 (dX with the
@@ -793,6 +797,8 @@ def mlp_fit[E: Exec](
                 gx.i2 = off
                 gx.i3 = O
                 ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
             tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
             comptime if MLP_LOSSBLOCK:
                 # lane ag-pass3-lossblock: seed, row-loss and L2 sums and the
@@ -873,6 +879,8 @@ def mlp_fit[E: Exec](
                     bl.p3 = rowparts
                     bl.i5 = nrb
                 ex.launch[OP_MLP_BLOSS](bl, 1)
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
             mlp_backward_autograd(tape, ex, net, tape_logits, dlogits, P, Gr, B, alpha)
             comptime if AUTOGRAD_OPTIM:
                 # one OP_OPT launch through autograd/optim.mojo (same words)

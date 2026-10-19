@@ -1211,7 +1211,7 @@ struct Tape(Movable):
         l2: Float32, divisor: Float32, into: FP, use_into: Bool,
     ) raises -> Tensor:
         # LAUNCHES PER DENSE LAYER (lane ag-fusion2, read from the code).
-        # Hand-assembled MLP (sequence/mlp_fit.mojo, AUTOGRAD_MLP_OFF):
+        # Hand-assembled MLP (sequence/mlp_fit.mojo, AUTOGRAD_MLP_OFF, deleted 2026-10-19):
         #   forward 1 (gemm_epi EPI_BIAS_ACT; + OP_SOFTMAX for a softmax
         #   output); backward 3: gemm_epi EPI_L2GRAD (dW), OP_COLSUM_DIV
         #   (db), gemm_epi EPI_ACT_BWD (dX times the layer below's act');
