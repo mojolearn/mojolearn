@@ -100,8 +100,36 @@ class Session:
         Numeric mode. None uses the library default. ``'fast'`` is available
         on Apple GPUs only.
 
+    Every operation takes tensor handles and returns the integer handle of a
+    new tensor; nothing is copied back to the host until you call
+    :meth:`numpy`, :meth:`scalar` or :meth:`grad`. The metrics
+    (:meth:`accuracy`, :meth:`log_loss`, :meth:`roc_auc`) return a float.
+
     A session is a context manager; :meth:`close` (or leaving the ``with``
     block) returns its device memory.
+
+    Examples
+    --------
+    Compose an inference step and read a scalar back:
+
+    >>> import numpy as np
+    >>> from mojolearn import ops
+    >>> rng = np.random.default_rng(0)
+    >>> with ops.Session() as s:
+    ...     x = s.tensor(rng.standard_normal((32, 4), dtype=np.float32))
+    ...     w = s.tensor(rng.standard_normal((4, 2), dtype=np.float32))
+    ...     h = s.linear(x, w, activation="tanh")
+    ...     total = s.scalar(s.sum(h))
+
+    Record the same composition and differentiate a loss:
+
+    >>> y = rng.standard_normal((32, 2), dtype=np.float32)
+    >>> with ops.Session(record=True) as s:
+    ...     x = s.tensor(rng.standard_normal((32, 4), dtype=np.float32))
+    ...     w = s.tensor(rng.standard_normal((4, 2), dtype=np.float32), requires_grad=True)
+    ...     loss = s.mse(s.matmul(x, w), s.tensor(y))
+    ...     s.backward(loss)
+    ...     grad_w = s.grad(w)
     """
 
     def __init__(self, record=False, numeric_mode=None):

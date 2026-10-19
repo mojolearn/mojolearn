@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`Sequential`: a model the user assembles layer by layer, trained by the
-native autograd tape (`autograd/model.mojo`).
-
-Python is the API shell only: it records the layers and options as a flat
-integer program and a float table, checks the arguments, and makes one call
-into Mojo per fit or prediction. Initialisation, shuffling, batching, the
-forward and backward passes, the optimizer and the loss curve all run in
-Mojo on the executor.
-"""
+"""A feed-forward model you assemble layer by layer and train on the GPU."""
+# Engineering note: `Sequential` is trained by the native autograd tape
+# (autograd/model.mojo). Python is the API shell only: it records the layers
+# and options as a flat integer program and a float table, checks the
+# arguments, and makes one call into Mojo per fit or prediction.
+# Initialisation, shuffling, batching, the forward and backward passes, the
+# optimizer and the loss curve all run in Mojo on the executor.
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_model')
 
@@ -38,9 +36,13 @@ class Sequential:
 
     Add layers with :meth:`add` (or the shortcuts :meth:`linear`,
     :meth:`relu`, ...), choose the loss and optimizer with :meth:`compile`,
-    then call :meth:`fit`. Every computation of training and prediction runs
-    natively; in ``identical`` mode the trained parameters and predictions
-    are the same bits on Apple, NVIDIA and AMD GPUs for the same seed.
+    then call :meth:`fit`. Parameter initialization, shuffling, batching, the
+    forward and backward passes and the optimizer all run natively on the
+    device.
+
+    In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+    For the same data and seed, the trained parameters and the predictions
+    of a ``Sequential`` model are the same on every vendor.
 
     Parameters
     ----------
@@ -73,6 +75,14 @@ class Sequential:
     >>> model = model.compile(loss="mse", optimizer="adam", lr=0.01)
     >>> model = model.fit(X, y, epochs=20, batch_size=32, seed=0)
     >>> pred = model.predict(X)
+
+    A classifier with class probabilities:
+
+    >>> labels = (X[:, 0] > X[:, 1]).astype(np.int64)
+    >>> clf = mojolearn.Sequential().linear(16).relu().linear(2)
+    >>> clf = clf.compile(loss="cross_entropy", optimizer="adam", lr=0.01)
+    >>> clf = clf.fit(X, labels, epochs=20, batch_size=32, seed=0)
+    >>> proba = clf.predict_proba(X)
     """
 
     def __init__(self, numeric_mode=None):
@@ -84,11 +94,26 @@ class Sequential:
     def add(self, kind, *args, **kwargs):
         """Append a layer and return the model.
 
-        ``kind`` is one of ``'linear'`` (``units``, ``bias=True``),
-        ``'relu'``, ``'sigmoid'``, ``'tanh'``, ``'softmax'``,
-        ``'layer_norm'`` (``eps=1e-5``), ``'dropout'`` (``p``) or
-        ``'residual'`` (``source=-1``: add the output of layer ``source``,
-        or the model input for -1, to the current output).
+        Parameters
+        ----------
+        kind : str
+            One of ``'linear'`` (``units``, ``bias=True``), ``'relu'``,
+            ``'sigmoid'``, ``'tanh'``, ``'softmax'``, ``'layer_norm'``
+            (``eps=1e-5``) or ``'residual'`` (``source=-1``: add the output
+            of layer ``source``, or the model input for -1, to the current
+            output).
+        *args, **kwargs
+            The layer's arguments, as listed for ``kind``.
+
+        Returns
+        -------
+        Sequential
+            The model, so calls chain.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> model = mojolearn.Sequential().add("linear", 8).add("relu").add("linear", 1)
         """
         if not isinstance(kind, str) or kind.lower() not in _LAYER:
             raise ValueError(f"kind must be one of {sorted(_LAYER)}")
@@ -171,7 +196,7 @@ class Sequential:
     def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=0.9, nesterov=False,
                 beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
                 step_size=1, gamma=0.1, huber_delta=1.0, tol=1e-4, n_iter_no_change=0):
-        """Choose the loss, optimizer and learning-rate schedule; returns the model.
+        """Choose the loss, optimizer and learning-rate schedule.
 
         Parameters
         ----------
@@ -198,6 +223,17 @@ class Sequential:
         tol, n_iter_no_change : float, int
             Stop when the epoch loss has not improved by more than ``tol``
             for ``n_iter_no_change`` epochs; 0 trains every epoch.
+
+        Returns
+        -------
+        Sequential
+            The model.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> model = mojolearn.Sequential().linear(8).relu().linear(1)
+        >>> model = model.compile(loss="huber", optimizer="momentum", lr=0.01, nesterov=True)
         """
         if loss not in _LOSS:
             raise ValueError(f"loss must be one of {sorted(_LOSS)}")
@@ -232,11 +268,31 @@ class Sequential:
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=32, shuffle=True, seed=0):
-        """Train on ``X`` (n_samples, n_features) and targets ``y``; returns the model.
+        """Train the model.
 
-        ``y`` is (n_samples,) or (n_samples, n_outputs) for ``mse`` and
-        ``huber``, and 1-D labels for ``cross_entropy`` and
-        ``bce_with_logits``. Parameters are initialized from ``seed``.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training inputs, cast to float32.
+        y : array-like
+            Targets: (n_samples,) or (n_samples, n_outputs) for ``mse`` and
+            ``huber``; one label per row for ``cross_entropy`` (any number
+            of classes, one model output per class) and ``bce_with_logits``
+            (two classes, one model output).
+        epochs : int, default 10
+            Passes over the data.
+        batch_size : int, default 32
+            Rows per optimizer step.
+        shuffle : bool, default True
+            Visit the rows in a new random order every epoch.
+        seed : int, default 0
+            Seed of the parameter initialization and the row order.
+
+        Returns
+        -------
+        Sequential
+            The fitted model, with ``params_``, ``loss_curve_``, ``n_iter_``
+            and ``n_features_in_`` set (and ``classes_`` for classifiers).
         """
         if not self._layers:
             raise ValueError("add at least one layer before fit")
@@ -321,7 +377,21 @@ class Sequential:
         return out
 
     def predict(self, X):
-        """Model outputs; class labels for ``cross_entropy`` and ``bce_with_logits``."""
+        """Predict with the fitted model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Inputs, cast to float32.
+
+        Returns
+        -------
+        ndarray
+            The model outputs, (n_samples,) or (n_samples, n_outputs) in the
+            shape ``y`` had at fit; for ``cross_entropy`` and
+            ``bce_with_logits`` models, the predicted class labels
+            (n_samples,).
+        """
         loss = getattr(self, "_fit_loss", None)
         if loss == "cross_entropy" or loss == "bce_with_logits":
             # class codes from the binding: the first-max-wins row argmax of
@@ -333,7 +403,18 @@ class Sequential:
         return out[:, 0].copy() if getattr(self, "_y_1d", False) else out
 
     def predict_proba(self, X):
-        """Class probabilities (n_samples, n_classes), columns in ``classes_`` order."""
+        """Class probabilities of a ``cross_entropy`` or ``bce_with_logits`` model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Inputs, cast to float32.
+
+        Returns
+        -------
+        ndarray of float32, shape (n_samples, n_classes)
+            Each row sums to one; columns follow ``classes_``.
+        """
         loss = getattr(self, "_fit_loss", None)
         if loss == "cross_entropy":
             return self._forward(X, _OUT_SOFTMAX)
