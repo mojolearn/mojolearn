@@ -35,8 +35,9 @@ Constraints that carry into any public surface:
   composite `NeuralRules` that dispatches every family is the target once
   the module graph allows it without an import cycle: today
   `autograd.rules_recurrent` imports `sequence.recurrent`, which imports no
-  autograd module; the `RnnStep` seam lets `sequence/pyapi.mojo` pick the
-  step, so `sequence.recurrent` never imports the rules.
+  autograd module but `autograd.losses` (which imports only the tape, the
+  fold and the loss bodies); the `RnnStep` seam lets `sequence/pyapi.mojo`
+  pick the step, so `sequence.recurrent` never imports the rules.
 - Metal, NVIDIA and AMD: the 97-case gradient suite gives the same digests
   on all three and on the host (NATIVE_AUTOGRAD.md, "GPU status").
 - `python/mojolearn/_training_impl.py:80` and `:1379` (`step()` rationale).
@@ -45,6 +46,63 @@ Constraints that carry into any public surface:
 
 The public surface is listed in `docs-site/api_exclude.txt` until its
 gradient checks pass on Apple, NVIDIA and AMD.
+
+## Losses and metrics
+
+One set, used by the tape for training losses and by the trainers for the
+losses they report, so the numbers users compare across machines are
+identical by construction.
+
+- `autograd/losses.mojo` (tape): `mse`, `mae`, `huber(delta)`,
+  `binary_cross_entropy_with_logits`, `cross_entropy` (logits and integer
+  class codes, held as float values in a (rows, 1) tensor), each with
+  `REDUCTION_MEAN` or `REDUCTION_SUM`, and `cross_entropy_dense` (the tape's
+  dense-target `cross_entropy`). Each is a loss node of the tape
+  (`Tape.loss_terms`, `Tape.cross_entropy_rows`: per-element or per-row
+  terms with their VJPs) followed by `Tape.mean` or `Tape.sum`. `mse`
+  equals `Tape.mse_loss` bit for bit for same-shape inputs.
+- `loss_value_into` (trainers, no tape): the same term bodies and the same
+  fold over executor buffers into one word, plus the forward-only
+  clipped-probability kinds `LS_LOG_PROB` / `LS_BINARY_LOG_PROB` of the MLP
+  trainer. Its value equals the tape loss of the same kind and reduction bit
+  for bit. Scratch: `loss_scratch(ex, max_terms)`.
+- `autograd/metrics.mojo` (forward only, one download of one value each):
+  `accuracy`, `accuracy_from_scores` (first maximum), `log_loss` (clipped to
+  [2^-23, 1 - 2^-23], k-class or the positive column), `mean_squared_error`,
+  `root_mean_squared_error`, `mean_absolute_error`, `r2_score` (one output),
+  `roc_auc` (ties count one half). Rows are limited to 2^24 - 1 because
+  codes, counts and indices travel as float values.
+- Bodies: `autograd/loss_ops.mojo`, opcodes 1200..1211, a second range in
+  `sequence/dispatch.mojo` (asserted disjoint from the autograd ops and the
+  recurrent scan codes).
+
+Fold convention. Every sum is the tape's blocked fold
+(`autograd/fold.mojo::blocked_fold`, the launches `Tape` itself uses):
+blocks of `ag_fold_block(extent)` consecutive terms (the smallest power of
+two R >= 64 with R * R >= extent) added ascending from +0.0, then the block
+partials added ascending from +0.0 times the factor. The mean's factor is
+`identical_div(1, count)`. Per-row terms (cross-entropy, log loss, argmax)
+are one thread per row over the classes in ascending order. The AUC sorts
+(score, label) with a bitonic network on the executor (padding to a power
+of two sorts last), counts positives before each row with a blocked scan,
+finds each positive row's tie group by binary search, and folds its tie-aware
+pair count over twice the negatives; the integer counts are exact, the final
+sum is the fixed fold. The metrics in `metrics/impl/` (DeviceContext kernels
+with shared-memory trees) are not used here because they do not run on
+HostExec; the terms are theirs, the fold order is the tape's.
+
+Trainers under `-D MOJOLEARN_AUTOGRAD_LOSS` (default off): `sequence/
+mlp_fit.mojo` takes each batch's data term from `loss_value_into` (sum of
+per-element terms) and keeps op_mlp_bloss for the L2 term and the divide;
+`sequence/recurrent.mojo::rnn_fit` takes `losses[k]` from `loss_value_into`
+(mean) instead of the one-thread OP_SUM. Gradient seeds are unchanged in
+both. New bits in the reported losses only; n_iter of the MLP can move with
+them through the stopping rule.
+
+Checks: `autograd/checks/loss_cpu.mojo` and `loss_gpu.mojo`
+(`run_loss_checks`): float64 oracles for every loss value and gradient,
+bit equality of `loss_value_into` and the tape, and the metrics on small
+arrays with ties.
 
 ## (c) Migration order
 
