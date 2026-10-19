@@ -26,13 +26,15 @@
 from std.memory import bitcast
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI
 from sequence.mlp import EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX
-from sequence.gemm_tiled import GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GR_MICRO, seq_gemm_route
+from sequence.gemm_tiled import GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GR_MICRO, GR_TILE16, seq_gemm_route
 from sequence.gemm_split import OP_GK_SPLIT, gemm_split_args, gemm_split_on
 from sequence.exec_device import DeviceExec
 from sequence.exec import HostExec
 from autograd.ops import OP_AGK_GEMM_EPI
 
-comptime N_ROUTES = 6  # GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GR_MICRO, then the dispatch's own
+# GR_CELL, GR_TILE (the tiled family as the dispatch resolves it), GR_THIN_N,
+# GR_THIN_M, GR_MICRO and GR_TILE16 forced, then the dispatch's own
+comptime N_ROUTES = 7
 comptime N_KINDS = 10
 
 
@@ -369,7 +371,7 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
     var ns: List[Int] = [1, 2, 3, 16, 17, 64, 65]
     var ks: List[Int] = [1, 2, 27, 28, 29, 255, 256, 257]
     var idx = 0
-    var routes_seen = List[Int](length=5, fill=0)
+    var routes_seen = List[Int](length=6, fill=0)
     for i in range(len(ms)):  # driver-loop: over the shape grid
         for j in range(len(ns)):
             for l in range(len(ks)):
@@ -445,7 +447,7 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
         idx += 1
     print(
         "ROUTES grid cell", routes_seen[GR_CELL], "tile", routes_seen[GR_TILE],
-        "thinN", routes_seen[GR_THIN_N], "thinM", routes_seen[GR_THIN_M], "micro", routes_seen[GR_MICRO],
+        "thinN", routes_seen[GR_THIN_N], "thinM", routes_seen[GR_THIN_M],
     )
     if tally.host_diffs != 0:
         print("HOSTDIFF total words", tally.host_diffs, "(reported, not required)")

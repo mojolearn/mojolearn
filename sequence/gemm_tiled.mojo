@@ -573,6 +573,7 @@ def seq_gemm_tile_blocks(route: Int, M: Int, N: Int) -> Int:
         return ((M + GM_M - 1) // GM_M) * ((N + GM_N - 1) // GM_N)
     if route == GR_TILE and seq_gemm_micro_on(M, N):
         return ((M + GM_M - 1) // GM_M) * ((N + GM_N - 1) // GM_N)
+    # GR_TILE below the micro edge, GR_TILE16
     return seq_gemm_tiled_blocks(M, N)
 
 

@@ -54,7 +54,8 @@ from sequence.gemm_tiled import (
     seq_gemm_route, seq_gemm_epi_kind, seq_gemm_tile_blocks, seq_gemm_tile_kernel,
 )
 from sequence.gemm_tiled import (
-    GR_MICRO, GK_BIAS_LOGISTIC, GK_BIAS_TANH, seq_gemm_micro_kernel, seq_gemm_split_blocks, seq_gemm_split_kernel,
+    GR_MICRO, GK_BIAS_LOGISTIC, GK_BIAS_TANH, seq_gemm_micro_kernel, seq_gemm_micro_on,
+    seq_gemm_split_blocks, seq_gemm_split_kernel,
 )
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
 from sequence.ops import OP_GEMM_EPI
@@ -1142,11 +1143,13 @@ struct DeviceExec(Exec, Movable):
                         self._gemm_tile[GT_THIN, 1, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
                     elif route == GR_THIN_M:
                         self._gemm_tile[1, GT_THIN, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
-                    elif route == GR_MICRO:
-                        # lane ag-pass6-gemm: 4 x 4 register cells a thread
-                        self._gemm_micro(a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
+                    elif route == GR_MICRO or (route == GR_TILE and seq_gemm_micro_on(a.i0, a.i1)):
+                        # lane ag-pass6-gemm: GR_TILE on both edges >= 64 (or
+                        # forced): the micro-tile, 4 x 4 register cells a thread
+                        self._gemm_micro(a, ek, colsum, seq_gemm_tile_blocks(GR_MICRO, a.i0, a.i1))
                     else:
-                        self._gemm_tile[GT_M, GT_N, GT_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
+                        # GR_TILE below the micro edge, or GR_TILE16 forced
+                        self._gemm_tile[GT_M, GT_N, GT_K](a, ek, colsum, seq_gemm_tiled_blocks(a.i0, a.i1))
                     return
         self.ctx.enqueue_function[seq_kernel[OP]](
             a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
