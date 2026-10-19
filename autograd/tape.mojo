@@ -12,6 +12,8 @@ from autograd.ops import (
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output,
 )
 
+comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
+
 
 @fieldwise_init
 struct Tensor(ImplicitlyCopyable, Movable):
@@ -35,6 +37,9 @@ struct _Node(ImplicitlyCopyable, Movable):
     # The gradient buffer holds a value: written by a backward (or zeroed for
     # an unreached leaf), or caller storage from variable_into.
     var grad_ready: Bool
+    # Produced in inference mode (no_grad): a value with no parents, no
+    # gradient storage and no backward.
+    var inferred: Bool
 
 
 trait BackwardRules:
@@ -128,6 +133,17 @@ struct Tape(Movable):
         var loss = tape.multiply(ex, x, x)
         tape.backward(ex, loss)
         var dx = tape.gradients(ex, x)
+
+    Inference: after no_grad() every operation computes its value exactly
+    as when recording (the same kernels, so the same bits) but keeps no
+    graph and no gradient storage; record() switches recording back on.
+    Tensors made in inference mode are constants: backward from one, or
+    gradient() of one, raises. Example::
+
+        tape.no_grad()
+        var y = tape.relu(ex, tape.matmul(ex, x, w))
+        var prediction = tape.values(ex, y)
+        tape.record()
     """
     var _nodes: List[_Node]
     var _parents: List[Int]
@@ -136,6 +152,7 @@ struct Tape(Movable):
     var _cursor: Int
     var _identity: Optional[MutPointer[Int, MutUntrackedOrigin]]
     var _generation: Int
+    var _recording: Bool
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -145,6 +162,23 @@ struct Tape(Movable):
         self._cursor = 0
         self._identity = None
         self._generation = 0
+        self._recording = True
+
+    def no_grad(mut self):
+        """Enter inference mode: later operations keep no graph or gradients.
+
+        Values are computed exactly as when recording. The mode lasts until
+        record() and is kept across reset() and release().
+        """
+        self._recording = False
+
+    def record(mut self):
+        """Leave inference mode: later operations are recorded for backward."""
+        self._recording = True
+
+    def is_recording(self) -> Bool:
+        """True unless no_grad() is in effect."""
+        return self._recording
 
     def __deinit__(deinit self):
         # The tape keeps no executor reference, so it cannot free executor
@@ -213,9 +247,26 @@ struct Tape(Movable):
         op: Int, parents: List[Tensor], saved: Args, leaf_grad: Bool = False,
         grad_storage: FP = dummy_ptr(), caller_grad: Bool = False,
     ) raises -> Tensor:
+        # ONE VALUE PATH (lane ag-forward). Every operation computes its value
+        # (allocation through _alloc, or caller storage for *_into, then the
+        # same launch helper) BEFORE calling _record, and _record never
+        # launches a value kernel. Inference mode differs from recording only
+        # here: the node keeps no parents, gets no gradient storage and is
+        # marked inferred. So a recorded and a non-recorded forward run the
+        # same kernels on the same inputs and produce the same bits by
+        # construction. (Recording also takes gradient slots from _alloc, so
+        # the two modes may place values in different slots; slot placement
+        # never changes a value.)
         self._shape(rows, cols)
         if not self._identity:
             self._identity = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(alloc[Int](1)))
+        if not self._recording:
+            for p in parents:  # driver-loop: over node inputs
+                _ = self._check(p)
+            var at = len(self._nodes)
+            self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
+                                     saved, False, True))
+            return Tensor(Int(self._identity.value()), self._generation, at)
         var requires = leaf_grad
         var start = len(self._parents)
         for p in parents:
@@ -234,7 +285,7 @@ struct Tape(Movable):
             else:
                 grad = self._alloc(ex, rows * cols)
         var index = len(self._nodes)
-        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready))
+        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
@@ -281,6 +332,8 @@ struct Tape(Movable):
     def gradient(self, x: Tensor) raises -> FP:
         """Return the executor pointer for a differentiable tensor's gradient."""
         var n = self._nodes[self._check(x)]
+        if n.inferred:
+            raise Error(_INFERRED_REFUSAL)
         if not n.requires_grad:
             raise Error("tensor does not require a gradient")
         if not n.grad_ready:
@@ -597,6 +650,8 @@ struct Tape(Movable):
     ) raises:
         """Differentiate a scalar using native custom backward rules."""
         var n = self._nodes[self._check(output)]
+        if n.inferred:
+            raise Error(_INFERRED_REFUSAL)
         if n.rows * n.cols != 1:
             raise Error("non-scalar backward requires an explicit seed tensor")
         var cursor = self._cursor
@@ -620,6 +675,8 @@ struct Tape(Movable):
     ) raises:
         var n = self._nodes[self._check(output)]
         var s = self._nodes[self._check(seed)]
+        if n.inferred:
+            raise Error(_INFERRED_REFUSAL)
         if n.rows != s.rows or n.cols != s.cols:
             raise Error("backward seed shape must equal output shape")
         var cursor = self._cursor
@@ -634,6 +691,8 @@ struct Tape(Movable):
         mut self, mut ex: E, output: Tensor, seed: FP, rules: R, accumulate: Bool,
     ) raises:
         var root = self._check(output)
+        if self._nodes[root].inferred:
+            raise Error(_INFERRED_REFUSAL)
         if not self._nodes[root].requires_grad:
             raise Error("output has no differentiable ancestors")
         var active = List[Bool](length=len(self._nodes), fill=False)
