@@ -55,6 +55,15 @@ comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DE
 #:   MLP_BLOCKED_FOLDS kernels (op_mlp_rowloss, op_mlp_l2part, op_mlp_l2fold,
 #:   op_mlp_rowpart, op_mlp_bloss, op_mlp_epoch_loss) for the A/B.
 comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_OFF"]()
+#: MLP_LB_ROWS (lane ag-pass5-loss, 2026-10-19; PASS5_IDEAS idea 2): the
+#:   loss block's row losses one thread per row (B threads in op_mlp_lb_part,
+#:   each storing its row's loss term) and the row-block sums by many threads
+#:   in the fold launch, in place of ceil(B / R) part threads that each chained
+#:   R rows of software logs. Same bits by construction (the loss-section
+#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is;
+#:   -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF restores the pass-3 row-block threads
+#:   for the A/B.
+comptime MLP_LB_ROWS = MLP_LOSSBLOCK and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF"]()
 # NI52 scheduling-only subarm: leave the exact epoch Feistel mapping intact,
 # but construct even the no-shuffle identity order on the selected executor.
 # Avoid the otherwise unused host N-row permutation initialization. Default
@@ -168,6 +177,37 @@ def op_act_bwd(t: Int, a: Args):
 #:   once-an-epoch norm would report a different number. The curve feeds
 #:   tol / n_iter_no_change every epoch, so the term is always consumed; it
 #:   is made cheap instead (2 launches, short chains, many threads).
+#: MLP_LB_ROWS (the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF keeps the
+#: layout above), per batch, L <= 4 layers: 3 launches (L > 4: 2 ceil(L / 4)
+#: + 1). The pass-3 part launch's critical path was one row-block thread's
+#: chain of R(B) rows of O loss terms, two software logs a term under
+#: IDENTICAL (HIGGS: 128 dependent logs, 42 us a batch on AMD, 23.5 us on
+#: NVIDIA); the seed threads idled after one subtract.
+#:   OP_MLP_LB_PART (1600) i3 = 1: B O seed threads, then B row threads
+#:                        (rowloss[row] = mlp_row_loss(row), chain O terms),
+#:                        then the weight blocks as above. i3 = 2 (the data
+#:                        sum comes from -D MOJOLEARN_AUTOGRAD_LOSS): no row
+#:                        threads. HIGGS: 512 + 512 + 56 + 4.
+#:   OP_MLP_LB_FOLD (1601) i11 = 2, once per group of four layers: ceil(B /
+#:                        R(B)) row-block threads on the first group (rowparts
+#:                        [k] = rowloss[k R : min((k + 1) R, B)] added
+#:                        ascending from +0.0, af_fold_parts) and one thread
+#:                        per layer of the group (l2[l] = its block partials
+#:                        added ascending, the pass-3 fold's sum). HIGGS: 8
+#:                        threads of 64 adds + 2 threads of 56 and 4.
+#:   OP_MLP_LB_FOLD (1601) i11 = 3, once: 1 thread, the batch loss from the
+#:                        row-block partials and l2, the pass-3 last-group
+#:                        arithmetic (chain ceil(B / R) + L adds; HIGGS 10).
+#: BITS: the same as MLP_LB_ROWS off, every column, every shape. A row's loss
+#:   is mlp_row_loss unchanged; its value is an ftz'd fma3 result or that
+#:   value negated, so the st (ftz) / ld (ftz) round trip through rowloss
+#:   returns the same word. Each row block adds the same rows ascending from
+#:   +0.0 with `add` (af_fold_parts is that chain with its loads staged), the
+#:   blocks are mlp_lb_block(B) as before, and the final fold, the per-layer
+#:   sums and the batch-loss arithmetic are the pass-3 fold's verbatim. No bit
+#:   version: digests (hand, composed, fused, loss curves) are unchanged.
+#:   autograd/checks/lossblock_cases.mojo runs both layouts on every case and
+#:   fails on any differing word.
 
 
 @always_inline
