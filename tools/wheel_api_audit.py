@@ -193,12 +193,16 @@ def split_audit(wheels):
                 bundle = actual_marker.get('bundled_ptx')
             except (KeyError, ValueError, AttributeError):
                 bundle = None
-            if package.get('ptx') and (bundle is not None or package.get('ptx_shipped', True)):
+            if package.get('ptx'):
+                try:
+                    plugins.validate_bundle_descriptor(bundle)
+                    row['ptx_reference'] = bundle
+                except ValueError as exc:
+                    problems.append(f'{wheel.name}: invalid PTX dependency manifest: {exc}')
+            elif package['code_format'] == 'ptx':
                 # THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag):
-                # required in the NVIDIA wheel, its manifest bound by the marker,
-                # its bytes the manifest's and the release inventory's ... while the registry ships it
-                # (`ptx_shipped`; off since 2026-10-12 while the wheel is over PyPI's 100 MiB limit: a wheel
-                # without the slot and without a bundle passes; one that carries a bundle is checked as before).
+                # owned by the PTX dependency, with its manifest bound by both
+                # package markers and its bytes by the release inventory.
                 try:
                     if bundle is None:
                         raise ValueError('the vendor marker binds no PTX set')
@@ -265,6 +269,11 @@ def split_audit(wheels):
         problems.append(f'the split wheels carry different versions: {sorted(versions)}')
     if len(tagsets) > 1:
         problems.append(f'the split wheels carry different tags: {sorted(tagsets)}')
+    ptx = next((r.get('ptx') for r in rows if r.get('role') == plugins.PTX_PROFILE), None)
+    if ptx is not None:
+        for row in rows:
+            if 'ptx_reference' in row and row['ptx_reference']['manifest_sha256'] != ptx['manifest_sha256']:
+                problems.append(f"{row['wheel']}: PTX dependency manifest differs from the vendor marker")
     return dict(scope='Split wheel ownership, dependencies, size and metadata; no numerical qualification.',
                 wheels=rows, problems=problems)
 
@@ -312,6 +321,8 @@ def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
         packages = {r['distribution']: r for r in plugins.distribution_rows()}
         if name == plugins.CORE_DISTRIBUTION and dist + '/' + plugins.CORE_MARKER in read:
             required = plugins.core_requirements(version)
+        elif name in packages:
+            required = plugins.package_requirements(packages[name]['profile'], version)
         else:
             continue
         for requirement in required:

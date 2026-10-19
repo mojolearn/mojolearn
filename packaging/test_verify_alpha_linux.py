@@ -198,11 +198,12 @@ class SplitLinuxTests(unittest.TestCase):
             for arch in arches:
                 members[f"mojolearn/{package['directory']}/{arch}/identical/_mojolearn_knn.so"] = b'FAKE BYTES, NEVER EXECUTE'
             bundle = None
-            if package.get('ptx'):
+            if package.get('ptx') or package['code_format'] == 'ptx':
                 # THE PTX SLOT (Andrew 2026-10-10: PTX is a normal target; no flag)
                 ptx_root = P.BUNDLED_PTX_ROOT + '/'
                 ptx_bytes = b'FAKE PTX BYTES, NEVER EXECUTE'
-                members[ptx_root + 'identical/_mojolearn_knn.so'] = ptx_bytes
+                if package['code_format'] == 'ptx':
+                    members[ptx_root + 'identical/_mojolearn_knn.so'] = ptx_bytes
                 manifest = json.dumps(dict(
                     schema=P.PTX_MANIFEST_SCHEMA, code_format=P.PTX_CODE_FORMAT, vendor='cuda', target='sm_80',
                     min_compute_capability=[8, 0], source_commit='a' * 40, source_dirty=False,
@@ -210,7 +211,8 @@ class SplitLinuxTests(unittest.TestCase):
                     files=[dict(file='identical/_mojolearn_knn.so', numeric_mode='identical',
                                 sha256=hashlib.sha256(ptx_bytes).hexdigest(),
                                 ptx_modules=[dict(target='sm_80', sha256='b' * 64)])])).encode()
-                members[ptx_root + P.BASELINE_MANIFEST] = manifest
+                if package['code_format'] == 'ptx':
+                    members[ptx_root + P.BASELINE_MANIFEST] = manifest
                 bundle = dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
             members[prefix + P.PLUGIN_MARKER] = json.dumps(P.package_marker(kind, v, arches, bundled_ptx=bundle)).encode()
         payload['extensions'] = {name: hashlib.sha256(raw).hexdigest()
@@ -240,7 +242,7 @@ class SplitLinuxTests(unittest.TestCase):
         return hashlib.sha256(raw).hexdigest()
 
     def test_each_split_wheel_admits_alone(self):
-        for kind in ('core', 'nvidia', 'amd'):
+        for kind in ('core', 'nvidia', 'amd', 'nvidia-ptx'):
             with self.subTest(kind=kind):
                 result = gate.verify(self.dist, self.stage(kind), None, self.root)
                 self.assertTrue(result['passed'])
@@ -344,8 +346,8 @@ class SplitLinuxTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'source witness differs'):
             gate.verify(self.dist, self.stage('core', wrong_source), None, self.root)
 
-    def test_there_is_no_separate_ptx_package_to_publish(self):
-        # the PTX set is a slot of mojolearn-nvidia, not a project of its own
+    def test_old_experimental_ptx_name_remains_retired(self):
+        self.assertEqual(self.plugins.package('nvidia-ptx')['distribution'], 'mojolearn-nvidia-ptx')
         self.assertNotIn('nvidia-ptx80', self.plugins.PAYLOADS)
         with self.assertRaises((KeyError, StopIteration)):
             self.plugins.package('nvidia-ptx80')

@@ -34,13 +34,15 @@ import sys
 import urllib.error
 import urllib.request
 
-#: The three projects of the split Linux release (python/mojolearn/gpu_plugins.py,
+#: The projects of the split Linux release (python/mojolearn/gpu_plugins.py,
 #: spelled here because this file ships to the box without the package).
 CORE = "mojolearn"
 PLUGINS = {"cuda": "mojolearn-nvidia", "hip": "mojolearn-amd"}
 PAYLOADS = {vendor: (project,) for vendor, project in PLUGINS.items()}
-PROJECTS = (CORE, *PLUGINS.values())
-REQUIRES = {CORE: tuple(PLUGINS.values()), **{project: (CORE,) for project in PLUGINS.values()}}
+PTX_PROJECT = "mojolearn-nvidia-ptx"
+PROJECTS = (CORE, *PLUGINS.values(), PTX_PROJECT)
+REQUIRES = {CORE: tuple(PLUGINS.values()), "mojolearn-nvidia": (CORE, PTX_PROJECT),
+            "mojolearn-amd": (CORE,), PTX_PROJECT: (CORE,)}
 
 
 #: index -> (simple index, JSON API root, file host of OUR three projects)
@@ -189,6 +191,7 @@ def load_check(vendor, version):
         facts["vendor_how"] = str(getattr(_backend, "vendor_how", lambda: None)())
         facts["gpu_arch"] = getattr(_backend, "gpu_arch", lambda: None)()
         facts["plugin"] = getattr(_backend, "gpu_plugin", lambda: None)()
+        facts["ptx_selection"] = getattr(_backend, "baseline_selection_receipt", lambda: None)()
         mode = _backend.default_mode()
         facts["mode"] = mode
         facts["tier_dir"] = os.path.realpath(_backend.tier_dir(mode))
@@ -204,7 +207,10 @@ def load_check(vendor, version):
         problems.append(f"the loaded GPU set is not from {PLUGINS[vendor]} {version} (gpu_plugin() = {facts['plugin']})")
     if set(plugin.get("payloads") or []) != set(PAYLOADS[vendor]):
         problems.append(f"loaded vendor package has unexpected native ownership: {plugin}")
-    want_dir = os.path.join(facts["package"], {"cuda": "cuda_native", "hip": "hip_native"}[vendor]) + os.sep
+    directory = {"cuda": "cuda_native", "hip": "hip_native"}[vendor]
+    if vendor == "cuda" and facts["ptx_selection"]:
+        directory = "cuda_ptx"
+    want_dir = os.path.join(facts["package"], directory) + os.sep
     if not (facts["tier_dir"] + os.sep).startswith(want_dir):
         problems.append(f"the loaded tier directory {facts['tier_dir']} is not under {want_dir}")
     return facts, problems

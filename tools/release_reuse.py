@@ -102,9 +102,8 @@ LINUX = "linux-64"
 MACOS = "osx-arm64"
 #: The Linux release sets: native sm_89, the PTX slot sm_80 (Andrew 2026-10-10: PTX is a
 #: normal target; no flag) and gfx942 (python/mojolearn/gpu_plugins.py; sm_90a out from 0.8.38: PyPI 100 MiB limit).
-#: 2026-10-12 (0.8.39): the PTX slot is OUT of the Linux sets while PyPI's 100 MiB mojolearn-nvidia limit stands
-#: (sm_89 67.0 MiB + sm_80 67.0 MiB compressed = 134.1 MiB; gpu_plugins.py `ptx_shipped=False`). Put it back with the limit.
-LINUX_SETS = (("cuda", "sm_89"), ("hip", "gfx942"))
+#: PTX ships in its own exactly pinned wheel, under the per-file upload limit.
+LINUX_SETS = (("cuda", "sm_89"), ("cuda", "sm_80"), ("hip", "gfx942"))
 #: The PTX slot (gpu_plugins.PTX_ARCH): always BUILD, never taken from a published wheel.
 PTX_SET = ("cuda", "sm_80")
 #: The leg that builds when only a host binding or the runtime needs one.

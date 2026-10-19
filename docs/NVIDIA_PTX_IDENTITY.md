@@ -2,22 +2,22 @@
 
 Andrew 2026-10-10: PTX is a normal target; no flag.
 
-## Published wheels: native sm_89 only
+## Distribution layout
 
-The published `mojolearn-nvidia` wheels carry **native `sm_89` only, with no
-PTX fallback** (checked in the 0.8.43 wheel on PyPI: `cuda_native/sm_89`, no PTX entry). This supports Ada GPUs such as RTX 40-series, L4, L40, L40S
-and RTX 6000 Ada. It does not support A100, RTX 30-series/A40, H100/H200 or
-Blackwell GPUs out of the box; those need an appropriate source build.
+The release packages native `sm_89` in `mojolearn-nvidia` and PTX `sm_80`
+in `mojolearn-nvidia-ptx`. NVIDIA requires the PTX distribution at exactly
+the same version, so `pip install mojolearn` installs both automatically.
+Their files occupy separate directories at the existing loader paths.
+Both package markers bind the PTX manifest's SHA256.
 
-The loader and build system support the PTX slot described below, but
-`gpu_plugins.PLUGINS["cuda"]["ptx_shipped"]` is currently false. The native
-and PTX sets together packed at 134.1 MiB, over the NVIDIA project's 100 MiB
-PyPI file limit. A registered or built target is not a shipped target.
+Releases through 0.8.52 shipped native `sm_89` only. The native and PTX
+sets together packed at 134.1 MiB, over PyPI's 100 MiB file limit. Splitting
+the files lets each distribution fit under that limit.
 
 ## Available build slots
 
-`mojolearn-nvidia` supports two kinds of set, both regular slots of the same
-wheel when included (`python/mojolearn/gpu_plugins.py`):
+The NVIDIA install supports two kinds of set, registered in
+`python/mojolearn/gpu_plugins.py`:
 
 | Slot | Directory | Code | Runs on |
 | --- | --- | --- | --- |
@@ -120,7 +120,7 @@ places the two can produce different bits, and what holds each one:
   keeps the rounding-pinned PTX and writes `PTX_BASELINE.json` instead of
   converting the IDENTICAL modules to cubins. It needs no GPU.
 - `cross-compile-check` compiles sm_80 like any arch.
-- When PTX is shipped, `pack_wheel.py --profile release-split` packs the PTX
-  set into `mojolearn-nvidia` with its own build proof. Current releases omit
-  it under the file-size limit above; there is no separate PTX wheel and no
-  `--bundle-ptx` option.
+- `pack_wheel.py --profile release-split` packs the PTX set into
+  `mojolearn-nvidia-ptx` with its own build proof. The split audit checks
+  disjoint file ownership and matching PTX manifest digests across packages.
+  Publication uploads PTX first, NVIDIA next, and the core after both vendors.

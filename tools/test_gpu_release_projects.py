@@ -59,7 +59,7 @@ class ProjectClassification(unittest.TestCase):
         result = projects.classify(wheels, version='1.2.3', require_complete=True)
         self.assertTrue(result['core'])
         self.assertEqual(result['plugins'], ['amd', 'nvidia'])
-        self.assertEqual(result['payloads'], [])
+        self.assertEqual(result['payloads'], ['nvidia-ptx'])
         parsed = {key: json.loads(value) for key, value in
                   (line.split('=', 1) for line in projects.github_outputs(result).splitlines())}
         self.assertEqual(parsed['payloads'], result['payloads'])
@@ -69,7 +69,7 @@ class ProjectClassification(unittest.TestCase):
         self.assertEqual(output.read_text(), projects.github_outputs(result))
 
     def test_partial_payload_and_aggregate_dispatches(self):
-        for profile, role in (('amd', 'plugins'), ('nvidia', 'plugins')):
+        for profile, role in (('amd', 'plugins'), ('nvidia', 'plugins'), ('nvidia-ptx', 'payloads')):
             wheel = self.wheel(profile)
             result = projects.classify([wheel])
             self.assertFalse(result['core'])
@@ -85,8 +85,8 @@ class ProjectClassification(unittest.TestCase):
         self.assertEqual(result['payloads'], [])
 
     def test_retired_unknown_empty_duplicate_and_mixed_versions_fail(self):
-        # The separate PTX project is retired: the PTX set is a slot of
-        # mojolearn-nvidia (Andrew 2026-10-10: PTX is a normal target; no flag).
+        # The old experimental PTX80 name remains retired; the normal PTX
+        # dependency uses mojolearn-nvidia-ptx.
         retired = self.root / 'mojolearn_nvidia_ptx80-1.2.3-py3-none-manylinux_2_35_x86_64.whl'
         retired.write_bytes(b'')
         with self.assertRaisesRegex(ValueError, 'unknown GPU release project'):

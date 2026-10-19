@@ -61,7 +61,7 @@
 # Publish native payloads FIRST, vendor aggregates SECOND, the core LAST.
 # The aggregate/core jobs also check their exact dependencies on the index,
 # including when the release uploads each project in a separate dispatch.
-# Experimental PTX payloads are never publishable through this workflow.
+# The NVIDIA PTX dependency is a regular payload and publishes before NVIDIA.
 # Every project uses its own Trusted Publisher environment: pypi[-<profile>]
 # and testpypi[-<profile>]. New architecture environments/publishers must be
 # provisioned externally before the first upload; this workflow does not
@@ -1179,7 +1179,7 @@ jobs:
   publish_alpha_plugins:
     name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
     # Native vendor packages publish before the core. Architecture sets stay
-    # together in each vendor wheel; experimental PTX is not release-enabled.
+    # together in each vendor wheel; the PTX dependency has already published.
     needs: [alpha_stage, cpu_certification, publish_alpha_payloads]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&

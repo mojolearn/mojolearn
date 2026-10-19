@@ -202,7 +202,7 @@ class CandidateSelectionTests(unittest.TestCase):
         self.assertEqual(plan["previous"]["version"], "0.8.47")
         self.assertEqual(self.builds(plan), ["_mojolearn_svm"])
         self.assertTrue(all("release owner" in r["reason"] for r in rr.plan_rows(plan, decision="BUILD")
-                            if r["name"] == "_mojolearn_svm"))
+                            if r["name"] == "_mojolearn_svm" and (r["vendor"], r["arch"]) != rr.PTX_SET))
 
     def test_a_candidate_older_than_pypi_is_not_weighed(self):
         self.candidate(version="0.8.45")

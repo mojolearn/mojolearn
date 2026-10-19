@@ -74,17 +74,20 @@ pixi run release <version> --publish pypi     # ... then publish each wheel as i
 (`## <version> (published YYYY-MM-DD)`, UTC) first; the command bumps the two
 version files, runs `write-docs-facts`, commits and pushes exactly those files,
 freezes HEAD, runs the rehearsal (step 0) and the reuse plan, and then runs
-FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
+FIVE PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
 - **macos**: macos-build, macos-smoke (its self-test job is the bundled-table
   gate: publish-macos refuses without its PASSED receipt), publish-macos.
 - **core-linux**: cross-compile (step 0b, beside the rehearsal; it gates
   linux-builds, the first rental), linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
-  plugins, 3b), publish-core-linux (last, after both plugins).
+  plugins plus PTX, 3b), publish-core-linux (last, after both plugins).
+- **nvidia-ptx**: publish-nvidia-ptx, before the NVIDIA vendor package that
+  requires it. The default preverified route uses its build and artifact checks.
 - **nvidia**: gpu-column-nvidia (the expanded smoke, on the
   nv box we hold, the RunPod L40S sm_89), gpu-column-nvidia-hopper (only with
-  `--hopper-box <ssh>`, a Hopper box we hold; otherwise SKIPPED), publish-nvidia.
+  `--hopper-box <ssh>`, a Hopper box we hold; otherwise SKIPPED), publish-nvidia
+  (after publish-nvidia-ptx).
 - **amd**: gpu-column-amd (on the amd box we hold, the DigitalOcean MI325X
   gfx942; the expanded smoke too), publish-amd.
 
