@@ -53,6 +53,10 @@ from sequence.gemm_tiled import (
     GK_PLAIN, GK_BIAS, GK_BIAS_RELU, GK_BIAS_ACT, GK_L2GRAD, GK_ACT_BWD,
     seq_gemm_route, seq_gemm_epi_kind, seq_gemm_tile_blocks, seq_gemm_tile_kernel,
 )
+from sequence.gemm_tiled import (
+    GR_MICRO, GK_BIAS_LOGISTIC, GK_BIAS_TANH, seq_gemm_micro_kernel, seq_gemm_split_blocks, seq_gemm_split_kernel,
+)
+from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
 from sequence.ops import OP_GEMM_EPI
 from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
 from sequence.ops import OP_COLSUM_DIV
@@ -985,6 +989,17 @@ struct DeviceExec(Exec, Movable):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
+        # lane ag-pass6-gemm (BIT VERSION, sequence/gemm_split.mojo): the
+        # products the shape rule selects take the split-K order on every GPU
+        # column (Apple too), ahead of the coop and tile routes; HostExec takes
+        # the same rule, so the same words. MOJOLEARN_IDN_GEMM_SPLITK_OFF: off.
+        comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
+            if gemm_split_on[OP](a):
+                self._gemm_split[OP](a)
+                return
+        comptime if OP == OP_GK_SPLIT:
+            self._gemm_split_kernel(a)
+            return
         # VAR's one-thread ops on one threadgroup (sequence/vecar_block.mojo):
         # the same chain per cell, so the same words
         comptime if OP == OP_CHOLSOLVE:
@@ -1127,6 +1142,9 @@ struct DeviceExec(Exec, Movable):
                         self._gemm_tile[GT_THIN, 1, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
                     elif route == GR_THIN_M:
                         self._gemm_tile[1, GT_THIN, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
+                    elif route == GR_MICRO:
+                        # lane ag-pass6-gemm: 4 x 4 register cells a thread
+                        self._gemm_micro(a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
                     else:
                         self._gemm_tile[GT_M, GT_N, GT_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
                     return
@@ -1157,6 +1175,10 @@ struct DeviceExec(Exec, Movable):
             self._gemm_tile_k[TM, TN, TK, GK_L2GRAD](a, colsum, blocks)
         elif ek == GK_ACT_BWD:
             self._gemm_tile_k[TM, TN, TK, GK_ACT_BWD](a, colsum, blocks)
+        elif ek == GK_BIAS_LOGISTIC:
+            self._gemm_tile_k[TM, TN, TK, GK_BIAS_LOGISTIC](a, colsum, blocks)
+        elif ek == GK_BIAS_TANH:
+            self._gemm_tile_k[TM, TN, TK, GK_BIAS_TANH](a, colsum, blocks)
         else:
             self._gemm_tile_k[TM, TN, TK, GK_PLAIN](a, colsum, blocks)
 
@@ -1168,6 +1190,78 @@ struct DeviceExec(Exec, Movable):
             Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
             Int32(a.i7), Int32(a.i8), Int32(a.i10), Int32(colsum), a.f0, a.f1,
             grid_dim=(blocks, 1, 1),
+            block_dim=(GT_TPB, 1, 1),
+        )
+
+    def _gemm_micro(mut self, a: Args, ek: Int, colsum: Int, blocks: Int) raises:
+        """seq_gemm_micro_kernel[ek] (lane ag-pass6-gemm, idea A)."""
+        if ek == GK_BIAS:
+            self._gemm_micro_k[GK_BIAS](a, colsum, blocks)
+        elif ek == GK_BIAS_RELU:
+            self._gemm_micro_k[GK_BIAS_RELU](a, colsum, blocks)
+        elif ek == GK_BIAS_ACT:
+            self._gemm_micro_k[GK_BIAS_ACT](a, colsum, blocks)
+        elif ek == GK_L2GRAD:
+            self._gemm_micro_k[GK_L2GRAD](a, colsum, blocks)
+        elif ek == GK_ACT_BWD:
+            self._gemm_micro_k[GK_ACT_BWD](a, colsum, blocks)
+        elif ek == GK_BIAS_LOGISTIC:
+            self._gemm_micro_k[GK_BIAS_LOGISTIC](a, colsum, blocks)
+        elif ek == GK_BIAS_TANH:
+            self._gemm_micro_k[GK_BIAS_TANH](a, colsum, blocks)
+        else:
+            self._gemm_micro_k[GK_PLAIN](a, colsum, blocks)
+
+    def _gemm_micro_k[EK: Int](mut self, a: Args, colsum: Int, blocks: Int) raises:
+        comptime kern = seq_gemm_micro_kernel[EK]
+        self.ctx.enqueue_function[kern](
+            a.p0, a.p1, a.p2, a.p3, a.p4,
+            Int32(a.i0), Int32(a.i1), Int32(a.i2),
+            Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+            Int32(a.i7), Int32(a.i8), Int32(a.i10), Int32(colsum), a.f0, a.f1,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(GT_TPB, 1, 1),
+        )
+
+    def _gemm_split[OP: Int](mut self, a: Args) raises:
+        """OP_GEMM, OP_GEMM_EPI or OP_AGK_GEMM_EPI in the split-K order (lane
+        ag-pass6-gemm, idea B): one OP_GK_SPLIT launch, then for
+        OP_AGK_GEMM_EPI with i11 = 1 the column sums' own OP_COLSUM_DIV
+        launch (not split), as HostExec runs them."""
+        self._launch[OP_GK_SPLIT](gemm_split_args[OP](a), a.i0 * a.i1)
+        comptime if OP == OP_AGK_GEMM_EPI:
+            if a.i11 != 0:
+                self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
+
+    def _gemm_split_kernel(mut self, a: Args) raises:
+        """seq_gemm_split_kernel[kind] for OP_GK_SPLIT's arguments (i9 / i10
+        the epilogue, as op_gemm_epi's)."""
+        var ek = seq_gemm_epi_kind(a.i9, a.i10)
+        if ek == GK_BIAS:
+            self._gemm_split_k[GK_BIAS](a)
+        elif ek == GK_BIAS_RELU:
+            self._gemm_split_k[GK_BIAS_RELU](a)
+        elif ek == GK_BIAS_ACT:
+            self._gemm_split_k[GK_BIAS_ACT](a)
+        elif ek == GK_L2GRAD:
+            self._gemm_split_k[GK_L2GRAD](a)
+        elif ek == GK_ACT_BWD:
+            self._gemm_split_k[GK_ACT_BWD](a)
+        elif ek == GK_BIAS_LOGISTIC:
+            self._gemm_split_k[GK_BIAS_LOGISTIC](a)
+        elif ek == GK_BIAS_TANH:
+            self._gemm_split_k[GK_BIAS_TANH](a)
+        else:
+            self._gemm_split_k[GK_PLAIN](a)
+
+    def _gemm_split_k[EK: Int](mut self, a: Args) raises:
+        comptime kern = seq_gemm_split_kernel[EK]
+        self.ctx.enqueue_function[kern](
+            a.p0, a.p1, a.p2, a.p3,
+            Int32(a.i0), Int32(a.i1), Int32(a.i2),
+            Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+            Int32(a.i7), Int32(a.i8), Int32(a.i10), a.f0, a.f1,
+            grid_dim=(seq_gemm_split_blocks(a.i0, a.i1, a.i2), 1, 1),
             block_dim=(GT_TPB, 1, 1),
         )
 
