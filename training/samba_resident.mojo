@@ -92,7 +92,7 @@ from mamba.impl.modules.mamba3 import (
     Mamba3DeviceWeights,
     mamba3_block_forward,
 )
-from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward_on
+from mamba.impl.modules.mamba3_prefill_backward import Mamba3DeviceGradients, mamba3_prefill_backward_on
 from training.checks.loss_contract import (
     CeConfig,
     IGNORE_INDEX_DEFAULT,
@@ -123,7 +123,33 @@ from transformer.checks.transformer_backward import (
 )
 from transformer.checks.transformer_fixture import RMS_EPS
 from autograd.rules_lm import AUTOGRAD_LM
-from autograd.rules_transformer import llama_decoder_layer_backward_autograd
+from autograd.rules_transformer import (
+    AUTOGRAD_REFUSE_DEFER,
+    llama_decoder_layer_backward_autograd,
+    llama_decoder_layer_record,
+)
+from autograd.tape import Tape, Tensor
+from autograd.refuse_scan import DeferredNonfiniteScan
+from autograd.rules_mamba3 import M3_BLOCK, M3KeepRef, M3StagesRef, M3WeightsRef
+from autograd.rules_samba import (
+    AUTOGRAD_SAMBA,
+    SAMBA_CE,
+    SAMBA_EMBEDDING,
+    SAMBA_HEAD,
+    SAMBA_NORM_F,
+    SambaBstRef,
+    SambaF32Ref,
+    SambaFwdRef,
+    SambaI32Ref,
+    SambaLayersRef,
+    SambaRules,
+    SambaScansRef,
+    samba_f32_ref,
+    samba_i32_ref,
+    samba_tape_eligible,
+)
+from sequence.exec_device import DeviceExec
+from sequence.ops import FP, Args
 from transformer.impl.llama.fused_attention import fused_forward_supported_head_dim
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_EAGER,
@@ -349,6 +375,13 @@ struct SambaResidentSession(Movable, Writable):
     var counts: DeviceBuffer[DType.int32]
     var run_begin: DeviceBuffer[DType.int32]
     var perm: DeviceBuffer[DType.int32]
+    # ---- the tape arm's own state (AUTOGRAD_SAMBA; rebuilt with the shape)
+    #: per Mamba-3 layer: the storage of d loss / d(block input), [M, dm]
+    var m3_dx: List[DeviceBuffer[DType.float32]]
+    #: the attention layers' nine weight gradients are views of `grad`
+    var t_grad_bound: Bool
+    #: the loss node's value word (the tape reads no value of it)
+    var tape_loss: DeviceBuffer[DType.float32]
     var busy: Bool
 
     def __init__(
@@ -471,6 +504,9 @@ struct SambaResidentSession(Movable, Writable):
         self.counts = ctx.enqueue_create_buffer[DType.int32](1)
         self.run_begin = ctx.enqueue_create_buffer[DType.int32](1)
         self.perm = ctx.enqueue_create_buffer[DType.int32](1)
+        self.m3_dx = List[DeviceBuffer[DType.float32]]()
+        self.t_grad_bound = False
+        self.tape_loss = ctx.enqueue_create_buffer[DType.float32](1)
         self.busy = False
         # ---- the weight views: the blocks read the registry in place
         self.m3_w = List[Mamba3DeviceWeights]()
@@ -605,6 +641,9 @@ def _ensure_shape(mut s: SambaResidentSession, b: Int, l: Int) raises:
     s.counts = ctx.enqueue_create_buffer[DType.int32](v)
     s.run_begin = ctx.enqueue_create_buffer[DType.int32](v + 1)
     s.perm = ctx.enqueue_create_buffer[DType.int32](m)
+    # the tape arm's per-shape state: rebuilt on its next use
+    s.m3_dx = List[DeviceBuffer[DType.float32]]()
+    s.t_grad_bound = False
     ctx.synchronize()
     s.b = b
     s.l = l
@@ -727,6 +766,239 @@ def _backward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
             _d2d(s.ctx, s.dh, 0, s.t_bst[j].d_x, m * dm)
 
 
+@always_inline
+def _fpb(mut buf: DeviceBuffer[DType.float32]) -> FP:
+    return FP(unsafe_from_address=Int(buf.unsafe_ptr()))
+
+
+def _bind_attention_grad_views(mut s: SambaResidentSession) raises:
+    """Tape arm: each attention layer's nine weight gradients become views
+    of `grad` at the registry offsets `_backward_blocks` copies them to
+    (`training/byte_lm.mojo::_afn_bind_grad_views`, in Samba's registry
+    order: norm1, norm2, q, k, v, o, gate, up, down). Each is written whole,
+    once, by the layer backward, so `grad` ends holding what the nine copies
+    wrote and the copies go. Bound once per shape (`_ensure_shape` rebuilds
+    the stages and clears the flag). A session runs one arm (the arm is
+    chosen at build time): the hand arm's copies would then copy a view
+    onto itself."""
+    if s.t_grad_bound:
+        return
+    for i in range(s.n_layers()):  # driver-loop: over stack layers
+        if s.kinds[i] != SAMBA_LAYER_ATTENTION:
+            continue
+        var j = s.slot[i]
+        var base = 1 + SAMBA_BLOCK_TENSORS * i
+        var g0 = s.grad_view(base + 0)
+        var g1 = s.grad_view(base + 1)
+        var g2 = s.grad_view(base + 2)
+        var g3 = s.grad_view(base + 3)
+        var g4 = s.grad_view(base + 4)
+        var g5 = s.grad_view(base + 5)
+        var g6 = s.grad_view(base + 6)
+        var g7 = s.grad_view(base + 7)
+        var g8 = s.grad_view(base + 8)
+        s.t_bst[j].dw_norm1 = g0^
+        s.t_bst[j].dw_norm2 = g1^
+        s.t_bst[j].dw_q = g2^
+        s.t_bst[j].dw_k = g3^
+        s.t_bst[j].dw_v = g4^
+        s.t_bst[j].dw_o = g5^
+        s.t_bst[j].dw_gate = g6^
+        s.t_bst[j].dw_up = g7^
+        s.t_bst[j].dw_down = g8^
+    s.t_grad_bound = True
+
+
+def _ensure_m3_dx(mut s: SambaResidentSession, m: Int) raises:
+    """Tape arm: one [M, dm] buffer per Mamba-3 layer for d loss / d(block
+    input). The hand path copies every block's input gradient into `dh`;
+    on the tape every activation gradient has storage of its own (the
+    tape's aliasing rule), so a Mamba-3 block's lands here."""
+    var n_m3 = len(s.m3_w)
+    if len(s.m3_dx) == n_m3:
+        return
+    s.m3_dx = List[DeviceBuffer[DType.float32]]()
+    for _ in range(n_m3):  # driver-loop: over Mamba-3 layers
+        s.m3_dx.append(s.ctx.enqueue_create_buffer[DType.float32](m * s.dm))
+
+
+def _backward_tape(
+    mut s: SambaResidentSession,
+    b: Int,
+    l: Int,
+    mut ew: DeviceBuffer[DType.float32],
+    mut hw: DeviceBuffer[DType.float32],
+    mut nw: DeviceBuffer[DType.float32],
+    mut dnw: DeviceBuffer[DType.float32],
+) raises:
+    """-D MOJOLEARN_AUTOGRAD_SAMBA (default on): the train step's whole
+    backward on ONE tape (`autograd/rules_samba.mojo`, header): the head,
+    the final norm, every block last to first, the embedding, then the tied
+    pair add, with the hand path's kernels on the hand path's buffers. The
+    gradients land in `grad` (and `pair`) directly: no per-layer copy of an
+    attention block's gradients, no per-block wait after a Mamba-3 block's
+    copies, one wait at the end. `dlogits` holds the loss gradient on entry
+    (`identical_ce_loss_resident`)."""
+    var m = b * l
+    var dm = s.dm
+    var v = s.vocab
+    var n_layers = s.n_layers()
+    _bind_attention_grad_views(s)
+    _ensure_m3_dx(s, m)
+    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    # ---- every activation gradient's storage: gin[i] = d loss / d acts[i]
+    # (the gradient the consumer of acts[i] writes); gin[n_layers] = dh, the final
+    # norm's dx as in the hand path
+    var gin = List[FP]()
+    for i in range(n_layers):  # driver-loop: over stack layers
+        var j = s.slot[i]
+        if s.kinds[i] == SAMBA_LAYER_MAMBA3:
+            gin.append(_fpb(s.m3_dx[j]))
+        else:
+            gin.append(_fpb(s.t_bst[j].d_x))
+    gin.append(_fpb(s.dh))
+    # ---- the embedding's and the head's weight-gradient destinations: the
+    # tied pair's halves [d_emb | dw_head], or their registry tensors
+    var demb = s.grad_view(0)
+    var dwh = s.grad_view(s.head_index())
+    if s.tie:
+        demb = s.pair.create_sub_buffer[DType.float32](0, v * dm)
+        dwh = s.pair.create_sub_buffer[DType.float32](v * dm, v * dm)
+
+    # ---- the forward as it ran, recorded (nothing is relaunched)
+    var ex = DeviceExec(s.ctx)
+    var tape = Tape()
+    var g_emb = tape.variable_into(ex, _fpb(ew), _fpb(demb), v, dm)
+    var h = tape.custom_into(ex, [g_emb], _fpb(s.acts[0]), gin[0], m, dm, SAMBA_EMBEDDING, Args())
+    for i in range(n_layers):  # driver-loop: over stack layers
+        var j = s.slot[i]
+        if s.kinds[i] == SAMBA_LAYER_MAMBA3:
+            # [x, the nine weights] -> the block's own residual_out; the
+            # weight gradients are the registry tensors themselves
+            var base = 1 + SAMBA_BLOCK_TENSORS * i
+            var ins = List[Tensor]()
+            ins.append(h)
+            for k in range(SAMBA_BLOCK_TENSORS):  # driver-loop: over the block's nine weight tensors
+                var wv = s.view(base + k)
+                var gv = s.grad_view(base + k)
+                ins.append(tape.variable_into(ex, _fpb(wv), _fpb(gv), 1, s.tensor_size(base + k)))
+            var saved = Args()
+            saved.i11 = j
+            h = tape.custom_into(
+                ex, ins, _fpb(s.m3_stages[j].residual_out), gin[i + 1], m, dm, M3_BLOCK, saved
+            )
+        else:
+            # the decoder layer's nodes; its output is its own residual2
+            h = llama_decoder_layer_record(
+                tape, ex, h, s.t_bst[j], s.t_stages[j], s.t_w[j], gin[i + 1], b, l, j
+            )
+    var g_nw = tape.variable_into(ex, _fpb(nw), _fpb(dnw), 1, dm)
+    var hn = tape.custom_into(ex, [h, g_nw], _fpb(s.hn), _fpb(s.dhn), m, dm, SAMBA_NORM_F, Args())
+    # tied: the same embedding data recorded as a second leaf, its gradient
+    # the pair's second half (summed by the hand path's pair add below)
+    var g_hw = tape.variable_into(ex, _fpb(hw), _fpb(dwh), v, dm)
+    var lg = tape.custom_into(ex, [hn, g_hw], _fpb(s.logits), _fpb(s.dlogits), m, v, SAMBA_HEAD, Args())
+    # the loss; its gradient is the unit seed s.ones[0] (1.0, never written)
+    var one = _fpb(s.ones)
+    var loss = tape.custom_into(ex, [lg], _fpb(s.tape_loss), one, 1, 1, SAMBA_CE, Args())
+    var seed = tape.variable(ex, one, 1, 1, False)
+
+    # ---- the rule set's pointers (all into the session, which outlives it)
+    var scans = List[DeferredNonfiniteScan]()
+    var scan_layers = List[Int]()
+    var keep = List[Mamba3DeviceGradients]()
+    var bst_refs = List[SambaBstRef]()
+    var fwd_refs = List[SambaFwdRef]()
+    var t_eps = List[Float32]()
+    for j in range(len(s.t_bst)):  # driver-loop: over attention layers
+        bst_refs.append(SambaBstRef(unsafe_from_address=Int(MutPointer(to=s.t_bst[j]))))
+        fwd_refs.append(SambaFwdRef(unsafe_from_address=Int(MutPointer(to=s.t_stages[j]))))
+        t_eps.append(s.t_w[j].eps)
+    var w3 = List[M3WeightsRef]()
+    var st3 = List[M3StagesRef]()
+    for j in range(len(s.m3_w)):  # driver-loop: over Mamba-3 layers
+        w3.append(M3WeightsRef(unsafe_from_address=Int(MutPointer(to=s.m3_w[j]))))
+        st3.append(M3StagesRef(unsafe_from_address=Int(MutPointer(to=s.m3_stages[j]))))
+    var cos_tab = _fpb(s.ones)
+    var sin_tab = _fpb(s.ones)
+    if s.has_attn:
+        cos_tab = _fpb(s.rope.value().cos)
+        sin_tab = _fpb(s.rope.value().sin)
+    var r_dh = samba_f32_ref(s.dh)
+    var r_dhn = samba_f32_ref(s.dhn)
+    var r_dlogits = samba_f32_ref(s.dlogits)
+    var r_ws_a = samba_f32_ref(s.ws_a)
+    var r_ws_b = samba_f32_ref(s.ws_b)
+    var r_dot = samba_f32_ref(s.dot_out)
+    var r_dh_tmp = samba_f32_ref(s.dh_tmp)
+    var r_dprod = samba_f32_ref(s.dprod)
+    var r_rstd = samba_f32_ref(s.rstd)
+    var r_dvcoef = samba_f32_ref(s.dvcoef)
+    var r_ones = samba_f32_ref(s.ones)
+    var r_sumsq = samba_f32_ref(s.sumsq)
+    var r_ids = samba_i32_ref(s.ids)
+    var r_counts = samba_i32_ref(s.counts)
+    var r_run_begin = samba_i32_ref(s.run_begin)
+    var r_perm = samba_i32_ref(s.perm)
+    var r_keep = M3KeepRef(unsafe_from_address=Int(MutPointer(to=keep)))
+    var r_scans = SambaScansRef(unsafe_from_address=Int(MutPointer(to=scans)))
+    var r_layers = SambaLayersRef(unsafe_from_address=Int(MutPointer(to=scan_layers)))
+    var rules = SambaRules(
+        s.ctx, bst_refs^, fwd_refs^, t_eps^, cos_tab, sin_tab, w3^, st3^, r_keep, ton,
+        b, l, dm, v, s.eps, one,
+        r_dh, r_dhn, r_dlogits, r_ws_a, r_ws_b, r_dot, r_dh_tmp, r_dprod, r_rstd, r_dvcoef, r_ones, r_sumsq,
+        r_ids, r_counts, r_run_begin, r_perm, r_scans, r_layers,
+    )
+
+    # ---- one backward, then the tied pair add (embedding first, as the hand
+    # path's `accumulate_grads([d_emb, dw_head], tokens=None)`)
+    comptime if AUTOGRAD_REFUSE_DEFER:
+        # A NaN reaching a later rule may make it raise first; the refusal
+        # is the error the hand path gives, so it is checked first.
+        var raised = False
+        var msg = String()
+        try:
+            tape.backward_with_rules(ex, loss, seed, rules)
+        except e:
+            raised = True
+            msg = String(e)
+        if not raised:
+            tape.release(ex)
+        for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
+            scans[i].enqueue_readback(s.ctx)
+        # Drain the queue before the keep list and the views go.
+        ex.sync()
+        for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
+            var bad = scans[i].result_after_sync()
+            if bad >= 0:
+                raise Error(
+                    String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad)
+                    + " REFUSED"
+                )
+        if raised:
+            raise Error(msg)
+    else:
+        try:
+            tape.backward_with_rules(ex, loss, seed, rules)
+        except e:
+            # the keep list's buffers may still be read by queued copies
+            ex.sync()
+            raise e
+        tape.release(ex)
+        # Drain the queue before the keep list and the views go.
+        ex.sync()
+    if s.tie:
+        var gemb = s.grad_view(0)
+        _pair_add_device(s.ctx, gemb, s.pair, v * dm)
+        _ = gemb^
+    _ = keep^
+    _ = scans^
+    _ = scan_layers^
+    _ = demb^
+    _ = dwh^
+    _ = gin^
+
+
 def _upload_tokens(
     mut s: SambaResidentSession,
     ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
@@ -788,7 +1060,7 @@ def samba_resident_forward(
     return m * s.vocab
 
 
-def samba_resident_train_step(
+def samba_resident_train_step[tape: Bool = AUTOGRAD_SAMBA](
     mut s: SambaResidentSession,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
     ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
@@ -876,52 +1148,61 @@ def samba_resident_train_step(
     )
     _ = rows^
 
-    # ---- head backward: dhn = dlogits . W, dW = dlogits^T . hn
+    # ---- the backward: the tape (AUTOGRAD_SAMBA, default on) or the hand
+    # walk (MOJOLEARN_AUTOGRAD_SAMBA_OFF); the same kernels on the same
+    # buffers either way, so the same bits
     var hw = s.view(s.head_index())
-    identical_gemm_backward_a_into[ROLE_HEAD](
-        s.ctx, s.dhn, s.dlogits, hw, s.ws_a, m, v, dm, OP_NT
-    )
-    if s.tie:
-        var dwh = s.pair.create_sub_buffer[DType.float32](v * dm, v * dm)
-        identical_gemm_backward_b_into(s.ctx, dwh, s.dlogits, s.hn, s.ws_b, m, v, dm, OP_NT)
-        _ = dwh^
-    else:
-        var dwh = s.grad_view(s.head_index())
-        identical_gemm_backward_b_into(s.ctx, dwh, s.dlogits, s.hn, s.ws_b, m, v, dm, OP_NT)
-        _ = dwh^
-
-    # ---- final norm backward on the forward's own row statistics (arm B
-    # recomputes them with the same kernel on the same input)
     var nw = s.view(s.norm_f_index())
     var dnw = s.grad_view(s.norm_f_index())
-    bwd_rms_norm[0](
-        s.ctx, s.dot_out, s.dh, dnw, s.dh_tmp, s.dprod, s.rstd, s.dvcoef, s.ones, s.dhn,
-        s.acts[s.n_layers()], nw, s.sumsq,
-        s.dh.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        s.dh.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, s.eps,
-    )
-
-    # ---- the blocks, last to first
-    _backward_blocks(s, b, l)
-
-    # ---- the embedding gradient (fresh, run-sorted fold) and the tied pair
-    if s.tie:
-        var demb = s.pair.create_sub_buffer[DType.float32](0, v * dm)
-        identical_embedding_backward_into(
-            s.ctx, demb, s.dh, s.ids, s.counts, s.run_begin, s.perm, m, emb
-        )
-        # ONE pair add, embedding first, no alignment claim (tokens=None):
-        # `accumulate_grads([d_emb, dw_head], tokens=None)` in arm B.
-        var gemb = s.grad_view(0)
-        _pair_add_device(s.ctx, gemb, s.pair, v * dm)
-        _ = demb^
-        _ = gemb^
+    var on_tape = False
+    comptime if tape:
+        on_tape = samba_tape_eligible(s.t_w)
+    if on_tape:
+        _backward_tape(s, b, l, ew, hw, nw, dnw)
     else:
-        var gemb = s.grad_view(0)
-        identical_embedding_backward_into(
-            s.ctx, gemb, s.dh, s.ids, s.counts, s.run_begin, s.perm, m, emb
+        # ---- head backward: dhn = dlogits . W, dW = dlogits^T . hn
+        identical_gemm_backward_a_into[ROLE_HEAD](
+            s.ctx, s.dhn, s.dlogits, hw, s.ws_a, m, v, dm, OP_NT
         )
-        _ = gemb^
+        if s.tie:
+            var dwh = s.pair.create_sub_buffer[DType.float32](v * dm, v * dm)
+            identical_gemm_backward_b_into(s.ctx, dwh, s.dlogits, s.hn, s.ws_b, m, v, dm, OP_NT)
+            _ = dwh^
+        else:
+            var dwh = s.grad_view(s.head_index())
+            identical_gemm_backward_b_into(s.ctx, dwh, s.dlogits, s.hn, s.ws_b, m, v, dm, OP_NT)
+            _ = dwh^
+
+        # ---- final norm backward on the forward's own row statistics (arm B
+        # recomputes them with the same kernel on the same input)
+        bwd_rms_norm[0](
+            s.ctx, s.dot_out, s.dh, dnw, s.dh_tmp, s.dprod, s.rstd, s.dvcoef, s.ones, s.dhn,
+            s.acts[s.n_layers()], nw, s.sumsq,
+            s.dh.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            s.dh.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, s.eps,
+        )
+
+        # ---- the blocks, last to first
+        _backward_blocks(s, b, l)
+
+        # ---- the embedding gradient (fresh, run-sorted fold) and the tied pair
+        if s.tie:
+            var demb = s.pair.create_sub_buffer[DType.float32](0, v * dm)
+            identical_embedding_backward_into(
+                s.ctx, demb, s.dh, s.ids, s.counts, s.run_begin, s.perm, m, emb
+            )
+            # ONE pair add, embedding first, no alignment claim (tokens=None):
+            # `accumulate_grads([d_emb, dw_head], tokens=None)` in arm B.
+            var gemb = s.grad_view(0)
+            _pair_add_device(s.ctx, gemb, s.pair, v * dm)
+            _ = demb^
+            _ = gemb^
+        else:
+            var gemb = s.grad_view(0)
+            identical_embedding_backward_into(
+                s.ctx, gemb, s.dh, s.ids, s.counts, s.run_begin, s.perm, m, emb
+            )
+            _ = gemb^
 
     # ---- the optimizer: `identical_optimizer_step` on the resident registry
     # and gradient (`io = 0`: no transfer; `param_ptr` stands in for the
