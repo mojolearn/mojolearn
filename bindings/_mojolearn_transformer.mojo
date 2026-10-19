@@ -193,11 +193,11 @@ from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
     llama_decoder_layer_backward,
-    llama_decoder_layer_backward_device,
 )
-# lane ag-transformer: -D MOJOLEARN_AUTOGRAD_TRANSFORMER (default off) runs
-# the two saved-stage backwards below through the autograd tape.
-from autograd.rules_transformer import AUTOGRAD_TRANSFORMER, llama_decoder_layer_backward_autograd
+# The session and saved-tape backwards below run on the autograd tape.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 # lane ag-tm-timing: the launch profile the backward timing entries read.
 from sequence.launch_profile import launch_profile_level, launch_profile_reset, launch_profile_snapshot
 # lane/block-options (2026-09-17): the block options record and the two
@@ -1196,14 +1196,12 @@ def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) 
     ctx.synchronize()
     var off = IdentityTrace.disabled()
     # Reuse the real saved forward; no weight upload or forward recompute.
-    # -D MOJOLEARN_AUTOGRAD_TRANSFORMER: the same launches with the stage order
-    # and fan-in sums owned by the autograd tape (autograd/rules_transformer.mojo).
-    comptime if AUTOGRAD_TRANSFORMER:
-        llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
-            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
-    else:
-        llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
-            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+    # The stage order and fan-in sums are owned by the autograd tape
+    # (autograd/rules_transformer.mojo).
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+    llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
+        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
     _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
     _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
     _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
@@ -1363,16 +1361,12 @@ def _transformer_run_session_backward(
     )
     _btick(ton, tk, "surface.forward")
     var offb = IdentityTrace.disabled()
-    comptime if AUTOGRAD_TRANSFORMER:
-        llama_decoder_layer_backward_autograd(
-            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
-            b, l, 0, offb, String("pyb"),
-        )
-    else:
-        llama_decoder_layer_backward_device(
-            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
-            b, l, 0, offb, String("pyb"),
-        )
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+    llama_decoder_layer_backward_autograd(
+        ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+        b, l, 0, offb, String("pyb"),
+    )
     _btick(ton, tk, "surface.backward")
     _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
     _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
@@ -1443,16 +1437,16 @@ def transformer_session_backward_binding(
 
 # ===========================================================================
 # BACKWARD TIMING ENTRIES (lane ag-tm-timing, 2026-10-19). Measurement only:
-# tools/transformer_tape_arm_check.py --time N calls these to time the hand
-# backward against -D MOJOLEARN_AUTOGRAD_TRANSFORMER, one build per arm. The
+# tools/transformer_tape_arm_check.py --time N calls these to time the tape
+# backward (the hand arm, -D MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF, is deleted). The
 # inputs and weights are uploaded once before the first clock; each timed
 # call brackets only the launches (device sync before and after), so the
-# clock is kernel-only and the same in both arms. Call 0 is the warm-up and
+# clock is kernel-only. Call 0 is the warm-up and
 # is returned like the rest; the caller drops it. Same kernels, same
 # launches, same order as `_transformer_run_session_backward` and
 # `_transformer_saved_backward`; no bits move.
 #
-# Return list: [autograd (1 tape / 0 hand), launches, t...]. `launches` is
+# Return list: [autograd (always 1, tape), launches, t...]. `launches` is
 # the process-wide launch profile's total over the LAST timed call when
 # MOJOLEARN_AG_PROFILE is set (-1 otherwise); it counts the launches that go
 # through DeviceExec only (kernels enqueued on the context directly are not
@@ -1497,7 +1491,9 @@ def _transformer_session_backward_time(
     ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[10]))
     ctx.synchronize()
     var out = List[Int]()
-    out.append(Int(AUTOGRAD_TRANSFORMER))
+    # Slot 0 is always 1 (tape): the hand arm is deleted; the slot keeps the
+    # return shape tools/transformer_tape_arm_check.py reads.
+    out.append(1)
     out.append(-1)
     var prof = launch_profile_level() > 0
     for k in range(calls + 1):  # driver-loop: over timed calls
@@ -1519,16 +1515,12 @@ def _transformer_session_backward_time(
         ctx.synchronize()
         var t1 = Int(perf_counter_ns())
         var offb = IdentityTrace.disabled()
-        comptime if AUTOGRAD_TRANSFORMER:
-            llama_decoder_layer_backward_autograd(
-                ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
-                b, l, 0, offb, String("pyb"),
-            )
-        else:
-            llama_decoder_layer_backward_device(
-                ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
-                b, l, 0, offb, String("pyb"),
-            )
+        # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+        # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+        llama_decoder_layer_backward_autograd(
+            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+            b, l, 0, offb, String("pyb"),
+        )
         ctx.synchronize()
         var t2 = Int(perf_counter_ns())
         out.append(t1 - t0)
@@ -1611,12 +1603,10 @@ def _transformer_saved_backward_timed(mut tape: TransformerForwardTape, a: List[
     ctx.synchronize()
     var off = IdentityTrace.disabled()
     var t0 = Int(perf_counter_ns())
-    comptime if AUTOGRAD_TRANSFORMER:
-        llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
-            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
-    else:
-        llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
-            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+    llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
+        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
     ctx.synchronize()
     var ns = Int(perf_counter_ns()) - t0
     _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
@@ -1665,7 +1655,8 @@ def transformer_backward_tape_time_binding(addrs: PythonObject, params: PythonOb
     if calls < 1:
         raise Error("transformer backward tape time: the call count must be >= 1")
     var out = Python.list()
-    out.append(PythonObject(Int(AUTOGRAD_TRANSFORMER)))
+    # Slot 0 is always 1 (tape); see _transformer_session_backward_time.
+    out.append(PythonObject(1))
     var stamps = List[Int]()
     var launches = -1
     with GILReleased(Python()):

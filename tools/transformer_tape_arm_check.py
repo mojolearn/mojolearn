@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Gradient digests of one decoder-layer backward, for comparing two builds
-bit for bit (lane ag-transformer: the hand path against
--D MOJOLEARN_AUTOGRAD_TRANSFORMER).
+"""Gradient digests of one decoder-layer backward (the autograd tape),
+compared bit for bit against the stored digests in
+tools/transformer_tape_arm_digests.json (the same on Metal, NVIDIA and AMD).
 
 Loads the given _mojolearn_transformer binding, builds one fixed problem
-(seeded inputs, weights and incoming gradient) and runs the two backwards
-the define switches:
+(seeded inputs, weights and incoming gradient) and runs the two backward
+entries:
 
   saved    transformer_forward_tape + transformer_backward_tape
            (_transformer_saved_backward); needs a build with the forward
@@ -21,6 +21,13 @@ y, else of <x, d_x>. Digests are blake2b of the raw float32 bytes, 16 hex.
 The binding does every computed number of the run; this script only makes
 the fixed inputs and digests what comes back.
 
+Every printed digest is then compared with the stored file (--expected):
+one `STORED <key> MATCH|DIFFER` line per digest and a closing
+`STORED all MATCH|DIFFER <equal>/<total>`; the exit status is 1 on any
+DIFFER. A path the build skips is reported as SKIP, not compared.
+(The hand arm, -D MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF, was deleted
+2026-10-19; it printed the same digests.)
+
     python3 tools/transformer_tape_arm_check.py \
         --binding python/mojolearn/identical/_mojolearn_transformer.so \
         --backend metal --out tape-arm.json
@@ -33,18 +40,18 @@ larger shape (TIME_SHAPE below), one warm-up call excluded:
   TIME <arm> saved median_ms=<x> n=<N>             saved-tape backward
   LAUNCHES <arm> <path> <n>                        with MOJOLEARN_AG_PROFILE=1
 
-<arm> is tape or hand, as the binding reports. The binding uploads the
-inputs and weights before the first clock and syncs the device on both
-sides of every clock (kernel-only, the same in both arms); this script only
-takes the median of the nanoseconds it returns. LAUNCHES counts the
-launches that go through DeviceExec; kernels enqueued on the context
-directly are not counted, so the hand build reports them as n/a.
+<arm> is tape, as the binding reports. The binding uploads the inputs
+and weights before the first clock and syncs the device on both sides of
+every clock (kernel-only); this script only takes the median of the
+nanoseconds it returns. LAUNCHES counts the launches that go through
+DeviceExec; kernels enqueued on the context directly are not counted.
 """
 import argparse
 import hashlib
 import importlib.util
 import json
 import statistics
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -57,6 +64,7 @@ B, L, DM, NH, NKV, HD, IT, WINDOW = 2, 128, 64, 4, 2, 16, 128, 0
 # route, and intermediate ~2.7 * d_model is the usual SwiGLU ratio. One
 # layer's stages fit well inside every box's memory.
 TIME_SHAPE = (8, 512, 512, 8, 2, 64, 1376, 0)
+STORED = Path(__file__).resolve().with_name('transformer_tape_arm_digests.json')
 NAMES = ('d_x', 'dw_norm1', 'dw_norm2', 'dw_q', 'dw_k', 'dw_v', 'dw_o',
          'dw_gate', 'dw_up', 'dw_down')
 
@@ -87,8 +95,8 @@ def median_ms(ns):
     return statistics.median(ns) / 1e6
 
 
-def launches_text(arm, n):
-    return 'n/a' if n < 0 or arm == 'hand' else str(n)
+def launches_text(n):
+    return 'n/a' if n < 0 else str(n)
 
 
 def timing(mod, n, result):
@@ -103,7 +111,8 @@ def timing(mod, n, result):
         out = list(mod.transformer_session_backward_time(session, addrs, params + [n]))
     finally:
         mod.transformer_session_close(session)
-    arm = 'tape' if out[0] else 'hand'
+    assert out[0] == 1, 'binding reports a non-tape backward'
+    arm = 'tape'
     fwd, bwd = out[2::2][1:], out[3::2][1:]
     assert len(fwd) == n and len(bwd) == n, 'binding returned %d/%d calls' % (len(fwd), len(bwd))
     timed['arm'] = arm
@@ -113,7 +122,7 @@ def timing(mod, n, result):
     print('TIME %s session.forward median_ms=%.3f n=%d' % (arm, timed['session.forward_ms'], n), flush=True)
     print('TIME %s session median_ms=%.3f n=%d' % (arm, timed['session_ms'], n), flush=True)
     if out[1] >= 0:
-        print('LAUNCHES %s session %s' % (arm, launches_text(arm, out[1])), flush=True)
+        print('LAUNCHES %s session %s' % (arm, launches_text(out[1])), flush=True)
     if mod.transformer_forward_tape_enabled():
         y = np.full_like(x, np.nan)
         sgrads = grads_like(x, w)
@@ -125,7 +134,7 @@ def timing(mod, n, result):
         timed['saved_ms'] = median_ms(bwd)
         print('TIME %s saved median_ms=%.3f n=%d' % (arm, timed['saved_ms'], n), flush=True)
         if out[1] >= 0:
-            print('LAUNCHES %s saved %s' % (arm, launches_text(arm, out[1])), flush=True)
+            print('LAUNCHES %s saved %s' % (arm, launches_text(out[1])), flush=True)
     else:
         print('SKIP time saved forward tape disabled in this build', flush=True)
 
@@ -144,11 +153,34 @@ def record(result, path, grads, loss):
     print('LOSS %s %s' % (path, loss), flush=True)
 
 
+def compare_stored(result, path):
+    """Equal-string comparison of every digest this run printed with the
+    stored file; returns True when all are equal."""
+    stored = json.loads(path.read_text())
+    if stored['shape'] != result['shape']:
+        print('STORED shape %s differs from the stored %s DIFFER' % (result['shape'], stored['shape']), flush=True)
+        return False
+    got = [('GRAD', k, v, stored['grads'].get(k)) for k, v in result['grads'].items()] + \
+          [('LOSS', k, v, stored['loss'].get(k)) for k, v in result['loss'].items()]
+    equal = 0
+    for kind, key, value, want in got:
+        same = value == want
+        equal += same
+        print('STORED %s %s %s%s' % (kind, key, 'MATCH' if same else 'DIFFER',
+                                     '' if same else ' got=%s stored=%s' % (value, want)), flush=True)
+    ok = equal == len(got) and len(got) > 0
+    print('STORED all %s %d/%d' % ('MATCH' if ok else 'DIFFER', equal, len(got)), flush=True)
+    result['stored'] = dict(file=str(path), equal=equal, total=len(got), match=ok)
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--binding', type=Path, required=True)
     ap.add_argument('--backend', choices=('metal', 'cuda', 'hip'), required=True)
     ap.add_argument('--out', type=Path, required=True)
+    ap.add_argument('--expected', type=Path, default=STORED,
+                    help='stored digests to compare with (default: %(default)s)')
     ap.add_argument('--time', type=int, default=0, metavar='N',
                     help='after the digests, time N backwards per path on TIME_SHAPE (0: off)')
     args = ap.parse_args()
@@ -195,9 +227,12 @@ def main():
         same = all(result['grads']['saved.' + n] == result['grads']['session.' + n] for n in NAMES)
         result['saved_equals_session'] = same
         print('PATHS saved session %s' % ('MATCH' if same else 'DIFFER'), flush=True)
+    ok = compare_stored(result, args.expected)
     if args.time > 0:
         timing(mod, args.time, result)
     args.out.write_text(json.dumps(result, indent=2) + '\n')
+    if not ok:
+        sys.exit(1)
 
 
 if __name__ == '__main__':
