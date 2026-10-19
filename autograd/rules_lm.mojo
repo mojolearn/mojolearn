@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Language-model trainer backward on the tape (-D MOJOLEARN_AUTOGRAD_LM,
-# default off). docs/plans/AUTOGRAD_API.md section (c) item 4.
+# Language-model trainer backward on the tape (the byte LM's only backward
+# path). docs/plans/AUTOGRAD_API.md section (c) item 4.
 #
 # ---------------------------------------------------------------- launch inventory
 # The hand path, training/byte_lm.mojo::byte_gradient_device after the
@@ -113,12 +113,12 @@ from autograd.rules_transformer import (
     llama_decoder_layer_record,
 )
 
-# The language-model backward runs on the tape by default (promoted 2026-10-19). One run per arm, tools/bench_board_neural.py
+# The language-model backward runs on the tape, the only path (promoted 2026-10-19). One run per arm, tools/bench_board_neural.py
 # lm-train-step, ours, full shape: NVIDIA L40S 34.611 -> 35.351 ms (1.02), AMD MI325X 42.939 -> 42.953 ms (1.00); average 1.01;
-# same loss_first_step 9.0155868. Every gradient and updated parameter equals the hand walk word for word on Metal, NVIDIA
-# and AMD (training/checks/lm_tape_backward_check.mojo, 44/44). MOJOLEARN_AUTOGRAD_LM_OFF restores the hand walk for the
-# A/B; the old opt-in spelling is accepted too.
-comptime AUTOGRAD_LM = not is_defined["MOJOLEARN_AUTOGRAD_LM_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_LM"]()
+# same loss_first_step 9.0155868. Every gradient and updated parameter equalled the hand walk word for word on Metal, NVIDIA
+# and AMD (44/44); training/checks/lm_tape_backward_check.mojo now compares against those stored digests.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by @SHA@; code recoverable at @SHA@^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
 
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: each
 # layer's refusal scan of its d_out (_refuse_nonfinite) queues its verdict
