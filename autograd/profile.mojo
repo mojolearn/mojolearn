@@ -10,10 +10,6 @@ from sequence.launch_profile import (
     launch_profile_wall_us,
     PROFILE_FORWARD, PROFILE_BACKWARD, PROFILE_OTHER, PROFILE_KIND_ALL,
 )
-from sequence.gemm_tiled import (
-    GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M,
-    GR_PROF_COOP, GR_PROF_V1_TILE, GR_PROF_SPLITK_PART, GR_PROF_SPLITK_FOLD,
-)
 from autograd.ops import (
     OP_AG_BIN_FWD, OP_AG_BIN_VJP, OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_TRANSPOSE,
     OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, OP_AG_REDUCE_VJP, OP_AG_SOFTMAX_FWD,
@@ -240,22 +236,24 @@ def _us(ns: Int) -> String:
 
 
 def ag_route_name(route: Int) -> String:
-    """The GEMM route of a profile shape row (sequence/gemm_tiled.mojo)."""
-    if route == GR_CELL:
+    """The GEMM route of a profile shape row: sequence/gemm_tiled.mojo GR_*
+    (0-3) and GR_PROF_* (8-11), by value (this module stays importable by
+    the host-only bindings, which never import the GPU kernel module)."""
+    if route == 0:
         return "cell"
-    if route == GR_TILE:
+    if route == 1:
         return "tile16"
-    if route == GR_THIN_N:
+    if route == 2:
         return "thinN"
-    if route == GR_THIN_M:
+    if route == 3:
         return "thinM"
-    if route == GR_PROF_COOP:
+    if route == 8:
         return "coop"
-    if route == GR_PROF_V1_TILE:
+    if route == 9:
         return "v1_tile"
-    if route == GR_PROF_SPLITK_PART:
+    if route == 10:
         return "splitk_part"
-    if route == GR_PROF_SPLITK_FOLD:
+    if route == 11:
         return "splitk_fold"
     return "route_" + String(route)
 
