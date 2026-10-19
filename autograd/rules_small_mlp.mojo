@@ -57,6 +57,7 @@
 #   seed: dlogits (the loss's gradient, written by the forward)
 #
 # Bits: same kernels, same operands, same buffers => the hand path's bits.
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer
 
 from autograd.tape import Tape, Tensor, BackwardRules
@@ -68,6 +69,20 @@ from gemm.contract import OP_NN, OP_TN
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 # (the AUTOGRAD_SMALL_MLP switch and its opt-in spelling MOJOLEARN_AUTOGRAD_SMALL_MLP;
 # training/checks/mlp_tape_step_check.mojo compares the tape against stored digests).
+
+
+def _check_removed_defines() -> Bool:
+    """Refusals for the retired small MLP hand-chain defines. They live here, next to the code they named, not in
+    core/six_lane_experiment_guards.mojo: a line there marks every binding that imports core as changed (the
+    rebuild fence refuses it)."""
+    # lane del-smallmlp (2026-10-19): the tape backward is the step's only backward (same bits, 162/162 tensors on
+    # Metal, NVIDIA and AMD; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP_OFF restored the small MLP train step's hand backward chain; the tape backward is the only one (same bits, 162/162 tensors on Metal, NVIDIA and AMD). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP was the opt-in spelling of the small MLP tape backward, now the only path; drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+    return True
+
+
+comptime SMALL_MLP_REMOVED_DEFINES_OK = _check_removed_defines()
 
 # Tags 120-121 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
 # LM 64-71, Mamba-3 72-86, CNN 96-111, MoE 112-115).

@@ -390,9 +390,10 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Deleted 2026-10-19 by `3cd0063d7` on lane/del-smallmlp; recoverable at `3cd0063d7^`.
 - Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch` (the deletion reversed, code files only:
   `training/mlp_ops.mojo`, `autograd/rules_small_mlp.mojo`, `training/checks/mlp_tape_step_check.mojo`, restoring the in-process
-  hand-vs-tape check). Then delete the two refusals in `core/six_lane_experiment_guards.mojo` (block "lane del-smallmlp").
-- Guard: `MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF` and `MOJOLEARN_AUTOGRAD_SMALL_MLP` refused in `core/six_lane_experiment_guards.mojo`.
-  No `grid_controls` entry existed.
+  hand-vs-tape check; it also removes the refusals below).
+- Guard: `MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF` and `MOJOLEARN_AUTOGRAD_SMALL_MLP` refused in `autograd/rules_small_mlp.mojo`
+  (`_check_removed_defines`, forced by `mlp_train_step_host`), not in core: the pre-push rebuild fence refuses a core line (76
+  bindings rebuild). No `grid_controls` entry existed.
 - EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF`, **removed**.
 
 ### MOJOLEARN_ET_DEVICE_BATCH_65536

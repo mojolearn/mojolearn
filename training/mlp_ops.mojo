@@ -57,6 +57,7 @@ from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 from sequence.ops import FP
 from autograd.rules_small_mlp import (
+    SMALL_MLP_REMOVED_DEFINES_OK,
     SmallMlpBuffer,
     SmallMlpKernels,
     SmallMlpRecordExec,
@@ -413,6 +414,7 @@ def mlp_train_step_host(
     one-element buffer), `info` is the optimizer's three floats, all +0.0
     here because the clip never runs.
     """
+    comptime assert SMALL_MLP_REMOVED_DEFINES_OK, "retired small MLP hand-chain define"
     mlp_validate_shape(rows, MLP_HID)
     if mode < MLP_STEP_FORWARD or mode > MLP_STEP_TRAIN:
         raise Error("small MLP train step: mode must be 0 (forward), 1 (grads) or 2 (train)")

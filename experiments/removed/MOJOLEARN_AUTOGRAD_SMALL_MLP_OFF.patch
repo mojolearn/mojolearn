@@ -1,5 +1,5 @@
 diff --git b/autograd/rules_small_mlp.mojo a/autograd/rules_small_mlp.mojo
-index 1a5b9f6cb..4ddb7fc02 100644
+index 7ae363fbf..4ddb7fc02 100644
 --- b/autograd/rules_small_mlp.mojo
 +++ a/autograd/rules_small_mlp.mojo
 @@ -1,5 +1,6 @@
@@ -10,15 +10,7 @@ index 1a5b9f6cb..4ddb7fc02 100644
  # TAPE_EVERYWHERE_PLAN.md path 8, lane ag-smallmlp-tape.
  #
  # ---------------------------------------------------------------- launch inventory
-@@ -57,6 +58,7 @@
- #   seed: dlogits (the loss's gradient, written by the forward)
- #
- # Bits: same kernels, same operands, same buffers => the hand path's bits.
-+from std.sys.compile import is_defined
- from max.gpu.host import DeviceBuffer
- 
- from autograd.tape import Tape, Tensor, BackwardRules
-@@ -64,10 +66,12 @@ from sequence.exec_trait import Exec
+@@ -65,24 +66,12 @@ from sequence.exec_trait import Exec
  from sequence.ops import FP, Args
  from gemm.contract import OP_NN, OP_TN
  
@@ -26,6 +18,20 @@ index 1a5b9f6cb..4ddb7fc02 100644
 -# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 -# (the AUTOGRAD_SMALL_MLP switch and its opt-in spelling MOJOLEARN_AUTOGRAD_SMALL_MLP;
 -# training/checks/mlp_tape_step_check.mojo compares the tape against stored digests).
+-
+-
+-def _check_removed_defines() -> Bool:
+-    """Refusals for the retired small MLP hand-chain defines. They live here, next to the code they named, not in
+-    core/six_lane_experiment_guards.mojo: a line there marks every binding that imports core as changed (the
+-    rebuild fence refuses it)."""
+-    # lane del-smallmlp (2026-10-19): the tape backward is the step's only backward (same bits, 162/162 tensors on
+-    # Metal, NVIDIA and AMD; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
+-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP_OFF restored the small MLP train step's hand backward chain; the tape backward is the only one (same bits, 162/162 tensors on Metal, NVIDIA and AMD). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP was the opt-in spelling of the small MLP tape backward, now the only path; drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+-    return True
+-
+-
+-comptime SMALL_MLP_REMOVED_DEFINES_OK = _check_removed_defines()
 +# Default on (Andrew 2026-10-19: the word-for-word check is the gate;
 +# training/checks/mlp_tape_step_check.mojo). MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
 +# restores the hand chain for the A/B; the opt-in spelling is accepted too.
@@ -175,7 +181,7 @@ index 98456242e..808f38033 100644
 -    print("MLP_TAPE_STEP_PASS every loss, logit, gradient and updated state word equals the stored record (" + String(k) + " tensors)")
 +    print("MLP_TAPE_STEP_PASS every loss, logit, gradient and updated state word equals the hand chain")
 diff --git b/training/mlp_ops.mojo a/training/mlp_ops.mojo
-index b9dd69447..698f3e2e7 100644
+index e703bf437..698f3e2e7 100644
 --- b/training/mlp_ops.mojo
 +++ a/training/mlp_ops.mojo
 @@ -29,7 +29,7 @@ from gemm.neural_dispatch import (
@@ -187,7 +193,7 @@ index b9dd69447..698f3e2e7 100644
  from gemm.experiments.neural_switches import ROLE_PROJECTION, ROLE_WGRAD
  from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED
  from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
-@@ -50,13 +50,13 @@ from training.estimator import (
+@@ -50,14 +50,13 @@ from training.estimator import (
  #: FAST + Apple + `-D MOJOLEARN_AFN_MLP_FUSED_STEP` (or `_ALL`); every other
  #: build takes the path below unchanged (training/mlp_fast.mojo).
  from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
@@ -202,11 +208,12 @@ index b9dd69447..698f3e2e7 100644
 +#: restores the hand chain below.
  from sequence.ops import FP
  from autograd.rules_small_mlp import (
+-    SMALL_MLP_REMOVED_DEFINES_OK,
 +    AUTOGRAD_SMALL_MLP,
      SmallMlpBuffer,
      SmallMlpKernels,
      SmallMlpRecordExec,
-@@ -328,7 +328,7 @@ def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
+@@ -329,7 +328,7 @@ def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
          ws_n = w
  
  
@@ -215,7 +222,7 @@ index b9dd69447..698f3e2e7 100644
      ctx: DeviceContext,
      x_ptr: MutPointer[Float32, MutUntrackedOrigin],
      y_ptr: MutPointer[Int32, MutUntrackedOrigin],
-@@ -387,8 +387,9 @@ def mlp_train_step_host(
+@@ -388,8 +387,9 @@ def mlp_train_step_host(
                      flat `[w1, b1, w2, b2]` registry, the weights, `m`, `v`
                      and the flags written back in place
  
@@ -227,7 +234,15 @@ index b9dd69447..698f3e2e7 100644
  
      `mode` is `MLP_STEP_FORWARD` (the logits alone; `y` is unread),
      `MLP_STEP_GRADS` (the loss, the logits and the four gradients; the
-@@ -551,34 +552,61 @@ def mlp_train_step_host(
+@@ -414,7 +414,6 @@ def mlp_train_step_host(
+     one-element buffer), `info` is the optimizer's three floats, all +0.0
+     here because the clip never runs.
+     """
+-    comptime assert SMALL_MLP_REMOVED_DEFINES_OK, "retired small MLP hand-chain define"
+     mlp_validate_shape(rows, MLP_HID)
+     if mode < MLP_STEP_FORWARD or mode > MLP_STEP_TRAIN:
+         raise Error("small MLP train step: mode must be 0 (forward), 1 (grads) or 2 (train)")
+@@ -553,34 +552,61 @@ def mlp_train_step_host(
      var db2_v = g_d.create_sub_buffer[DType.float32](MLP_OFF_B2, MLP_B2)
      var incoming = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
      var dhidden = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
