@@ -19,7 +19,8 @@ __all__ = ["LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "
            "RNNRegressor", "RNNClassifier", "Lion", "Adafactor", "LAMB", "Adamax", "NAdam",
            "StepLR", "ExponentialLR", "OneCycleLR", "LayerNorm", "layer_norm_forward",
            "layer_norm_backward", "Theta", "OptimizedTheta", "DynamicTheta", "DynamicOptimizedTheta",
-           "AutoTheta", "CrostonClassic", "CrostonOptimized", "CrostonSBA", "ETS", "DampedETS", "GARCH", "ProphetForecaster", "MoEBlock"]
+           "AutoTheta", "CrostonClassic", "CrostonOptimized", "CrostonSBA", "ETS", "DampedETS", "GARCH", "ProphetForecaster", "MoEBlock",
+           "Sequential"]
 
 # Keep the public registry importable without NumPy. Implementations load only
 # when their public symbol is requested; the core/verifier CLI stays usable.
@@ -27,6 +28,7 @@ _LAZY_EXPORTS = {
     'AutoARIMA': ('_x_sequence_autoarima', 'AutoARIMA'),
     'MLPClassifier': ('_x_sequence_mlp', 'MLPClassifier'),
     'MLPRegressor': ('_x_sequence_mlp', 'MLPRegressor'),
+    'Sequential': ('_x_sequence_model', 'Sequential'),
     'LAMB': ('_x_sequence_optim', 'LAMB'),
     'Adafactor': ('_x_sequence_optim', 'Adafactor'),
     'Adagrad': ('_x_sequence_optim', 'Adagrad'),

@@ -48,10 +48,36 @@ from sequence.ops import (
     gates_of,
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
+from autograd.data import epoch_order as ag_epoch_order
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_applies
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 from std.sys.compile import is_defined, get_defined_int
+from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
+
+# Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM runs
+# rnn_fit's update through autograd/optim.mojo (OptimizerState + step_lr)
+# instead of opt_step below. Bits: the same. optimizer_config_packed maps
+# OptConfig's words to named fields that pack back to the same words,
+# optimizer_scalars is opt_scalars word for word, and the update is the same
+# one OP_OPT launch over Gr; a slot word the kind's body never reads may
+# differ (RMSprop's f1, a non-SGD kind's flags) and moves no bit. No fold is
+# involved (no clip; the rate is lrs[k] as before).
+comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
+from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
+from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
+from sequence.ops import dummy_ptr
+
+# A/B define (lane ag-loss, default off): -D MOJOLEARN_AUTOGRAD_LOSS computes
+# each step's reported loss (losses[k]) through autograd/losses.mojo
+# (loss_value_into: the squared-error terms or op_ce's row losses, term for
+# term, then the tape's blocked fold with factor 1 / count) instead of the
+# one-thread ascending OP_SUM. The gradient seed w.dy still comes from
+# OP_MSE / OP_CE; the loss module's VJP would give the same bits (2 (g d)
+# with g = 1 / (B O) equals d (2 / (B O)) exactly, and (softmax - onehot) g
+# is op_ce's expression with g = 1 / B), but the seed is left as it is.
+# New bits in losses[] only; parameters unchanged.
+comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
 
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
@@ -627,14 +653,28 @@ def opt_step[E: Exec](
     ex.launch[OP_OPT](a, n)
 
 
+#: -D MOJOLEARN_AUTOGRAD_DATA (default off): rnn_fit's epoch order comes from
+#: autograd/data.mojo (`epoch_order`), the shared data layer of the tape
+#: trainers, instead of the launches below. That module launches the same
+#: OP_MLP_PERM with the same mlp_epoch_key(seed, epoch), or OP_SEQ_IOTA
+#: without shuffle, so the expected result is the same order and the same
+#: bits as the hand path; the A/B confirms the routing. autograd.data
+#: imports no sequence.recurrent, so there is no import cycle.
+comptime AUTOGRAD_DATA = is_defined["MOJOLEARN_AUTOGRAD_DATA"]()
+
+
 # ------------------------------------------------------------------ training step seam
 trait RnnStep(Defaultable & Movable & Deinitable):
     """One optimizer step's differentiation: forward_head leaves the head's
     output in w.yhat; backward reads dy [B, O] from w.dy and writes every
     parameter gradient into Gr (the `Net` layout). rnn_fit keeps the loss,
-    shuffle, batching and optimizer; only this assembly is swappable."""
+    shuffle, batching and optimizer; only this assembly is swappable.
+    forward_head also receives Gr so a step can name it as the gradient
+    destination when it records the forward (the tape step does)."""
 
-    def forward_head[E: Exec](mut self, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises:
+    def forward_head[E: Exec](
+        mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    ) raises:
         ...
 
     def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
@@ -647,7 +687,9 @@ struct HandStep(RnnStep):
     def __init__(out self):
         pass
 
-    def forward_head[E: Exec](mut self, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises:
+    def forward_head[E: Exec](
+        mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    ) raises:
         var hT = forward(ex, net, P, x, T, B, w)
         head(ex, net, P, hT, B, w.yhat)
 
@@ -685,28 +727,41 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(np_)
-    var s2 = ex.alloc(np_)
-    var s3 = ex.alloc(np_)
-    if init_acc != Float32(0.0):
-        fill(ex, s2, np_, init_acc)
+    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var opt_cfg = optimizer_config_packed(cfg.kind, cfg.flags, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, Float32(0.0))
+    var opt_state = OptimizerState()
+    comptime if AUTOGRAD_OPTIM:
+        # -D MOJOLEARN_AUTOGRAD_OPTIM: the state on the executor, s2 filled
+        # with init_acc as below
+        opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
+    else:
+        if init_acc != Float32(0.0):
+            fill(ex, s2, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
+    var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
+    comptime if AUTOGRAD_LOSS:
+        loss_ws = loss_scratch(ex, bmax * net.O)
     var st = OptState()
     var step = S()
     for k in range(n_steps):
         var j = k % per
         if j == 0:
-            if shuffle:
-                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
+            comptime if AUTOGRAD_DATA:
+                ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
             else:
-                var ia = Args()
-                ia.p0 = dord
-                ex.launch[OP_SEQ_IOTA](ia, N)
+                if shuffle:
+                    ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
+                else:
+                    var ia = Args()
+                    ia.p0 = dord
+                    ex.launch[OP_SEQ_IOTA](ia, N)
         var off = j * bs
         var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
-        step.forward_head(ex, net, P, w.xb, T, B, w)
+        step.forward_head(ex, net, P, Gr, w.xb, T, B, w)
         if task == TASK_MSE:
             gather_rows(ex, dY, dord, w.yb, B, net.O, off)
             var a = Args()
@@ -716,7 +771,10 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
             a.p3 = w.sq
             a.f0 = Float32(2.0) / Float32(B * net.O)
             ex.launch[OP_MSE](a, B * net.O)
-            sum_into(ex, w.sq, B * net.O, dloss, k, Float32(1.0) / Float32(B * net.O))
+            comptime if AUTOGRAD_LOSS:
+                loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
+            else:
+                sum_into(ex, w.sq, B * net.O, dloss, k, Float32(1.0) / Float32(B * net.O))
         else:
             gather_rows(ex, dY, dord, w.yb, B, 1, off)
             var a = Args()
@@ -728,9 +786,19 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
             a.i1 = net.O
             a.f0 = Float32(1.0) / Float32(B)
             ex.launch[OP_CE](a, B)
-            sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
+            comptime if AUTOGRAD_LOSS:
+                loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
+            else:
+                sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
         step.backward(ex, net, P, Gr, w.xb, T, B, w)
-        opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+        comptime if AUTOGRAD_OPTIM:
+            step_lr(ex, opt_cfg, opt_state, P, Gr, np_, k + 1, ftz(lrs.unsafe_load(k)))
+        else:
+            opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+    comptime if AUTOGRAD_OPTIM:
+        opt_state.release(ex)
+    comptime if AUTOGRAD_LOSS:
+        release_loss_scratch(ex, loss_ws)
     ex.sync()
     ex.download(Pio, P, np_)
     ex.download(losses, dloss, n_steps)

@@ -37,11 +37,15 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
+from sequence.launch_profile import launch_profile_level, launch_profile_record
+from std.time import perf_counter_ns
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
+from sequence.gemm_tiled import seq_gemm_epi_tiled_kernel
+from autograd.ops import OP_AGK_GEMM_EPI
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
 from sequence.adafactor import AF_COL_CHUNK_FOLD
@@ -415,7 +419,9 @@ def _pool_release_host(i: Int) raises:
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
     pool[].host_free[i] = True
 
-struct DeviceExec(Exec):
+# Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
+# owns its executor across binding calls; moving changes no value.
+struct DeviceExec(Exec, Movable):
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
     var base: List[Int]
@@ -447,6 +453,9 @@ struct DeviceExec(Exec):
     #: the next sync or the end of this Exec drains the queue.
     var retired: List[DeviceBuffer[DType.float32]]
     var retired_pdev: List[Int]
+    #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
+    #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
+    var profile: Int
     # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
@@ -469,6 +478,33 @@ struct DeviceExec(Exec):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.profile = launch_profile_level()
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        """An executor on a caller's context (lane ag-transformer: the
+        autograd tape records over the transformer's own DeviceContext, so
+        its launches and the transformer's kernels share one in-order queue).
+        It never takes pooled storage: the pool's buffers belong to the
+        shared sequence context. Its destructor drains `ctx`."""
+        self.ctx = ctx.copy()
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.base = List[Int]()
+        self.size = List[Int]()
+        self.staged = List[HostBuffer[DType.float32]]()
+        self.pend_host = List[HostBuffer[DType.float32]]()
+        self.pend_dst = List[Int]()
+        self.pend_n = List[Int]()
+        self.pooled = False
+        self.pdev = List[Int]()
+        self.pstaged = List[Int]()
+        self.ppend_host = List[Int]()
+        self.pipe_dst = List[Int]()
+        self.pipe_src = List[Int]()
+        self.pipe_n = List[Int]()
+        self.moe_poff = List[Int]()
+        self.retired = List[DeviceBuffer[DType.float32]]()
+        self.retired_pdev = List[Int]()
+        self.profile = launch_profile_level()
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
@@ -659,6 +695,27 @@ struct DeviceExec(Exec):
         self.pend_n.append(n)
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
+        # lane ag-pass2-kernels: the launch profile (MOJOLEARN_AG_PROFILE).
+        # Off, one Int test. Level 2 drains the queue before and after the
+        # launch so the host clock brackets this launch alone: a relative
+        # profile, the syncs change the timing.
+        if self.profile == 0:
+            self._launch[OP](a, n)
+            return
+        if n <= 0:
+            return
+        var t0 = 0
+        if self.profile >= 2:
+            self.sync()
+            t0 = Int(perf_counter_ns())
+        self._launch[OP](a, n)
+        var ns = 0
+        if self.profile >= 2:
+            self.sync()
+            ns = Int(perf_counter_ns()) - t0
+        launch_profile_record(OP, n, ns, self.profile)
+
+    def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
         # The autograd family (OP_AG_FIRST..OP_AG_LAST, autograd/ops.mojo) runs
@@ -939,6 +996,21 @@ struct DeviceExec(Exec):
                     Int32(a.i0), Int32(a.i1), Int32(a.i2),
                     Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
                     Int32(a.i7), Int32(a.i8),
+                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
+                    block_dim=(GT_TPB, 1, 1),
+                )
+                return
+        # lane ag-pass2-kernels: the tape's GEMM with epilogue on the same
+        # tile as OP_GEMM (same chain, then op_gemm_epi's follower on the
+        # stored word): the same words as the one-thread op_gemm_epi. The
+        # hand MLP's OP_GEMM_EPI keeps its one-thread launch.
+        comptime if SEQ_GEMM_TILED and OP == OP_AGK_GEMM_EPI:
+            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
+                self.ctx.enqueue_function[seq_gemm_epi_tiled_kernel](
+                    a.p0, a.p1, a.p2, a.p3,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
+                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+                    Int32(a.i9), Int32(a.i10), a.f0, a.f1,
                     grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
                     block_dim=(GT_TPB, 1, 1),
                 )

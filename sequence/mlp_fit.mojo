@@ -44,6 +44,7 @@ from sequence.ops import (
     OPT_SK_ADAM,
     OPT_SK_SGD,
     Args,
+    dummy_ptr,
 )
 from sequence.recurrent import bias_rows, colsum, gather_rows, gemm
 from checks.numerics import ftz, identical_div, identical_mul, identical_pow64, identical_sqrt
@@ -54,6 +55,11 @@ from autograd.ops import RELU as AG_RELU
 from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
+from autograd.optim import OptimizerState, optimizer_config, step_lr
+from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_SUM
+from autograd.loss_ops import LS_MSE, LS_LOG_PROB, LS_BINARY_LOG_PROB
+from sequence.mlp import LOSS_SQUARED, LOSS_BINARY_LOG
+from sequence.ops import dummy_ptr
 
 # The tape-assembled backward is the default (promoted 2026-10-18). A/B
 # fad4bec3e, tools/sequence_speed.py case_mlp, HIGGS 1M x 28, (256,) b512
@@ -65,6 +71,26 @@ from autograd.ops import TANH as AG_TANH
 # (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
 # -D MOJOLEARN_AUTOGRAD_MLP_OFF restores the hand-assembled backward (arm A).
 comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
+# -D MOJOLEARN_AUTOGRAD_PREDICT (lane ag-forward, default off, A/B owed):
+# mlp_predict_py predicts through the tape's forward in inference mode
+# (mlp_predict_autograd) instead of the fused hand forward (mlp_predict).
+comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
+# Lane ag-fusion2, A/B pending: -D MOJOLEARN_AUTOGRAD_MLP_FUSED (default off;
+# arm A the current tape path, arm B this) records each layer as one fused
+# tape.linear_into node and backpropagates p - y with
+# backward_from_preactivation. Per layer that is the hand path's launches
+# with the hand path's arguments: forward 1 (gemm_epi EPI_BIAS_ACT, + the
+# softmax launch for a softmax output), backward 3 (gemm_epi EPI_L2GRAD,
+# OP_COLSUM_DIV, gemm_epi EPI_ACT_BWD; 2 for the first layer), no seed copy,
+# no L2GRAD/DIVS export. Expected bits: equal to the hand path's digest
+# (AUTOGRAD_MLP_OFF), different from the current tape's (its bias gradient
+# is the blocked fold and its activation derivative the tape's VJP body).
+# Either is allowed within a version. No effect under AUTOGRAD_MLP_OFF.
+# Lane ag-pass2-kernels: with MOJOLEARN_AUTOGRAD_PASS2_FOLD (default on) the
+# fused node's bias gradient is the tape's blocked fold for batches over 64
+# rows, so this arm equals the hand path's digest only for batches of at most
+# 64 rows; -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF keeps OP_COLSUM_DIV (equal).
+comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and is_defined["MOJOLEARN_AUTOGRAD_MLP_FUSED"]()
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
 # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
 # It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
@@ -72,6 +98,37 @@ comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
 # (256,) b512: NV 0.388 -> 0.387 s, AMD 0.602 -> 0.599 s, same digest as the default
 # (B = 512 is a power of two, so the scaling rounds identically); noise.
 # Restore: git checkout 91ebd1cb4 -- sequence/mlp_fit.mojo (then merge by hand).
+# A/B define (lane ag-loss, default off): -D MOJOLEARN_AUTOGRAD_LOSS computes
+# the data term of each batch's reported loss through autograd/losses.mojo
+# (loss_value_into: one term per element of the B x O output, the same
+# clipped-probability terms as op_mlp_rowloss, summed by the tape's blocked
+# fold) and hands that sum to op_mlp_bloss as its one partial. The L2 term,
+# the batch divide, the epoch fold and the stopping rule are unchanged;
+# OP_MLP_ROWLOSS still writes the gradient seed (the delta at the logits).
+# New bits in the reported loss (and so possibly in n_iter) under the define;
+# the gradients, hence the parameters per epoch, are untouched.
+comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
+
+
+def _mlp_loss_kind(loss_kind: Int) -> Int:
+    """The autograd/loss_ops.mojo kind of an MLP loss code."""
+    if loss_kind == LOSS_SQUARED:
+        return LS_MSE
+    if loss_kind == LOSS_BINARY_LOG:
+        return LS_BINARY_LOG_PROB
+    return LS_LOG_PROB
+
+# Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM updates
+# the parameters through autograd/optim.mojo (OptimizerState + step_lr)
+# instead of the hand-built OP_OPT launch below. Bits: the same. step_lr
+# issues the same one OP_OPT launch over Gr with the same words the body
+# reads (sklearn Adam: f1 b1, f2 b2, f3 eps, f5 lr sqrt(1 - b2^t) / (1 - b1^t)
+# from running products advanced by one identical_mul a step, as here;
+# sklearn SGD: f0 lr, f1 momentum, i2 Nesterov); the words it sets that the
+# hand path leaves 0 (f0 and i1 for Adam) are not read by those bodies. No
+# fold is involved (the clip is off, the schedule is the caller's lr).
+# The state buffers are the module's (s1, s2 here shrink to one float).
+comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -175,6 +232,7 @@ def _mlp_autograd_unary(act: Int) -> Int:
 
 def mlp_forward_autograd[E: Exec](
     mut tape: Tape, mut ex: E, net: MLPNet, P: FP, Gr: FP, acts: List[FP], B: Int,
+    alpha: Float32 = 0,
 ) raises -> Tensor:
     # The graph is recorded from the forward computation. No reverse-layer
     # loop or manually connected activation gradients remains in this path.
@@ -182,6 +240,18 @@ def mlp_forward_autograd[E: Exec](
     # each parameter's gradient lands in its slot of Gr (no export copy).
     tape.reset()
     var h = tape.variable(ex, acts[0], B, net.sizes[0], False)
+    comptime if AUTOGRAD_MLP_FUSED:
+        # One fused node a layer; its weight gradient comes out of the GEMM
+        # as (dW + alpha W) / B and its bias gradient as colsum / B, the
+        # hand path's EPI_L2GRAD and OP_COLSUM_DIV. Returns the output
+        # layer's node; its seed is the pre-activation gradient p - y.
+        for i in range(net.n_layers()):  # driver-loop: over layers
+            var fw = tape.variable_into(ex, P + net.w_off(i), Gr + net.w_off(i), net.sizes[i], net.sizes[i + 1])
+            var fb = tape.variable_into(ex, P + net.b_off(i), Gr + net.b_off(i), 1, net.sizes[i + 1])
+            var fact = net.out_act if i == net.n_layers() - 1 else net.act
+            h = tape.linear_into(ex, h, fw, Optional[Tensor](fb), _mlp_autograd_unary(fact), acts[i + 1],
+                                 alpha, Float32(B))
+        return h
     var logits = h
     for i in range(net.n_layers()):  # driver-loop: over layers
         var w = tape.variable_into(ex, P + net.w_off(i), Gr + net.w_off(i), net.sizes[i], net.sizes[i + 1])
@@ -224,6 +294,15 @@ def mlp_backward_autograd[E: Exec](
     # respect to LOGITS, not probabilities. Seed that precise graph boundary.
     var O = net.sizes[net.n_layers()]
     var seed = tape.variable(ex, delta, B, O, False)
+    comptime if AUTOGRAD_MLP_FUSED:
+        # LAUNCHES PER LAYER, fused (lane ag-fusion2): backward 3 (dW
+        # gemm_epi EPI_L2GRAD into Gr, db OP_COLSUM_DIV into Gr, dX gemm_epi
+        # EPI_ACT_BWD with the layer below's act'), 2 for the first layer;
+        # forward 1 (+1 softmax for a softmax output). No seed copy (the
+        # seed is the output node's dZ, read in place) and no export:
+        # hand path 4 (1 + 3) a layer, unfused tape 12 (3 + 9).
+        tape.backward_from_preactivation(ex, logits, seed)
+        return
     tape.backward_from(ex, logits, seed)
     # Preserve sklearn's parameter-gradient convention: add alpha*W then
     # divide by batch size. Output-width normalization of reported squared
@@ -331,9 +410,19 @@ def mlp_fit[E: Exec](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(np_)
-    var s2 = ex.alloc(np_)
-    var s3 = ex.alloc(np_)
+    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    # -D MOJOLEARN_AUTOGRAD_OPTIM: the optimizer and its state on the executor
+    var opt_cfg = optimizer_config(OPT_SK_ADAM if solver == SOLVER_ADAM else OPT_SK_SGD, lr_init)
+    opt_cfg.beta1 = b1
+    opt_cfg.beta2 = b2
+    opt_cfg.eps = eps
+    opt_cfg.momentum = momentum
+    opt_cfg.nesterov = nesterov
+    var opt_state = OptimizerState()
+    comptime if AUTOGRAD_OPTIM:
+        opt_state = OptimizerState(ex, opt_cfg, np_)
     var acts = List[FP]()
     var deltas = List[FP]()
     var tape = Tape()
@@ -354,6 +443,12 @@ def mlp_fit[E: Exec](
         l2_nb += (net.sizes[i] * net.sizes[i + 1] + MLP_L2_BLOCK - 1) // MLP_L2_BLOCK
     var l2parts = ex.alloc(l2_nb if MLP_BLOCKED_FOLDS else 1)
     var rowparts = ex.alloc((bs + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK if MLP_BLOCKED_FOLDS else 1)
+    # MOJOLEARN_AUTOGRAD_LOSS: the loss module's scratch and the batch's data sum
+    var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
+    var loss_sum = dummy_ptr()
+    comptime if AUTOGRAD_LOSS:
+        loss_ws = loss_scratch(ex, bs * O)
+        loss_sum = ex.alloc(1)
     # MLP_EPOCH_DEV: the epoch losses stay on the executor, one word read back
     var dcurve = ex.alloc(max_iter if MLP_EPOCH_DEV else 1)
     var loss_word = List[Float32](length=1, fill=Float32(0.0))
@@ -402,7 +497,7 @@ def mlp_fit[E: Exec](
             gx.i3 = O
             ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
             comptime if AUTOGRAD_MLP:
-                tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B)
+                tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
             else:
                 mlp_forward(ex, net, P, acts, B)
             var a = Args()
@@ -456,7 +551,11 @@ def mlp_fit[E: Exec](
             bl.i3 = L
             bl.i4 = loss_kind
             bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
-            comptime if MLP_BLOCKED_FOLDS:
+            comptime if AUTOGRAD_LOSS:
+                loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
+                bl.p3 = loss_sum
+                bl.i5 = 1
+            elif MLP_BLOCKED_FOLDS:
                 var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
                 var rp = Args()
                 rp.p0 = rowloss
@@ -488,28 +587,33 @@ def mlp_fit[E: Exec](
                         gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
                                  EPI_ACT_BWD, acts[i], net.act, Float32(0.0), Float32(0.0))
                     i -= 1
-            var o = Args()
-            o.p0 = P
-            o.p1 = Gr
-            o.p2 = s1
-            o.p3 = s2
-            o.p4 = s3
-            if solver == SOLVER_ADAM:
+            comptime if AUTOGRAD_OPTIM:
+                # one OP_OPT launch through autograd/optim.mojo (same words)
                 t_upd += 1
-                pw1 = ftz(identical_mul(pw1, b1))
-                pw2 = ftz(identical_mul(pw2, b2))
-                o.i0 = OPT_SK_ADAM
-                o.f1 = b1
-                o.f2 = b2
-                o.f3 = eps
-                o.f5 = ftz(identical_div(ftz(identical_mul(lr, ftz(identical_sqrt(Float32(1.0) - pw2)))),
-                                         Float32(1.0) - pw1))
+                step_lr(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr)
             else:
-                o.i0 = OPT_SK_SGD
-                o.i2 = 1 if nesterov else 0
-                o.f0 = lr
-                o.f1 = momentum
-            ex.launch[OP_OPT](o, np_)
+                var o = Args()
+                o.p0 = P
+                o.p1 = Gr
+                o.p2 = s1
+                o.p3 = s2
+                o.p4 = s3
+                if solver == SOLVER_ADAM:
+                    t_upd += 1
+                    pw1 = ftz(identical_mul(pw1, b1))
+                    pw2 = ftz(identical_mul(pw2, b2))
+                    o.i0 = OPT_SK_ADAM
+                    o.f1 = b1
+                    o.f2 = b2
+                    o.f3 = eps
+                    o.f5 = ftz(identical_div(ftz(identical_mul(lr, ftz(identical_sqrt(Float32(1.0) - pw2)))),
+                                             Float32(1.0) - pw1))
+                else:
+                    o.i0 = OPT_SK_SGD
+                    o.i2 = 1 if nesterov else 0
+                    o.f0 = lr
+                    o.f1 = momentum
+                ex.launch[OP_OPT](o, np_)
         var loss: Float64
         comptime if MLP_EPOCH_DEV:
             var el = Args()
@@ -553,6 +657,11 @@ def mlp_fit[E: Exec](
     comptime if AUTOGRAD_MLP:
         # lane ag-fusion: return the tape's storage now, not at the end of ex
         tape.release(ex)
+    comptime if AUTOGRAD_OPTIM:
+        opt_state.release(ex)
+    comptime if AUTOGRAD_LOSS:
+        release_loss_scratch(ex, loss_ws)
+        ex.free(loss_sum)
     ex.sync()
     ex.download(Pio, P, np_)
     _ = perm^
@@ -590,6 +699,56 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
         d.p1 = dout + b0 * O
         ex.launch[OP_COPY](d, B * O)
         b0 += B
+    if proba2 and O == 1:
+        var two = ex.alloc(N * 2)
+        var q = Args()
+        q.p0 = dout
+        q.p1 = two
+        ex.launch[OP_PROBA2](q, N * 2)
+        ex.sync()
+        ex.download(dst, two, N * 2)
+        return
+    ex.sync()
+    ex.download(dst, dout, N * O)
+
+
+def mlp_predict_autograd[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
+                                  proba2: Bool = False) raises:
+    """mlp_predict through the tape: each chunk runs mlp_forward_autograd on a
+    tape in inference mode (no graph, no gradient storage), so predictions
+    come from the same kernels, in the same order, as the training forward.
+    Chunking, the output copy and `proba2` are mlp_predict's."""
+    var L = net.n_layers()
+    var D = net.sizes[0]
+    var O = net.sizes[L]
+    var bs = chunk if chunk < N else N
+    var dX = ex.alloc(N * D)
+    ex.upload(dX, X, N * D)
+    var P = ex.alloc(net.n_params())
+    ex.upload(P, Pin, net.n_params())
+    var acts = List[FP]()
+    for i in range(L + 1):  # driver-loop: over layers
+        acts.append(ex.alloc(bs * net.sizes[i]))
+    var dout = ex.alloc(N * O)
+    var tape = Tape()
+    tape.no_grad()
+    var b0 = 0
+    while b0 < N:  # driver-loop: over prediction chunks
+        var B = bs if b0 + bs <= N else N - b0
+        var c = Args()
+        c.p0 = dX + b0 * D
+        c.p1 = acts[0]
+        ex.launch[OP_COPY](c, B * D)
+        # Inference mode never keeps a gradient pointer, so the gradient
+        # vector is a placeholder. mlp_forward_autograd resets the tape, so
+        # every chunk reuses the first (largest) chunk's storage.
+        _ = mlp_forward_autograd(tape, ex, net, P, dummy_ptr(), acts, B)
+        var d = Args()
+        d.p0 = acts[L]
+        d.p1 = dout + b0 * O
+        ex.launch[OP_COPY](d, B * O)
+        b0 += B
+    tape.release(ex)
     if proba2 and O == 1:
         var two = ex.alloc(N * 2)
         var q = Args()
