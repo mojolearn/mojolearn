@@ -1224,8 +1224,12 @@ def transformer_backward_tape_binding(tape: PythonObject, addrs: PythonObject) r
     if owner[].busy or owner[].consumed:
         raise Error("transformer forward tape: busy, closed or already consumed")
     var a = _read_addrs_tail(addrs, 11, String("transformer_backward_tape"))
-    if len(a) != 11:
-        raise Error("transformer backward tape: expected dy and ten outputs")
+    # _read_addrs_tail pads to 11 + BLOCK_OPTION_ADDRS slots, so the old
+    # `len(a) != 11` test refused every call (the forward tape entry had the
+    # same fault). The backward takes no options: the tail must be zero.
+    for i in range(11, len(a)):  # small-loop(a: the block options tail slots): validated tensor addresses, not data
+        if a[i] != 0:
+            raise Error("transformer backward tape: expected dy and ten outputs, no block options tail")
     for i in range(11):
         if a[i] == 0:
             raise Error("transformer backward tape: null address at slot " + String(i))
