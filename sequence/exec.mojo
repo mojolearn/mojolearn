@@ -28,6 +28,8 @@ from core.host_predict_threads import host_predict_chunk, host_predict_task_coun
 from sequence.dispatch import apply
 from sequence.ets_team import IDN_ETS_TEAM, ets_team_replay, ets_team_replay_applies
 from sequence.exec_trait import Exec
+from sequence.launch_profile import launch_profile_level, launch_profile_record
+from std.time import perf_counter_ns
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.ops import (
     FP,
@@ -181,12 +183,16 @@ struct HostExec(Exec):
     #: across launches, grown on demand.
     var panel: FP
     var panel_cap: Int
+    #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
+    #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
+    var profile: Int
 
     def __init__(out self):
         self.bufs = List[FP]()
         self.workers = host_predict_task_count(1 << 30)
         self.panel = FP(unsafe_from_address=Int(alloc[Float32](1)))
         self.panel_cap = 1
+        self.profile = launch_profile_level()
 
     def __deinit__(deinit self):
         for i in range(len(self.bufs)):
@@ -227,6 +233,24 @@ struct HostExec(Exec):
         return src
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
+        # lane ag-pass2-kernels: the launch profile (MOJOLEARN_AG_PROFILE),
+        # as DeviceExec.launch; the host runs each launch before it returns,
+        # so level 2 needs no sync. Off, one Int test.
+        if self.profile == 0:
+            self._launch[OP](a, n)
+            return
+        if n <= 0:
+            return
+        var t0 = 0
+        if self.profile >= 2:
+            t0 = Int(perf_counter_ns())
+        self._launch[OP](a, n)
+        var ns = 0
+        if self.profile >= 2:
+            ns = Int(perf_counter_ns()) - t0
+        launch_profile_record(OP, n, ns, self.profile)
+
+    def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
         comptime if OP == OP_GEMM:
@@ -237,7 +261,7 @@ struct HostExec(Exec):
         # same cells in the same order either way.
         comptime if OP == OP_GEMM_EPI:
             self._gemm(a)
-            self.launch[OP_GEMM_EPI_TAIL](a, n)
+            self._launch[OP_GEMM_EPI_TAIL](a, n)
             return
         comptime if OP == OP_CELL_FWD_H:
             # h_prev @ W_hh^T into GH, + b_hh, then the cell
@@ -265,8 +289,8 @@ struct HostExec(Exec):
             bb.i1 = GH
             bb.i2 = GH
             bb.i3 = GH
-            self.launch[OP_BIAS](bb, B * GH)
-            self.launch[OP_CELL_FWD](a, n)
+            self._launch[OP_BIAS](bb, B * GH)
+            self._launch[OP_CELL_FWD](a, n)
             return
         comptime if OP == OP_CELL_BWD_H:
             # dh += dGH_{s+1} @ W_hh (when a later step exists), then the cell
@@ -288,7 +312,7 @@ struct HostExec(Exec):
                 g.i7 = 1
                 g.i8 = H
                 self._gemm(g)
-            self.launch[OP_CELL_BWD](a, n)
+            self._launch[OP_CELL_BWD](a, n)
             return
         var tasks = host_launch_tasks(n, _element_weight[OP](a), self.workers)
         if tasks <= 1:

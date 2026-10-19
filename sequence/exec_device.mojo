@@ -37,6 +37,8 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
+from sequence.launch_profile import launch_profile_level, launch_profile_record
+from std.time import perf_counter_ns
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
@@ -447,6 +449,9 @@ struct DeviceExec(Exec):
     #: the next sync or the end of this Exec drains the queue.
     var retired: List[DeviceBuffer[DType.float32]]
     var retired_pdev: List[Int]
+    #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
+    #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
+    var profile: Int
     # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
@@ -469,6 +474,7 @@ struct DeviceExec(Exec):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.profile = launch_profile_level()
 
     def __init__(out self, ctx: DeviceContext) raises:
         """An executor on a caller's context (lane ag-transformer: the
@@ -494,6 +500,7 @@ struct DeviceExec(Exec):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.profile = launch_profile_level()
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
@@ -684,6 +691,27 @@ struct DeviceExec(Exec):
         self.pend_n.append(n)
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
+        # lane ag-pass2-kernels: the launch profile (MOJOLEARN_AG_PROFILE).
+        # Off, one Int test. Level 2 drains the queue before and after the
+        # launch so the host clock brackets this launch alone: a relative
+        # profile, the syncs change the timing.
+        if self.profile == 0:
+            self._launch[OP](a, n)
+            return
+        if n <= 0:
+            return
+        var t0 = 0
+        if self.profile >= 2:
+            self.sync()
+            t0 = Int(perf_counter_ns())
+        self._launch[OP](a, n)
+        var ns = 0
+        if self.profile >= 2:
+            self.sync()
+            ns = Int(perf_counter_ns()) - t0
+        launch_profile_record(OP, n, ns, self.profile)
+
+    def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
         # The autograd family (OP_AG_FIRST..OP_AG_LAST, autograd/ops.mojo) runs
