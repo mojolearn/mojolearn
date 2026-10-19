@@ -13,15 +13,26 @@
 # the staging boundaries M in (1, 17), N in (1, 16, 33), K in (15, 16, 17,
 # 63, 64, 65, 127, 128, 129) (lane ag-pass5-gemm).
 # Off NVIDIA/AMD identical (Apple, FAST) every route is the one-thread launch.
+#
+# Lane ag-pass6-gemm: the 64 x 64 micro-tile (GR_MICRO) is a forced route on
+# every shape like the others (the same words required); the split-K order
+# (sequence/gemm_split.mojo, a BIT VERSION) is run forced on every shape on
+# the device and on the host (OP_GK_SPLIT), and those words must be EQUAL
+# device vs host (SPLITDIFF fails the check); where the shape rule selects
+# it, the dispatch and the host executor are compared against it instead of
+# the one-chain route. The pass-5 shapes keep the old digest ("digest"); the
+# pass-6 shapes (micro edges 63..65 x K 15..129, long-K split shapes) add
+# "digest6", and every case's split words "split_digest".
 from std.memory import bitcast
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI
 from sequence.mlp import EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX
-from sequence.gemm_tiled import GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, seq_gemm_route
+from sequence.gemm_tiled import GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GR_MICRO, seq_gemm_route
+from sequence.gemm_split import OP_GK_SPLIT, gemm_split_args, gemm_split_on
 from sequence.exec_device import DeviceExec
 from sequence.exec import HostExec
 from autograd.ops import OP_AGK_GEMM_EPI
 
-comptime N_ROUTES = 5  # GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, then the dispatch's own
+comptime N_ROUTES = 6  # GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GR_MICRO, then the dispatch's own
 comptime N_KINDS = 10
 
 
@@ -69,16 +80,39 @@ struct GemmTally(Movable):
     var launches: Int
     var host_diffs: Int
     var digest: UInt64
+    #: lane ag-pass6-gemm: 0 = the pass-5 shapes (digest), 1 = the pass-6
+    #: shapes (cases6, digest6); the split words of every case (split_digest)
+    var phase: Int
+    var cases6: Int
+    var digest6: UInt64
+    var split_cases: Int
+    var split_hits: Int
+    var split_diffs: Int
+    var split_digest: UInt64
 
     def __init__(out self):
         self.cases = 0
         self.launches = 0
         self.host_diffs = 0
         self.digest = UInt64(1469598103934665603)
+        self.phase = 0
+        self.cases6 = 0
+        self.digest6 = UInt64(1469598103934665603)
+        self.split_cases = 0
+        self.split_hits = 0
+        self.split_diffs = 0
+        self.split_digest = UInt64(1469598103934665603)
 
     def mix(mut self, v: List[Float32]):
         for i in range(len(v)):
-            self.digest = (self.digest ^ UInt64(bitcast[DType.uint32](v[i]))) * UInt64(1099511628211)
+            if self.phase == 0:
+                self.digest = (self.digest ^ UInt64(bitcast[DType.uint32](v[i]))) * UInt64(1099511628211)
+            else:
+                self.digest6 = (self.digest6 ^ UInt64(bitcast[DType.uint32](v[i]))) * UInt64(1099511628211)
+
+    def mix_split(mut self, v: List[Float32]):
+        for i in range(len(v)):
+            self.split_digest = (self.split_digest ^ UInt64(bitcast[DType.uint32](v[i]))) * UInt64(1099511628211)
 
 
 def _same_bits(name: String, route: Int, got: List[Float32], ref_: List[Float32]) raises:
@@ -156,6 +190,19 @@ def _run[OP: Int](
     dev.upload(dA, _hp(ha), M * K)
     dev.upload(dB, _hp(hb), K * N)
     dev.upload(d3, _hp(h3), M * N)
+    # lane ag-pass6-gemm: the split-K order forced (OP_GK_SPLIT), device
+    # words; the host's are compared below. split_on: the dispatch takes it.
+    a.p0 = dA
+    a.p1 = dB
+    a.p2 = dC
+    a.p3 = d3
+    a.p4 = d4
+    var split_on = gemm_split_on[OP](a)
+    dev.upload(dC, _hp(hc0), M * ldc)
+    dev.launch[OP_GK_SPLIT](gemm_split_args[OP](a), M * N)
+    tally.launches += 1
+    var split_dev = List[Float32](length=M * ldc, fill=0)
+    dev.download(_hp(split_dev), dC, M * ldc)
     var first = List[Float32]()
     var first_cs = List[Float32]()
     for route in range(N_ROUTES):  # driver-loop: over the routes compared
@@ -181,6 +228,11 @@ def _run[OP: Int](
         if route == 0:
             first = got.copy()
             first_cs = got_cs.copy()
+        elif route == N_ROUTES - 1 and split_on:
+            # the dispatch took the split order: its words are the split's
+            _same_bits(name + "/split_dispatch", route, got, split_dev)
+            if colsum:
+                _same_bits(name + "/colsum", route, got_cs, first_cs)
         else:
             _same_bits(name, route, got, first)
             if colsum:
@@ -207,6 +259,9 @@ def _run[OP: Int](
                 if not (abs(Float64(first[m * ldc + n]) - s) <= tol):
                     print("FAIL", name, "oracle cell", m, n, "got", first[m * ldc + n], "float64", s)
                     raise Error(name + ": the GEMM is off the float64 oracle")
+                if not (abs(Float64(split_dev[m * ldc + n]) - s) <= tol):
+                    print("FAIL", name, "oracle split cell", m, n, "got", split_dev[m * ldc + n], "float64", s)
+                    raise Error(name + ": the split-K GEMM is off the float64 oracle")
     if colsum:
         for n in range(N):
             var s = Float64(0.0)
@@ -238,7 +293,11 @@ def _run[OP: Int](
     host.launch[OP](a, M * N)
     var hgot = List[Float32](length=M * ldc, fill=0)
     host.download(_hp(hgot), hC, M * ldc)
-    var hd = _count_diffs(hgot, first)
+    var hd: Int
+    if split_on:
+        hd = _count_diffs(hgot, split_dev)
+    else:
+        hd = _count_diffs(hgot, first)
     if colsum:
         var hcs = List[Float32](length=N, fill=0)
         host.download(_hp(hcs), hp4, N)
@@ -246,6 +305,20 @@ def _run[OP: Int](
     if hd != 0:
         print("HOSTDIFF", name, "words", hd)
     tally.host_diffs += hd
+    # the split order forced on the host: the same words as the device's
+    # (required: the bit version's identity, device vs host)
+    host.upload(hC, _hp(hc0), M * ldc)
+    host.launch[OP_GK_SPLIT](gemm_split_args[OP](a), M * N)
+    var hsplit = List[Float32](length=M * ldc, fill=0)
+    host.download(_hp(hsplit), hC, M * ldc)
+    var sd = _count_diffs(hsplit, split_dev)
+    if sd != 0:
+        print("SPLITDIFF", name, "words", sd)
+    tally.split_diffs += sd
+    tally.split_cases += 1
+    if split_on:
+        tally.split_hits += 1
+    tally.mix_split(split_dev)
     host.free(hA)
     host.free(hB)
     host.free(hC)
@@ -259,7 +332,10 @@ def _run[OP: Int](
     _ = h3^
     tally.mix(first)
     tally.mix(first_cs)
-    tally.cases += 1
+    if tally.phase == 0:
+        tally.cases += 1
+    else:
+        tally.cases6 += 1
 
 
 def _shape_all_kinds(mut dev: DeviceExec, mut host: HostExec, mut tally: GemmTally, M: Int, N: Int, K: Int) raises:
@@ -287,7 +363,7 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
     var ns: List[Int] = [1, 2, 3, 16, 17, 64, 65]
     var ks: List[Int] = [1, 2, 27, 28, 29, 255, 256, 257]
     var idx = 0
-    var routes_seen = List[Int](length=4, fill=0)
+    var routes_seen = List[Int](length=5, fill=0)
     for i in range(len(ms)):  # driver-loop: over the shape grid
         for j in range(len(ns)):
             for l in range(len(ks)):
@@ -326,10 +402,52 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
                 _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
                 _run[OP_GEMM_EPI](dev, host, tally, M, N, K, True, (idx + 3) % N_KINDS, False)
                 idx += 1
+    # lane ag-pass6-gemm: the pass-6 shapes (digest6). The micro-tile's
+    # edges (63, 64, 65, 128 against its 64 x 64 block) and slab boundaries
+    # (K on both sides of its 32-term slab and of gemm_dot's 64-term round),
+    # every route forced as above; then long-K products on both sides of
+    # the split rule's cell bounds (2^15 thin, 2^14 with both edges >= 8)
+    # and of its block counts (S = 2, a non-power-of-two S, S = 256 lanes).
+    tally.phase = 1
+    var mms: List[Int] = [63, 64, 65, 128]
+    var mns: List[Int] = [63, 64, 65]
+    var mks: List[Int] = [15, 31, 32, 33, 64, 65, 129]
+    for i in range(len(mms)):  # driver-loop: over the micro-tile shape grid
+        for j in range(len(mns)):
+            for l in range(len(mks)):
+                var M = mms[i]
+                var N = mns[j]
+                var K = mks[l]
+                routes_seen[seq_gemm_route(M, N, K, True)] += 1
+                _run[OP_GEMM](dev, host, tally, M, N, K, False, 0, False)
+                _run[OP_GEMM](dev, host, tally, M, N, K, True, 0, True)
+                _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
+                _run[OP_GEMM_EPI](dev, host, tally, M, N, K, True, (idx + 3) % N_KINDS, False)
+                idx += 1
+    var sms: List[Int] = [1, 3, 17, 300, 1, 127, 128, 181]
+    var sns: List[Int] = [1, 5, 33, 1, 300, 128, 128, 181]
+    var sks: List[Int] = [65537, 4097, 16385, 1000, 777, 2048, 129, 300]
+    for i in range(len(sms)):  # driver-loop: over the split-K shapes
+        var M = sms[i]
+        var N = sns[i]
+        var K = sks[i]
+        routes_seen[seq_gemm_route(M, N, K, True)] += 1
+        _run[OP_GEMM](dev, host, tally, M, N, K, False, 0, False)
+        _run[OP_GEMM](dev, host, tally, M, N, K, True, 0, True)
+        _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, 5, False)
+        _run[OP_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
+        idx += 1
     print(
         "ROUTES grid cell", routes_seen[GR_CELL], "tile", routes_seen[GR_TILE],
-        "thinN", routes_seen[GR_THIN_N], "thinM", routes_seen[GR_THIN_M],
+        "thinN", routes_seen[GR_THIN_N], "thinM", routes_seen[GR_THIN_M], "micro", routes_seen[GR_MICRO],
     )
     if tally.host_diffs != 0:
         print("HOSTDIFF total words", tally.host_diffs, "(reported, not required)")
+    print(
+        "SPLIT cases", tally.split_cases, "dispatch_hits", tally.split_hits,
+        "device_vs_host_diffs", tally.split_diffs, "split_digest", tally.split_digest,
+    )
+    if tally.split_diffs != 0:
+        raise Error("gemm_cases: the split-K order differs device vs host (" + String(tally.split_diffs) + " words)")
     print("PASS gemm_cases", tally.cases, "launches", tally.launches, "digest", tally.digest)
+    print("PASS gemm_cases6", tally.cases6, "digest6", tally.digest6)
