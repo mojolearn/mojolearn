@@ -44,6 +44,7 @@ from sequence.ops import (
     OPT_SK_ADAM,
     OPT_SK_SGD,
     Args,
+    dummy_ptr,
 )
 from sequence.recurrent import bias_rows, colsum, gather_rows, gemm
 from checks.numerics import ftz, identical_div, identical_mul, identical_pow64, identical_sqrt
@@ -65,6 +66,10 @@ from autograd.ops import TANH as AG_TANH
 # (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
 # -D MOJOLEARN_AUTOGRAD_MLP_OFF restores the hand-assembled backward (arm A).
 comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
+# -D MOJOLEARN_AUTOGRAD_PREDICT (lane ag-forward, default off, A/B owed):
+# mlp_predict_py predicts through the tape's forward in inference mode
+# (mlp_predict_autograd) instead of the fused hand forward (mlp_predict).
+comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
 # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
 # It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
@@ -590,6 +595,56 @@ def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP
         d.p1 = dout + b0 * O
         ex.launch[OP_COPY](d, B * O)
         b0 += B
+    if proba2 and O == 1:
+        var two = ex.alloc(N * 2)
+        var q = Args()
+        q.p0 = dout
+        q.p1 = two
+        ex.launch[OP_PROBA2](q, N * 2)
+        ex.sync()
+        ex.download(dst, two, N * 2)
+        return
+    ex.sync()
+    ex.download(dst, dout, N * O)
+
+
+def mlp_predict_autograd[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
+                                  proba2: Bool = False) raises:
+    """mlp_predict through the tape: each chunk runs mlp_forward_autograd on a
+    tape in inference mode (no graph, no gradient storage), so predictions
+    come from the same kernels, in the same order, as the training forward.
+    Chunking, the output copy and `proba2` are mlp_predict's."""
+    var L = net.n_layers()
+    var D = net.sizes[0]
+    var O = net.sizes[L]
+    var bs = chunk if chunk < N else N
+    var dX = ex.alloc(N * D)
+    ex.upload(dX, X, N * D)
+    var P = ex.alloc(net.n_params())
+    ex.upload(P, Pin, net.n_params())
+    var acts = List[FP]()
+    for i in range(L + 1):  # driver-loop: over layers
+        acts.append(ex.alloc(bs * net.sizes[i]))
+    var dout = ex.alloc(N * O)
+    var tape = Tape()
+    tape.no_grad()
+    var b0 = 0
+    while b0 < N:  # driver-loop: over prediction chunks
+        var B = bs if b0 + bs <= N else N - b0
+        var c = Args()
+        c.p0 = dX + b0 * D
+        c.p1 = acts[0]
+        ex.launch[OP_COPY](c, B * D)
+        # Inference mode never keeps a gradient pointer, so the gradient
+        # vector is a placeholder. mlp_forward_autograd resets the tape, so
+        # every chunk reuses the first (largest) chunk's storage.
+        _ = mlp_forward_autograd(tape, ex, net, P, dummy_ptr(), acts, B)
+        var d = Args()
+        d.p0 = acts[L]
+        d.p1 = dout + b0 * O
+        ex.launch[OP_COPY](d, B * O)
+        b0 += B
+    tape.release(ex)
     if proba2 and O == 1:
         var two = ex.alloc(N * 2)
         var q = Args()

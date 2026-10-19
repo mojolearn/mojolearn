@@ -48,6 +48,23 @@ Caller storage and storage lifetime (lane `ag-fusion`):
   never released go when the executor ends. The MLP trainer releases its
   tape when the fit finishes.
 
+Inference (lane `ag-forward`): `tape.no_grad()` puts a tape in inference
+mode until `tape.record()`; the mode survives `reset()` and `release()`.
+Every operation still allocates its value through the tape's reusable
+storage (or writes caller storage for the `*_into` variants) and runs the
+same launch helper, then `_record` keeps no parents, allocates no gradient
+storage and marks the node inferred. `_record` never launches a value
+kernel, so a recorded and a non-recorded forward give the same bits by
+construction. `backward`, `backward_from` and `gradient()` refuse an
+inferred tensor; inside a later recorded graph it is a constant.
+`sequence/mlp_fit.mojo` `mlp_predict_autograd` predicts through
+`mlp_forward_autograd` on an inference tape, chunked like `mlp_predict`;
+`mlp_predict_py` uses it under `-D MOJOLEARN_AUTOGRAD_PREDICT` (default off,
+A/B owed). `autograd/checks/infer_cpu.mojo` and `infer_gpu.mojo` check the
+recorded/inference bit match on seven small models, the absence of graph
+edges and gradient slots, chunked prediction against the full-batch
+forward, and the refusals.
+
 The MLP tape path records each layer's output into the trainer's
 activation buffers and lands parameter gradients in the trainer's gradient
 vector, so the per-layer launch count drops from about 28 to 8 or 9 (with the per-opcode bodies and the bias gradient's blocked fold) (the
