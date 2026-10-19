@@ -95,6 +95,15 @@ def ag_op_name(op: Int) -> String:
         return "colsum_div"
     if op == 62:
         return "gemm_epi_tail"
+    # the MLP loss block (sequence/ops.mojo OP_MLP_LB_*, 1600..1603)
+    if op == 1600:
+        return "mlp_lb_part"
+    if op == 1601:
+        return "mlp_lb_fold"
+    if op == 1602:
+        return "mlp_lb_epoch_part"
+    if op == 1603:
+        return "mlp_lb_epoch_fold"
     return "op_" + String(op)
 
 
