@@ -2,6 +2,7 @@
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr, OP_COPY, OP_FILL, OP_GEMM
 from checks.numerics import identical_div
+from autograd.fold import blocked_fold, fold_partials
 from autograd.ops import (
     OP_AG_BIN_FWD, OP_AG_BIN_VJP, OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_TRANSPOSE,
     OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, OP_AG_REDUCE_VJP, OP_AG_SOFTMAX_FWD,
@@ -481,28 +482,10 @@ struct Tape(Movable):
         output's block partials added ascending from +0.0 (OP_AG_REDUCE_FOLD,
         parallel over outputs). One order on every executor. The partials
         are tape scratch (released with the graph's storage at reset)."""
-        var extent = rows * cols if axis == AXIS_ALL else (rows if axis == AXIS_ROWS else cols)
-        var block = ag_fold_block(extent)
-        var blocks = (extent + block - 1) // block
-        var outputs = 1 if axis == AXIS_ALL else (cols if axis == AXIS_ROWS else rows)
-        var partials = self._alloc(ex, blocks * outputs)
-        var a = Args()
-        a.p0 = src
-        a.p1 = partials
-        a.i0 = axis
-        a.i1 = rows
-        a.i2 = cols
-        a.i3 = block
-        ex.launch[OP_AG_REDUCE_PART](a, blocks * outputs)
-        var f = Args()
-        f.p0 = partials
-        f.p1 = dst
-        f.i0 = axis
-        f.i1 = rows
-        f.i2 = cols
-        f.i3 = block
-        f.f0 = factor
-        ex.launch[OP_AG_REDUCE_FOLD](f, outputs)
+        # The launches live in autograd/fold.mojo (blocked_fold), shared with
+        # the losses and metrics so every sum in autograd has one order.
+        var partials = self._alloc(ex, fold_partials(rows, cols, axis))
+        blocked_fold(ex, dst, src, rows, cols, axis, factor, partials)
 
     def sum[E: Exec](mut self, mut ex: E, x: Tensor, axis: Int = -1) raises -> Tensor:
         """Sum all elements or one matrix axis, retaining reduced dimensions."""
