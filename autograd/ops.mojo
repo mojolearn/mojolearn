@@ -50,6 +50,9 @@ comptime REDUCE = 22
 comptime SOFTMAX = 23
 comptime LOG_SOFTMAX = 24
 comptime MATMUL = 30
+# act(x @ W + b) as one node (tape.linear / linear_into): the forward and
+# backward launches of the hand-assembled MLP, no new element bodies.
+comptime LINEAR = 31
 comptime CUSTOM = 40
 comptime LEAF = 0
 
