@@ -692,7 +692,7 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
             _d2d(s.ctx, s.acts[i + 1], 0, s.t_stages[j].residual2, m * dm)
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by SHA_X; code recoverable at SHA_X^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by 70ce81192; code recoverable at 70ce81192^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch
 # (_backward_blocks: the hand walk's per-block VJP loop and its 9 + 1 copies per block; the tape's
 # M3_BLOCK and transformer rules launch the same block backwards, autograd/rules_samba.mojo.)
@@ -1080,7 +1080,7 @@ def samba_resident_train_step(
     _ = rows^
 
     # ---- the backward on one tape (autograd/rules_samba.mojo)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by SHA_X; code recoverable at SHA_X^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by 70ce81192; code recoverable at 70ce81192^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch
     # (the hand walk: head GEMMs, final-norm backward, _backward_blocks, embedding backward, pair add)
     var hw = s.view(s.head_index())

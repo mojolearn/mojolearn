@@ -104,7 +104,7 @@ from autograd.rules_mamba3 import (
 
 # The Samba train step's backward runs on the tape only (training/checks/samba_tape_step_check.mojo
 # checks it against stored digests).
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by SHA_X; code recoverable at SHA_X^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by 70ce81192; code recoverable at 70ce81192^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch
 # (the AUTOGRAD_SAMBA switch; MOJOLEARN_AUTOGRAD_SAMBA and MOJOLEARN_AUTOGRAD_SAMBA_OFF are refused in core/six_lane_experiment_guards.mojo)
 
