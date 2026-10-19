@@ -23,7 +23,7 @@ from core.label_encode import host_unique_inverse
 from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
     ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
-    ops_profile_reset_py, ops_profile_report_py,
+    ops_profile_reset_py, ops_profile_report_py, ops_op_packed_py,
 )
 from autograd.ops_api import OPS_HOST
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
@@ -145,6 +145,10 @@ def ops_download_binding(sid: PythonObject, h: PythonObject, addr: PythonObject)
 
 def ops_op_binding(sid: PythonObject, code: PythonObject, hs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     return ops_op_py[HostExec, OPS_HOST](sid, code, hs, ip, fp)
+
+
+def ops_op_packed_binding(sid: PythonObject, code: PythonObject, block: PythonObject) raises -> PythonObject:
+    return ops_op_packed_py[HostExec, OPS_HOST](sid, code, block)
 
 
 def ops_scalar_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
@@ -285,6 +289,7 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[ops_upload_binding]("ops_upload")
         m.def_function[ops_download_binding]("ops_download")
         m.def_function[ops_op_binding]("ops_op")
+        m.def_function[ops_op_packed_binding]("ops_op_packed")
         m.def_function[ops_scalar_binding]("ops_scalar")
         m.def_function[ops_shape_binding]("ops_shape")
         m.def_function[ops_free_binding]("ops_free")

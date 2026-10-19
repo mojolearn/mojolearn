@@ -61,7 +61,7 @@ FAMILIES = (
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
             "ops_open", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
             "ops_shape", "ops_free", "ops_reset", "ops_metric", "ops_backward", "ops_grad",
-            "ops_profile_reset", "ops_profile_report",
+            "ops_profile_reset", "ops_profile_report", "ops_op_packed",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

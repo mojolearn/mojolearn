@@ -197,6 +197,16 @@ def ops_op_py[E: Exec & Movable & Deinitable, KIND: Int](
     return PythonObject(p[].op(Int(py=code), _handle_list(hs), _arg_ints(ip), _arg_floats(fp)))
 
 
+def ops_op_packed_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, code: PythonObject, block: PythonObject,
+) raises -> PythonObject:
+    """`ops_op_py` with the handles and arguments in the session's packed
+    int64 block at address `block` (autograd/ops_api.mojo OPS_PACK_*): no
+    Python list is walked (lane ag-pass6-host idea G)."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(p[].op_packed(Int(py=code), Int(py=block)))
+
+
 def ops_scalar_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
     """The one value of a (1, 1) tensor."""
     var p = ops_session[E, KIND](Int(py=sid))

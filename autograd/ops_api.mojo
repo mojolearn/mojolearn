@@ -36,6 +36,22 @@ from autograd.data import permutation, gather_rows
 from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
 
 # Executor kinds of a session (the binding that opened it).
+# Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
+# block of one operation call (OpsSession.op_packed), int64 words written by
+# the Python shell into a session-owned buffer and read here by address, so
+# a call crosses no Python list: word 0 the handle count, 1 the integer
+# count, 2 the float count, then OPS_PACK_HANDLES handle words, then
+# OPS_PACK_INTS integer words, then OPS_PACK_FLOATS float32 values in the
+# words from OPS_PACK_F_WORD on (two a word, little-endian order as numpy's
+# float32 view of the same buffer).
+comptime OPS_PACK_HANDLES = 4
+comptime OPS_PACK_INTS = 8
+comptime OPS_PACK_FLOATS = 4
+comptime OPS_PACK_H_WORD = 3
+comptime OPS_PACK_I_WORD = OPS_PACK_H_WORD + OPS_PACK_HANDLES
+comptime OPS_PACK_F_WORD = OPS_PACK_I_WORD + OPS_PACK_INTS
+comptime OPS_PACK_WORDS = OPS_PACK_F_WORD + (OPS_PACK_FLOATS + 1) // 2
+
 comptime OPS_DEVICE = 1
 comptime OPS_HOST = 2
 
@@ -440,6 +456,29 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         else:
             raise Error("ops: unknown operation code " + String(code))
         return self._add(t, 0, False, 0)
+
+    def op_packed(mut self, code: Int, block: Int) raises -> Int:
+        """`op` with its arguments in a packed block at address `block`
+        (OPS_PACK_* layout): the same checks and the same call."""
+        if block == 0:
+            raise Error("ops: null argument block")
+        var w = UnsafePointer[Int64, MutUntrackedOrigin](unsafe_from_address=block)
+        var nh = Int(w[0])
+        var ni = Int(w[1])
+        var nf = Int(w[2])
+        if nh < 0 or nh > OPS_PACK_HANDLES or ni < 0 or ni > OPS_PACK_INTS or nf < 0 or nf > OPS_PACK_FLOATS:
+            raise Error("ops: the argument block's counts are out of range")
+        var hs = List[Int](capacity=nh)
+        for i in range(nh):  # small-loop(nh: an op's input handles, at most four): argument parsing, no data
+            hs.append(Int(w[OPS_PACK_H_WORD + i]))
+        var ints = List[Int](capacity=ni)
+        for i in range(ni):  # small-loop(ni: an op's integer arguments, at most eight): argument parsing, no data
+            ints.append(Int(w[OPS_PACK_I_WORD + i]))
+        var f = UnsafePointer[Float32, MutUntrackedOrigin](unsafe_from_address=block + 8 * OPS_PACK_F_WORD)
+        var fs = List[Float32](capacity=nf)
+        for i in range(nf):  # small-loop(nf: an op's float arguments, at most four): argument parsing, no data
+            fs.append(f[i])
+        return self.op(code, hs, ints, fs)
 
     def metric(mut self, kind: Int, hs: List[Int]) raises -> Float32:
         """A forward-only metric of (y_true, prediction); one value read back."""
