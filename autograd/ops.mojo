@@ -55,6 +55,9 @@ comptime LOG_SOFTMAX = 24
 comptime LOSS_ELEM = 25
 comptime LOSS_CE = 26
 comptime MATMUL = 30
+# act(x @ W + b) as one node (tape.linear / linear_into): the forward and
+# backward launches of the hand-assembled MLP, no new element bodies.
+comptime LINEAR = 31
 comptime CUSTOM = 40
 comptime LEAF = 0
 

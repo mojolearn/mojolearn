@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr, OP_COPY, OP_FILL, OP_GEMM
+from sequence.ops import OP_ACT, OP_ACT_BWD, OP_COLSUM, OP_COLSUM_DIV, OP_GEMM_EPI, OP_SOFTMAX
+from sequence.mlp import (
+    ACT_IDENTITY, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX,
+    EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD,
+)
 from checks.numerics import identical_div
 from autograd.fold import blocked_fold, fold_partials
 from autograd.ops import (
@@ -9,7 +14,7 @@ from autograd.ops import (
     OP_AG_SOFTMAX_VJP, OP_AG_ACCUMULATE,
     LEAF, ADD, SUBTRACT, MULTIPLY,
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
-    REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
+    REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE,
 )
 from autograd.loss_ops import (
@@ -46,6 +51,10 @@ struct _Node(ImplicitlyCopyable, Movable):
     # Produced in inference mode (no_grad): a value with no parents, no
     # gradient storage and no backward.
     var inferred: Bool
+    # A LINEAR node's gradient buffer holds dL/d(pre-activation), not
+    # dL/d(output): its activation derivative was already applied, by its
+    # one consumer's dX epilogue or in place by its own backward.
+    var grad_preact: Bool
 
 
 trait BackwardRules:
@@ -112,6 +121,48 @@ def _transpose[E: Exec](mut ex: E, dst: FP, src: FP, src_rows: Int, src_cols: In
     a.i0 = src_rows
     a.i1 = src_cols
     ex.launch[OP_AG_TRANSPOSE](a, src_rows * src_cols)
+
+
+def _gemm_epi[E: Exec](
+    mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, epi: Int, p3: FP, i10: Int, f0: Float32, f1: Float32,
+) raises:
+    """A GEMM and its elementwise follower in one launch, with the argument
+    layout of the MLP trainer's gemm_epi (sequence/mlp_fit.mojo), so the
+    fused linear node launches what the hand-assembled MLP launches."""
+    var a = Args()
+    a.p0 = A
+    a.p1 = Bm
+    a.p2 = C
+    a.p3 = p3
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    a.i3 = sam
+    a.i4 = sak
+    a.i5 = sbk
+    a.i6 = sbn
+    a.i8 = N
+    a.i9 = epi
+    a.i10 = i10
+    a.f0 = f0
+    a.f1 = f1
+    ex.launch[OP_GEMM_EPI](a, M * N)
+
+
+def _linear_act(activation: Int) raises -> Int:
+    """The MLP activation code of a linear node's activation."""
+    if activation == 0:
+        return ACT_IDENTITY
+    if activation == SIGMOID:
+        return ACT_LOGISTIC
+    if activation == TANH:
+        return ACT_TANH
+    if activation == RELU:
+        return ACT_RELU
+    if activation == SOFTMAX:
+        return ACT_SOFTMAX
+    raise Error("linear takes activation 0 (none), RELU, SIGMOID, TANH or SOFTMAX")
 
 
 def _gemm[E: Exec](
@@ -281,7 +332,7 @@ struct Tape(Movable):
                 _ = self._check(p)
             var at = len(self._nodes)
             self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
-                                     saved, False, True))
+                                     saved, False, True, False))
             return Tensor(Int(self._identity.value()), self._generation, at)
         var requires = leaf_grad
         var start = len(self._parents)
@@ -301,7 +352,7 @@ struct Tape(Movable):
             else:
                 grad = self._alloc(ex, rows * cols)
         var index = len(self._nodes)
-        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False))
+        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
@@ -354,6 +405,24 @@ struct Tape(Movable):
             raise Error("tensor does not require a gradient")
         if not n.grad_ready:
             raise Error("tensor has no gradient: run backward from an output that depends on it")
+        if n.grad_preact:
+            raise Error("this linear output holds its pre-activation gradient: use preactivation_gradient")
+        return n.grad
+
+    def preactivation_gradient(self, x: Tensor) raises -> FP:
+        """Return the gradient with respect to a linear output's pre-activation.
+
+        Available after a backward for an output recorded by linear or
+        linear_into whose activation derivative was applied in place, and
+        for one without an activation.
+        """
+        var n = self._nodes[self._check(x)]
+        if n.op != LINEAR:
+            raise Error("preactivation_gradient takes an output of linear or linear_into")
+        if not n.requires_grad or not n.grad_ready:
+            raise Error("tensor has no gradient: run backward from an output that depends on it")
+        if not n.grad_preact and n.saved.i0 != ACT_IDENTITY:
+            raise Error("the pre-activation gradient of this output was not kept")
         return n.grad
 
     def requires_grad(self, x: Tensor) raises -> Bool:
@@ -542,6 +611,126 @@ struct Tape(Movable):
         var output = self._alloc(ex, a.rows * b.cols)
         _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
         return self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
+
+    def linear[E: Exec](
+        mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
+        activation: Int = 0, l2: Float32 = 0, divisor: Float32 = 0,
+    ) raises -> Tensor:
+        """A dense layer, activation(x @ weight + bias), recorded as one node.
+
+        Use it for dense layers instead of matmul, add and an activation:
+        it runs one forward launch and three backward launches per layer.
+
+        Args:
+            x: The (rows, inputs) input.
+            weight: The (inputs, outputs) weights.
+            bias: An optional (1, outputs) bias.
+            activation: 0 (none), RELU, SIGMOID, TANH or SOFTMAX from
+                autograd.ops.
+            l2: L2 penalty on the weights; needs a positive `divisor`.
+            divisor: When positive, this layer's weight gradient is
+                (x^T dZ + l2 * weight) / divisor and its bias gradient is
+                the column sum of dZ divided by `divisor` (dZ the gradient
+                with respect to the pre-activation). 0 leaves both unscaled.
+
+        Returns:
+            The (rows, outputs) activated output.
+
+        Example::
+
+            var h = tape.linear(ex, x, w1, b1, RELU)
+            var logits = tape.linear(ex, h, w2, b2)
+        """
+        return self._linear_to(ex, x, weight, bias, activation, l2, divisor, dummy_ptr(), False)
+
+    def linear_into[E: Exec](
+        mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor], activation: Int,
+        output: FP, l2: Float32 = 0, divisor: Float32 = 0,
+    ) raises -> Tensor:
+        """linear() with its output written to caller storage.
+
+        `output` holds rows * outputs floats of this executor and must not
+        overlap x. Keep it unchanged until backward finishes. Record
+        `weight` and `bias` with variable_into to have their gradients land
+        in caller storage as well.
+        """
+        return self._linear_to(ex, x, weight, bias, activation, l2, divisor, output, True)
+
+    def _linear_to[E: Exec](
+        mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor], activation: Int,
+        l2: Float32, divisor: Float32, into: FP, use_into: Bool,
+    ) raises -> Tensor:
+        # LAUNCHES PER DENSE LAYER (lane ag-fusion2, read from the code).
+        # Hand-assembled MLP (sequence/mlp_fit.mojo, AUTOGRAD_MLP_OFF):
+        #   forward 1 (gemm_epi EPI_BIAS_ACT; + OP_SOFTMAX for a softmax
+        #   output); backward 3: gemm_epi EPI_L2GRAD (dW), OP_COLSUM_DIV
+        #   (db), gemm_epi EPI_ACT_BWD (dX times the layer below's act');
+        #   2 for the first layer (no dX).
+        # Unfused tape (matmul + add + activation): forward 3 (2 without an
+        #   activation); backward activation VJP 1, the product's add VJP 1,
+        #   the bias's add VJP 3 (elementwise VJP + two-launch blocked fold),
+        #   GEMMs 2 (1 for the first layer), the MLP's L2GRAD + DIVS export
+        #   2: 9 (8 for the first layer); plus 1 seed copy a backward.
+        # This node: forward 1 (gemm_epi EPI_BIAS_ACT, the hand path's call;
+        #   + OP_SOFTMAX for softmax; without a bias OP_GEMM + OP_ACT).
+        #   Backward 3: dW = gemm_epi EPI_L2GRAD (OP_GEMM when unscaled),
+        #   db = OP_COLSUM_DIV (OP_COLSUM when unscaled), dX = gemm_epi
+        #   EPI_ACT_BWD with the input layer's activation derivative in the
+        #   epilogue when the input is a linear node consumed only here
+        #   (else OP_GEMM). 2 for a layer whose input needs no gradient.
+        #   The dZ materialisation launch (OP_ACT_BWD in place, or the
+        #   softmax VJP into scratch) runs only when no consumer fused the
+        #   activation derivative and the seed is not the pre-activation
+        #   gradient (backward_from_preactivation): 0 in the MLP. With
+        #   backward_from_preactivation the root needs no seed copy either.
+        #   So the MLP runs exactly the hand path's launches with the hand
+        #   path's arguments.
+        var a = self._nodes[self._check(x)]
+        var w = self._nodes[self._check(weight)]
+        if a.cols != w.rows:
+            raise Error("linear: input columns must equal weight rows")
+        var act = _linear_act(activation)
+        if divisor < 0 or (l2 != 0 and not (divisor > 0)):
+            raise Error("linear: divisor must be positive when l2 is set, and never negative")
+        var rows = a.rows
+        var cols = w.cols
+        var inner = a.cols
+        self._shape(rows, cols)
+        var parents = List[Tensor]()
+        parents.append(x)
+        parents.append(weight)
+        var output = into if use_into else self._alloc(ex, rows * cols)
+        if bias:
+            var bt = bias.value()
+            var b = self._nodes[self._check(bt)]
+            if b.rows != 1 or b.cols != cols:
+                raise Error("linear: bias must have shape (1, outputs)")
+            parents.append(bt)
+            # the GEMM, its bias and (not softmax) its activation: one launch
+            _gemm_epi(ex, a.value, w.value, output, rows, cols, inner, inner, 1, cols, 1,
+                      EPI_BIAS_ACT, b.value, 0 if act == ACT_SOFTMAX else act, Float32(0.0), Float32(0.0))
+        else:
+            _gemm(ex, output, a.value, w.value, rows, cols, inner, inner, 1, cols, 1)
+            if act != ACT_IDENTITY and act != ACT_SOFTMAX:
+                var f = Args()
+                f.p0 = output
+                f.i0 = act
+                ex.launch[OP_ACT](f, rows * cols)
+        if act == ACT_SOFTMAX:
+            # in place, as the MLP trainer's _act_launch
+            var s = Args()
+            s.p0 = output
+            s.p1 = output
+            s.i0 = act
+            s.i1 = cols
+            ex.launch[OP_SOFTMAX](s, rows)
+        var saved = Args()
+        saved.i0 = act
+        if bias:
+            saved.i1 = 1
+        saved.f0 = l2
+        saved.f1 = divisor
+        return self._record(ex, output, rows, cols, LINEAR, parents, saved)
 
     def transpose[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         var n = self._nodes[self._check(x)]
@@ -796,6 +985,110 @@ struct Tape(Movable):
         """Compute a vector-Jacobian product using a seed of the output's shape."""
         self.backward_with_rules(ex, output, seed, NoCustomRules(), accumulate)
 
+    def backward_from_preactivation[E: Exec](
+        mut self, mut ex: E, output: Tensor, seed: Tensor, accumulate: Bool = False,
+    ) raises:
+        """Backpropagate a seed that is the gradient with respect to a linear
+        output's pre-activation (x @ W + b), not its activated output.
+
+        Use it when the loss derivative already includes the output
+        activation, as the softmax or sigmoid with log loss derivative
+        p - y does. `output` comes from linear or linear_into and `seed` has
+        its shape. The seed is read in place (no copy); keep it unchanged
+        until backward finishes. The output's own gradient is not stored.
+        """
+        self.backward_from_preactivation_with_rules(ex, output, seed, NoCustomRules(), accumulate)
+
+    def backward_from_preactivation_with_rules[E: Exec, R: BackwardRules](
+        mut self, mut ex: E, output: Tensor, seed: Tensor, rules: R, accumulate: Bool = False,
+    ) raises:
+        var n = self._nodes[self._check(output)]
+        var s = self._nodes[self._check(seed)]
+        if n.op != LINEAR:
+            raise Error("backward_from_preactivation takes an output of linear or linear_into")
+        if n.rows != s.rows or n.cols != s.cols:
+            raise Error("backward seed shape must equal output shape")
+        var cursor = self._cursor
+        try:
+            self._backward(ex, output, s.value, rules, accumulate, True)
+        except e:
+            self._cursor = cursor
+            raise e
+        self._cursor = cursor
+
+    def _linear_dz[E: Exec](mut self, mut ex: E, i: Int) raises -> FP:
+        """dL/dZ of linear node i from its output gradient dY: dY itself
+        without an activation; act'(Y) applied in place (OP_ACT_BWD, the
+        hand path's body) for an elementwise one; the softmax VJP into
+        backward scratch for softmax."""
+        var n = self._nodes[i]
+        var act = n.saved.i0
+        if act == ACT_IDENTITY:
+            return n.grad
+        if act == ACT_SOFTMAX:
+            var d = self._alloc(ex, n.rows * n.cols)
+            var s = Args()
+            s.p0 = n.value
+            s.p1 = n.grad
+            s.p2 = d
+            s.i0 = 0
+            s.i1 = n.cols
+            ex.launch[OP_AG_SOFTMAX_VJP](s, n.rows)
+            return d
+        var a = Args()
+        a.p0 = n.grad
+        a.p1 = n.value
+        a.i0 = act
+        ex.launch[OP_ACT_BWD](a, n.rows * n.cols)
+        self._nodes[i].grad_preact = True
+        return n.grad
+
+    def _linear_vjp[E: Exec](
+        mut self, mut ex: E, n: _Node, edge: Int, dst: FP, first: Bool, dz: FP, consumers: List[Int],
+    ) raises:
+        """Edge `edge` of linear node n into `dst` (the parent's gradient
+        for a first contribution, else scratch), from dz = dL/dZ. The calls
+        and arguments are the hand MLP backward's (sequence/mlp_fit.mojo)."""
+        var xi = self._parents[n.start]
+        var x = self._nodes[xi]
+        var w = self._nodes[self._parents[n.start + 1]]
+        var rows = n.rows
+        var fi = x.cols
+        var fo = n.cols
+        var divisor = n.saved.f1
+        if edge == 1:
+            # dW = x^T dz (+ l2 W) / divisor
+            if divisor > 0:
+                _gemm_epi(ex, x.value, dz, dst, fi, fo, rows, 1, fi, fo, 1,
+                          EPI_L2GRAD, w.value, 0, n.saved.f0, divisor)
+            else:
+                _gemm(ex, dst, x.value, dz, fi, fo, rows, 1, fi, fo, 1)
+        elif edge == 2:
+            # db = column sum of dz over the rows (/ divisor)
+            var c = Args()
+            c.p0 = dz
+            c.p1 = dst
+            c.i0 = rows
+            c.i2 = fo
+            if divisor > 0:
+                c.f0 = divisor
+                ex.launch[OP_COLSUM_DIV](c, fo)
+            else:
+                ex.launch[OP_COLSUM](c, fo)
+        else:
+            # dX = dz W^T. When x is a linear node whose only consumer is
+            # this node, its activation derivative rides in the epilogue
+            # and x's gradient holds its pre-activation gradient: the hand
+            # path's EPI_ACT_BWD (act' read from x's output values).
+            var x_act = x.saved.i0
+            if first and consumers[xi] == 1 and x.op == LINEAR and x_act != ACT_SOFTMAX:
+                _gemm_epi(ex, dz, w.value, dst, rows, fi, fo, fo, 1, 1, fo,
+                          EPI_ACT_BWD, x.value, x_act, Float32(0.0), Float32(0.0))
+                if x_act != ACT_IDENTITY:
+                    self._nodes[xi].grad_preact = True
+            else:
+                _gemm(ex, dst, dz, w.value, rows, fi, fo, fo, 1, 1, fo)
+
     def backward_with_rules[E: Exec, R: BackwardRules](
         mut self, mut ex: E, output: Tensor, seed: Tensor, rules: R, accumulate: Bool = False,
     ) raises:
@@ -815,6 +1108,7 @@ struct Tape(Movable):
 
     def _backward[E: Exec, R: BackwardRules](
         mut self, mut ex: E, output: Tensor, seed: FP, rules: R, accumulate: Bool,
+        preact: Bool = False,
     ) raises:
         var root = self._check(output)
         if self._nodes[root].inferred:
@@ -822,6 +1116,9 @@ struct Tape(Movable):
         if not self._nodes[root].requires_grad:
             raise Error("output has no differentiable ancestors")
         var active = List[Bool](length=len(self._nodes), fill=False)
+        # Edges from differentiated nodes into each node (a linear node's
+        # dX epilogue may apply its input's act' only for a sole consumer).
+        var consumers = List[Int](length=len(self._nodes), fill=0)
         active[root] = True
         # Creation order is topological. Mark only ancestors of this output;
         # disconnected invalid-domain operations are never differentiated.
@@ -836,6 +1133,7 @@ struct Tape(Movable):
                 var p = self._parents[n.start + edge]
                 if self._nodes[p].requires_grad:
                     active[p] = True
+                    consumers[p] += 1
         # GRADIENT WRITE INVARIANT (lane ag-fusion). Gradients are never
         # zero-filled before use. touched[i] says node i's gradient already
         # holds a contribution. The FIRST contribution to a parent is written
@@ -851,6 +1149,7 @@ struct Tape(Movable):
         # intermediate has no gradient (gradient() refuses).
         var touched = List[Bool](length=len(self._nodes), fill=False)
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
+            self._nodes[i].grad_preact = False
             var n = self._nodes[i]
             if not n.requires_grad:
                 continue
@@ -861,10 +1160,12 @@ struct Tape(Movable):
                 touched[i] = True
             else:
                 self._nodes[i].grad_ready = False
-        # Preserve the seed before overwriting a leaf root's gradient. A seed
-        # that already is the root's gradient storage (custom_into) is used
-        # in place: the copy onto itself would leave the same values.
-        if touched[root]:
+        # Preserve the seed before overwriting a leaf root's gradient. A
+        # pre-activation seed (backward_from_preactivation) is read in place
+        # as the root linear node's dZ: no copy.
+        if preact:
+            pass
+        elif touched[root]:
             _accumulate(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         elif Int(self._nodes[root].grad) != Int(seed):
             _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
@@ -898,6 +1199,14 @@ struct Tape(Movable):
                     contributions.append(self._alloc(ex, p.rows * p.cols))
                 else:
                     contributions.append(dummy_ptr())
+            # A linear node's dL/dZ: the pre-activation seed at the root, its
+            # gradient when a consumer already applied act', else formed here.
+            var dz = n.grad
+            if n.op == LINEAR:
+                if i == root and preact:
+                    dz = seed
+                elif not n.grad_preact:
+                    dz = self._linear_dz(ex, i)
             if n.op >= CUSTOM:
                 var inputs = List[FP]()
                 var rows = List[Int]()
@@ -925,7 +1234,9 @@ struct Tape(Movable):
                     if first[edge]:
                         _copy(ex, p.grad, n.grad, p.rows * p.cols)
                 elif n.op < CUSTOM:
-                    if n.op == MATMUL:
+                    if n.op == LINEAR:
+                        self._linear_vjp(ex, n, edge, contribution, first[edge], dz, consumers)
+                    elif n.op == MATMUL:
                         var left = self._nodes[self._parents[n.start]]
                         var right = self._nodes[self._parents[n.start + 1]]
                         if edge == 0:
@@ -1005,3 +1316,6 @@ struct Tape(Movable):
                 # unreached differentiable leaf: its gradient is zero
                 _fill(ex, n.grad, n.rows * n.cols)
                 self._nodes[i].grad_ready = True
+        if preact:
+            # the root's gradient buffer was never written: the seed was used
+            self._nodes[root].grad_ready = False
