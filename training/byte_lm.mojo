@@ -102,11 +102,11 @@ from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_ea
 from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
 from transformer.checks.transformer_backward import (
-    BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
+    BWD_ANY_SABOTAGE, LlamaBackwardStages,
 )
-# lane ag-lm-migrate: -D MOJOLEARN_AUTOGRAD_LM (default off) runs the step's
-# backward (loss, head, every layer, embedding) on one autograd tape.
-from autograd.rules_lm import AUTOGRAD_LM, byte_backward_autograd, byte_lm_tape_eligible
+# The step's backward (loss, head, every layer, embedding) runs on one
+# autograd tape (autograd/rules_lm.mojo).
+from autograd.rules_lm import byte_backward_autograd, byte_lm_tape_eligible
 from transformer.impl.llama.fused_attention import (
     ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY,
 )
@@ -1733,10 +1733,9 @@ def _byte_release_eager(ctx: DeviceContext, mut fwd: LlamaDeviceStages,
 
 
 def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
-    """-D MOJOLEARN_AUTOGRAD_LM: byte_gradient_device's backward half (CE,
-    head, the layers, the embedding, the pack) with the stage order and the
-    layer chaining owned by the autograd tape (autograd/rules_lm.mojo). The
-    same kernels on the same buffers, so the same gradient in `grad`."""
+    """byte_gradient_device's backward half (CE, head, the layers, the
+    embedding, the pack) with the stage order and the layer chaining owned
+    by the autograd tape (autograd/rules_lm.mojo)."""
     var config = tr.config.copy()
     var M = config.batch * config.length
     var ton = timing_on()
@@ -1745,7 +1744,14 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
         # The weight gradients land in the current flat `grad` owner.
         for layer in range(config.n_layers):
             _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
-    # byte_gradient_device's plan pick, verbatim (see the comment there).
+    # PLAN_SCAN performs 2 * vocab * positions integer probes before the
+    # identical row fold; PLAN_SORT is a total-key sort over the positions
+    # alone and builds the same ascending-position runs (contract 6 clause (d):
+    # bit-identical on every vendor and the host column, so the pick moves no
+    # bit). The scan cost grows with V * M, so the pick keys on V * M with the
+    # embedding lane's own EMB_AUTO_SORT_MIN_CELLS (2^26), not on a token
+    # count. Needs neighbor-shape validation (V 256 and 50,257; M 4,096 to
+    # 65,536).
     var emb_plan = (
         PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
         else PLAN_SCAN
@@ -1761,8 +1767,8 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
         config.chunked_lm_head_v2, AFN_LM_HEAD_FUSE and not config.chunked_lm_head_v2,
         NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS, emb_plan,
     )
-    # The tape's backward has drained the queue (its one wait): the hand
-    # walk's per-layer policy and release steps, after every layer.
+    # The tape's backward has drained the queue (its one wait): the
+    # per-layer policy and release steps, after every layer.
     for layer in range(config.n_layers):  # driver-loop: over decoder layers
         comptime if BYTE_LM_STICKY_EAGER:
             if tr.forward[layer].attn_forward_status == FUSED_CORNER or tr.backward[layer].attn_backward_status == FUSED_CORNER:
@@ -1779,150 +1785,22 @@ def _byte_backward_tape(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
 
 
-def byte_gradient_device[deferred: Bool = False, tape: Bool = AUTOGRAD_LM](ctx: DeviceContext, mut tr: ByteTrainer,
+def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
                          ids: List[Int32]) raises -> Float32:
     """Internal gradient half. Caller owns admission and transaction recovery.
 
-    `tape` (default: -D MOJOLEARN_AUTOGRAD_LM) takes the backward half
-    through the autograd tape when every layer is a default block; the
-    hand walk below is otherwise untouched."""
+    The forward and loss, then the backward half on the autograd tape
+    (`_byte_backward_tape`)."""
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
     tr.released_eager_cells = 0
-    var config = tr.config.copy()
-    var M = config.batch * config.length
-    var emb = EmbConfig.llama(config.vocab_size, config.d_model)
-    var ce = CeConfig.causal_lm(config.vocab_size)
     var trace = IdentityTrace.disabled()
     var loss = _byte_forward_loss[deferred](ctx, tr, ids, trace)
-    comptime if tape:
-        if byte_lm_tape_eligible(tr.weights):
-            _byte_backward_tape(ctx, tr)
-            return loss
-    # DEVIATION 2499 step-phase timers; see byte_train_step. The forward's
-    # own clock ended at `step.loss_download`; this one starts here.
-    var ton = timing_on()
-    var tk = Int(perf_counter_ns())
-    if config.chunked_lm_head_v2:
-        chunked_lm_head_v2_gemm_backward_into(
-            ctx, tr.buffers.d_h, tr.buffers.dw_lm, tr.buffers.logits,
-            tr.buffers.head_ws,
-            tr.forward[config.n_layers - 1].residual2, tr.buffers.lm_w,
-            tr.buffers.targets, tr.buffers.ce_max, tr.buffers.ce_denom,
-            M, config.vocab_size, config.d_model,
-        )
-    elif not AFN_LM_HEAD_FUSE:
-        identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
-            tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
-            tr.buffers.targets, M, M, ce)
-    # No wait: the two head backward GEMMs below queue onto this same in-order context.
-    # A host round trip costs about a dozen kernel launches on Metal.
-    timing_tick(ctx, ton, tk, "step.ce_backward")
-    # DEVIATION 2630: the head GEMMs' call-kind lines (core/step_phase.mojo),
-    # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1. Its dA tick
-    # waits only there, like the `step.head_backward_da` tick below.
-    var pg = StepPhaseClock(ctx)
-    if not config.chunked_lm_head_v2:
-        identical_gemm_backward_a_into[ROLE_HEAD](ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
-            tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
-    pg.tick(ctx, "gemm.head_dA")
-    # dA and dB share one wait below; the tick between them waits ONLY
-    # under the switch (a timed step is not a sample, and the two GEMMs are
-    # queued on one in-order context either way).
-    timing_tick(ctx, ton, tk, "step.head_backward_da")
-    if not config.chunked_lm_head_v2:
-        identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
-            tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
-    # No wait: the block backward loop below queues onto this same in-order context.
-    # A host round trip costs about a dozen kernel launches on Metal.
-    pg.tick(ctx, "gemm.head_dB")
-    timing_tick(ctx, ton, tk, "step.head_backward_db")
-    comptime if BYTE_LM_BLOCK_VIEWS:
-        # The weight gradients land in the current flat `grad` owner.
-        for layer in range(config.n_layers):
-            _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
-    # Keep inter-layer cotangents on device, as the reference tensor graph
-    # does (transformers/models/llama/modeling_llama.py:402-412). Each
-    # backward call synchronizes before its borrowed buffers are reinserted.
-    for layer in range(config.n_layers - 1, -1, -1):
-        var stages = tr.forward.pop(layer)
-        var backward = tr.backward.pop(layer)
-        var prefix = String("byte.block") + String(layer) + ".backward"
-        if layer == config.n_layers - 1:
-            if layer == 0:
-                llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
-                    tr.rope.cos, tr.rope.sin, tr.buffers.x, tr.buffers.d_h,
-                    config.batch, config.length, 0, trace, prefix)
-            else:
-                llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
-                    tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, tr.buffers.d_h,
-                    config.batch, config.length, 0, trace, prefix)
-        elif layer == 0:
-            llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
-                tr.rope.cos, tr.rope.sin, tr.buffers.x, tr.backward[layer].d_x,
-                config.batch, config.length, 0, trace, prefix)
-        else:
-            llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
-                tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, tr.backward[layer].d_x,
-                config.batch, config.length, 0, trace, prefix)
-        if _byte_layer_sync():
-            step_count_sync()
-            ctx.synchronize()
-        comptime if BYTE_LM_STICKY_EAGER:
-            # A policy decision from an observed refusal, not a prediction of
-            # a numerical corner. Both directions use the existing eager
-            # kernels BEFORE attempting fused on subsequent auto calls.
-            if stages.attn_forward_status == FUSED_CORNER or backward.attn_backward_status == FUSED_CORNER:
-                stages.attn_prefer_eager = True
-        comptime if BYTE_LM_RELEASE_EAGER:
-            tr.released_eager_cells += _byte_release_eager(ctx, stages, backward)
-        tr.backward.insert(layer, backward^)
-        tr.forward.insert(layer, stages^)
-    # Envelope of the whole backward loop (the blocks print `bwd.*`).
-    timing_tick(ctx, ton, tk, "envelope.blocks_backward")
-    # PLAN_SCAN performs 2 * vocab * positions integer probes before the
-    # identical row fold; PLAN_SORT is a total-key sort over the positions
-    # alone and builds the same ascending-position runs (contract 6 clause (d):
-    # bit-identical on every vendor and the host column, so the pick moves no
-    # bit). The scan cost grows with V * M, so the pick keys on V * M with the
-    # embedding lane's own EMB_AUTO_SORT_MIN_CELLS (2^26), not on a token
-    # count (the old `M >= 16384` sat one doubling below the one measured
-    # GPT-3 row and ignored V). Tier-independent here, as before. Needs
-    # neighbor-shape validation (V 256 and 50,257; M 4,096 to 65,536).
-    var emb_plan = (
-        PLAN_SORT if config.vocab_size * M >= EMB_AUTO_SORT_MIN_CELLS
-        else PLAN_SCAN
-    )
-    comptime if NN50_OWNED_RUNS:
-        var reuse = False
-        if len(tr.embedding_runs) == 1:
-            reuse = tr.embedding_runs[0].matches(ctx, tr.buffers.ids, M, emb)
-        if not reuse:
-            if len(tr.embedding_runs) == 1:
-                _ = tr.embedding_runs.pop()
-            tr.embedding_runs.append(OwnedEmbeddingRuns(ctx, tr.buffers.ids, M, emb))
-        tr.embedding_runs[0].backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x, emb)
-    elif NN51_RESIDENT_TOKEN_VALIDATION or IDN_LM_OWNED_TOKENS:
-        # The immediately preceding forward in this gradient operation owned
-        # and validated the same IDs. This skips a redundant ID download only.
-        identical_embedding_backward_prerefused_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
-            tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
-            tr.buffers.emb_perm, M, emb, emb_plan)
-    else:
-        identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
-            tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
-            tr.buffers.emb_perm, M, emb, emb_plan)
-    # No wait: the pack loop below queues onto this same in-order context.
-    # A host round trip costs about a dozen kernel launches on Metal.
-    timing_tick(ctx, ton, tk, "step.embedding_backward")
-    for layer in range(0 if BYTE_LM_BLOCK_VIEWS else config.n_layers):
-        _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
-    # No wait: the gradient scan in `byte_update_device` waits for its own answer.
-    # A host round trip costs about a dozen kernel launches on Metal.
-    # Device-to-device: every gradient byte copied once into `grad`.
-    timing_tick(ctx, ton, tk, "step.pack_grads")
-    var packed_cells = 2 * config.vocab_size * config.d_model if BYTE_LM_BLOCK_VIEWS else config.n_total()
-    timing_bytes(ton, "step.pack_grads_bytes", packed_cells * 4)
+    # Every byte LM layer is built with the default block options
+    # (_block_weights / _block_weights_dev), which is what the tape records.
+    if not byte_lm_tape_eligible(tr.weights):
+        raise Error("byte LM: every decoder layer must use the default block options")
+    _byte_backward_tape(ctx, tr)
     _ = trace
     return loss
 

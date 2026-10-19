@@ -32,6 +32,8 @@ in the tables after the sections.
 |---|---|---|---|---|
 | [`MOJOLEARN_AUTOGRAD_MLP_OFF`](#mojolearn_autograd_mlp_off) | Neural | DELETED-superseded | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MLP_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MAMBA_OFF`](#mojolearn_autograd_mamba_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_LM`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_LM_OFF`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_AUTOGRAD_RNN_OFF`](#mojolearn_autograd_rnn_off) | Neural | removed (hand glue, tape is the only path) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_RNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch) |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
@@ -397,6 +399,32 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Timing, one timed series per arm (20 calls, median; host copies in both clocks; `mamba/checks/mamba_tape_backward_time.mojo`; autograd-buildout-20261019/final-01, TM_LM_TIMING_2026-10-19.md): NVIDIA L40S m1 1.942 -> 2.035 ms (1.05), m2 6.462 -> 6.554 ms (1.01); AMD MI325X m1 5.131 -> 5.285 ms (1.03), m2 17.620 -> 18.458 ms (1.05); NV+AMD averages m1 1.04, m2 1.03 (tape 3-4% slower, accepted for one backward path; flip a2f6f51db). The pass-5 (nv-04 NV_PASS5, amd-08 AMD_PASS5) and pass-6 (p6-01 NV_PASS6 / AMD_PASS6) reports carry no Mamba timing; p6-01 ran the word-for-word check only.
 - Bits: unchanged. The tape equals the hand path on every gradient word on Apple Metal (compile-21), NVIDIA (p6-01/nv/checks/mamba-tape-run.log) and AMD (p6-01/amd/checks/mamba-tape-run.log), all three digest sets equal; e.g. m1.case1 x 8834719169517249902, m2.case4 x 2231443176492846100. Those 70 digests (46 gradients + 24 two-block stack rows) are stored in `mamba/checks/mamba_tape_backward_digests.tsv`, which `mamba_tape_backward_check.mojo` now checks, with the Mamba-1 public gradients compared word for word against the host backward oracle.
 - grid_controls: no entry. EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_MAMBA_OFF`, **removed**.
+### MOJOLEARN_AUTOGRAD_LM_OFF
+
+- What it was: the hand-written byte LM backward walk in `training/byte_lm.mojo::byte_gradient_device` (CE backward or the
+  chunked v2 head, the two head GEMM backwards, `llama_decoder_layer_backward_device` per layer in reverse with the per-layer
+  host wait, the embedding backward, the pack), selected by `MOJOLEARN_AUTOGRAD_LM_OFF` (and the old opt-in spelling
+  `MOJOLEARN_AUTOGRAD_LM`) through `autograd/rules_lm.mojo::AUTOGRAD_LM` and the `tape` parameter of `byte_gradient_device`;
+  `training/samba_resident.mojo` read the same switch for its attention blocks. The fused kernels stay (the tape rules call
+  them) and `training/byte_lm_host_backward.mojo` stays (the host column's oracle walk).
+- Verdict: removed, superseded by the tape backward (`autograd/rules_lm.mojo::byte_backward_autograd`), the default since
+  2026-10-19. One run per arm, `tools/bench_board_neural.py` lm-train-step, ours, full shape
+  (`~/mojolearn-evidence/autograd-buildout-20261019/final-01/TM_LM_TIMING_2026-10-19.md`): NVIDIA L40S 34.611 -> 35.351 ms
+  (1.021), AMD MI325X 42.939 -> 42.953 ms (1.000), average 1.01; same `loss_first_step` 9.0155868 (no quality change). The
+  pass-5 and pass-6 reports (nv-04/NV_PASS5, amd-08/AMD_PASS5, p6-01/*_PASS6) carry no LM timing row.
+- Bits: `training/checks/lm_tape_backward_check.mojo` hand vs tape, every gradient and updated parameter word equal, 44/44 on
+  Metal (compile-21), NVIDIA and AMD (p6-01 `checks/lm-check-run.log`); digests identical on the three, e.g. v1 loss bits
+  1085369304, v1 `grad.embed` 5562955793640804344, v1 `params_after` 6614463532828634214, chunked_v2 `params_after`
+  8759336185958287388. They are stored in `training/checks/lm_tape_backward_digests.tsv`; the check now compares the tape
+  against them and word for word against `byte_host_train_step`.
+- Deleted 2026-10-19 by `a54a5fb2e` on lane/del-lm; recoverable at `a54a5fb2e^` (main `66e0842f8`).
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch` (lane/del-lm's head back to `66e0842f8` over `training/byte_lm.mojo`,
+  `autograd/rules_lm.mojo`, `training/samba_resident.mojo`; it also drops the tombstone comments and the refusals). The hand arm calls
+  `llama_decoder_layer_backward_device`; if lane del-transformer has removed that walk, restore it too.
+- Guard: `MOJOLEARN_AUTOGRAD_LM_OFF` and `MOJOLEARN_AUTOGRAD_LM` refused in `autograd/rules_lm.mojo` (`_check_removed_defines`, forced
+  by `byte_backward_autograd`), not in core: a core line rebuilds every binding (the push fence refuses it). No `grid_controls`
+  entry existed.
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_LM_OFF`, **removed**.
 
 ### MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE
 

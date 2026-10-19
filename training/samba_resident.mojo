@@ -122,7 +122,6 @@ from transformer.checks.transformer_backward import (
     llama_decoder_layer_backward_device,
 )
 from transformer.checks.transformer_fixture import RMS_EPS
-from autograd.rules_lm import AUTOGRAD_LM
 from autograd.rules_transformer import (
     AUTOGRAD_REFUSE_DEFER,
     llama_decoder_layer_backward_autograd,
@@ -738,12 +737,12 @@ def _backward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
             s.ctx.synchronize()
             _ = g^
         else:
-            # -D MOJOLEARN_AUTOGRAD_LM: a default attention block's backward
-            # through the transformer tape entry (the same launches, the
-            # same bst fields); the Mamba-3 blocks stay hand-chained.
-            var on_tape = False
-            comptime if AUTOGRAD_LM:
-                on_tape = s.t_w[j].opts.is_default()
+            # A default attention block's backward through the transformer
+            # tape entry (the same launches, the same bst fields); the
+            # Mamba-3 blocks stay hand-chained.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
+            var on_tape = s.t_w[j].opts.is_default()
             if on_tape:
                 llama_decoder_layer_backward_autograd(
                     s.ctx, s.t_bst[j], s.t_stages[j], s.t_w[j], s.rope.value().cos, s.rope.value().sin,
