@@ -6,7 +6,7 @@
 # runs can be compared digest for digest.
 from std.math import exp, log, log1p, sqrt
 from std.memory import bitcast
-from autograd import Tape
+from autograd import Tape, Tensor
 from autograd.losses import (
     mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy, REDUCTION_MEAN,
     REDUCTION_SUM, loss_scratch, release_loss_scratch, loss_value_into,
@@ -256,6 +256,115 @@ def _cross_entropy_case[E: Exec](mut ex: E, mut tape: Tape, reduction: Int) rais
         ex.free(rowloss)
 
 
+def _wide_logits(rows: Int, cols: Int) -> List[Float32]:
+    """Rows of at least one coop cell's width (32 lanes): a tie at the
+    maximum in row 1, an all-tied row 2, the rest mixed."""
+    var z = List[Float32]()
+    for r in range(rows):
+        for k in range(cols):
+            var v = Float32(((r * 37 + k * 11) % 23) - 11) * Float32(0.25)
+            if r == 1 and (k == 5 or k == 40):
+                v = Float32(4.0)
+            if r == 2:
+                v = Float32(0.5)
+            z.append(v)
+    return z^
+
+
+def _wide_row_cases[E: Exec](mut ex: E, mut tape: Tape) raises -> Int:
+    """Softmax, log-softmax, cross-entropy and argmax accuracy on 6 x 70 rows:
+    the device runs these rows on a 32-lane coop cell, the host the same
+    fold32 slots (MOJOLEARN_IDN_ROW_COOP), so the digests compare the two."""
+    var rows = 6
+    var cols = 70
+    var logits = _wide_logits(rows, cols)
+    var codes: List[Float32] = [3.0, 40.0, 10.0, 0.0, 35.0, 64.0]
+    var w = List[Float32]()
+    for r in range(rows):
+        for k in range(cols):
+            w.append(Float32(((r * 5 + k * 3) % 7) - 3) * Float32(0.1))
+    # float64 softmax rows
+    var sm = List[Float64]()
+    for r in range(rows):
+        var m = Float64(logits[r * cols])
+        for k in range(cols):
+            m = max(m, Float64(logits[r * cols + k]))
+        var s = 0.0
+        for k in range(cols):
+            s += exp(Float64(logits[r * cols + k]) - m)
+        for k in range(cols):
+            sm.append(exp(Float64(logits[r * cols + k]) - m) / s)
+    var cases = 0
+    for kind in [0, 1]:
+        tape.reset()
+        var x = tape.tensor(ex, logits, rows, cols, True)
+        var wt = tape.tensor(ex, w, rows, cols, False)
+        var y: Tensor
+        if kind == 0:
+            y = tape.softmax(ex, x)
+        else:
+            y = tape.log_softmax(ex, x)
+        var out = tape.sum(ex, tape.multiply(ex, y, wt))
+        var expect_y = List[Float32]()
+        var expect_g = List[Float32]()
+        for r in range(rows):
+            var dot = 0.0
+            var wsum = 0.0
+            for k in range(cols):
+                dot += sm[r * cols + k] * Float64(w[r * cols + k])
+                wsum += Float64(w[r * cols + k])
+            for k in range(cols):
+                var i = r * cols + k
+                if kind == 0:
+                    expect_y.append(_f32(sm[i]))
+                    expect_g.append(_f32(sm[i] * (Float64(w[i]) - dot)))
+                else:
+                    expect_y.append(_f32(log(sm[i])))
+                    expect_g.append(_f32(Float64(w[i]) - sm[i] * wsum))
+        var name = String("wide/softmax") if kind == 0 else String("wide/log_softmax")
+        check_values(name + "/value", tape.values(ex, y), expect_y)
+        tape.backward(ex, out)
+        check_values(name + "/grad", tape.gradients(ex, x), expect_g)
+        cases += 1
+    for reduction in [REDUCTION_MEAN, REDUCTION_SUM]:
+        tape.reset()
+        var z = tape.tensor(ex, logits, rows, cols, True)
+        var c = tape.tensor(ex, codes, rows, 1, False)
+        var out = cross_entropy(tape, ex, z, c, reduction)
+        var factor = 1.0 / Float64(rows) if reduction == REDUCTION_MEAN else 1.0
+        var value = 0.0
+        var grad = List[Float32]()
+        for r in range(rows):
+            var yc = Int(codes[r])
+            value -= log(sm[r * cols + yc])
+            for k in range(cols):
+                var p = sm[r * cols + k]
+                if k == yc:
+                    p -= 1.0
+                grad.append(_f32(factor * p))
+        var name = String("wide/cross_entropy/") + (String("mean") if reduction == REDUCTION_MEAN else String("sum"))
+        check_values(name + "/value", tape.values(ex, out), [_f32(value * factor)])
+        tape.backward(ex, out)
+        check_values(name + "/logits", tape.gradients(ex, z), grad)
+        cases += 1
+    # argmax accuracy: the first maximum (row 1 ties at columns 5 and 40,
+    # row 2 is all tied: column 0)
+    var hits = 0.0
+    for r in range(rows):
+        var best = 0
+        for k in range(1, cols):
+            if logits[r * cols + k] > logits[r * cols + best]:
+                best = k
+        if best == Int(codes[r]):
+            hits += 1.0
+    var dz = _upload(ex, logits)
+    var dc = _upload(ex, codes)
+    _metric("wide/accuracy_from_scores", accuracy_from_scores(ex, dc, dz, rows, cols), hits / Float64(rows))
+    ex.free(dz)
+    ex.free(dc)
+    return cases + 1
+
+
 def _mse_seed_report[E: Exec](mut ex: E, mut tape: Tape, pred: List[Float32], target: List[Float32]) raises:
     """Report (not a gate): does the mse VJP give op_mse's seed bits?"""
     tape.reset()
@@ -460,6 +569,7 @@ def run_loss_checks[E: Exec](mut ex: E) raises:
         _elementwise_case(ex, tape, String("bce_logits/") + r, LS_BCE_LOGITS, reduction, 1, pred, bce_target)
         _cross_entropy_case(ex, tape, reduction)
         cases += 5
+    cases += _wide_row_cases(ex, tape)
     _mse_matches_tape(ex, tape, pred, target)
     _mse_seed_report(ex, tape, pred, target)
     _probability_terms(ex)
