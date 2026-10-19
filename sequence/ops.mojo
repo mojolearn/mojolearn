@@ -374,7 +374,24 @@ def sub(a: Float32, b: Float32) -> Float32:
 
 
 comptime SUMSQ_STAGE = 64
+#: lane ag-pass5-gemm (PASS5_IDEAS idea 1 Part B, default on NVIDIA and
+#: AMD): `gemm_dot` stages GEMM_STAGE_V2_WIDE = 64 terms a round instead of
+#: 16 (K = 512: 32 -> 8 load rounds; the recurrent cells' K = H = 64: 4 -> 1
+#: a gate), then the remainder in guarded rounds of 16 (no dependent
+#: one-load-a-term tail). A register-budget rule, never a shape: 64 + 64
+#: staged floats fit every NVIDIA / AMD thread, and these launches sit at
+#: 0.1-1.7 waves a CU where occupancy does not bind. Apple keeps the old
+#: width (Apple is not tuned by IDENTICAL A/Bs; its FAST work is the M3
+#: peer's). SAME BITS: the fold is the same chain, acc = fma3(A(k), B(k),
+#: acc), k ascending from acc0, on the same `ld`-flushed words; only how
+#: many loads are in flight before the fmas changes.
+#: -D MOJOLEARN_IDN_GEMM_STAGE_OFF (or MOJOLEARN_IDN_ALL_OFF) restores 16 and
+#: the serial tail (the A/B arm).
+comptime GEMM_STAGE_V2 = not has_apple_gpu_accelerator() and not (
+    is_defined["MOJOLEARN_IDN_GEMM_STAGE_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
 comptime GEMM_STAGE = 16
+comptime GEMM_STAGE_V2_WIDE = 64
 comptime COLSUM_STAGE = 32
 comptime SUMSQ_VEC = 4
 
@@ -447,18 +464,43 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
         # that many loads in flight instead of waiting out each one); the
         # fold is the same chain of fmas in the same order.
         var k = 0
-        while k + GEMM_STAGE <= K:
-            var va = SIMD[DType.float32, GEMM_STAGE]()
-            var vb = SIMD[DType.float32, GEMM_STAGE]()
-            comptime for i in range(GEMM_STAGE):
-                va[i] = ld(pa, abase + (k + i) * sak)
-                vb[i] = ld(pb, (k + i) * sbk + bbase)
-            comptime for i in range(GEMM_STAGE):
-                acc = fma3(va[i], vb[i], acc)
-            k += GEMM_STAGE
-        while k < K:
-            acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
-            k += 1
+        comptime if GEMM_STAGE_V2:
+            # GEMM_STAGE_V2_WIDE terms a round, then guarded rounds of
+            # GEMM_STAGE for the remainder: a term k >= K is neither loaded
+            # nor folded, so the chain is the plain loop's, k ascending
+            while k + GEMM_STAGE_V2_WIDE <= K:
+                var wa = SIMD[DType.float32, GEMM_STAGE_V2_WIDE]()
+                var wb = SIMD[DType.float32, GEMM_STAGE_V2_WIDE]()
+                comptime for i in range(GEMM_STAGE_V2_WIDE):
+                    wa[i] = ld(pa, abase + (k + i) * sak)
+                    wb[i] = ld(pb, (k + i) * sbk + bbase)
+                comptime for i in range(GEMM_STAGE_V2_WIDE):
+                    acc = fma3(wa[i], wb[i], acc)
+                k += GEMM_STAGE_V2_WIDE
+            while k < K:
+                var va = SIMD[DType.float32, GEMM_STAGE]()
+                var vb = SIMD[DType.float32, GEMM_STAGE]()
+                comptime for i in range(GEMM_STAGE):
+                    if k + i < K:
+                        va[i] = ld(pa, abase + (k + i) * sak)
+                        vb[i] = ld(pb, (k + i) * sbk + bbase)
+                comptime for i in range(GEMM_STAGE):
+                    if k + i < K:
+                        acc = fma3(va[i], vb[i], acc)
+                k += GEMM_STAGE
+        else:
+            while k + GEMM_STAGE <= K:
+                var va = SIMD[DType.float32, GEMM_STAGE]()
+                var vb = SIMD[DType.float32, GEMM_STAGE]()
+                comptime for i in range(GEMM_STAGE):
+                    va[i] = ld(pa, abase + (k + i) * sak)
+                    vb[i] = ld(pb, (k + i) * sbk + bbase)
+                comptime for i in range(GEMM_STAGE):
+                    acc = fma3(va[i], vb[i], acc)
+                k += GEMM_STAGE
+            while k < K:
+                acc = fma3(ld(pa, abase + k * sak), ld(pb, k * sbk + bbase), acc)
+                k += 1
     return acc
 
 

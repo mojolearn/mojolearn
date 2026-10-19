@@ -19,6 +19,7 @@ from sequence.mlp_fit import AUTOGRAD_PREDICT, MLPNet, mlp_fit, mlp_predict, mlp
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from autograd.rules_recurrent import AUTOGRAD_RNN, AutogradRnnStep
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
+from autograd.profile import ag_profile_fit_begin, ag_profile_fit_end
 from sequence.ets import ets_scratch
 from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
@@ -132,6 +133,10 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
             var v = Int(y.unsafe_load(i))
             if v < 0 or v >= net.O or Float32(v) != y.unsafe_load(i):
                 raise Error("rnn_fit: a label is not a class index below the class count")
+    # MOJOLEARN_AG_PROFILE (lane ag-pass5-gemm): this fit's launch profile,
+    # counted by the executor, printed after it (the MLP trainer's table;
+    # the recurrent fit used to count its launches and print nothing)
+    var profile = ag_profile_fit_begin()
     comptime if AUTOGRAD_RNN:
         # -D MOJOLEARN_AUTOGRAD_RNN: the same fit with the tape-assembled backward
         rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
@@ -139,6 +144,8 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
     else:
         rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
                 fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+    if profile:
+        ag_profile_fit_end("rnn_fit cell=" + String(ival(ip, 0)))
     return PythonObject(net.n_params())
 
 

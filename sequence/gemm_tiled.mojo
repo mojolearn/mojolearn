@@ -7,7 +7,8 @@
 # (M x N, K; operand strides sam sak / sbk sbn), the same arguments on every
 # opcode (hand gemm_epi, tape linear_into, tape matmul VJPs). "cell" = one
 # thread a cell (seq_kernel, TPB 128, gemm_dot: GEMM_STAGE 16 loads in flight,
-# then ONE dependent load round trip per term of the K mod 16 tail);
+# then ONE dependent load round trip per term of the K mod 16 tail; pass 5,
+# GEMM_STAGE_V2: 64 in flight, the remainder in guarded rounds of 16);
 # "tile16" = 16 x 16 cells, 256 threads, GT_K 128 slabs; "thinN" = 16 x 1
 # cells, 256 threads loading, 256-term slabs; split-K and the coop cells are
 # never taken here (coop: M N <= 1024 and K >= 32768 only).
@@ -123,7 +124,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from sequence.ops import FP, add, fma3, ld, st
+from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI, OP_GEMM_SPLITK, add, fma3, ld, st
+from autograd.ops import OP_AGK_GEMM_EPI
 from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_IDENTITY, ACT_RELU
 
 comptime GT_V2 = not (
@@ -361,6 +363,25 @@ def seq_gemm_epi_tiled_kernel(
 # the old kernels with full-slab staging): the A/B arm. Bits are the same on
 # both arms.
 comptime GEMM_DISPATCH_V1 = is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"]()
+#: lane ag-pass5-gemm (PASS5_IDEAS idea 1 Part A, default on): in
+#: seq_gemm_tile_kernel each thread first loads ALL its slab words of an
+#: operand into registers (a comptime-sized batch, ceil(TM TK / GT_TPB) A
+#: words and ceil(TK TN / GT_TPB) B words, each guarded by the slab's live
+#: count), then stores them to threadgroup memory: one global round trip an
+#: operand a slab instead of one a word (the old loop's body was one load
+#: and one store, so no load was issued before the previous one landed).
+#: The fold then reads the slabs GT_FOLD_STAGE words at a time into
+#: registers before its fmas (gemm_dot's pattern on threadgroup memory).
+#: SAME BITS: every word is the same `ld` of the same address stored in the
+#: same slot, and the fold is the same chain, acc = fma3(A(m, k), B(k, n),
+#: acc), k ascending from the same initial word; the column sums the same
+#: add chain over the same staged words. Only when a load is issued moves.
+#: -D MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF (or MOJOLEARN_IDN_ALL_OFF) keeps the
+#: pass-4 loops (the A/B arm).
+comptime GT_V3 = not (
+    is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V3_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime GT_FOLD_STAGE = 16
 comptime GT_MIN_K = 4
 #: the thin tile: GT_THIN cells along the long edge, GT_THIN_K-term slabs
 comptime GT_THIN = 16
@@ -486,9 +507,15 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
     over the staged words, by the one thread of tile row 0 in column n
     (OP_COLSUM_DIV's word; B dense). Each slab stores only its cnt live
     terms (the fold reads no other slot), loaded along the operand's unit
-    stride; neither changes a word or the order it is folded in."""
+    stride; neither changes a word or the order it is folded in. GT_V3
+    (pass 5): each thread's slab words are loaded into registers before
+    any is stored, and the fold reads the slab in register batches; the
+    same words, slots and chain."""
     comptime AS = TK + 1
     comptime BS = TN + 1
+    #: GT_V3: this thread's slab words a slab, per operand
+    comptime NA = (TM * TK + GT_TPB - 1) // GT_TPB
+    comptime NB = (TK * TN + GT_TPB - 1) // GT_TPB
     comptime assert TM * TN <= GT_TPB, "seq_gemm_tile: more cells than threads"
     comptime assert (TM * AS + TK * BS) * 4 <= 32768, "seq_gemm_tile: the slab page must fit every column"
     var M = Int(m_rows)
@@ -525,46 +552,115 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
     var k0 = 0
     while k0 < K:
         var cnt = min(TK, K - k0)
-        # the A slab: TM rows of cnt terms (a_s[row * AS + kk])
-        var q = tid
-        while q < TM * cnt:
-            var row: Int
-            var kk: Int
-            if a_rows_fast:
-                kk = q // TM
-                row = q - kk * TM
-            else:
-                row = q // cnt
-                kk = q - row * cnt
-            var v = Float32(0.0)
-            if m0 + row < M:
-                v = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
-            a_s[row * AS + kk] = v
-            q += GT_TPB
-        # the B slab: cnt terms of TN columns (b_s[kk * BS + col])
-        q = tid
-        while q < cnt * TN:
-            var kk: Int
-            var col: Int
-            if b_terms_fast:
-                col = q // cnt
-                kk = q - col * cnt
-            else:
-                kk = q // TN
-                col = q - kk * TN
-            var v = Float32(0.0)
-            if n0 + col < N:
-                v = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
-            b_s[kk * BS + col] = v
-            q += GT_TPB
+        comptime if GT_V3:
+            # register-staged slabs: every load of this thread's words is
+            # issued before the first store (slot q = tid + j GT_TPB; the
+            # same index math, the same guards, the same words and slots)
+            var av = InlineArray[Float32, NA](fill=Float32(0.0))
+            var aslot = InlineArray[Int32, NA](fill=Int32(-1))
+            comptime for j in range(NA):
+                var q = tid + j * GT_TPB
+                if q < TM * cnt:
+                    var row: Int
+                    var kk: Int
+                    if a_rows_fast:
+                        kk = q // TM
+                        row = q - kk * TM
+                    else:
+                        row = q // cnt
+                        kk = q - row * cnt
+                    aslot[j] = Int32(row * AS + kk)
+                    if m0 + row < M:
+                        av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
+            var bv = InlineArray[Float32, NB](fill=Float32(0.0))
+            var bslot = InlineArray[Int32, NB](fill=Int32(-1))
+            comptime for j in range(NB):
+                var q = tid + j * GT_TPB
+                if q < cnt * TN:
+                    var kk: Int
+                    var col: Int
+                    if b_terms_fast:
+                        col = q // cnt
+                        kk = q - col * cnt
+                    else:
+                        kk = q // TN
+                        col = q - kk * TN
+                    bslot[j] = Int32(kk * BS + col)
+                    if n0 + col < N:
+                        bv[j] = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
+            comptime for j in range(NA):
+                if aslot[j] >= 0:
+                    a_s[Int(aslot[j])] = av[j]
+            comptime for j in range(NB):
+                if bslot[j] >= 0:
+                    b_s[Int(bslot[j])] = bv[j]
+        else:
+            # the A slab: TM rows of cnt terms (a_s[row * AS + kk])
+            var q = tid
+            while q < TM * cnt:
+                var row: Int
+                var kk: Int
+                if a_rows_fast:
+                    kk = q // TM
+                    row = q - kk * TM
+                else:
+                    row = q // cnt
+                    kk = q - row * cnt
+                var v = Float32(0.0)
+                if m0 + row < M:
+                    v = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
+                a_s[row * AS + kk] = v
+                q += GT_TPB
+            # the B slab: cnt terms of TN columns (b_s[kk * BS + col])
+            q = tid
+            while q < cnt * TN:
+                var kk: Int
+                var col: Int
+                if b_terms_fast:
+                    col = q // cnt
+                    kk = q - col * cnt
+                else:
+                    kk = q // TN
+                    col = q - kk * TN
+                var v = Float32(0.0)
+                if n0 + col < N:
+                    v = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
+                b_s[kk * BS + col] = v
+                q += GT_TPB
         barrier()
-        if live:
-            for i in range(cnt):
-                acc = fma3(a_s[r * AS + i], b_s[i * BS + c], acc)
-        if cs_on:
-            # op_colsum: acc = add(acc, ld(X, r * i2 + c)), r ascending
-            for i in range(cnt):
-                cs = add(cs, b_s[i * BS + c])
+        comptime if GT_V3:
+            # the staged fold: GT_FOLD_STAGE slab words into registers, then
+            # their fmas in order; cs_on implies live (tile row 0 of tile
+            # row 0 is row 0 < M, and cs_on tests n < N), so the column sum
+            # chain reads the same staged B words, i ascending
+            if live:
+                var i = 0
+                while i + GT_FOLD_STAGE <= cnt:
+                    var fa = SIMD[DType.float32, GT_FOLD_STAGE]()
+                    var fb = SIMD[DType.float32, GT_FOLD_STAGE]()
+                    comptime for j in range(GT_FOLD_STAGE):
+                        fa[j] = a_s[r * AS + i + j]
+                        fb[j] = b_s[(i + j) * BS + c]
+                    comptime for j in range(GT_FOLD_STAGE):
+                        acc = fma3(fa[j], fb[j], acc)
+                    if cs_on:
+                        comptime for j in range(GT_FOLD_STAGE):
+                            cs = add(cs, fb[j])
+                    i += GT_FOLD_STAGE
+                while i < cnt:
+                    var wb = b_s[i * BS + c]
+                    acc = fma3(a_s[r * AS + i], wb, acc)
+                    if cs_on:
+                        cs = add(cs, wb)
+                    i += 1
+        else:
+            if live:
+                for i in range(cnt):
+                    acc = fma3(a_s[r * AS + i], b_s[i * BS + c], acc)
+            if cs_on:
+                # op_colsum: acc = add(acc, ld(X, r * i2 + c)), r ascending
+                for i in range(cnt):
+                    cs = add(cs, b_s[i * BS + c])
         barrier()
         k0 += TK
     if live:
@@ -574,3 +670,50 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
             st(pc, ci, _tile_epi[EK](acc, ci, n, Int(epi_arg), p3, f0, f1))
     if cs_on:
         st(p4, n, div(cs, f1))
+
+
+# ---------------------------------------------------------------- the launch profile's route (lane ag-pass5-gemm)
+#: route codes of the profile's GEMM shape rows beyond GR_*: the coop
+#: launch (sequence/coop.mojo), the pass-3 V1 tiles, and the two stages of
+#: OP_GEMM_SPLITK (the recurrent blocked weight gradients)
+comptime GR_PROF_COOP = 8
+comptime GR_PROF_V1_TILE = 9
+comptime GR_PROF_SPLITK_PART = 10
+comptime GR_PROF_SPLITK_FOLD = 11
+
+
+@always_inline
+def seq_gemm_profile_route[OP: Int](a: Args, coop_on: Bool, coop_i11: Bool) -> Int:
+    """The route `DeviceExec._launch` takes for this GEMM launch (OP_GEMM,
+    OP_GEMM_EPI, OP_AGK_GEMM_EPI or OP_GEMM_SPLITK), for the launch
+    profile's shape rows only (host bookkeeping, read at MOJOLEARN_AG_PROFILE
+    >= 1). `coop_on`: the executor's SEQ_COOP; `coop_i11`: its FAST VAR coop
+    rule (OP_GEMM with i11 = 1). It restates `_launch`'s tests in the same
+    order, so the row names the kernel that ran."""
+    comptime if OP == OP_GEMM_SPLITK:
+        return GR_PROF_SPLITK_FOLD if a.i11 == 1 else GR_PROF_SPLITK_PART
+    comptime if OP == OP_GEMM:
+        if coop_on and ((a.i0 * a.i1 <= 1024 and a.i2 >= 32768) or (coop_i11 and a.i11 == 1)):
+            return GR_PROF_COOP
+    comptime if not SEQ_GEMM_TILED:
+        return GR_CELL
+    comptime if GEMM_DISPATCH_V1:
+        comptime if OP == OP_GEMM:
+            return GR_PROF_V1_TILE if seq_gemm_tiled_on(a.i0, a.i1) else GR_CELL
+        elif OP == OP_AGK_GEMM_EPI:
+            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
+                return GR_PROF_V1_TILE
+            return GR_CELL
+        else:
+            return GR_CELL
+    var fused = False
+    comptime if OP != OP_GEMM:
+        fused = seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN
+        comptime if OP == OP_AGK_GEMM_EPI:
+            fused = fused or a.i11 != 0
+    var route = seq_gemm_route(a.i0, a.i1, a.i2, fused)
+    comptime if OP != OP_GEMM:
+        # gemm_launch_route: a tile on an epilogue opcode needs a dense C
+        if route != GR_CELL and not (a.i7 == 0 and a.i8 == a.i1):
+            return GR_CELL
+    return route

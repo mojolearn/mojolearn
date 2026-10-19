@@ -38,6 +38,9 @@ from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
 from sequence.launch_profile import launch_profile_level, launch_profile_record
+from sequence.launch_profile import launch_profile_record_drain, launch_profile_record_shape
+from sequence.gemm_tiled import seq_gemm_profile_route
+from sequence.ops import OP_GEMM_SPLITK
 from std.time import perf_counter_ns
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST
 from sequence.dispatch import apply
@@ -748,7 +751,17 @@ struct DeviceExec(Exec, Movable):
         if self.profile >= 2:
             self.sync()
             ns = Int(perf_counter_ns()) - t0
+            # lane ag-pass5-gemm: the drain line, one synchronize on the
+            # now-empty queue (outside this launch's bracket)
+            var t1 = Int(perf_counter_ns())
+            self.ctx.synchronize()
+            launch_profile_record_drain(Int(perf_counter_ns()) - t1)
         launch_profile_record(OP, n, ns, self.profile)
+        # lane ag-pass5-gemm: one row per (code, route, M, N, K) for the GEMMs
+        comptime if OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI or OP == OP_GEMM_SPLITK:
+            launch_profile_record_shape(
+                OP, seq_gemm_profile_route[OP](a, SEQ_COOP, SEQ_FAST_VAR_COOP), a.i0, a.i1, a.i2, ns,
+            )
 
     def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
