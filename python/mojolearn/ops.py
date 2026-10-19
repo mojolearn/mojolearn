@@ -49,6 +49,7 @@ _OP = {
     "linear": 19, "layer_norm": 20, "dropout": 21, "gather_rows": 22,
     "permutation": 23, "mse": 24, "mae": 25, "huber": 26, "bce_with_logits": 27,
     "cross_entropy": 28, "detach": 29, "full": 30, "copy": 31,
+    "embedding": 32,
 }
 _METRIC = {"accuracy": 1, "log_loss": 2, "roc_auc": 3}
 _ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
@@ -349,6 +350,36 @@ class Session:
         """
         count = 0 if count is None else _int(count, "count", 1)
         return self._op("gather_rows", (x, indices), [_int(start, "start", 0), count])
+
+    def embedding(self, table, ids, padding_idx=None):
+        """Rows of ``table`` picked by integer ``ids``: ``table[ids]``.
+
+        ``table`` is a ``(num_embeddings, embedding_dim)`` tensor and ``ids``
+        an array of integers in ``[0, num_embeddings)``, flattened in order;
+        the result has one row per id. An id outside that range raises an
+        error. In a recording session the gradient of ``table`` sums, for
+        each row, the gradients of every position that picked it, in
+        ascending position order, and row ``padding_idx`` gets a zero
+        gradient.
+
+        Example
+        -------
+        >>> with ops.Session(record=True) as s:
+        ...     w = s.tensor(np.ones((10, 4), dtype=np.float32), requires_grad=True)
+        ...     x = s.embedding(w, np.array([3, 1, 3]))
+        ...     s.backward(s.sum(x))
+        ...     g = s.grad(w)
+        """
+        from ._buffer import _materialize, as_i32_c
+        raw, _ = _materialize(ids, "ids")
+        if raw.dtype[1] not in "iu":
+            raise TypeError(f"ids must be integers, got dtype {raw.dtype!r}")
+        flat = np.ascontiguousarray(np.asarray(as_i32_c(raw, ndim=None, name="ids")[0])).reshape(-1)
+        if flat.size == 0:
+            raise ValueError("ids must not be empty")
+        pad = -1 if padding_idx is None else _int(padding_idx, "padding_idx", 0)
+        # the binding copies the ids before it returns; `flat` lives until then
+        return self._op("embedding", (table,), [flat.ctypes.data, int(flat.size), pad])
 
     # ------------------------------------------------------------ losses (differentiable)
     def mse(self, prediction, target, reduction="mean"):
