@@ -71,10 +71,14 @@ SOURCES = {
     "mamba/impl/modules/mamba2_backward.mojo": "mamba2_backward",
     "mamba/impl/ops/mamba2_ssd_backward.mojo": "mamba2_ssd_backward",
     "mamba/impl/modules/mamba2_prefill_backward.mojo": "mamba2_prefill_backward",
+    # lane del-mamba (2026-10-19): the device runs the Mamba-1/2 backward on the
+    # tape; the hand walk lives on only as this column's input
+    "mamba/host/mamba2_prefill_chain.mojo": "mamba2_prefill_chain",
     "mamba/checks/mamba_backward.mojo": "mamba_backward_checks",
     "mamba/impl/ops/selective_scan_backward.mojo": "selective_scan_backward",
     "mamba/impl/modeling/modeling_mamba_backward.mojo": "modeling_mamba_backward",
     "mamba/impl/modeling/modeling_mamba_prefill_backward.mojo": "modeling_mamba_prefill_backward",
+    "mamba/host/mamba1_prefill_chain.mojo": "mamba1_prefill_chain",
     "mamba/impl/modules/mamba3_refusal.mojo": "mamba3_refusal",
     "mamba/impl/modules/mamba3_transfer.mojo": "mamba3_transfer",
     "mamba/impl/ops/mamba3_siso.mojo": "mamba3_siso",
@@ -183,8 +187,8 @@ SUBSTITUTIONS = (
 # Explicit substitutions keep the already-qualified generated host sources byte
 # identical and fail closed if the upstream lifecycle spelling changes again.
 _CONTEXT_SOURCES = (
-    "mamba/impl/modules/mamba2_prefill_backward.mojo",
-    "mamba/impl/modeling/modeling_mamba_prefill_backward.mojo",
+    "mamba/host/mamba2_prefill_chain.mojo",
+    "mamba/host/mamba1_prefill_chain.mojo",
     "mamba/impl/modules/mamba3_prefill_backward.mojo",
 )
 _CONTEXT_RULES = (
