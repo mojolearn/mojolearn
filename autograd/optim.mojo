@@ -11,8 +11,8 @@
 #
 # Why it does not import sequence.recurrent: rnn_fit calls this module under
 # -D MOJOLEARN_AUTOGRAD_OPTIM, so sequence.recurrent imports it; this module
-# imports only sequence.ops, sequence.exec_trait, checks.numerics and
-# autograd.ops. recurrent.mojo keeps its opt_scalars / opt_step for the A/B's
+# imports only sequence.ops, sequence.exec_trait, checks.numerics,
+# autograd.ops and autograd.composed_ops (sequence.ops and sequence.mlp). recurrent.mojo keeps its opt_scalars / opt_step for the A/B's
 # arm A; once the define is promoted they become this module's functions.
 #
 # Identity: the update is ONE OP_OPT launch over the flat parameter vector
@@ -48,7 +48,22 @@ from sequence.ops import (
     st,
 )
 from autograd.ops import ag_fold_block
+from autograd.composed_ops import OP_AGC_OPT_FINISH, AGC_FINISH_TENSORS, agc_set_bound
 from checks.numerics import ftz, identical_cos, identical_div, identical_mul, identical_pow64, identical_sqrt
+from std.sys.compile import is_defined
+
+# Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 5), default on: a
+# trainer that finishes its raw gradients with OP_L2GRAD (weights: (g +
+# alpha w) / divisor) and OP_DIVS (biases: g / divisor) before the step
+# hands those ranges to launch_opt_finish / step_lr_finish instead, which
+# run the finish and the update in ONE launch (autograd/composed_ops.mojo
+# OP_AGC_OPT_FINISH). Bits: identical by construction (the same two bodies
+# on the same words, stored, then op_opt on the stored word; the gradient
+# vector ends holding the finished words, as before). Launches: 2 a
+# parameter tensor pair fewer each step (the composed tape MLP: 4 a batch
+# for one hidden layer). -D MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF keeps the
+# separate finish launches (arm A).
+comptime AUTOGRAD_OPT_FUSE = not is_defined["MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF"]()
 
 # Operation codes of this family, a range of their own clear of the tape's
 # 1000..1010 (autograd/ops.mojo); sequence/dispatch.mojo routes the range
@@ -467,3 +482,88 @@ def step[E: Exec](
 ) raises:
     """`step_lr` at the configuration's own learning rate."""
     step_lr(ex, cfg, state, params, grads, n, t, cfg.lr)
+
+
+# ------------------------------------------------------------------ fused gradient finish
+@fieldwise_init
+struct GradFinish(Copyable, Movable):
+    """The finish a trainer applies to its raw gradient vector before the
+    step, by parameter tensor: tensor l's weights run from the previous
+    tensor's bias end (0 for the first) to bias_start[l] and take
+    (g + alpha w) / divisor; its biases run to bias_end[l] and take
+    g / divisor. The tensors tile [0, bias_end[last]) in order."""
+
+    var bias_start: List[Int]
+    var bias_end: List[Int]
+    var alpha: Float32
+    var divisor: Float32
+
+
+def launch_opt_finish[E: Exec](
+    mut ex: E, o: Args, fin: GradFinish, n: Int, shift_s1: Bool, shift_s2: Bool, shift_s3: Bool,
+) raises:
+    """The finish and the OP_OPT update `o` (op_opt's arguments over the n
+    parameters) as OP_AGC_OPT_FINISH launches, one per group of up to
+    AGC_FINISH_TENSORS tensors. A group's launch covers its own range of
+    the vectors: the parameter and gradient pointers, and each state
+    pointer whose shift flag is set (a buffer of n words), start at the
+    group's first word. Only the sklearn kinds (OPT_SK_ADAM, OPT_SK_SGD)."""
+    if o.i0 != OPT_SK_ADAM and o.i0 != OPT_SK_SGD:
+        raise Error("autograd optim: the fused gradient finish takes the sklearn Adam or SGD step")
+    var L = len(fin.bias_start)
+    if L < 1 or len(fin.bias_end) != L or fin.bias_end[L - 1] != n:
+        raise Error("autograd optim: the gradient finish's tensors must tile the parameter vector")
+    var first = 0
+    var base = 0
+    while first < L:  # driver-loop: over groups of parameter tensors
+        var count = min(AGC_FINISH_TENSORS, L - first)
+        var a = o
+        a.p0 = o.p0 + base
+        a.p1 = o.p1 + base
+        if shift_s1:
+            a.p2 = o.p2 + base
+        if shift_s2:
+            a.p3 = o.p3 + base
+        if shift_s3:
+            a.p4 = o.p4 + base
+        a.i3 = count
+        for j in range(count):  # driver-loop: over the group's tensors
+            agc_set_bound(a, 2 * j, fin.bias_start[first + j] - base)
+            agc_set_bound(a, 2 * j + 1, fin.bias_end[first + j] - base)
+        a.f6 = fin.alpha
+        a.f7 = fin.divisor
+        var end = fin.bias_end[first + count - 1]
+        ex.launch[OP_AGC_OPT_FINISH](a, end - base)
+        base = end
+        first += count
+
+
+def step_lr_finish[E: Exec](
+    mut ex: E, cfg: OptimizerConfig, mut state: OptimizerState, params: FP, grads: FP, n: Int, t: Int,
+    lr: Float32, fin: GradFinish,
+) raises:
+    """`step_lr` on raw gradients that `fin` finishes in the same launch
+    (launch_opt_finish): the same words as finishing them first and then
+    calling step_lr. No clip (a clip reads the finished gradients)."""
+    if n != state.n:
+        raise Error("autograd optim: the parameter count differs from the state's")
+    if cfg.clip > Float32(0.0):
+        raise Error("autograd optim: the fused gradient finish does not clip")
+    var a = Args()
+    a.p0 = params
+    a.p1 = grads
+    a.p2 = state.s1
+    a.p3 = state.s2
+    a.p4 = state.s3
+    a.i0 = cfg.kind
+    a.i1 = t
+    a.i2 = cfg.flags()
+    a.f0 = lr
+    a.f1 = cfg.f1()
+    a.f2 = cfg.f2()
+    a.f3 = cfg.eps
+    a.f4 = cfg.weight_decay
+    var sc = optimizer_scalars(cfg, state, t, lr)
+    a.f5 = sc[0]
+    var used = optimizer_slots(cfg)
+    launch_opt_finish(ex, a, fin, n, used[0], used[1], used[2])
