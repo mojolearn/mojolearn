@@ -98,7 +98,7 @@ def _same(p: FP, mut buf: DeviceBuffer[DType.float32], what: String) raises:
         raise Error(String("small MLP backward (autograd): ") + what + " is not the trainer's buffer")
 
 
-trait SmallMlpKernels(Movable):
+trait SmallMlpKernels(Movable & Deinitable):
     """The two launches the small MLP's hand path makes, as the trainer
     makes them (its GEMM dispatch, its workspace and its context), so the
     rules launch exactly the hand kernels without importing the trainer."""
