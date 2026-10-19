@@ -1,4 +1,44 @@
 # SPDX-License-Identifier: Apache-2.0
+#
+# PASS 2 (lane ag-pass2-kernels, 2026-10-19): LAUNCHES AND MEMORY PASSES PER
+# TAPE OPERATION, before -> after, read from the code (r x c the node's
+# output; "pass" = one read or write of an r x c matrix). Measure with
+# MOJOLEARN_AG_PROFILE=1 (counts) or 2 (synced host-clock times, relative).
+#   binary fwd (add/sub/mul/div): 1 -> 1 launch; 3 passes -> 3; per element
+#     two integer divisions per operand -> none when the operand has the
+#     output's shape (_x_at / _y_at), kept for a broadcast operand.
+#   binary VJP, operand of the output's shape: 1 -> 1; no index divisions.
+#   binary VJP, broadcast operand (bias, row, column, scalar): 3 -> 2
+#     launches (OP_AG_BIN_VJP into scratch + REDUCE_PART + REDUCE_FOLD ->
+#     OP_AGK_BIN_VJP_PART + REDUCE_FOLD); passes 4-5 -> 2-3 (the scratch
+#     write and its re-read are gone); same terms, same order, same bits.
+#     The default tape MLP: one launch fewer per layer per batch.
+#   unary fwd / VJP, reduce VJP, accumulate: unchanged (1 launch, 2-3 passes;
+#     the hand bodies are scalar, one element a thread, so are these).
+#   softmax fwd: 1 -> 1 launch per row block; per row 3 reads of x + 1 write
+#     and 2C exponentials -> 2 reads of x, 2 writes + 1 read of y and C
+#     exponentials (each exponential parked in y); same words. Log-softmax
+#     unchanged. Softmax VJP unchanged (1 launch, one dot per row).
+#   sum / mean: 2 -> 2 launches (blocked fold, unchanged order).
+#   matmul fwd and its two VJP GEMMs: 1 launch each, unchanged; already
+#     OP_GEMM, which DeviceExec runs on the tiled kernel (sequence/
+#     gemm_tiled.mojo) on NVIDIA and AMD in identical, op_gemm's chain; the
+#     transposed operands are GEMM strides, so 0 transpose launches before
+#     and after (OP_AG_TRANSPOSE runs only for an explicit transpose node).
+#   fused linear fwd, dW, dX (gemm_epi): 1 launch each -> 1, now
+#     OP_AGK_GEMM_EPI: on NVIDIA/AMD identical the tiled GEMM with the
+#     epilogue on the stored word (each A row and B column staged once a
+#     tile instead of re-read by every cell's thread); same words. Apple and
+#     the host run op_gemm_epi as before.
+#   fused linear db: 1 launch (OP_COLSUM_DIV, one thread a column, a serial
+#     chain over all batch rows) -> unchanged for batches of at most 64 rows;
+#     above, 2 launches (REDUCE_PART over ceil(B / R) x O threads with chains
+#     of R = ag_fold_block(B), then REDUCE_FOLD) under AUTOGRAD_PASS2_FOLD:
+#     THE ONLY BIT CHANGE of this pass (new bits above 64 rows).
+# The blocked fold itself (REDUCE_PART / REDUCE_FOLD) was already two-level
+# for the B x O column sums (ceil(B / R) x O threads, chains <= R), not one
+# thread per column: its block rule and order are unchanged.
+#
 # Native element bodies shared by HostExec and DeviceExec. Graph traversal
 # and gradient accumulation order live in tape.mojo, not inside GPU atomics.
 #
