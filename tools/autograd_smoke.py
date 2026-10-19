@@ -48,7 +48,7 @@ ENTRIES = (
      "what": "the MLP tape fits against the hand-written trainer on the vendor's GPU"},
     {"name": "autograd-fit-smoke", "pytest": "tests/test_autograd_smoke.py",
      "what": "a tiny MLP and LSTM fit through the installed bindings' default path"},
-    {"name": "autograd-public", "pytest": "python/mojolearn/tests/test_autograd_public.py",
+    {"name": "autograd-public", "pytest": "python/mojolearn/tests/test_autograd_public.py", "pytest_args": ["-s"],
      "what": "the public Sequential and ops.Session examples of the docs, PUBLIC_DIGEST lines"},
 )
 
@@ -122,7 +122,8 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S):
             cmd = [str(exe)]
             env = None
         else:
-            cmd = [python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", str(ROOT / e["pytest"])]
+            cmd = ([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"] + e.get("pytest_args", [])
+                   + [str(ROOT / e["pytest"])])
             env = dict(os.environ, MOJOLEARN_AUTOGRAD_SMOKE_OUT=str(logs / ("fit-digests-%s.json" % vendor)))
         status, rc, seconds = start(cmd, log, timeout, env=env, cwd=str(ROOT))
         row.update(command=cmd, status=status, rc=rc, seconds=seconds)
