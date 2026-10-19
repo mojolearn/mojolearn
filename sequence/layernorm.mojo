@@ -12,6 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from std.sys.compile import is_defined, get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 from sequence.fold32 import FOLD_L, tree32
+from std.gpu.primitives.warp import shuffle_xor
 
 #: lane layernorm-idn N3 (2026-10-09), MOJOLEARN_IDN_LN_ROW_WARP, IDENTICAL,
 #: the DEFAULT since 2026-10-10 (lane/postmerge-act-6; `-D
@@ -281,3 +282,109 @@ def op_ln_bwd_w(t: Int, a: Args):
     var w = _ln_w_fold(a, t, 0, a.i1)
     st(a.p2, t, w[0])
     st(a.p3, t, w[1])
+
+
+# ------------------------------------------------------------------ one pass over the row (lane ag-pass6-host)
+#: lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea L), IDENTICAL, default on
+#: under LN_ROW_WARP: the 32-lane cell's forward keeps its lane's words of the
+#: row in registers between the three passes (the sum, the squares, the
+#: output), and the backward-x keeps (g, xhat) between its two passes, when
+#: D <= LN_ONE_PASS_MAX_D. Each lane runs the same chain on the same words in
+#: the same order as coop_ln_fwd_rw / coop_ln_bwd_x_rw (c = lane, lane + 32,
+#: ... ascending from +0.0, then the five-level shuffle tree), so the bits are
+#: the same; only the repeated global reads go. Bound: 32 words a lane (D =
+#: 1024 on a 32-lane cell) is a register budget (the forward holds 32 floats,
+#: the backward 64), not a shape choice; wider rows keep the passes over memory.
+#: `-D MOJOLEARN_IDN_LN_ONE_PASS_OFF` keeps the multi-pass cell (arm A).
+comptime LN_ONE_PASS = LN_ROW_WARP and not is_defined["MOJOLEARN_IDN_LN_ONE_PASS_OFF"]()
+#: words a lane holds (slots of the register row)
+comptime LN_ONE_PASS_SLOTS = 32
+comptime LN_ONE_PASS_MAX_D = LN_RW_LANES * LN_ONE_PASS_SLOTS
+
+
+@always_inline
+def ln_one_pass_on(D: Int) -> Bool:
+    """True when the cell's row fits the lane registers (LN_ONE_PASS)."""
+    comptime if LN_ONE_PASS:
+        return D <= LN_ONE_PASS_MAX_D
+    return False
+
+
+@always_inline
+def _ln_cell_tree(v: Float32) -> Float32:
+    """sequence/coop.mojo coop_rw_total's five levels, word for word (the
+    tree of fold32's `tree32`; shuffle_xor strides below 32 stay inside a
+    32-lane half of a 64-wide wavefront). Kept here because coop.mojo
+    imports this module."""
+    var t = v
+    comptime for lv in range(5):
+        comptime h = LN_RW_LANES >> (lv + 1)
+        t = add(t, shuffle_xor(t, UInt32(h)))
+    return t
+
+
+@always_inline
+def ln_fwd_rw_one_pass(row: Int, lane: Int, a: Args):
+    """coop_ln_fwd_rw's row (D <= LN_ONE_PASS_MAX_D) with the lane's words
+    loaded once: slot r holds x[base + r 32 + lane]."""
+    var D = a.i0
+    var base = row * D
+    var xr = SIMD[DType.float32, LN_ONE_PASS_SLOTS]()
+    comptime for r in range(LN_ONE_PASS_SLOTS):
+        var c = r * LN_RW_LANES + lane
+        if c < D:
+            xr[r] = ld(a.p0, base + c)
+    var acc = Float32(0.0)
+    comptime for r in range(LN_ONE_PASS_SLOTS):
+        if r * LN_RW_LANES + lane < D:
+            acc = add(acc, xr[r])
+    var mean = div(_ln_cell_tree(acc), Float32(D))
+    var q = Float32(0.0)
+    comptime for r in range(LN_ONE_PASS_SLOTS):
+        if r * LN_RW_LANES + lane < D:
+            var d = sub(xr[r], mean)
+            q = fma3(d, d, q)
+    q = _ln_cell_tree(q)
+    var rstd = ftz(identical_rsqrt(add(div(q, Float32(D)), a.f0)))
+    if lane == 0:
+        st(a.p4, row, mean)
+        st(a.p5, row, rstd)
+    comptime for r in range(LN_ONE_PASS_SLOTS):
+        var c = r * LN_RW_LANES + lane
+        if c < D:
+            var y = mul(sub(xr[r], mean), rstd)
+            if a.i1 != 0:
+                y = mul(y, ld(a.p1, c))
+            if a.i2 != 0:
+                y = add(y, ld(a.p2, c))
+            st(a.p3, base + c, y)
+
+
+@always_inline
+def ln_bwd_x_rw_one_pass(row: Int, lane: Int, a: Args):
+    """coop_ln_bwd_x_rw's row (D <= LN_ONE_PASS_MAX_D) with the lane's
+    (g, xhat) computed once (ln_bwd_g) and kept for the output pass."""
+    var D = a.i0
+    var base = row * D
+    var mean = ld(a.p4, row)
+    var rstd = ld(a.p5, row)
+    var gr = SIMD[DType.float32, LN_ONE_PASS_SLOTS]()
+    var hr = SIMD[DType.float32, LN_ONE_PASS_SLOTS]()
+    var sg = Float32(0.0)
+    var sgx = Float32(0.0)
+    comptime for r in range(LN_ONE_PASS_SLOTS):
+        var c = r * LN_RW_LANES + lane
+        if c < D:
+            var gx = ln_bwd_g(a, base, c, mean, rstd)
+            gr[r] = gx[0]
+            hr[r] = gx[1]
+            sg = add(sg, gx[0])
+            sgx = fma3(gx[0], gx[1], sgx)
+    sg = _ln_cell_tree(sg)
+    sgx = _ln_cell_tree(sgx)
+    var mg = div(sg, Float32(D))
+    var mgx = div(sgx, Float32(D))
+    comptime for r in range(LN_ONE_PASS_SLOTS):
+        var c = r * LN_RW_LANES + lane
+        if c < D:
+            st(a.p3, base + c, mul(rstd, sub(sub(gr[r], mg), mul(hr[r], mgx))))

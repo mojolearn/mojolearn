@@ -244,6 +244,49 @@ def _view(ctx: DeviceContext, p: FP, n: Int) raises -> DeviceBuffer[DType.float3
     return DeviceBuffer[DType.float32](ctx, p.unsafe_origin_cast[MutAnyOrigin](), n if n > 0 else 1, owning=False)
 
 
+# Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea K), default on: the
+# tape's host work around the hand kernels. (1) Block k + 1's input (acts[k +
+# 1]) is a view of block k's residual_out, the buffer the forward wrote,
+# instead of its own buffer and a device copy per block (and the zero fill
+# and wait of that buffer's allocation). (2) The export queues every
+# gradient download (DeviceExec.download_async for tape storage, one
+# enqueued copy for the stack's own buffers) and drains once: Mamba-1's 11 +
+# 2 synchronous downloads a block and Mamba-2's 8 + 2 become one wait a
+# call. Bits: unchanged (the same kernels read the same words; the copies
+# are bit copies either way). -D MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF keeps the
+# per-block copy and the synchronous downloads (arm A).
+comptime AUTOGRAD_MAMBA_EXPORT = not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF"]()
+
+
+def _act_after(ctx: DeviceContext, mut residual_out: DeviceBuffer[DType.float32], n: Int) raises -> DeviceBuffer[DType.float32]:
+    """Block k + 1's input under AUTOGRAD_MAMBA_EXPORT: a view of the first n
+    words of block k's residual_out (the stage outlives the stack's acts)."""
+    return residual_out.create_sub_buffer[DType.float32](0, n)
+
+
+def _grad_queued(tape: Tape, mut ex: DeviceExec, x: Tensor) raises -> List[Float32]:
+    """`Tape.gradients` with the download queued (DeviceExec.download_async):
+    the list holds the gradient after the executor's next sync."""
+    var p = tape.gradient(x)
+    var n = tape.rows(x) * tape.cols(x)
+    var result = List[Float32](length=n, fill=0)
+    ex.download_async(FP(unsafe_from_address=Int(result.unsafe_ptr())), p, n)
+    return result^
+
+
+def _download_queued(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
+    """`mamba_download` without its wait: the copy into the list is queued
+    on ctx and lands at the caller's next synchronize (the list's storage
+    does not move when the list is moved)."""
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    if n == 0:
+        return out^
+    var view = buf.create_sub_buffer[DType.float32](0, n)
+    ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+    _ = view^
+    return out^
+
+
 def _copy[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
     """dst[0:n] = src[0:n]: OP_COPY, a copy of bits, in stream order."""
     var a = Args()
@@ -392,7 +435,10 @@ struct Mamba1TapeStack(Movable):
             self.state.append(MambaDeviceState(ctx, b, self.dims))
             self.stages.append(MambaDeviceStages(ctx, b, l, self.dims))
             self.scratch.append(Mamba1TapeScratch(ctx, b, l, self.dims))
-            self.acts.append(mamba_zeros(ctx, m * dm))
+            comptime if AUTOGRAD_MAMBA_EXPORT:
+                self.acts.append(_act_after(ctx, self.stages[k].residual_out, m * dm))
+            else:
+                self.acts.append(mamba_zeros(ctx, m * dm))
         self.ws = mamba_zeros(ctx, mamba_backward_workspace_max_floats(self.dims, m))
         # mamba1_prefill_backward's ones: mamba_zeros' guard layout, body set to 1
         self.ones = mamba_zeros(ctx, m)
@@ -653,7 +699,8 @@ def mamba1_tape_backward_stack(
             S.ctx, S.stages[k], S.state[k], S.w[k], S.acts[k], b, l, trace,
             String("m1.backward.tail"),
         )
-        _d2d(S.ctx, S.acts[k + 1], S.stages[k].residual_out, m * dm)
+        comptime if not AUTOGRAD_MAMBA_EXPORT:
+            _d2d(S.ctx, S.acts[k + 1], S.stages[k].residual_out, m * dm)
 
     var dres = mamba_upload(ctx, grad_output)
     mamba_refuse_grad_output(ctx, String("mamba1"), dres, grad_output)
@@ -701,29 +748,58 @@ def mamba1_tape_backward_stack(
     tape.backward_with_rules(ex, x_t, seed, rules)
 
     var result = List[Mamba1PrefillGradients]()
-    for k in range(nb):  # driver-loop: over blocks
-        var g = Mamba1PrefillGradients()
-        var base = 10 * k
-        g.norm_weight = tape.gradients(ex, params[base + 0])
-        g.in_proj_weight = tape.gradients(ex, params[base + 1])
-        g.conv1d_weight = tape.gradients(ex, params[base + 2])
-        g.conv1d_bias = tape.gradients(ex, params[base + 3])
-        g.x_proj_weight = tape.gradients(ex, params[base + 4])
-        g.dt_proj_weight = tape.gradients(ex, params[base + 5])
-        g.dt_proj_bias = tape.gradients(ex, params[base + 6])
-        g.A_log = tape.gradients(ex, params[base + 7])
-        g.D = tape.gradients(ex, params[base + 8])
-        g.out_proj_weight = tape.gradients(ex, params[base + 9])
-        g.x = tape.gradients(ex, xs[k])
-        g.stage_dB = mamba_download(ctx, S.scratch[k].dbm, m * D_STATE)
-        g.stage_dC = mamba_download(ctx, S.scratch[k].dcm, m * D_STATE)
-        result.append(g^)
-    tape.release(ex)
-    ctx.synchronize()
-    _ = rules^
-    _ = dres^
-    _ = S^
-    return result^
+    comptime if AUTOGRAD_MAMBA_EXPORT:
+        # idea K(2): every download queued, one drain
+        for k in range(nb):  # driver-loop: over blocks
+            var g = Mamba1PrefillGradients()
+            var base = 10 * k
+            g.norm_weight = _grad_queued(tape, ex, params[base + 0])
+            g.in_proj_weight = _grad_queued(tape, ex, params[base + 1])
+            g.conv1d_weight = _grad_queued(tape, ex, params[base + 2])
+            g.conv1d_bias = _grad_queued(tape, ex, params[base + 3])
+            g.x_proj_weight = _grad_queued(tape, ex, params[base + 4])
+            g.dt_proj_weight = _grad_queued(tape, ex, params[base + 5])
+            g.dt_proj_bias = _grad_queued(tape, ex, params[base + 6])
+            g.A_log = _grad_queued(tape, ex, params[base + 7])
+            g.D = _grad_queued(tape, ex, params[base + 8])
+            g.out_proj_weight = _grad_queued(tape, ex, params[base + 9])
+            g.x = _grad_queued(tape, ex, xs[k])
+            g.stage_dB = _download_queued(ctx, S.scratch[k].dbm, m * D_STATE)
+            g.stage_dC = _download_queued(ctx, S.scratch[k].dcm, m * D_STATE)
+            result.append(g^)
+        # the one wait: every queued copy lands (DeviceExec copies the
+        # staged words into the lists here)
+        ex.sync()
+        tape.release(ex)
+        ctx.synchronize()
+        _ = rules^
+        _ = dres^
+        _ = S^
+        return result^
+    else:
+        for k in range(nb):  # driver-loop: over blocks
+            var g = Mamba1PrefillGradients()
+            var base = 10 * k
+            g.norm_weight = tape.gradients(ex, params[base + 0])
+            g.in_proj_weight = tape.gradients(ex, params[base + 1])
+            g.conv1d_weight = tape.gradients(ex, params[base + 2])
+            g.conv1d_bias = tape.gradients(ex, params[base + 3])
+            g.x_proj_weight = tape.gradients(ex, params[base + 4])
+            g.dt_proj_weight = tape.gradients(ex, params[base + 5])
+            g.dt_proj_bias = tape.gradients(ex, params[base + 6])
+            g.A_log = tape.gradients(ex, params[base + 7])
+            g.D = tape.gradients(ex, params[base + 8])
+            g.out_proj_weight = tape.gradients(ex, params[base + 9])
+            g.x = tape.gradients(ex, xs[k])
+            g.stage_dB = mamba_download(ctx, S.scratch[k].dbm, m * D_STATE)
+            g.stage_dC = mamba_download(ctx, S.scratch[k].dcm, m * D_STATE)
+            result.append(g^)
+        tape.release(ex)
+        ctx.synchronize()
+        _ = rules^
+        _ = dres^
+        _ = S^
+        return result^
 
 
 def mamba1_tape_backward(
@@ -793,7 +869,10 @@ struct Mamba2TapeStack(Movable):
             self.w.append(Mamba2DeviceWeights(ctx, weights[k]))
             self.state.append(allocate_inference_cache(ctx, b, self.dims))
             self.stages.append(Mamba2DeviceStages(ctx, b, l, 0, self.dims))
-            self.acts.append(mamba_zeros(ctx, m * dm))
+            comptime if AUTOGRAD_MAMBA_EXPORT:
+                self.acts.append(_act_after(ctx, self.stages[k].residual_out, m * dm))
+            else:
+                self.acts.append(mamba_zeros(ctx, m * dm))
             self.tail.append(Mamba2BackwardTail(ctx, self.dims, m))
         ctx.synchronize()
 
@@ -1006,7 +1085,8 @@ def mamba2_tape_backward_stack(
             S.ctx, S.stages[k], S.state[k], S.w[k], S.acts[k], b, l, dt_lo, dt_hi, trace,
             String("m2.backward.tail"),
         )
-        _d2d(S.ctx, S.acts[k + 1], S.stages[k].residual_out, m * dm)
+        comptime if not AUTOGRAD_MAMBA_EXPORT:
+            _d2d(S.ctx, S.acts[k + 1], S.stages[k].residual_out, m * dm)
         # the hand path's SSD backward state, sized by this block's stages
         var nc = S.stages[k].nc
         var t_work = S.stages[k].t_work
@@ -1071,30 +1151,58 @@ def mamba2_tape_backward_stack(
     # stack's own device buffers, which DeviceExec did not allocate (its
     # download refuses them): they are read with the hand path's download,
     # after the tape's queue drains. w_in and w_out keep tape storage.
-    ex.sync()
-    for k in range(nb):  # driver-loop: over blocks
-        var g = Mamba2PrefillGradients()
-        var base = 9 * k
-        ref T = S.tail[k]
-        ref cv = S.conv[k]
-        ref disc = S.disc[k]
-        g.block_norm_weight = mamba_download(ctx, T.d_block_w, dm)
-        g.in_proj_weight = tape.gradients(ex, params[base + 1])
-        g.conv1d_weight = mamba_download(ctx, cv.d_w, cd * M2_D_CONV)
-        g.conv1d_bias = mamba_download(ctx, cv.d_b, cd)
-        g.dt_bias = mamba_download(ctx, disc.d_dt_bias, nh)
-        g.A_log = mamba_download(ctx, disc.d_a_log, nh)
-        g.D = mamba_download(ctx, T.d_d, nh)
-        g.norm_weight = mamba_download(ctx, T.d_gnorm_w, di)
-        g.out_proj_weight = tape.gradients(ex, params[base + 8])
-        g.x = mamba_download(ctx, T.d_block_x, m * dm)
-        result.append(g^)
-    tape.release(ex)
-    ctx.synchronize()
-    _ = rules^
-    _ = dres^
-    _ = S^
-    return result^
+    comptime if AUTOGRAD_MAMBA_EXPORT:
+        # idea K(2): the copies are queued behind the backward on the same
+        # in-order queue (so they read the finished words), one drain
+        for k in range(nb):  # driver-loop: over blocks
+            var g = Mamba2PrefillGradients()
+            var base = 9 * k
+            ref T = S.tail[k]
+            ref cv = S.conv[k]
+            ref disc = S.disc[k]
+            g.block_norm_weight = _download_queued(ctx, T.d_block_w, dm)
+            g.in_proj_weight = _grad_queued(tape, ex, params[base + 1])
+            g.conv1d_weight = _download_queued(ctx, cv.d_w, cd * M2_D_CONV)
+            g.conv1d_bias = _download_queued(ctx, cv.d_b, cd)
+            g.dt_bias = _download_queued(ctx, disc.d_dt_bias, nh)
+            g.A_log = _download_queued(ctx, disc.d_a_log, nh)
+            g.D = _download_queued(ctx, T.d_d, nh)
+            g.norm_weight = _download_queued(ctx, T.d_gnorm_w, di)
+            g.out_proj_weight = _grad_queued(tape, ex, params[base + 8])
+            g.x = _download_queued(ctx, T.d_block_x, m * dm)
+            result.append(g^)
+        ex.sync()
+        tape.release(ex)
+        ctx.synchronize()
+        _ = rules^
+        _ = dres^
+        _ = S^
+        return result^
+    else:
+        ex.sync()
+        for k in range(nb):  # driver-loop: over blocks
+            var g = Mamba2PrefillGradients()
+            var base = 9 * k
+            ref T = S.tail[k]
+            ref cv = S.conv[k]
+            ref disc = S.disc[k]
+            g.block_norm_weight = mamba_download(ctx, T.d_block_w, dm)
+            g.in_proj_weight = tape.gradients(ex, params[base + 1])
+            g.conv1d_weight = mamba_download(ctx, cv.d_w, cd * M2_D_CONV)
+            g.conv1d_bias = mamba_download(ctx, cv.d_b, cd)
+            g.dt_bias = mamba_download(ctx, disc.d_dt_bias, nh)
+            g.A_log = mamba_download(ctx, disc.d_a_log, nh)
+            g.D = mamba_download(ctx, T.d_d, nh)
+            g.norm_weight = mamba_download(ctx, T.d_gnorm_w, di)
+            g.out_proj_weight = tape.gradients(ex, params[base + 8])
+            g.x = mamba_download(ctx, T.d_block_x, m * dm)
+            result.append(g^)
+        tape.release(ex)
+        ctx.synchronize()
+        _ = rules^
+        _ = dres^
+        _ = S^
+        return result^
 
 
 def mamba2_tape_backward(

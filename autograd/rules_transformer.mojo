@@ -111,8 +111,21 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
 from core.identity_trace import IdentityTrace
 from core.device_scan import device_first_nonfinite
+from autograd.refuse_scan import DeferredNonfiniteScan
 from core.step_phase import step_count_launch
 from gemm.contract import OP_NT
+# Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: the
+# refusal scan of d(residual2) writes its verdict to a device word and the
+# call reads it at its own closing wait (autograd/refuse_scan.mojo
+# DeferredNonfiniteScan), so a layer call drains the queue once instead of
+# twice (the scan's own wait and the pipeline bubble behind it go: NV ~7 us
+# + bubble, AMD ~18 us + bubble of ~3.4 ms). The verdict is the same index
+# from the same kernels; the refusal is still raised by this call, after the
+# layer's gradients are written. Bits of an accepted call: unchanged (no
+# kernel or order moves). -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps the
+# synchronous scan before the first launch (arm A).
+comptime AUTOGRAD_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
+
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
     LlamaDeviceWeights,
@@ -608,6 +621,45 @@ def llama_decoder_layer_record(
     return tape.custom_into_shared(ex, [residual1, down], _fp(fwd.residual2), down, m, dm, TF_RESIDUAL, _at(s_out, layer))
 
 
+def _layer_backward_tape(
+    ctx: DeviceContext,
+    mut ex: DeviceExec,
+    mut bst: LlamaBackwardStages,
+    mut fwd: LlamaDeviceStages,
+    mut w: LlamaDeviceWeights,
+    mut cos_tab: DeviceBuffer[DType.float32],
+    mut sin_tab: DeviceBuffer[DType.float32],
+    mut x_dev: DeviceBuffer[DType.float32],
+    mut d_out: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    pos0: Int,
+) raises:
+    """The tape half of llama_decoder_layer_backward_autograd (the caller
+    checked the arguments and owns the closing wait): record the layer,
+    run one backward from d(residual2), release the tape."""
+    var m = b * l
+    var dm = fwd.dims.d_model
+    var tape = Tape()
+    # ---- the block input, gradient into bst.d_x; then the layer
+    # d(residual2): the seed's own storage under the hand path's entry alias
+    # (used in place), else in_d_residual2 (the tape's one bit copy, S0-1).
+    var x = tape.variable_into(ex, _fp(x_dev), _fp(bst.d_x), m, dm)
+    var din = _fp(d_out) if IDN_BWD_ENTRY_ALIAS else _fp(bst.in_d_residual2)
+    var residual2 = llama_decoder_layer_record(tape, ex, x, bst, fwd, w, din, b, l, 0)
+
+    # ---- one backward from d(residual2)
+    var seed = tape.variable(ex, _fp(d_out), m, dm, False)
+    var rules = TransformerRules(
+        ctx,
+        MutPointer[LlamaBackwardStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=bst))),
+        MutPointer[LlamaDeviceStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=fwd))),
+        _fp(cos_tab), _fp(sin_tab), w.eps, b, l, pos0,
+    )
+    tape.backward_with_rules(ex, residual2, seed, rules)
+    tape.release(ex)
+
+
 def llama_decoder_layer_backward_autograd(
     ctx: DeviceContext,
     mut bst: LlamaBackwardStages,
@@ -627,7 +679,10 @@ def llama_decoder_layer_backward_autograd(
     """`llama_decoder_layer_backward_device` with the stage order and the
     fan-in sums owned by the autograd tape (same arguments, same outputs in
     the same `bst` fields). Records no identity card: a traced or
-    materialized call is refused (use the hand path)."""
+    materialized call is refused (use the hand path).
+
+    A NaN or infinity in `d_out` raises an error; the layer's gradients in
+    `bst` may already have been written when it does."""
     if trace.enabled or materialize:
         raise Error("llama backward (autograd): traced or materialized calls take the hand path")
     if not w.opts.is_default():
@@ -648,29 +703,22 @@ def llama_decoder_layer_backward_autograd(
         raise Error(String("llama backward: d_out has ") + String(len(d_out)) + " elements and [B, L, d_model] wants " + String(m * dm))
     if len(x_dev) < m * dm:
         raise Error(String("llama backward: x_dev holds ") + String(len(x_dev)) + " floats and the block input [B, L, d_model] wants " + String(m * dm))
-    var bad = device_first_nonfinite(ctx, d_out, len(d_out))
-    if bad >= 0:
-        raise Error(String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad) + " REFUSED")
-
-    var ex = DeviceExec(ctx)
-    var tape = Tape()
-    # ---- the block input, gradient into bst.d_x; then the layer
-    # d(residual2): the seed's own storage under the hand path's entry alias
-    # (used in place), else in_d_residual2 (the tape's one bit copy, S0-1).
-    var x = tape.variable_into(ex, _fp(x_dev), _fp(bst.d_x), m, dm)
-    var din = _fp(d_out) if IDN_BWD_ENTRY_ALIAS else _fp(bst.in_d_residual2)
-    var residual2 = llama_decoder_layer_record(tape, ex, x, bst, fwd, w, din, b, l, 0)
-
-    # ---- one backward from d(residual2)
-    var seed = tape.variable(ex, _fp(d_out), m, dm, False)
-    var rules = TransformerRules(
-        ctx,
-        MutPointer[LlamaBackwardStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=bst))),
-        MutPointer[LlamaDeviceStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=fwd))),
-        _fp(cos_tab), _fp(sin_tab), w.eps, b, l, pos0,
-    )
-    tape.backward_with_rules(ex, residual2, seed, rules)
-    tape.release(ex)
-    # Drain the queue (and the tape storage freed above) before the caller's
-    # downloads; ex's destructor would drain it again.
-    ex.sync()
+    comptime if AUTOGRAD_REFUSE_DEFER:
+        # idea J: the verdict is queued now and read at the closing wait
+        var scan = DeferredNonfiniteScan(ctx, d_out, len(d_out))
+        var ex = DeviceExec(ctx)
+        _layer_backward_tape(ctx, ex, bst, fwd, w, cos_tab, sin_tab, x_dev, d_out, b, l, pos0)
+        scan.enqueue_readback(ctx)
+        # Drain the queue (and the tape storage freed) before the caller's
+        # downloads; ex's destructor would drain it again.
+        ex.sync()
+        var bad = scan.result_after_sync()
+        if bad >= 0:
+            raise Error(String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad) + " REFUSED")
+    else:
+        var bad = device_first_nonfinite(ctx, d_out, len(d_out))
+        if bad >= 0:
+            raise Error(String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad) + " REFUSED")
+        var ex = DeviceExec(ctx)
+        _layer_backward_tape(ctx, ex, bst, fwd, w, cos_tab, sin_tab, x_dev, d_out, b, l, pos0)
+        ex.sync()

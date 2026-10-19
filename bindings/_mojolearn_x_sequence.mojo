@@ -22,7 +22,7 @@ from sequence.exec_device import sequence_ctx
 from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
     ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
-    ops_profile_reset_py, ops_profile_report_py,
+    ops_profile_reset_py, ops_profile_report_py, ops_op_packed_py,
 )
 from autograd.ops_api import OPS_DEVICE
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
@@ -223,6 +223,10 @@ def ops_op_binding(sid: PythonObject, code: PythonObject, hs: PythonObject, ip: 
     return ops_op_py[DeviceExec, OPS_DEVICE](sid, code, hs, ip, fp)
 
 
+def ops_op_packed_binding(sid: PythonObject, code: PythonObject, block: PythonObject) raises -> PythonObject:
+    return ops_op_packed_py[DeviceExec, OPS_DEVICE](sid, code, block)
+
+
 def ops_scalar_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
     return ops_scalar_py[DeviceExec, OPS_DEVICE](sid, h)
 
@@ -396,6 +400,7 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[ops_upload_binding]("ops_upload")
         m.def_function[ops_download_binding]("ops_download")
         m.def_function[ops_op_binding]("ops_op")
+        m.def_function[ops_op_packed_binding]("ops_op_packed")
         m.def_function[ops_scalar_binding]("ops_scalar")
         m.def_function[ops_shape_binding]("ops_shape")
         m.def_function[ops_free_binding]("ops_free")

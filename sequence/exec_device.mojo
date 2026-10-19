@@ -202,6 +202,22 @@ def _hi(w: Int64) -> Int:
 
 
 @always_inline
+def _i32_out(v: Int) -> Bool:
+    return v > 2147483647 or v < -2147483648
+
+
+@always_inline
+def _args_i32_out(a: Args) -> Bool:
+    """True when any of the twelve integer slots does not fit Int32 (the
+    launch packs them as Int32; lane ag-pass6-host idea G: no List a launch)."""
+    return (
+        _i32_out(a.i0) or _i32_out(a.i1) or _i32_out(a.i2) or _i32_out(a.i3)
+        or _i32_out(a.i4) or _i32_out(a.i5) or _i32_out(a.i6) or _i32_out(a.i7)
+        or _i32_out(a.i8) or _i32_out(a.i9) or _i32_out(a.i10) or _i32_out(a.i11)
+    )
+
+
+@always_inline
 def _pack_ff(lo: Float32, hi: Float32) -> Int64:
     """Two floats' bit patterns in one Int64 word (exact)."""
     return Int64(Int(bitcast[DType.uint32](lo)) | (Int(bitcast[DType.uint32](hi)) << 32))
@@ -776,10 +792,13 @@ struct DeviceExec(Exec, Movable):
         # here like every other code: qualified 2026-10-18 with the 97-case
         # gradient suite giving the same digests on Metal, NVIDIA L40S and AMD
         # MI325X (docs/plans/NATIVE_AUTOGRAD.md, "GPU status").
-        comptime I32_MAX = 2147483647
-        for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
-            if v > I32_MAX or v < -I32_MAX - 1:
-                raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        # lane ag-pass6-host (idea G): twelve comparisons, no List literal per
+        # launch; the List walk runs only on the refusal, to name the value.
+        if _args_i32_out(a):
+            comptime I32_MAX = 2147483647
+            for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
+                if v > I32_MAX or v < -I32_MAX - 1:
+                    raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
         # TOMBSTONE (lane/postmerge-act-5, 2026-10-09: -D MOJOLEARN_IDN_AF_VEC_FUSED (Adafactor fused vector step)): the OP_AF_VFUSE / OP_AF_VFIN
         # launches were NOISE: NV 13.671 -> 13.738 ms (1.00x, nv2 v1010/v1012), AMD 8.620 -> 8.186 ms (0.95x, a1141/a1143), avg 0.98x, digest aa99a3dc unchanged; recoverable at main 0a7b206f1.
         # NI54 neural optimizer-only opcode. Every lane's logical leaf is

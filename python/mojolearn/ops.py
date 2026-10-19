@@ -54,6 +54,10 @@ _METRIC = {"accuracy": 1, "log_loss": 2, "roc_auc": 3}
 _ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
 _REDUCTION = {"mean": 0, "sum": 1}
 _AXIS = {None: -1, 0: 0, 1: 1}
+# autograd/ops_api.mojo OPS_PACK_*: the packed argument block of one call
+_PACK_H, _PACK_I, _PACK_F = 3, 7, 15
+_PACK_HANDLES, _PACK_INTS, _PACK_FLOATS = 4, 8, 4
+_PACK_WORDS = _PACK_F + (_PACK_FLOATS + 1) // 2
 
 
 def _int(value, name, low=None):
@@ -105,6 +109,13 @@ class Session:
         self.numeric_mode = numeric_mode
         self._b = _backend.binding("_mojolearn_x_sequence", numeric_mode)
         self._id = int(self._b.ops_open(1 if self.record else 0))
+        # One argument block per session, written in place each call and read
+        # by address in Mojo (no list crosses into the binding). A binding
+        # built before the packed entry takes the list call.
+        self._packed = hasattr(self._b, "ops_op_packed")
+        self._args = np.zeros(_PACK_WORDS, dtype=np.int64)
+        self._argf = self._args[_PACK_F:].view(np.float32)
+        self._args_addr = self._args.ctypes.data
 
     # ------------------------------------------------------------ lifetime
     def close(self):
@@ -204,6 +215,16 @@ class Session:
 
     # ------------------------------------------------------------ the call
     def _op(self, name, handles, ints=(), floats=()):
+        if self._packed and len(handles) <= _PACK_HANDLES and len(ints) <= _PACK_INTS and len(floats) <= _PACK_FLOATS:
+            a = self._args
+            a[0], a[1], a[2] = len(handles), len(ints), len(floats)
+            for k, h in enumerate(handles):  # glue: at most three input handles
+                a[_PACK_H + k] = _int(h, "handle", 1)
+            for k, v in enumerate(ints):  # glue: at most four validated integer arguments
+                a[_PACK_I + k] = v
+            for k, v in enumerate(floats):  # glue: at most one float argument
+                self._argf[k] = v
+            return int(self._b.ops_op_packed(self._sid(), _OP[name], self._args_addr))
         hs = [_int(h, "handle", 1) for h in handles]  # glue: at most three input handles
         return int(self._b.ops_op(self._sid(), _OP[name], hs, list(ints), list(floats)))
 
