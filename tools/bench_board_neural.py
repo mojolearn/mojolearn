@@ -2297,7 +2297,8 @@ class OursFit(Ours):
         return self._score
 
     def _loss_curve(self):
-        return self.np.asarray(getattr(self.model, "loss_curve_", None) or [], dtype=self.np.float64).ravel()
+        curve = getattr(self.model, "loss_curve_", None)     # a list (MLP) or an array (recurrent)
+        return self.np.asarray([] if curve is None else curve, dtype=self.np.float64).ravel()
 
     def outputs(self):
         return {"score": self._predict(), "loss_curve": self._loss_curve()}
