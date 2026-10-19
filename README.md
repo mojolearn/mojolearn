@@ -177,6 +177,14 @@ print(model.numeric_mode_used(), mojolearn.vendor())
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. Run the same script on
 any of them and the model and its predictions are the same bits.
 
+## Build your own model
+
+The autograd engine behind mojolearn's neural trainers is public. `mojolearn.Sequential` builds and
+trains a feed-forward model layer by layer, and `mojolearn.ops.Session` gives you the operations,
+losses, metrics and data steps themselves, with gradients, so you can compose your own algorithm on
+the GPU. What you build keeps the same bits on Apple, NVIDIA and AMD in `identical` mode. See
+[Build your own model](https://docs.mojolearn.org/user_guide/autograd.html).
+
 ## Verify it yourself
 
 The wheel ships the reference results recorded on Apple, NVIDIA, AMD and
