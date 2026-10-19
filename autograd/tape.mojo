@@ -38,10 +38,17 @@ struct _Node(ImplicitlyCopyable, Movable):
 
 
 trait BackwardRules:
-    # Native extensions receive one distinct, zeroed destination per input.
-    # They write VJPs there; the tape owns graph traversal and accumulation.
+    # Native extensions receive one distinct destination per input, zeroed
+    # unless zeroed_destination says the rule needs no zeros there. They
+    # write VJPs there; the tape owns graph traversal and accumulation.
     # Return False for unknown tags so a backward refuses BEFORE touching grads.
     def supports(self, tag: Int) -> Bool:
+        ...
+
+    # True: zero-fill destination `edge` before apply (the safe default).
+    # False: the rule overwrites every element of that destination, or never
+    # touches it and the input needs no gradient, so the fill is skipped.
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         ...
 
     def apply[E: Exec](
@@ -55,6 +62,9 @@ trait BackwardRules:
 struct NoCustomRules(BackwardRules):
     def supports(self, tag: Int) -> Bool:
         return False
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return True
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
@@ -286,6 +296,10 @@ struct Tape(Movable):
         if not n.grad_ready:
             raise Error("tensor has no gradient: run backward from an output that depends on it")
         return n.grad
+
+    def requires_grad(self, x: Tensor) raises -> Bool:
+        """Return whether a backward computes a gradient for this tensor."""
+        return self._nodes[self._check(x)].requires_grad
 
     def rows(self, x: Tensor) raises -> Int:
         return self._nodes[self._check(x)].rows
@@ -545,6 +559,25 @@ struct Tape(Movable):
         self._nodes[result._index].op = CUSTOM + tag
         return result
 
+    def custom_into[E: Exec](
+        mut self, mut ex: E, inputs: List[Tensor], output: FP, grad_destination: FP,
+        rows: Int, cols: Int, tag: Int, saved: Args,
+    ) raises -> Tensor:
+        """Like custom(), with the operation's gradient held in caller storage.
+
+        `grad_destination` holds rows * cols floats of this executor. Pass
+        the same storage as the seed of backward_with_rules() and the seed
+        is used in place, without a copy. Keep it unchanged through
+        backward, and do not let it overlap any tensor of the graph other
+        than that seed.
+        """
+        if tag < 0 or tag > (1 << 30):
+            raise Error("custom operation tag is out of range")
+        var args = saved
+        var result = self._record(ex, output, rows, cols, CUSTOM, inputs, args, False, grad_destination, True)
+        self._nodes[result._index].op = CUSTOM + tag
+        return result
+
     def _binary_vjp[E: Exec](
         mut self, mut ex: E, n: _Node, edge: Int, contribution: FP, rows: Int, cols: Int,
     ) raises:
@@ -676,10 +709,12 @@ struct Tape(Movable):
                 touched[i] = True
             else:
                 self._nodes[i].grad_ready = False
-        # Preserve the seed before overwriting a leaf root's gradient.
+        # Preserve the seed before overwriting a leaf root's gradient. A seed
+        # that already is the root's gradient storage (custom_into) is used
+        # in place: the copy onto itself would leave the same values.
         if touched[root]:
             _accumulate(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
-        else:
+        elif Int(self._nodes[root].grad) != Int(seed):
             _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         touched[root] = True
         var scratch_start = self._cursor
@@ -720,8 +755,10 @@ struct Tape(Movable):
                     inputs.append(p.value)
                     rows.append(p.rows)
                     cols.append(p.cols)
-                    # BackwardRules receive zeroed, distinct destinations.
-                    _fill(ex, contributions[edge], p.rows * p.cols)
+                    # BackwardRules receive distinct destinations, zeroed
+                    # unless the rule overwrites (or ignores) that one.
+                    if rules.zeroed_destination(n.op - CUSTOM, n.saved, edge):
+                        _fill(ex, contributions[edge], p.rows * p.cols)
                 rules.apply(ex, n.op - CUSTOM, n.saved, n.value, n.grad, inputs, contributions, rows, cols)
             for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]

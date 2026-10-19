@@ -15,6 +15,9 @@ struct NeuralRules(BackwardRules):
     def supports(self, tag: Int) -> Bool:
         return tag == LAYER_NORM
 
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return True
+
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
