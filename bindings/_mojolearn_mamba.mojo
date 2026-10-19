@@ -223,6 +223,12 @@ from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
 from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward, mamba3_prefill_backward_on
 from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
 from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
+# -D MOJOLEARN_AUTOGRAD_MAMBA (default off): the Mamba-1 / Mamba-2 backward
+# entries assemble the VJP on the tape (autograd/rules_mamba.mojo); off, the
+# hand-chained prefill backward above runs unchanged.
+from autograd.rules_mamba import AUTOGRAD_MAMBA, mamba1_tape_backward, mamba2_tape_backward
+from mamba.impl.modeling.modeling_mamba_prefill_backward import Mamba1PrefillGradients
+from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
 from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
 from mamba.impl.modeling.modeling_mamba_backward import ANY_BWD_BLOCK_SABOTAGE
 from mamba.impl.ops.selective_scan_backward import ANY_BWD_SCAN_SABOTAGE
@@ -483,10 +489,17 @@ def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     w.d_skip = _read_f32(a[9], di)
     w.w_out = _read_f32(a[10], dm * di)
 
-    var gradients = mamba1_prefill_backward(
-        w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
-        neural_ctx[_NEURAL_CTX](),
-    )
+    var gradients: Mamba1PrefillGradients
+    comptime if AUTOGRAD_MAMBA:
+        gradients = mamba1_tape_backward(
+            w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
+            neural_ctx[_NEURAL_CTX](),
+        )
+    else:
+        gradients = mamba1_prefill_backward(
+            w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
+            neural_ctx[_NEURAL_CTX](),
+        )
     _write_f32(a[12], gradients.x)
     _write_f32(a[13], gradients.norm_weight)
     _write_f32(a[14], gradients.in_proj_weight)
@@ -2985,10 +2998,17 @@ def _mamba2_backward_run(a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32, 
     w.d_skip = _read_f32(a[7], nh)
     w.gnorm_w = _read_f32(a[8], di)
     w.w_out = _read_f32(a[9], dm * di)
-    var gradients = mamba2_prefill_backward(
-        w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
-        neural_ctx[_NEURAL_CTX](),
-    )
+    var gradients: Mamba2PrefillGradients
+    comptime if AUTOGRAD_MAMBA:
+        gradients = mamba2_tape_backward(
+            w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
+            neural_ctx[_NEURAL_CTX](),
+        )
+    else:
+        gradients = mamba2_prefill_backward(
+            w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
+            neural_ctx[_NEURAL_CTX](),
+        )
     _write_f32(a[11], gradients.x)
     _write_f32(a[12], gradients.block_norm_weight)
     _write_f32(a[13], gradients.in_proj_weight)
