@@ -1049,6 +1049,8 @@ struct Tape(Movable):
             raise Error(_INFERRED_REFUSAL)
         if n.rows * n.cols != 1:
             raise Error("non-scalar backward requires an explicit seed tensor")
+        if not n.requires_grad:
+            raise Error("output has no differentiable ancestors")
         var cursor = self._cursor
         # The seed 1 is written straight into the root's own gradient (one
         # launch, no seed copy) unless the root is a leaf whose gradient
