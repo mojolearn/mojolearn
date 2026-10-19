@@ -240,10 +240,20 @@ naming the first bad layer):
 
 GELU is left out: the tape has no GELU op yet.
 
-Entries (`bindings/_mojolearn_x_sequence.mojo` and the host twin):
+Entries (`bindings/_mojolearn_x_sequence.mojo` and the host twin). The
+user's arrays travel as INPUT DESCRIPTORS `[address, NumPy dtype number,
+item size, rows, cols, row stride, column stride]` (strides in bytes; a 1-D
+array of n is `(n, 1)`, a scalar `(1, 1)`; `python/mojolearn/_cast_in.py`
+`describe`, parsed by `autograd/pyapi.mojo` `cast_in_of`): bool, int8..int64,
+uint8..uint64, float32 or float64 in C or Fortran order, cast to row-major
+float32 on the executor (`core/cast_in.mojo`, `autograd/cast_ops.mojo`
+`OP_CAST_F32` 3500; float32 C order is the plain upload). Python makes no
+copy or cast (lane ag-thin-glue).
 
 - `model_n_params(prog, ptab)` -> `[parameter count, output width]`.
-- `model_fit([X, Y, params, loss_curve], prog, ip, fp)` -> epochs run.
+- `model_fit([X descriptor, Y descriptor, params, loss_curve], prog, ip, fp)`
+  -> epochs run (Y: a dense target of any accepted dtype, or the N
+  C-contiguous int32 codes `model_labels` wrote).
   `ip = [N, loss, target, optimizer, optimizer flags, schedule, schedule
   step, batch, epochs, shuffle, seed_lo, seed_hi, n_iter_no_change, init]`;
   `fp = [lr, f1 (momentum / beta1), f2 (beta2), eps, weight_decay,
@@ -259,16 +269,21 @@ Entries (`bindings/_mojolearn_x_sequence.mojo` and the host twin):
   step)`), 2 exponential (`lr gamma^epoch`), a per-epoch scalar in Mojo.
   `n_iter_no_change = k > 0` stops after k epochs without an improvement
   greater than tol (one word read back per epoch); 0 runs every epoch.
-- `model_predict([X, params, out], prog, ptab, [N, chunk, transform])`;
+- `model_predict([X descriptor, params, out], prog, ptab, [N, chunk, transform])`;
   transform 0 raw, 1 row softmax, 2 sigmoid, 3 the `(N, 2)` `[1 - p, p]` of a
   one-output sigmoid, 4 the first-max-wins row argmax and 5 one-output
   sigmoid > 0.5, both as N float32 class codes (`OP_AGM_ROW_ARGMAX` 1041,
   `OP_AGM_THRESHOLD` 1042).
-- `model_labels(src, n, kind, classes, codes)` -> class count: the base
-  binding's `unique_inverse` contract (n 64-bit labels, kind 0 float64 / 1
-  int64; sorted classes and int32 codes), run by the sequence binding itself
-  (`core/label_encode_device.mojo` on a GPU, `core/label_encode.mojo` on the
-  host column), so the classifiers need no other binding.
+- `model_labels(y descriptor, classes, codes)` -> class count: the base
+  binding's `unique_inverse` sort (sorted classes and int32 codes) over the
+  labels as they are: each item widened to its 64-bit label word, sorted, and
+  the classes narrowed back into `classes` in y's own dtype
+  (`core/label_cast_device.mojo` on a GPU, `core/label_cast.mojo` on the host
+  column; uint64 labels are refused), so the classifiers need no other
+  binding.
+- `model_gather_labels([codes, classes, out], [n, k, item size])` -> n:
+  `out[i] = classes[codes[i]]` for the float32 codes of transforms 4 and 5,
+  on the executor (`OP_CAST_GATHER` 3501, one element per output word).
 
 Fit, per epoch: the row order on the executor (`OP_MLP_PERM` keyed by
 `mlp_epoch_key(seed, epoch)`, or the identity order); per batch one gather
@@ -328,8 +343,8 @@ tier) tagged with the executor kind, so the host binding never reaches a
 device session. `DeviceExec` and `HostExec` conform to `Movable` for this
 (no value change). Entries (`autograd/pyapi.mojo` `ops_*_py[E, KIND]`,
 registered in `bindings/_mojolearn_x_sequence.mojo` and the host twin):
-`ops_open(record)`, `ops_close(sid)`, `ops_upload(sid, addr, [rows, cols,
-requires_grad])`, `ops_download(sid, h, addr)`, `ops_op(sid, code, handles,
+`ops_open(record)`, `ops_close(sid)`, `ops_upload(sid, x descriptor,
+[requires_grad])`, `ops_download(sid, h, addr)`, `ops_op(sid, code, handles,
 ints, floats)`, `ops_scalar(sid, h)` (one value read back, for a Python
 branch), `ops_shape`, `ops_free`, `ops_reset` (drops computed tensors and
 the graph; uploads stay as fresh leaves), `ops_metric(sid, kind, [y_true,
