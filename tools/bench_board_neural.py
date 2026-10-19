@@ -70,6 +70,12 @@ prediction runs after the clock and is scored by the conductor):
                        Adam: a model the user describes, trained through the
                        tape (the model API of lane ag-pyapi; the arm refuses
                        by name while that class is absent).
+  sequential-fit       (2026-10-19, lane ag-board-twins) mojolearn.Sequential:
+                       linear(128), relu, linear(64), relu, linear(1), BCE
+                       with logits, Adam; fit(X, y) and predict_proba(X_test),
+                       BOTH inside the clock, on a seeded synthetic binary set
+                       (no download: 32 standard-normal features, the label
+                       the sign of a fixed teacher plus noise; FIT_ROWS rows).
   Their opponents are the same networks in torch.nn (nn.Sequential of
   nn.Linear/nn.ReLU, nn.LSTM / nn.GRU / nn.RNN with an nn.Linear head on the
   last hidden state) trained by torch.optim.Adam with the same sizes, batch
@@ -81,6 +87,21 @@ prediction runs after the clock and is scored by the conductor):
   Quality beside every time (held-out rows, float64 in the conductor):
   accuracy, log loss and AUC for the classifiers, RMSE and AUC of the score
   for the recurrent regressors (tools/speed_gbdt_arm.py's metric helpers).
+GPU composition lane (2026-10-19, lane ag-board-twins):
+  ops-session-step     one training step composed with the public operation
+                       session, mojolearn.ops.Session(record=True): linear,
+                       relu, linear, softmax cross-entropy, backward, every
+                       gradient read back with grad(), the SGD update with the
+                       session's own ops (sub, scale) and the updated
+                       parameters back on the host. Every round is the same
+                       step from the same fixture weights (nothing carries
+                       over), so an identical arm's digest repeats. The
+                       opponent is the same step in torch autograd (leaf
+                       tensors with requires_grad, F.cross_entropy, backward,
+                       torch.optim.SGD), the same weights, batch and lr, at
+                       every torch setting of the box. Quality: the loss, each
+                       gradient's and updated parameter's max difference from
+                       ours, and every arm's gradient digests.
 The Mamba blocks and TransformerBlock expose a backward (a VJP), not a
 training step; they have no optimizer, so they race forward only.
 
@@ -257,8 +278,16 @@ LANES = ("lm-train-step", "lm-forward", "gemm",
          # LanguageModelTrainer, raced by lm-train-step and lm-forward)
          "lm-infer", "lm-host-train-step", "gemm-bf16", "gemm-int8")
 #: 2026-10-19 (lane ag-bench): whole fits of the tape-trained models on HIGGS (see the docstring)
-FIT_LANES = ("mlp-fit", "lstm-fit", "gru-fit", "rnn-fit", "tape-user-model")
-LANES = LANES + FIT_LANES
+FIT_LANES = ("mlp-fit", "lstm-fit", "gru-fit", "rnn-fit", "tape-user-model",
+             # 2026-10-19 (lane ag-board-twins): Sequential fit + predict_proba on a synthetic set
+             "sequential-fit")
+#: fit lanes whose data is the conductor's seeded synthetic set (no HIGGS download)
+SYNTH_FIT_LANES = ("sequential-fit",)
+#: fit lanes whose held-out predict_proba runs INSIDE the clock on every arm
+FIT_PREDICT_IN_CLOCK = ("sequential-fit",)
+#: 2026-10-19 (lane ag-board-twins): one recorded training step through mojolearn.ops.Session
+OPS_LANES = ("ops-session-step",)
+LANES = LANES + FIT_LANES + OPS_LANES
 #: The model each lane runs.
 MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "transformer-forward": "transformer", "transformer-infer": "transformer",
@@ -272,7 +301,7 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "mamba2-decode": "mamba2", "mamba3-decode": "mamba3", "samba-decode": "samba",
             "mlp-predict": "mlp",
             "mlp-fit": "mlpfit", "lstm-fit": "rnnfit", "gru-fit": "rnnfit", "rnn-fit": "rnnfit",
-            "tape-user-model": "tapefit"}
+            "tape-user-model": "tapefit", "sequential-fit": "tapefit", "ops-session-step": "opsstep"}
 #: The recurrent cell of each recurrent fit lane.
 FIT_CELL = {"lstm-fit": "lstm", "gru-fit": "gru", "rnn-fit": "rnn"}
 #: GPU incremental-decode lanes: one public step call per token over the
@@ -287,13 +316,13 @@ TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-t
 #: Whole-fit lanes (2026-10-19, lane ag-bench): FIT_LANES above. Every arm's round is one fit
 #: from a fresh seeded initialization; nothing carries over between rounds, so the per-round
 #: digest of an identical arm repeats (digest_stable is meaningful).
-FIT_TASK = {"mlp-fit": "classification", "tape-user-model": "classification",
+FIT_TASK = {"mlp-fit": "classification", "tape-user-model": "classification", "sequential-fit": "classification",
             "lstm-fit": "regression", "gru-fit": "regression", "rnn-fit": "regression"}
 #: Where OUR class runs: the *Inference classes are the host binding.
 DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") or lane == "lm-host-train-step" else "gpu")
              for lane in LANES}
 #: The data each lane reads (the board's `dataset` column).
-DATA_OF = {lane: ("higgs" if lane in FIT_LANES else "bytes" if MODEL_OF[lane] in ("lm", "samba")
+DATA_OF = {lane: ("synthetic" if lane in SYNTH_FIT_LANES else "higgs" if lane in FIT_LANES else "bytes" if MODEL_OF[lane] in ("lm", "samba")
                   else "gaussian") for lane in LANES}
 
 #: torch settings, in tools/torch_lm_step_opponent.py COLUMNS order.
@@ -561,6 +590,20 @@ FIT_BATCH, FIT_EPOCHS = 512, 1
 FIT_MLP_HIDDEN = (256,)
 FIT_RNN_HIDDEN = 64
 FIT_TAPE_HIDDEN = (64, 64)
+#: sequential-fit (2026-10-19, lane ag-board-twins): the synthetic set's width and the network's hidden
+#: widths. Sizes a user's small tabular classifier has; no rule anywhere keys on them.
+SEQFIT_FEATURES = 32
+SEQFIT_HIDDEN = (128, 64)
+#: the hidden widths of every feed-forward fit lane
+FIT_HIDDEN = {"mlp-fit": FIT_MLP_HIDDEN, "tape-user-model": FIT_TAPE_HIDDEN, "sequential-fit": SEQFIT_HIDDEN}
+#: ops-session-step (2026-10-19, lane ag-board-twins): batch rows, input width, hidden width and classes of
+#: the one step, `full` the board and `small` the smoke; power-of-two sizes of a typical MLP step, no rule keys
+#: on them. SGD on every arm, every value explicit.
+OPS_SHAPES = {"full": dict(batch=4096, d_in=256, hidden=512, classes=16),
+              "small": dict(batch=64, d_in=16, hidden=32, classes=4)}
+OPS_SGD = {"lr": 0.05, "momentum": 0.0, "weight_decay": 0.0}
+#: the step's parameters, in this order on every arm (weights (inputs, outputs), biases (1, outputs))
+OPS_PARAMS = ("w1", "b1", "w2", "b2")
 #: Adam on every fit lane and arm (no weight decay, no amsgrad): ours' MLPClassifier (beta_1, beta_2,
 #: epsilon), the recurrent estimators (optimizer_options), torch.optim.Adam and mlx.optimizers.Adam.
 FIT_ADAM = {"lr": 1e-3, "betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0}
@@ -656,10 +699,14 @@ def _dims_of(lane, shape):
         d = dict(SAMBA_SHAPES[shape])
     elif model == "mlp":
         d = dict(MLP_SHAPES[shape])
+    elif model == "opsstep":
+        return dict(OPS_SHAPES[shape])
     elif lane in FIT_LANES:
         d = dict(FIT_ROWS[shape], batch=FIT_BATCH, epochs=FIT_EPOCHS)
         if lane in FIT_CELL:
             d.update(length=FIT_SEQ_LEN, hidden=FIT_RNN_HIDDEN)
+        if lane in SYNTH_FIT_LANES:
+            d.update(features=SEQFIT_FEATURES)
         return d
     else:
         d = dict(BLOCK_SHAPES[model][shape])
@@ -692,10 +739,12 @@ def shape_record(lane, shape):
         if lane in FIT_CELL:
             net = "%s h%d T%d" % (FIT_CELL[lane], FIT_RNN_HIDDEN, FIT_SEQ_LEN)
         else:
-            hidden = FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN
-            net = "%d-%s-1" % (HIGGS_FEATURES, "-".join(str(h) for h in hidden))
-        rec["label"] = "HIGGS train %d test %d %s b%d %d epoch adam" % (
-            d["train"], d["test"], net, d["batch"], d["epochs"])
+            net = "%d-%s-1" % (fit_d_in(lane), "-".join(str(h) for h in FIT_HIDDEN[lane]))
+        rec["label"] = "%s train %d test %d %s b%d %d epoch adam" % (
+            "synthetic" if lane in SYNTH_FIT_LANES else "HIGGS", d["train"], d["test"], net, d["batch"],
+            d["epochs"]) + (" + predict_proba" if lane in FIT_PREDICT_IN_CLOCK else "")
+    elif model == "opsstep":
+        rec["label"] = "B%d %d-%d-%d linear relu linear CE sgd" % (d["batch"], d["d_in"], d["hidden"], d["classes"])
     else:
         rec["label"] = "B%d L%d DM%d" % (d["batch"], d["length"], d["d_model"])
     return rec
@@ -803,6 +852,24 @@ LANE_TEXT = {
                         "batch_size=512, shuffle=True, seed=7)",
                         "the same torch.nn.Sequential, Glorot-uniform init, BCE with logits, "
                         "torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
+    # 2026-10-19 (lane ag-board-twins)
+    "sequential-fit": ("mojolearn.Sequential().linear(128).relu().linear(64).relu().linear(1); "
+                       "compile(loss='bce_with_logits', optimizer='adam', lr=1e-3, beta1=0.9, beta2=0.999, "
+                       "eps=1e-8, weight_decay=0.0, schedule='constant', tol=0.0, n_iter_no_change=0); "
+                       "fit(X, y, epochs=1, batch_size=512, shuffle=True, seed=7); predict_proba(X_test)",
+                       "torch.nn.Sequential(Linear(32, 128), ReLU, Linear(128, 64), ReLU, Linear(64, 1)), "
+                       "Glorot-uniform init, X and y moved to the device, one epoch of torch.randperm minibatches "
+                       "of 512: zero_grad, BCE with logits, backward, torch.optim.Adam step; then the held-out "
+                       "rows to the device, sigmoid of the logits, .cpu(), inside the clock"),
+    "ops-session-step": ("mojolearn.ops.Session(record=True): tensor(X), tensor(y_codes), tensor(w1, b1, w2, b2, "
+                         "requires_grad=True); relu(linear(x, w1, b1)); linear(h, w2, b2); cross_entropy(logits, "
+                         "codes); backward(loss); scalar(loss); grad(p) for each parameter; numpy(sub(p, "
+                         "scale(tensor(grad_p), lr))) for each parameter: the SGD update p - lr * grad with the "
+                         "session's ops, each updated parameter back on the host (the session exposes gradients as host arrays, so ours "
+                         "re-uploads each gradient for the update)",
+                         "the same tensors .to(dev) as leaves with requires_grad; relu(x @ w1 + b1) @ w2 + b2; "
+                         "F.cross_entropy(logits, y); backward; loss.item(); each .grad .cpu(); "
+                         "torch.optim.SGD(lr, momentum=0, weight_decay=0).step(); each updated parameter .cpu()"),
 }
 
 
@@ -820,9 +887,22 @@ def lane_settings(lane):
                  "default_rng(%d) file; torch arms also call torch.manual_seed(%d); ours' neural "
                  "classes take no seed argument (nothing in them draws)" % (SEED, SEED, SEED))
     s["explicit_params"] = _lane_params(lane)
+    if lane in OPS_LANES:
+        # 2026-10-19 (lane ag-board-twins): one round = the same one recorded step
+        s["clock"] = OPS_SPAN["inside_clock"]
+        s["seed_rule"] = ("seed %d: every weight, input and label of every arm comes from the conductor's "
+                          "default_rng(%d) file; torch arms also call torch.manual_seed(%d); nothing in the step "
+                          "draws" % (SEED, SEED, SEED))
+        s["optimizer"] = ("SGD lr %g, momentum %g, weight decay %g, passed explicitly on every arm"
+                          % (OPS_SGD["lr"], OPS_SGD["momentum"], OPS_SGD["weight_decay"]))
+        s["quality"] = ("loss, loss_abs_diff_vs_ours, grad_max_abs_diff_vs_ours and param_max_abs_diff_vs_ours "
+                        "per tensor, grad_digests of every arm")
+        s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
+                               ["torch-" + x for x in TORCH_SETTINGS]}
+        return s
     if lane in FIT_LANES:
         # 2026-10-19 (lane ag-bench): one round = one whole fit
-        s["clock"] = FIT_SPAN["inside_clock"]
+        s["clock"] = fit_span(lane)["inside_clock"]
         s["seed_rule"] = ("seed %d on every arm: ours random_state=%d (its initialization and shuffle draw "
                           "in Mojo), torch.manual_seed(%d) before each fit, mx.random.seed(%d) on MLX; the "
                           "draws differ between libraries (a different random start, not a different "
@@ -1203,6 +1283,8 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
         arrays["X"] = rng.standard_normal((steps, d["batch"], 8)).astype(np.float32)
         arrays["y"] = rng.integers(0, 3, (steps, d["batch"])).astype(np.int32)
         rec["inputs"] = "weights uniform(+-1/sqrt(fan_in)); X standard normal; labels 0..2"
+    elif model == "opsstep":
+        arrays.update(ops_arrays(shape, rng, rec))
     elif lane in FIT_LANES:
         arrays.update(fit_arrays(lane, shape, rec))
     np.savez(path, **arrays)
@@ -1246,6 +1328,8 @@ def fit_arrays(lane, shape, rec):
     float32 (the classifiers' class labels, the recurrent regressors' target). The recurrent lanes cut
     consecutive rows into FIT_SEQ_LEN-step sequences, the target the label of each sequence's last row
     (sequence_speed.case_recurrent). Bench-side preparation before every clock; no arm computes it."""
+    if lane in SYNTH_FIT_LANES:
+        return synthetic_fit_arrays(shape, rec)
     import numpy as np
     want = FIT_ROWS[shape]
     path = higgs_path()
@@ -1287,6 +1371,60 @@ def fit_arrays(lane, shape, rec):
                        + ("; %d-step sequences of consecutive rows, target the last row's label" % FIT_SEQ_LEN
                           if lane in FIT_CELL else "")),
                shapes={k: list(v.shape) for k, v in out.items()})
+    return out
+
+
+def synthetic_fit_arrays(shape, rec):
+    """sequential-fit's data (2026-10-19, lane ag-board-twins): FIT_ROWS[shape] training rows then the
+    held-out rows of one seeded synthetic binary set, no download. X is default_rng(SEED) standard normal
+    float32 with SEQFIT_FEATURES columns (already standardized); the label is 1 where a fixed float64 teacher
+    z = sum_j X[:, j] w[j] / sqrt(features) + 0.5 X[:, 0] X[:, 1] + 0.3 noise is positive, so a linear model
+    is not enough and a small MLP reaches a high AUC. The teacher sums column by column in one fixed order
+    (elementwise products, no BLAS), so the labels are the same bytes on every box. Bench-side preparation
+    before every clock; no arm computes it."""
+    import numpy as np
+    want = FIT_ROWS[shape]
+    n = want["train"] + want["test"]
+    rng = np.random.default_rng(SEED)
+    X = rng.standard_normal((n, SEQFIT_FEATURES), dtype=np.float32)
+    w = rng.standard_normal(SEQFIT_FEATURES)
+    noise = rng.standard_normal(n)
+    z = np.zeros(n, dtype=np.float64)
+    for j in range(SEQFIT_FEATURES):          # one fixed order, elementwise: the same bits on every box
+        z += X[:, j].astype(np.float64) * w[j]
+    z = z / np.float64(SEQFIT_FEATURES) ** 0.5 + 0.5 * (X[:, 0].astype(np.float64) * X[:, 1].astype(np.float64)) \
+        + 0.3 * noise
+    y = (z > 0).astype(np.float32)
+    ntr = want["train"]
+    out = {"X_train": np.ascontiguousarray(X[:ntr]), "y_train": np.ascontiguousarray(y[:ntr]),
+           "X_test": np.ascontiguousarray(X[ntr:]), "y_test": np.ascontiguousarray(y[ntr:])}
+    rec.update(inputs=("synthetic binary set: default_rng(%d) X standard normal (%d features), label 1 where "
+                       "X w / sqrt(%d) + 0.5 X0 X1 + 0.3 noise > 0 (w, noise standard normal from the same "
+                       "generator; the teacher summed column by column, no BLAS)"
+                       % (SEED, SEQFIT_FEATURES, SEQFIT_FEATURES)),
+               positive_rate_train=float(y[:ntr].mean()),
+               shapes={k: list(v.shape) for k, v in out.items()})
+    return out
+
+
+def ops_arrays(shape, rng, rec):
+    """ops-session-step's inputs (2026-10-19, lane ag-board-twins), from the race's generator: w1 (d_in,
+    hidden), b1 (1, hidden), w2 (hidden, classes), b2 (1, classes) uniform(+-1/sqrt(fan_in)); X (batch, d_in)
+    standard normal; labels integers 0..classes-1, stored as int64 `y` (torch's F.cross_entropy) and as the
+    float32 codes (batch, 1) `y_codes` that ops.Session.cross_entropy takes, so no arm converts them."""
+    import numpy as np
+    d = OPS_SHAPES[shape]
+    di, h, k, bsz = d["d_in"], d["hidden"], d["classes"], d["batch"]
+    out = {}
+    for name, s, fan_in in (("w1", (di, h), di), ("b1", (1, h), di), ("w2", (h, k), h), ("b2", (1, k), h)):
+        bound = 1.0 / np.sqrt(fan_in)
+        out["w:" + name] = rng.uniform(-bound, bound, s).astype(np.float32)
+    out["X"] = rng.standard_normal((bsz, di)).astype(np.float32)
+    labels = rng.integers(0, k, bsz)
+    out["y"] = labels.astype(np.int64)
+    out["y_codes"] = labels.astype(np.float32).reshape(bsz, 1)
+    rec["inputs"] = ("weights uniform(+-1/sqrt(fan_in)) (weights (inputs, outputs), biases (1, outputs)); X "
+                     "standard normal; labels 0..%d (int64 and float32 codes)" % (k - 1))
     return out
 
 
@@ -1350,6 +1488,8 @@ def _lane_params(lane):
     out = {}
     if lane in FIT_LANES:
         return fit_params(lane)
+    if lane in OPS_LANES:
+        return ops_params()
     if lane in TRAIN_LANES:
         out.update(lr=ADAMW["lr"], betas=list(ADAMW["betas"]), eps=ADAMW["eps"],
                    weight_decay=ADAMW["weight_decay"], amsgrad=False)
@@ -1381,11 +1521,47 @@ def fit_layers(lane, d_in, hidden, d_out=1):
     return out
 
 
-def fit_params(lane, d_in=HIGGS_FEATURES, **readback):
+def fit_d_in(lane):
+    """The input width of a fit lane's data (HIGGS's 28 features, or the synthetic set's)."""
+    return SEQFIT_FEATURES if lane in SYNTH_FIT_LANES else HIGGS_FEATURES
+
+
+def ops_layers(d_in, hidden, classes):
+    """ops-session-step's composition as every arm reads it back from the tensors it built."""
+    return ["linear %d %d bias" % (int(d_in), int(hidden)), "relu",
+            "linear %d %d bias" % (int(hidden), int(classes)), "softmax cross_entropy mean"]
+
+
+def ops_params(shape="full", **readback):
+    """ops-session-step's work settings, the same explicit values on every arm (readback overrides a value
+    with what the arm read back from what it built, so a difference shows as a mismatch)."""
+    d = OPS_SHAPES[shape]
+    out = dict(optimizer="sgd", learning_rate=OPS_SGD["lr"], momentum=OPS_SGD["momentum"],
+               weight_decay=OPS_SGD["weight_decay"], nesterov=False, loss="cross_entropy", reduction="mean",
+               batch_size=int(d["batch"]), steps=1, layers=ops_layers(d["d_in"], d["hidden"], d["classes"]),
+               seed=SEED)
+    for k, v in readback.items():
+        if k not in out:
+            raise KeyError("ops_params: %r is not one of the lane's settings" % (k,))
+        out[k] = list(v) if isinstance(v, tuple) else v
+    return out
+
+
+def ops_record(library, implementation, shape="full", **readback):
+    """An ops-session-step arm's parameter record for tools/bench_board_params.py."""
+    rec = {"__library__": library}
+    if implementation is not None:
+        rec["__implementation__"] = implementation
+    rec.update(ops_params(shape, **readback))
+    return rec
+
+
+def fit_params(lane, d_in=None, **readback):
     """The work settings of a fit lane, the same explicit values on every arm (the board's parameter
     check compares them by these names). `readback` overrides a value with what the arm read back
     from the object it built, so a difference shows as a mismatch, never as the lane's constant."""
-    hidden = (FIT_RNN_HIDDEN,) if lane in FIT_CELL else (FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN)
+    d_in = fit_d_in(lane) if d_in is None else d_in
+    hidden = (FIT_RNN_HIDDEN,) if lane in FIT_CELL else FIT_HIDDEN[lane]
     out = dict(optimizer="adam", learning_rate=FIT_ADAM["lr"], betas=list(FIT_ADAM["betas"]),
                eps=FIT_ADAM["eps"], weight_decay=FIT_ADAM["weight_decay"], amsgrad=False, maximize=False,
                batch_size=FIT_BATCH, epochs=FIT_EPOCHS, shuffle=True, layers=fit_layers(lane, d_in, hidden),
