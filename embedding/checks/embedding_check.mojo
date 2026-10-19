@@ -298,6 +298,9 @@ from embedding.checks.embedding_identical import (
 )
 from gemm.checks.gemm_oracle import OP_TN, gemm_oracle
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+from sequence.exec_device import DeviceExec
+from sequence.ops import FP
+from autograd.tape import Tape
 from embedding.checks.embedding_oracle import (
     EMB_MAX_POSITIONS,
     EMB_NO_PADDING_IDX,
@@ -3694,6 +3697,156 @@ def clause_g_onehot(
     )
 
 
+# ===========================================================================
+# CLAUSE (tape): THE EMBEDDING TAPE OP AGAINST THE HAND KERNELS (lane
+# ag-embedding-op, 2026-10-19). Tape.embedding + backward_from on a
+# DeviceExec over this context, against identical_embedding_forward_into and
+# identical_embedding_backward_into on the same case data, word for word:
+# every unrefused case with T >= 1 and d >= 1 (the tape's tensors have
+# positive shapes; f_t0 and f_d0 stay clause (a)'s), PLAN_SCAN and PLAN_SORT
+# on both sides, the case's padding_idx and carry (a variable_into table
+# whose gradient holds dW_prev, backward with accumulate=True), and, for a
+# split case, the two microbatches on the tape (the second continuing the
+# first's gradient) against the unsplit hand backward. One TAPE line per
+# compared stage with its digest. Clean builds only: a sabotage arm patches
+# the hand kernels, which the tape op does not run.
+# ===========================================================================
+def _tape_digest(v: List[Float32]) -> UInt64:
+    var digest = UInt64(1469598103934665603)
+    for i in range(len(v)):
+        digest = (digest ^ UInt64(bits_of(v[i]))) * UInt64(1099511628211)
+    return digest
+
+
+def _tape_same(name: String, got: List[Float32], want: List[Float32]) raises -> UInt64:
+    if len(got) != len(want):
+        raise Error("clause (tape): " + name + ": lengths differ")
+    for i in range(len(got)):
+        if bits_of(got[i]) != bits_of(want[i]):
+            raise Error(
+                "clause (tape): " + name + " differs at " + String(i) + ": tape " + hexbits(got[i])
+                + ", hand " + hexbits(want[i])
+            )
+    var d = _tape_digest(got)
+    print("TAPE " + name + " cells " + String(len(got)) + " digest " + String(d))
+    return d
+
+
+def _tape_pass(
+    mut ex: DeviceExec, mut tape: Tape, wb: FP, gb: FP, cfg: EmbConfig, ids: List[Int32], dy: List[Float32],
+    plan: Int, accumulate: Bool,
+) raises -> List[Float32]:
+    """One recorded embedding forward and backward_from on the tape; the
+    table's gradient lands in gb (continuing from it when `accumulate`).
+    Returns the forward's words."""
+    tape.reset()
+    var t = len(ids)
+    var ib = ex.alloc(t)
+    ex.upload(ib, FP(unsafe_from_address=Int(ids.unsafe_ptr())), t)
+    var w = tape.variable_into(ex, wb, gb, cfg.vocab, cfg.width)
+    var pad = cfg.padding_idx if cfg.has_padding() else -1
+    var y = tape.embedding(ex, w, tape.ids(ex, ib, t), pad, plan)
+    var seed = tape.tensor(ex, dy, t, cfg.width)
+    tape.backward_from(ex, y, seed, accumulate)
+    var out = tape.values(ex, y)
+    ex.free(ib)
+    return out^
+
+
+def _hand_dw(ctx: DeviceContext, cfg: EmbConfig, ids: List[Int32], dy: List[Float32], prev: List[Float32], plan: Int) raises -> List[Float32]:
+    var t = len(ids)
+    var cells = cfg.vocab * cfg.width
+    var start: List[Float32]
+    if cfg.accumulate:
+        start = prev.copy()
+    else:
+        start = emb_poison(cells)
+    var ddw = _upload_f32(ctx, start)
+    var ddy = _upload_f32(ctx, dy)
+    var dids = _upload_i32(ctx, ids)
+    var counts = _upload_i32(ctx, _zeros_i32_list(cfg.vocab))
+    var run_begin = _upload_i32(ctx, _zeros_i32_list(cfg.vocab + 1))
+    var perm = _upload_i32(ctx, _zeros_i32_list(t))
+    identical_embedding_backward_into(ctx, ddw, ddy, dids, counts, run_begin, perm, t, cfg, plan)
+    ctx.synchronize()
+    var out = _download_f32(ctx, ddw, cells)
+    _ = ddw^
+    _ = ddy^
+    _ = dids^
+    _ = counts^
+    _ = run_begin^
+    _ = perm^
+    return out^
+
+
+def _hand_y(ctx: DeviceContext, cfg: EmbConfig, ids: List[Int32], w: List[Float32]) raises -> List[Float32]:
+    var t = len(ids)
+    var dy = _upload_f32(ctx, emb_poison(t * cfg.width))
+    var dw = _upload_f32(ctx, w)
+    var dids = _upload_i32(ctx, ids)
+    identical_embedding_forward_into(ctx, dy, dw, dids, t, cfg)
+    ctx.synchronize()
+    var out = _download_f32(ctx, dy, t * cfg.width)
+    _ = dy^
+    _ = dw^
+    _ = dids^
+    return out^
+
+
+def clause_tape(ctx: DeviceContext) raises:
+    var ex = DeviceExec(ctx)
+    var tape = Tape()
+    var summary = UInt64(1469598103934665603)
+    var compared = 0
+    var plans: List[Int] = [PLAN_SCAN, PLAN_SORT]
+    for k in range(EMB_CASE_COUNT):
+        var c = emb_case(k)
+        if c.refused or c.n_positions < 1 or c.width < 1:
+            print("TAPE " + String(c.name) + " skipped (refused case or an empty shape)")
+            continue
+        var cfg = emb_case_config(c)
+        var ids = emb_case_ids(c)
+        var dy = emb_case_dy(c)
+        var w = emb_case_weight(c)
+        var prev = emb_case_dw_prev(c)
+        var cells = cfg.vocab * cfg.width
+        var wb = ex.alloc(cells)
+        ex.upload(wb, FP(unsafe_from_address=Int(w.unsafe_ptr())), cells)
+        var gb = ex.alloc(cells)
+        var want_y = _hand_y(ctx, cfg, ids, w)
+        for pi in range(len(plans)):
+            var plan = plans[pi]
+            var name = String(c.name) + "/plan" + String(plan)
+            if cfg.accumulate:
+                ex.upload(gb, FP(unsafe_from_address=Int(prev.unsafe_ptr())), cells)
+            var y = _tape_pass(ex, tape, wb, gb, cfg, ids, dy, plan, cfg.accumulate)
+            summary = (summary ^ _tape_same(name + "/y", y, want_y)) * UInt64(1099511628211)
+            var g = List[Float32](length=cells, fill=Float32(0))
+            ex.download(FP(unsafe_from_address=Int(g.unsafe_ptr())), gb, cells)
+            var want = _hand_dw(ctx, cfg, ids, dy, prev, plan)
+            summary = (summary ^ _tape_same(name + "/dW", g, want)) * UInt64(1099511628211)
+            compared += 2
+            if c.split > 0 and c.split < c.n_positions and not cfg.accumulate:
+                # the microbatches in ascending position order, the second
+                # continuing the first's gradient (contract 7.4)
+                var t0 = c.split
+                _ = _tape_pass(ex, tape, wb, gb, cfg, _slice_ids(ids, 0, t0), _slice_dy(dy, 0, t0, cfg.width), plan, False)
+                _ = _tape_pass(
+                    ex, tape, wb, gb, cfg, _slice_ids(ids, t0, c.n_positions),
+                    _slice_dy(dy, t0, c.n_positions, cfg.width), plan, True,
+                )
+                var gs = List[Float32](length=cells, fill=Float32(0))
+                ex.download(FP(unsafe_from_address=Int(gs.unsafe_ptr())), gb, cells)
+                summary = (summary ^ _tape_same(name + "/split-dW", gs, want)) * UInt64(1099511628211)
+                compared += 1
+        tape.reset()
+        ex.free(wb)
+        ex.free(gb)
+    tape.release(ex)
+    ex.sync()
+    print("clause (tape): " + String(compared) + " stages equal to the hand kernels, summary " + String(summary))
+
+
 def main() raises:
     var armed = emb_sabotage_name()
     var independent_dump=env_str("MOJOLEARN_INDEPENDENT_GRADIENT_DUMP")
@@ -3922,6 +4075,9 @@ def main() raises:
         # last so a regression there cannot cost the other clauses their
         # measurements.
         clause_f(ctx)
+        # CLAUSE (tape), lane ag-embedding-op: clean builds only (above).
+        comptime if not ANY_EMB_SABOTAGE:
+            clause_tape(ctx)
         var also = String("")
         if env_on("MOJOLEARN_EMB_CHECK_CLAUSE_D"):
             also += ", (d)"
