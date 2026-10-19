@@ -50,6 +50,19 @@ from training.estimator import (
 #: FAST + Apple + `-D MOJOLEARN_AFN_MLP_FUSED_STEP` (or `_ALL`); every other
 #: build takes the path below unchanged (training/mlp_fast.mojo).
 from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
+#: lane ag-smallmlp-tape (2026-10-19): the step's backward on the autograd
+#: tape, default on (autograd/rules_small_mlp.mojo; the same kernels on the
+#: same buffers, so the same bits). -D MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
+#: restores the hand chain below.
+from sequence.ops import FP
+from sequence.exec_device import DeviceExec
+from autograd.rules_small_mlp import (
+    AUTOGRAD_SMALL_MLP,
+    SmallMlpBuffer,
+    SmallMlpKernels,
+    small_mlp_backward_autograd,
+    small_mlp_buffer,
+)
 
 #: The public small MLP's fixed architecture, 8 -> 16 -> 3, and the flat
 #: parameter layout `[w1 (16 x 8), b1 (16), w2 (3 x 16), b2 (3)]` the
@@ -278,6 +291,34 @@ def _gemm[ROLE: Int = ROLE_PROJECTION](
     identical_gemm_into[ROLE=ROLE](ctx, c, a, b, ws, m, n, k, op)
 
 
+struct _MlpStepKernels(SmallMlpKernels):
+    """The train step's own `_gemm` (its dispatch, its one workspace) and
+    `_launch_mlp`, on its context, for the tape's rules
+    (autograd/rules_small_mlp.mojo)."""
+
+    var ctx: DeviceContext
+    var ws: SmallMlpBuffer
+
+    def __init__(out self, ctx: DeviceContext, ws: SmallMlpBuffer):
+        self.ctx = ctx.copy()
+        self.ws = ws
+
+    def gemm(
+        self, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
+        mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, wgrad: Bool,
+    ) raises:
+        if wgrad:
+            _gemm[ROLE_WGRAD](self.ctx, c, a, b, self.ws[], m, n, k, op)
+        else:
+            _gemm(self.ctx, c, a, b, self.ws[], m, n, k, op)
+
+    def cells(self, source: FP, other: FP, output: FP, rows: Int, cols: Int, operation: Int) raises:
+        _launch_mlp(
+            self.ctx, source.unsafe_origin_cast[MutAnyOrigin](), other.unsafe_origin_cast[MutAnyOrigin](),
+            output.unsafe_origin_cast[MutAnyOrigin](), rows, cols, operation,
+        )
+
+
 def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
     comptime if MLP_GEMM_LEAF128:
         # The profile body reads no workspace (the measured arm sized it 1).
@@ -287,7 +328,7 @@ def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
         ws_n = w
 
 
-def mlp_train_step_host(
+def mlp_train_step_host[tape: Bool = AUTOGRAD_SMALL_MLP](
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
     y_ptr: MutPointer[Int32, MutUntrackedOrigin],
@@ -345,6 +386,10 @@ def mlp_train_step_host(
         step        `identical_optimizer_step` (AdamW, no clip) over the
                     flat `[w1, b1, w2, b2]` registry, the weights, `m`, `v`
                     and the flags written back in place
+
+    `tape` (default `AUTOGRAD_SMALL_MLP`) runs the backward on the autograd
+    tape (autograd/rules_small_mlp.mojo): the same launches with the same
+    arguments, so the same bits; False is the hand chain below.
 
     `mode` is `MLP_STEP_FORWARD` (the logits alone; `y` is unread),
     `MLP_STEP_GRADS` (the loss, the logits and the four gradients; the
@@ -507,37 +552,61 @@ def mlp_train_step_host(
     var db2_v = g_d.create_sub_buffer[DType.float32](MLP_OFF_B2, MLP_B2)
     var incoming = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
     var dhidden = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
-    _gemm[ROLE_WGRAD](ctx, dw2_v, dlogits, act, ws, MLP_OUT, MLP_HID, rows, OP_TN)
-    _launch_mlp(
-        # operation 3 never reads `other`; `incoming` is a distinct placeholder
-        ctx, dlogits.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B2,
-        rows, MLP_OUT, 3,
-    )
-    _gemm(ctx, incoming, dlogits, w2_v, ws, rows, MLP_HID, MLP_OUT, OP_NN)
-    _launch_mlp(
-        ctx, act.unsafe_ptr(), incoming.unsafe_ptr(), dhidden.unsafe_ptr(),
-        rows, MLP_HID, 2,
-    )
-    _gemm[ROLE_WGRAD](ctx, dw1_v, dhidden, x_d, ws, MLP_HID, MLP_IN, rows, OP_TN)
-    _launch_mlp(
-        # operation 3 never reads `other`; `incoming` is a distinct placeholder
-        ctx, dhidden.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B1,
-        rows, MLP_HID, 3,
-    )
-    # cpu2-l11-neural (2026-10-04): the gradients' (and dx's) refusal is a
-    # device scan here, before any result or state leaves the device; the
-    # Python trainer no longer walks them on the host after the call.
-    if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
-        raise Error("small MLP operation has nonfinite input or output")
+    # dx's buffer is made here for both arms (the tape writes it inside the
+    # backward); an allocation's place in the queue moves no bit.
     var dx_n = 1
     if want_input_grad != 0:
         dx_n = rows * MLP_IN
     var dx_d = ctx.enqueue_create_buffer[DType.float32](dx_n)
-    if want_input_grad != 0:
-        _gemm(ctx, dx_d, dhidden, w1_v, ws, rows, MLP_IN, MLP_HID, OP_NN)
-        if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
+    # The tape's executor wraps this context; it drains the queue when it
+    # goes, so it is kept until after the step's closing wait (below).
+    var tape_ex: DeviceExec
+    comptime if tape:
+        # ---- Backward on the tape: the same seven launches (header of
+        # autograd/rules_small_mlp.mojo), then the same two refusal scans.
+        tape_ex = DeviceExec(ctx)
+        small_mlp_backward_autograd(
+            tape_ex, _MlpStepKernels(ctx, small_mlp_buffer(ws)),
+            x_d, w1_v, b1_v, w2_v, b2_v, pre1, act, pre2, logits, dlogits,
+            dw1_v, db1_v, dw2_v, db2_v, incoming, dhidden, dx_d,
+            rows, MLP_IN, MLP_HID, MLP_OUT, want_input_grad != 0,
+        )
+        if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
             raise Error("small MLP operation has nonfinite input or output")
-        ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
+        if want_input_grad != 0:
+            if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
+                raise Error("small MLP operation has nonfinite input or output")
+            ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
+    else:
+        # ---- Backward by hand: `_gradient`'s six calls in its order (the
+        # MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF arm).
+        _gemm[ROLE_WGRAD](ctx, dw2_v, dlogits, act, ws, MLP_OUT, MLP_HID, rows, OP_TN)
+        _launch_mlp(
+            # operation 3 never reads `other`; `incoming` is a distinct placeholder
+            ctx, dlogits.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B2,
+            rows, MLP_OUT, 3,
+        )
+        _gemm(ctx, incoming, dlogits, w2_v, ws, rows, MLP_HID, MLP_OUT, OP_NN)
+        _launch_mlp(
+            ctx, act.unsafe_ptr(), incoming.unsafe_ptr(), dhidden.unsafe_ptr(),
+            rows, MLP_HID, 2,
+        )
+        _gemm[ROLE_WGRAD](ctx, dw1_v, dhidden, x_d, ws, MLP_HID, MLP_IN, rows, OP_TN)
+        _launch_mlp(
+            # operation 3 never reads `other`; `incoming` is a distinct placeholder
+            ctx, dhidden.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B1,
+            rows, MLP_HID, 3,
+        )
+        # cpu2-l11-neural (2026-10-04): the gradients' (and dx's) refusal is a
+        # device scan here, before any result or state leaves the device; the
+        # Python trainer no longer walks them on the host after the call.
+        if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
+            raise Error("small MLP operation has nonfinite input or output")
+        if want_input_grad != 0:
+            _gemm(ctx, dx_d, dhidden, w1_v, ws, rows, MLP_IN, MLP_HID, OP_NN)
+            if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
+                raise Error("small MLP operation has nonfinite input or output")
+            ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
     # The gradients are a result whatever the mode; the optimizer (no clip)
     # never writes them, so their download may sit ahead of it in the queue.
     ctx.enqueue_copy(dst_ptr=dw1_ptr, src_buf=dw1_v)
@@ -639,4 +708,6 @@ def mlp_train_step_host(
     _ = incoming^
     _ = dhidden^
     _ = dx_d^
+    comptime if tape:
+        _ = tape_ex^
     return rows * MLP_OUT
