@@ -32,6 +32,7 @@ from sequence.launch_profile import launch_profile_level, launch_profile_record
 from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART, OP_AGF_LEVEL, agk_colsum_args
 from std.time import perf_counter_ns
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
+from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
 from sequence.ops import (
     FP,
     Args,
@@ -108,6 +109,9 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return max(a.i2, 1)
     elif OP == OP_GEMM_SPLITK:
         return max(a.i10, 1) if a.i11 == 0 else max(a.i9, 1)
+    # lane ag-pass6-gemm: one cell's whole split order (K fmas, S adds)
+    elif OP == OP_GK_SPLIT:
+        return max(a.i2, 1)
     elif OP == OP_COLSUM or OP == OP_COLSUM_DIV:
         return max(a.i0, 1)
     # the tape's blocked-fold partials: one block chain an element
@@ -271,6 +275,24 @@ struct HostExec(Exec, Movable):
     def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
+        # lane ag-pass6-gemm (BIT VERSION, sequence/gemm_split.mojo): the
+        # products the shape rule selects take the split-K order, one
+        # OP_GK_SPLIT element a cell (DeviceExec takes the same rule, so the
+        # same words); the column sums of OP_AGK_GEMM_EPI stay OP_COLSUM_DIV.
+        # MOJOLEARN_IDN_GEMM_SPLITK_OFF: the host GEMM below, as before.
+        comptime if GEMM_SPLITK and (OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI):
+            if gemm_split_on[OP](a):
+                self._launch[OP_GK_SPLIT](gemm_split_args[OP](a), a.i0 * a.i1)
+                return
+        # OP_GK_SPLIT with i11 = 1: the cells, then B's column sums as the
+        # hand path's OP_COLSUM_DIV (the device runs them in the same launch)
+        comptime if OP == OP_GK_SPLIT:
+            if a.i11 != 0:
+                var g = a
+                g.i11 = 0
+                self._launch[OP_GK_SPLIT](g, n)
+                self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
+                return
         comptime if OP == OP_GEMM:
             self._gemm(a)
             return

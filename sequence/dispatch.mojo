@@ -150,6 +150,7 @@ from autograd.composed_ops import OP_AGC_FIRST, OP_AGC_LAST, apply_composed
 from autograd.ops import OP_AG_SOFTMAX_FWD, OP_AG_SOFTMAX_VJP
 from autograd.row_ops import OP_ROW_FIRST, OP_ROW_LAST, ROW_COOP, apply_rows, row_softmax_fwd, row_softmax_vjp
 from autograd.fold_ops import OP_AGS_FIRST, OP_AGS_LAST, apply_fold_ops
+from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_split
 
 
 @always_inline
@@ -306,6 +307,18 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_AGS_FIRST or OP_CELL_FWD_SCAN > OP_AGS_LAST) and (
         OP_CELL_BWD_SCAN < OP_AGS_FIRST or OP_CELL_BWD_SCAN > OP_AGS_LAST
     ), "loss-leaf opcode collides with recurrent scan"
+    # The pass-6 GEMM family (sequence/gemm_split.mojo OP_GK_*, 2100..;
+    # lane ag-pass6-gemm), disjoint from every autograd range and the scans.
+    comptime assert OP_GK_FIRST <= OP_GK_LAST, "pass-6 gemm opcode range is empty"
+    comptime assert OP_GK_FIRST > OP_AGC_LAST or OP_GK_LAST < OP_AGC_FIRST, "pass-6 gemm opcodes overlap the composed family"
+    comptime assert OP_GK_FIRST > OP_AG_LAST or OP_GK_LAST < OP_AG_FIRST, "pass-6 gemm opcodes overlap the tape's"
+    comptime assert OP_GK_FIRST > OP_AGK_LAST or OP_GK_LAST < OP_AGK_FIRST, "pass-6 gemm opcodes overlap the kernel family"
+    comptime assert OP_GK_FIRST > OP_AGF_LAST or OP_GK_LAST < OP_AGF_FIRST, "pass-6 gemm opcodes overlap the fold levels"
+    comptime assert OP_GK_FIRST > OP_P1_LAST or OP_GK_LAST < OP_P1_FIRST, "pass-6 gemm opcodes overlap the fused family"
+    comptime assert OP_GK_FIRST > OP_MLP_LB_LAST or OP_GK_LAST < OP_MLP_LB_FIRST, "pass-6 gemm opcodes overlap the MLP loss block"
+    comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
+        OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
+    ), "pass-6 gemm opcode collides with recurrent scan"
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -346,6 +359,9 @@ def apply[OP: Int](t: Int, a: Args):
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
         op_gemm_splitk(t, a)
+    elif OP == OP_GK_SPLIT:
+        # lane ag-pass6-gemm: the split-K order of the three GEMM opcodes
+        op_gk_split(t, a)
     elif OP == OP_BIAS:
         op_bias(t, a)
     elif OP == OP_COLSUM:
