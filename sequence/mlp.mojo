@@ -55,6 +55,15 @@ comptime MLP_EPOCH_DEV = _MLP_IDN and not is_defined["MOJOLEARN_IDN_MLP_EPOCH_DE
 #:   MLP_BLOCKED_FOLDS kernels (op_mlp_rowloss, op_mlp_l2part, op_mlp_l2fold,
 #:   op_mlp_rowpart, op_mlp_bloss, op_mlp_epoch_loss) for the A/B.
 comptime MLP_LOSSBLOCK = MLP_BLOCKED_FOLDS and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_OFF"]()
+#: MLP_LB_ROWS (lane ag-pass5-loss, 2026-10-19; PASS5_IDEAS idea 2): the
+#:   loss block's row losses one thread per row (B threads in op_mlp_lb_part,
+#:   each storing its row's loss term) and the row-block sums by many threads
+#:   in the fold launch, in place of ceil(B / R) part threads that each chained
+#:   R rows of software logs. Same bits by construction (the loss-section
+#:   comment block below says why). Default on wherever MLP_LOSSBLOCK is;
+#:   -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF restores the pass-3 row-block threads
+#:   for the A/B.
+comptime MLP_LB_ROWS = MLP_LOSSBLOCK and not is_defined["MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF"]()
 # NI52 scheduling-only subarm: leave the exact epoch Feistel mapping intact,
 # but construct even the no-shuffle identity order on the selected executor.
 # Avoid the otherwise unused host N-row permutation initialization. Default
@@ -168,6 +177,37 @@ def op_act_bwd(t: Int, a: Args):
 #:   once-an-epoch norm would report a different number. The curve feeds
 #:   tol / n_iter_no_change every epoch, so the term is always consumed; it
 #:   is made cheap instead (2 launches, short chains, many threads).
+#: MLP_LB_ROWS (the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF keeps the
+#: layout above), per batch, L <= 4 layers: 3 launches (L > 4: 2 ceil(L / 4)
+#: + 1). The pass-3 part launch's critical path was one row-block thread's
+#: chain of R(B) rows of O loss terms, two software logs a term under
+#: IDENTICAL (HIGGS: 128 dependent logs, 42 us a batch on AMD, 23.5 us on
+#: NVIDIA); the seed threads idled after one subtract.
+#:   OP_MLP_LB_PART (1600) i3 = 1: B O seed threads, then B row threads
+#:                        (rowloss[row] = mlp_row_loss(row), chain O terms),
+#:                        then the weight blocks as above. i3 = 2 (the data
+#:                        sum comes from -D MOJOLEARN_AUTOGRAD_LOSS): no row
+#:                        threads. HIGGS: 512 + 512 + 56 + 4.
+#:   OP_MLP_LB_FOLD (1601) i11 = 2, once per group of four layers: ceil(B /
+#:                        R(B)) row-block threads on the first group (rowparts
+#:                        [k] = rowloss[k R : min((k + 1) R, B)] added
+#:                        ascending from +0.0, af_fold_parts) and one thread
+#:                        per layer of the group (l2[l] = its block partials
+#:                        added ascending, the pass-3 fold's sum). HIGGS: 8
+#:                        threads of 64 adds + 2 threads of 56 and 4.
+#:   OP_MLP_LB_FOLD (1601) i11 = 3, once: 1 thread, the batch loss from the
+#:                        row-block partials and l2, the pass-3 last-group
+#:                        arithmetic (chain ceil(B / R) + L adds; HIGGS 10).
+#: BITS: the same as MLP_LB_ROWS off, every column, every shape. A row's loss
+#:   is mlp_row_loss unchanged; its value is an ftz'd fma3 result or that
+#:   value negated, so the st (ftz) / ld (ftz) round trip through rowloss
+#:   returns the same word. Each row block adds the same rows ascending from
+#:   +0.0 with `add` (af_fold_parts is that chain with its loads staged), the
+#:   blocks are mlp_lb_block(B) as before, and the final fold, the per-layer
+#:   sums and the batch-loss arithmetic are the pass-3 fold's verbatim. No bit
+#:   version: digests (hand, composed, fused, loss curves) are unchanged.
+#:   autograd/checks/lossblock_cases.mojo runs both layouts on every case and
+#:   fails on any differing word.
 
 
 @always_inline
@@ -640,15 +680,27 @@ def op_mlp_lb_part(t: Int, a: Args):
         [k R, min((k + 1) R, B)) added ascending from +0.0, R = mlp_lb_block(B);
       then each layer's ceil(c / R(c)) weight blocks, layers in order:
         p5[q] = the block's squared weights, one fma each ascending from
-        +0.0 (sumsq_fold), R = mlp_lb_block(c)."""
+        +0.0 (sumsq_fold), R = mlp_lb_block(c).
+    MLP_LB_ROWS (i3 = 1): the row blocks are replaced by B row threads,
+    p3[row] = mlp_row_loss(row) (p3 the row-loss scratch [B]); i3 = 2: no
+    row threads (the data sum comes from elsewhere). i3 = 0: the row blocks."""
     var O = a.i1
     var B = a.i2
     var ne = B * O
     if t < ne:
         st(a.p2, t, sub(ld(a.p0, t), ld(a.p1, t)))
         return
-    var nrb = mlp_lb_blocks(B)
     var r = t - ne
+    if a.i3 != 0:
+        # MLP_LB_ROWS: one thread per row, its O terms; the block sums are
+        # op_mlp_lb_fold's (i11 = 2)
+        var nrow = B if a.i3 == 1 else 0
+        if r < nrow:
+            st(a.p3, r, mlp_row_loss(a.p0, a.p1, r * O, O, a.i0))
+            return
+        _lb_weight_block(a, r - nrow)
+        return
+    var nrb = mlp_lb_blocks(B)
     if r < nrb:
         var R = mlp_lb_block(B)
         var lo = r * R
@@ -658,7 +710,13 @@ def op_mlp_lb_part(t: Int, a: Args):
             s = add(s, mlp_row_loss(a.p0, a.p1, row * O, O, a.i0))
         st(a.p3, r, s)
         return
-    var q = r - nrb
+    _lb_weight_block(a, r - nrb)
+
+
+@always_inline
+def _lb_weight_block(a: Args, q: Int):
+    """op_mlp_lb_part's weight-block thread q (layers in order, each layer's
+    ceil(c / R(c)) blocks): p5[q] = the block's squared weights, sumsq_fold."""
     var rest = q
     for l in range(4):
         var oc = _layer_oc(a, l)
@@ -682,7 +740,21 @@ def op_mlp_lb_fold(t: Int, a: Args):
     p3[i10 + g] = layer g's block partials added ascending from +0.0; on the
     last group p2[i0] = data + f0 sum(p3[0:L]) / B, data = (the i5 partials
     added ascending from +0.0) / (B O) / 2 (squared) or / B (log):
-    op_mlp_bloss's arithmetic on the new sums."""
+    op_mlp_bloss's arithmetic on the new sums.
+    MLP_LB_ROWS splits this one thread over two launches:
+      i11 = 2, threads [0, i5) row blocks then one per layer of the group:
+        p4[k] = p0[k R : min((k + 1) R, i1)] added ascending from +0.0
+        (p0 the row losses [B], R = mlp_lb_block(i1), i5 = 0 on a group
+        without rows), then p3[i10 + g] = layer g's block partials p1 added
+        ascending (i6..i9 the counts, as above);
+      i11 = 3, one thread: the batch loss above (p0 the i5 data partials,
+        p2, p3, i0..i4, f0 as above)."""
+    if a.i11 == 2:
+        _lb_fold_rows_layers(t, a)
+        return
+    if a.i11 == 3:
+        _lb_batch_loss(a)
+        return
     var start = 0
     for g in range(4):
         var c = _lb_count(a, g)
@@ -693,6 +765,14 @@ def op_mlp_lb_fold(t: Int, a: Args):
         start += nb
     if a.i11 == 0:
         return
+    _lb_batch_loss(a)
+
+
+@always_inline
+def _lb_batch_loss(a: Args):
+    """op_mlp_lb_fold's batch loss: p2[i0] = data + f0 sum(p3[0:i3]) / B,
+    data = (the i5 partials p0 added ascending from +0.0) / (B O) / 2
+    (squared) or / B (log); i1 B, i2 O, i4 loss."""
     var B = a.i1
     var s = af_fold_parts(a.p0, a.i5)
     var data: Float32
@@ -704,6 +784,27 @@ def op_mlp_lb_fold(t: Int, a: Args):
     for l in range(a.i3):
         qs = add(qs, ld(a.p3, l))
     st(a.p2, a.i0, add(data, div(mul(a.f0, qs), Float32(B))))
+
+
+@always_inline
+def _lb_fold_rows_layers(t: Int, a: Args):
+    """op_mlp_lb_fold, i11 = 2 (MLP_LB_ROWS): thread t < i5 is row block t,
+    then thread i5 + g is the group's layer g."""
+    if t < a.i5:
+        var R = mlp_lb_block(a.i1)
+        var lo = t * R
+        st(a.p4, t, af_fold_parts(a.p0 + lo, min(R, a.i1 - lo)))
+        return
+    var g = t - a.i5
+    if g >= 4:
+        return
+    var c = _lb_count(a, g)
+    if c <= 0:
+        return
+    var start = 0
+    for h in range(g):
+        start += mlp_lb_blocks(_lb_count(a, h))
+    st(a.p3, a.i10 + g, af_fold_parts(a.p1 + start, mlp_lb_blocks(c)))
 
 
 @always_inline

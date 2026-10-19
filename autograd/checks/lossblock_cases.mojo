@@ -7,6 +7,12 @@
 # terms is one block on both paths: its batch loss must keep the old bits.
 # Every case prints its digests so the columns (host, Metal, NVIDIA, AMD) can
 # be compared; the digests are the bit version mlp-lossblock-1.
+# Lane ag-pass5-loss (MLP_LB_ROWS): every case also runs the pass-3 layout
+# (mlp_loss_block[False]) beside the default and fails on any differing word
+# of the seed, the per-layer norms or the batch loss, with the data sum from
+# the rows and handed in (-D MOJOLEARN_AUTOGRAD_LOSS's i5 = 1); the grid
+# B in {64, 512, 4096, 65536} x O in {1, 3, 10} covers one and many row
+# blocks and multi-output rows.
 from sequence.exec_trait import Exec
 from sequence.mlp_fit import (
     MLPNet,
@@ -93,7 +99,29 @@ def _batch_case[E: Exec](
     var dl2p = ex.alloc(mlp_lb_l2_parts(net))
     var dl2 = ex.alloc(L)
     var dloss = ex.alloc(2)
-    mlp_loss_block(ex, net, dP, dpred, dy, dseed, drow, dl2p, dl2, dloss, 1, B, kind, half, dummy_ptr(), 0)
+    var drl = ex.alloc(B)
+    mlp_loss_block(ex, net, dP, dpred, dy, dseed, drow, dl2p, dl2, dloss, 1, B, kind, half, dummy_ptr(), 0, drl)
+    # the pass-3 layout (MLP_LB_ROWS off): must give the same words
+    var rseed = ex.alloc(B * O)
+    var rrow = ex.alloc(mlp_lb_row_parts(B))
+    var rl2p = ex.alloc(mlp_lb_l2_parts(net))
+    var rl2 = ex.alloc(L)
+    var rloss = ex.alloc(2)
+    mlp_loss_block[False](
+        ex, net, dP, dpred, dy, rseed, rrow, rl2p, rl2, rloss, 1, B, kind, half, dummy_ptr(), 0, dummy_ptr(),
+    )
+    # the data sum handed in (one partial), both layouts
+    var given = List[Float32](length=1, fill=Float32(3.25))
+    var dgiven = ex.alloc(1)
+    ex.upload(dgiven, _ptr(given), 1)
+    var gloss = ex.alloc(2)
+    var gloss_old = ex.alloc(2)
+    var gseed = ex.alloc(B * O)
+    var gl2 = ex.alloc(L)
+    mlp_loss_block(ex, net, dP, dpred, dy, gseed, drow, dl2p, gl2, gloss, 1, B, kind, half, dgiven, 1, drl)
+    mlp_loss_block[False](
+        ex, net, dP, dpred, dy, gseed, rrow, rl2p, gl2, gloss_old, 1, B, kind, half, dgiven, 1, dummy_ptr(),
+    )
     # the previous kernels (MLP_BLOCKED_FOLDS), as mlp_fit issued them
     var oseed = ex.alloc(B * O)
     var orow = ex.alloc(B)
@@ -142,6 +170,25 @@ def _batch_case[E: Exec](
     ex.download(_ptr(loss), dloss, 2)
     ex.download(_ptr(seed), dseed, B * O)
     ex.download(_ptr(old_loss), oloss, 2)
+    var r_l2 = List[Float32](length=L, fill=0)
+    var r_loss = List[Float32](length=2, fill=0)
+    var r_seed = List[Float32](length=B * O, fill=0)
+    var g_loss = List[Float32](length=2, fill=0)
+    var g_loss_old = List[Float32](length=2, fill=0)
+    ex.download(_ptr(r_l2), rl2, L)
+    ex.download(_ptr(r_loss), rloss, 2)
+    ex.download(_ptr(r_seed), rseed, B * O)
+    ex.download(_ptr(g_loss), gloss, 2)
+    ex.download(_ptr(g_loss_old), gloss_old, 2)
+    # MLP_LB_ROWS against the pass-3 layout, word for word
+    var rows_same = bitcast[DType.uint32](loss[1]) == bitcast[DType.uint32](r_loss[1])
+    rows_same = rows_same and bitcast[DType.uint32](g_loss[1]) == bitcast[DType.uint32](g_loss_old[1])
+    for l in range(L):  # driver-loop: over layers
+        if bitcast[DType.uint32](l2[l]) != bitcast[DType.uint32](r_l2[l]):
+            rows_same = False
+    for i in range(B * O):
+        if bitcast[DType.uint32](seed[i]) != bitcast[DType.uint32](r_seed[i]):
+            rows_same = False
     # the float64 host reference
     var ok = True
     var q64 = Float64(0.0)
@@ -182,11 +229,14 @@ def _batch_case[E: Exec](
     var same_old = bitcast[DType.uint32](loss[1]) == bitcast[DType.uint32](old_loss[1])
     if one_block and not same_old:
         ok = False
+    if not rows_same:
+        ok = False
     print(
-        "LOSSBLOCK", name, "layers", L, "rows", B, "loss", loss[1], "old", old_loss[1], "ref", want, "rel", e,
-        "same_old", same_old, "l2_digest", _digest(l2), "loss_digest", bitcast[DType.uint32](loss[1]),
-        "PASS" if ok else "FAIL",
+        "LOSSBLOCK", name, "layers", L, "rows", B, "outputs", O, "loss", loss[1], "old", old_loss[1], "ref", want,
+        "rel", e, "same_old", same_old, "rows_same", rows_same, "l2_digest", _digest(l2),
+        "loss_digest", bitcast[DType.uint32](loss[1]), "PASS" if ok else "FAIL",
     )
+    _ = given^
     _ = params^
     _ = pred^
     _ = y^
@@ -247,6 +297,25 @@ def run_lossblock_cases[E: Exec](mut ex: E) raises:
     total += 1
     if _batch_case(ex, "six_layers", s5^, 37, LOSS_SQUARED, Float32(0.5), False):
         passed += 1
+    # lane ag-pass5-loss: B x O grid, 4 -> 16 -> O (layers of 64 and 16 O
+    # weights): O = 1 binary log loss, O = 3 squared and log, O = 10 log
+    var grid_b: List[Int] = [64, 512, 4096, 65536]
+    var grid_o: List[Int] = [1, 3, 10]
+    for bj in range(len(grid_b)):
+        for oj in range(len(grid_o)):
+            var gb = grid_b[bj]
+            var go = grid_o[oj]
+            var kind = LOSS_LOG
+            if go == 1:
+                kind = LOSS_BINARY_LOG
+            elif go == 3 and bj % 2 == 1:
+                kind = LOSS_SQUARED
+            var sg: List[Int] = [4, 16, go]
+            # one block on both paths: 64 rows, layers of at most 64 weights
+            var one = gb <= 64 and 16 * go <= 64
+            total += 1
+            if _batch_case(ex, String("grid_b", gb, "_o", go), sg^, gb, kind, Float32(1.0e-3), one):
+                passed += 1
     total += 1
     if _epoch_case(ex, "epoch_short", 7, 64, 9):
         passed += 1

@@ -13,6 +13,7 @@ from sequence.mlp import (
     MLP_DEVICE_EPOCH_ORDER,
     MLP_L2_BLOCK,
     MLP_LOSSBLOCK,
+    MLP_LB_ROWS,
     mlp_lb_block,
     mlp_lb_blocks,
     MLP_ROW_BLOCK,
@@ -447,9 +448,10 @@ def mlp_lb_row_parts(max_rows: Int) -> Int:
     return fold_partials_bound(max_rows)
 
 
-def mlp_loss_block[E: Exec](
+def mlp_loss_block[E: Exec, //, ROWS: Bool = MLP_LB_ROWS](
     mut ex: E, net: MLPNet, P: FP, pred: FP, y: FP, seed: FP, rowparts: FP, l2parts: FP, l2: FP,
     dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, data: FP, data_parts: Int,
+    rowloss: FP,
 ) raises:
     """MLP_LOSSBLOCK (sequence/mlp.mojo): one batch's loss block. seed[0:B O]
     = pred - y, l2[i] = ||W_i||^2 and dloss[bi] = the batch's reported loss
@@ -458,7 +460,17 @@ def mlp_loss_block[E: Exec](
     blocked sum (row partials written to `rowparts`); > 0: it is `data`'s
     `data_parts` partials added ascending (-D MOJOLEARN_AUTOGRAD_LOSS hands
     its one sum). Launches: one op_mlp_lb_part and one op_mlp_lb_fold per
-    group of four layers (2 for L <= 4)."""
+    group of four layers (2 for L <= 4).
+    ROWS (MLP_LB_ROWS, the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF):
+    the row losses one thread per row into `rowloss` (B floats), the row
+    blocks and the per-layer norms folded by many threads, then a one-thread
+    batch loss: one more launch (3 for L <= 4), the same bits."""
+    comptime if ROWS:
+        _mlp_loss_block_rows(
+            ex, net, P, pred, y, seed, rowparts, l2parts, l2, dloss, bi, B, loss_kind, half_alpha, data,
+            data_parts, rowloss,
+        )
+        return
     var L = net.n_layers()
     var O = net.sizes[L]
     var groups = (L + 3) // 4
@@ -506,6 +518,77 @@ def mlp_loss_block[E: Exec](
                 _lb_set_count(f, j, c)
                 pstart += mlp_lb_blocks(c)
         ex.launch[OP_MLP_LB_FOLD](f, 1)
+
+
+def _mlp_loss_block_rows[E: Exec](
+    mut ex: E, net: MLPNet, P: FP, pred: FP, y: FP, seed: FP, rowparts: FP, l2parts: FP, l2: FP,
+    dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, data: FP, data_parts: Int,
+    rowloss: FP,
+) raises:
+    """mlp_loss_block under MLP_LB_ROWS (sequence/mlp.mojo's loss-section
+    comment): per group of four layers one op_mlp_lb_part (group 0: B O seed
+    threads and, unless the data sum is given, B row threads) and one
+    op_mlp_lb_fold with i11 = 2 (group 0: the row blocks; every group: one
+    thread per layer), then one op_mlp_lb_fold with i11 = 3 (1 thread)."""
+    var L = net.n_layers()
+    var O = net.sizes[L]
+    var groups = (L + 3) // 4
+    var rows = 0 if data_parts > 0 else B
+    var pstart = 0
+    for g in range(groups):  # driver-loop: over groups of four layers
+        var p = Args()
+        p.p0 = pred
+        p.p1 = y
+        p.p2 = seed
+        p.p3 = rowloss
+        p.p4 = P
+        p.p5 = l2parts + pstart
+        p.i0 = loss_kind
+        p.i1 = O
+        p.i2 = B if g == 0 else 0
+        p.i3 = 1 if rows > 0 else 2
+        var threads = (B * O + rows) if g == 0 else 0
+        for j in range(4):  # driver-loop: over the group's layers
+            var l = 4 * g + j
+            if l < L:
+                var c = net.sizes[l] * net.sizes[l + 1]
+                _lb_set_layer(p, j, net.w_off(l), c)
+                threads += mlp_lb_blocks(c)
+                pstart += mlp_lb_blocks(c)
+        ex.launch[OP_MLP_LB_PART](p, threads)
+    pstart = 0
+    for g in range(groups):  # driver-loop: over groups of four layers
+        var f = Args()
+        f.p0 = rowloss
+        f.p1 = l2parts + pstart
+        f.p3 = l2
+        f.p4 = rowparts
+        f.i1 = B
+        f.i5 = mlp_lb_blocks(rows) if g == 0 else 0
+        f.i10 = 4 * g
+        f.i11 = 2
+        var nl = 0
+        for j in range(4):  # driver-loop: over the group's layers
+            var l = 4 * g + j
+            if l < L:
+                var c = net.sizes[l] * net.sizes[l + 1]
+                _lb_set_count(f, j, c)
+                pstart += mlp_lb_blocks(c)
+                nl += 1
+        ex.launch[OP_MLP_LB_FOLD](f, f.i5 + nl)
+    var b = Args()
+    b.p0 = data if data_parts > 0 else rowparts
+    b.p2 = dloss
+    b.p3 = l2
+    b.i0 = bi
+    b.i1 = B
+    b.i2 = O
+    b.i3 = L
+    b.i4 = loss_kind
+    b.i5 = data_parts if data_parts > 0 else mlp_lb_blocks(B)
+    b.i11 = 3
+    b.f0 = half_alpha
+    ex.launch[OP_MLP_LB_FOLD](b, 1)
 
 
 def mlp_epoch_loss_block[E: Exec](
@@ -666,11 +749,13 @@ def mlp_fit[E: Exec](
                 # lane ag-pass3-lossblock: seed, row-loss and L2 sums and the
                 # batch loss in 2 launches (was 5; sequence/mlp.mojo's
                 # loss-section comment). -D MOJOLEARN_MLP_LOSSBLOCK_OFF: below.
+                # lane ag-pass5-loss (MLP_LB_ROWS): row losses one thread per
+                # row into rowloss, 3 launches, the same bits.
                 comptime if AUTOGRAD_LOSS:
                     loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
                 mlp_loss_block(
                     ex, net, P, acts[L], yb, deltas[L], lb_rowparts, lb_l2parts, l2, dloss, bi, B, loss_kind,
-                    ftz(identical_mul(Float32(0.5), alpha)), loss_sum, 1 if AUTOGRAD_LOSS else 0,
+                    ftz(identical_mul(Float32(0.5), alpha)), loss_sum, 1 if AUTOGRAD_LOSS else 0, rowloss,
                 )
             else:
                 var a = Args()
