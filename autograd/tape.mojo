@@ -7,7 +7,12 @@ from sequence.mlp import (
     EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD,
 )
 from checks.numerics import identical_div
-from autograd.fold import blocked_fold, fold_partials
+from autograd.fold import blocked_fold, blocked_fold_finish, fold_block, fold_partials
+from autograd.profile import ag_profile_report
+from sequence.launch_profile import (
+    launch_profile_level, launch_profile_mark, PROFILE_FORWARD, PROFILE_BACKWARD, PROFILE_OTHER,
+    PROFILE_KIND_ALL,
+)
 from autograd.ops import (
     OP_AG_BIN_FWD, OP_AG_BIN_VJP, OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_TRANSPOSE,
     OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, OP_AG_REDUCE_VJP, OP_AG_SOFTMAX_FWD,
@@ -16,6 +21,7 @@ from autograd.ops import (
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE,
+    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD,
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
@@ -136,8 +142,10 @@ def _gemm_epi[E: Exec](
     sam: Int, sak: Int, sbk: Int, sbn: Int, epi: Int, p3: FP, i10: Int, f0: Float32, f1: Float32,
 ) raises:
     """A GEMM and its elementwise follower in one launch, with the argument
-    layout of the MLP trainer's gemm_epi (sequence/mlp_fit.mojo), so the
-    fused linear node launches what the hand-assembled MLP launches."""
+    layout of the MLP trainer's gemm_epi (sequence/mlp_fit.mojo). It
+    launches OP_AGK_GEMM_EPI, op_gemm_epi's body, which DeviceExec runs on
+    the tiled GEMM where OP_GEMM is tiled (lane ag-pass2-kernels): the hand
+    path's words, the tiled kernel's loads."""
     var a = Args()
     a.p0 = A
     a.p1 = Bm
@@ -155,7 +163,7 @@ def _gemm_epi[E: Exec](
     a.i10 = i10
     a.f0 = f0
     a.f1 = f1
-    ex.launch[OP_GEMM_EPI](a, M * N)
+    ex.launch[OP_AGK_GEMM_EPI](a, M * N)
 
 
 def _linear_act(activation: Int) raises -> Int:
@@ -235,6 +243,9 @@ struct Tape(Movable):
     # watch / assert_unchanged: node indices and their host value copies.
     var _watched: List[Int]
     var _snapshots: List[List[Float32]]
+    # MOJOLEARN_AG_PROFILE set at construction: mark launches with the node
+    # kind that issued them (sequence/launch_profile.mojo).
+    var _profile: Bool
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -248,6 +259,7 @@ struct Tape(Movable):
         self._stale = List[Bool]()
         self._watched = List[Int]()
         self._snapshots = List[List[Float32]]()
+        self._profile = launch_profile_level() > 0
 
     def no_grad(mut self):
         """Enter inference mode: later operations keep no graph or gradients.
@@ -264,6 +276,40 @@ struct Tape(Movable):
     def is_recording(self) -> Bool:
         """True unless no_grad() is in effect."""
         return self._recording
+
+    def profile_mark(self, kind: Int, backward: Bool = True):
+        """Attribute the launches since the last mark to node kind `kind`.
+
+        Only has an effect when MOJOLEARN_AG_PROFILE is set (1 counts
+        launches, 2 also times them). Forward operations mark themselves;
+        a backward marks its launches as one row unless its node loop
+        marks each node.
+        """
+        if not self._profile:
+            return
+        try:
+            launch_profile_mark(PROFILE_BACKWARD if backward else PROFILE_FORWARD, kind)
+        except:
+            pass
+
+    def _profile_phase(self, phase: Int):
+        if not self._profile:
+            return
+        try:
+            launch_profile_mark(phase, PROFILE_KIND_ALL)
+        except:
+            pass
+
+    def profile_report(self) raises -> String:
+        """The launch profile as text, when MOJOLEARN_AG_PROFILE is set.
+
+        One line per operation code (launches, elements and, with
+        MOJOLEARN_AG_PROFILE=2, milliseconds measured between
+        synchronisations, a relative profile) and one line per forward or
+        backward node kind. The table covers every executor and tape in
+        the process since it was last cleared.
+        """
+        return ag_profile_report()
 
     def __deinit__(deinit self):
         # The tape keeps no executor reference, so it cannot free executor
@@ -287,6 +333,8 @@ struct Tape(Movable):
 
     def reset(mut self):
         """Discard the recorded graph and reuse its executor storage."""
+        # launches since the last node (optimizer steps, losses) are "other"
+        self._profile_phase(PROFILE_OTHER)
         self._nodes.clear()
         self._parents.clear()
         self._generation += 1
@@ -457,6 +505,9 @@ struct Tape(Movable):
         # construction. (Recording also takes gradient slots from _alloc, so
         # the two modes may place values in different slots; slot placement
         # never changes a value.)
+        if self._profile:
+            # the launches that computed this value (lane ag-pass2-kernels)
+            self.profile_mark(op, False)
         self._shape(rows, cols)
         if not self._identity:
             self._identity = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(alloc[Int](1)))
@@ -1110,11 +1161,21 @@ struct Tape(Movable):
             a.p4 = contribution
             ex.launch[OP_AG_BIN_VJP](a, n.rows * n.cols)
             return
-        var elementwise = self._alloc(ex, n.rows * n.cols)
-        a.p4 = elementwise
-        ex.launch[OP_AG_BIN_VJP](a, n.rows * n.cols)
+        # Lane ag-pass2-kernels: the VJP terms go straight into the blocked
+        # fold's partials (OP_AGK_BIN_VJP_PART), the same terms in the same
+        # order as OP_AG_BIN_VJP into an output-sized scratch then
+        # OP_AG_REDUCE_PART: one launch and one write + read of the
+        # rows x cols matrix fewer, the same bits.
         var axis = AXIS_ALL if reduce_rows and reduce_cols else (AXIS_ROWS if reduce_rows else AXIS_COLS)
-        self._fold(ex, contribution, elementwise, n.rows, n.cols, axis, Float32(1))
+        var block = fold_block(n.rows, n.cols, axis)
+        var partials = self._alloc(ex, fold_partials(n.rows, n.cols, axis))
+        a.p4 = partials
+        a.i0 = axis
+        a.i9 = block
+        var extent = n.rows * n.cols if axis == AXIS_ALL else (n.rows if axis == AXIS_ROWS else n.cols)
+        var outputs = 1 if axis == AXIS_ALL else (n.cols if axis == AXIS_ROWS else n.rows)
+        ex.launch[OP_AGK_BIN_VJP_PART](a, ((extent + block - 1) // block) * outputs)
+        blocked_fold_finish(ex, contribution, partials, n.rows, n.cols, axis, Float32(1))
 
     def backward[E: Exec](mut self, mut ex: E, output: Tensor, accumulate: Bool = False) raises:
         """Differentiate a scalar, clearing gradients unless accumulate=True."""
@@ -1130,6 +1191,7 @@ struct Tape(Movable):
         if n.rows * n.cols != 1:
             raise Error("non-scalar backward requires an explicit seed tensor")
         self._refuse_stale(output._index)
+        self._profile_phase(PROFILE_OTHER)
         var cursor = self._cursor
         var seed = self._alloc(ex, 1)
         _fill(ex, seed, 1, 1)
@@ -1139,6 +1201,7 @@ struct Tape(Movable):
             self._cursor = cursor
             raise e
         self._cursor = cursor
+        self._profile_phase(PROFILE_BACKWARD)
 
     def backward_from[E: Exec](
         mut self, mut ex: E, output: Tensor, seed: Tensor, accumulate: Bool = False,
@@ -1172,6 +1235,7 @@ struct Tape(Movable):
         self._refuse_stale(output._index)
         if n.requires_grad:
             self._refuse_seed_overlap(output._index, s.value, accumulate)
+        self._profile_phase(PROFILE_OTHER)
         var cursor = self._cursor
         try:
             self._backward(ex, output, s.value, rules, accumulate, True)
@@ -1179,6 +1243,7 @@ struct Tape(Movable):
             self._cursor = cursor
             raise e
         self._cursor = cursor
+        self._profile_phase(PROFILE_BACKWARD)
 
     def _linear_dz[E: Exec](mut self, mut ex: E, i: Int) raises -> FP:
         """dL/dZ of linear node i from its output gradient dY: dY itself
@@ -1229,16 +1294,28 @@ struct Tape(Movable):
                 _gemm(ex, dst, x.value, dz, fi, fo, rows, 1, fi, fo, 1)
         elif edge == 2:
             # db = column sum of dz over the rows (/ divisor)
-            var c = Args()
-            c.p0 = dz
-            c.p1 = dst
-            c.i0 = rows
-            c.i2 = fo
-            if divisor > 0:
-                c.f0 = divisor
-                ex.launch[OP_COLSUM_DIV](c, fo)
+            var blocked = False
+            comptime if AUTOGRAD_PASS2_FOLD:
+                # More rows than one fold block: the blocked fold (chains of
+                # ag_fold_block(rows), parallel over blocks x columns), not
+                # one serial chain over every row a column. One block is the
+                # column sum's chain, so the one-launch column sum stays.
+                blocked = rows > ag_fold_block(rows)
+            if blocked:
+                var partials = self._alloc(ex, fold_partials(rows, fo, AXIS_ROWS))
+                blocked_fold(ex, dst, dz, rows, fo, AXIS_ROWS, divisor if divisor > 0 else Float32(1),
+                             partials, divisor > 0)
             else:
-                ex.launch[OP_COLSUM](c, fo)
+                var c = Args()
+                c.p0 = dz
+                c.p1 = dst
+                c.i0 = rows
+                c.i2 = fo
+                if divisor > 0:
+                    c.f0 = divisor
+                    ex.launch[OP_COLSUM_DIV](c, fo)
+                else:
+                    ex.launch[OP_COLSUM](c, fo)
         else:
             # dX = dz W^T. When x is a linear node whose only consumer is
             # this node, its activation derivative rides in the epilogue
@@ -1265,6 +1342,7 @@ struct Tape(Movable):
         self._refuse_stale(output._index)
         if n.requires_grad:
             self._refuse_seed_overlap(output._index, s.value, accumulate)
+        self._profile_phase(PROFILE_OTHER)
         var cursor = self._cursor
         try:
             self._backward(ex, output, s.value, rules, accumulate)
@@ -1272,6 +1350,7 @@ struct Tape(Movable):
             self._cursor = cursor
             raise e
         self._cursor = cursor
+        self._profile_phase(PROFILE_BACKWARD)
 
     def _backward[E: Exec, R: BackwardRules](
         mut self, mut ex: E, output: Tensor, seed: FP, rules: R, accumulate: Bool,

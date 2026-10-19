@@ -18,6 +18,7 @@ from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import AUTOGRAD_PREDICT, MLPNet, mlp_fit, mlp_predict, mlp_predict_autograd
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from autograd.rules_recurrent import AUTOGRAD_RNN, AutogradRnnStep
+from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from sequence.ets import ets_scratch
 from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
@@ -728,11 +729,19 @@ def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
     var max_iter = ival(ip, 10)
     if batch < 1 or max_iter < 1:
         raise Error("mlp_fit: batch_size and max_iter must be >= 1")
+    # MOJOLEARN_AG_PROFILE (lane ag-pass2-kernels): this fit's launch
+    # profile, counted by the executor, printed after it
+    var profile = ag_profile_on()
+    if profile:
+        ag_profile_reset()
     var n_iter = mlp_fit(ex, net, fptr(addrs[0], "X"), fptr(addrs[1], "Y"), N, fptr(addrs[2], "params"),
                          fptr(addrs[3], "loss_curve"), ival(ip, 5), ival(ip, 6), ival(ip, 7), ival(ip, 8) != 0,
                          batch, max_iter, ival(ip, 11) != 0, UInt64(ival(ip, 12)), ival(ip, 13),
                          fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
                          Float64(py=fp[5]), fval(fp, 6), Float64(py=fp[7]), y_codes)
+    if profile:
+        print("AG_PROFILE fit=mlp_fit")
+        print(ag_profile_report())
     return PythonObject(n_iter)
 
 

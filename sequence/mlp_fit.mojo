@@ -86,6 +86,10 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # (AUTOGRAD_MLP_OFF), different from the current tape's (its bias gradient
 # is the blocked fold and its activation derivative the tape's VJP body).
 # Either is allowed within a version. No effect under AUTOGRAD_MLP_OFF.
+# Lane ag-pass2-kernels: with MOJOLEARN_AUTOGRAD_PASS2_FOLD (default on) the
+# fused node's bias gradient is the tape's blocked fold for batches over 64
+# rows, so this arm equals the hand path's digest only for batches of at most
+# 64 rows; -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF keeps OP_COLSUM_DIV (equal).
 comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and is_defined["MOJOLEARN_AUTOGRAD_MLP_FUSED"]()
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
 # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
