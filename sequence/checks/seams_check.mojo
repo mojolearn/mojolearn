@@ -62,6 +62,7 @@ def _signed(n: Int, seed: UInt64, scale: Float32) -> List[Float32]:
         out.append(hashed_signed_f32(seed, i) * scale)
     return out^
 
+from std.os import getenv
 
 # ------------------------------------------------------------ comparison
 def _diff(a: List[Float32], b: List[Float32]) -> Int:
@@ -78,25 +79,37 @@ def _separates(seam: String, differing: Int) raises:
     print("  " + seam + ": fixture separates (" + String(differing) + " cells)")
 
 
-def _same(seam: String, column: String, differing: Int) raises:
+def _continue_on_fail() -> Bool:
+    try:
+        return getenv("MOJOLEARN_SEAMS_CONTINUE", "") == "1"
+    except:
+        return False
+
+
+def _same(seam: String, column: String, differing: Int, mut fails: List[String]) raises:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         if differing != 0:
+            # MOJOLEARN_SEAMS_CONTINUE=1 prints every FAIL and raises once at the end (the driver sums _FAILS).
+            if _continue_on_fail():
+                print("  FAIL " + seam + " " + column + ": " + String(differing) + " cells differ from the oracle")
+                fails.append(seam + " " + column)
+                return
             raise Error("FAIL " + seam + " " + column + ": " + String(differing) + " cells differ from the oracle")
         print("  " + seam + " " + column + ": == oracle")
     else:
         print("  " + seam + " " + column + ": FAST, " + String(differing) + " cells differ (no claim)")
 
 
-def _check(seam: String, want: List[Float32], alt: List[Float32], dev: List[Float32], host: List[Float32], mut tr: IdentityTrace) raises:
+def _check(seam: String, want: List[Float32], alt: List[Float32], dev: List[Float32], host: List[Float32], mut tr: IdentityTrace, mut fails: List[String]) raises:
     _separates(seam, _diff(want, alt))
-    _same(seam, "device", _diff(dev, want))
-    _same(seam, "host", _diff(host, want))
+    _same(seam, "device", _diff(dev, want), fails)
+    _same(seam, "host", _diff(host, want), fails)
     tr.record_list_f32("sequence." + seam, dev)
 
 
-def _check_host(seam: String, want: List[Float32], alt: List[Float32], host: List[Float32], mut tr: IdentityTrace) raises:
+def _check_host(seam: String, want: List[Float32], alt: List[Float32], host: List[Float32], mut tr: IdentityTrace, mut fails: List[String]) raises:
     _separates(seam, _diff(want, alt))
-    _same(seam, "host", _diff(host, want))
+    _same(seam, "host", _diff(host, want), fails)
     tr.record_list_f32("sequence." + seam, host)
 
 
@@ -284,6 +297,7 @@ def _host_ptr(mut v: List[Float32]) -> FP:
 
 
 def main() raises:
+    var fails = List[String]()
     var tr = IdentityTrace()
     var hx = HostExec()
     var dx = DeviceExec()
@@ -295,7 +309,7 @@ def main() raises:
     var C0 = _mixed(M * N, 13)
     var g = _both[OP_GEMM](hx, dx, [A.copy(), Bm.copy(), C0.copy()], [M, N, K, K, 1, N, 1, 1, N], List[Float32](), M * N)
     _check("5500_gemm_k_order", o_gemm(A, Bm, C0, M, N, K, False), o_gemm(A, Bm, C0, M, N, K, True),
-           g.dev[2], g.host[2], tr)
+           g.dev[2], g.host[2], tr, fails)
 
     # ---- 5544 the host GEMM's vector cells (`sequence/host_gemm.mojo`):
     # M 7 (a 4-row block, then 3 single rows), N 37 (full vectors at every
@@ -315,13 +329,13 @@ def main() raises:
     var want2 = o_gemm(A2, B2, C2, M2, N2, K2, False)
     var alt2 = o_gemm_split(A2, B2, C2, M2, N2, K2)
     _check("5544_host_gemm_vector", _cat(want2, want2), _cat(alt2, alt2),
-           _cat(gv.dev[2], gp.dev[2]), _cat(gv.host[2], gp.host[2]), tr)
+           _cat(gv.dev[2], gp.dev[2]), _cat(gv.host[2], gp.host[2]), tr, fails)
 
     # ---- 5501 column sums, R 41, C 3.
     var R = 41; var Cc = 3
     var X = _mixed(R * Cc, 21)
     var cs = _both[OP_COLSUM](hx, dx, [X.copy(), List[Float32](length=Cc, fill=Float32(0.0))], [R, Cc, Cc, 0], List[Float32](), Cc)
-    _check("5501_colsum_order", o_colsum(X, R, Cc, False), o_colsum(X, R, Cc, True), cs.dev[1], cs.host[1], tr)
+    _check("5501_colsum_order", o_colsum(X, R, Cc, False), o_colsum(X, R, Cc, True), cs.dev[1], cs.host[1], tr, fails)
 
     # ---- 5502 LSTM step, B 4, H 8.
     var Bb = 4; var H = 8
@@ -334,7 +348,7 @@ def main() raises:
     var ls = _both[OP_CELL_FWD](hx, dx, [gx.copy(), gh.copy(), z4.copy(), hprev.copy(), cprev.copy(), zH.copy(), zH.copy()],
                                 [CELL_LSTM, Bb, H], List[Float32](), Bb * H)
     _check("5502_lstm_cell", o_lstm(gx, gh, cprev, Bb, H, False), o_lstm(gx, gh, cprev, Bb, H, True),
-           _cat(ls.dev[5], ls.dev[6]), _cat(ls.host[5], ls.host[6]), tr)
+           _cat(ls.dev[5], ls.dev[6]), _cat(ls.host[5], ls.host[6]), tr, fails)
 
     # ---- 5503 GRU step, B 4, H 8.
     var gx3 = _signed(Bb * 3 * H, 41, 3.0)
@@ -344,7 +358,7 @@ def main() raises:
     var gr = _both[OP_CELL_FWD](hx, dx, [gx3.copy(), gh3.copy(), z3.copy(), hp3.copy(), zH.copy(), zH.copy(), zH.copy()],
                                 [CELL_GRU, Bb, H], List[Float32](), Bb * H)
     _check("5503_gru_update", o_gru(gx3, gh3, hp3, Bb, H, False), o_gru(gx3, gh3, hp3, Bb, H, True),
-           gr.dev[5], gr.host[5], tr)
+           gr.dev[5], gr.host[5], tr, fails)
 
     # ---- 5504 BPTT weight gradient: an LSTM, D 3, H 4, one layer, O 2, T 6, B 3.
     var net = Net(CELL_LSTM, 3, 4, 1, 2)
@@ -356,8 +370,8 @@ def main() raises:
     var bh = _bptt(hx, net, P, x5, dy, T, B5)
     var GH = net.G() * net.H
     _check("5504_bptt_fold", o_bptt_dw(bh[1], x5, T, B5, GH, 3, False), o_bptt_dw(bh[1], x5, T, B5, GH, 3, True),
-           bd[0], bh[0], tr)
-    _same("5504_bptt_fold dgx", "device vs host", _diff(bd[1], bh[1]))
+           bd[0], bh[0], tr, fails)
+    _same("5504_bptt_fold dgx", "device vs host", _diff(bd[1], bh[1]), fails)
     # nr-small D3: K = T B = 600 > 512 rows, two blocks of the IDENTICAL
     # blocked weight-gradient order (one fold when it is off)
     var Tb = 200
@@ -365,8 +379,8 @@ def main() raises:
     var bdb = _bptt(dx, net, P, xb5, dy, Tb, B5)
     var bhb = _bptt(hx, net, P, xb5, dy, Tb, B5)
     _check("5504_bptt_fold_blocked", o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, False),
-           o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, True), bdb[0], bhb[0], tr)
-    _same("5504_bptt_fold_blocked dgx", "device vs host", _diff(bdb[1], bhb[1]))
+           o_bptt_dw(bhb[1], xb5, Tb, B5, GH, 3, True), bdb[0], bhb[0], tr, fails)
+    _same("5504_bptt_fold_blocked dgx", "device vs host", _diff(bdb[1], bhb[1]), fails)
 
     # ---- 5505 softmax cross entropy, B 3, C 40.
     var B6 = 3; var C6 = 40
@@ -379,7 +393,7 @@ def main() raises:
     var ce = _both[OP_CE](hx, dx, [logits.copy(), lab.copy(), List[Float32](length=B6 * C6, fill=Float32(0.0)),
                                    List[Float32](length=B6, fill=Float32(0.0))], [0, C6], [scale6], B6)
     _check("5505_ce_expsum", o_ce(logits, labels, B6, C6, scale6, False), o_ce(logits, labels, B6, C6, scale6, True),
-           _cat(ce.dev[2], ce.dev[3]), _cat(ce.host[2], ce.host[3]), tr)
+           _cat(ce.dev[2], ce.dev[3]), _cat(ce.host[2], ce.host[3]), tr, fails)
 
     # ---- 5506 Adam, 64 parameters, step 3, L2 weight decay.
     var n7 = 64
@@ -404,7 +418,7 @@ def main() raises:
                            [OPT_ADAM, 3, 0], [lrA, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, Float32(0.0)], n7)
     _check("5506_adam_denom", o_adam(pA, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, False),
            o_adam(pA, g7, m7, v7, b1, b2, Float32(1e-8), Float32(0.01), f5, f6, True),
-           _cat(_cat(ad.dev[0], ad.dev[2]), ad.dev[3]), _cat(_cat(ad.host[0], ad.host[2]), ad.host[3]), tr)
+           _cat(_cat(ad.dev[0], ad.dev[2]), ad.dev[3]), _cat(_cat(ad.host[0], ad.host[2]), ad.host[3]), tr, fails)
 
     # ---- 5507 torch.lerp through Adamax, beta1 0.3 (w = 0.7, the upper branch).
     var b1x = Float32(0.3); var b2x = Float32(0.99)
@@ -413,7 +427,7 @@ def main() raises:
                            [OPT_ADAMAX, 1, 0], [lr, b1x, b2x, Float32(1e-8), Float32(0.0), clr, Float32(0.0), Float32(0.0)], n7)
     _check("5507_torch_lerp", o_adamax(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), Float32(0.0), clr, False),
            o_adamax(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), Float32(0.0), clr, True),
-           _cat(_cat(ax.dev[0], ax.dev[2]), ax.dev[3]), _cat(_cat(ax.host[0], ax.host[2]), ax.host[3]), tr)
+           _cat(_cat(ax.dev[0], ax.dev[2]), ax.dev[3]), _cat(_cat(ax.host[0], ax.host[2]), ax.host[3]), tr, fails)
 
     # ---- 5507 torch.lerp through NAdam (w = 1 - beta1 = 0.7, the upper branch) and
     #      Adafactor's vector second moment (w 0.8): the same `lerp` body, their own ops.
@@ -423,11 +437,11 @@ def main() raises:
                            [OPT_NADAM, 2, 0], [lr, b1x, b2x, Float32(1e-8), Float32(0.0), bc2n, c1n, c2n], n7)
     _check("5507_torch_lerp_nadam", o_nadam(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), bc2n, c1n, c2n, False),
            o_nadam(p7, g7, m7, v7, b1x, b2x, Float32(1e-8), bc2n, c1n, c2n, True),
-           _cat(_cat(na.dev[0], na.dev[2]), na.dev[3]), _cat(_cat(na.host[0], na.host[2]), na.host[3]), tr)
+           _cat(_cat(na.dev[0], na.dev[2]), na.dev[3]), _cat(_cat(na.host[0], na.host[2]), na.host[3]), tr, fails)
     var wv = Float32(0.8); var e1sq = Float32(1e-30)
     var av = _both[OP_AF_VEC](hx, dx, [g7.copy(), v7.copy(), z7.copy()], List[Int](), [wv, e1sq], n7)
     _check("5507_torch_lerp_adafactor", o_af_vec(g7, v7, wv, e1sq, False), o_af_vec(g7, v7, wv, e1sq, True),
-           _cat(av.dev[1], av.dev[2]), _cat(av.host[1], av.host[2]), tr)
+           _cat(av.dev[1], av.dev[2]), _cat(av.host[1], av.host[2]), tr, fails)
 
     # ---- 5508 MLP binary log loss, 10 rows, O 1: p at 0, 1 and near both ends.
     var pb: List[Float32] = [0.0, 1.0, 1e-9, 0.99999994, 0.3, 0.7, 5e-8, 0.5, 1.0, 0.0]
@@ -436,7 +450,7 @@ def main() raises:
     var ll = _both[OP_MLP_ROWLOSS](hx, dx, [pb.copy(), yb.copy(), List[Float32](length=nb, fill=Float32(0.0)),
                                              List[Float32](length=nb, fill=Float32(0.0))], [LOSS_BINARY_LOG, 1], List[Float32](), nb)
     _check("5508_logloss_clip", o_binary_logloss(pb, yb, False), o_binary_logloss(pb, yb, True),
-           _cat(ll.dev[2], ll.dev[3]), _cat(ll.host[2], ll.host[3]), tr)
+           _cat(ll.dev[2], ll.dev[3]), _cat(ll.host[2], ll.host[3]), tr, fails)
 
     # ---- 5509 the MLP shuffle (host), n 97, seed 20260927.
     var perm = List[Float32]()
@@ -444,7 +458,7 @@ def main() raises:
         perm.append(Float32(i))
     var rng = SplitMix(UInt64(20260927))
     fisher_yates(rng, perm)
-    _check_host("5509_shuffle", o_shuffle(97, UInt64(20260927), False), o_shuffle(97, UInt64(20260927), True), perm, tr)
+    _check_host("5509_shuffle", o_shuffle(97, UInt64(20260927), False), o_shuffle(97, UInt64(20260927), True), perm, tr, fails)
 
     # ---- 5510 STL robustness weights (host), 12 series of 24.
     var want10 = List[Float32](); var alt10 = List[Float32](); var got10 = List[Float32]()
@@ -460,7 +474,7 @@ def main() raises:
         _ = ys^
         _ = fs^
         _ = sb^
-    _check_host("5510_stl_rwts", want10, alt10, got10, tr)
+    _check_host("5510_stl_rwts", want10, alt10, got10, tr, fails)
 
     # ---- 5511 VAR column scaling, R 9, 4 columns (one all zero).
     var R11 = 9; var M11 = 4
@@ -470,7 +484,7 @@ def main() raises:
         X11[r * M11 + 3] = X11[r * M11 + 3] * Float32(37.0)
     var sc = _both[OP_COLSCALE](hx, dx, [X11.copy(), List[Float32](length=M11, fill=Float32(0.0))], [R11, M11], List[Float32](), M11)
     _check("5511_var_pow2_scale", o_colscale(X11, R11, M11, False), o_colscale(X11, R11, M11, True),
-           _cat(sc.dev[0], sc.dev[1]), _cat(sc.host[0], sc.host[1]), tr)
+           _cat(sc.dev[0], sc.dev[1]), _cat(sc.host[0], sc.host[1]), tr, fails)
 
     # ---- 5512 VAR Cholesky solve: an SPD 7x7 with 2 right-hand sides, and an indefinite one.
     var m12 = 7; var K12 = 2
@@ -496,7 +510,7 @@ def main() raises:
            _cat(o_cholsolve(G, B12, m12, K12, False), o_cholsolve(Gbad, B12, m12, K12, False)),
            _cat(o_cholsolve(G, B12, m12, K12, True), o_cholsolve(Gbad, B12, m12, K12, True)),
            _cat(_cat(_cat(ch.dev[0], ch.dev[1]), ch.dev[2]), _cat(_cat(chb.dev[0], chb.dev[1]), chb.dev[2])),
-           _cat(_cat(_cat(ch.host[0], ch.host[1]), ch.host[2]), _cat(_cat(chb.host[0], chb.host[1]), chb.host[2])), tr)
+           _cat(_cat(_cat(ch.host[0], ch.host[1]), ch.host[2]), _cat(_cat(chb.host[0], chb.host[1]), chb.host[2])), tr, fails)
 
     # ---- 5513 Nelder-Mead simplex order (host): a staircase objective, 3 coordinates, 4 starts.
     var want13 = List[Float32](); var alt13 = List[Float32](); var got13 = List[Float32]()
@@ -517,7 +531,7 @@ def main() raises:
         _ = scratch^
         _ = lo^
         _ = hi^
-    _check_host("5513_nm_tie_order", want13, alt13, got13, tr)
+    _check_host("5513_nm_tie_order", want13, alt13, got13, tr, fails)
 
     # ---- 5514 MoE routing, T 4, D 3, E 6, k 2: experts 1 and 4 share a router row (exact ties).
     var T14 = 4; var D14 = 3; var E14 = 6; var k14 = 2
@@ -534,7 +548,7 @@ def main() raises:
                                  [D14, E14, k14, 1], List[Float32](), T14)
     _check("5514_moe_route_tie", o_moe_route(x14, W14, T14, D14, E14, k14, True, False),
            o_moe_route(x14, W14, T14, D14, E14, k14, True, True),
-           _cat(_cat(mo.dev[2], mo.dev[3]), mo.dev[4]), _cat(_cat(mo.host[2], mo.host[3]), mo.host[4]), tr)
+           _cat(_cat(mo.dev[2], mo.dev[3]), mo.dev[4]), _cat(_cat(mo.host[2], mo.host[3]), mo.host[4]), tr, fails)
 
     # ---- 5515 LayerNorm forward, M 3, D 33, weight and bias.
     var M15 = 3; var D15 = 33
@@ -547,7 +561,7 @@ def main() raises:
                               [D15, 1, 1], [eps15], M15)
     _check("5515_layernorm_stats", o_layer_norm(x15, w15, b15, M15, D15, eps15, False),
            o_layer_norm(x15, w15, b15, M15, D15, eps15, True),
-           _cat(_cat(ln.dev[3], ln.dev[4]), ln.dev[5]), _cat(_cat(ln.host[3], ln.host[4]), ln.host[5]), tr)
+           _cat(_cat(ln.dev[3], ln.dev[4]), ln.dev[5]), _cat(_cat(ln.host[3], ln.host[4]), ln.host[5]), tr, fails)
 
     # ---- 5516 SES recursion through Croston: 5 intermittent series of 40, classic and optimized.
     var B16 = 5; var n16 = 40
@@ -565,7 +579,7 @@ def main() raises:
         alt16 = _cat(alt16, o_croston(y16, B16, n16, variant, True))
         dev16 = _cat(dev16, cr.dev[1])
         host16 = _cat(host16, cr.host[1])
-    _check("5516_ses_recursion", want16, alt16, dev16, host16, tr)
+    _check("5516_ses_recursion", want16, alt16, dev16, host16, tr, fails)
 
     # ---- 5517 ETS seasonal update through Calc (OP_ETS_LIK): 4 series of 36, m 5,
     #      (A error, A season, trend), (M, M, trend), (M, A, no trend); lik, final l, b, s.
@@ -599,7 +613,7 @@ def main() raises:
         alt17 = _cat(alt17, o_ets_calc(y17, B17, n17, err17, tr17, seas17, m17, par17, True))
         dev17 = _cat(dev17, ec.dev[2])
         host17 = _cat(host17, ec.host[2])
-    _check("5517_ets_seasonal_update", want17, alt17, dev17, host17, tr)
+    _check("5517_ets_seasonal_update", want17, alt17, dev17, host17, tr, fails)
 
     # ---- 5518 ETS initstate by decomposition (OP_ETS_INIT, n >= 3m): 3 series of 40,
     #      m 6 (even, half-weight ends) and m 5, additive and multiplicative, with a trend.
@@ -623,7 +637,7 @@ def main() raises:
         alt18 = _cat(alt18, o_ets_init(y18, B18, n18, True, seas18, m18, True))
         dev18 = _cat(dev18, ic.dev[1])
         host18 = _cat(host18, ic.host[1])
-    _check("5518_ets_decompose_ma", want18, alt18, dev18, host18, tr)
+    _check("5518_ets_decompose_ma", want18, alt18, dev18, host18, tr, fails)
 
     # ---- 5536 RMSprop, centered, momentum 0.9, L2 weight decay: 64 parameters whose
     #      second moment sits just above gavg^2, so v - gavg^2 cancels and its rounding shows.
@@ -643,7 +657,7 @@ def main() raises:
            o_rmsprop(p36, g36, b36, v36, ga36, Float32(1.0), al36, Float32(1e-8), wd36, mu36, False),
            o_rmsprop(p36, g36, b36, v36, ga36, Float32(1.0), al36, Float32(1e-8), wd36, mu36, True),
            _cat(_cat(_cat(rp.dev[0], rp.dev[2]), rp.dev[3]), rp.dev[4]),
-           _cat(_cat(_cat(rp.host[0], rp.host[2]), rp.host[3]), rp.host[4]), tr)
+           _cat(_cat(_cat(rp.host[0], rp.host[2]), rp.host[3]), rp.host[4]), tr, fails)
 
     # ---- 5537 Adagrad, 64 parameters, step 3, weight decay 0.01.
     var s37 = List[Float32]()
@@ -657,7 +671,7 @@ def main() raises:
                                                  Float32(0.0), Float32(0.0)], n36)
     _check("5537_adagrad_sum", o_adagrad(p36, g36, s37, clr37, Float32(1e-10), wd36, False),
            o_adagrad(p36, g36, s37, clr37, Float32(1e-10), wd36, True),
-           _cat(ag.dev[0], ag.dev[3]), _cat(ag.host[0], ag.host[3]), tr)
+           _cat(ag.dev[0], ag.dev[3]), _cat(ag.host[0], ag.host[3]), tr, fails)
 
     # ---- 5538 Lion, 64 parameters, betas (0.9, 0.99), weight decay 0.1.
     var m38 = _signed(n36, 381, 0.5)
@@ -667,7 +681,7 @@ def main() raises:
                                               Float32(0.0), Float32(0.0)], n36)
     _check("5538_lion_momentum", o_lion(p36, g36, m38, lr38, Float32(0.9), Float32(0.99), Float32(0.1), False),
            o_lion(p36, g36, m38, lr38, Float32(0.9), Float32(0.99), Float32(0.1), True),
-           _cat(li.dev[0], li.dev[2]), _cat(li.host[0], li.host[2]), tr)
+           _cat(li.dev[0], li.dev[2]), _cat(li.host[0], li.host[2]), tr, fails)
 
     # ---- 5539 LAMB trust ratio: 5 tensors (one all-zero parameter), trust_clip off and on.
     var offs39: List[Int] = [0, 7, 20, 33, 40, 64]
@@ -687,7 +701,7 @@ def main() raises:
         alt39 = _cat(alt39, o_lamb_ratio(p39, u39, offs39, clip == 1, True))
         dev39 = _cat(dev39, lr39.dev[3])
         host39 = _cat(host39, lr39.host[3])
-    _check("5539_lamb_trust_ratio", want39, alt39, dev39, host39, tr)
+    _check("5539_lamb_trust_ratio", want39, alt39, dev39, host39, tr, fails)
 
     # ---- 5541 Theta's level recursion (host; theta_run is op_theta's body): a trending
     #      series of 30, STM, OTM (theta 2.7) and DSTM, alpha 0.37, level0 y0 / 2.
@@ -709,7 +723,7 @@ def main() raises:
         got41 = _cat(_cat(got41, st41), e41)
         got41.append(mse)
         _ = yw^
-    _check_host("5541_theta_level", want41, alt41, got41, tr)
+    _check_host("5541_theta_level", want41, alt41, got41, tr, fails)
 
     # ---- 5542 GARCH variance recursion (host; garch_sigma2 is op_garch's body): 40 returns,
     #      GJR(1, 1, 1) and GARCH(2, 0, 2); one step under its floor, one over its cap.
@@ -739,7 +753,7 @@ def main() raises:
         _ = pw^
         _ = rw^
         _ = vw^
-    _check_host("5542_garch_recursion", want42, alt42, got42, tr)
+    _check_host("5542_garch_recursion", want42, alt42, got42, tr, fails)
 
     # ---- 5543 Prophet Fourier features: 16 rows, seasonalities of order 3 and 10, 2 holidays.
     var N43 = 16; var nh43 = 2
@@ -755,14 +769,16 @@ def main() raises:
                                                  List[Float32](length=N43 * K43, fill=Float32(0.0))],
                                         [2, nh43, K43], List[Float32](), N43)
     _check("5543_prophet_fourier", o_prophet_features(fr43, ord43, hol43, N43, nh43, False),
-           o_prophet_features(fr43, ord43, hol43, N43, nh43, True), pf.dev[3], pf.host[3], tr)
+           o_prophet_features(fr43, ord43, hol43, N43, nh43, True), pf.dev[3], pf.host[3], tr, fails)
 
     # ---- 5545 the MLP device epoch order (`op_mlp_perm`, roadmap D13), n 97
     # (a 256-value domain: the cycle walk runs), seed 20260927, epoch 3.
     var key45 = mlp_epoch_key(UInt64(20260927), 3)
     _check("5545_mlp_epoch_perm", o_mlp_perm(97, UInt64(20260927), 3, False), o_mlp_perm(97, UInt64(20260927), 3, True),
-           _perm_col(dx, 97, key45), _perm_col(hx, 97, key45), tr)
+           _perm_col(dx, 97, key45), _perm_col(hx, 97, key45), tr, fails)
 
     _ = dx^
     _ = hx^
+    if len(fails) > 0:
+        raise Error("FAIL sequence seams: " + String(len(fails)) + " column(s) differ from the oracle (see the FAIL lines)")
     print("PASS sequence seams (28 seams: 5500-5518, 5536-5539, 5541-5545; 5540 is sched_check.py)")
