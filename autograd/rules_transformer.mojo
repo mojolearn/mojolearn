@@ -180,6 +180,10 @@ struct TransformerRules(BackwardRules):
         self.l = l
         self.pos0 = pos0
 
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # Every rule here reads a zero-filled destination and accumulates into it.
+        return True
+
     def supports(self, tag: Int) -> Bool:
         return tag >= TF_RMS_NORM_INPUT and tag <= TF_SWIGLU
 
