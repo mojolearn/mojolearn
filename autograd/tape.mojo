@@ -30,9 +30,52 @@ from autograd.loss_ops import (
 from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dropout_args
 from std.memory import memcmp
 from autograd.pass1_ops import OP_P1_SCE_VJP
+from autograd.composed_ops import OP_AGC_LINEAR_PAIR
+from sequence.gemm_tiled import GR_TILE, seq_gemm_route
+from std.sys.compile import is_defined
 
 comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
 comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it was used: record the graph again"
+
+# Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 5), default on:
+# PASS-THROUGH GRADIENTS ARE BORROWED, NOT COPIED. backward_from's seed
+# becomes the root's gradient buffer (no OP_COPY) when the root is a
+# tape-owned, non-leaf, non-linear, non-custom node, and the first
+# contribution of a same-shape add (either operand) or a subtraction's left
+# operand to a once-consumed, tape-owned, non-leaf, non-linear, non-custom
+# operand is the add's own gradient buffer (no copy VJP), as the reshape's
+# already is. Bits: identical by construction: OP_COPY copies bits, and the
+# copy VJP stores ftz(g) where every consumer loads through ld (ftz), so
+# every kernel reads the same word; only a host download of an
+# intermediate's gradient can differ, where the caller's seed holds a
+# subnormal (it then shows the seed's word). Invariant: a borrowed buffer is
+# never written during the backward that borrows it (one consumer, no
+# in-place backward: linear and custom operands never borrow), and each
+# backward first returns every node to its own buffer (_Node.own_grad), so
+# a later backward never writes the caller's old seed. gradient() of a
+# borrowing node is the buffer it borrowed (for the root, the seed's
+# storage). Launches: the composed MLP's seed copy and one copy VJP a layer.
+# -D MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF keeps the copies (arm A).
+comptime AUTOGRAD_GRAD_ALIAS = not is_defined["MOJOLEARN_AUTOGRAD_GRAD_ALIAS_OFF"]()
+
+# Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 4), default on: ONE
+# LAUNCH FOR A LINEAR (OR MATMUL) NODE'S BACKWARD GEMMS. When both its
+# input and its weight want a gradient and neither product takes the
+# 16 x 16 tile (sequence/gemm_tiled.mojo seq_gemm_route: a thin edge or a
+# short K, where every output word is one thread's chain with no operand
+# reuse), dX, dW and (with AUTOGRAD_PASS3_DB) db run as three index ranges
+# of one OP_AGC_LINEAR_PAIR launch (autograd/composed_ops.mojo), each the
+# body its own launch runs one thread a cell. A tiled product keeps its own
+# launch: the tile's staged reuse costs less than the launch floor saved.
+# A few-cell, long-K weight product (the coop GEMM's shape in
+# sequence/exec_device.mojo: at most 1024 cells, K >= 32768) is not paired:
+# one thread a cell would serialize its K. Bits: identical by construction
+# (the same chain per word as the tiled, thin and cell routes, the same
+# epilogues; sequence/gemm_tiled.mojo states that contract). Launches: the
+# fused MLP's dH + dW2 (+ db2) 2 -> 1 a batch; the composed MLP's matmul
+# dX + dW 2 -> 1 a layer above the first. -D MOJOLEARN_AUTOGRAD_PAIR_OFF
+# keeps the separate launches (arm A).
+comptime AUTOGRAD_PAIR = not is_defined["MOJOLEARN_AUTOGRAD_PAIR_OFF"]()
 
 
 def _ranges_overlap(a: Int, a_count: Int, b: Int, b_count: Int) -> Bool:
@@ -77,6 +120,11 @@ struct _Node(ImplicitlyCopyable, Movable):
     # this node shares (custom_into_shared: a pass-through edge, the node's
     # gradient IS that input's gradient). Every member holds the same range.
     var alias_of: Int
+    # The gradient buffer given at record time. `grad` differs from it only
+    # while the node borrows a pass-through buffer (a reshape's or an add's
+    # gradient, or backward_from's seed: AUTOGRAD_GRAD_ALIAS); each backward
+    # starts by returning to it.
+    var own_grad: FP
 
 
 trait BackwardRules:
@@ -413,8 +461,12 @@ struct Tape(Movable):
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             var node = self._nodes[i]
             var count = node.rows * node.cols
-            if node.requires_grad and _ranges_overlap(a, n, Int(node.grad), count):
-                if not (shared >= 0 and self._alias_root(i) == shared and Int(node.grad) == a and count == n):
+            # AUTOGRAD_GRAD_ALIAS: a node's own buffer, the one its next
+            # backward writes; a borrowed range is its owner's (checked as
+            # that node) or the caller's old seed (written by no backward)
+            var g = Int(node.own_grad) if AUTOGRAD_GRAD_ALIAS else Int(node.grad)
+            if node.requires_grad and _ranges_overlap(a, n, g, count):
+                if not (shared >= 0 and self._alias_root(i) == shared and g == a and count == n):
                     raise Error(what + " overlaps the gradient storage of a recorded tensor")
             if values and _ranges_overlap(a, n, Int(node.value), count):
                 raise Error(what + " overlaps the value storage of a recorded tensor")
@@ -431,15 +483,19 @@ struct Tape(Movable):
             var node = self._nodes[i]
             if not node.requires_grad:
                 continue
-            if not _ranges_overlap(a, count, Int(node.grad), node.rows * node.cols):
+            # the buffer this backward writes (AUTOGRAD_GRAD_ALIAS: the
+            # node's own; a range borrowed by an earlier backward is
+            # returned before anything is written)
+            var g = Int(node.own_grad) if AUTOGRAD_GRAD_ALIAS else Int(node.grad)
+            if not _ranges_overlap(a, count, g, node.rows * node.cols):
                 continue
-            if i == root and Int(node.grad) == a:
+            if i == root and g == a:
                 if accumulate and node.op == LEAF:
                     raise Error("a seed held in the root's own gradient cannot accumulate into it")
                 continue
             # a member of the root's alias group holds the root's gradient
             # range itself (custom_into_shared): the same seed in place
-            if (Int(node.grad) == a and node.rows * node.cols == count
+            if (g == a and node.rows * node.cols == count
                     and self._alias_root(i) == self._alias_root(root)):
                 continue
             raise Error("backward seed overlaps the gradient storage of a recorded tensor")
@@ -570,7 +626,7 @@ struct Tape(Movable):
                 self._stale.append(self._stale_of(parents))
             var at = len(self._nodes)
             self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
-                                     saved, False, True, False, False, -1))
+                                     saved, False, True, False, False, -1, dummy_ptr()))
             return Tensor(Int(self._identity.value()), self._generation, at)
         var requires = leaf_grad
         var start = len(self._parents)
@@ -593,7 +649,7 @@ struct Tape(Movable):
             self._stale.append(self._stale_of(parents))
         var index = len(self._nodes)
         self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False,
-                                 requires and caller_grad, -1))
+                                 requires and caller_grad, -1, grad))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
@@ -1364,7 +1420,9 @@ struct Tape(Movable):
         if accumulate and n.op == LEAF:
             seed = self._alloc(ex, 1)
         else:
-            seed = n.grad
+            # AUTOGRAD_GRAD_ALIAS: the root's own buffer, never one it
+            # borrowed in an earlier backward (a caller's seed)
+            seed = n.own_grad if AUTOGRAD_GRAD_ALIAS else n.grad
         _fill(ex, seed, 1, 1)
         try:
             self._backward(ex, output, seed, rules, accumulate)
@@ -1377,7 +1435,12 @@ struct Tape(Movable):
     def backward_from[E: Exec](
         mut self, mut ex: E, output: Tensor, seed: Tensor, accumulate: Bool = False,
     ) raises:
-        """Compute a vector-Jacobian product using a seed of the output's shape."""
+        """Compute a vector-Jacobian product using a seed of the output's shape.
+
+        The seed may be read in place rather than copied: keep its storage
+        unchanged until you have read the gradients of this backward. The
+        output's gradient is then the seed's storage itself.
+        """
         self.backward_with_rules(ex, output, seed, NoCustomRules(), accumulate)
 
     def backward_from_preactivation[E: Exec](
@@ -1508,6 +1571,93 @@ struct Tape(Movable):
             else:
                 _gemm(ex, dst, dz, w.value, rows, fi, fo, fo, 1, 1, fo)
 
+    def _borrows(self, p: _Node) -> Bool:
+        """AUTOGRAD_GRAD_ALIAS: whether node p may take a pass-through
+        gradient buffer (a consumer's, or the seed) as its own: a recorded,
+        tape-owned intermediate whose backward never writes its own gradient
+        (not a leaf, not linear, which applies act' in place, not custom,
+        not in an alias group)."""
+        return (p.requires_grad and not p.inferred and p.op != LEAF and p.op < CUSTOM and p.op != LINEAR
+                and not p.caller_grad and p.alias_of < 0)
+
+    def _pair_backward[E: Exec](
+        mut self, mut ex: E, n: _Node, dz: FP, contributions: List[FP], first: List[Bool],
+        consumers: List[Int], mut paired: List[Bool],
+    ) raises:
+        """AUTOGRAD_PAIR: linear or matmul node n's dX, dW and (fused db)
+        bias gradient in one OP_AGC_LINEAR_PAIR launch into the edges'
+        destinations, with the arguments _linear_vjp (or the matmul VJP)
+        gives each launch; marks the edges written in `paired`. Launches
+        nothing where the rule in the AUTOGRAD_PAIR comment says no."""
+        var xi = self._parents[n.start]
+        var x = self._nodes[xi]
+        var w = self._nodes[self._parents[n.start + 1]]
+        if not x.requires_grad or not w.requires_grad:
+            return
+        if Int(x.value) == Int(w.value):
+            return  # x @ x: one buffer would fill two slots of the launch
+        var rows = n.rows
+        var fi = x.cols
+        var fo = n.cols
+        var c0 = contributions[0]
+        var c1 = contributions[1]
+        if Int(c0) == Int(c1) or Int(c0) == Int(dz) or Int(c1) == Int(dz):
+            return
+        var dx_epi = 0
+        var x_act = 0
+        var dw_epi = 0
+        var db = False
+        var alpha = Float32(0.0)
+        var divisor = Float32(0.0)
+        if n.op == LINEAR:
+            var xa = x.saved.i0
+            # _linear_vjp edge 0's epilogue rule
+            if first[0] and consumers[xi] == 1 and x.op == LINEAR and xa != ACT_SOFTMAX:
+                dx_epi = EPI_ACT_BWD
+                x_act = xa
+            if n.saved.f1 > 0:
+                divisor = n.saved.f1
+                alpha = n.saved.f0
+                dw_epi = EPI_L2GRAD
+            # _backward's fuse_db rule (W's gradient is wanted, checked above)
+            comptime if AUTOGRAD_PASS3_DB:
+                db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
+                      and self._nodes[self._parents[n.start + 2]].requires_grad)
+        # The route rule (AUTOGRAD_PAIR comment): neither product on the tile,
+        # and no few-cell long-K weight product.
+        if seq_gemm_route(rows, fi, fo, dx_epi != 0) == GR_TILE:
+            return
+        if seq_gemm_route(fi, fo, rows, dw_epi != 0 or db) == GR_TILE:
+            return
+        if fi * fo <= 1024 and rows >= 32768:
+            return
+        var a = Args()
+        a.p0 = x.value
+        a.p1 = w.value
+        a.p2 = dz
+        a.p3 = c0
+        a.p4 = c1
+        a.i0 = rows
+        a.i1 = fi
+        a.i2 = fo
+        a.i3 = dx_epi
+        a.i4 = x_act
+        a.i5 = dw_epi
+        a.f0 = alpha
+        a.f1 = divisor
+        var threads = rows * fi + fi * fo
+        if db:
+            a.p5 = contributions[2]
+            a.i6 = 1
+            threads += fo
+        ex.launch[OP_AGC_LINEAR_PAIR](a, threads)
+        if dx_epi != 0 and x_act != ACT_IDENTITY:
+            self._nodes[xi].grad_preact = True
+        paired[0] = True
+        paired[1] = True
+        if db:
+            paired[2] = True
+
     def backward_with_rules[E: Exec, R: BackwardRules](
         mut self, mut ex: E, output: Tensor, seed: Tensor, rules: R, accumulate: Bool = False,
     ) raises:
@@ -1601,6 +1751,11 @@ struct Tape(Movable):
         var touched = List[Bool](length=len(self._nodes), fill=False)
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             self._nodes[i].grad_preact = False
+            comptime if AUTOGRAD_GRAD_ALIAS:
+                # every node back on its own buffer: a buffer borrowed by an
+                # earlier backward (a reshape's, an add's, a caller's seed)
+                # is never written by this one
+                self._nodes[i].grad = self._nodes[i].own_grad
             var n = self._nodes[i]
             if not n.requires_grad:
                 continue
@@ -1621,7 +1776,12 @@ struct Tape(Movable):
         elif touched[root]:
             _accumulate(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         elif Int(self._nodes[root].grad) != Int(seed):
-            _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
+            if AUTOGRAD_GRAD_ALIAS and self._borrows(self._nodes[root]):
+                # the root borrows the seed: no copy (the seed is read in
+                # place; nothing in this backward writes the root's gradient)
+                self._nodes[root].grad = seed
+            else:
+                _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         touched[root] = True
         # ACCUMULATION ORDER (docs/plans/NATIVE_AUTOGRAD.md, "Accumulation
         # order"): contributions to a gradient are applied in decreasing
@@ -1644,6 +1804,8 @@ struct Tape(Movable):
             # that needs no gradient: the rule writes every destination).
             var first = List[Bool](length=n.count, fill=False)
             var total = List[Bool](length=n.count, fill=False)
+            # AUTOGRAD_GRAD_ALIAS: the operand borrowed n's gradient (no VJP launch)
+            var borrowed = List[Bool](length=n.count, fill=False)
             var contributions = List[FP]()
             for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]
@@ -1666,6 +1828,14 @@ struct Tape(Movable):
                         # writes its own gradient, unlike LINEAR's act' in
                         # place). No launch.
                         self._nodes[parent].grad = n.grad
+                    elif (AUTOGRAD_GRAD_ALIAS and _passes_upstream(n, edge, p) and consumers[parent] == 1
+                            and not n.caller_grad and self._borrows(p)):
+                        # a same-shape add's operand (or a subtraction's
+                        # left one) consumed only here takes the add's
+                        # gradient buffer: its VJP is that word, flushed,
+                        # and every reader loads through ld (ftz). No launch.
+                        self._nodes[parent].grad = n.grad
+                        borrowed[edge] = True
                     contributions.append(self._nodes[parent].grad)
                 elif p.requires_grad and (n.op == RESHAPE or _passes_upstream(n, edge, p)):
                     # a reshape's VJP, and a same-shape add's, is its upstream
@@ -1701,6 +1871,11 @@ struct Tape(Movable):
                     if not total[edge] and rules.zeroed_destination(n.op - CUSTOM, n.saved, edge):
                         _fill(ex, contributions[edge], p.rows * p.cols)
                 rules.apply(ex, n.op - CUSTOM, n.saved, n.value, n.grad, inputs, contributions, rows, cols)
+            # AUTOGRAD_PAIR: the edges a paired launch already wrote
+            var paired = List[Bool](length=n.count, fill=False)
+            comptime if AUTOGRAD_PAIR:
+                if n.op == LINEAR or n.op == MATMUL:
+                    self._pair_backward(ex, n, dz, contributions, first, consumers, paired)
             for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]
                 var p = self._nodes[parent]
@@ -1716,6 +1891,8 @@ struct Tape(Movable):
                         _copy(ex, contribution, n.grad, p.rows * p.cols)
                 elif not first[edge] and _passes_upstream(n, edge, p):
                     pass  # the accumulate below adds n.grad itself
+                elif borrowed[edge] or paired[edge]:
+                    pass  # the operand holds n's gradient itself / the paired launch wrote it
                 elif n.op < CUSTOM:
                     if n.op == LINEAR:
                         # AUTOGRAD_PASS3_DB: with a bias, a divisor and both
