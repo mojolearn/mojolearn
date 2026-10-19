@@ -204,6 +204,9 @@ comptime M2_PROJ_IN = 57
 comptime M2_SSD = 58
 comptime M2_GATE = 59
 comptime M2_PROJ_OUT = 60
+# x_{k+1} = x_k + O recorded as a launch-free node (see the header)
+comptime M1_RESID = 61
+comptime M2_RESID = 62
 comptime MAMBA_TAG_FIRST = M1_NORM
 comptime MAMBA_TAG_LAST = 63
 
@@ -245,23 +248,25 @@ def _d2d(ctx: DeviceContext, dst: DeviceBuffer[DType.float32], src: DeviceBuffer
     )
 
 
-def _negzero(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
-    """n floats of -0.0, the additive identity for every value (see the
-    header: the operand a split kernel gets for a term the tape adds)."""
-    var buf = mamba_zeros(ctx, n)
-    # the body only, as mamba_zeros fills it (a guard-band build keeps its band)
-    var body = buf.create_sub_buffer[DType.float32](0, n)
-    body.enqueue_fill(-Float32(0.0))
-    ctx.synchronize()
-    _ = body^
-    return buf^
-
-
 def _saved(k: Int, out_cols: Int) -> Args:
     var a = Args()
     a.i0 = k
     a.i1 = out_cols
     return a^
+
+
+def _saved_norm(k: Int, out_cols: Int, residual_grad: FP) -> Args:
+    """A norm node's slots: block k, its width, and the gradient arriving at
+    the block's residual output (the norm adds it into x's gradient)."""
+    var a = _saved(k, out_cols)
+    a.p2 = residual_grad
+    return a^
+
+
+def _copy_unless_same[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
+    """dst = src (OP_COPY, bits) unless the driver made them one buffer."""
+    if Int(dst) != Int(src):
+        _copy(ex, dst, src, n)
 
 
 # ================================================================== Mamba-1
@@ -292,6 +297,10 @@ struct Mamba1TapeScratch(Movable):
     var tg3: DeviceBuffer[DType.float32]
     var product_d: DeviceBuffer[DType.float32]
     var dz: DeviceBuffer[DType.float32]
+    # B11's three du terms (the hand path's du_d, du_s, du_x)
+    var du_d: DeviceBuffer[DType.float32]
+    var du_s: DeviceBuffer[DType.float32]
+    var du_x: DeviceBuffer[DType.float32]
 
     def __init__(out self, ctx: DeviceContext, b: Int, l: Int, dims: MambaDims) raises:
         var m = b * l
@@ -320,6 +329,9 @@ struct Mamba1TapeScratch(Movable):
         self.tg3 = mamba_zeros(ctx, di)
         self.product_d = mamba_zeros(ctx, m * di)
         self.dz = mamba_zeros(ctx, m * di)
+        self.du_d = mamba_zeros(ctx, m * di)
+        self.du_s = mamba_zeros(ctx, m * di)
+        self.du_x = mamba_zeros(ctx, m * di)
 
 
 struct Mamba1TapeStack(Movable):
@@ -338,8 +350,6 @@ struct Mamba1TapeStack(Movable):
     var acts: List[DeviceBuffer[DType.float32]]
     var ws: DeviceBuffer[DType.float32]
     var ones: DeviceBuffer[DType.float32]
-    var nz_a: DeviceBuffer[DType.float32]
-    var nz_b: DeviceBuffer[DType.float32]
 
     def __init__(
         out self, ctx: DeviceContext, weights: List[MambaWeights], input: List[Float32], b: Int, l: Int,
@@ -375,14 +385,13 @@ struct Mamba1TapeStack(Movable):
         var ones_body = self.ones.create_sub_buffer[DType.float32](0, m)
         ones_body.enqueue_fill(Float32(1.0))
         _ = ones_body^
-        var nz = max(m * 2 * di, max(m * dm, m * self.dims.x_proj_rows()))
-        self.nz_a = _negzero(ctx, nz)
-        self.nz_b = _negzero(ctx, nz)
         ctx.synchronize()
 
 
-def _m1_norm_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) raises:
-    # B16 with dres = -0.0 (the residual is the tape's add), then RED_NORM_W.
+def _m1_norm_bwd(mut S: Mamba1TapeStack, k: Int, saved: Args, up: FP, gradients: List[FP]) raises:
+    # B16 with the gradient at the block's residual output (saved.p2) as its
+    # dres, so x's whole gradient dres + norm'(dnrm) lands in gradients[0]
+    # (writes_total), then RED_NORM_W.
     var ctx = S.ctx.copy()
     var dims = S.dims.copy()
     var m = S.b * S.l
@@ -392,8 +401,9 @@ def _m1_norm_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
     ref w = S.w[k]
     var dx = _view(ctx, gradients[0], m * dm)
     var dnrm = _view(ctx, up, m * dm)
+    var dres = _view(ctx, saved.p2, m * dm)
     mamba_bwd_norm_into(
-        ctx, dx, sc.drstd, sc.norm_product, S.nz_a, dnrm, S.acts[k],
+        ctx, dx, sc.drstd, sc.norm_product, dres, dnrm, S.acts[k],
         st.norm_out, w.norm_w, st.norm_sumsq, m, dm,
     )
     var dwn = _view(ctx, gradients[1], dm)
@@ -415,15 +425,21 @@ def _m1_proj_bwd(mut S: Mamba1TapeStack, k: Int, which: Int, saved: Args, up: FP
         mamba_backward_proj_a_into(ctx, din, dout, w.w_in, S.ws, PROJ_IN, dims, m)
         mamba_backward_proj_b_into(ctx, dw, dout, st.norm_out, S.ws, PROJ_IN, dims, m)
     elif which == PROJ_X:
-        mamba_backward_proj_a_into(ctx, din, dout, w.w_x, S.ws, PROJ_X, dims, m)
+        # B10 into du_x, then B11: U's last consumer joins du = (du_D + du_s)
+        # + du_x straight into U's gradient (writes_total) and forms dconv
+        ref sc = S.scratch[k]
+        var di = dims.d_inner
+        mamba_backward_proj_a_into(ctx, sc.du_x, dout, w.w_x, S.ws, PROJ_X, dims, m)
         mamba_backward_proj_b_into(ctx, dw, dout, st.silu_out, S.ws, PROJ_X, dims, m)
+        mamba_bwd_du_join_into(ctx, din, sc.dconv, sc.du_d, sc.du_s, sc.du_x, st.conv_out, m, di)
     else:
         mamba_backward_proj_a_into(ctx, din, dout, w.w_out, S.ws, PROJ_OUT, dims, m)
         mamba_backward_proj_b_into(ctx, dw, dout, st.gate_out, S.ws, PROJ_OUT, dims, m)
 
 
 def _m1_conv_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) raises:
-    # B11 (du is the tape's join; du_s = du_x = -0.0), B12, B13, B14 (dz = -0.0).
+    # B12, B13, B14 (dconv from the X_PROJ rule's B11; dP = [dhin | dz], P's
+    # whole gradient, writes_total).
     var ctx = S.ctx.copy()
     var dims = S.dims.copy()
     var b = S.b
@@ -433,8 +449,6 @@ def _m1_conv_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
     ref st = S.stages[k]
     ref sc = S.scratch[k]
     ref w = S.w[k]
-    var du = _view(ctx, up, m * di)
-    mamba_bwd_du_join_into(ctx, sc.du, sc.dconv, du, S.nz_a, S.nz_b, st.conv_out, m, di)
     mamba_bwd_dhin_into(ctx, sc.dhin, sc.dconv, w.conv_w, b, l, di)
     var dcb = _view(ctx, gradients[2], di)
     mamba_backward_reduce_into(ctx, dcb, sc.dconv, S.ones, S.ws, RED_CONV_BIAS, dims, m)
@@ -462,11 +476,12 @@ def _m1_conv_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
         block_dim=(_TPB, 1, 1),
     )
     var dp = _view(ctx, gradients[0], m * 2 * di)
-    mamba_bwd_concat_p_into(ctx, dp, sc.dhin, S.nz_a, m, di)
+    mamba_bwd_concat_p_into(ctx, dp, sc.dhin, sc.dz, m, di)
 
 
 def _m1_dt_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) raises:
-    # B7, B8, then B9 with dBm = dCm = -0.0 (the scan rule writes those).
+    # B7, B8, then B9: dXP = [ddtl | dBm | dCm], XP's whole gradient
+    # (writes_total; the scan rule, XP's other consumer, left dBm and dCm).
     var ctx = S.ctx.copy()
     var dims = S.dims.copy()
     var m = S.b * S.l
@@ -482,11 +497,12 @@ def _m1_dt_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) rais
     var dbdt = _view(ctx, gradients[2], di)
     mamba_backward_reduce_into(ctx, dbdt, sc.ddtp, S.ones, S.ws, RED_DT_BIAS, dims, m)
     var dxp = _view(ctx, gradients[0], m * dims.x_proj_rows())
-    mamba_bwd_concat_xp_into(ctx, dxp, sc.ddtl, S.nz_a, S.nz_b, m, dims)
+    mamba_bwd_concat_xp_into(ctx, dxp, sc.ddtl, sc.dbm, sc.dcm, m, dims)
 
 
 def _m1_scan_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) raises:
-    # B3-B6, then B9 with ddtl = -0.0 (the dt rule writes it).
+    # B3-B6. du_s goes to B11's term buffer and dBm / dCm stay for B9: U's
+    # and XP's gradients are written whole by their last consumers.
     var ctx = S.ctx.copy()
     var dims = S.dims.copy()
     var b = S.b
@@ -499,10 +515,9 @@ def _m1_scan_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
     selective_scan_checkpoint_fn(
         ctx, sc.h_ckpt, S.state_in[k].h, st.silu_out, st.softplus_out, st.a_out, st.b_mat, b, l, di,
     )
-    var du_s = _view(ctx, gradients[0], m * di)
     var dd = _view(ctx, gradients[1], m * di)
     selective_scan_bwd_scan_into(
-        ctx, sc.dh, du_s, dd, sc.scan_w, dy, st.c_mat, st.b_mat,
+        ctx, sc.dh, sc.du_s, dd, sc.scan_w, dy, st.c_mat, st.b_mat,
         st.softplus_out, st.a_out, st.silu_out, sc.h_ckpt, b, l, di,
     )
     mamba_bwd_dbc_into(ctx, sc.dcm, sc.dbm, dy, sc.h_ckpt, sc.scan_w, sc.dh, b, l, di)
@@ -512,12 +527,10 @@ def _m1_scan_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
     )
     var dal = _view(ctx, gradients[3], di * D_STATE)
     mamba_bwd_da_log_into(ctx, dal, sc.da, st.a_out, di)
-    var dxp = _view(ctx, gradients[2], m * dims.x_proj_rows())
-    mamba_bwd_concat_xp_into(ctx, dxp, S.nz_a, sc.dbm, sc.dcm, m, dims)
 
 
 def _m1_gate_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) raises:
-    # B2, B14 with dhin = -0.0 (the conv rule writes it), B17.
+    # B2 (du_D to B11's term buffer, dz kept for B14), B17.
     var ctx = S.ctx.copy()
     var dims = S.dims.copy()
     var m = S.b * S.l
@@ -527,13 +540,10 @@ def _m1_gate_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
     ref w = S.w[k]
     var dg = _view(ctx, up, m * di)
     var dsk = _view(ctx, gradients[0], m * di)
-    var du_d = _view(ctx, gradients[1], m * di)
     mamba_bwd_gate_into(
-        ctx, dsk, sc.dz, du_d, sc.product_d, dg, st.skip_out, st.silu_out,
+        ctx, dsk, sc.dz, sc.du_d, sc.product_d, dg, st.skip_out, st.silu_out,
         st.in_proj, w.d_skip, m, di,
     )
-    var dp = _view(ctx, gradients[2], m * 2 * di)
-    mamba_bwd_concat_p_into(ctx, dp, S.nz_a, sc.dz, m, di)
     var ddsk = _view(ctx, gradients[3], di)
     mamba_backward_reduce_into(ctx, ddsk, sc.product_d, S.ones, S.ws, RED_D, dims, m)
 
@@ -546,11 +556,25 @@ struct Mamba1Rules(BackwardRules, Copyable, Movable):
     var s: MutPointer[Mamba1TapeStack, MutUntrackedOrigin]
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        # Every rule here reads a zero-filled destination and accumulates into it.
-        return True
+        # Never: every kernel these rules launch stores every element of the
+        # destination it is handed (the hand path's buffers start zeroed but
+        # none of its kernels reads them back), and M1_RESID writes nothing.
+        return False
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # The joins (header): x by its norm (B16), U by X_PROJ (B11), XP by
+        # DT (B9), P by CONV (B14); the other consumers of those inputs only
+        # leave their terms in the hand path's buffers.
+        if tag == M1_NORM or tag == M1_RESID or tag == M1_PROJ_X or tag == M1_DT or tag == M1_CONV:
+            return edge == 0
+        if tag == M1_SCAN:
+            return edge == 0 or edge == 2
+        if tag == M1_GATE:
+            return edge == 1 or edge == 2
+        return False
 
     def supports(self, tag: Int) -> Bool:
-        return tag >= M1_NORM and tag <= M1_PROJ_OUT
+        return (tag >= M1_NORM and tag <= M1_PROJ_OUT) or tag == M1_RESID
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
@@ -559,7 +583,7 @@ struct Mamba1Rules(BackwardRules, Copyable, Movable):
         ref S = self.s[]
         var k = saved.i0
         if tag == M1_NORM:
-            _m1_norm_bwd(S, k, upstream, gradients)
+            _m1_norm_bwd(S, k, saved, upstream, gradients)
         elif tag == M1_PROJ_IN:
             _m1_proj_bwd(S, k, PROJ_IN, saved, upstream, gradients, rows, cols)
         elif tag == M1_CONV:
@@ -574,6 +598,10 @@ struct Mamba1Rules(BackwardRules, Copyable, Movable):
             _m1_gate_bwd(S, k, upstream, gradients)
         elif tag == M1_PROJ_OUT:
             _m1_proj_bwd(S, k, PROJ_OUT, saved, upstream, gradients, rows, cols)
+        elif tag == M1_RESID:
+            # no launch: O's gradient is this node's storage, x's is written
+            # whole by its norm
+            _copy_unless_same(ex, gradients[1], upstream, rows[1] * cols[1])
         else:
             raise Error("unknown mamba1 backward rule")
 
@@ -620,6 +648,12 @@ def mamba1_tape_backward_stack(
     var tape = Tape()
     var xs = List[Tensor]()
     var params = List[Tensor]()
+    # The gradient at block k's residual output: the caller's dres for the
+    # last block (the seed, used in place), tape storage otherwise. O_k's
+    # gradient shares it; block k's norm adds it into x_k's (B16).
+    var dres_at = List[FP]()
+    for k in range(nb):  # driver-loop: over blocks
+        dres_at.append(_fp(dres) if k == nb - 1 else tape.reserve(ex, m * dm))
     var x_t = tape.variable(ex, _fp(S.acts[0]), m, dm)
     for k in range(nb):  # driver-loop: over blocks
         xs.append(x_t)
@@ -639,15 +673,15 @@ def mamba1_tape_backward_stack(
             params.append(t)
         # Creation order fixes the tape's accumulation order (see the header):
         # U's consumers X_PROJ, SCAN, GATE; P's CONV, GATE; XP's DT, SCAN.
-        var nrm = tape.custom(ex, [x_t, norm_w], _fp(st.norm_out), m, dm, M1_NORM, _saved(k, dm))
+        var nrm = tape.custom(ex, [x_t, norm_w], _fp(st.norm_out), m, dm, M1_NORM, _saved_norm(k, dm, dres_at[k]))
         var p = tape.custom(ex, [nrm, w_in], _fp(st.in_proj), m, 2 * di, M1_PROJ_IN, _saved(k, 2 * di))
         var u = tape.custom(ex, [p, conv_w, conv_b], _fp(st.silu_out), m, di, M1_CONV, _saved(k, di))
         var xp = tape.custom(ex, [u, w_x], _fp(st.x_proj), m, xr, M1_PROJ_X, _saved(k, xr))
         var delta = tape.custom(ex, [xp, w_dt, b_dt], _fp(st.softplus_out), m, di, M1_DT, _saved(k, di))
         var y = tape.custom(ex, [u, delta, xp, a_log], _fp(st.scan_y), m, di, M1_SCAN, _saved(k, di))
         var g = tape.custom(ex, [y, u, p, d_skip], _fp(st.gate_out), m, di, M1_GATE, _saved(k, di))
-        var o = tape.custom(ex, [g, w_out], _fp(st.out_proj), m, dm, M1_PROJ_OUT, _saved(k, dm))
-        x_t = tape.add(ex, x_t, o)
+        var o = tape.custom_into(ex, [g, w_out], _fp(st.out_proj), dres_at[k], m, dm, M1_PROJ_OUT, _saved(k, dm))
+        x_t = tape.custom_into(ex, [x_t, o], _fp(S.acts[k + 1]), dres_at[k], m, dm, M1_RESID, _saved(k, dm))
     var seed = tape.variable(ex, _fp(dres), m, dm, False)
     var rules = Mamba1Rules(MutPointer[Mamba1TapeStack, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=S))))
     tape.backward_with_rules(ex, x_t, seed, rules)
