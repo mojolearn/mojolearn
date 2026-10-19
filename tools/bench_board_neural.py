@@ -3717,6 +3717,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
                                % (arm, OUR_MODE[arm], os.environ.get("MOJOLEARN_NUMERIC_MODE")))
         model = MODEL_OF[lane]
         runtime = (ab_config or {}).get("runtime", {})
+        if lane in FIT_LANES:
+            if operation != "model_default":
+                raise RuntimeError("REFUSED: the fit lanes have no experimental operation")
+            return OursFit(lane, shape, data)
         if operation == "residual_dropout_forward_vjp":
             return OursResidualDropout(lane, shape, data, runtime)
         if operation == "mlp_inference_sessions":
@@ -3744,6 +3748,12 @@ def build_runner(lane, arm, shape, data, ab_config=None):
         return OURS[model](lane, shape, data)
     if operation != "model_default":
         raise RuntimeError("REFUSED: experimental operation has no matched opponent implementation")
+    if lane in FIT_LANES:                # 2026-10-19 (lane ag-bench): whole fits
+        if arm in MLX_ARMS:
+            return MlxFitArm(lane, shape, data, arm)
+        return TorchFitArm(lane, shape, data, arm)
+    if arm in MLX_ARMS:
+        raise RuntimeError("REFUSED: %s races the fit lanes only" % arm)
     if arm in MAMBA_SSM_ARMS:            # FAIRNESS FIX (2026-10-13 audit): the real Mamba kernels
         return MambaSsmArm(lane, shape, data, arm)
     return TorchArm(lane, shape, data, arm)
@@ -4065,6 +4075,8 @@ def scorer_preflight(lane, shape, data_path, arms, operation):
             need.append("batches")
         if MODEL_OF.get(lane) == "gemm":
             need += ["a", "b"]
+        if lane in FIT_LANES:
+            need += ["X_test", "y_test"]
         absent = [k for k in need if k not in keys]
         receipt["checks"].append({"check": "reference data", "need": need, "absent": absent,
                                   "status": "failed" if absent else "ok"})
@@ -4134,9 +4146,48 @@ def mark_forward_quality_failures(result):
                        result.get("quality", {}).get("error", "missing saved output or host reference"))})
 
 
+def fit_quality(lane, data, outs):
+    """The fit lanes' quality (2026-10-19, lane ag-bench), float64, on the held-out rows, with
+    tools/speed_gbdt_arm.py's metric helpers: accuracy (score > 0.5), log_loss and auc for the
+    classifiers (the score is P(y = 1)); rmse and the auc of the score for the regressors (the target
+    is the 0/1 label). Every other arm also gets its difference from ours' value."""
+    import numpy as np
+    M = _load("speed_gbdt_arm")
+    y = np.asarray(data["y_test"], dtype=np.float64).ravel()
+    q = {}
+    for arm, o in outs.items():
+        row = q[arm] = {"held_out_rows": int(y.size)}
+        score = np.asarray(o.get("score"), dtype=np.float64).ravel()
+        if score.shape != y.shape:
+            row["shape_mismatch"] = "%s vs %s" % (list(score.shape), list(y.shape))
+            continue
+        if not np.isfinite(score).all():
+            row["nonfinite_scores"] = int((~np.isfinite(score)).sum())
+            continue
+        if FIT_TASK[lane] == "classification":
+            row.update(accuracy=M.accuracy(y > 0.5, score > 0.5), log_loss=M.logloss(y, score),
+                       auc=M.auc(y, score))
+        else:
+            row.update(rmse=M.rmse(y, score), auc=M.auc(y, score))
+        curve = np.asarray(o.get("loss_curve") if o.get("loss_curve") is not None else [], dtype=np.float64).ravel()
+        if curve.size:
+            row.update(train_loss_last_step=float(curve[-1]), loss_curve_length=int(curve.size),
+                       train_loss_finite=bool(np.isfinite(curve).all()))
+    ref = q.get("ours") or q.get("ours-fast")
+    for arm, row in q.items():
+        if ref is None or row is ref:
+            continue
+        for k in ("accuracy", "log_loss", "auc", "rmse"):
+            if k in row and k in ref:
+                row[k + "_diff_vs_ours"] = row[k] - ref[k]
+    return q
+
+
 def quality(lane, data, outs, *, shape="full"):
     import numpy as np
     q = {}
+    if lane in FIT_LANES:
+        return fit_quality(lane, data, outs)
     if lane in TRAIN_LANES:
         for arm, o in outs.items():
             losses = [float(x) for x in o["losses"]]
@@ -4207,6 +4258,11 @@ def _worker_env(arm):
 
 SPAN = {"input_home": "host", "pre_clock_fit": False,
         "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized"}
+#: the fit lanes' comparability span (2026-10-19, lane ag-bench), the same on every arm
+FIT_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": None,
+            "inside_clock": "one whole fit: a fresh seeded initialization, the training rows to the device, "
+                            "the shuffle, every minibatch step (forward, loss, backward, Adam), the loss curve "
+                            "back on the host, synchronized; the held-out prediction is after the clock"}
 
 
 def _worker_message(worker, seconds, stage, command=None):
