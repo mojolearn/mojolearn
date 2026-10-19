@@ -199,6 +199,9 @@ _CPU_INFERENCE = {
     "LanguageModelHostTrainer": "._byte_lm_host",
     # The public CPU neural inference (host/_mojolearn_neural_host.so).
     "neural_inference": None,
+    # The operation session (`mojolearn.ops`, autograd/ops_api.mojo): loads on
+    # first touch, so the package imports without NumPy.
+    "ops": None,
     "MLPInference": ".neural_inference", "TransformerBlockInference": ".neural_inference",
     "Mamba1BlockInference": ".neural_inference", "Mamba2BlockInference": ".neural_inference",
     "Mamba3BlockInference": ".neural_inference", "SambaInference": ".neural_inference",
@@ -467,6 +470,7 @@ __all__ = [
     "metrics",
     "neural_network",
     "language_model",
+    "ops",
     "tokenizer",
     "transformer",
     "training",

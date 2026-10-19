@@ -16,10 +16,16 @@
 #                  backward plus the dW_hh / db_hh launches.
 #   RNN_LAST_STEP  the view h_T of a layer's output; its backward places the
 #                  upstream rows at step T - 1 of a zeroed sequence gradient.
+#                  (The trainer does not use it: its head is an RNN_LINEAR
+#                  over the last B rows of the top layer's sequence, see
+#                  rnn_head, which writes dh_T in place like the hand path.)
 #
-# Every launch, argument and fold order is the hand path's, and the tape only
-# copies first contributions (no tensor is used twice, so no ACCUMULATE
-# runs): the gradients in Gr are expected to carry the same bits as
+# Every launch, argument and fold order is the hand path's. No tensor is
+# used twice, so every gradient is a first contribution written in place
+# and no ACCUMULATE runs; parameter gradients land in Gr (variable_into),
+# the loss derivative w.dy is the head's gradient storage (custom_into),
+# and a rule's destination is zero-filled only where the hand path fills
+# (zeroed_destination). The gradients in Gr carry the same bits as
 # HandStep. The A/B is HandStep (arm A) against this step (arm B).
 # Scratch comes from the trainer's Work buffers, not tape.reserve, so the
 # tape allocates only node gradients and contributions.
@@ -79,11 +85,26 @@ def rnn_linear[E: Exec](
     add_bias=False leaves b out of Y (a later kernel adds it) while db is
     still the column sum of dY. need_dx=False skips dX (X needs no gradient)."""
     var R = tape.rows(x)
+    var saved = _linear_record(tape, ex, x, weight, bias, output, 0, R, add_bias, blocked_wgrad, need_dx, w)
+    return tape.custom(ex, [x, weight, bias], output, R, tape.rows(weight), RNN_LINEAR, saved)
+
+
+def _linear_record[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor, bias: Tensor, output: FP,
+    first_row: Int, R: Int, add_bias: Bool, blocked_wgrad: Bool, need_dx: Bool, w: Work,
+) raises -> Args:
+    # Y = X[first_row : first_row + R] W^T (+ b); returns the rule's Args.
     var din = tape.cols(x)
     var dout = tape.rows(weight)
     if tape.cols(weight) != din or tape.rows(bias) != 1 or tape.cols(bias) != dout:
         raise Error("recurrent linear: weight must be (out, in) and bias (1, out)")
-    gemm(ex, tape.value(x), tape.value(weight), output, R, dout, din, din, 1, 1, din, False, dout)
+    if first_row < 0 or R <= 0 or first_row + R > tape.rows(x):
+        raise Error("recurrent linear: rows out of range")
+    if not need_dx and tape.requires_grad(x):
+        # the rule leaves dX unwritten (and unzeroed): only for an input
+        # that needs no gradient
+        raise Error("recurrent linear: need_dx=False needs an input without a gradient")
+    gemm(ex, tape.value(x) + first_row * din, tape.value(weight), output, R, dout, din, din, 1, 1, din, False, dout)
     if add_bias:
         bias_rows(ex, output, tape.value(bias), output, R, dout)
     var saved = Args()
@@ -91,7 +112,30 @@ def rnn_linear[E: Exec](
     saved.p1 = w.one
     saved.i0 = 1 if need_dx else 0
     saved.i1 = 1 if blocked_wgrad else 0
-    return tape.custom(ex, [x, weight, bias], output, R, dout, RNN_LINEAR, saved)
+    saved.i2 = first_row
+    saved.i3 = R
+    # dX covers only rows [first_row, first_row + R) of x: the other rows
+    # of x's gradient are zero, so that destination is zero-filled first.
+    saved.i4 = 1 if need_dx and (first_row != 0 or R != tape.rows(x)) else 0
+    return saved
+
+
+def rnn_head[E: Exec](
+    mut tape: Tape, mut ex: E, seq: Tensor, weight: Tensor, bias: Tensor, B: Int,
+    output: FP, grad_destination: FP, w: Work,
+) raises -> Tensor:
+    """Y [B, out] = h_T W^T + b into `output`, h_T the last B rows of the
+    time-major sequence `seq` [T B, H], recorded as RNN_LINEAR on `seq`
+    itself; Y's gradient is `grad_destination` (the loss derivative, used
+    as the backward seed in place). The backward zero-fills seq's gradient
+    and writes dh_T into its last B rows (recurrent.backward's fill + GEMM),
+    so no h_T view, gradient copy or seed copy runs."""
+    var rows = tape.rows(seq)
+    if B <= 0 or rows % B != 0:
+        raise Error("recurrent head: rows must be a multiple of the batch")
+    var saved = _linear_record(tape, ex, seq, weight, bias, output, rows - B, B, True, False, True, w)
+    return tape.custom_into(ex, [seq, weight, bias], output, grad_destination, B, tape.rows(weight),
+                            RNN_LINEAR, saved)
 
 
 def rnn_layer[E: Exec](
@@ -182,24 +226,26 @@ def _linear_bwd[E: Exec](
     mut ex: E, saved: Args, up: FP, inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
 ) raises:
     # recurrent.backward: dW = dY^T X (one GEMM over the R rows, or the
-    # blocked order), db = column sums, dX = dY W.
-    var R = rows[0]
+    # blocked order), db = column sums, dX = dY W. X is rows
+    # [saved.i2, saved.i2 + R) of input 0 (all of it but for the head).
+    var R = saved.i3
     var din = cols[0]
     var dout = rows[1]
+    var xin = inputs[0] + saved.i2 * din
     var done = False
     comptime if SEQ_WGRAD_BLOCKED:
         if saved.i1 != 0:
-            wgrad_blocked(ex, up, inputs[0], gradients[1], dout, din, R, 1, dout, din, 1, din, saved.p0)
+            wgrad_blocked(ex, up, xin, gradients[1], dout, din, R, 1, dout, din, 1, din, saved.p0)
             if wgrad_block(R) < R:
                 wgrad_blocked(ex, saved.p1, up, gradients[2], 1, dout, R, 0, 0, dout, 1, dout, saved.p0)
             else:
                 colsum(ex, up, gradients[2], R, dout)
             done = True
     if not done:
-        gemm(ex, up, inputs[0], gradients[1], dout, din, R, 1, dout, din, 1, False, din)
+        gemm(ex, up, xin, gradients[1], dout, din, R, 1, dout, din, 1, False, din)
         colsum(ex, up, gradients[2], R, dout)
     if saved.i0 != 0:
-        gemm(ex, up, inputs[1], gradients[0], R, din, dout, dout, 1, din, 1, False, din)
+        gemm(ex, up, inputs[1], gradients[0] + saved.i2 * din, R, din, dout, dout, 1, din, 1, False, din)
 
 
 def _layer_bwd[E: Exec](
@@ -293,6 +339,24 @@ struct RecurrentRules(BackwardRules):
     def supports(self, tag: Int) -> Bool:
         return tag == RNN_LINEAR or tag == RNN_LAYER or tag == RNN_LAST_STEP
 
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # Fill only where recurrent.backward fills. RNN_LINEAR: dW (GEMM or
+        # blocked wgrad) and db (column sum) overwrite every element; dX is
+        # a full overwrite, or skipped for an input without a gradient
+        # (_linear_record refuses otherwise), except the head's dh_T rows,
+        # whose zeroed sequence gradient is the hand path's fill of cur.
+        # RNN_LAYER: the cell (or scan) backward writes every step's dGX
+        # rows, and dW_hh / db_hh overwrite; the hand path never zeroes
+        # w.dgx or Gr either. RNN_LAST_STEP writes only step T - 1.
+        if tag == RNN_LINEAR:
+            return edge == 0 and saved.i4 != 0
+        if tag == RNN_LAYER:
+            return False
+        return True
+
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
@@ -310,78 +374,64 @@ struct RecurrentRules(BackwardRules):
 
 # ------------------------------------------------------------------ trainer step
 def rnn_forward_autograd[E: Exec](
-    mut tape: Tape, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work,
-    mut params: List[Tensor], mut offsets: List[Int],
+    mut tape: Tape, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
 ) raises -> Tensor:
-    """Record input projections, layers, h_T and the head on the tape; the
-    head's output lands in w.yhat. params/offsets receive every parameter
-    leaf and its offset in the `Net` layout."""
+    """Record input projections, layers and the head on the tape; the
+    head's output lands in w.yhat and its gradient is w.dy. Every parameter
+    leaf's gradient is its slice of Gr (the `Net` layout)."""
     tape.reset()
-    params.clear()
-    offsets.clear()
     var H = net.H
     var GH = net.G() * H
     var inp = tape.variable(ex, x, T * B, net.D, False)
     for l in range(net.L):  # driver-loop: over layers
         var din = net.din(l)
-        var w_ih = tape.variable(ex, P + net.w_ih(l), GH, din)
-        var w_hh = tape.variable(ex, P + net.w_hh(l), GH, H)
-        var b_ih = tape.variable(ex, P + net.b_ih(l), 1, GH)
-        var b_hh = tape.variable(ex, P + net.b_hh(l), 1, GH)
-        params.append(w_ih)
-        offsets.append(net.w_ih(l))
-        params.append(w_hh)
-        offsets.append(net.w_hh(l))
-        params.append(b_ih)
-        offsets.append(net.b_ih(l))
-        params.append(b_hh)
-        offsets.append(net.b_hh(l))
+        var w_ih = tape.variable_into(ex, P + net.w_ih(l), Gr + net.w_ih(l), GH, din)
+        var w_hh = tape.variable_into(ex, P + net.w_hh(l), Gr + net.w_hh(l), GH, H)
+        var b_ih = tape.variable_into(ex, P + net.b_ih(l), Gr + net.b_ih(l), 1, GH)
+        var b_hh = tape.variable_into(ex, P + net.b_hh(l), Gr + net.b_hh(l), 1, GH)
         var gx = rnn_linear(tape, ex, inp, w_ih, b_ih, w.gx[l], RNN_INPUT_BIAS_IN_GX, True, l > 0, w)
         inp = rnn_layer(tape, ex, gx, w_hh, b_hh, P + net.b_ih(l), net.cell, T, B, w, l)
-    var hT = rnn_last_step(tape, ex, inp, B)
-    var w_o = tape.variable(ex, P + net.head(), net.O, H)
-    var b_o = tape.variable(ex, P + net.head() + net.O * H, 1, net.O)
-    params.append(w_o)
-    offsets.append(net.head())
-    params.append(b_o)
-    offsets.append(net.head() + net.O * H)
-    return rnn_linear(tape, ex, hT, w_o, b_o, w.yhat, True, False, True, w)
+    var w_o = tape.variable_into(ex, P + net.head(), Gr + net.head(), net.O, H)
+    var b_o = tape.variable_into(ex, P + net.head() + net.O * H, Gr + net.head() + net.O * H, 1, net.O)
+    return rnn_head(tape, ex, inp, w_o, b_o, B, w.yhat, w.dy, w)
 
 
-def rnn_backward_autograd[E: Exec](
-    mut tape: Tape, mut ex: E, net: Net, logits: Tensor,
-    params: List[Tensor], offsets: List[Int], dy: FP, Gr: FP, B: Int,
-) raises:
-    """Seed the existing loss derivative dy [B, O] at the head output and
-    copy each parameter gradient into Gr."""
+def rnn_backward_autograd[E: Exec](mut tape: Tape, mut ex: E, net: Net, logits: Tensor, dy: FP, B: Int) raises:
+    """Seed the existing loss derivative dy [B, O] (the head's gradient
+    storage, so no seed copy) at the head output; parameter gradients land
+    in Gr directly."""
     var seed = tape.variable(ex, dy, B, net.O, False)
     tape.backward_with_rules(ex, logits, seed, RecurrentRules())
-    for i in range(len(params)):  # driver-loop: over parameter tensors
-        _copy(ex, Gr + offsets[i], tape.gradient(params[i]), tape.rows(params[i]) * tape.cols(params[i]))
 
 
 struct AutogradRnnStep(RnnStep):
     """rnn_fit's step with the backward assembled by the tape."""
 
+    # Launches per optimizer step, backward only (the forward launches are
+    # recurrent.forward + head on both paths). L layers, T steps, per-step
+    # cell path; W = one weight-gradient group (a GEMM, or wgrad_blocked's
+    # launches), S = one bias sum (colsum or its blocked twin).
+    #   HandStep:  head W + S + fill(dh_out) + GEMM(dh_T)                  4
+    #              per layer: fill(dh) + fill(dc) + T cells + 2 W + 2 S
+    #              (+ GEMM dX for l > 0)                    L (T + 6) + L - 1
+    #   tape, before lane ag-rnn-fix: the same, plus a seed copy, three
+    #              zero fills per custom node (6 L + 4), the h_T copy and
+    #              4 L + 2 parameter-gradient copies into Gr:   10 L + 7 more
+    #   tape now:  exactly the hand launches, same arguments; the only
+    #              difference is order inside a layer (dW_hh, db_hh before
+    #              dW_ih, db_ih, and the head fill before its dW), each
+    #              writing its own buffer, so the bits are unchanged.
     var tape: Tape
     var logits: Tensor
-    var params: List[Tensor]
-    var offsets: List[Int]
 
     def __init__(out self):
         self.tape = Tape()
         self.logits = Tensor(0, 0, -1)
-        self.params = List[Tensor]()
-        self.offsets = List[Int]()
 
-    def forward_head[E: Exec](mut self, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises:
-        var params = List[Tensor]()
-        var offsets = List[Int]()
-        self.logits = rnn_forward_autograd(self.tape, ex, net, P, x, T, B, w, params, offsets)
-        self.params = params^
-        self.offsets = offsets^
+    def forward_head[E: Exec](
+        mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    ) raises:
+        self.logits = rnn_forward_autograd(self.tape, ex, net, P, Gr, x, T, B, w)
 
     def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
-        var params = self.params.copy()
-        var offsets = self.offsets.copy()
-        rnn_backward_autograd(self.tape, ex, net, self.logits, params, offsets, w.dy, Gr, B)
+        rnn_backward_autograd(self.tape, ex, net, self.logits, w.dy, B)
