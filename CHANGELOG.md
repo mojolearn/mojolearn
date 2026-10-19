@@ -2,6 +2,22 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+- A native autograd engine: every operation records its gradient, and the backward pass runs on the GPU. In
+  `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs, and models you build on the
+  engine inherit it.
+- `mojolearn.Sequential`: build a feed-forward model layer by layer (linear, activations, layer norm, residual
+  connections), choose its loss, optimizer and learning-rate schedule with `compile`, then `fit`, `predict` and
+  `predict_proba`.
+- `mojolearn.ops.Session`: compose your own inference or training algorithm from mojolearn's operations, with
+  gradients through `Session(record=True)`, `backward` and `grad`.
+- The engine's optimizers (SGD with momentum and Nesterov, Adam, AdamW), losses (squared, absolute, Huber, binary
+  and multiclass cross-entropy), metrics (accuracy, log loss, ROC AUC) and data steps (seeded shuffling, batching
+  and dropout) give the same results on every vendor.
+- The MLP, recurrent, transformer, Mamba and language-model trainers now train through the engine.
+- New guide: Build your own model.
+
 ## 0.8.53 (published 2026-10-19)
 
 - Linux installs include NVIDIA PTX through the automatically installed, exact-version
