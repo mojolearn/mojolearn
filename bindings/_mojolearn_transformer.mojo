@@ -1461,17 +1461,17 @@ def _tm_profile_launches() raises -> Int:
 
 def _transformer_session_backward_time(
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
-    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int, n: Int,
+    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int, calls: Int,
 ) raises -> List[Int]:
     """[autograd, launches, fwd_ns_0, bwd_ns_0, ..., fwd_ns_n, bwd_ns_n]:
-    n + 1 forward-from-zero-cache + backward calls on device-resident
+    calls + 1 forward-from-zero-cache + backward calls on device-resident
     inputs; the last call's ten gradients go to a[11..20]."""
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
     if window < 0:
         raise Error("transformer backward time: window must be >= 0")
-    if n < 1:
-        raise Error("transformer backward time: n must be >= 1")
+    if calls < 1:
+        raise Error("transformer backward time: the call count must be >= 1")
     var opts = BlockOptions()
     var qw = dims.q_width()
     var kw = dims.kv_width()
@@ -1492,7 +1492,7 @@ def _transformer_session_backward_time(
     out.append(Int(AUTOGRAD_TRANSFORMER))
     out.append(-1)
     var prof = launch_profile_level() > 0
-    for k in range(n + 1):  # driver-loop: over timed calls
+    for k in range(calls + 1):  # driver-loop: over timed calls
         # The per-call resets `_transformer_run_session_backward` does on a
         # reused workspace, outside the clock.
         ws.kv.k.enqueue_fill(Float32(0.0))
@@ -1501,7 +1501,7 @@ def _transformer_session_backward_time(
         if k > 0 and _stage_reset_on():
             ws.stages.reset(ctx)
         ctx.synchronize()
-        if prof and k == n:
+        if prof and k == calls:
             launch_profile_reset()
         var t0 = Int(perf_counter_ns())
         var off = IdentityTrace.disabled()
@@ -1525,7 +1525,7 @@ def _transformer_session_backward_time(
         var t2 = Int(perf_counter_ns())
         out.append(t1 - t0)
         out.append(t2 - t1)
-        if prof and k == n:
+        if prof and k == calls:
             out[1] = _tm_profile_launches()
     _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
     _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
@@ -1564,11 +1564,11 @@ def transformer_session_backward_time_binding(
     for i in range(9):  # metadata: fixed scalar list
         p.append(Int(py=params[i]))
     owner[].busy = True
-    var t = List[Int]()
+    var stamps = List[Int]()
     try:
         with GILReleased(Python()):
             try:
-                t = _transformer_session_backward_time(owner[], a,
+                stamps = _transformer_session_backward_time(owner[], a,
                     p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8])
             except error:
                 owner[].clear()
@@ -1578,8 +1578,8 @@ def transformer_session_backward_time_binding(
         raise error
     owner[].busy = False
     var out = Python.list()
-    for i in range(len(t)):  # metadata: the returned timestamps, not data
-        out.append(PythonObject(t[i]))
+    for i in range(len(stamps)):  # small-loop(stamps: one clock reading per timed call): measurement timestamps, not model data
+        out.append(PythonObject(stamps[i]))
     return out
 
 
@@ -1653,32 +1653,32 @@ def transformer_backward_tape_time_binding(addrs: PythonObject, params: PythonOb
     var p = List[Int]()
     for i in range(8):  # metadata: fixed scalar list
         p.append(Int(py=params[i]))
-    var n = Int(py=params[8])
-    if n < 1:
-        raise Error("transformer backward tape time: n must be >= 1")
+    var calls = Int(py=params[8])
+    if calls < 1:
+        raise Error("transformer backward tape time: the call count must be >= 1")
     var out = Python.list()
     out.append(PythonObject(Int(AUTOGRAD_TRANSFORMER)))
-    var t = List[Int]()
+    var stamps = List[Int]()
     var launches = -1
     with GILReleased(Python()):
         var prof = launch_profile_level() > 0
-        for k in range(n + 1):  # driver-loop: over timed calls
+        for k in range(calls + 1):  # driver-loop: over timed calls
             var tape = TransformerForwardTape(p)
             try:
                 _ = _transformer_run_session[True, True](tape.session, fa,
                     p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
-                if prof and k == n:
+                if prof and k == calls:
                     launch_profile_reset()
-                t.append(_transformer_saved_backward_timed(tape, ba))
-                if prof and k == n:
+                stamps.append(_transformer_saved_backward_timed(tape, ba))
+                if prof and k == calls:
                     launches = _tm_profile_launches()
             except error:
                 tape.close()
                 raise error
             tape.close()
     out.append(PythonObject(launches))
-    for i in range(len(t)):  # metadata: the returned timestamps, not data
-        out.append(PythonObject(t[i]))
+    for i in range(len(stamps)):  # small-loop(stamps: one clock reading per timed call): measurement timestamps, not model data
+        out.append(PythonObject(stamps[i]))
     return out
 
 
