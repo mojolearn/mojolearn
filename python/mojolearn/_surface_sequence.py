@@ -47,7 +47,8 @@ FAMILIES = (
                       "sequence/garch.mojo", "sequence/prophet.mojo",
                       "sequence/moe.mojo", "autograd/model.mojo", "autograd/model_ops.mojo",
                       "autograd/pyapi.mojo", "autograd/ops_api.mojo", "autograd/losses.mojo",
-                      "autograd/metrics.mojo", "autograd/data.mojo"),
+                      "autograd/metrics.mojo", "autograd/data.mojo",
+                      "autograd/profile.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
@@ -60,6 +61,7 @@ FAMILIES = (
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
             "ops_open", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
             "ops_shape", "ops_free", "ops_reset", "ops_metric", "ops_backward", "ops_grad",
+            "ops_profile_reset", "ops_profile_report",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

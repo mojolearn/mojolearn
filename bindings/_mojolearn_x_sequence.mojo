@@ -22,6 +22,7 @@ from sequence.exec_device import sequence_ctx
 from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
     ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
+    ops_profile_reset_py, ops_profile_report_py,
 )
 from autograd.ops_api import OPS_DEVICE
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
@@ -250,6 +251,14 @@ def ops_grad_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) rai
     return ops_grad_py[DeviceExec, OPS_DEVICE](sid, h, addr)
 
 
+def ops_profile_reset_binding() raises -> PythonObject:
+    return ops_profile_reset_py()
+
+
+def ops_profile_report_binding() raises -> PythonObject:
+    return ops_profile_report_py()
+
+
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return adafactor_step_py(ex, addrs, ip, fp)
@@ -394,6 +403,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[ops_metric_binding]("ops_metric")
         m.def_function[ops_backward_binding]("ops_backward")
         m.def_function[ops_grad_binding]("ops_grad")
+        m.def_function[ops_profile_reset_binding]("ops_profile_reset")
+        m.def_function[ops_profile_report_binding]("ops_profile_report")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         # the resident optimizer state (sequence/opt_resident.mojo)

@@ -15,6 +15,7 @@ from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FitConfig, ModelSpec, model_fit, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
+from autograd.profile import ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 
 # Training options ahead of the per-layer float table in model_fit's fp.
@@ -249,3 +250,16 @@ def ops_grad_py[E: Exec & Movable & Deinitable, KIND: Int](
     var p = ops_session[E, KIND](Int(py=sid))
     p[].gradient_into(Int(py=h), fptr(addr, "grad"))
     return PythonObject(0)
+
+
+# The process-wide launch profile (autograd/profile.mojo; MOJOLEARN_AG_PROFILE),
+# read by tools/ag_opbench.py per op.
+def ops_profile_reset_py() raises -> PythonObject:
+    """Clear the launch profile."""
+    ag_profile_reset()
+    return PythonObject(0)
+
+
+def ops_profile_report_py() raises -> PythonObject:
+    """The launch profile as text (AG_PROFILE lines)."""
+    return PythonObject(ag_profile_report())

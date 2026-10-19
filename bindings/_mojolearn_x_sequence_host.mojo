@@ -23,6 +23,7 @@ from core.label_encode import host_unique_inverse
 from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
     ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
+    ops_profile_reset_py, ops_profile_report_py,
 )
 from autograd.ops_api import OPS_HOST
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
@@ -174,6 +175,14 @@ def ops_grad_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) rai
     return ops_grad_py[HostExec, OPS_HOST](sid, h, addr)
 
 
+def ops_profile_reset_binding() raises -> PythonObject:
+    return ops_profile_reset_py()
+
+
+def ops_profile_report_binding() raises -> PythonObject:
+    return ops_profile_report_py()
+
+
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return adafactor_step_py(ex, addrs, ip, fp)
@@ -283,6 +292,8 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[ops_metric_binding]("ops_metric")
         m.def_function[ops_backward_binding]("ops_backward")
         m.def_function[ops_grad_binding]("ops_grad")
+        m.def_function[ops_profile_reset_binding]("ops_profile_reset")
+        m.def_function[ops_profile_report_binding]("ops_profile_report")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         m.def_function[layer_norm_binding]("layer_norm")

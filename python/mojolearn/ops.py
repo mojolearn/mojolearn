@@ -141,6 +141,15 @@ class Session:
         """Release tensor ``h``; its memory is reused after :meth:`reset`."""
         self._b.ops_free(self._sid(), _int(h, "handle", 1))
 
+    def profile_reset(self):
+        """Clear the process-wide launch profile (recorded when the
+        MOJOLEARN_AG_PROFILE environment variable is set)."""
+        self._b.ops_profile_reset()
+
+    def profile_report(self):
+        """The process-wide launch profile as text: launches per operation."""
+        return str(self._b.ops_profile_report())
+
     # ------------------------------------------------------------ data
     def tensor(self, x, requires_grad=False):
         """Copy an array to the device; returns its handle.
