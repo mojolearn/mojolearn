@@ -71,15 +71,17 @@ own launches and fold order.
   output layer (the softmax or sigmoid with log loss derivative p - y), read
   in place without the root copy.
 - Per layer: hand MLP 1 + 3 launches, unfused tape 3 + 9, fused node 1 + 3
-  (2 backward for a first layer). The MLP uses it under
-  `-D MOJOLEARN_AUTOGRAD_MLP_FUSED`; recurrent gates and transformer MLPs
-  are the next users.
+  (2 backward for a first layer); since pass 3 the bias gradient rides in
+  the dW launch on the tiled GEMM (`AUTOGRAD_PASS3_DB`), 1 + 2 there. The
+  MLP's tape path uses it by default (pass 3); `-D MOJOLEARN_AUTOGRAD_MLP_UNFUSED`
+  restores the composed graph. Recurrent gates and transformer MLPs are the
+  next users.
 - Opcodes: none new. The node reuses `OP_GEMM_EPI`, `OP_COLSUM_DIV`,
   `OP_COLSUM`, `OP_ACT`, `OP_ACT_BWD`, `OP_SOFTMAX` and `OP_AG_SOFTMAX_VJP`
   (range 1200..1219 stays reserved for this lane's fused bodies).
 - Check: `autograd/checks/fused_cpu.mojo`, `fused_gpu.mojo` (fused vs
   unfused tape), and `mlp_cpu` / `mlp_gpu` `DIGEST` lines across the
-  `_MLP_OFF`, default and `_MLP_FUSED` builds.
+  `_MLP_OFF`, default and `_MLP_UNFUSED` builds.
 
 Constraints that carry into any public surface:
 
