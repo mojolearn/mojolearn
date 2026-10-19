@@ -248,7 +248,7 @@ def package_marker(profile, version, arches=(), bundled_ptx=None):
         validate_bundle_descriptor(bundled_ptx)
         return dict(schema=PLUGIN_SCHEMA, role="payload", vendor=row["vendor"],
                     version=version, distribution=row["distribution"],
-                    requires=f"{CORE_DISTRIBUTION}=={version}", arches=sorted(arches),
+                    requires=f"{CORE_DISTRIBUTION}=={version}", arches=sorted(arches),  # glue: canonicalize build-time package metadata
                     directory=row["directory"], code_format=row["code_format"],
                     bundled_ptx=dict(bundled_ptx))
     return plugin_marker(by_profile(profile), version, arches, bundled_ptx=bundled_ptx)
