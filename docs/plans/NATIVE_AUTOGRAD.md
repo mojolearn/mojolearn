@@ -82,8 +82,8 @@ continue importing the same implementations. Autograd does not import the
 Python binding module to reach those routines.
 
 `sequence/mlp_fit.mojo` trains through the tape by default (promoted
-2026-10-18 on the A/B below; `-D MOJOLEARN_AUTOGRAD_MLP_OFF=1` restores the
-hand-assembled backward). It records the forward composition, seeds the
+2026-10-18 on the A/B below; the hand-assembled backward,
+`MOJOLEARN_AUTOGRAD_MLP_OFF`, was deleted 2026-10-19, see docs/TOMBSTONES.md). It records the forward composition, seeds the
 existing combined loss/link derivative at the logits, and obtains parameter
 gradients from the tape. The existing normalization, L2 penalty, optimizer,
 shuffle, batching and stopping conventions remain intact. In particular, the
