@@ -37,7 +37,9 @@ evidence of Apple identity, and nothing that needs such evidence may cite it.
 THE AUTOGRAD ENTRIES (2026-10-19, lane ag-bench) are pinned beside the derived set: the tape is
 under every neural trainer, so a broken tape must stop a release even when no derived lane lands
 on its files first. They are tools/autograd_smoke.py's ENTRIES (the gradient suite, the MLP
-identity check, the tiny fit test), each a 5 s "does it start" row on the vendor (`metal` here),
+identity check, the tiny fit test, the public examples, and since 2026-10-19 (lane ag-board-twins)
+the Sequential and ops.Session probes of the board's sequential-fit and ops-session-step lanes),
+each a 5 s "does it start" row on the vendor (`metal` here),
 listed by `--autograd` and run by `tools/autograd_smoke.py run --vendor metal`.
 """
 import argparse, sys, os
@@ -84,7 +86,7 @@ def main():
     import autograd_smoke
     if a.autograd:
         for e in autograd_smoke.ENTRIES:
-            print("%s %s" % (e["name"], e.get("source") or e.get("pytest")))
+            print("%s %s" % (e["name"], e.get("source") or e.get("pytest") or "probe " + e["probe"]))
         return 0
     chosen, total = derive(a.n, a.include_par)
     if a.lanes_only:
@@ -95,7 +97,7 @@ def main():
         print(f"{i}. {lane:<30} +{gain:4d} new    {cum}/{tot}  {100*cum//tot}%")
     print("# pinned autograd entries (5 s each, tools/autograd_smoke.py run --vendor metal):")
     for e in autograd_smoke.ENTRIES:
-        print(f"   {e['name']:<30} {e.get('source') or e.get('pytest')}")
+        print(f"   {e['name']:<30} {e.get('source') or e.get('pytest') or 'probe ' + e['probe']}")
     print("#")
     print("# A TRIPWIRE, NOT EVIDENCE. File coverage is not kernel coverage and")
     print("# neither is defect coverage. Nothing that needs Apple identity evidence")

@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE AUTOGRAD SMOKE ENTRIES (2026-10-19, lane ag-bench): does the tape start on this vendor.
 
-Four "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
+Six "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
 
   autograd-gradients     autograd/checks/gpu.mojo, the gradient suite on the vendor's GPU (every
                          case prints PASS and its digest; the digests equal the CPU column's).
@@ -14,6 +14,15 @@ Four "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing 
                          expected-digest file present.
   autograd-public        python/mojolearn/tests/test_autograd_public.py: the docs' Sequential and
                          ops.Session examples run verbatim; PUBLIC_DIGEST lines in its log.
+  autograd-sequential-smoke
+                         (2026-10-19, lane ag-board-twins) the board's sequential-fit recipe in
+                         miniature through the installed bindings: mojolearn.Sequential linear,
+                         relu, linear(1), BCE with logits, Adam, one fit and predict_proba on a
+                         seeded 256 x 8 set; finite probabilities, a SMOKE_DIGEST line (params_).
+  autograd-session-smoke (2026-10-19, lane ag-board-twins) the board's ops-session-step in
+                         miniature: one Session(record=True) step (linear, relu, linear, softmax
+                         cross-entropy, backward, the SGD update with the session's ops); finite
+                         loss and gradients, a SMOKE_DIGEST line (the gradients).
 
 A check binary is built ONCE per vendor by the orchestrator (`build-commands` prints the lines; this
 tool never builds), then `run` starts each entry with a 5 s timer:
@@ -50,7 +59,71 @@ ENTRIES = (
      "what": "a tiny MLP and LSTM fit through the installed bindings' default path"},
     {"name": "autograd-public", "pytest": "python/mojolearn/tests/test_autograd_public.py", "pytest_args": ["-s"],
      "what": "the public Sequential and ops.Session examples of the docs, PUBLIC_DIGEST lines"},
+    # 2026-10-19 (lane ag-board-twins): the two board lanes of the public tape API, in miniature
+    {"name": "autograd-sequential-smoke", "probe": "sequential",
+     "what": "a tiny Sequential fit + predict_proba (the sequential-fit board lane) through the installed bindings"},
+    {"name": "autograd-session-smoke", "probe": "session",
+     "what": "one tiny ops.Session(record=True) step (the ops-session-step board lane) through the installed bindings"},
 )
+
+
+def _probe_digest(arrays):
+    import hashlib
+    import numpy as np
+    h = hashlib.sha256()
+    for a in arrays:
+        h.update(np.ascontiguousarray(a, dtype=np.float32).tobytes())
+    return h.hexdigest()[:16]
+
+
+def probe_sequential():
+    """autograd-sequential-smoke: does Sequential fit + predict_proba start and give finite probabilities."""
+    import numpy as np
+    import mojolearn
+    rng = np.random.default_rng(7)
+    X = rng.standard_normal((256, 8), dtype=np.float32)
+    y = (X[:, 0] + 0.5 * X[:, 1] > 0).astype(np.float32)       # the fixture's labels (no runtime math)
+    model = mojolearn.Sequential().linear(16).relu().linear(1)
+    model.compile(loss="bce_with_logits", optimizer="adam", lr=1e-2, beta1=0.9, beta2=0.999, eps=1e-8,
+                  weight_decay=0.0, schedule="constant", tol=0.0, n_iter_no_change=0)
+    model.fit(X, y, epochs=1, batch_size=64, shuffle=True, seed=7)
+    proba = np.asarray(model.predict_proba(X))
+    if proba.shape != (256, 2) or not np.isfinite(proba).all() or not np.isfinite(model.params_).all():
+        print("SMOKE_FAIL sequential proba shape %s finite %s" % (proba.shape, bool(np.isfinite(proba).all())))
+        return 1
+    print("SMOKE_DIGEST sequential params %s vendor %s mode %s" % (_probe_digest([model.params_]),
+                                                                   mojolearn.vendor(), mojolearn.numeric_mode()))
+    return 0
+
+
+def probe_session():
+    """autograd-session-smoke: does one recorded ops.Session step start and give finite gradients."""
+    import numpy as np
+    import mojolearn
+    from mojolearn import ops
+    rng = np.random.default_rng(7)
+    X = rng.standard_normal((32, 8)).astype(np.float32)
+    codes = rng.integers(0, 3, (32, 1)).astype(np.float32)
+    init = [rng.uniform(-0.3, 0.3, s).astype(np.float32) for s in ((8, 16), (1, 16), (16, 3), (1, 3))]
+    with ops.Session(record=True) as s:
+        x, c = s.tensor(X), s.tensor(codes)
+        ps = [s.tensor(p, requires_grad=True) for p in init]
+        logits = s.linear(s.relu(s.linear(x, ps[0], ps[1])), ps[2], ps[3])
+        loss = s.cross_entropy(logits, c)
+        s.backward(loss)
+        value = s.scalar(loss)
+        grads = [s.grad(p) for p in ps]
+        updated = [s.numpy(s.sub(s.detach(p), s.scale(s.tensor(g), 0.05))) for p, g in zip(ps, grads)]
+    finite = np.isfinite(value) and all(np.isfinite(a).all() for a in grads + updated)
+    if not finite:
+        print("SMOKE_FAIL session loss %r finite %s" % (value, finite))
+        return 1
+    print("SMOKE_DIGEST session grads %s loss %.6f vendor %s mode %s"
+          % (_probe_digest(grads), value, mojolearn.vendor(), mojolearn.numeric_mode()))
+    return 0
+
+
+PROBES = {"sequential": probe_sequential, "session": probe_session}
 
 
 def binary(bin_dir, entry, vendor):
@@ -121,6 +194,11 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S):
                 continue
             cmd = [str(exe)]
             env = None
+        elif "probe" in e:
+            # through the installed bindings: `python` is the wheel's environment, nothing on PYTHONPATH
+            cmd = [python, str(Path(__file__).resolve()), "probe", e["probe"]]
+            env = dict(os.environ)
+            env.pop("PYTHONPATH", None)
         else:
             cmd = ([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"] + e.get("pytest_args", [])
                    + [str(ROOT / e["pytest"])])
@@ -157,11 +235,15 @@ def main(argv=None):
     r.add_argument("--out", required=True)
     r.add_argument("--timeout", type=float, default=TIMEOUT_S)
     sub.add_parser("list", help="the entries, one line each")
+    pr = sub.add_parser("probe", help="one installed-bindings probe (what the probe entries start)")
+    pr.add_argument("kind", choices=sorted(PROBES))
     a = ap.parse_args(argv)
     if a.cmd == "list":
         for e in ENTRIES:
-            print("%-22s %s" % (e["name"], e.get("source") or e.get("pytest")))
+            print("%-26s %s" % (e["name"], e.get("source") or e.get("pytest") or "probe " + e["probe"]))
         return 0
+    if a.cmd == "probe":
+        return PROBES[a.kind]()
     if a.cmd == "build-commands":
         for cmd in build_commands(a.vendor, a.mojo, a.bin_dir, a.target_accelerator):
             print(" ".join(cmd))

@@ -11,8 +11,10 @@ smoke: tools/gpu_gap_campaign.py --smoke over the vendor's WHOLE plan (no
 --manifest, no --smoke-suspects: every line, not a subset), --smoke-verify-data.
 autograd (2026-10-19, lane ag-bench): tools/autograd_smoke.py's entries on this vendor, 5 s "does it
 start" each: the gradient suite and the MLP identity check from the check binaries the orchestrator built
-into <out-root>/autograd-bin (`tools/autograd_smoke.py build-commands`), and the tiny fit test through the
-installed wheel. A missing binary reads `not built`, never a pass.
+into <out-root>/autograd-bin (`tools/autograd_smoke.py build-commands`), and the tiny fit test, the public
+examples and the Sequential and ops.Session probes (2026-10-19, lane ag-board-twins: the board's
+sequential-fit and ops-session-step lanes in miniature) through the installed wheel. A missing binary reads
+`not built`, never a pass.
 Nothing here times, measures, rents or deletes anything.
 """
 

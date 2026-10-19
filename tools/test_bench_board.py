@@ -1085,7 +1085,7 @@ def test_neural_tape_api_lanes_tables_fixtures_and_quality(tmp_path):
     ours = bbn._ops_outputs(np, 1.5, grads, [data["w:" + n] for n in bbn.OPS_PARAMS])
     theirs = bbn._ops_outputs(np, 1.25, [g * 2 for g in grads], [data["w:" + n] for n in bbn.OPS_PARAMS])
     q = bbn.quality("ops-session-step", data, {"ours": ours, "torch-eager-fp32": theirs})
-    assert q["ours"]["grad_digests"] == q["ours"]["grad_digests"] and q["ours"]["loss"] == 1.5
+    assert sorted(q["ours"]["grad_digests"]) == sorted(bbn.OPS_PARAMS) and q["ours"]["loss"] == 1.5
     t = q["torch-eager-fp32"]
     assert t["loss_abs_diff_vs_ours"] == 0.25 and t["grad_max_abs_diff_vs_ours_w1"] == 1.0
     assert t["param_max_abs_diff_vs_ours_b2"] == 0.0 and t["grad_digests_equal_ours"] is False
