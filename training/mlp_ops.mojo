@@ -53,7 +53,7 @@ from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
 #: lane ag-smallmlp-tape (2026-10-19): the step's backward runs on the
 #: autograd tape (autograd/rules_small_mlp.mojo; the same kernels on the
 #: same buffers, so the same bits as the hand chain it replaced).
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 from sequence.ops import FP
 from autograd.rules_small_mlp import (
@@ -564,7 +564,7 @@ def mlp_train_step_host(
     # records on an executor that refuses to launch or allocate (every node
     # holds caller storage, the rules launch on ctx) and never waits, so it
     # adds no drain to the step.
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
     var tape_ex = SmallMlpRecordExec()
     small_mlp_backward_autograd(

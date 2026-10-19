@@ -64,7 +64,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
 from gemm.contract import OP_NN, OP_TN
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 # (the AUTOGRAD_SMALL_MLP switch and its opt-in spelling MOJOLEARN_AUTOGRAD_SMALL_MLP;
 # training/checks/mlp_tape_step_check.mojo compares the tape against stored digests).

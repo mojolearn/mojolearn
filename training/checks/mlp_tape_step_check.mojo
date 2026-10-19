@@ -13,7 +13,7 @@ root; MOJOLEARN_MLP_TAPE_DIGESTS overrides it.
 
     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/mlp_tape_step_check.mojo
 """
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 # (the check compared step[False] (hand chain) against step[True] (tape) in one process;
 # the hand chain's digests are now the stored record).

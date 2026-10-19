@@ -450,6 +450,13 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_RF_FAST_QSAMPLE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): RF_FAST_QSAMPLE (split candidates from >= 65,536 sampled rows) was DROPPED-slower: M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise). Restore with experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
+    # ---- lane del-smallmlp (2026-10-19): the small MLP train step's hand backward chain, superseded by the tape
+    # (word-for-word 162/162 tensors on Metal, NVIDIA and AMD; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP_OFF restored the small MLP train step's hand backward chain; the tape backward is the only one (same bits, 162/162 tensors on Metal, NVIDIA and AMD). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP was the opt-in spelling of the small MLP tape backward, now the only path; drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+    # ---- end lane del-smallmlp
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

@@ -1,0 +1,314 @@
+diff --git b/autograd/rules_small_mlp.mojo a/autograd/rules_small_mlp.mojo
+index 1a5b9f6cb..4ddb7fc02 100644
+--- b/autograd/rules_small_mlp.mojo
++++ a/autograd/rules_small_mlp.mojo
+@@ -1,5 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+-# The small MLP train step's backward on the tape (the step's only backward).
++# The small MLP train step's backward on the tape (-D MOJOLEARN_AUTOGRAD_SMALL_MLP,
++# default on; MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF restores the hand chain).
+ # TAPE_EVERYWHERE_PLAN.md path 8, lane ag-smallmlp-tape.
+ #
+ # ---------------------------------------------------------------- launch inventory
+@@ -57,6 +58,7 @@
+ #   seed: dlogits (the loss's gradient, written by the forward)
+ #
+ # Bits: same kernels, same operands, same buffers => the hand path's bits.
++from std.sys.compile import is_defined
+ from max.gpu.host import DeviceBuffer
+ 
+ from autograd.tape import Tape, Tensor, BackwardRules
+@@ -64,10 +66,12 @@ from sequence.exec_trait import Exec
+ from sequence.ops import FP, Args
+ from gemm.contract import OP_NN, OP_TN
+ 
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+-# (the AUTOGRAD_SMALL_MLP switch and its opt-in spelling MOJOLEARN_AUTOGRAD_SMALL_MLP;
+-# training/checks/mlp_tape_step_check.mojo compares the tape against stored digests).
++# Default on (Andrew 2026-10-19: the word-for-word check is the gate;
++# training/checks/mlp_tape_step_check.mojo). MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
++# restores the hand chain for the A/B; the opt-in spelling is accepted too.
++comptime AUTOGRAD_SMALL_MLP = (
++    not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"]()
++)
+ 
+ # Tags 120-121 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
+ # LM 64-71, Mamba-3 72-86, CNN 96-111, MoE 112-115).
+diff --git b/training/checks/mlp_tape_step_check.mojo a/training/checks/mlp_tape_step_check.mojo
+index 98456242e..808f38033 100644
+--- b/training/checks/mlp_tape_step_check.mojo
++++ a/training/checks/mlp_tape_step_check.mojo
+@@ -1,28 +1,19 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""The small MLP train step (its backward on the tape, autograd/rules_small_mlp.mojo) against stored digests, word for word.
++"""The small MLP train step's tape backward (autograd/rules_small_mlp.mojo) against the hand chain, word for word.
+ 
+ For each case (rows 1, 37 and 256; with and without the input gradient),
+-runs two AdamW steps (t = 1, 2) of `mlp_train_step_host` from fixed weights
+-and batches and digests (FNV-1a 64 over the float32 words) the loss, the
+-logits, the four gradients, the input gradient and the weights, moments and
+-flags after each step. Every digest must equal the stored record
+-(training/checks/mlp_tape_step_digests.tsv: the tape == hand-chain runs on
+-Metal, NVIDIA and AMD, 162 tensors). Prints one digest per tensor so columns
+-can be compared across vendors. The record path is relative to the repo
+-root; MOJOLEARN_MLP_TAPE_DIGESTS overrides it.
++runs two AdamW steps (t = 1, 2) of `mlp_train_step_host` from the same
++weights and batches, once through the hand chain and once through the tape,
++and requires the loss, the logits, the four gradients, the input gradient
++and the weights, moments and flags after each step to be equal word for
++word. Prints one FNV-1a digest per tensor so columns can be compared across
++vendors.
+ 
+     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/mlp_tape_step_check.mojo
+ """
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+-# (the check compared step[False] (hand chain) against step[True] (tape) in one process;
+-# the hand chain's digests are now the stored record).
+ from std.memory import bitcast
+-from std.os import getenv
+ from max.gpu.host import DeviceContext
+ 
+-from checks.identity_trace_read import read_trace_lines
+-
+ from training.mlp_ops import (
+     MLP_B1, MLP_B2, MLP_IN, MLP_OUT, MLP_STEP_TRAIN, MLP_TOTAL, MLP_W1, MLP_W2,
+     mlp_train_step_host,
+@@ -75,7 +66,7 @@ struct StepState(Movable):
+         self.flags = List[Int32](length=4, fill=Int32(0))
+ 
+ 
+-def step(
++def step[tape: Bool](
+     ctx: DeviceContext, mut st: StepState, rows: Int, t: Int, want_input_grad: Int,
+ ) raises -> List[List[Float32]]:
+     """One train step; returns [loss, logits, dw1, db1, dw2, db2, dx, w1, b1, w2, b2, m, v, flags]."""
+@@ -91,7 +82,7 @@ def step(
+     var db2 = List[Float32](length=MLP_B2, fill=Float32(0.0))
+     var dx = List[Float32](length=rows * MLP_IN if want_input_grad != 0 else 1, fill=Float32(0.0))
+     var info = List[Float32](length=3, fill=Float32(0.0))
+-    _ = mlp_train_step_host(
++    _ = mlp_train_step_host[tape](
+         ctx, _p(x), _q(y), _p(st.w1), _p(st.b1), _p(st.w2), _p(st.b2), _p(st.m), _p(st.v), _q(st.flags),
+         _p(loss), _p(logits), _p(dw1), _p(db1), _p(dw2), _p(db2), _p(dx), _p(info),
+         rows, MLP_STEP_TRAIN, t, Float32(0.03), Float32(0.9), Float32(0.999), Float32(1e-8), Float32(0.01),
+@@ -121,57 +112,48 @@ def step(
+     return out^
+ 
+ 
+-comptime DIGESTS_DEFAULT = "training/checks/mlp_tape_step_digests.tsv"
+-
+-
+-def record_line(tag: String, name: String, values: List[Float32]) -> String:
+-    """One record: case, tensor, word count and digest, tab separated (the stored file's layout)."""
+-    return tag + "\t" + name + "\t" + String(len(values)) + "\t" + String(digest(values))
+-
+-
+-def compare(stored: List[String], mut k: Int, line: String) -> Int:
+-    """Print `line`, compare it with stored record `k` and advance `k`; 1 on a difference."""
+-    var want = String("<missing>")
+-    if k < len(stored):
+-        want = String(stored[k])
+-    k += 1
+-    var same = line == want
+-    print("MLP_TAPE", line, String("SAME") if same else String("DIFFER stored ") + want)
+-    return 0 if same else 1
++def compare(tag: String, name: String, hand: List[Float32], tape: List[Float32]) -> Int:
++    var diff = 0
++    var first = -1
++    if len(hand) != len(tape):
++        print("MLP_TAPE", tag, name, "DIFFER lengths", len(hand), len(tape))
++        return 1
++    for i in range(len(hand)):
++        if bitcast[DType.uint32](hand[i]) != bitcast[DType.uint32](tape[i]):
++            diff += 1
++            if first < 0:
++                first = i
++    print("MLP_TAPE", tag, name, len(hand), "hand", digest(hand), "tape", digest(tape),
++          "SAME" if diff == 0 else "DIFFER words=" + String(diff) + " first=" + String(first))
++    return 1 if diff != 0 else 0
+ 
+ 
+-def run_case(ctx: DeviceContext, stored: List[String], mut k: Int, rows: Int, want_input_grad: Int) raises -> Int:
++def run_case(ctx: DeviceContext, rows: Int, want_input_grad: Int) raises -> Int:
+     var names: List[String] = [
+         "loss", "logits", "grad.w1", "grad.b1", "grad.w2", "grad.b2", "grad.x",
+         "w1_after", "b1_after", "w2_after", "b2_after", "m_after", "v_after", "flags_after",
+     ]
+-    var state = StepState()
++    var hand_state = StepState()
++    var tape_state = StepState()
+     var bad = 0
+     for t in range(1, 3):
+         var tag = String("rows=") + String(rows) + " dx=" + String(want_input_grad) + " t=" + String(t)
+-        var got = step(ctx, state, rows, t, want_input_grad)
++        var hand = step[False](ctx, hand_state, rows, t, want_input_grad)
++        var tape = step[True](ctx, tape_state, rows, t, want_input_grad)
+         for j in range(len(names)):
+             if j == 6 and want_input_grad == 0:
+                 continue
+-            bad += compare(stored, k, record_line(tag, names[j], got[j]))
++            bad += compare(tag, names[j], hand[j], tape[j])
+     return bad
+ 
+ 
+ def main() raises:
+-    var path = String(getenv("MOJOLEARN_MLP_TAPE_DIGESTS"))
+-    if path.byte_length() == 0:
+-        path = String(DIGESTS_DEFAULT)
+-    var stored = read_trace_lines(path)
+     var ctx = DeviceContext()
+     var bad = 0
+-    var k = 0
+     var row_cases: List[Int] = [1, 37, 256]
+     for r in range(len(row_cases)):
+-        bad += run_case(ctx, stored, k, row_cases[r], 0)
+-        bad += run_case(ctx, stored, k, row_cases[r], 1)
+-    if k != len(stored):
+-        print("MLP_TAPE records produced", k, "stored", len(stored), "DIFFER")
+-        bad += 1
++        bad += run_case(ctx, row_cases[r], 0)
++        bad += run_case(ctx, row_cases[r], 1)
+     if bad != 0:
+         raise Error("MLP_TAPE_STEP_FAIL " + String(bad) + " differing tensors")
+-    print("MLP_TAPE_STEP_PASS every loss, logit, gradient and updated state word equals the stored record (" + String(k) + " tensors)")
++    print("MLP_TAPE_STEP_PASS every loss, logit, gradient and updated state word equals the hand chain")
+diff --git b/training/mlp_ops.mojo a/training/mlp_ops.mojo
+index b9dd69447..698f3e2e7 100644
+--- b/training/mlp_ops.mojo
++++ a/training/mlp_ops.mojo
+@@ -29,7 +29,7 @@ from gemm.neural_dispatch import (
+     neural_model_leaf_into,
+     NEURAL_GEMM_EXPERIMENT_ENABLED,
+ )
+-from gemm.contract import OP_NT
++from gemm.contract import OP_NN, OP_NT, OP_TN
+ from gemm.experiments.neural_switches import ROLE_PROJECTION, ROLE_WGRAD
+ from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED
+ from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
+@@ -50,13 +50,13 @@ from training.estimator import (
+ #: FAST + Apple + `-D MOJOLEARN_AFN_MLP_FUSED_STEP` (or `_ALL`); every other
+ #: build takes the path below unchanged (training/mlp_fast.mojo).
+ from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
+-#: lane ag-smallmlp-tape (2026-10-19): the step's backward runs on the
+-#: autograd tape (autograd/rules_small_mlp.mojo; the same kernels on the
+-#: same buffers, so the same bits as the hand chain it replaced).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
++#: lane ag-smallmlp-tape (2026-10-19): the step's backward on the autograd
++#: tape, default on (autograd/rules_small_mlp.mojo; the same kernels on the
++#: same buffers, so the same bits). -D MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
++#: restores the hand chain below.
+ from sequence.ops import FP
+ from autograd.rules_small_mlp import (
++    AUTOGRAD_SMALL_MLP,
+     SmallMlpBuffer,
+     SmallMlpKernels,
+     SmallMlpRecordExec,
+@@ -328,7 +328,7 @@ def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
+         ws_n = w
+ 
+ 
+-def mlp_train_step_host(
++def mlp_train_step_host[tape: Bool = AUTOGRAD_SMALL_MLP](
+     ctx: DeviceContext,
+     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+     y_ptr: MutPointer[Int32, MutUntrackedOrigin],
+@@ -387,8 +387,9 @@ def mlp_train_step_host(
+                     flat `[w1, b1, w2, b2]` registry, the weights, `m`, `v`
+                     and the flags written back in place
+ 
+-    The backward runs on the autograd tape (autograd/rules_small_mlp.mojo):
+-    the six calls above as recorded nodes, launched in that order.
++    `tape` (default `AUTOGRAD_SMALL_MLP`) runs the backward on the autograd
++    tape (autograd/rules_small_mlp.mojo): the same launches with the same
++    arguments, so the same bits; False is the hand chain below.
+ 
+     `mode` is `MLP_STEP_FORWARD` (the logits alone; `y` is unread),
+     `MLP_STEP_GRADS` (the loss, the logits and the four gradients; the
+@@ -551,34 +552,61 @@ def mlp_train_step_host(
+     var db2_v = g_d.create_sub_buffer[DType.float32](MLP_OFF_B2, MLP_B2)
+     var incoming = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
+     var dhidden = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
+-    # dx's buffer is made here (the tape writes it inside the backward); an
+-    # allocation's place in the queue moves no bit.
++    # dx's buffer is made here for both arms (the tape writes it inside the
++    # backward); an allocation's place in the queue moves no bit.
+     var dx_n = 1
+     if want_input_grad != 0:
+         dx_n = rows * MLP_IN
+     var dx_d = ctx.enqueue_create_buffer[DType.float32](dx_n)
+-    # ---- Backward on the tape: the same seven launches (header of
+-    # autograd/rules_small_mlp.mojo), then the two refusal scans
+-    # (cpu2-l11-neural, 2026-10-04: the gradients' and dx's refusal is a
+-    # device scan, before any result or state leaves the device). The tape
+-    # records on an executor that refuses to launch or allocate (every node
+-    # holds caller storage, the rules launch on ctx) and never waits, so it
+-    # adds no drain to the step.
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+-    var tape_ex = SmallMlpRecordExec()
+-    small_mlp_backward_autograd(
+-        tape_ex, _MlpStepKernels(ctx, small_mlp_buffer(ws)),
+-        x_d, w1_v, b1_v, w2_v, b2_v, pre1, act, pre2, logits, dlogits,
+-        dw1_v, db1_v, dw2_v, db2_v, incoming, dhidden, dx_d,
+-        rows, MLP_IN, MLP_HID, MLP_OUT, want_input_grad != 0,
+-    )
+-    if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
+-        raise Error("small MLP operation has nonfinite input or output")
+-    if want_input_grad != 0:
+-        if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
++    comptime if tape:
++        # ---- Backward on the tape: the same seven launches (header of
++        # autograd/rules_small_mlp.mojo), then the same two refusal scans.
++        # The tape records on an executor that refuses to launch or allocate
++        # (every node holds caller storage, the rules launch on ctx) and
++        # never waits, so it adds no drain to the step.
++        var tape_ex = SmallMlpRecordExec()
++        small_mlp_backward_autograd(
++            tape_ex, _MlpStepKernels(ctx, small_mlp_buffer(ws)),
++            x_d, w1_v, b1_v, w2_v, b2_v, pre1, act, pre2, logits, dlogits,
++            dw1_v, db1_v, dw2_v, db2_v, incoming, dhidden, dx_d,
++            rows, MLP_IN, MLP_HID, MLP_OUT, want_input_grad != 0,
++        )
++        if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
++            raise Error("small MLP operation has nonfinite input or output")
++        if want_input_grad != 0:
++            if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
++                raise Error("small MLP operation has nonfinite input or output")
++            ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
++    else:
++        # ---- Backward by hand: `_gradient`'s six calls in its order (the
++        # MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF arm).
++        _gemm[ROLE_WGRAD](ctx, dw2_v, dlogits, act, ws, MLP_OUT, MLP_HID, rows, OP_TN)
++        _launch_mlp(
++            # operation 3 never reads `other`; `incoming` is a distinct placeholder
++            ctx, dlogits.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B2,
++            rows, MLP_OUT, 3,
++        )
++        _gemm(ctx, incoming, dlogits, w2_v, ws, rows, MLP_HID, MLP_OUT, OP_NN)
++        _launch_mlp(
++            ctx, act.unsafe_ptr(), incoming.unsafe_ptr(), dhidden.unsafe_ptr(),
++            rows, MLP_HID, 2,
++        )
++        _gemm[ROLE_WGRAD](ctx, dw1_v, dhidden, x_d, ws, MLP_HID, MLP_IN, rows, OP_TN)
++        _launch_mlp(
++            # operation 3 never reads `other`; `incoming` is a distinct placeholder
++            ctx, dhidden.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B1,
++            rows, MLP_HID, 3,
++        )
++        # cpu2-l11-neural (2026-10-04): the gradients' (and dx's) refusal is a
++        # device scan here, before any result or state leaves the device; the
++        # Python trainer no longer walks them on the host after the call.
++        if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
+             raise Error("small MLP operation has nonfinite input or output")
+-        ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
++        if want_input_grad != 0:
++            _gemm(ctx, dx_d, dhidden, w1_v, ws, rows, MLP_IN, MLP_HID, OP_NN)
++            if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
++                raise Error("small MLP operation has nonfinite input or output")
++            ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
+     # The gradients are a result whatever the mode; the optimizer (no clip)
+     # never writes them, so their download may sit ahead of it in the queue.
+     ctx.enqueue_copy(dst_ptr=dw1_ptr, src_buf=dw1_v)
