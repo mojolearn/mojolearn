@@ -344,7 +344,9 @@ def test_plan_apple_carries_fast_and_identical_arms():
                           + len([l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"]) + more + tasks + algos)
     for r in races:
         if r["family"] == "neural":
-            assert r["our_arms"] == {"ours": "identical", "ours-fast": "fast"}, r["id"]
+            want = ({"ours-fast": "fast"} if r["lane"] in bb.NEURAL.FIT_LANES
+                    else {"ours": "identical", "ours-fast": "fast"})
+            assert r["our_arms"] == want, r["id"]
             continue
         modes = sorted(set(r["our_arms"].values()))
         assert modes == ["fast", "identical"], r["id"]
@@ -750,7 +752,13 @@ NEURAL_IDS = [
     "neural/mamba3-decode/gaussian/shape=full",
     "neural/samba-decode/bytes/shape=full",
     "neural/mlp-predict/gaussian/shape=full",
-    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full"]
+    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full",
+    # the whole-fit lanes of the tape-trained models (2026-10-19, lane ag-bench)
+    "neural/mlp-fit/higgs/shape=full", "neural/lstm-fit/higgs/shape=full",
+    "neural/gru-fit/higgs/shape=full", "neural/rnn-fit/higgs/shape=full",
+    "neural/tape-user-model/higgs/shape=full"]
+#: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch
+FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i}
 #: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
 #: minus DECODE_TORCH_TWIN); transformer-decode's twin is a per-token loop, never compiled
 NO_TWIN_DECODE = ("mamba1-decode", "mamba2-decode", "mamba3-decode", "samba-decode")
@@ -772,6 +780,12 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # the Apple FAST neural tier (Oct 3 2026): `ours-fast` beside `ours` on Apple only
     ours = ["ours", "ours-fast"] if vendor == "apple" else ["ours"]
     for r in races:
+        fit = r["id"] in FIT_IDS
+        if fit and vendor == "apple":
+            assert r["our_arms"] == {"ours-fast": "fast"} and r["modes"] == ["fast"], r["id"]
+            assert r["opponents"] == GPU_ARMS[vendor] + ["mlx-fp32"], r["id"]
+            assert r["arms"] == ["ours-fast"] + GPU_ARMS[vendor] + ["mlx-fp32"]
+            continue
         assert r["our_arms"] == ({"ours": "identical", "ours-fast": "fast"} if vendor == "apple"
                                  else {"ours": "identical"})
         assert r["modes"] == (["fast", "identical"] if vendor == "apple" else ["identical"])
@@ -808,8 +822,10 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # +6 inference lanes (Oct 7 2026): apple 64 -> 82, amd 52 -> 64, nvidia 73 -> 88
     # FAIRNESS FIX (2026-10-13 audit): + the mamba-ssm arms on the three Mamba forward lanes
     # (NVIDIA fp32 and tf32: +6; AMD fp32: +3)
-    assert cells == {"apple": 82, "amd": 67, "nvidia": 94}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 18, "cells": cells}}
+    # + the 5 fit lanes (2026-10-19): apple ours-fast + 4 torch + mlx (+30), amd ours + 4 torch (+25),
+    # nvidia ours + 6 torch (+35)
+    assert cells == {"apple": 112, "amd": 92, "nvidia": 129}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 23, "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
