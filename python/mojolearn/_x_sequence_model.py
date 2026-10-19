@@ -10,6 +10,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_model')
 
 from . import _backend
+from ._cast_in import as_input, describe
 
 # Description codes (autograd/model.mojo LAYER_*, LOSS_*, ...).
 _SPEC_VERSION = 1
@@ -24,11 +25,13 @@ _OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2}
 _PREDICT_CHUNK = 4096
 
 
-def _f32_2d(X, name):
-    # float64 input is cast to float32 once, natively, as every other
-    # estimator's input is; the view keeps the converted Array alive
-    from ._buffer import as_f32_c
-    return np.asarray(as_f32_c(X, ndim=2, name=name)[0])
+def _x_2d(X, name):
+    # the user's array as it is and its descriptor: Mojo casts it to float32
+    # on the executor (_cast_in.py); the caller keeps the array alive
+    X = as_input(X)
+    if X.ndim != 2:
+        raise ValueError(f"{name} must be a 2-D array of shape (n_samples, n_features)")
+    return X, describe(X, name)
 
 
 class Sequential:
@@ -273,7 +276,8 @@ class Sequential:
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training inputs, cast to float32.
+            Training inputs: a bool, integer, float32 or float64 array in C
+            or Fortran order, used as float32.
         y : array-like
             Targets: (n_samples,) or (n_samples, n_outputs) for ``mse`` and
             ``huber``; one label per row for ``cross_entropy`` (any number
@@ -303,13 +307,13 @@ class Sequential:
         if int(epochs) < 1 or int(batch_size) < 1:
             raise ValueError("epochs and batch_size must be >= 1")
         o = self._options
-        X = _f32_2d(X, "X")
+        X, xd = _x_2d(X, "X")
         n, d = X.shape
         prog = self._program(d)
         table = self._table()
         b = self._binding()
         n_params, n_out = (int(v) for v in b.model_n_params(prog, table))  # glue: two counts returned by Mojo
-        Y, target = self._targets(y, n, n_out, o["loss"])
+        Y, yd, target = self._targets(y, n, n_out, o["loss"])
         params = np.zeros(n_params, dtype=np.float32)
         curve = np.zeros(int(epochs), dtype=np.float32)
         seed = int(seed)
@@ -318,8 +322,9 @@ class Sequential:
               o["n_iter_no_change"], 1]
         fp = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0.0, o["tol"], o["gamma"],
               o["huber_delta"]] + table
-        n_iter = int(b.model_fit([X.ctypes.data, Y.ctypes.data, params.ctypes.data, curve.ctypes.data],
-                                 prog, ip, fp))
+        # X and Y stay referenced until the call returns (their descriptors
+        # carry the addresses)
+        n_iter = int(b.model_fit([xd, yd, params.ctypes.data, curve.ctypes.data], prog, ip, fp))
         self.params_ = params
         self.n_iter_ = n_iter
         self.loss_curve_ = curve[:n_iter].tolist()
@@ -330,48 +335,46 @@ class Sequential:
 
     def _targets(self, y, n, n_out, loss):
         if loss in ("cross_entropy", "bce_with_logits"):
-            y = np.asarray(y)
+            y = as_input(y)
             if y.ndim != 1 or len(y) != n:
                 raise ValueError(f"{loss} takes one label per row of X")
             if y.dtype.kind not in "biuf":
                 raise ValueError(f"{loss} takes numeric labels")
-            # sorted classes and int32 codes in Mojo, by the sequence
-            # binding itself (`model_labels`: the device sort on a GPU, its
-            # host twin on the CPU column)
-            real = y.dtype.kind == "f"
-            wide = np.ascontiguousarray(y, dtype=np.float64 if real else np.int64)
-            classes = np.empty(n, dtype=wide.dtype)
+            # sorted classes (in y's own dtype) and int32 codes in Mojo, by
+            # the sequence binding itself (`model_labels`: the device sort on
+            # a GPU, its host twin on the CPU column), from y as it is
+            classes = np.empty(n, dtype=y.dtype)
             codes = np.empty(n, dtype=np.int32)
-            k = int(self._binding().model_labels(wide.ctypes.data, n, 0 if real else 1,
-                                                 classes.ctypes.data, codes.ctypes.data))
-            self.classes_ = classes[:k].astype(y.dtype, copy=False)
+            k = int(self._binding().model_labels(describe(y, "y"), classes.ctypes.data,
+                                                 codes.ctypes.data))
+            self.classes_ = classes[:k]
             if loss == "cross_entropy":
                 if k != n_out:
                     raise ValueError(f"the labels have {k} classes but the model has {n_out} outputs")
-                return codes, _TARGET_CODES
+                return codes, describe(codes, "y"), _TARGET_CODES
             if k != 2 or n_out != 1:
                 raise ValueError("bce_with_logits needs two classes and a model with one output")
-            return codes, _TARGET_CODE_VALUES
-        from ._buffer import as_f32_c
-        y = np.asarray(as_f32_c(y, ndim=None, name="y")[0])
+            return codes, describe(codes, "y"), _TARGET_CODE_VALUES
+        y = as_input(y)
         if y.ndim not in (1, 2) or len(y) != n:
             raise ValueError("y must be (n_samples,) or (n_samples, n_outputs)")
         self._y_1d = y.ndim == 1
-        Y = np.ascontiguousarray(y.reshape(n, -1))
-        if Y.shape[1] != n_out:
-            raise ValueError(f"y has {Y.shape[1]} outputs but the model has {n_out}")
-        return Y, _TARGET_DENSE
+        width = 1 if y.ndim == 1 else y.shape[1]
+        if width != n_out:
+            raise ValueError(f"y has {width} outputs but the model has {n_out}")
+        # y as it is; Mojo casts it to float32 on the executor
+        return y, describe(y, "y"), _TARGET_DENSE
 
     # ------------------------------------------------------------ prediction
     def _forward(self, X, transform, width=None):
         if not hasattr(self, "params_"):
             raise ValueError("call fit before predict")
-        X = _f32_2d(X, "X")
+        X, xd = _x_2d(X, "X")
         if X.shape[1] != self.n_features_in_:
             raise ValueError(f"X has {X.shape[1]} features, the model was fitted on {self.n_features_in_}")
         width = self.n_outputs_ if width is None else width
         out = np.zeros((X.shape[0], width), dtype=np.float32)
-        self._binding().model_predict([X.ctypes.data, self.params_.ctypes.data, out.ctypes.data],
+        self._binding().model_predict([xd, self.params_.ctypes.data, out.ctypes.data],
                                       self._program(self.n_features_in_), self._table(),
                                       [X.shape[0], _PREDICT_CHUNK, transform])
         return out
@@ -382,7 +385,8 @@ class Sequential:
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Inputs, cast to float32.
+            Inputs: a bool, integer, float32 or float64 array in C or
+            Fortran order, used as float32.
 
         Returns
         -------
@@ -397,8 +401,15 @@ class Sequential:
             # class codes from the binding: the first-max-wins row argmax of
             # the logits, or sigmoid p > 0.5 (a NaN takes class 0)
             mode = _OUT_ARGMAX if loss == "cross_entropy" else _OUT_THRESHOLD
-            codes = self._forward(X, mode, width=1)[:, 0].astype(np.int64)
-            return self.classes_[codes]
+            codes = self._forward(X, mode, width=1)
+            # the labels by one gather over classes_ in Mojo (`model_gather_labels`;
+            # classes_ is numeric: fit refuses non-numeric labels)
+            classes = self.classes_
+            labels = np.empty(codes.shape[0], dtype=classes.dtype)
+            self._binding().model_gather_labels(
+                [codes.ctypes.data, classes.ctypes.data, labels.ctypes.data],
+                [codes.shape[0], classes.shape[0], classes.dtype.itemsize])
+            return labels
         out = self._forward(X, _OUT_RAW)
         return out[:, 0].copy() if getattr(self, "_y_1d", False) else out
 
@@ -408,7 +419,8 @@ class Sequential:
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Inputs, cast to float32.
+            Inputs: a bool, integer, float32 or float64 array in C or
+            Fortran order, used as float32.
 
         Returns
         -------
