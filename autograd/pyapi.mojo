@@ -2,8 +2,10 @@
 """The address contract of the model-description entries, written once over
 `Exec`: `bindings/_mojolearn_x_sequence.mojo` calls these with a
 `DeviceExec`, `bindings/_mojolearn_x_sequence_host.mojo` with a `HostExec`.
-Python passes the description and the options as integer and float lists
-plus caller-owned C-contiguous float32 buffers by address; Mojo validates
+Python passes the description and the options as integer and float lists,
+the user's arrays as they are (an input descriptor, `cast_in_of`: address,
+NumPy dtype number, item size, shape, byte strides; Mojo casts them on the
+executor) and caller-owned float32 result buffers by address; Mojo validates
 them and runs the whole fit or prediction. Nothing is retained after a call.
 
 Description (both entries): prog = [1, input features, layer count, then per
@@ -17,6 +19,8 @@ from autograd.model import FitConfig, ModelSpec, model_fit, model_predict, parse
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
 from autograd.profile import ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
+from core.cast_in import CastIn, cast_in_kind, label_kind_of
+from autograd.cast_ops import gather_labels
 
 # Training options ahead of the per-layer float table in model_fit's fp.
 comptime FIT_INTS = 14
@@ -37,6 +41,20 @@ def _floats(p: PythonObject, start: Int) raises -> List[Float32]:
     return out^
 
 
+def cast_in_of(desc: PythonObject, what: String) raises -> CastIn:
+    """The input descriptor [address, NumPy dtype number, item size, rows,
+    cols, row stride, column stride] (strides in bytes; a 1-D array of n is
+    (n, 1), a scalar (1, 1)) as a checked CastIn."""
+    if len(desc) != 7:
+        raise Error(what + ": the input descriptor takes 7 integers")
+    var c = CastIn(
+        ival(desc, 0), cast_in_kind(ival(desc, 1), ival(desc, 2), what), ival(desc, 2),
+        ival(desc, 3), ival(desc, 4), ival(desc, 5), ival(desc, 6),
+    )
+    c.check(what)
+    return c
+
+
 def _seed(ip: PythonObject, at: Int) raises -> UInt64:
     var lo = ival(ip, at)
     var hi = ival(ip, at + 1)
@@ -48,8 +66,9 @@ def _seed(ip: PythonObject, at: Int) raises -> UInt64:
 def model_fit_py[E: Exec](
     mut ex: E, addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject,
 ) raises -> PythonObject:
-    """addrs = [X (N, D), Y ((N, out) float32, or N int32 codes), params
-    (n_params, in/out), loss_curve (epochs, out)];
+    """addrs = [X (N, D) descriptor, Y descriptor ((N, out) any accepted
+    dtype, or N C-contiguous int32 codes), params address (n_params,
+    in/out), loss_curve address (epochs, out)];
     ip = [N, loss, target, optimizer kind, optimizer flags, schedule,
     schedule step, batch, epochs, shuffle, seed_lo, seed_hi,
     n_iter_no_change, init];
@@ -71,7 +90,7 @@ def model_fit_py[E: Exec](
     var profile = ag_profile_on()
     if profile:
         ag_profile_reset()
-    var n_iter = model_fit(ex, spec, cfg, fptr(addrs[0], "X"), fptr(addrs[1], "Y"), N,
+    var n_iter = model_fit(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
                            fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"))
     if profile:
         print("AG_PROFILE fit=model_fit")
@@ -82,7 +101,7 @@ def model_fit_py[E: Exec](
 def model_predict_py[E: Exec](
     mut ex: E, addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject,
 ) raises -> PythonObject:
-    """addrs = [X (N, D), params, out (N, out)]; ptab = one float per layer;
+    """addrs = [X (N, D) descriptor, params address, out address (N, out)]; ptab = one float per layer;
     ip = [N, chunk, transform (0 none, 1 softmax, 2 sigmoid, 3 the (N, 2)
     [1 - p, p] of a one-output sigmoid, 4 the row argmax as N float32
     codes, 5 one-output sigmoid > 0.5 as N float32 codes)]. Returns the
@@ -91,7 +110,7 @@ def model_predict_py[E: Exec](
         raise Error("model_predict: requires 3 addresses and 3 integer parameters")
     var spec = parse_model(_ints(prog), _floats(ptab, 0))
     var N = ival(ip, 0)
-    model_predict(ex, spec, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"),
+    model_predict(ex, spec, cast_in_of(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"),
                   ival(ip, 1), ival(ip, 2))
     if ival(ip, 2) == 3:
         return PythonObject(N * 2)
@@ -100,24 +119,34 @@ def model_predict_py[E: Exec](
     return PythonObject(N * spec.out_features())
 
 
-def model_labels_check(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
-                       classes_addr: PythonObject, codes_addr: PythonObject) raises -> Tuple[Int, Int]:
-    """`model_labels`' argument checks (both columns): returns (n, kind)."""
-    var count = Int(py=n)
-    var k_ind = Int(py=kind)
-    if count < 1:
-        raise Error("model_labels: n must be positive, got " + String(count))
-    if k_ind != 0 and k_ind != 1:
-        raise Error("model_labels: kind must be 0 (float64) or 1 (int64)")
-    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
+def model_labels_check(src: PythonObject, classes_addr: PythonObject, codes_addr: PythonObject) raises -> Tuple[CastIn, Int]:
+    """`model_labels`' argument checks (both columns): the labels'
+    descriptor (one label per row: cols 1) and the label sort's kind."""
+    var c = cast_in_of(src, "y")
+    if c.cols != 1:
+        raise Error("model_labels: the labels must be one per row")
+    if Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
         raise Error("model_labels: null buffer address")
-    return (count, k_ind)
+    return (c, label_kind_of(c.kind, c.itemsize, "y"))
 
 
 def model_labels_result(k: Int) raises -> PythonObject:
     if k == -2:
         raise Error("mojolearn: y contains a NaN label; NaN is not a class")
     return PythonObject(k)
+
+
+def model_gather_labels_py[E: Exec](
+    mut ex: E, codes: PythonObject, n: PythonObject, classes: PythonObject, k: PythonObject,
+    itemsize: PythonObject, out: PythonObject,
+) raises -> PythonObject:
+    """out[i] = classes[codes[i]]: n float32 class codes at `codes`, k
+    classes of `itemsize` bytes at `classes` (classes_), n items into `out`
+    (an array of classes_' dtype), gathered on the executor
+    (autograd/cast_ops.mojo gather_labels). Returns n. Sequential refuses
+    non-numeric labels at fit, so classes_ is always a numeric array."""
+    gather_labels(ex, Int(py=codes), Int(py=n), Int(py=classes), Int(py=k), Int(py=itemsize), Int(py=out))
+    return PythonObject(Int(py=n))
 
 
 def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
@@ -168,14 +197,16 @@ def ops_close_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject) r
 
 
 def ops_upload_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, addr: PythonObject, ip: PythonObject,
+    sid: PythonObject, desc: PythonObject, ip: PythonObject,
 ) raises -> PythonObject:
-    """addr: the caller's C-contiguous float32 (rows, cols); ip = [rows, cols,
-    requires_grad]. Returns the new tensor's handle."""
-    if len(ip) != 3:
-        raise Error("ops_upload: requires [rows, cols, requires_grad]")
+    """desc: the caller's (rows, cols) array as it is (`cast_in_of`; cast to
+    float32 on the executor); ip = [requires_grad]. Returns the new
+    tensor's handle."""
+    if len(ip) != 1:
+        raise Error("ops_upload: requires [requires_grad]")
+    var src = cast_in_of(desc, "x")
     var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].upload(fptr(addr, "data"), ival(ip, 0), ival(ip, 1), ival(ip, 2) != 0))
+    return PythonObject(p[].upload(src, ival(ip, 0) != 0))
 
 
 def ops_download_py[E: Exec & Movable & Deinitable, KIND: Int](
