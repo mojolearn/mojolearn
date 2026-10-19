@@ -52,6 +52,35 @@ CPU lanes (the *Inference classes run on the host binding, on the CPU):
                        Mamba{1,2,3}BlockInference(weights).forward(x).
   samba-infer          SambaInference(config, weights).forward(inputs).
   mlp-infer            MLPInference(w1, b1, w2, b2).predict_logits(X).
+GPU fit lanes (2026-10-19, lane ag-bench: the trainers whose backward runs
+through the autograd tape; one round is ONE WHOLE FIT, the held-out
+prediction runs after the clock and is scored by the conductor):
+  mlp-fit              MLPClassifier(hidden_layer_sizes=(256,), solver='adam',
+                       batch_size=512, max_iter=1, alpha=0.0, ...).fit(X, y)
+                       on HIGGS (tools/sequence_speed.py case_mlp's recipe:
+                       1M rows x 28 standardized; one logit, binary log loss).
+  lstm-fit / gru-fit / rnn-fit
+                       {LSTM,GRU,RNN}Regressor(hidden_size=64, num_layers=1,
+                       batch_size=512, max_epochs=1, optimizer='adam')
+                       .fit(X, y) on HIGGS rows cut into 16-step sequences
+                       (case_recurrent's recipe; the target is the label of
+                       each sequence's last row, MSE).
+  tape-user-model      mojolearn.Sequential: Linear(28, 64), ReLU,
+                       Linear(64, 64), ReLU, Linear(64, 1), BCE with logits,
+                       Adam: a model the user describes, trained through the
+                       tape (the model API of lane ag-pyapi; the arm refuses
+                       by name while that class is absent).
+  Their opponents are the same networks in torch.nn (nn.Sequential of
+  nn.Linear/nn.ReLU, nn.LSTM / nn.GRU / nn.RNN with an nn.Linear head on the
+  last hidden state) trained by torch.optim.Adam with the same sizes, batch
+  size, epoch count, learning rate, betas, eps and seed, every training row
+  moved to the device inside the clock (TorchFitArm), at every torch setting
+  of the box (TORCH_SETTINGS); on Apple also MLX (`mlx-fp32`: mlx.nn and
+  mlx.optimizers.Adam with bias correction, MlxFitArm). On Apple the fit
+  lanes race `ours-fast` only: identical is never timed on Apple.
+  Quality beside every time (held-out rows, float64 in the conductor):
+  accuracy, log loss and AUC for the classifiers, RMSE and AUC of the score
+  for the recurrent regressors (tools/speed_gbdt_arm.py's metric helpers).
 The Mamba blocks and TransformerBlock expose a backward (a VJP), not a
 training step; they have no optimizer, so they race forward only.
 
@@ -227,6 +256,9 @@ LANES = ("lm-train-step", "lm-forward", "gemm",
          # bf16 and int8 GEMM profiles (SmallByteLanguageModelTrainer IS
          # LanguageModelTrainer, raced by lm-train-step and lm-forward)
          "lm-infer", "lm-host-train-step", "gemm-bf16", "gemm-int8")
+#: 2026-10-19 (lane ag-bench): whole fits of the tape-trained models on HIGGS (see the docstring)
+FIT_LANES = ("mlp-fit", "lstm-fit", "gru-fit", "rnn-fit", "tape-user-model")
+LANES = LANES + FIT_LANES
 #: The model each lane runs.
 MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "transformer-forward": "transformer", "transformer-infer": "transformer",
@@ -238,7 +270,11 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "lm-infer": "lm", "lm-host-train-step": "lm", "gemm-bf16": "gemm", "gemm-int8": "gemm",
             "transformer-decode": "transformer", "mamba1-decode": "mamba1",
             "mamba2-decode": "mamba2", "mamba3-decode": "mamba3", "samba-decode": "samba",
-            "mlp-predict": "mlp"}
+            "mlp-predict": "mlp",
+            "mlp-fit": "mlpfit", "lstm-fit": "rnnfit", "gru-fit": "rnnfit", "rnn-fit": "rnnfit",
+            "tape-user-model": "tapefit"}
+#: The recurrent cell of each recurrent fit lane.
+FIT_CELL = {"lstm-fit": "lstm", "gru-fit": "gru", "rnn-fit": "rnn"}
 #: GPU incremental-decode lanes: one public step call per token over the
 #: lane's whole sequence, from a zero state each round.
 DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-decode",
@@ -248,11 +284,17 @@ DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-
 #: carried-state step, and Samba stacks Mamba-3, so those lanes race ours alone.
 DECODE_TORCH_TWIN = ("transformer-decode",)
 TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
+#: Whole-fit lanes (2026-10-19, lane ag-bench): FIT_LANES above. Every arm's round is one fit
+#: from a fresh seeded initialization; nothing carries over between rounds, so the per-round
+#: digest of an identical arm repeats (digest_stable is meaningful).
+FIT_TASK = {"mlp-fit": "classification", "tape-user-model": "classification",
+            "lstm-fit": "regression", "gru-fit": "regression", "rnn-fit": "regression"}
 #: Where OUR class runs: the *Inference classes are the host binding.
 DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") or lane == "lm-host-train-step" else "gpu")
              for lane in LANES}
 #: The data each lane reads (the board's `dataset` column).
-DATA_OF = {lane: ("bytes" if MODEL_OF[lane] in ("lm", "samba") else "gaussian") for lane in LANES}
+DATA_OF = {lane: ("higgs" if lane in FIT_LANES else "bytes" if MODEL_OF[lane] in ("lm", "samba")
+                  else "gaussian") for lane in LANES}
 
 #: torch settings, in tools/torch_lm_step_opponent.py COLUMNS order.
 TORCH_SETTINGS = ("eager-fp32", "eager-tf32", "compile-fp32", "compile-tf32",
@@ -301,9 +343,11 @@ MAMBA_SSM_VENDORS = tuple(MAMBA_SSM_VENDOR_ARMS)
 #: Our arms: `ours` IDENTICAL, `ours-fast` the Apple FAST neural tier.
 OUR_ARMS = ("ours", "ours-fast")
 OUR_MODE = {"ours": "identical", "ours-fast": "fast"}
+#: 2026-10-19 (lane ag-bench): MLX on Apple, the fit lanes' second Apple opponent (MlxFitArm)
+MLX_ARMS = ("mlx-fp32",)
 ARMS = OUR_ARMS + tuple("torch-" + s for s in TORCH_SETTINGS) \
     + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8") \
-    + MAMBA_SSM_ARMS
+    + MAMBA_SSM_ARMS + MLX_ARMS
 #: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
 INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
                 "compile_int8": dict(tf32=False, compile=True, autocast=None)}
