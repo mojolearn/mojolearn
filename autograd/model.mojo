@@ -13,7 +13,7 @@ from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
-    OPT_ADAM, OPT_ADAMW, OPT_SGD,
+    OPT_ADAM, OPT_ADAMW, OPT_SGD, dummy_ptr,
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from sequence.recurrent import OptConfig, OptState, opt_step
@@ -21,6 +21,7 @@ from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
 from autograd.tape import Tape, Tensor
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
 from autograd.layers import NeuralRules, layer_norm
+from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 
 # Lane ag-data adds `Tape.dropout`; lane ag-forward adds the tape's
@@ -530,6 +531,17 @@ def model_fit[E: Exec](
     var didx = ex.alloc(N)
     var xb = ex.alloc(bs * D)
     var yb = ex.alloc(bs * TW)
+    # AUTOGRAD_GATHER_EPOCH (autograd/data.mojo, lane ag-pass5-composed): one
+    # gather an epoch into a permuted copy when it fits; each batch is then
+    # a slice of it (xb and yb point into the copy). The same words.
+    var epoch_gather = False
+    var Xp = dummy_ptr()
+    var Yp = dummy_ptr()
+    comptime if AUTOGRAD_GATHER_EPOCH:
+        epoch_gather = gather_epoch_fits(N, D + TW)
+        if epoch_gather:
+            Xp = ex.alloc(N * D)
+            Yp = ex.alloc(N * TW)
     var n_batches = (N + bs - 1) // bs
     var dloss = ex.alloc(n_batches)
     var dcurve = ex.alloc(cfg.epochs)
@@ -550,21 +562,32 @@ def model_fit[E: Exec](
             ia.p0 = didx
             ex.launch[OP_SEQ_IOTA](ia, N)
         var lr = model_lr(cfg, epoch)
+        comptime if AUTOGRAD_GATHER_EPOCH:
+            # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
+            if epoch_gather and (cfg.shuffle or epoch == 0):
+                gather_epoch(ex, dX, dY, didx, N, D, TW, Xp, Yp)
         for bi in range(n_batches):  # driver-loop: over batches
             var off = bi * bs
             var B = bs if off + bs <= N else N - off
-            # X and Y rows of the batch in one launch
-            var gx = Args()
-            gx.p0 = dX
-            gx.p1 = didx
-            gx.p2 = xb
-            gx.p3 = dY
-            gx.p4 = yb
-            gx.i0 = B
-            gx.i1 = D
-            gx.i2 = off
-            gx.i3 = TW
-            ex.launch[OP_GATHER_ROWS](gx, B * (D + TW))
+            var gathered = False
+            comptime if AUTOGRAD_GATHER_EPOCH:
+                if epoch_gather:
+                    xb = Xp + off * D
+                    yb = Yp + off * TW
+                    gathered = True
+            if not gathered:
+                # X and Y rows of the batch in one launch
+                var gx = Args()
+                gx.p0 = dX
+                gx.p1 = didx
+                gx.p2 = xb
+                gx.p3 = dY
+                gx.p4 = yb
+                gx.i0 = B
+                gx.i1 = D
+                gx.i2 = off
+                gx.i3 = TW
+                ex.launch[OP_GATHER_ROWS](gx, B * (D + TW))
             tape.reset()
             var x = tape.variable(ex, xb, B, D, False)
             var target = tape.variable(ex, yb, B, TW, False)
