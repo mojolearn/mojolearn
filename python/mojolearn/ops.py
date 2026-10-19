@@ -148,7 +148,7 @@ class Session:
 
     def profile_report(self):
         """The process-wide launch profile as text: launches per operation."""
-        return str(self._b.ops_profile_report())
+        return str(self._b.ops_profile_report())  # glue: diagnostic launch-count text over profile rows, no data
 
     # ------------------------------------------------------------ data
     def tensor(self, x, requires_grad=False):
