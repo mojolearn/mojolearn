@@ -2941,6 +2941,354 @@ class TorchArm:
         return None if self.train else _sha(self.np.ascontiguousarray(self.out).data)[:16]
 
 
+class TorchFitArm:
+    """The fit lanes' torch opponent at one setting (2026-10-19, lane ag-bench): the same network in
+    torch.nn, torch.optim.Adam, the lane's batch size and epoch count. The clock covers what ours'
+    fit() covers: a fresh seeded initialization, the training rows to the device, the shuffle, every
+    minibatch step (zero_grad, forward under the setting's autocast, loss, backward, Adam) and the loss
+    curve back on the host. The held-out prediction runs after the clock (outputs()). The module is
+    built (and compiled) once and re-initialized in place each round, so a compile arm compiles in its
+    untimed warm-up fit only."""
+
+    def __init__(self, lane, shape, data, arm):
+        import math
+        import numpy as np
+        self.np, self.lane, self.shape, self.arm = np, lane, shape, arm
+        where, setting = arm_setting(arm)
+        if where != "gpu":
+            raise RuntimeError("REFUSED: %s: the fit lanes race torch on the GPU only" % arm)
+        twin = _load("torch_lm_step_opponent")
+        col = twin.COLUMNS[setting.replace("-", "_")]
+        torch, dev, kind, name, sync = _torch_device()
+        self.torch, self.dev, self.kind, self._sync = torch, dev, kind, sync
+        torch.manual_seed(SEED)
+        hip = getattr(torch.version, "hip", None)
+        if col["tf32"] and not (kind == "cuda" and not hip):
+            raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA matmul mode; torch on %s "
+                               "accepts the flag and changes nothing" % (arm, "ROCm" if hip else kind))
+        precision = twin.set_precision(torch, col["tf32"])
+        self.autocast, probe = None, None
+        if col["autocast"]:
+            probe = twin.probe_autocast(torch, dev, col["autocast"], sync)
+            if not probe.get("applicable"):
+                raise RuntimeError("REFUSED: %s: torch.autocast(%r, %s) does not work on this box: %s"
+                                   % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
+            self.autocast = getattr(torch, col["autocast"])
+        self.compile = bool(col["compile"])
+        # host tensors (no copy): moved to the device inside every timed fit
+        self.Xtr = torch.from_numpy(np.ascontiguousarray(data["X_train"], dtype=np.float32))
+        self.ytr = torch.from_numpy(np.ascontiguousarray(data["y_train"], dtype=np.float32))
+        self.Xte = torch.from_numpy(np.ascontiguousarray(data["X_test"], dtype=np.float32))
+        d_in = int(self.Xtr.shape[-1])
+        nn, F = torch.nn, torch.nn.functional
+        recurrent = lane in FIT_CELL
+        task = FIT_TASK[lane]
+        if recurrent:
+            cls = {"lstm": nn.LSTM, "gru": nn.GRU, "rnn": nn.RNN}[FIT_CELL[lane]]
+            extra = {"nonlinearity": "tanh"} if lane == "rnn-fit" else {}
+            body = cls(d_in, FIT_RNN_HIDDEN, num_layers=1, bias=True, batch_first=True, device=dev, **extra)
+            head = nn.Linear(FIT_RNN_HIDDEN, 1, device=dev)
+            impl = type(body)
+            self.linears = []
+        else:
+            hidden = FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN
+            sizes = [d_in] + list(hidden) + [1]
+            mods = []
+            for i in range(len(sizes) - 1):
+                mods.append(nn.Linear(sizes[i], sizes[i + 1], device=dev))
+                if i < len(sizes) - 2:
+                    mods.append(nn.ReLU())
+            body, head = nn.Sequential(*mods), None
+            impl = type(body)
+            self.linears = [m for m in mods if isinstance(m, nn.Linear)]
+
+        class FitNet(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.body = body
+                self.head = head
+
+            def forward(self, x, y=None):
+                if recurrent:
+                    z = self.head(self.body(x)[0][:, -1]).squeeze(-1)
+                else:
+                    z = self.body(x).squeeze(-1)
+                if y is None:
+                    return z
+                if task == "classification":
+                    return F.binary_cross_entropy_with_logits(z.float(), y, reduction="mean")
+                return F.mse_loss(z.float(), y, reduction="mean")
+
+        self.module = FitNet()
+        self.body = body
+        self.head = head
+        self.recurrent = recurrent
+        self.task = task
+        self.fn = torch.compile(self.module) if self.compile else self.module
+        # every Adam flag explicit where this torch takes it (fused/foreach left to torch: implementation)
+        import inspect
+        try:
+            sig = inspect.signature(torch.optim.Adam).parameters
+        except (TypeError, ValueError):
+            sig = {}
+        self.opt_kwargs = dict(lr=FIT_ADAM["lr"], betas=tuple(FIT_ADAM["betas"]), eps=FIT_ADAM["eps"],
+                               weight_decay=FIT_ADAM["weight_decay"])
+        self.opt_kwargs.update({k: False for k in ("amsgrad", "maximize", "capturable", "differentiable")
+                                if k in sig})
+        back = torch.optim.Adam(self.module.parameters(), **self.opt_kwargs).defaults
+        try:
+            torch.randperm(4, device=dev)
+            self.perm_where = "torch.randperm on the device"
+        except Exception:  # noqa: BLE001  (a backend without a device randperm)
+            self.perm_where = "torch.randperm on the host, moved to the device inside the clock"
+        if recurrent:
+            layers = fit_layers(lane, d_in, [body.hidden_size])
+            extra_rb = dict(num_layers=body.num_layers, timesteps=int(self.Xtr.shape[1]))
+            if lane == "rnn-fit":
+                extra_rb["nonlinearity"] = body.nonlinearity
+        else:
+            layers = []
+            for m in body:
+                layers.append("linear %d %d %s" % (m.in_features, m.out_features, "bias" if m.bias is not None
+                                                   else "nobias") if isinstance(m, nn.Linear)
+                              else type(m).__name__.lower())
+            extra_rb = {}
+        self.record = fit_record(lane, "torch", impl, d_in, optimizer="adam", learning_rate=back["lr"],
+                                 betas=list(back["betas"]), eps=back["eps"], weight_decay=back["weight_decay"],
+                                 amsgrad=back.get("amsgrad", False), maximize=back.get("maximize", False),
+                                 layers=layers, **extra_rb)
+        self.info = {"library": "torch", "version": torch.__version__,
+                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
+                     "torch_backend": kind, "device": "gpu", "device_name": name,
+                     "setting": setting, "precision": precision_text(setting),
+                     "compile": "torch.compile (inductor, default mode)" if self.compile else "eager",
+                     "mode": "torch %s, %s" % ("compile" if self.compile else "eager", precision_text(setting)),
+                     "precision_readback": precision, "autocast_probe": probe,
+                     "column": setting.replace("-", "_") + " (tools/torch_lm_step_opponent.py COLUMNS)",
+                     "torch_threads": torch.get_num_threads(), "pre_clock_fit": False, "input_home": "host",
+                     "call": LANE_TEXT[lane][1], "shuffle": self.perm_where,
+                     "init": ("torch's own reset_parameters (U(+-1/sqrt(hidden)) on the cell, nn.Linear's "
+                              "default on the head: the same bound)" if recurrent else
+                              "Glorot uniform sqrt(6/(fan_in+fan_out)) on every weight and bias (scikit-learn's "
+                              "bounds, ours' rule)"),
+                     "fit_rows": int(self.Xtr.shape[0]), "held_out_rows": int(self.Xte.shape[0])}
+        self._glorot = lambda m: math.sqrt(6.0 / (m.in_features + m.out_features))
+        self.losses = None
+        self._score = None
+        sync()
+
+    def _ctx(self, grad=True):
+        import contextlib
+        torch = self.torch
+        stack = contextlib.ExitStack()
+        if self.autocast is not None:
+            stack.enter_context(torch.autocast(device_type=self.dev.type, dtype=self.autocast))
+        if not grad:
+            stack.enter_context(torch.no_grad())
+        return stack
+
+    def _reinit(self):
+        torch = self.torch
+        with torch.no_grad():
+            if self.recurrent:
+                self.body.reset_parameters()
+                self.head.reset_parameters()
+            else:
+                for m in self.linears:
+                    b = self._glorot(m)
+                    m.weight.uniform_(-b, b)
+                    m.bias.uniform_(-b, b)
+
+    def _perm(self, n):
+        torch = self.torch
+        if self.perm_where.endswith("on the device"):
+            return torch.randperm(n, device=self.dev)
+        return torch.randperm(n).to(self.dev)
+
+    def call(self):
+        np, torch = self.np, self.torch
+        torch.manual_seed(SEED)
+        self._reinit()
+        opt = torch.optim.Adam(self.module.parameters(), **self.opt_kwargs)
+        X, y = self.Xtr.to(self.dev), self.ytr.to(self.dev)
+        n = int(X.shape[0])
+        bs = max(1, min(FIT_BATCH, n))
+        losses = []
+        for _epoch in range(FIT_EPOCHS):
+            perm = self._perm(n)
+            for s in range(0, n, bs):
+                idx = perm[s:s + bs]
+                opt.zero_grad(set_to_none=True)
+                with self._ctx():
+                    loss = self.fn(X[idx], y[idx])
+                loss.backward()
+                opt.step()
+                losses.append(loss.detach())
+        self.losses = torch.stack(losses).float().cpu().numpy().astype(np.float64)
+        self._score = None
+
+    def sync(self):
+        self._sync()
+
+    def _predict(self):
+        torch = self.torch
+        if self._score is None:
+            parts = []
+            with self._ctx(grad=False):
+                X = self.Xte.to(self.dev)
+                for s in range(0, int(X.shape[0]), FIT_PREDICT_CHUNK):
+                    z = self.module(X[s:s + FIT_PREDICT_CHUNK]).float()
+                    parts.append(torch.sigmoid(z) if self.task == "classification" else z)
+            self._score = self.np.ascontiguousarray(torch.cat(parts).cpu().numpy().astype(self.np.float32))
+        return self._score
+
+    def outputs(self):
+        return {"score": self._predict(), "loss_curve": self.losses}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self._predict()).data)[:16]
+
+
+class MlxFitArm:
+    """The fit lanes' MLX opponent on Apple silicon (2026-10-19, lane ag-bench): mlx.nn (Linear/ReLU,
+    LSTM/GRU/RNN with a Linear head on the last hidden state), mlx.optimizers.Adam with bias correction,
+    nn.value_and_grad, mx.eval after every step (MLX's own training-loop pattern), float32. Same clock as
+    TorchFitArm: a fresh seeded model, the training rows into MLX arrays, the shuffle, every step and the
+    loss curve back on the host; the held-out prediction after the clock."""
+
+    def __init__(self, lane, shape, data, arm):
+        import numpy as np
+        if arm != "mlx-fp32":
+            raise RuntimeError("REFUSED: no MLX arm %r (mlx-fp32 only)" % arm)
+        if sys.platform != "darwin" or platform.machine() != "arm64":
+            raise RuntimeError("REFUSED: %s: MLX runs on Apple silicon only" % arm)
+        try:
+            import mlx.core as mx
+            import mlx.nn as mnn
+            import mlx.optimizers as mopt
+        except ImportError as exc:
+            raise RuntimeError("REFUSED: %s: mlx is not installed in this environment (%r)" % (arm, exc))
+        self.np, self.mx, self.mnn, self.mopt = np, mx, mnn, mopt
+        self.lane, self.arm = lane, arm
+        self.Xtr = np.ascontiguousarray(data["X_train"], dtype=np.float32)
+        self.ytr = np.ascontiguousarray(data["y_train"], dtype=np.float32)
+        self.Xte = np.ascontiguousarray(data["X_test"], dtype=np.float32)
+        self.d_in = int(self.Xtr.shape[-1])
+        self.recurrent = lane in FIT_CELL
+        self.task = FIT_TASK[lane]
+        mx.random.seed(SEED)
+        model = self._build()
+        opt = self._optimizer()
+        layers = (fit_layers(lane, self.d_in, [FIT_RNN_HIDDEN]) if self.recurrent else
+                  ["linear %d %d bias" % (m.weight.shape[1], m.weight.shape[0]) if isinstance(m, mnn.Linear)
+                   else type(m).__name__.lower() for m in model.body.layers])
+        extra = dict(num_layers=1, timesteps=int(self.Xtr.shape[1])) if self.recurrent else {}
+        if lane == "rnn-fit":
+            extra["nonlinearity"] = "tanh"
+        lr = float(np.asarray(opt.learning_rate))
+        self.record = fit_record(lane, "mlx", type(model.body), self.d_in, optimizer="adam", learning_rate=lr,
+                                 betas=[float(b) for b in opt.betas], eps=float(opt.eps), weight_decay=0.0,
+                                 layers=layers, **extra)
+        self.info = {"library": "mlx", "version": getattr(mx, "__version__", "unknown"), "device": "gpu",
+                     "device_name": str(mx.default_device()), "setting": "fp32",
+                     "precision": "float32", "mode": "mlx eager, float32", "pre_clock_fit": False,
+                     "input_home": "host", "call": "mlx.nn twin of: " + LANE_TEXT[lane][1],
+                     "shuffle": "mx.random.permutation", "init": (
+                         "mlx's own init (U(+-1/sqrt(hidden)) on the cell and the head)" if self.recurrent
+                         else "Glorot uniform sqrt(6/(fan_in+fan_out)) on every weight and bias"),
+                     "fit_rows": int(self.Xtr.shape[0]), "held_out_rows": int(self.Xte.shape[0])}
+        self.model, self.losses, self._score = None, None, None
+
+    def _build(self):
+        import math
+        mx, mnn = self.mx, self.mnn
+        recurrent, task = self.recurrent, self.task
+        if recurrent:
+            cls = {"lstm": mnn.LSTM, "gru": mnn.GRU, "rnn": mnn.RNN}[FIT_CELL[self.lane]]
+            body, head = cls(self.d_in, FIT_RNN_HIDDEN, bias=True), mnn.Linear(FIT_RNN_HIDDEN, 1)
+        else:
+            hidden = FIT_MLP_HIDDEN if self.lane == "mlp-fit" else FIT_TAPE_HIDDEN
+            sizes = [self.d_in] + list(hidden) + [1]
+            mods = []
+            for i in range(len(sizes) - 1):
+                lin = mnn.Linear(sizes[i], sizes[i + 1])
+                b = math.sqrt(6.0 / (sizes[i] + sizes[i + 1]))
+                lin.weight = mx.random.uniform(-b, b, lin.weight.shape)
+                lin.bias = mx.random.uniform(-b, b, lin.bias.shape)
+                mods.append(lin)
+                if i < len(sizes) - 2:
+                    mods.append(mnn.ReLU())
+            body, head = mnn.Sequential(*mods), None
+
+        class FitNet(mnn.Module):
+            def __init__(self):
+                super().__init__()
+                self.body = body
+                if head is not None:
+                    self.head = head
+
+            def __call__(self, x):
+                if recurrent:
+                    out = self.body(x)
+                    h = out[0] if isinstance(out, tuple) else out
+                    return self.head(h[:, -1, :]).squeeze(-1)
+                return self.body(x).squeeze(-1)
+
+        self._loss = ((lambda m, x, y: mnn.losses.binary_cross_entropy(m(x), y, with_logits=True,
+                                                                        reduction="mean"))
+                      if task == "classification" else
+                      (lambda m, x, y: mnn.losses.mse_loss(m(x), y, reduction="mean")))
+        return FitNet()
+
+    def _optimizer(self):
+        try:
+            return self.mopt.Adam(learning_rate=FIT_ADAM["lr"], betas=list(FIT_ADAM["betas"]), eps=FIT_ADAM["eps"],
+                                  bias_correction=True)
+        except TypeError as exc:
+            raise RuntimeError("REFUSED: %s: this mlx's Adam has no bias_correction (ours and torch correct "
+                               "the bias; a different update) (%r)" % (self.arm, exc))
+
+    def call(self):
+        np, mx, mnn = self.np, self.mx, self.mnn
+        mx.random.seed(SEED)
+        model = self._build()
+        opt = self._optimizer()
+        step = mnn.value_and_grad(model, self._loss)
+        X, y = mx.array(self.Xtr), mx.array(self.ytr)
+        n = int(X.shape[0])
+        bs = max(1, min(FIT_BATCH, n))
+        losses = []
+        for _epoch in range(FIT_EPOCHS):
+            perm = mx.random.permutation(n)
+            for s in range(0, n, bs):
+                idx = perm[s:s + bs]
+                loss, grads = step(model, X[idx], y[idx])
+                opt.update(model, grads)
+                mx.eval(model.parameters(), opt.state, loss)
+                losses.append(loss)
+        self.losses = np.asarray(mx.stack(losses), dtype=np.float64)
+        self.model, self._score = model, None
+
+    def sync(self):
+        self.mx.synchronize() if hasattr(self.mx, "synchronize") else None
+
+    def _predict(self):
+        np, mx = self.np, self.mx
+        if self._score is None:
+            parts = []
+            for s in range(0, len(self.Xte), FIT_PREDICT_CHUNK):
+                z = self.model(mx.array(self.Xte[s:s + FIT_PREDICT_CHUNK]))
+                parts.append(np.asarray(mx.sigmoid(z) if self.task == "classification" else z, dtype=np.float32))
+            self._score = np.ascontiguousarray(np.concatenate(parts))
+        return self._score
+
+    def outputs(self):
+        return {"score": self._predict(), "loss_curve": self.losses}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self._predict()).data)[:16]
+
+
 def _restore_torch(torch, threads, info):
     """gen_corpus.py switches torch to deterministic algorithms and one thread
     at import; an opponent runs at torch's defaults (tools/speed_torch_seq.py
