@@ -212,6 +212,16 @@ comptime OP_MLP_L2FOLD = 91
 comptime OP_MLP_ROWPART = 92
 comptime OP_MLP_PERM = 93
 comptime OP_MLP_EPOCH_LOSS = 94
+# lane ag-pass3-lossblock (2026-10-19), sequence/mlp.mojo MLP_LOSSBLOCK: the
+# MLP fit's per-batch loss block (seed, row-loss and L2 block partials in one
+# launch, one fold) and the blocked epoch loss; a range of its own (1600..),
+# registered in sequence/dispatch.mojo.
+comptime OP_MLP_LB_PART = 1600
+comptime OP_MLP_LB_FOLD = 1601
+comptime OP_MLP_LB_EPOCH_PART = 1602
+comptime OP_MLP_LB_EPOCH_FOLD = 1603
+comptime OP_MLP_LB_FIRST = OP_MLP_LB_PART
+comptime OP_MLP_LB_LAST = OP_MLP_LB_EPOCH_FOLD
 #: lane cpu4-python: p0[t] = t (float32, exact below 2^24): the unshuffled
 #: epoch order of the RNN fit, built on the executor.
 comptime OP_SEQ_IOTA = 95
