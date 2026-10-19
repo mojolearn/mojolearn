@@ -55,7 +55,7 @@ FAMILIES = (
             "epoch_schedule", "prophet_days", "prophet_features",
             "prophet_changepoints",
             # the model-description trainer (autograd/model.mojo)
-            "model_fit", "model_predict", "model_n_params",
+            "model_fit", "model_predict", "model_n_params", "model_labels",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

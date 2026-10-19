@@ -12,7 +12,6 @@ from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_model')
 
 from . import _backend
-from ._labels import argmax_rows, threshold_codes, unique_inverse
 
 # Description codes (autograd/model.mojo LAYER_*, LOSS_*, ...).
 _SPEC_VERSION = 1
@@ -21,7 +20,7 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
-_OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2 = 0, 1, 2, 3
+_OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD = 0, 1, 2, 3, 4, 5
 # sequence/ops.mojo OPT_*: "momentum" is SGD with a momentum buffer.
 _OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2}
 _PREDICT_CHUNK = 4096
@@ -278,11 +277,18 @@ class Sequential:
             y = np.asarray(y)
             if y.ndim != 1 or len(y) != n:
                 raise ValueError(f"{loss} takes one label per row of X")
-            # sorted classes and int32 codes on the device (_labels.unique_inverse)
-            cls, inv = unique_inverse(y)
-            self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
-            codes = np.ascontiguousarray(np.asarray(inv), dtype=np.int32)
-            k = len(self.classes_)
+            if y.dtype.kind not in "biuf":
+                raise ValueError(f"{loss} takes numeric labels")
+            # sorted classes and int32 codes in Mojo, by the sequence
+            # binding itself (`model_labels`: the device sort on a GPU, its
+            # host twin on the CPU column)
+            real = y.dtype.kind == "f"
+            wide = np.ascontiguousarray(y, dtype=np.float64 if real else np.int64)
+            classes = np.empty(n, dtype=wide.dtype)
+            codes = np.empty(n, dtype=np.int32)
+            k = int(self._binding().model_labels(wide.ctypes.data, n, 0 if real else 1,
+                                                 classes.ctypes.data, codes.ctypes.data))
+            self.classes_ = classes[:k].astype(y.dtype, copy=False)
             if loss == "cross_entropy":
                 if k != n_out:
                     raise ValueError(f"the labels have {k} classes but the model has {n_out} outputs")
@@ -317,13 +323,12 @@ class Sequential:
     def predict(self, X):
         """Model outputs; class labels for ``cross_entropy`` and ``bce_with_logits``."""
         loss = getattr(self, "_fit_loss", None)
-        if loss == "cross_entropy":
-            # the first-max-wins row argmax in Mojo (`argmax_rows`)
-            return self.classes_[np.asarray(argmax_rows(self._forward(X, _OUT_RAW)))]
-        if loss == "bce_with_logits":
-            p = self._forward(X, _OUT_SIGMOID)
-            # p > 0.5 per row in Mojo (`threshold_codes`; NaN takes class 0)
-            return self.classes_[np.asarray(threshold_codes(np.ascontiguousarray(p[:, 0]), 0.5))]
+        if loss == "cross_entropy" or loss == "bce_with_logits":
+            # class codes from the binding: the first-max-wins row argmax of
+            # the logits, or sigmoid p > 0.5 (a NaN takes class 0)
+            mode = _OUT_ARGMAX if loss == "cross_entropy" else _OUT_THRESHOLD
+            codes = self._forward(X, mode, width=1)[:, 0].astype(np.int64)
+            return self.classes_[codes]
         out = self._forward(X, _OUT_RAW)
         return out[:, 0].copy() if getattr(self, "_y_1d", False) else out
 

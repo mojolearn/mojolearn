@@ -246,7 +246,14 @@ Entries (`bindings/_mojolearn_x_sequence.mojo` and the host twin):
   greater than tol (one word read back per epoch); 0 runs every epoch.
 - `model_predict([X, params, out], prog, ptab, [N, chunk, transform])`;
   transform 0 raw, 1 row softmax, 2 sigmoid, 3 the `(N, 2)` `[1 - p, p]` of a
-  one-output sigmoid.
+  one-output sigmoid, 4 the first-max-wins row argmax and 5 one-output
+  sigmoid > 0.5, both as N float32 class codes (`OP_AGM_ROW_ARGMAX` 1041,
+  `OP_AGM_THRESHOLD` 1042).
+- `model_labels(src, n, kind, classes, codes)` -> class count: the base
+  binding's `unique_inverse` contract (n 64-bit labels, kind 0 float64 / 1
+  int64; sorted classes and int32 codes), run by the sequence binding itself
+  (`core/label_encode_device.mojo` on a GPU, `core/label_encode.mojo` on the
+  host column), so the classifiers need no other binding.
 
 Fit, per epoch: the row order on the executor (`OP_MLP_PERM` keyed by
 `mlp_epoch_key(seed, epoch)`, or the identity order); per batch one gather

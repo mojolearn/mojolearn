@@ -73,8 +73,9 @@ def model_predict_py[E: Exec](
 ) raises -> PythonObject:
     """addrs = [X (N, D), params, out (N, out)]; ptab = one float per layer;
     ip = [N, chunk, transform (0 none, 1 softmax, 2 sigmoid, 3 the (N, 2)
-    [1 - p, p] of a one-output sigmoid)]. Returns the number of values
-    written."""
+    [1 - p, p] of a one-output sigmoid, 4 the row argmax as N float32
+    codes, 5 one-output sigmoid > 0.5 as N float32 codes)]. Returns the
+    number of values written."""
     if len(addrs) != 3 or len(ip) != 3:
         raise Error("model_predict: requires 3 addresses and 3 integer parameters")
     var spec = parse_model(_ints(prog), _floats(ptab, 0))
@@ -83,7 +84,29 @@ def model_predict_py[E: Exec](
                   ival(ip, 1), ival(ip, 2))
     if ival(ip, 2) == 3:
         return PythonObject(N * 2)
+    if ival(ip, 2) == 4 or ival(ip, 2) == 5:
+        return PythonObject(N)
     return PythonObject(N * spec.out_features())
+
+
+def model_labels_check(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+                       classes_addr: PythonObject, codes_addr: PythonObject) raises -> Tuple[Int, Int]:
+    """`model_labels`' argument checks (both columns): returns (n, kind)."""
+    var count = Int(py=n)
+    var k_ind = Int(py=kind)
+    if count < 1:
+        raise Error("model_labels: n must be positive, got " + String(count))
+    if k_ind != 0 and k_ind != 1:
+        raise Error("model_labels: kind must be 0 (float64) or 1 (int64)")
+    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
+        raise Error("model_labels: null buffer address")
+    return (count, k_ind)
+
+
+def model_labels_result(k: Int) raises -> PythonObject:
+    if k == -2:
+        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+    return PythonObject(k)
 
 
 def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:

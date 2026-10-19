@@ -18,7 +18,8 @@ from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
-from autograd.pyapi import model_fit_py, model_n_params_py, model_predict_py
+from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
+from core.label_encode import host_unique_inverse
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 
 
@@ -97,6 +98,21 @@ def model_fit_binding(addrs: PythonObject, prog: PythonObject, ip: PythonObject,
 def model_predict_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return model_predict_py(ex, addrs, prog, ptab, ip)
+
+
+def model_labels_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+                         classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
+    """Sorted distinct labels and one int32 code per row for Sequential's
+    classification losses, by the host twin (`core/label_encode.mojo`, the same statements as the device sort): n 64-bit labels at src_addr (kind 0
+    float64, 1 int64), the classes' bits into classes_addr (n slots), codes
+    into codes_addr. Returns the class count."""
+    var nk = model_labels_check(src_addr, n, kind, classes_addr, codes_addr)
+    var k = host_unique_inverse(
+        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr)), nk[0], nk[1],
+        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr)),
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr)),
+    )
+    return model_labels_result(k)
 
 
 def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
@@ -198,6 +214,7 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[model_fit_binding]("model_fit")
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")
+        m.def_function[model_labels_binding]("model_labels")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         m.def_function[layer_norm_binding]("layer_norm")
