@@ -177,7 +177,7 @@ def launch_profile_wall_us() -> Int:
     adds, (profile ns - wall ns) / launches, and the wall-equivalent rows
     (row ms - drain x launches)."""
     var v = String(getenv("MOJOLEARN_AG_PROFILE_WALL_US"))
-    if len(v) == 0:
+    if v.byte_length() == 0:
         return -1
     try:
         return Int(atol(v))
