@@ -450,11 +450,6 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_RF_FAST_QSAMPLE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): RF_FAST_QSAMPLE (split candidates from >= 65,536 sampled rows) was DROPPED-slower: M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise). Restore with experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
-    # BEGIN lane del-mlp (hand-path deletions, 2026-10-19; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"](), "removed 2026-10-19 (lane/del-mlp, 6784245b2): AUTOGRAD_MLP_OFF (the hand-assembled MLP backward) was superseded by the tape: same 48 check digests on host, Metal, NVIDIA and AMD; HIGGS 1M (256,) b512 hand -> fused tape NV 0.476 -> 0.526 s, AMD 0.408 -> 0.366 s, digest 8f410a4ae2d620af on both arms; recoverable at 6784245b2^"
-    # END lane del-mlp
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
