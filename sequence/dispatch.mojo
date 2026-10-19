@@ -130,6 +130,7 @@ from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_
 from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
+from autograd.ops import OP_AGK_FIRST, OP_AGK_LAST, OP_AGK_GEMM_EPI, apply_autograd_kernels
 from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
 from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
 from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
@@ -177,6 +178,17 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert OP_AGM_LAST < OP_AGD_FIRST or OP_AGM_FIRST > OP_AGD_LAST, "model opcodes overlap the data family"
     comptime assert OP_AGM_LAST < OP_AGO_FIRST or OP_AGM_FIRST > OP_AGO_LAST, "model opcodes overlap the optim family"
     comptime assert OP_AGM_LAST < OP_LS_FIRST or OP_AGM_FIRST > OP_LS_LAST, "model opcodes overlap the loss family"
+    # The tape's kernel family (lane ag-pass2-kernels, autograd/ops.mojo
+    # OP_AGK_*, 1400..), disjoint from every other autograd range and the scans.
+    comptime assert OP_AGK_FIRST <= OP_AGK_LAST, "autograd kernel opcode range is empty"
+    comptime assert OP_AGK_FIRST > OP_AG_LAST or OP_AGK_LAST < OP_AG_FIRST, "autograd kernel opcodes overlap the tape's"
+    comptime assert OP_AGK_FIRST > OP_AGD_LAST or OP_AGK_LAST < OP_AGD_FIRST, "autograd kernel opcodes overlap the data family"
+    comptime assert OP_AGK_FIRST > OP_AGO_LAST or OP_AGK_LAST < OP_AGO_FIRST, "autograd kernel opcodes overlap the optim family"
+    comptime assert OP_AGK_FIRST > OP_LS_LAST or OP_AGK_LAST < OP_LS_FIRST, "autograd kernel opcodes overlap the loss family"
+    comptime assert OP_AGK_FIRST > OP_AGM_LAST or OP_AGK_LAST < OP_AGM_FIRST, "autograd kernel opcodes overlap the model family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGK_FIRST or OP_CELL_FWD_SCAN > OP_AGK_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGK_FIRST or OP_CELL_BWD_SCAN > OP_AGK_LAST
+    ), "autograd kernel opcode collides with recurrent scan"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
@@ -187,6 +199,12 @@ def apply[OP: Int](t: Int, a: Args):
         apply_losses[OP](t, a)
     elif OP >= OP_AGM_FIRST and OP <= OP_AGM_LAST:
         apply_model_ops[OP](t, a)
+    elif OP == OP_AGK_GEMM_EPI:
+        # the tape's GEMM with epilogue: op_gemm_epi's body (DeviceExec tiles
+        # it where OP_GEMM is tiled; sequence/gemm_tiled.mojo)
+        op_gemm_epi(t, a)
+    elif OP >= OP_AGK_FIRST and OP <= OP_AGK_LAST:
+        apply_autograd_kernels[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

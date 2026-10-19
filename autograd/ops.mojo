@@ -7,12 +7,14 @@
 # the tape binds every other slot to the Args() placeholder, as every other
 # sequence operation does, and never binds one buffer to two slots of a
 # launch. No body reads back a slot it writes, except OP_AG_ACCUMULATE's
-# element-wise read-modify-write of its own destination word.
+# element-wise read-modify-write of its own destination word and
+# OP_AG_SOFTMAX_FWD's read-back of its own row's exponentials.
 from sequence.ops import Args, FP, ld, st, add, sub, mul
 from checks.numerics import (
     ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_sqrt,
     identical_tanh,
 )
+from std.sys.compile import is_defined
 
 # Sequence codes 120/121 are recurrent scan kernels, intercepted before the
 # generic dispatcher. Codes OP_AG_FIRST..OP_AG_LAST are this family, on both
@@ -30,6 +32,31 @@ comptime OP_AG_SOFTMAX_VJP = 1009
 comptime OP_AG_ACCUMULATE = 1010
 comptime OP_AG_FIRST = OP_AG_BIN_FWD
 comptime OP_AG_LAST = OP_AG_ACCUMULATE
+# Lane ag-pass2-kernels (2026-10-19): the tape's kernel family, a range of
+# its own (1400..), registered in sequence/dispatch.mojo.
+#   OP_AGK_BIN_VJP_PART: a broadcast operand's binary VJP terms folded
+#     straight into the blocked fold's partials (op_agk_bin_vjp_part), so
+#     the elementwise VJP matrix is never written: the same terms in the
+#     same order as OP_AG_BIN_VJP into scratch then OP_AG_REDUCE_PART.
+#   OP_AGK_GEMM_EPI: OP_GEMM_EPI's body (sequence/mlp.mojo op_gemm_epi) on
+#     the tiled GEMM where OP_GEMM is tiled (NVIDIA and AMD in identical,
+#     sequence/gemm_tiled.mojo seq_gemm_epi_tiled_kernel); the same chain
+#     and the same epilogue, so the same words as OP_GEMM_EPI everywhere.
+comptime OP_AGK_BIN_VJP_PART = 1400
+comptime OP_AGK_GEMM_EPI = 1401
+comptime OP_AGK_FIRST = OP_AGK_BIN_VJP_PART
+comptime OP_AGK_LAST = OP_AGK_GEMM_EPI
+
+# BIT VERSION (lane ag-pass2-kernels, default on): the fused linear node's
+# bias gradient (tape.linear / linear_into, edge 2) is the tape's blocked
+# fold over the batch rows (two launches, chains of ag_fold_block(rows))
+# instead of the hand MLP's OP_COLSUM / OP_COLSUM_DIV (one thread per
+# output column, one serial chain over every row). A batch of at most
+# ag_fold_block(rows) = 64 rows is one block: the fold is then the column
+# sum's chain term for term and keeps the one launch, so its bits are the
+# old bits; longer batches get new bits on every column and the host
+# together. -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF restores the column sum.
+comptime AUTOGRAD_PASS2_FOLD = not is_defined["MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF"]()
 
 # Node kinds recorded by the tape. Binary and unary kinds also travel as a
 # runtime integer (a.i1 / a.i0) inside their operation's body.
@@ -134,13 +161,38 @@ def unary_vjp_reads_output(op: Int) -> Bool:
 
 
 @always_inline
+def _x_at(a: Args, t: Int) -> Float32:
+    """The left operand at output element t (output shape i2 x i3, left
+    shape i4 x i5). An operand of the output's shape is read at t with no
+    index arithmetic (a uniform branch: the shapes are launch arguments)."""
+    if a.i4 == a.i2 and a.i5 == a.i3:
+        return ld(a.p0, t)
+    return ld(a.p0, _index(t // a.i3, t % a.i3, a.i4, a.i5))
+
+
+@always_inline
+def _y_at(a: Args, t: Int) -> Float32:
+    """The right operand at output element t (right shape i6 x i7), through
+    _ld_right (p0 when i10 = 1)."""
+    if a.i6 == a.i2 and a.i7 == a.i3:
+        return _ld_right(a, t)
+    return _ld_right(a, _index(t // a.i3, t % a.i3, a.i6, a.i7))
+
+
+@always_inline
+def _y1_at(a: Args, t: Int) -> Float32:
+    """The right operand at output element t from p1 (DIVIDE's VJP binds p1)."""
+    if a.i6 == a.i2 and a.i7 == a.i3:
+        return ld(a.p1, t)
+    return ld(a.p1, _index(t // a.i3, t % a.i3, a.i6, a.i7))
+
+
+@always_inline
 def op_ag_bin_fwd(t: Int, a: Args):
-    """p0 x, p1 y (unbound when i10 = 1), p2 z. i1 kind, i3 output cols,
-    i4/i5 x shape, i6/i7 y shape. Thread t = output element t."""
-    var row = t // a.i3
-    var col = t % a.i3
-    var x = ld(a.p0, _index(row, col, a.i4, a.i5))
-    var y = _ld_right(a, _index(row, col, a.i6, a.i7))
+    """p0 x, p1 y (unbound when i10 = 1), p2 z. i1 kind, i2/i3 output
+    shape, i4/i5 x shape, i6/i7 y shape. Thread t = output element t."""
+    var x = _x_at(a, t)
+    var y = _y_at(a, t)
     var op = a.i1
     var z: Float32
     if op == ADD:
@@ -155,31 +207,70 @@ def op_ag_bin_fwd(t: Int, a: Args):
 
 
 @always_inline
-def op_ag_bin_vjp(t: Int, a: Args):
-    """The elementwise VJP at output element t, for operand i8, written at
-    output index t of p4 (output shape i2 x i3). A broadcast operand's
-    gradient is then a blocked row/column/total reduction of p4 (tape.mojo).
-    Slots read by kind: ADD/SUBTRACT p3 only; MULTIPLY p0 and p1 (the other
-    operand); DIVIDE p1 and, for operand 1, p2 (the forward output z).
-    p0 x, p1 y (unbound when i10 = 1), p2 z, p3 upstream, p4 destination."""
+def _bin_vjp_at(t: Int, a: Args) -> Float32:
+    """The elementwise VJP for operand i8 at output element t: the value
+    op_ag_bin_vjp stores and op_agk_bin_vjp_part folds."""
     var op = a.i1
-    var row = t // a.i3
-    var col = t % a.i3
     var g = ld(a.p3, t)
     if op == SUBTRACT and a.i8 == 1:
         g = -g
     elif op == MULTIPLY:
         if a.i8 == 0:
-            g = mul(g, _ld_right(a, _index(row, col, a.i6, a.i7)))
+            g = mul(g, _y_at(a, t))
         else:
-            g = mul(g, ld(a.p0, _index(row, col, a.i4, a.i5)))
+            g = mul(g, _x_at(a, t))
     elif op == DIVIDE:
-        var y = ld(a.p1, _index(row, col, a.i6, a.i7))
+        var y = _y1_at(a, t)
         if a.i8 == 0:
             g = div(g, y)
         else:
             g = -div(mul(g, ld(a.p2, t)), y)
-    st(a.p4, t, g)
+    return g
+
+
+@always_inline
+def op_ag_bin_vjp(t: Int, a: Args):
+    """The elementwise VJP at output element t, for operand i8, written at
+    output index t of p4 (output shape i2 x i3). Slots read by kind:
+    ADD/SUBTRACT p3 only; MULTIPLY p0 and p1 (the other operand); DIVIDE p1
+    and, for operand 1, p2 (the forward output z). p0 x, p1 y (unbound when
+    i10 = 1), p2 z, p3 upstream, p4 destination. A broadcast operand's
+    gradient is op_agk_bin_vjp_part instead (tape.mojo _binary_vjp)."""
+    st(a.p4, t, _bin_vjp_at(t, a))
+
+
+@always_inline
+def op_agk_bin_vjp_part(t: Int, a: Args):
+    """Partial sums of the blocked fold of a broadcast operand's binary VJP:
+    op_ag_reduce_part over the matrix op_ag_bin_vjp would write, with each
+    term computed in place (ftz, as the stored word reads back) instead of
+    loaded. op_ag_bin_vjp's slots (p0..p3, i1..i8, i10; the folded source
+    is the i2 x i3 output), plus p4 partials, i0 axis, i9 block length B
+    (ag_fold_block of the folded extent). Thread mapping and partial layout
+    are op_ag_reduce_part's; the second launch is OP_AG_REDUCE_FOLD."""
+    var rows = a.i2
+    var cols = a.i3
+    var B = a.i9
+    var s = Float32(0)
+    if a.i0 == AXIS_ALL:
+        var lo = t * B
+        var hi = min(lo + B, rows * cols)
+        for k in range(lo, hi):
+            s = add(s, ftz(_bin_vjp_at(k, a)))
+    elif a.i0 == AXIS_ROWS:
+        var c = t % cols
+        var lo = (t // cols) * B
+        var hi = min(lo + B, rows)
+        for r in range(lo, hi):
+            s = add(s, ftz(_bin_vjp_at(r * cols + c, a)))
+    else:
+        var nb = (cols + B - 1) // B
+        var r = t // nb
+        var lo = (t % nb) * B
+        var hi = min(lo + B, cols)
+        for k in range(lo, hi):
+            s = add(s, ftz(_bin_vjp_at(r * cols + k, a)))
+    st(a.p4, t, s)
 
 
 @always_inline
@@ -259,8 +350,8 @@ def op_ag_reduce_part(t: Int, a: Args):
 @always_inline
 def op_ag_reduce_fold(t: Int, a: Args):
     """Second launch of the blocked fold: p1[t] = (the partials of output t,
-    p0, added ascending from +0.0) * f0. i0 axis, i1 rows, i2 cols, i3 B as
-    in op_ag_reduce_part. AXIS_ALL: one output; AXIS_ROWS: thread t =
+    p0, added ascending from +0.0) * f0, or / f0 when i4 = 1. i0 axis, i1
+    rows, i2 cols, i3 B as in op_ag_reduce_part. AXIS_ALL: one output; AXIS_ROWS: thread t =
     column t; AXIS_COLS: thread t = row t."""
     var rows = a.i1
     var cols = a.i2
@@ -278,7 +369,12 @@ def op_ag_reduce_fold(t: Int, a: Args):
         var nb = (cols + B - 1) // B
         for k in range(nb):
             s = add(s, ld(a.p0, t * nb + k))
-    st(a.p1, t, mul(s, a.f0))
+    if a.i4 == 1:
+        # the fused linear node's bias gradient divided by its divisor, as
+        # op_colsum_div divides its column sum (AUTOGRAD_PASS2_FOLD)
+        st(a.p1, t, div(s, a.f0))
+    else:
+        st(a.p1, t, mul(s, a.f0))
 
 
 @always_inline
@@ -295,22 +391,29 @@ def op_ag_reduce_vjp(t: Int, a: Args):
 
 @always_inline
 def op_ag_softmax_fwd(t: Int, a: Args):
-    """p0 x, p1 y, i0 = 1 for log-softmax, i1 cols. Thread t = row t. The
-    exponentials are recomputed in the last pass rather than read back
-    from p1, so the body never reads a slot it writes."""
+    """p0 x, p1 y, i0 = 1 for log-softmax, i1 cols. Thread t = row t: the
+    row max, the exponential sum and the normalisation in one launch.
+    Softmax parks each exponential in p1 and reads it back for the
+    division (its own row); p1 must not overlap p0."""
     var cols = a.i1
     var base = t * cols
     var maximum = ld(a.p0, base)
     for k in range(1, cols):
         maximum = max(maximum, ld(a.p0, base + k))
     var total = Float32(0)
-    for k in range(cols):
-        total = add(total, ftz(identical_exp(sub(ld(a.p0, base + k), maximum))))
     if a.i0 == 0:
+        # each exponential once (lane ag-pass2-kernels): parked in the
+        # output row, read back for the division (this thread's own words;
+        # p1 never overlaps p0). The same words as computing it twice.
         for k in range(cols):
             var e = ftz(identical_exp(sub(ld(a.p0, base + k), maximum)))
-            st(a.p1, base + k, div(e, total))
+            total = add(total, e)
+            st(a.p1, base + k, e)
+        for k in range(cols):
+            st(a.p1, base + k, div(ld(a.p1, base + k), total))
     else:
+        for k in range(cols):
+            total = add(total, ftz(identical_exp(sub(ld(a.p0, base + k), maximum))))
         var log_total = ftz(identical_log(total))
         for k in range(cols):
             st(a.p1, base + k, sub(sub(ld(a.p0, base + k), maximum), log_total))
@@ -367,3 +470,11 @@ def apply_autograd[OP: Int](t: Int, a: Args):
         op_ag_softmax_vjp(t, a)
     elif OP == OP_AG_ACCUMULATE:
         op_ag_accumulate(t, a)
+
+
+@always_inline
+def apply_autograd_kernels[OP: Int](t: Int, a: Args):
+    """The OP_AGK_FIRST..OP_AGK_LAST family except OP_AGK_GEMM_EPI, whose
+    body (op_gemm_epi) sequence/dispatch.mojo calls itself."""
+    comptime if OP == OP_AGK_BIN_VJP_PART:
+        op_agk_bin_vjp_part(t, a)
