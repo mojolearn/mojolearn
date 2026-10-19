@@ -198,6 +198,8 @@ from transformer.checks.transformer_backward import (
 # lane ag-transformer: -D MOJOLEARN_AUTOGRAD_TRANSFORMER (default off) runs
 # the two saved-stage backwards below through the autograd tape.
 from autograd.rules_transformer import AUTOGRAD_TRANSFORMER, llama_decoder_layer_backward_autograd
+# lane ag-tm-timing: the launch profile the backward timing entries read.
+from sequence.launch_profile import launch_profile_level, launch_profile_reset, launch_profile_snapshot
 # lane/block-options (2026-09-17): the block options record and the two
 # tails. `transformer/block_options.mojo` is the order's authority; the
 # docstrings below repeat it word for word because a binding docstring is
@@ -1429,6 +1431,255 @@ def transformer_session_backward_binding(
         raise error
     owner[].busy = False
     return PythonObject(0)
+
+
+# ===========================================================================
+# BACKWARD TIMING ENTRIES (lane ag-tm-timing, 2026-10-19). Measurement only:
+# tools/transformer_tape_arm_check.py --time N calls these to time the hand
+# backward against -D MOJOLEARN_AUTOGRAD_TRANSFORMER, one build per arm. The
+# inputs and weights are uploaded once before the first clock; each timed
+# call brackets only the launches (device sync before and after), so the
+# clock is kernel-only and the same in both arms. Call 0 is the warm-up and
+# is returned like the rest; the caller drops it. Same kernels, same
+# launches, same order as `_transformer_run_session_backward` and
+# `_transformer_saved_backward`; no bits move.
+#
+# Return list: [autograd (1 tape / 0 hand), launches, t...]. `launches` is
+# the process-wide launch profile's total over the LAST timed call when
+# MOJOLEARN_AG_PROFILE is set (-1 otherwise); it counts the launches that go
+# through DeviceExec only (kernels enqueued on the context directly are not
+# counted).
+
+
+def _tm_profile_launches() raises -> Int:
+    var p = launch_profile_snapshot()
+    var total = 0
+    for i in range(len(p.ops)):  # driver-loop: over profiled operation codes
+        total += p.op_launches[i]
+    return total
+
+
+def _transformer_session_backward_time(
+    mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int, calls: Int,
+) raises -> List[Int]:
+    """[autograd, launches, fwd_ns_0, bwd_ns_0, ..., fwd_ns_n, bwd_ns_n]:
+    calls + 1 forward-from-zero-cache + backward calls on device-resident
+    inputs; the last call's ten gradients go to a[11..20]."""
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    if window < 0:
+        raise Error("transformer backward time: window must be >= 0")
+    if calls < 1:
+        raise Error("transformer backward time: the call count must be >= 1")
+    var opts = BlockOptions()
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var m = b * l
+    if not session.ctx:
+        session.ctx = neural_ctx[_NEURAL_CTX]()
+        session.contexts += 1
+    var lean = transformer_lean_stages(hd)
+    _session_weights(session, dims, a, opts, List[Int]())
+    ref ctx = session.ctx.value()
+    ref w = session.weights.value()
+    var ws = TransformerWorkspace(ctx, dims, b, l, l, window, lean, opts)
+    var bw = TransformerBackwardWorkspace(ctx, dims, b, l, window, lean)
+    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
+    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[10]))
+    ctx.synchronize()
+    var out = List[Int]()
+    out.append(Int(AUTOGRAD_TRANSFORMER))
+    out.append(-1)
+    var prof = launch_profile_level() > 0
+    for k in range(calls + 1):  # driver-loop: over timed calls
+        # The per-call resets `_transformer_run_session_backward` does on a
+        # reused workspace, outside the clock.
+        ws.kv.k.enqueue_fill(Float32(0.0))
+        ws.kv.v.enqueue_fill(Float32(0.0))
+        ws.kv.s = 0
+        if k > 0 and _stage_reset_on():
+            ws.stages.reset(ctx)
+        ctx.synchronize()
+        if prof and k == calls:
+            launch_profile_reset()
+        var t0 = Int(perf_counter_ns())
+        var off = IdentityTrace.disabled()
+        llama_decoder_layer_forward(
+            ctx, ws.stages, ws.kv, ws.rope, w, ws.x, b, l, 0, off, String("pyf")
+        )
+        ctx.synchronize()
+        var t1 = Int(perf_counter_ns())
+        var offb = IdentityTrace.disabled()
+        comptime if AUTOGRAD_TRANSFORMER:
+            llama_decoder_layer_backward_autograd(
+                ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+                b, l, 0, offb, String("pyb"),
+            )
+        else:
+            llama_decoder_layer_backward_device(
+                ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+                b, l, 0, offb, String("pyb"),
+            )
+        ctx.synchronize()
+        var t2 = Int(perf_counter_ns())
+        out.append(t1 - t0)
+        out.append(t2 - t1)
+        if prof and k == calls:
+            out[1] = _tm_profile_launches()
+    _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
+    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
+    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[13])
+    _download_addr[False](ctx, bw.bst.dw_q, qw * dm, a[14])
+    _download_addr[False](ctx, bw.bst.dw_k, kw * dm, a[15])
+    _download_addr[False](ctx, bw.bst.dw_v, kw * dm, a[16])
+    _download_addr[False](ctx, bw.bst.dw_o, dm * qw, a[17])
+    _download_addr[False](ctx, bw.bst.dw_gate, it * dm, a[18])
+    _download_addr[False](ctx, bw.bst.dw_up, it * dm, a[19])
+    _download_addr[False](ctx, bw.bst.dw_down, dm * it, a[20])
+    ctx.synchronize()
+    _ = ws^
+    _ = bw^
+    return out^
+
+
+def transformer_session_backward_time_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`transformer_session_backward`'s 21 addresses; its 8 scalars plus the
+    number of timed calls N. Returns [autograd, launches, then forward and
+    backward nanoseconds for N + 1 calls, the first a warm-up]."""
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer: session is busy or closed")
+    if len(addrs) != 21 or len(params) != 9:
+        raise Error("transformer backward time: expected 21 addresses and 9 scalars")
+    var a = List[Int]()
+    for i in range(21):  # metadata: fixed pointer list
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("transformer backward time: null buffer address at slot " + String(i))
+        a.append(address)
+    var p = List[Int]()
+    for i in range(9):  # metadata: fixed scalar list
+        p.append(Int(py=params[i]))
+    owner[].busy = True
+    var stamps = List[Int]()
+    try:
+        with GILReleased(Python()):
+            try:
+                stamps = _transformer_session_backward_time(owner[], a,
+                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8])
+            except error:
+                owner[].clear()
+                raise error
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    var out = Python.list()
+    for i in range(len(stamps)):  # small-loop(stamps: one clock reading per timed call): measurement timestamps, not model data
+        out.append(PythonObject(stamps[i]))
+    return out
+
+
+def _transformer_saved_backward_timed(mut tape: TransformerForwardTape, a: List[Int]) raises -> Int:
+    """`_transformer_saved_backward` with dy uploaded and the backward
+    workspace built before the clock; returns the backward's nanoseconds
+    (device sync before and after)."""
+    ref p = tape.shape
+    var b = p[0]
+    var l = p[1]
+    var dm = p[2]
+    var dims = LlamaDims(dm, p[3], p[4], p[5], p[6])
+    ref session = tape.session
+    if not session.ctx or not session.workspace or not session.weights:
+        raise Error("transformer forward tape: saved owner is unavailable")
+    ref ctx = session.ctx.value()
+    ref ws = session.workspace.value()
+    ref w = session.weights.value()
+    var bw = TransformerBackwardWorkspace(ctx, dims, b, l, p[7], transformer_lean_stages(p[5]))
+    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[0]))
+    ctx.synchronize()
+    var off = IdentityTrace.disabled()
+    var t0 = Int(perf_counter_ns())
+    comptime if AUTOGRAD_TRANSFORMER:
+        llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
+            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+    else:
+        llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
+            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+    ctx.synchronize()
+    var ns = Int(perf_counter_ns()) - t0
+    _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
+    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
+    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
+    _download_addr[False](ctx, bw.bst.dw_q, dims.q_width() * dm, a[4])
+    _download_addr[False](ctx, bw.bst.dw_k, dims.kv_width() * dm, a[5])
+    _download_addr[False](ctx, bw.bst.dw_v, dims.kv_width() * dm, a[6])
+    _download_addr[False](ctx, bw.bst.dw_o, dm * dims.q_width(), a[7])
+    _download_addr[False](ctx, bw.bst.dw_gate, p[6] * dm, a[8])
+    _download_addr[False](ctx, bw.bst.dw_up, p[6] * dm, a[9])
+    _download_addr[False](ctx, bw.bst.dw_down, dm * p[6], a[10])
+    ctx.synchronize()
+    _ = bw^
+    return ns
+
+
+def transformer_backward_tape_time_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """22 addresses: `transformer_forward_tape`'s 11 (x, nine weights, y),
+    then `transformer_backward_tape`'s 11 (dy, ten gradients); its 8 shape
+    scalars plus N. Runs N + 1 saved forwards (untimed) each followed by a
+    timed saved backward. Returns [autograd, launches, N + 1 backward
+    nanoseconds, the first a warm-up]."""
+    comptime if not IDN_SAMBA_FORWARD_TAPE:
+        raise Error("transformer backward tape time: IDENTICAL opt-in is disabled")
+    if len(addrs) != 22 or len(params) != 9:
+        raise Error("transformer backward tape time: expected 22 addresses and 9 scalars")
+    var fa = List[Int]()
+    var ba = List[Int]()
+    for i in range(22):  # metadata: fixed pointer list
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("transformer backward tape time: null address at slot " + String(i))
+        if i < 10:
+            fa.append(address)
+        elif i == 10:
+            fa.append(0)
+            fa.append(0)
+            fa.append(address)
+        else:
+            ba.append(address)
+    var p = List[Int]()
+    for i in range(8):  # metadata: fixed scalar list
+        p.append(Int(py=params[i]))
+    var calls = Int(py=params[8])
+    if calls < 1:
+        raise Error("transformer backward tape time: the call count must be >= 1")
+    var out = Python.list()
+    out.append(PythonObject(Int(AUTOGRAD_TRANSFORMER)))
+    var stamps = List[Int]()
+    var launches = -1
+    with GILReleased(Python()):
+        var prof = launch_profile_level() > 0
+        for k in range(calls + 1):  # driver-loop: over timed calls
+            var tape = TransformerForwardTape(p)
+            try:
+                _ = _transformer_run_session[True, True](tape.session, fa,
+                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
+                if prof and k == calls:
+                    launch_profile_reset()
+                stamps.append(_transformer_saved_backward_timed(tape, ba))
+                if prof and k == calls:
+                    launches = _tm_profile_launches()
+            except error:
+                tape.close()
+                raise error
+            tape.close()
+    out.append(PythonObject(launches))
+    for i in range(len(stamps)):  # small-loop(stamps: one clock reading per timed call): measurement timestamps, not model data
+        out.append(PythonObject(stamps[i]))
+    return out
 
 
 def transformer_session_create_binding() raises -> PythonObject:
@@ -3446,6 +3697,9 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         m.def_function[transformer_forward_tape_binding]("transformer_forward_tape")
         m.def_function[transformer_backward_tape_binding]("transformer_backward_tape")
         m.def_function[transformer_close_tape_binding]("transformer_close_tape")
+        # lane ag-tm-timing: the backward timing entries (measurement only).
+        m.def_function[transformer_session_backward_time_binding]("transformer_session_backward_time")
+        m.def_function[transformer_backward_tape_time_binding]("transformer_backward_tape_time")
         # DEVIATION 2940: the resident decode session.
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
