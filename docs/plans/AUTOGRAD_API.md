@@ -659,6 +659,23 @@ fast tier only; identical is timed on NVIDIA and AMD. A broken tape is caught be
 the autograd smoke entries (`tools/autograd_smoke.py`: the gradient suite, the MLP identity check
 and `tests/test_autograd_smoke.py`), 5 s each on every vendor.
 
+Two more board lanes race the public tape API itself (lane ag-board-twins). `sequential-fit` fits
+`mojolearn.Sequential` (32-128-64-1, ReLU, BCE with logits, Adam, batch 512, one epoch, seed 7) on a
+seeded synthetic binary set the conductor writes (32 standard-normal features, the label the sign of
+a fixed teacher plus noise, summed column by column so the bytes match on every box; 1M training and
+100k held-out rows in `full`) and times the fit and the held-out `predict_proba` together on every
+arm; its twin is the same `torch.nn.Sequential` with `torch.optim.Adam` (and MLX on Apple), quality
+is held-out accuracy, log loss and AUC plus our `params_` digest. `ops-session-step` times one
+training step composed with `mojolearn.ops.Session(record=True)`: linear, relu, linear, softmax
+cross-entropy, backward, every gradient read back, the SGD update with the session's own ops and the
+updated parameters read back (batch 4096, 256-512-16, lr 0.05, the same fixture weights every
+round); its twin is the same step in torch autograd with `torch.optim.SGD`, and quality is the loss,
+each gradient's and updated parameter's max difference from ours and every arm's gradient digests.
+Both lanes move their inputs to the device inside the clock on every arm. The smoke entries
+`autograd-sequential-smoke` and `autograd-session-smoke` run the same two recipes in miniature through
+the installed bindings, 5 s each. Building them fixed the `tape-user-model` arm, which called
+`Sequential.add("linear", fan_in, fan_out)` and `compile(betas=...)`, neither of which the class takes.
+
 Per-op microbenchmark (lane ag-opbench, data for optimization pass 6): `tools/ag_opbench.py` times
 every operation of the session table above through `mojolearn.ops.Session` in identical mode
 (elementwise binary in the same-shape, row, column and scalar broadcast forms; the unary ops and
