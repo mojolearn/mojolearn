@@ -52,6 +52,20 @@ from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 from std.sys.compile import is_defined, get_defined_int
+from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
+from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
+from sequence.ops import dummy_ptr
+
+# A/B define (lane ag-loss, default off): -D MOJOLEARN_AUTOGRAD_LOSS computes
+# each step's reported loss (losses[k]) through autograd/losses.mojo
+# (loss_value_into: the squared-error terms or op_ce's row losses, term for
+# term, then the tape's blocked fold with factor 1 / count) instead of the
+# one-thread ascending OP_SUM. The gradient seed w.dy still comes from
+# OP_MSE / OP_CE; the loss module's VJP would give the same bits (2 (g d)
+# with g = 1 / (B O) equals d (2 / (B O)) exactly, and (softmax - onehot) g
+# is op_ce's expression with g = 1 / B), but the seed is left as it is.
+# New bits in losses[] only; parameters unchanged.
+comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
 
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
@@ -692,6 +706,9 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
         fill(ex, s2, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
+    var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
+    comptime if AUTOGRAD_LOSS:
+        loss_ws = loss_scratch(ex, bmax * net.O)
     var st = OptState()
     var step = S()
     for k in range(n_steps):
@@ -716,7 +733,10 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
             a.p3 = w.sq
             a.f0 = Float32(2.0) / Float32(B * net.O)
             ex.launch[OP_MSE](a, B * net.O)
-            sum_into(ex, w.sq, B * net.O, dloss, k, Float32(1.0) / Float32(B * net.O))
+            comptime if AUTOGRAD_LOSS:
+                loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
+            else:
+                sum_into(ex, w.sq, B * net.O, dloss, k, Float32(1.0) / Float32(B * net.O))
         else:
             gather_rows(ex, dY, dord, w.yb, B, 1, off)
             var a = Args()
@@ -728,9 +748,14 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
             a.i1 = net.O
             a.f0 = Float32(1.0) / Float32(B)
             ex.launch[OP_CE](a, B)
-            sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
+            comptime if AUTOGRAD_LOSS:
+                loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
+            else:
+                sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
         step.backward(ex, net, P, Gr, w.xb, T, B, w)
         opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+    comptime if AUTOGRAD_LOSS:
+        release_loss_scratch(ex, loss_ws)
     ex.sync()
     ex.download(Pio, P, np_)
     ex.download(losses, dloss, n_steps)
