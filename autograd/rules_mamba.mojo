@@ -196,7 +196,13 @@ from mamba.impl.ops.mamba2_ssd_backward import (
 )
 from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
 
-comptime AUTOGRAD_MAMBA = is_defined["MOJOLEARN_AUTOGRAD_MAMBA"]()
+# The Mamba-1/2 block backward runs on the tape by default (promoted 2026-10-19 by Andrew's decision: the tape is 3-4%
+# slower in one timed series per arm with the host copies in both clocks, mamba/checks/mamba_tape_backward_time.mojo n=20:
+# NVIDIA L40S m1 1.942 -> 2.035 ms, m2 6.462 -> 6.554; AMD MI325X m1 5.131 -> 5.285, m2 17.620 -> 18.458; averages 1.04 /
+# 1.03; accepted for one backward path instead of two). Every gradient word equals the hand path on Apple, NVIDIA and AMD
+# (MAMBA_TAPE_BACKWARD_PASS). MOJOLEARN_AUTOGRAD_MAMBA_OFF restores the hand chain for the A/B; the old opt-in spelling
+# is accepted too. Pass-6 (ag-pass6-host, idea K) removes the tape's per-block copies and waits; re-time after it lands.
+comptime AUTOGRAD_MAMBA = not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_MAMBA"]()
 
 # Tags in a range of their own, clear of LayerNorm (1) and recurrent (16-18).
 comptime M1_NORM = 48
