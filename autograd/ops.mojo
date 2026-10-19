@@ -390,35 +390,6 @@ def op_ag_transpose(t: Int, a: Args):
     st(a.p1, t, ld(a.p0, (t % a.i0) * a.i1 + t // a.i0))
 
 
-#: Lane ag-pass3-impl (AMD phase-2 profile: ag_reduce_part ~100x slower per
-#: element than the elementwise bodies, 93 ms for 4M terms; a 512 x 256 bias
-#: fold is 2048 threads, 8 workgroups on 304 CUs, each thread a 64-term chain
-#: whose every add waited on its own load). The terms are now LOADED
-#: AG_FOLD_STAGE at a time before they are added (op_colsum's and gemm_dot's
-#: staging): many loads in flight a thread, the same adds in the same order,
-#: so the same bits. A cooperative per-block combine would be a new order (a
-#: bit version) and is left for the next pass.
-comptime AG_FOLD_STAGE = 16
-
-
-@always_inline
-def _ag_staged_sum(p: FP, base: Int, stride: Int, n: Int) -> Float32:
-    """p[base + k stride] added ascending over k < n from +0.0, loads staged."""
-    var s = Float32(0)
-    var k = 0
-    while k + AG_FOLD_STAGE <= n:
-        var v = SIMD[DType.float32, AG_FOLD_STAGE]()
-        comptime for j in range(AG_FOLD_STAGE):
-            v[j] = ld(p, base + (k + j) * stride)
-        comptime for j in range(AG_FOLD_STAGE):
-            s = add(s, v[j])
-        k += AG_FOLD_STAGE
-    while k < n:
-        s = add(s, ld(p, base + k * stride))
-        k += 1
-    return s
-
-
 @always_inline
 def op_ag_reduce_part(t: Int, a: Args):
     """Partial sums of a blocked fold. p0 source (i1 rows x i2 cols), p1
@@ -436,18 +407,21 @@ def op_ag_reduce_part(t: Int, a: Args):
     if a.i0 == AXIS_ALL:
         var lo = t * B
         var hi = min(lo + B, rows * cols)
-        s = _ag_staged_sum(a.p0, lo, 1, hi - lo)
+        for k in range(lo, hi):
+            s = add(s, ld(a.p0, k))
     elif a.i0 == AXIS_ROWS:
         var c = t % cols
         var lo = (t // cols) * B
         var hi = min(lo + B, rows)
-        s = _ag_staged_sum(a.p0, lo * cols + c, cols, hi - lo)
+        for r in range(lo, hi):
+            s = add(s, ld(a.p0, r * cols + c))
     else:
         var nb = (cols + B - 1) // B
         var r = t // nb
         var lo = (t % nb) * B
         var hi = min(lo + B, cols)
-        s = _ag_staged_sum(a.p0, r * cols + lo, 1, hi - lo)
+        for k in range(lo, hi):
+            s = add(s, ld(a.p0, r * cols + k))
     st(a.p1, t, s)
 
 
