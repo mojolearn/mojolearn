@@ -114,7 +114,7 @@ _GUIDES = {
     "boosting": "trees", "trees": "trees", "linear": "linear", "clustering": "clustering",
     "decomposition": "decomposition", "neighbors": "neighbors", "gaussian_process": "gaussian_process",
     "time_series": "time_series", "preprocessing": "preprocessing", "neural": "neural_networks",
-    "language_models": "language_models",
+    "language_models": "language_models", "autograd": "autograd",
 }
 _ESTIMATOR_FAMILIES = {"boosting", "trees", "linear", "clustering", "decomposition", "neighbors",
                        "gaussian_process", "time_series", "preprocessing", "svm_kernels", "density"}
