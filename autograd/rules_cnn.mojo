@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# CNNClassifier's trainer backward on the tape (MOJOLEARN_AUTOGRAD_CNN, default on;
-# MOJOLEARN_AUTOGRAD_CNN_OFF restores the hand walk). TAPE_EVERYWHERE_PLAN path 3.
+# CNNClassifier's trainer backward on the tape, the only backward (the hand walk
+# was deleted 2026-10-19, see the tombstone below). TAPE_EVERYWHERE_PLAN path 3.
 #
 # ---------------------------------------------------------------- launch inventory
-# The hand path, bindings/_mojolearn_x_cnn.mojo fit_epoch_r_binding /
+# The deleted hand path, bindings/_mojolearn_x_cnn.mojo fit_epoch_r_binding /
 # fit_epoch_d_binding, per step after the forward (the pair gather, every
 # block's conv_block_forward_into[True], the head's linear_forward_into[True]
 # and softmax_xent_into[True] / softmax_xent_res_loss, which already writes
@@ -65,8 +65,6 @@
 # The rules launch on cnn_ctx(), the context every x_cnn entry uses, and keep
 # the entries' slot workspaces; the DeviceExec wraps that same context, so its
 # one sync drains the queue the kernels ran on.
-from std.sys.compile import is_defined
-
 from autograd.tape import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
 from sequence.exec_device import DeviceExec
@@ -75,12 +73,9 @@ from x_cnn.ops import FP as XFP, IP as XIP
 from x_cnn.ops import CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_N, PP_C, PP_OH, PP_OW
 from x_cnn.device import cnn_ctx, conv_block_backward_into, linear_backward_into
 
-# Flipped default on without waiting for timing (Andrew 2026-10-19: the
-# word-for-word check, x_cnn/checks/tape_check.mojo, is the gate; timing is
-# recorded once after, board lane cnn-clf, BUILDS=hand,tape).
-# MOJOLEARN_AUTOGRAD_CNN_OFF restores the hand walk for the A/B; the opt-in
-# spelling MOJOLEARN_AUTOGRAD_CNN is accepted too.
-comptime AUTOGRAD_CNN = not is_defined["MOJOLEARN_AUTOGRAD_CNN_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_CNN"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the AUTOGRAD_CNN switch and the hand walk;
+# the tape matched it word for word on Metal, NVIDIA and AMD, x_cnn/checks/tape_check.mojo now checks stored digests).
 
 # Tags 96-111 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
 # LM 64-71). 99-111 are reserved for the per-layer rules (bare conv, pools,

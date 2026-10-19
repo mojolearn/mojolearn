@@ -44,8 +44,10 @@ from x_cnn.device import (
     softmax_xent_res_loss,
 )
 from x_cnn.device import cnn_ctx
-# the step backward on the tape (MOJOLEARN_AUTOGRAD_CNN, default on; _OFF the hand walk)
-from autograd.rules_cnn import AUTOGRAD_CNN, cnn_backward_autograd
+# the step backward on the tape (autograd/rules_cnn.mojo)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch; record in docs/TOMBSTONES.md.
+from autograd.rules_cnn import cnn_backward_autograd
 from core.device_zero import enqueue_fill
 from std.gpu import block_dim, block_idx, thread_idx
 
@@ -1239,15 +1241,13 @@ def _at_i(a: Int) -> IP:
 
 
 def _tape_words() raises -> Int:
-    """Under AUTOGRAD_CNN, two resident words for the tape step: [the unit
-    seed 1.0, the loss's recorded value (never read)]; 0 otherwise."""
-    comptime if AUTOGRAD_CNN:
-        var w = res_alloc(2)
-        var one: List[Float32] = [Float32(1), Float32(0)]
-        res_upload(w, one.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 2)
-        _ = one^
-        return w
-    return 0
+    """Two resident words for the tape step: [the unit seed 1.0, the loss's
+    recorded value (never read)]."""
+    var w = res_alloc(2)
+    var one: List[Float32] = [Float32(1), Float32(0)]
+    res_upload(w, one.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 2)
+    _ = one^
+    return w
 
 
 def _epoch_plan(
@@ -1331,25 +1331,10 @@ def fit_epoch_r_binding(
             linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
             var loss = softmax_xent_into[True](_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]))
             losses[st] = Float64(loss)
-            comptime if AUTOGRAD_CNN:
-                # the head and every block's backward on the tape (autograd/rules_cnn.mojo): the same
-                # entries, arguments and order as the arm below; MOJOLEARN_AUTOGRAD_CNN_OFF keeps it
-                cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
-            else:
-                var glast = bh[nb - 1][6] if nb > 0 else a[5]
-                linear_backward_into[True](
-                    _at(src), _at(head[0]), _at(a[3]), m, flat, k, _at(glast), _at(head[2]), _at(head[3])
-                )
-                for jj in range(nb):
-                    var j = nb - 1 - jj
-                    var bsrc = bh[j - 1][4] if j > 0 else a[0]
-                    var dx = bh[j - 1][6] if j > 0 else 0
-                    var want = dx != 0
-                    conv_block_backward_into[True](
-                        _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), _at_i(bh[j][5]), cs[q][j], ps[q][j],
-                        pools[q][j], want, _at(dx) if want else _at(bh[j][3]), _at(bh[j][2]), _at(bh[j][3]), bh[j][7],
-                        bh[j][8],
-                    )
+            # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
+            cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
             var h = List[Float32]()
             for e in range(nh):  # small-loop(nh: optimizer scalars of one step, six or nine): builds one launch parameter list, not data
                 h.append(Float32(hyp[st * nh + e]))
@@ -1357,8 +1342,7 @@ def fit_epoch_r_binding(
                 opt_many_resident[True](t[0], t[1], t[2], t[3], h)
             else:
                 opt_many_resident[False](t[0], t[1], t[2], t[3], h)
-        if tw != 0:
-            res_free(tw)
+        res_free(tw)
     return PythonObject(steps)
 
 
@@ -1509,25 +1493,10 @@ def fit_epoch_d_binding(
                 src = bh[j][4]
             linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
             softmax_xent_res_loss(_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]), lbuf, st)
-            comptime if AUTOGRAD_CNN:
-                # the head and every block's backward on the tape (autograd/rules_cnn.mojo): the same
-                # entries, arguments and order as the arm below; MOJOLEARN_AUTOGRAD_CNN_OFF keeps it
-                cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
-            else:
-                var glast = bh[nb - 1][6] if nb > 0 else a[5]
-                linear_backward_into[True](
-                    _at(src), _at(head[0]), _at(a[3]), m, flat, k, _at(glast), _at(head[2]), _at(head[3])
-                )
-                for jj in range(nb):
-                    var j = nb - 1 - jj
-                    var bsrc = bh[j - 1][4] if j > 0 else a[0]
-                    var dx = bh[j - 1][6] if j > 0 else 0
-                    var want = dx != 0
-                    conv_block_backward_into[True](
-                        _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), _at_i(bh[j][5]), cs[q][j], ps[q][j],
-                        pools[q][j], want, _at(dx) if want else _at(bh[j][3]), _at(bh[j][2]), _at(bh[j][3]), bh[j][7],
-                        bh[j][8],
-                    )
+            # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
+            cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
             if adam:
                 opt_many_resident_h[True](t[0], t[1], t[2], t[3], hbuf + 4 * AH_ROW * st)
             else:
@@ -1535,8 +1504,7 @@ def fit_epoch_d_binding(
         res_download(lbuf, l32.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), steps)
         res_free(hbuf)
         res_free(lbuf)
-        if tw != 0:
-            res_free(tw)
+        res_free(tw)
     for st in range(steps):  # small-loop(steps: optimizer steps of one epoch): widens one loss scalar per step, not row data
         losses[st] = Float64(l32[st])
     _ = base^
