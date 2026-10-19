@@ -141,7 +141,12 @@ from transformer.checks.transformer_backward import (
     bwd_silu_backward_kernel,
 )
 
-comptime AUTOGRAD_TRANSFORMER = is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]()
+# The decoder-layer backward runs on the tape by default (promoted 2026-10-19). One timed series per arm (20 calls,
+# median, kernel-only clock, B8 L512 d512 8 heads 2 kv, tools/transformer_tape_arm_check.py --time 20): NVIDIA L40S
+# session 5.231 -> 5.259 ms, saved 5.118 -> 5.153; AMD MI325X session 3.415 -> 3.484, saved 3.648 -> 3.710; average 1.01.
+# Same launches, same arguments, same bits on Apple, NVIDIA and AMD (20 GRAD lines equal, both paths).
+# MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF restores the hand walk for the A/B; the old opt-in spelling is accepted too.
+comptime AUTOGRAD_TRANSFORMER = not is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]()
 
 # Tags in a range of their own: LayerNorm 1 (autograd/layers.mojo),
 # recurrent 16-18 (autograd/rules_recurrent.mojo), transformer 32-47.
