@@ -278,7 +278,7 @@ struct OpsSession[E: Exec & Movable](Movable):
         """Run operation `code` on the tensors `hs` with integer and float
         arguments; returns the new tensor's handle."""
         var x = List[Tensor]()
-        for i in range(len(hs)):  # driver-loop: over op inputs
+        for i in range(len(hs)):  # small-loop(hs: an op's input handles, at most three): handle lookup, no data
             x.append(self.tensor(hs[i]))
         var n = len(x)
         var ni = len(ints)

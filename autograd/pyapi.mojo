@@ -105,8 +105,22 @@ def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonOb
 
 def _handle_list(p: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(p)):  # driver-loop: over op inputs
+    for i in range(len(p)):  # small-loop(p: an op's input handles, at most three): argument parsing, no data
         out.append(ival(p, i))
+    return out^
+
+
+def _arg_ints(p: PythonObject) raises -> List[Int]:
+    var out = List[Int]()
+    for i in range(len(p)):  # small-loop(p: an op's integer arguments, at most four): argument parsing, no data
+        out.append(ival(p, i))
+    return out^
+
+
+def _arg_floats(p: PythonObject) raises -> List[Float32]:
+    var out = List[Float32]()
+    for i in range(len(p)):  # small-loop(p: an op's float arguments, at most one): argument parsing, no data
+        out.append(fval(p, i))
     return out^
 
 
@@ -147,7 +161,7 @@ def ops_op_py[E: Exec & Movable, KIND: Int](
     `hs` with integer arguments `ip` and float arguments `fp`; returns the
     new tensor's handle."""
     var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].op(Int(py=code), _handle_list(hs), _ints(ip), _floats(fp, 0)))
+    return PythonObject(p[].op(Int(py=code), _handle_list(hs), _arg_ints(ip), _arg_floats(fp)))
 
 
 def ops_scalar_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
