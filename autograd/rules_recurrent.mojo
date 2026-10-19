@@ -56,7 +56,12 @@ from sequence.recurrent import (
     wgrad_blocked,
 )
 
-comptime AUTOGRAD_RNN = is_defined["MOJOLEARN_AUTOGRAD_RNN"]()
+# The recurrent trainer's backward runs on the tape by default (promoted 2026-10-19). One run per arm, HIGGS
+# 1M rows, 16-step sequences, hidden 64, b512, 1 epoch, identical: NVIDIA L40S lstm 0.1419 -> 0.1397 s, gru 0.1256 ->
+# 0.1129, rnn 0.0689 -> 0.0645; AMD MI325X lstm 0.1234 -> 0.1236, gru 0.1053 -> 0.1054, rnn 0.0709 -> 0.0718. Bits equal
+# to the hand step on Apple, NVIDIA and AMD (same launches, same arguments). MOJOLEARN_AUTOGRAD_RNN_OFF restores the hand
+# step (HandStep) for the A/B; the old opt-in spelling is accepted too.
+comptime AUTOGRAD_RNN = not is_defined["MOJOLEARN_AUTOGRAD_RNN_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_RNN"]()
 
 # Tags in a range of their own, clear of autograd/layers.mojo (LAYER_NORM = 1),
 # so one NeuralRules can later dispatch both families.
