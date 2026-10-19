@@ -490,6 +490,125 @@ struct Tape(Movable):
         _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
         return self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
 
+    def linear[E: Exec](
+        mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
+        activation: Int = 0, l2: Float32 = 0, divisor: Float32 = 0,
+    ) raises -> Tensor:
+        """A dense layer, activation(x @ weight + bias), recorded as one node.
+
+        Use it for dense layers instead of matmul, add and an activation:
+        it runs one forward launch and three backward launches per layer.
+
+        Args:
+            x: The (rows, inputs) input.
+            weight: The (inputs, outputs) weights.
+            bias: An optional (1, outputs) bias.
+            activation: 0 (none), RELU, SIGMOID, TANH or SOFTMAX from
+                autograd.ops.
+            l2: L2 penalty on the weights; needs a positive `divisor`.
+            divisor: When positive, this layer's weight gradient is
+                (x^T dZ + l2 * weight) / divisor and its bias gradient is
+                the column sum of dZ divided by `divisor` (dZ the gradient
+                with respect to the pre-activation). 0 leaves both unscaled.
+
+        Returns:
+            The (rows, outputs) activated output.
+
+        Example::
+
+            var h = tape.linear(ex, x, w1, b1, RELU)
+            var logits = tape.linear(ex, h, w2, b2)
+        """
+        return self._linear_to(ex, x, weight, bias, activation, l2, divisor, dummy_ptr(), False)
+
+    def linear_into[E: Exec](
+        mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor], activation: Int,
+        output: FP, l2: Float32 = 0, divisor: Float32 = 0,
+    ) raises -> Tensor:
+        """linear() with its output written to caller storage.
+
+        `output` holds rows * outputs floats of this executor and must not
+        overlap x. Keep it unchanged until backward finishes. Record
+        `weight` and `bias` with variable_into to have their gradients land
+        in caller storage as well.
+        """
+        return self._linear_to(ex, x, weight, bias, activation, l2, divisor, output, True)
+
+    def _linear_to[E: Exec](
+        mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor], activation: Int,
+        l2: Float32, divisor: Float32, into: FP, use_into: Bool,
+    ) raises -> Tensor:
+        # LAUNCHES PER DENSE LAYER (lane ag-fusion2, read from the code).
+        # Hand-assembled MLP (sequence/mlp_fit.mojo, AUTOGRAD_MLP_OFF):
+        #   forward 1 (gemm_epi EPI_BIAS_ACT; + OP_SOFTMAX for a softmax
+        #   output); backward 3: gemm_epi EPI_L2GRAD (dW), OP_COLSUM_DIV
+        #   (db), gemm_epi EPI_ACT_BWD (dX times the layer below's act');
+        #   2 for the first layer (no dX).
+        # Unfused tape (matmul + add + activation): forward 3 (2 without an
+        #   activation); backward activation VJP 1, the product's add VJP 1,
+        #   the bias's add VJP 3 (elementwise VJP + two-launch blocked fold),
+        #   GEMMs 2 (1 for the first layer), the MLP's L2GRAD + DIVS export
+        #   2: 9 (8 for the first layer); plus 1 seed copy a backward.
+        # This node: forward 1 (gemm_epi EPI_BIAS_ACT, the hand path's call;
+        #   + OP_SOFTMAX for softmax; without a bias OP_GEMM + OP_ACT).
+        #   Backward 3: dW = gemm_epi EPI_L2GRAD (OP_GEMM when unscaled),
+        #   db = OP_COLSUM_DIV (OP_COLSUM when unscaled), dX = gemm_epi
+        #   EPI_ACT_BWD with the input layer's activation derivative in the
+        #   epilogue when the input is a linear node consumed only here
+        #   (else OP_GEMM). 2 for a layer whose input needs no gradient.
+        #   The dZ materialisation launch (OP_ACT_BWD in place, or the
+        #   softmax VJP into scratch) runs only when no consumer fused the
+        #   activation derivative and the seed is not the pre-activation
+        #   gradient (backward_from_preactivation): 0 in the MLP. With
+        #   backward_from_preactivation the root needs no seed copy either.
+        #   So the MLP runs exactly the hand path's launches with the hand
+        #   path's arguments.
+        var a = self._nodes[self._check(x)]
+        var w = self._nodes[self._check(weight)]
+        if a.cols != w.rows:
+            raise Error("linear: input columns must equal weight rows")
+        var act = _linear_act(activation)
+        if divisor < 0 or (l2 != 0 and not (divisor > 0)):
+            raise Error("linear: divisor must be positive when l2 is set, and never negative")
+        var rows = a.rows
+        var cols = w.cols
+        var inner = a.cols
+        self._shape(rows, cols)
+        var parents = List[Tensor]()
+        parents.append(x)
+        parents.append(weight)
+        var output = into if use_into else self._alloc(ex, rows * cols)
+        if bias:
+            var bt = bias.value()
+            var b = self._nodes[self._check(bt)]
+            if b.rows != 1 or b.cols != cols:
+                raise Error("linear: bias must have shape (1, outputs)")
+            parents.append(bt)
+            # the GEMM, its bias and (not softmax) its activation: one launch
+            _gemm_epi(ex, a.value, w.value, output, rows, cols, inner, inner, 1, cols, 1,
+                      EPI_BIAS_ACT, b.value, 0 if act == ACT_SOFTMAX else act, Float32(0.0), Float32(0.0))
+        else:
+            _gemm(ex, output, a.value, w.value, rows, cols, inner, inner, 1, cols, 1)
+            if act != ACT_IDENTITY and act != ACT_SOFTMAX:
+                var f = Args()
+                f.p0 = output
+                f.i0 = act
+                ex.launch[OP_ACT](f, rows * cols)
+        if act == ACT_SOFTMAX:
+            # in place, as the MLP trainer's _act_launch
+            var s = Args()
+            s.p0 = output
+            s.p1 = output
+            s.i0 = act
+            s.i1 = cols
+            ex.launch[OP_SOFTMAX](s, rows)
+        var saved = Args()
+        saved.i0 = act
+        saved.i1 = 1 if bias else 0
+        saved.f0 = l2
+        saved.f1 = divisor
+        return self._record(ex, output, rows, cols, LINEAR, parents, saved)
+
     def transpose[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         var n = self._nodes[self._check(x)]
         var output = self._alloc(ex, n.rows * n.cols)
