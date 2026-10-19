@@ -449,10 +449,10 @@ def _m1_conv_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
     # the [d_inner, D_CONV] layout copy straight into the tape's gradient
     ctx.enqueue_function[m1_conv_w_interleave_kernel](
         _kp(gradients[1]),
-        sc.tg0.unsafe_ptr(),
-        sc.tg1.unsafe_ptr(),
-        sc.tg2.unsafe_ptr(),
-        sc.tg3.unsafe_ptr(),
+        _kp(_fp(sc.tg0)),
+        _kp(_fp(sc.tg1)),
+        _kp(_fp(sc.tg2)),
+        _kp(_fp(sc.tg3)),
         Int32(mamba_reduction_tap(RED_CONV_W_TAP0)),
         Int32(mamba_reduction_tap(RED_CONV_W_TAP1)),
         Int32(mamba_reduction_tap(RED_CONV_W_TAP2)),
@@ -541,10 +541,16 @@ def _m1_gate_bwd(mut S: Mamba1TapeStack, k: Int, up: FP, gradients: List[FP]) ra
 @fieldwise_init
 struct Mamba1Rules(BackwardRules, Copyable, Movable):
     """Backward adapters for a Mamba-1 stack's custom nodes."""
-    var s: MutPointer[Mamba1TapeStack, MutAnyOrigin]
+    # The stack's address, untracked (a struct field may not carry
+    # MutAnyOrigin); the driver keeps the stack alive through the backward.
+    var s: MutPointer[Mamba1TapeStack, MutUntrackedOrigin]
 
     def supports(self, tag: Int) -> Bool:
         return tag >= M1_NORM and tag <= M1_PROJ_OUT
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # Every rule here reads a zero-filled destination and accumulates into it.
+        return True
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
@@ -643,7 +649,7 @@ def mamba1_tape_backward_stack(
         var o = tape.custom(ex, [g, w_out], _fp(st.out_proj), m, dm, M1_PROJ_OUT, _saved(k, dm))
         x_t = tape.add(ex, x_t, o)
     var seed = tape.variable(ex, _fp(dres), m, dm, False)
-    var rules = Mamba1Rules(MutPointer(to=S).unsafe_origin_cast[MutAnyOrigin]())
+    var rules = Mamba1Rules(MutPointer[Mamba1TapeStack, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=S))))
     tape.backward_with_rules(ex, x_t, seed, rules)
 
     var result = List[Mamba1PrefillGradients]()
@@ -748,15 +754,13 @@ struct Mamba2TapeStack(Movable):
         ctx.synchronize()
 
 
-def _m2_pack(ctx: DeviceContext, dst: FP, z: MutPointer[Float32, MutAnyOrigin],
-             xbc: MutPointer[Float32, MutAnyOrigin], dt: MutPointer[Float32, MutAnyOrigin],
-             m: Int, dims: Mamba2Dims) raises:
+def _m2_pack(ctx: DeviceContext, dst: FP, z: FP, xbc: FP, dt: FP, m: Int, dims: Mamba2Dims) raises:
     """C7's pack kernel, [d_z | d_xbc | d_dt] into the tape's d(in_proj)."""
     var n = m * dims.d_in_proj()
     if n < 1:
         return
     ctx.enqueue_function[mamba2_pack_inproj_grad_kernel](
-        _kp(dst), z, xbc, dt,
+        _kp(dst), _kp(z), _kp(xbc), _kp(dt),
         Int32(m), Int32(dims.d_inner), Int32(dims.conv_dim()), Int32(dims.d_in_proj()), Int32(dims.nheads),
         grid_dim=((n + M2_BWD_TPB - 1) // M2_BWD_TPB, 1, 1),
         block_dim=(M2_BWD_TPB, 1, 1),
@@ -812,7 +816,7 @@ def _m2_gate_bwd[E: Exec](mut ex: E, mut S: Mamba2TapeStack, k: Int, up: FP, gra
     _copy(ex, gradients[2], _fp(T.d_gnorm_w), di)
     mamba2_backward_silu_gate_into(ctx, T, st.skip_out, st.in_proj, dims, m)
     _copy(ex, gradients[0], _fp(T.d_skip), m * di)
-    _m2_pack(ctx, gradients[1], T.d_z.unsafe_ptr(), S.nz.unsafe_ptr(), S.nz.unsafe_ptr(), m, dims)
+    _m2_pack(ctx, gradients[1], _fp(T.d_z), _fp(S.nz), _fp(S.nz), m, dims)
 
 
 def _m2_ssd_bwd[E: Exec](mut ex: E, mut S: Mamba2TapeStack, k: Int, up: FP, gradients: List[FP]) raises:
@@ -863,16 +867,22 @@ def _m2_ssd_bwd[E: Exec](mut ex: E, mut S: Mamba2TapeStack, k: Int, up: FP, grad
     _copy(ex, gradients[3], _fp(disc.d_dt_bias), nh)
     _copy(ex, gradients[4], _fp(disc.d_a_log), nh)
     _copy(ex, gradients[5], _fp(T.d_d), nh)
-    _m2_pack(ctx, gradients[0], S.nz.unsafe_ptr(), cv.d_in_xbc.unsafe_ptr(), disc.d_dtraw.unsafe_ptr(), m, dims)
+    _m2_pack(ctx, gradients[0], _fp(S.nz), _fp(cv.d_in_xbc), _fp(disc.d_dtraw), m, dims)
 
 
 @fieldwise_init
 struct Mamba2Rules(BackwardRules, Copyable, Movable):
     """Backward adapters for a Mamba-2 stack's custom nodes."""
-    var s: MutPointer[Mamba2TapeStack, MutAnyOrigin]
+    # The stack's address, untracked (a struct field may not carry
+    # MutAnyOrigin); the driver keeps the stack alive through the backward.
+    var s: MutPointer[Mamba2TapeStack, MutUntrackedOrigin]
 
     def supports(self, tag: Int) -> Bool:
         return tag >= M2_NORM and tag <= M2_PROJ_OUT
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        # Every rule here reads a zero-filled destination and accumulates into it.
+        return True
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
@@ -971,7 +981,7 @@ def mamba2_tape_backward_stack(
         var o = tape.custom(ex, [g, w_out], _fp(st.out_proj), m, dm, M2_PROJ_OUT, _saved(k, dm))
         x_t = tape.add(ex, x_t, o)
     var seed = tape.variable(ex, _fp(dres), m, dm, False)
-    var rules = Mamba2Rules(MutPointer(to=S).unsafe_origin_cast[MutAnyOrigin]())
+    var rules = Mamba2Rules(MutPointer[Mamba2TapeStack, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=S))))
     tape.backward_with_rules(ex, x_t, seed, rules)
 
     var result = List[Mamba2PrefillGradients]()
