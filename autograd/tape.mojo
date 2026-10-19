@@ -622,7 +622,8 @@ struct Tape(Movable):
             ex.launch[OP_SOFTMAX](s, rows)
         var saved = Args()
         saved.i0 = act
-        saved.i1 = 1 if bias else 0
+        if bias:
+            saved.i1 = 1
         saved.f0 = l2
         saved.f1 = divisor
         return self._record(ex, output, rows, cols, LINEAR, parents, saved)
