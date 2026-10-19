@@ -155,6 +155,8 @@ STUB_NEURAL = textwrap.dedent(r'''
         sys.exit(3)
     n = int(a.rounds)
     data = "bytes" if a.lane.split("-")[0] in ("lm", "samba") else "gaussian"
+    if a.lane.endswith("-fit") or a.lane == "tape-user-model":
+        data = "higgs"                    # the fit lanes (bench_board_neural.FIT_LANES)
     arms, qual = {}, {}
     for i, arm in enumerate(a.arms.split(",")):
         ours = arm in ("ours", "ours-cpu")
