@@ -13,7 +13,7 @@
 # Off NVIDIA/AMD identical (Apple, FAST) every route is the one-thread launch.
 from std.memory import bitcast
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI
-from sequence.mlp import EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_LOGISTIC, ACT_TANH, ACT_RELU
+from sequence.mlp import EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX
 from sequence.gemm_tiled import GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, seq_gemm_route
 from sequence.exec_device import DeviceExec
 from sequence.exec import HostExec
@@ -51,6 +51,10 @@ def _kind(k: Int) -> Tuple[Int, Int]:
         return (EPI_BIAS_ACT, ACT_TANH)
     if k == 5:
         return (EPI_L2GRAD, 0)
+    if k == 10:
+        # bias with the softmax code: the follower leaves z (the softmax is
+        # its own launch), as the hand path launches a softmax output layer
+        return (EPI_BIAS_ACT, ACT_SOFTMAX)
     if k == 6:
         return (EPI_ACT_BWD, ACT_RELU)
     if k == 7:
@@ -295,6 +299,10 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
                 _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
                 _run[OP_GEMM_EPI](dev, host, tally, M, N, K, True, (idx + 3) % N_KINDS, False)
                 idx += 1
+    # AMD opbench (Session.linear bias_softmax 65536 x 256 -> 256): the large
+    # fused launch on both epilogue opcodes, every route
+    _run[OP_AGK_GEMM_EPI](dev, host, tally, 65536, 256, 256, False, 10, False)
+    _run[OP_GEMM_EPI](dev, host, tally, 65536, 256, 256, False, 10, False)
     print(
         "ROUTES grid cell", routes_seen[GR_CELL], "tile", routes_seen[GR_TILE],
         "thinN", routes_seen[GR_THIN_N], "thinM", routes_seen[GR_THIN_M],

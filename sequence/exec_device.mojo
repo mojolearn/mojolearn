@@ -356,25 +356,31 @@ def seq_pool_on() -> Bool:
     return String(getenv("MOJOLEARN_SEQ_POOL")) != "0"
 
 
-def _pool_trim(pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], need: Int):
-    """Drop free entries, oldest first, until `need` more bytes fit."""
+def _pool_trim(ctx: DeviceContext, pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], need: Int) raises:
+    """Drop free entries' storage, oldest first, until `need` more bytes fit.
+    The slot itself stays (a 1-float placeholder, size 0, free): every live
+    executor holds pool INDICES (DeviceExec.pdev, retired_pdev, pstaged,
+    ppend_host, opt_resident's stages), so removing an entry from the lists
+    shifted every later index and a live buffer's index then named another
+    buffer or ran past the list (lane ag-pass4-gemm: AMD opbench, Session.linear
+    65536 x 256 after many smaller shapes, `index 236 ... valid range 0 to 119`
+    at DeviceExec._sub). A size-0 slot never matches a request (count >= 1) and
+    is refilled by the next new buffer."""
     while pool[].bytes + need > SEQ_POOL_BYTES:
         var dropped = False
-        for i in range(len(pool[].dev)):
-            if pool[].dev_free[i]:
+        for i in range(len(pool[].dev)):  # small-loop(pool: pooled device buffers): free-slot search, no data
+            if pool[].dev_free[i] and pool[].dev_n[i] > 0:
                 pool[].bytes -= pool[].dev_n[i] * 4
-                _ = pool[].dev.pop(i)
-                _ = pool[].dev_n.pop(i)
-                _ = pool[].dev_free.pop(i)
+                pool[].dev[i] = ctx.enqueue_create_buffer[DType.float32](1)
+                pool[].dev_n[i] = 0
                 dropped = True
                 break
         if not dropped:
-            for i in range(len(pool[].host)):
-                if pool[].host_free[i]:
+            for i in range(len(pool[].host)):  # small-loop(pool: pooled host stages): free-slot search, no data
+                if pool[].host_free[i] and pool[].host_n[i] > 0:
                     pool[].bytes -= pool[].host_n[i] * 4
-                    _ = pool[].host.pop(i)
-                    _ = pool[].host_n.pop(i)
-                    _ = pool[].host_free.pop(i)
+                    pool[].host[i] = ctx.enqueue_create_host_buffer[DType.float32](1)
+                    pool[].host_n[i] = 0
                     dropped = True
                     break
         if not dropped:
@@ -383,37 +389,59 @@ def _pool_trim(pool: UnsafePointer[_SeqPool, MutUntrackedOrigin], need: Int):
 
 def _pool_dev(ctx: DeviceContext, count: Int) raises -> Int:
     """A free device buffer of exactly `count` floats from the pool, or a
-    new one added to it; returns its index (held until released)."""
+    new one (in a trimmed slot if there is one, else appended); returns its
+    index (held until released; indices never move)."""
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
     for i in range(len(pool[].dev)):  # small-loop(pool: pooled device buffers): free-buffer slot search, no data
         if pool[].dev_free[i] and pool[].dev_n[i] == count:
             pool[].dev_free[i] = False
             return i
-    _pool_trim(pool, count * 4)
+    _pool_trim(ctx, pool, count * 4)
+    var slot = -1
+    for i in range(len(pool[].dev)):  # small-loop(pool: pooled device buffers): trimmed-slot search, no data
+        if pool[].dev_free[i] and pool[].dev_n[i] == 0:
+            slot = i
+            break
+    pool[].bytes += count * 4
+    if slot >= 0:
+        pool[].dev[slot] = ctx.enqueue_create_buffer[DType.float32](count)
+        pool[].dev_n[slot] = count
+        pool[].dev_free[slot] = False
+        return slot
     pool[].dev.append(ctx.enqueue_create_buffer[DType.float32](count))
     pool[].dev_n.append(count)
     pool[].dev_free.append(False)
-    pool[].bytes += count * 4
     return len(pool[].dev) - 1
 
 
 def _pool_host(ctx: DeviceContext, n: Int) raises -> Int:
     """A free pinned stage of capacity >= n (the smallest that fits), or a
-    new one of n floats; returns its index."""
+    new one of n floats (in a trimmed slot if there is one, else appended);
+    returns its index (indices never move)."""
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
     var best = -1
     for i in range(len(pool[].host)):
-        if pool[].host_free[i] and pool[].host_n[i] >= n:
+        if pool[].host_free[i] and pool[].host_n[i] > 0 and pool[].host_n[i] >= n:
             if best < 0 or pool[].host_n[i] < pool[].host_n[best]:
                 best = i
     if best >= 0:
         pool[].host_free[best] = False
         return best
-    _pool_trim(pool, n * 4)
+    _pool_trim(ctx, pool, n * 4)
+    var slot = -1
+    for i in range(len(pool[].host)):  # small-loop(pool: pooled host stages): trimmed-slot search, no data
+        if pool[].host_free[i] and pool[].host_n[i] == 0:
+            slot = i
+            break
+    pool[].bytes += n * 4
+    if slot >= 0:
+        pool[].host[slot] = ctx.enqueue_create_host_buffer[DType.float32](n)
+        pool[].host_n[slot] = n
+        pool[].host_free[slot] = False
+        return slot
     pool[].host.append(ctx.enqueue_create_host_buffer[DType.float32](n))
     pool[].host_n.append(n)
     pool[].host_free.append(False)
-    pool[].bytes += n * 4
     return len(pool[].host) - 1
 
 
