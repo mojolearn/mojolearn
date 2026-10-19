@@ -12,6 +12,9 @@ from sequence.mlp import (
     MLP_EPOCH_DEV,
     MLP_DEVICE_EPOCH_ORDER,
     MLP_L2_BLOCK,
+    MLP_LOSSBLOCK,
+    mlp_lb_block,
+    mlp_lb_blocks,
     MLP_ROW_BLOCK,
     SplitMix,
     fisher_yates,
@@ -38,6 +41,10 @@ from sequence.ops import (
     OP_MLP_PERM,
     OP_MLP_ROWLOSS,
     OP_MLP_ROWPART,
+    OP_MLP_LB_PART,
+    OP_MLP_LB_FOLD,
+    OP_MLP_LB_EPOCH_PART,
+    OP_MLP_LB_EPOCH_FOLD,
     OP_OPT,
     OP_SOFTMAX,
     OP_SUMSQ,
@@ -56,6 +63,7 @@ from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
 from autograd.optim import OptimizerState, optimizer_config, step_lr
+from autograd.fold import fold_partials_bound
 from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_SUM
 from autograd.loss_ops import LS_MSE, LS_LOG_PROB, LS_BINARY_LOG_PROB
 from sequence.mlp import LOSS_SQUARED, LOSS_BINARY_LOG
@@ -393,6 +401,138 @@ def _l2_blocked[E: Exec](mut ex: E, net: MLPNet, P: FP, l2: FP, parts: FP) raise
         poff += nb
 
 
+# ------------------------------------------------------------------ pass-3 loss block (MLP_LOSSBLOCK)
+@always_inline
+def _lb_set_layer(mut a: Args, j: Int, off: Int, cnt: Int):
+    """op_mlp_lb_part's layer j (offset, count) slot, op_sumsq's packing."""
+    if j == 0:
+        a.i4 = off
+        a.i5 = cnt
+    elif j == 1:
+        a.i6 = off
+        a.i7 = cnt
+    elif j == 2:
+        a.i8 = off
+        a.i9 = cnt
+    else:
+        a.i10 = off
+        a.i11 = cnt
+
+
+@always_inline
+def _lb_set_count(mut a: Args, j: Int, cnt: Int):
+    """op_mlp_lb_fold's layer j count slot (i6..i9)."""
+    if j == 0:
+        a.i6 = cnt
+    elif j == 1:
+        a.i7 = cnt
+    elif j == 2:
+        a.i8 = cnt
+    else:
+        a.i9 = cnt
+
+
+def mlp_lb_l2_parts(net: MLPNet) -> Int:
+    """Floats of L2 block-partial storage the loss block needs for `net`."""
+    var n = 0
+    for i in range(net.n_layers()):  # driver-loop: over layers
+        n += mlp_lb_blocks(net.sizes[i] * net.sizes[i + 1])
+    return n
+
+
+def mlp_lb_row_parts(max_rows: Int) -> Int:
+    """Floats of row block-partial storage covering any batch of up to
+    `max_rows` rows (autograd/fold.mojo fold_partials_bound: R(max_rows)
+    blocks always suffice)."""
+    return fold_partials_bound(max_rows)
+
+
+def mlp_loss_block[E: Exec](
+    mut ex: E, net: MLPNet, P: FP, pred: FP, y: FP, seed: FP, rowparts: FP, l2parts: FP, l2: FP,
+    dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, data: FP, data_parts: Int,
+) raises:
+    """MLP_LOSSBLOCK (sequence/mlp.mojo): one batch's loss block. seed[0:B O]
+    = pred - y, l2[i] = ||W_i||^2 and dloss[bi] = the batch's reported loss
+    (data term + half_alpha sum(l2) / B), every sum a blocked fold with the
+    tape's block rule. `data_parts` = 0: the data term is the B row losses'
+    blocked sum (row partials written to `rowparts`); > 0: it is `data`'s
+    `data_parts` partials added ascending (-D MOJOLEARN_AUTOGRAD_LOSS hands
+    its one sum). Launches: one op_mlp_lb_part and one op_mlp_lb_fold per
+    group of four layers (2 for L <= 4)."""
+    var L = net.n_layers()
+    var O = net.sizes[L]
+    var groups = (L + 3) // 4
+    var pstart = 0
+    for g in range(groups):  # driver-loop: over groups of four layers
+        var p = Args()
+        p.p0 = pred
+        p.p1 = y
+        p.p2 = seed
+        p.p3 = rowparts
+        p.p4 = P
+        p.p5 = l2parts + pstart
+        p.i0 = loss_kind
+        p.i1 = O
+        p.i2 = B if g == 0 else 0
+        var threads = (B * O + mlp_lb_blocks(B)) if g == 0 else 0
+        for j in range(4):  # driver-loop: over the group's layers
+            var l = 4 * g + j
+            if l < L:
+                var c = net.sizes[l] * net.sizes[l + 1]
+                _lb_set_layer(p, j, net.w_off(l), c)
+                threads += mlp_lb_blocks(c)
+                pstart += mlp_lb_blocks(c)
+        ex.launch[OP_MLP_LB_PART](p, threads)
+    pstart = 0
+    for g in range(groups):  # driver-loop: over groups of four layers
+        var f = Args()
+        f.p0 = data if data_parts > 0 else rowparts
+        f.p1 = l2parts + pstart
+        f.p2 = dloss
+        f.p3 = l2
+        f.i0 = bi
+        f.i1 = B
+        f.i2 = O
+        f.i3 = L
+        f.i4 = loss_kind
+        f.i5 = data_parts if data_parts > 0 else mlp_lb_blocks(B)
+        f.i10 = 4 * g
+        f.i11 = 1 if g == groups - 1 else 0
+        f.f0 = half_alpha
+        for j in range(4):  # driver-loop: over the group's layers
+            var l = 4 * g + j
+            if l < L:
+                var c = net.sizes[l] * net.sizes[l + 1]
+                _lb_set_count(f, j, c)
+                pstart += mlp_lb_blocks(c)
+        ex.launch[OP_MLP_LB_FOLD](f, 1)
+
+
+def mlp_epoch_loss_block[E: Exec](
+    mut ex: E, dloss: FP, parts: FP, dcurve: FP, n_batches: Int, bs: Int, N: Int, it: Int,
+) raises:
+    """MLP_LOSSBLOCK: dcurve[it] = (sum over batches of dloss[bi] * B_bi) / N
+    as a blocked fold (blocks of mlp_lb_block(n_batches) batches, one fma
+    each ascending from +0.0, then the partials ascending): two launches an
+    epoch. `parts` holds mlp_lb_row_parts(n_batches) floats."""
+    var R = mlp_lb_block(n_batches)
+    var e = Args()
+    e.p0 = dloss
+    e.p1 = parts
+    e.i0 = n_batches
+    e.i1 = bs
+    e.i2 = N
+    e.i4 = R
+    ex.launch[OP_MLP_LB_EPOCH_PART](e, mlp_lb_blocks(n_batches))
+    var f = Args()
+    f.p0 = parts
+    f.p2 = dcurve
+    f.i0 = mlp_lb_blocks(n_batches)
+    f.i2 = N
+    f.i3 = it
+    ex.launch[OP_MLP_LB_EPOCH_FOLD](f, 1)
+
+
 def mlp_fit[E: Exec](
     mut ex: E, net: MLPNet, X: FP, Y: FP, N: Int, Pio: FP, curve: FP,
     loss_kind: Int, solver: Int, lr_sched: Int, nesterov: Bool, batch: Int, max_iter: Int,
@@ -459,8 +599,12 @@ def mlp_fit[E: Exec](
     var l2_nb = 0
     for i in range(L):
         l2_nb += (net.sizes[i] * net.sizes[i + 1] + MLP_L2_BLOCK - 1) // MLP_L2_BLOCK
-    var l2parts = ex.alloc(l2_nb if MLP_BLOCKED_FOLDS else 1)
-    var rowparts = ex.alloc((bs + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK if MLP_BLOCKED_FOLDS else 1)
+    var l2parts = ex.alloc(l2_nb if MLP_BLOCKED_FOLDS and not MLP_LOSSBLOCK else 1)
+    var rowparts = ex.alloc((bs + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK if MLP_BLOCKED_FOLDS and not MLP_LOSSBLOCK else 1)
+    # MLP_LOSSBLOCK: the loss block's L2, row and epoch block partials
+    var lb_l2parts = ex.alloc(mlp_lb_l2_parts(net) if MLP_LOSSBLOCK else 1)
+    var lb_rowparts = ex.alloc(mlp_lb_row_parts(bs) if MLP_LOSSBLOCK else 1)
+    var lb_epochparts = ex.alloc(mlp_lb_row_parts(n_batches) if MLP_LOSSBLOCK else 1)
     # MOJOLEARN_AUTOGRAD_LOSS: the loss module's scratch and the batch's data sum
     var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
     var loss_sum = dummy_ptr()
@@ -518,72 +662,83 @@ def mlp_fit[E: Exec](
                 tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
             else:
                 mlp_forward(ex, net, P, acts, B)
-            var a = Args()
-            a.p0 = acts[L]
-            a.p1 = yb
-            a.p2 = deltas[L]
-            a.p3 = rowloss
-            a.i0 = loss_kind
-            a.i1 = O
-            ex.launch[OP_MLP_ROWLOSS](a, B)
-            comptime if MLP_BLOCKED_FOLDS:
-                _l2_blocked(ex, net, P, l2, l2parts)
-            else:  # runtime L: a plain if inside the comptime else (box-run-2 compile fix)
-                if L <= 4:
-                    # every layer's ||W||^2 in one launch, a thread each (apple2)
-                    var q = Args()
-                    q.p0 = P
-                    q.p1 = l2
-                    q.i2 = L
-                    for i in range(L):
-                        var o_ = net.w_off(i)
-                        var c_ = net.sizes[i] * net.sizes[i + 1]
-                        if i == 0:
-                            q.i4 = o_
-                            q.i5 = c_
-                        elif i == 1:
-                            q.i6 = o_
-                            q.i7 = c_
-                        elif i == 2:
-                            q.i8 = o_
-                            q.i9 = c_
-                        else:
-                            q.i10 = o_
-                            q.i11 = c_
-                    ex.launch[OP_SUMSQ](q, L)
-                else:
-                    for i in range(L):
+            comptime if MLP_LOSSBLOCK:
+                # lane ag-pass3-lossblock: seed, row-loss and L2 sums and the
+                # batch loss in 2 launches (was 5; sequence/mlp.mojo's
+                # loss-section comment). -D MOJOLEARN_MLP_LOSSBLOCK_OFF: below.
+                comptime if AUTOGRAD_LOSS:
+                    loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
+                mlp_loss_block(
+                    ex, net, P, acts[L], yb, deltas[L], lb_rowparts, lb_l2parts, l2, dloss, bi, B, loss_kind,
+                    ftz(identical_mul(Float32(0.5), alpha)), loss_sum, 1 if AUTOGRAD_LOSS else 0,
+                )
+            else:
+                var a = Args()
+                a.p0 = acts[L]
+                a.p1 = yb
+                a.p2 = deltas[L]
+                a.p3 = rowloss
+                a.i0 = loss_kind
+                a.i1 = O
+                ex.launch[OP_MLP_ROWLOSS](a, B)
+                comptime if MLP_BLOCKED_FOLDS:
+                    _l2_blocked(ex, net, P, l2, l2parts)
+                else:  # runtime L: a plain if inside the comptime else (box-run-2 compile fix)
+                    if L <= 4:
+                        # every layer's ||W||^2 in one launch, a thread each (apple2)
                         var q = Args()
-                        q.p0 = P + net.w_off(i)
+                        q.p0 = P
                         q.p1 = l2
-                        q.i0 = i
-                        q.i1 = net.sizes[i] * net.sizes[i + 1]
-                        ex.launch[OP_SUMSQ](q, 1)
-            var bl = Args()
-            bl.p0 = rowloss
-            bl.p1 = l2
-            bl.p2 = dloss
-            bl.i0 = bi
-            bl.i1 = B
-            bl.i2 = O
-            bl.i3 = L
-            bl.i4 = loss_kind
-            bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
-            comptime if AUTOGRAD_LOSS:
-                loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
-                bl.p3 = loss_sum
-                bl.i5 = 1
-            elif MLP_BLOCKED_FOLDS:
-                var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
-                var rp = Args()
-                rp.p0 = rowloss
-                rp.p1 = rowparts
-                rp.i0 = B
-                rp.i1 = MLP_ROW_BLOCK
-                ex.launch[OP_MLP_ROWPART](rp, nrb)
-                bl.p3 = rowparts
-                bl.i5 = nrb
-            ex.launch[OP_MLP_BLOSS](bl, 1)
+                        q.i2 = L
+                        for i in range(L):
+                            var o_ = net.w_off(i)
+                            var c_ = net.sizes[i] * net.sizes[i + 1]
+                            if i == 0:
+                                q.i4 = o_
+                                q.i5 = c_
+                            elif i == 1:
+                                q.i6 = o_
+                                q.i7 = c_
+                            elif i == 2:
+                                q.i8 = o_
+                                q.i9 = c_
+                            else:
+                                q.i10 = o_
+                                q.i11 = c_
+                        ex.launch[OP_SUMSQ](q, L)
+                    else:
+                        for i in range(L):
+                            var q = Args()
+                            q.p0 = P + net.w_off(i)
+                            q.p1 = l2
+                            q.i0 = i
+                            q.i1 = net.sizes[i] * net.sizes[i + 1]
+                            ex.launch[OP_SUMSQ](q, 1)
+                var bl = Args()
+                bl.p0 = rowloss
+                bl.p1 = l2
+                bl.p2 = dloss
+                bl.i0 = bi
+                bl.i1 = B
+                bl.i2 = O
+                bl.i3 = L
+                bl.i4 = loss_kind
+                bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
+                comptime if AUTOGRAD_LOSS:
+                    loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
+                    bl.p3 = loss_sum
+                    bl.i5 = 1
+                elif MLP_BLOCKED_FOLDS:
+                    var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
+                    var rp = Args()
+                    rp.p0 = rowloss
+                    rp.p1 = rowparts
+                    rp.i0 = B
+                    rp.i1 = MLP_ROW_BLOCK
+                    ex.launch[OP_MLP_ROWPART](rp, nrb)
+                    bl.p3 = rowparts
+                    bl.i5 = nrb
+                ex.launch[OP_MLP_BLOSS](bl, 1)
             comptime if AUTOGRAD_MLP:
                 mlp_backward_autograd(tape, ex, net, tape_logits, deltas[L], P, Gr, B, alpha)
             else:
@@ -634,14 +789,18 @@ def mlp_fit[E: Exec](
                 ex.launch[OP_OPT](o, np_)
         var loss: Float64
         comptime if MLP_EPOCH_DEV:
-            var el = Args()
-            el.p0 = dloss
-            el.p1 = dcurve
-            el.i0 = n_batches
-            el.i1 = bs
-            el.i2 = N
-            el.i3 = it
-            ex.launch[OP_MLP_EPOCH_LOSS](el, 1)
+            comptime if MLP_LOSSBLOCK:
+                # the epoch loss as a blocked fold (2 launches, chains ~sqrt(n_batches))
+                mlp_epoch_loss_block(ex, dloss, lb_epochparts, dcurve, n_batches, bs, N, it)
+            else:
+                var el = Args()
+                el.p0 = dloss
+                el.p1 = dcurve
+                el.i0 = n_batches
+                el.i1 = bs
+                el.i2 = N
+                el.i3 = it
+                ex.launch[OP_MLP_EPOCH_LOSS](el, 1)
             ex.sync()
             ex.download(FP(unsafe_from_address=Int(loss_word.unsafe_ptr())), dcurve + it, 1)
             curve.unsafe_store(it, loss_word[0])

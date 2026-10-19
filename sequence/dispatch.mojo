@@ -43,6 +43,12 @@ from sequence.ops import (
     OP_MLP_ROWPART,
     OP_MLP_PERM,
     OP_MLP_EPOCH_LOSS,
+    OP_MLP_LB_PART,
+    OP_MLP_LB_FOLD,
+    OP_MLP_LB_EPOCH_PART,
+    OP_MLP_LB_EPOCH_FOLD,
+    OP_MLP_LB_FIRST,
+    OP_MLP_LB_LAST,
     OP_SEQ_IOTA,
     OP_PROPHET_PREP,
     OP_L2GRAD,
@@ -119,6 +125,7 @@ from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
 from sequence.mlp import op_agk_gemm_epi
+from sequence.mlp import op_mlp_lb_epoch_fold, op_mlp_lb_epoch_part, op_mlp_lb_fold, op_mlp_lb_part
 from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
@@ -202,6 +209,19 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert OP_P1_LAST < OP_LS_FIRST or OP_P1_FIRST > OP_LS_LAST, "fused opcodes overlap the loss family"
     comptime assert OP_P1_LAST < OP_AGM_FIRST or OP_P1_FIRST > OP_AGM_LAST, "fused opcodes overlap the model family"
     comptime assert OP_P1_LAST < OP_AGK_FIRST or OP_P1_FIRST > OP_AGK_LAST, "fused opcodes overlap the kernel family"
+    # The MLP loss block (sequence/mlp.mojo MLP_LOSSBLOCK, lane
+    # ag-pass3-lossblock, 1600..), disjoint from every autograd range and the scans.
+    comptime assert OP_MLP_LB_FIRST <= OP_MLP_LB_LAST, "MLP loss-block opcode range is empty"
+    comptime assert OP_MLP_LB_FIRST > OP_AG_LAST or OP_MLP_LB_LAST < OP_AG_FIRST, "MLP loss-block opcodes overlap the tape's"
+    comptime assert OP_MLP_LB_FIRST > OP_AGD_LAST or OP_MLP_LB_LAST < OP_AGD_FIRST, "MLP loss-block opcodes overlap the data family"
+    comptime assert OP_MLP_LB_FIRST > OP_AGO_LAST or OP_MLP_LB_LAST < OP_AGO_FIRST, "MLP loss-block opcodes overlap the optim family"
+    comptime assert OP_MLP_LB_FIRST > OP_LS_LAST or OP_MLP_LB_LAST < OP_LS_FIRST, "MLP loss-block opcodes overlap the loss family"
+    comptime assert OP_MLP_LB_FIRST > OP_AGM_LAST or OP_MLP_LB_LAST < OP_AGM_FIRST, "MLP loss-block opcodes overlap the model family"
+    comptime assert OP_MLP_LB_FIRST > OP_AGK_LAST or OP_MLP_LB_LAST < OP_AGK_FIRST, "MLP loss-block opcodes overlap the kernel family"
+    comptime assert OP_MLP_LB_FIRST > OP_P1_LAST or OP_MLP_LB_LAST < OP_P1_FIRST, "MLP loss-block opcodes overlap the fused family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_MLP_LB_FIRST or OP_CELL_FWD_SCAN > OP_MLP_LB_LAST) and (
+        OP_CELL_BWD_SCAN < OP_MLP_LB_FIRST or OP_CELL_BWD_SCAN > OP_MLP_LB_LAST
+    ), "MLP loss-block opcode collides with recurrent scan"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
@@ -303,6 +323,14 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_perm(t, a)
     elif OP == OP_MLP_EPOCH_LOSS:
         op_mlp_epoch_loss(t, a)
+    elif OP == OP_MLP_LB_PART:
+        op_mlp_lb_part(t, a)
+    elif OP == OP_MLP_LB_FOLD:
+        op_mlp_lb_fold(t, a)
+    elif OP == OP_MLP_LB_EPOCH_PART:
+        op_mlp_lb_epoch_part(t, a)
+    elif OP == OP_MLP_LB_EPOCH_FOLD:
+        op_mlp_lb_epoch_fold(t, a)
     elif OP == OP_SEQ_IOTA:
         op_seq_iota(t, a)
     elif OP == OP_PROPHET_PREP:
