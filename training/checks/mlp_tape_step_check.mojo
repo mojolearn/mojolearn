@@ -1,18 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The small MLP train step's tape backward (autograd/rules_small_mlp.mojo) against the hand chain, word for word.
+"""The small MLP train step (its backward on the tape, autograd/rules_small_mlp.mojo) against stored digests, word for word.
 
 For each case (rows 1, 37 and 256; with and without the input gradient),
-runs two AdamW steps (t = 1, 2) of `mlp_train_step_host` from the same
-weights and batches, once through the hand chain and once through the tape,
-and requires the loss, the logits, the four gradients, the input gradient
-and the weights, moments and flags after each step to be equal word for
-word. Prints one FNV-1a digest per tensor so columns can be compared across
-vendors.
+runs two AdamW steps (t = 1, 2) of `mlp_train_step_host` from fixed weights
+and batches and digests (FNV-1a 64 over the float32 words) the loss, the
+logits, the four gradients, the input gradient and the weights, moments and
+flags after each step. Every digest must equal the stored record
+(training/checks/mlp_tape_step_digests.tsv: the tape == hand-chain runs on
+Metal, NVIDIA and AMD, 162 tensors). Prints one digest per tensor so columns
+can be compared across vendors. The record path is relative to the repo
+root; MOJOLEARN_MLP_TAPE_DIGESTS overrides it.
 
     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/mlp_tape_step_check.mojo
 """
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+# (the check compared step[False] (hand chain) against step[True] (tape) in one process;
+# the hand chain's digests are now the stored record).
 from std.memory import bitcast
+from std.os import getenv
 from max.gpu.host import DeviceContext
+
+from checks.identity_trace_read import read_trace_lines
 
 from training.mlp_ops import (
     MLP_B1, MLP_B2, MLP_IN, MLP_OUT, MLP_STEP_TRAIN, MLP_TOTAL, MLP_W1, MLP_W2,
@@ -66,7 +75,7 @@ struct StepState(Movable):
         self.flags = List[Int32](length=4, fill=Int32(0))
 
 
-def step[tape: Bool](
+def step(
     ctx: DeviceContext, mut st: StepState, rows: Int, t: Int, want_input_grad: Int,
 ) raises -> List[List[Float32]]:
     """One train step; returns [loss, logits, dw1, db1, dw2, db2, dx, w1, b1, w2, b2, m, v, flags]."""
@@ -82,7 +91,7 @@ def step[tape: Bool](
     var db2 = List[Float32](length=MLP_B2, fill=Float32(0.0))
     var dx = List[Float32](length=rows * MLP_IN if want_input_grad != 0 else 1, fill=Float32(0.0))
     var info = List[Float32](length=3, fill=Float32(0.0))
-    _ = mlp_train_step_host[tape](
+    _ = mlp_train_step_host(
         ctx, _p(x), _q(y), _p(st.w1), _p(st.b1), _p(st.w2), _p(st.b2), _p(st.m), _p(st.v), _q(st.flags),
         _p(loss), _p(logits), _p(dw1), _p(db1), _p(dw2), _p(db2), _p(dx), _p(info),
         rows, MLP_STEP_TRAIN, t, Float32(0.03), Float32(0.9), Float32(0.999), Float32(1e-8), Float32(0.01),
@@ -112,48 +121,57 @@ def step[tape: Bool](
     return out^
 
 
-def compare(tag: String, name: String, hand: List[Float32], tape: List[Float32]) -> Int:
-    var diff = 0
-    var first = -1
-    if len(hand) != len(tape):
-        print("MLP_TAPE", tag, name, "DIFFER lengths", len(hand), len(tape))
-        return 1
-    for i in range(len(hand)):
-        if bitcast[DType.uint32](hand[i]) != bitcast[DType.uint32](tape[i]):
-            diff += 1
-            if first < 0:
-                first = i
-    print("MLP_TAPE", tag, name, len(hand), "hand", digest(hand), "tape", digest(tape),
-          "SAME" if diff == 0 else "DIFFER words=" + String(diff) + " first=" + String(first))
-    return 1 if diff != 0 else 0
+comptime DIGESTS_DEFAULT = "training/checks/mlp_tape_step_digests.tsv"
 
 
-def run_case(ctx: DeviceContext, rows: Int, want_input_grad: Int) raises -> Int:
+def record_line(tag: String, name: String, values: List[Float32]) -> String:
+    """One record: case, tensor, word count and digest, tab separated (the stored file's layout)."""
+    return tag + "\t" + name + "\t" + String(len(values)) + "\t" + String(digest(values))
+
+
+def compare(stored: List[String], mut k: Int, line: String) -> Int:
+    """Print `line`, compare it with stored record `k` and advance `k`; 1 on a difference."""
+    var want = String("<missing>")
+    if k < len(stored):
+        want = String(stored[k])
+    k += 1
+    var same = line == want
+    print("MLP_TAPE", line, String("SAME") if same else String("DIFFER stored ") + want)
+    return 0 if same else 1
+
+
+def run_case(ctx: DeviceContext, stored: List[String], mut k: Int, rows: Int, want_input_grad: Int) raises -> Int:
     var names: List[String] = [
         "loss", "logits", "grad.w1", "grad.b1", "grad.w2", "grad.b2", "grad.x",
         "w1_after", "b1_after", "w2_after", "b2_after", "m_after", "v_after", "flags_after",
     ]
-    var hand_state = StepState()
-    var tape_state = StepState()
+    var state = StepState()
     var bad = 0
     for t in range(1, 3):
         var tag = String("rows=") + String(rows) + " dx=" + String(want_input_grad) + " t=" + String(t)
-        var hand = step[False](ctx, hand_state, rows, t, want_input_grad)
-        var tape = step[True](ctx, tape_state, rows, t, want_input_grad)
+        var got = step(ctx, state, rows, t, want_input_grad)
         for j in range(len(names)):
             if j == 6 and want_input_grad == 0:
                 continue
-            bad += compare(tag, names[j], hand[j], tape[j])
+            bad += compare(stored, k, record_line(tag, names[j], got[j]))
     return bad
 
 
 def main() raises:
+    var path = String(getenv("MOJOLEARN_MLP_TAPE_DIGESTS"))
+    if path.byte_length() == 0:
+        path = String(DIGESTS_DEFAULT)
+    var stored = read_trace_lines(path)
     var ctx = DeviceContext()
     var bad = 0
+    var k = 0
     var row_cases: List[Int] = [1, 37, 256]
     for r in range(len(row_cases)):
-        bad += run_case(ctx, row_cases[r], 0)
-        bad += run_case(ctx, row_cases[r], 1)
+        bad += run_case(ctx, stored, k, row_cases[r], 0)
+        bad += run_case(ctx, stored, k, row_cases[r], 1)
+    if k != len(stored):
+        print("MLP_TAPE records produced", k, "stored", len(stored), "DIFFER")
+        bad += 1
     if bad != 0:
         raise Error("MLP_TAPE_STEP_FAIL " + String(bad) + " differing tensors")
-    print("MLP_TAPE_STEP_PASS every loss, logit, gradient and updated state word equals the hand chain")
+    print("MLP_TAPE_STEP_PASS every loss, logit, gradient and updated state word equals the stored record (" + String(k) + " tensors)")

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# The small MLP train step's backward on the tape (-D MOJOLEARN_AUTOGRAD_SMALL_MLP,
-# default on; MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF restores the hand chain).
+# The small MLP train step's backward on the tape (the step's only backward).
 # TAPE_EVERYWHERE_PLAN.md path 8, lane ag-smallmlp-tape.
 #
 # ---------------------------------------------------------------- launch inventory
@@ -58,7 +57,6 @@
 #   seed: dlogits (the loss's gradient, written by the forward)
 #
 # Bits: same kernels, same operands, same buffers => the hand path's bits.
-from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer
 
 from autograd.tape import Tape, Tensor, BackwardRules
@@ -66,12 +64,10 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
 from gemm.contract import OP_NN, OP_TN
 
-# Default on (Andrew 2026-10-19: the word-for-word check is the gate;
-# training/checks/mlp_tape_step_check.mojo). MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
-# restores the hand chain for the A/B; the opt-in spelling is accepted too.
-comptime AUTOGRAD_SMALL_MLP = (
-    not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"]()
-)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+# (the AUTOGRAD_SMALL_MLP switch and its opt-in spelling MOJOLEARN_AUTOGRAD_SMALL_MLP;
+# training/checks/mlp_tape_step_check.mojo compares the tape against stored digests).
 
 # Tags 120-121 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
 # LM 64-71, Mamba-3 72-86, CNN 96-111, MoE 112-115).

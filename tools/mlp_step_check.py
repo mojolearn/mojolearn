@@ -13,10 +13,10 @@ both from one initialization over the same batches and compares every byte,
 then reports the median step wall of each and the ratio.
 
 Since lane ag-smallmlp-tape (2026-10-19) the fused entry's backward runs on
-the autograd tape by default (autograd/rules_small_mlp.mojo), so this tool
-also checks the tape against the per-operation hand calls; a binding built
-with -D MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF checks the hand fused chain. The
-in-binary hand-vs-tape check is `pixi run check-mlp-tape-step`.
+the autograd tape (autograd/rules_small_mlp.mojo; the hand fused chain was
+deleted 2026-10-19, see docs/TOMBSTONES.md MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF),
+so this tool checks the tape against the per-operation hand calls. The
+in-binary check against the stored digests is `pixi run check-mlp-tape-step`.
 
     python tools/mlp_step_check.py                    # 64 steps of 256 rows
     python tools/mlp_step_check.py --steps 128 --rows 32 --json out.json
