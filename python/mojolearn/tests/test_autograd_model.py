@@ -135,3 +135,106 @@ def test_dropout_trains_or_is_refused():
         assert "Dropout is not available" in str(exc)
         return
     assert m.predict(X).shape == (120,)
+
+
+# ---------------------------------------------------------------- inputs as they are
+# The entries take the user's array as it is and cast it to float32 in Mojo
+# (core/cast_in.mojo); the cast gives the float32 values numpy's astype
+# gives, so every accepted dtype and order trains to the float32 C-order bits.
+def _has_gather():
+    try:
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "model_gather_labels")
+    except Exception:
+        return False
+
+
+needs_gather = pytest.mark.skipif(not _has_gather(),
+                                  reason="the sequence binding has no model_gather_labels entry (rebuild it)")
+
+
+def _fit(loss, n_out, X, y):
+    m = ml.Sequential().linear(6).tanh().linear(n_out).compile(loss=loss, optimizer="adam", lr=0.02)
+    return m.fit(X, y, epochs=3, batch_size=32, seed=0)
+
+
+@needs_gather
+def test_classifier_inputs_as_they_are_give_the_same_bits():
+    X, _, y3, _ = _data()
+    ref = _fit("cross_entropy", 3, X, y3)
+    ref_pred = ref.predict(X)
+    cases = [
+        (X.astype(np.float64), y3),
+        (X, y3.astype(np.int8)),
+        (np.asfortranarray(X), y3),
+        (np.asfortranarray(X.astype(np.float64)), y3.astype(np.uint16)),
+        (X, y3.astype(np.float32)),
+    ]
+    for Xin, yin in cases:
+        m = _fit("cross_entropy", 3, Xin, yin)
+        assert _digest(m) == _digest(ref)
+        assert m.classes_.dtype == yin.dtype
+        assert np.array_equal(m.classes_, np.unique(yin))
+        p = m.predict(Xin)
+        assert p.dtype == yin.dtype and p.shape == (120,)
+        assert np.array_equal(p, ref_pred.astype(yin.dtype))
+        assert np.array_equal(m.predict_proba(Xin), ref.predict_proba(X))
+
+
+@needs_gather
+def test_binary_bool_labels_and_integer_inputs():
+    X, _, _, yb = _data()
+    Xi = np.round(X * 4).astype(np.int16)
+    ref = _fit("bce_with_logits", 1, Xi.astype(np.float32), yb)
+    m = _fit("bce_with_logits", 1, Xi, yb.astype(bool))
+    assert _digest(m) == _digest(ref)
+    assert m.classes_.dtype == np.bool_ and list(m.classes_) == [False, True]
+    p = m.predict(Xi)
+    assert p.dtype == np.bool_
+    assert np.array_equal(p, ref.predict(Xi.astype(np.float32)).astype(bool))
+
+
+def test_regressor_inputs_as_they_are_give_the_same_bits():
+    X, yr, _, _ = _data()
+    ref = _fit("mse", 1, X, yr)
+    for Xin, yin in [(X.astype(np.float64), yr.astype(np.float64)),
+                     (np.asfortranarray(X), yr),
+                     (X, yr.reshape(-1, 1).copy(order="F").reshape(-1))]:
+        m = _fit("mse", 1, Xin, yin)
+        assert _digest(m) == _digest(ref)
+        assert np.array_equal(m.predict(Xin), ref.predict(X))
+
+
+def test_inputs_refused_by_name():
+    X, yr, _, _ = _data()
+    m = ml.Sequential().linear(1).compile(loss="mse")
+    with pytest.raises(ValueError, match="contiguous"):
+        m.fit(np.zeros((120, 10), dtype=np.float32)[:, ::2], yr, epochs=1)
+    with pytest.raises(TypeError, match="numeric"):
+        m.fit(X.astype(object), yr, epochs=1)
+    with pytest.raises(TypeError, match="numeric"):
+        m.fit(X.astype(np.float16), yr, epochs=1)
+
+
+def _has_ops():
+    try:
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_open")
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _has_ops(), reason="the sequence binding has no ops_open entry (rebuild it)")
+def test_session_tensor_takes_inputs_as_they_are():
+    from mojolearn import ops
+    X, _, y3, _ = _data()
+    with ops.Session() as s:
+        for x in (X, X.astype(np.float64), np.asfortranarray(X), np.asfortranarray(X.astype(np.float64))):
+            assert np.array_equal(s.numpy(s.tensor(x)), X)
+        assert np.array_equal(s.numpy(s.tensor(y3.astype(np.int8))), y3.astype(np.float32).reshape(-1, 1))
+        assert np.array_equal(s.numpy(s.tensor(y3 > 0)), (y3 > 0).astype(np.float32).reshape(-1, 1))
+        assert np.array_equal(s.numpy(s.tensor(2.5)), np.full((1, 1), 2.5, dtype=np.float32))
+        big = np.array([2 ** 40 + 1, -(2 ** 31) - 3, 16777217], dtype=np.int64)
+        assert np.array_equal(s.numpy(s.tensor(big)), big.astype(np.float32).reshape(-1, 1))
+        with pytest.raises(ValueError, match="contiguous"):
+            s.tensor(X[:, ::2])
+        with pytest.raises(TypeError, match="numeric"):
+            s.tensor(X.astype(object))
