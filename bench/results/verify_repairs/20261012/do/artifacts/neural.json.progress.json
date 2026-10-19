@@ -1,0 +1,1 @@
+{"cells_journal": "/root/ml-verify/artifacts/neural.json.cells.jsonl", "complete": true, "evidence": "/root/ml-verify/artifacts/neural.json", "execution": {"completed_cells": 576, "interrupted": null, "mode": "fresh-process-per-cell", "timeout_s": 120.0, "total_cells": 576}, "exit": 1, "format": "mojolearn.verify-progress.v1", "verdict": "MISMATCH"}

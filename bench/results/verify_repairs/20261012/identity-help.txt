@@ -1,0 +1,96 @@
+usage: python -m mojolearn._identity_break [-h] [--json JSON]
+                                           [--require-backend {cpu,metal,cuda,hip}]
+                                           [--require-cpu] [--fail-on-refused]
+                                           [--resume] [--jobs N]
+                                           [--lanes LANES] [--skip SKIP]
+                                           [--fixtures FIXTURES]
+                                           [--repeats REPEATS]
+                                           [--vendor VENDOR] [--allow-fast]
+                                           [--batch-alone N]
+                                           [--partial-column PART[,PART...]]
+                                           [--no-batch] [--no-rlpair]
+                                           [--batch-grad] [--batch-scale]
+                                           [--ragged] [--step-full]
+                                           [--verbose]
+                                           [--diff JSON [JSON ...]]
+                                           [--require-columns N]
+                                           [--owed-json PATH]
+                                           [--merge JSON [JSON ...]]
+                                           [--allow-separate-builds]
+
+identity_break: TRY TO BREAK cross-vendor bit-identity, on every estimator.
+
+options:
+  -h, --help            show this help message and exit
+  --json JSON
+  --require-backend {cpu,metal,cuda,hip}
+                        refuse a different loaded backend before fitting
+  --require-cpu         refuse any GPU backend before fitting (internal CPU
+                        oracle jobs)
+  --fail-on-refused     exit nonzero if any requested stage refuses (used by
+                        iteration runner)
+  --resume              reuse completed cells from --json only when sources,
+                        binaries and protocol match
+  --jobs N              CPU only: run independent lane shards in N isolated
+                        processes (requires --json; each shard is resumable
+                        and the final record is merged in lane order)
+  --lanes LANES
+  --skip SKIP           lanes to leave out, comma separated; each is reported
+                        as SKIPPED
+  --fixtures FIXTURES
+  --repeats REPEATS
+  --vendor VENDOR       the box label, ^[a-z0-9][a-z0-9_.-]*$ and not a
+                        placeholder; default cpu-<cpu model slug> on a CPU-
+                        only install, platform.machine() elsewhere
+  --allow-fast
+  --batch-alone N       rows evaluated alone per batch call (default 16); the
+                        split and the prefixes are fixed, and the part's hash
+                        does not depend on N
+  --partial-column PART[,PART...]
+                        RUN A PARTIAL COLUMN, leaving out these parts: batch,
+                        rlpair, batchgrad, batchscale, ragged, stepfull, or
+                        'properties' for the four property parts. The parts
+                        left out are NOT collected, the JSON is stamped
+                        partial_column=true with parts_omitted, and
+                        _verify_reference.admit() REFUSES it, so it can never
+                        be read as a record. For a fast local loop only
+  --no-batch            equivalent to --partial-column batch; kept for the
+                        legs that pass it
+  --no-rlpair           equivalent to --partial-column rlpair; kept for the
+                        legs that pass it
+  --batch-grad          accepted and inert since 2026-09-20: the batchgrad
+                        part is collected by default
+  --batch-scale         accepted and inert since 2026-09-20: the batchscale
+                        part is collected by default
+  --ragged              accepted and inert since 2026-09-20: the ragged part
+                        is collected by default
+  --step-full           accepted and inert since 2026-09-20: the stepfull part
+                        is collected by default
+  --verbose
+  --diff JSON [JSON ...]
+                        compare JSONs cell by cell: the train column, then
+                        infer and model where carried
+  --require-columns N   with --diff: exit non-zero unless every compared cell
+                        of the lanes named by --lanes (every lane when --lanes
+                        is empty) rests on at least N real hashes; --lanes
+                        also scopes which cells --diff compares at all.
+                        DEFAULTS TO 2 when two or more JSONs are given: a cell
+                        only one column hashed was not compared, and a diff
+                        that reports nothing over a table of ONE-COLUMN prints
+                        is not a pass. Pass 0 to turn the floor off explicitly
+  --owed-json PATH      with --diff --require-columns: a cell part short ONLY
+                        because a record has no hash for it (cell absent, part
+                        absent or n/a) reads OWED xK instead of failing, when
+                        every CPU column hashes it STABLE over two or more
+                        repeats, no column refused or moved it, and the
+                        columns that hash it agree; the owed cell parts are
+                        written to PATH. Their sabotage check is
+                        tools/cpu_identity_gate_check.py owed
+  --merge JSON [JSON ...]
+                        join the parts of ONE column (same vendor, commit,
+                        fixtures, build) into --json
+  --allow-separate-builds
+                        with --merge: admit parts whose binding digests differ
+                        (two legs, two builds of the same commit on the same
+                        box type); every part's digests are kept under
+                        merged_from

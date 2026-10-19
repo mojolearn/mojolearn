@@ -1,0 +1,68 @@
+Merge made by the 'ort' strategy.
+ .../2026-10-12-verify-repairs/README.md            |     46 +
+ .../amd/neural.from-verify.json                    |  22678 +++
+ .../amd/neural.from-verify.source-report.json.gz   |    Bin 0 -> 387282 bytes
+ .../amd/radius-cross-check.exit                    |      1 +
+ .../amd/repaired-column.exit                       |      1 +
+ .../amd/repaired-neural-base.json                  |      1 +
+ .../amd/repaired.identical.json                    |   4662 +
+ .../2026-10-12-verify-repairs/amd/validation.exit  |      1 +
+ .../apple/neural.from-verify.json                  |  22678 +++
+ .../apple/neural.from-verify.source-report.json.gz |    Bin 0 -> 394317 bytes
+ .../apple/repaired-neural-base.json                |      1 +
+ .../apple/repaired-quick.json                      |      1 +
+ .../apple/repaired.identical.json                  |   4662 +
+ .../apple/routine.from-verify.json                 | 132118 ++++++++++++++++++
+ .../routine.from-verify.source-report.json.gz      |    Bin 0 -> 925629 bytes
+ .../nvidia/neural.from-verify.json                 |  22678 +++
+ .../neural.from-verify.source-report.json.gz       |    Bin 0 -> 389416 bytes
+ .../nvidia/radius-cross-check.exit                 |      1 +
+ .../nvidia/repaired-column.exit                    |      1 +
+ .../nvidia/repaired-neural-base.json               |      1 +
+ .../nvidia/repaired.identical.json                 |   4664 +
+ .../nvidia/validation.exit                         |      1 +
+ .../2026-10-12-verify-repairs/provenance.json      |     51 +
+ .../2026-10-12-verify-repairs/summary.json         |    241 +
+ docs/VERIFY.md                                     |      7 +-
+ python/mojolearn/_classical_host.py                |     17 +-
+ python/mojolearn/_expansion_trees.py               |      6 +-
+ python/mojolearn/_verify_all.py                    |      1 +
+ python/mojolearn/_verify_reference.py              |     33 +-
+ .../mojolearn/tests/test_dart_buffer_lifetime.py   |     37 +
+ .../mojolearn/tests/test_host_radius_bindings.py   |     42 +
+ .../mojolearn/tests/test_verify_ctr_model_roles.py |     19 +-
+ .../mojolearn/tests/test_verify_reference_admit.py |     25 +-
+ python/mojolearn/verify_reference/table.json       |      2 +-
+ tools/identity_break.py                            |     21 +-
+ tools/identity_columns.py                          |    113 +-
+ tools/test_identity_gram.py                        |     31 +
+ tools/test_identity_verify_record.py               |     67 +
+ 38 files changed, 214883 insertions(+), 26 deletions(-)
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/README.md
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/neural.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/neural.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/radius-cross-check.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired-column.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired-neural-base.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired.identical.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/validation.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/neural.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/neural.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired-neural-base.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired-quick.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired.identical.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/routine.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/routine.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/neural.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/neural.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/radius-cross-check.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired-column.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired-neural-base.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired.identical.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/validation.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/provenance.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/summary.json
+ create mode 100644 python/mojolearn/tests/test_dart_buffer_lifetime.py
+ create mode 100644 python/mojolearn/tests/test_host_radius_bindings.py
+ create mode 100644 tools/test_identity_gram.py
+ create mode 100644 tools/test_identity_verify_record.py

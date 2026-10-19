@@ -1,0 +1,13 @@
+{
+  "kind": "retained full run plus affected-lane reruns, judged against repaired references",
+  "original_report": "bench/results/pip_verify/20261012-205427/full.json",
+  "affected_record": "bench/results/verify_repairs/20261012/apple-repaired-column.json",
+  "counts": {
+    "IDENTICAL": 11240,
+    "N/A": 19980
+  },
+  "failures": [],
+  "rerun_parts": 576,
+  "original_completed_cells": 3456,
+  "original_total_cells": 3456
+}

@@ -1,0 +1,16 @@
+Collecting mojolearn==0.8.42
+  Using cached mojolearn-0.8.42-py3-none-manylinux_2_35_x86_64.whl.metadata (16 kB)
+Collecting mojolearn-nvidia==0.8.42
+  Using cached mojolearn_nvidia-0.8.42-py3-none-manylinux_2_35_x86_64.whl.metadata (2.4 kB)
+Collecting mojolearn-amd==0.8.42
+  Using cached mojolearn_amd-0.8.42-py3-none-manylinux_2_35_x86_64.whl.metadata (2.4 kB)
+Using cached mojolearn-0.8.42-py3-none-manylinux_2_35_x86_64.whl (14.2 MB)
+Using cached mojolearn_nvidia-0.8.42-py3-none-manylinux_2_35_x86_64.whl (70.4 MB)
+Using cached mojolearn_amd-0.8.42-py3-none-manylinux_2_35_x86_64.whl (54.5 MB)
+Saved ./artifacts/wheels/mojolearn-0.8.42-py3-none-manylinux_2_35_x86_64.whl
+Saved ./artifacts/wheels/mojolearn_nvidia-0.8.42-py3-none-manylinux_2_35_x86_64.whl
+Saved ./artifacts/wheels/mojolearn_amd-0.8.42-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn mojolearn-nvidia mojolearn-amd
+
+[notice] A new release of pip is available: 24.0 -> 26.2.1
+[notice] To update, run: python -m pip install --upgrade pip

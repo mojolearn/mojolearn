@@ -1,0 +1,4 @@
+nv: ssh: connect to host 81.27.69.178 port 32448: Connection refused
+amd: ssh: connect to host 107.170.16.163 port 22: Operation timed out
+m3: ec2-user@54.157.1.251: Permission denied (publickey).
+m2: ssh: connect to host 54.237.205.45 port 22: Operation timed out

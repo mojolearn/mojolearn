@@ -1,0 +1,164 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: metal (apple), 64 lanes x 1 fixtures, harness wheel copy, table /private/tmp/mojolearn-pip-verify-sWrlqV/repair-venv/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
+# incremental evidence: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/apple-repaired-neural-base.json.cells.jsonl; progress: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/apple-repaired-neural-base.json.progress.json
+# comparator self-test preflight (fresh process)
+  [1/64] mlp/base
+    5.8s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [2/64] byte-lm/base
+    1.2s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [3/64] byte-lm-host-train/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [4/64] mamba1/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [5/64] mamba2/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [6/64] mamba3/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [7/64] transformer/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [8/64] transformer-bf16w/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [9/64] transformer-int8w/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [10/64] mamba1-bf16w/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [11/64] mamba1-int8w/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [12/64] mamba2-bf16w/base
+    0.8s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [13/64] mamba2-int8w/base
+    0.7s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [14/64] mamba3-bf16w/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [15/64] mamba3-int8w/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [16/64] mlp-bf16w/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [17/64] mlp-int8w/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [18/64] samba-bf16w/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [19/64] samba-int8w/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [20/64] samba/base
+    1.0s: verified 5 of 5 cell parts (0 divergent, 0 owed, 0 refused, 0 n/a)
+  [21/64] mamba2-dtlimit/base
+    0.7s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [22/64] transformer-window/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [23/64] byte-lm-resident/base
+    0.7s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [24/64] samba-untied-dropout-accum/base
+    1.6s: verified 5 of 5 cell parts (0 divergent, 0 owed, 0 refused, 0 n/a)
+  [25/64] optim-sgd/base
+    0.6s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [26/64] optim-adam-clip/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [27/64] optim-maximize/base
+    0.6s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [28/64] cross-entropy-arms/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [29/64] ordered-gradient-sum/base
+    0.5s: verified 1 of 5 cell parts (0 divergent, 0 owed, 0 refused, 4 n/a)
+  [30/64] grad-accumulation/base
+    0.5s: verified 1 of 5 cell parts (0 divergent, 0 owed, 0 refused, 4 n/a)
+  [31/64] training-primitives/base
+    1.0s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [32/64] embedding/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [33/64] embedding-sort/base
+    0.7s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [34/64] mamba1-decode-session/base
+    1.4s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [35/64] transformer-decode-session/base
+    1.0s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [36/64] x-cnn-conv2d/base
+    0.7s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [37/64] x-cnn-conv1d/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [38/64] x-cnn-pool/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [39/64] x-cnn-trainer/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [40/64] x-cnn-batchnorm/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [41/64] x-cnn-dropout2d/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [42/64] x-cnn-globalpool/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [43/64] x-cnn-resnet-block/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [44/64] x-cnn-gcn/base
+    0.4s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [45/64] x-cnn-sage/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [46/64] x-cnn-conv-options/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [47/64] x-cnn-pool-options/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [48/64] x-cnn-bn-options/base
+    0.4s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [49/64] x-cnn-gnn-options/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [50/64] x-cnn-trainer-options/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [51/64] sequence-lstm/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [52/64] sequence-gru/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [53/64] sequence-rmsprop/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [54/64] sequence-adagrad/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [55/64] sequence-mlp/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [56/64] sequence-rnn/base
+    0.7s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [57/64] sequence-lion/base
+    0.6s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [58/64] sequence-adafactor/base
+    0.5s: verified 1 of 5 cell parts (0 divergent, 0 owed, 0 refused, 4 n/a)
+  [59/64] sequence-lamb/base
+    0.5s: verified 1 of 5 cell parts (0 divergent, 0 owed, 0 refused, 4 n/a)
+  [60/64] sequence-adamax/base
+    0.5s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [61/64] sequence-nadam/base
+    0.6s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [62/64] sequence-lr-schedulers/base
+    1.4s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [63/64] sequence-layernorm/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [64/64] sequence-moe/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+# python -m mojolearn verify --all
+# mojolearn 0.8.42  commit 0db362a62516faef0a52b112e93f7cba5e212a2b (wheel COMMIT witness)
+# mode identical  vendor metal (class apple)  device Apple M4 / Mac16,12
+# cpu Apple M4  macOS-26.5.2-arm64-arm-64bit-Mach-O  python 3.14.6  numpy 2.5.4
+# reference table /private/tmp/mojolearn-pip-verify-sWrlqV/repair-venv/lib/python3.14/site-packages/mojolearn/verify_reference/table.json (sha256 aeaf03b5a1349e78, 112 records)
+# depth base: 64 lanes x 1 fixtures, 1 repeat(s), 0 portable model(s)
+
+| family      | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-------------|-------|-----------|-----------|------|---------|-----|
+| training    |    14 |        39 |         0 |    0 |       0 |  31 |
+| byte_lm     |     3 |        10 |         0 |    0 |       0 |   5 |
+| mamba       |    11 |        43 |         0 |    0 |       0 |  12 |
+| transformer |     5 |        19 |         0 |    0 |       0 |   6 |
+| embedding   |     2 |         6 |         0 |    0 |       0 |   4 |
+| x_cnn       |    15 |        42 |         0 |    0 |       0 |  33 |
+| x_sequence  |    14 |        32 |         0 |    0 |       0 |  38 |
+| all         |    64 |       191 |         0 |    0 |       0 | 129 |
+
+LANE ACCOUNTING: 507 of 507 harness lanes accounted for; 64 VERIFIED, 443 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (384): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 378 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establish physical multi-device identity. Default verification skips execution; --lanes selects a local diagnostic explicitly. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 68 lanes, 64 VERIFIED, 4 not applicable, 0 not checked
+
+Batch invariance: IDENTICAL=50, DIVERGENT=0, OWED=0, REFUSED=0, N/A=14
+Profile: neural-training — neural training and backward/optimizer fixtures.
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: VERIFIED (verified 191 of 320 cell parts (0 divergent, 0 owed, 0 refused, 129 n/a); 64 verified, 4 not applicable, 0 owed, 0 held, of 68 lanes). 48.3s. exit 0
+# evidence written to /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/apple-repaired-neural-base.json

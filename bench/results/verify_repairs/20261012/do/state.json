@@ -1,0 +1,29 @@
+{
+  "name": "mojolearn-verify-neural-do-20261013022849",
+  "provider": "do",
+  "created_at": 1791858529.6736488,
+  "phase": "terminated",
+  "id": 608570916,
+  "cost_per_hour": 3.8,
+  "ssh": [
+    "-p",
+    "22",
+    "-i",
+    "/Users/andrewhendel/.ssh/id_ed25519",
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=15",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=4",
+    "root@201.79.55.198"
+  ],
+  "job_pid": 2047,
+  "capture_sha256": "38f74958ff819274d005d64c801f57d1fdc40fc0e87578e051c13fc0c2a62058",
+  "captured_at": 1791860008.7107022,
+  "terminated_at": 1791860103.391264
+}

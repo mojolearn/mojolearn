@@ -1,0 +1,1 @@
+{"cells_journal": "/root/ml-verify/artifacts/repaired-neural-base.json.cells.jsonl", "complete": true, "evidence": "/root/ml-verify/artifacts/repaired-neural-base.json", "execution": {"completed_cells": 64, "interrupted": null, "mode": "fresh-process-per-cell", "timeout_s": 120.0, "total_cells": 64}, "exit": 0, "format": "mojolearn.verify-progress.v1", "verdict": "VERIFIED"}

@@ -1,0 +1,9 @@
+{"lane": "linalg-eigh", "fixture": "base", "changed_parts": [], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "ties", "changed_parts": [], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "hashed", "changed_parts": ["gram_w", "gram_v"], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "wide", "changed_parts": ["gram_w"], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "denormal", "changed_parts": [], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "denormal_ftz", "changed_parts": [], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "dupes", "changed_parts": [], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "odd", "changed_parts": ["gram_w", "gram_v"], "unstable_parts": []}
+{"lane": "linalg-eigh", "fixture": "negative", "changed_parts": ["gram_w", "gram_v"], "unstable_parts": []}

@@ -1,0 +1,18 @@
+Collecting mojolearn==0.8.42 (from mojolearn[verify]==0.8.42)
+  Downloading mojolearn-0.8.42-py3-none-manylinux_2_35_x86_64.whl.metadata (16 kB)
+Collecting mojolearn-nvidia==0.8.42 (from mojolearn==0.8.42->mojolearn[verify]==0.8.42)
+  Downloading mojolearn_nvidia-0.8.42-py3-none-manylinux_2_35_x86_64.whl.metadata (2.4 kB)
+Collecting mojolearn-amd==0.8.42 (from mojolearn==0.8.42->mojolearn[verify]==0.8.42)
+  Downloading mojolearn_amd-0.8.42-py3-none-manylinux_2_35_x86_64.whl.metadata (2.4 kB)
+Collecting numpy>=1.26.4 (from mojolearn[verify]==0.8.42)
+  Downloading numpy-2.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Downloading mojolearn-0.8.42-py3-none-manylinux_2_35_x86_64.whl (14.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.2/14.2 MB 81.5 MB/s eta 0:00:00
+Downloading mojolearn_amd-0.8.42-py3-none-manylinux_2_35_x86_64.whl (54.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 54.5/54.5 MB 98.9 MB/s eta 0:00:00
+Downloading mojolearn_nvidia-0.8.42-py3-none-manylinux_2_35_x86_64.whl (70.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 70.4/70.4 MB 80.1 MB/s eta 0:00:00
+Downloading numpy-2.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 242.1 MB/s eta 0:00:00
+Installing collected packages: numpy, mojolearn-nvidia, mojolearn-amd, mojolearn
+Successfully installed mojolearn-0.8.42 mojolearn-amd-0.8.42 mojolearn-nvidia-0.8.42 numpy-2.5.4

@@ -1,0 +1,1006 @@
+{
+  "environment": {
+    "mojolearn_version": "0.8.42",
+    "numpy_version": "2.5.4",
+    "package_path": "/private/tmp/mojolearn-pip-verify-sWrlqV/venv/lib/python3.14/site-packages/mojolearn/__init__.py",
+    "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+    "executable": "/private/tmp/mojolearn-pip-verify-sWrlqV/venv/bin/python",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+  },
+  "quick": {
+    "exit": 0,
+    "verdict": "VERIFIED",
+    "elapsed_s": 26.4,
+    "device": {
+      "commit": "0db362a62516faef0a52b112e93f7cba5e212a2b",
+      "commit_source": "wheel COMMIT witness",
+      "cpu_model": "Apple M4",
+      "device": "Apple M4 / Mac16,12",
+      "device_class": "apple",
+      "mojolearn_version": "0.8.42",
+      "numeric_mode": "identical",
+      "numpy": "2.5.4",
+      "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+      "python": "3.14.6",
+      "requested_parallel_devices": [
+        0
+      ],
+      "vendor": "metal",
+      "verifier_cpu_threads": "1"
+    },
+    "counts": {
+      "DIVERGENT": 0,
+      "IDENTICAL": 223,
+      "N/A": 53,
+      "OWED": 0,
+      "REFUSED": 0
+    },
+    "lane_count": 32,
+    "fixture_count": 1,
+    "execution": {
+      "completed_cells": 32,
+      "interrupted": null,
+      "mode": "fresh-process-per-cell",
+      "timeout_s": 120.0,
+      "total_cells": 32
+    },
+    "failures_by_lane": {},
+    "failure_details": [],
+    "divergent_parts_matching_recorded_apple": 0,
+    "cross_check": {
+      "ran": true,
+      "passed": true,
+      "complete": true,
+      "agree": 22,
+      "differ": 0,
+      "compared": 22,
+      "missing_parts": 0,
+      "missing_parts_by_lane": {},
+      "skipped_cases": 0,
+      "skip_reasons": {}
+    },
+    "profile": "routine",
+    "evidence": {
+      "json": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/quick.json",
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/quick.log"
+    }
+  },
+  "full": {
+    "exit": 1,
+    "verdict": "MISMATCH",
+    "elapsed_s": 3963.95,
+    "device": {
+      "commit": "0db362a62516faef0a52b112e93f7cba5e212a2b",
+      "commit_source": "wheel COMMIT witness",
+      "cpu_model": "Apple M4",
+      "device": "Apple M4 / Mac16,12",
+      "device_class": "apple",
+      "mojolearn_version": "0.8.42",
+      "numeric_mode": "identical",
+      "numpy": "2.5.4",
+      "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+      "python": "3.14.6",
+      "requested_parallel_devices": [
+        0
+      ],
+      "vendor": "metal",
+      "verifier_cpu_threads": "1"
+    },
+    "counts": {
+      "DIVERGENT": 79,
+      "IDENTICAL": 11161,
+      "N/A": 19980,
+      "OWED": 0,
+      "REFUSED": 0
+    },
+    "lane_count": 384,
+    "fixture_count": 9,
+    "execution": {
+      "completed_cells": 3456,
+      "interrupted": null,
+      "mode": "fresh-process-per-cell",
+      "timeout_s": 120.0,
+      "total_cells": 3456
+    },
+    "failures_by_lane": {
+      "gbdt-feature-freq": 36,
+      "gbdt-tensor-ctr-tables": 36,
+      "linalg-eigh": 4,
+      "trees-oob-cv-link": 3
+    },
+    "failure_details": [
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "base",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "58fabedadecc539f",
+        "reference": "47ac338196dff3d2",
+        "detail": "this box 58fabedadecc539f, reference 47ac338196dff3d2"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "base",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "ec749dc9162f7896",
+        "reference": "ca19b5ae5a25b5dd",
+        "detail": "this box ec749dc9162f7896, reference ca19b5ae5a25b5dd"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "base",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "8a727e2c6a88a070",
+        "reference": "83a9f7d6f18e09cb",
+        "detail": "this box 8a727e2c6a88a070, reference 83a9f7d6f18e09cb"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "base",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "78df9b3bd41dd2a0",
+        "reference": "2e40ac8c72cec81e",
+        "detail": "this box 78df9b3bd41dd2a0, reference 2e40ac8c72cec81e"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "ties",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "517fa73dfd07e2ba",
+        "reference": "6931c25cdd1c2f8d",
+        "detail": "this box 517fa73dfd07e2ba, reference 6931c25cdd1c2f8d"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "ties",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "b8a5157b2422a83f",
+        "reference": "ec1aa08e2341245f",
+        "detail": "this box b8a5157b2422a83f, reference ec1aa08e2341245f"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "ties",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "3c8610664b7b143c",
+        "reference": "ad4b961b8bb6ef8e",
+        "detail": "this box 3c8610664b7b143c, reference ad4b961b8bb6ef8e"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "ties",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "f464dd03a2909e93",
+        "reference": "89c5d3e02d63546e",
+        "detail": "this box f464dd03a2909e93, reference 89c5d3e02d63546e"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "hashed",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "835a7321cf657cd6",
+        "reference": "2bacc278d00f25e7",
+        "detail": "this box 835a7321cf657cd6, reference 2bacc278d00f25e7"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "hashed",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "8c062fa69163dfd9",
+        "reference": "62fc84510b6bc3a8",
+        "detail": "this box 8c062fa69163dfd9, reference 62fc84510b6bc3a8"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "hashed",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "54863c3ce44c7a6c",
+        "reference": "f562af5de73ea31d",
+        "detail": "this box 54863c3ce44c7a6c, reference f562af5de73ea31d"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "hashed",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "b1e2f3304053024d",
+        "reference": "c310336c0ee737a2",
+        "detail": "this box b1e2f3304053024d, reference c310336c0ee737a2"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "wide",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "d54c6e04264f8320",
+        "reference": "14b7b5a6718be7e9",
+        "detail": "this box d54c6e04264f8320, reference 14b7b5a6718be7e9"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "wide",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "300a68386d105920",
+        "reference": "96ceeaf23f60401e",
+        "detail": "this box 300a68386d105920, reference 96ceeaf23f60401e"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "wide",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "c8556633c0848fad",
+        "reference": "f9c8b067914d0075",
+        "detail": "this box c8556633c0848fad, reference f9c8b067914d0075"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "wide",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "3dbaf1bb9b273de2",
+        "reference": "56d9c4a78878a065",
+        "detail": "this box 3dbaf1bb9b273de2, reference 56d9c4a78878a065"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "3ac3a02021b80eb0",
+        "reference": "43f3c7d476814041",
+        "detail": "this box 3ac3a02021b80eb0, reference 43f3c7d476814041"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "06ad9a2d0ef59a42",
+        "reference": "b7be104689a87350",
+        "detail": "this box 06ad9a2d0ef59a42, reference b7be104689a87350"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "f9862d02b2ad727f",
+        "reference": "d10fb7fd530439a2",
+        "detail": "this box f9862d02b2ad727f, reference d10fb7fd530439a2"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "4d54ee644d0411ff",
+        "reference": "5d8a7e5ee3f7d3cd",
+        "detail": "this box 4d54ee644d0411ff, reference 5d8a7e5ee3f7d3cd"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal_ftz",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "3ac3a02021b80eb0",
+        "reference": "43f3c7d476814041",
+        "detail": "this box 3ac3a02021b80eb0, reference 43f3c7d476814041"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal_ftz",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "06ad9a2d0ef59a42",
+        "reference": "b7be104689a87350",
+        "detail": "this box 06ad9a2d0ef59a42, reference b7be104689a87350"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal_ftz",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "f9862d02b2ad727f",
+        "reference": "d10fb7fd530439a2",
+        "detail": "this box f9862d02b2ad727f, reference d10fb7fd530439a2"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "denormal_ftz",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "4d54ee644d0411ff",
+        "reference": "5d8a7e5ee3f7d3cd",
+        "detail": "this box 4d54ee644d0411ff, reference 5d8a7e5ee3f7d3cd"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "dupes",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "8ed33f2037964303",
+        "reference": "4be0d2790f870c30",
+        "detail": "this box 8ed33f2037964303, reference 4be0d2790f870c30"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "dupes",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "c1fc9e8d753c66e3",
+        "reference": "d1e1dde14617d560",
+        "detail": "this box c1fc9e8d753c66e3, reference d1e1dde14617d560"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "dupes",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "a48bf4ccf1579844",
+        "reference": "668691d0ec68ef4f",
+        "detail": "this box a48bf4ccf1579844, reference 668691d0ec68ef4f"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "dupes",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "4ff9e085e9884cc8",
+        "reference": "ee190a2609c96645",
+        "detail": "this box 4ff9e085e9884cc8, reference ee190a2609c96645"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "odd",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "9ef22aad128817c2",
+        "reference": "3031046b3f20af72",
+        "detail": "this box 9ef22aad128817c2, reference 3031046b3f20af72"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "odd",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "345236ed89b04d8a",
+        "reference": "25d67a6f8c13ec14",
+        "detail": "this box 345236ed89b04d8a, reference 25d67a6f8c13ec14"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "odd",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "6a360628d7a33d8a",
+        "reference": "2f0bc175fa896a52",
+        "detail": "this box 6a360628d7a33d8a, reference 2f0bc175fa896a52"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "odd",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "2ca6fd41848b680c",
+        "reference": "e17786f44ac0057f",
+        "detail": "this box 2ca6fd41848b680c, reference e17786f44ac0057f"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "negative",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "54c1df89b0ad1cd0",
+        "reference": "40e4954f6c8d8921",
+        "detail": "this box 54c1df89b0ad1cd0, reference 40e4954f6c8d8921"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "negative",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "9cbef802a3795a1d",
+        "reference": "eaf98019c4922873",
+        "detail": "this box 9cbef802a3795a1d, reference eaf98019c4922873"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "negative",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "a2f1f1fefe792fad",
+        "reference": "ad209b43e360282b",
+        "detail": "this box a2f1f1fefe792fad, reference ad209b43e360282b"
+      },
+      {
+        "lane": "gbdt-feature-freq",
+        "fixture": "negative",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "7f5af99d47f374a1",
+        "reference": "40adac2ea355d375",
+        "detail": "this box 7f5af99d47f374a1, reference 40adac2ea355d375"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "base",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "c0d8ea38c17777c3",
+        "reference": "bef672a21deff182",
+        "detail": "this box c0d8ea38c17777c3, reference bef672a21deff182"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "base",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "2d3a9e5ac1911e14",
+        "reference": "40f7894b27192eff",
+        "detail": "this box 2d3a9e5ac1911e14, reference 40f7894b27192eff"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "base",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "02298a8655ac2f44",
+        "reference": "96028a3fbfd3aea3",
+        "detail": "this box 02298a8655ac2f44, reference 96028a3fbfd3aea3"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "base",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "46d538b33e45a6ad",
+        "reference": "f62faa823560afe9",
+        "detail": "this box 46d538b33e45a6ad, reference f62faa823560afe9"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "ties",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "c73648e38a2303a7",
+        "reference": "e0e0d5648206b367",
+        "detail": "this box c73648e38a2303a7, reference e0e0d5648206b367"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "ties",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "081ea92dcb6154fd",
+        "reference": "bfca4def2fae85dc",
+        "detail": "this box 081ea92dcb6154fd, reference bfca4def2fae85dc"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "ties",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "b75b1f9d36f3f066",
+        "reference": "cdb6da3ebb724acb",
+        "detail": "this box b75b1f9d36f3f066, reference cdb6da3ebb724acb"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "ties",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "fd40dcf6efb617cf",
+        "reference": "539f87a10593c9b6",
+        "detail": "this box fd40dcf6efb617cf, reference 539f87a10593c9b6"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "hashed",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "ca3fc9bb7092a9a4",
+        "reference": "044d47acfe88b370",
+        "detail": "this box ca3fc9bb7092a9a4, reference 044d47acfe88b370"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "hashed",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "39aa48e445754297",
+        "reference": "535865bbbcd9e3b2",
+        "detail": "this box 39aa48e445754297, reference 535865bbbcd9e3b2"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "hashed",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "aceb29af70d93b89",
+        "reference": "13f2b3cdee953101",
+        "detail": "this box aceb29af70d93b89, reference 13f2b3cdee953101"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "hashed",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "f5dd8e58712bc757",
+        "reference": "506f680eb791af3f",
+        "detail": "this box f5dd8e58712bc757, reference 506f680eb791af3f"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "wide",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "f0f9d799ef5e651d",
+        "reference": "286c2ac72d232205",
+        "detail": "this box f0f9d799ef5e651d, reference 286c2ac72d232205"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "wide",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "369cd38bbe7d4e5a",
+        "reference": "f1597e8a2d9aa26e",
+        "detail": "this box 369cd38bbe7d4e5a, reference f1597e8a2d9aa26e"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "wide",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "a9f239a16b785f98",
+        "reference": "6fd42a71b576ff29",
+        "detail": "this box a9f239a16b785f98, reference 6fd42a71b576ff29"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "wide",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "289858e05358fea3",
+        "reference": "6e159a763187c767",
+        "detail": "this box 289858e05358fea3, reference 6e159a763187c767"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "b7e1709be3cac5f7",
+        "reference": "86f11d76f0418857",
+        "detail": "this box b7e1709be3cac5f7, reference 86f11d76f0418857"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "d14c029ad90e9a3e",
+        "reference": "6b0f7aeb099ff693",
+        "detail": "this box d14c029ad90e9a3e, reference 6b0f7aeb099ff693"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "d6e89a0ea7ec96f9",
+        "reference": "22ff19a377ad2b6b",
+        "detail": "this box d6e89a0ea7ec96f9, reference 22ff19a377ad2b6b"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "252553661457a5fd",
+        "reference": "40a718febb7e0161",
+        "detail": "this box 252553661457a5fd, reference 40a718febb7e0161"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal_ftz",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "b7e1709be3cac5f7",
+        "reference": "86f11d76f0418857",
+        "detail": "this box b7e1709be3cac5f7, reference 86f11d76f0418857"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal_ftz",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "d14c029ad90e9a3e",
+        "reference": "6b0f7aeb099ff693",
+        "detail": "this box d14c029ad90e9a3e, reference 6b0f7aeb099ff693"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal_ftz",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "d6e89a0ea7ec96f9",
+        "reference": "22ff19a377ad2b6b",
+        "detail": "this box d6e89a0ea7ec96f9, reference 22ff19a377ad2b6b"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "denormal_ftz",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "252553661457a5fd",
+        "reference": "40a718febb7e0161",
+        "detail": "this box 252553661457a5fd, reference 40a718febb7e0161"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "dupes",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "9b5300513f452310",
+        "reference": "a5770f39df1bac10",
+        "detail": "this box 9b5300513f452310, reference a5770f39df1bac10"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "dupes",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "8cd66f51505d8add",
+        "reference": "f55f6218b2958539",
+        "detail": "this box 8cd66f51505d8add, reference f55f6218b2958539"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "dupes",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "1aa7c7e93c84ab4e",
+        "reference": "338f8c6bea61770f",
+        "detail": "this box 1aa7c7e93c84ab4e, reference 338f8c6bea61770f"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "dupes",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "1782f9cb1e862990",
+        "reference": "108bf3c60468a49a",
+        "detail": "this box 1782f9cb1e862990, reference 108bf3c60468a49a"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "odd",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "f87a46b2518c881f",
+        "reference": "a4b3092ba32bfd4e",
+        "detail": "this box f87a46b2518c881f, reference a4b3092ba32bfd4e"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "odd",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "31a31bbe1a12fedd",
+        "reference": "4ef49ff7abbe6af5",
+        "detail": "this box 31a31bbe1a12fedd, reference 4ef49ff7abbe6af5"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "odd",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "6c8f170d16a82867",
+        "reference": "941397fdc13e87e2",
+        "detail": "this box 6c8f170d16a82867, reference 941397fdc13e87e2"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "odd",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "88e26d3cb56d2639",
+        "reference": "97f3a390a2735037",
+        "detail": "this box 88e26d3cb56d2639, reference 97f3a390a2735037"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "negative",
+        "part": "batch",
+        "state": "DIVERGENT",
+        "value": "1f6888f2de9cddd7",
+        "reference": "47ce31a46e6be115",
+        "detail": "this box 1f6888f2de9cddd7, reference 47ce31a46e6be115"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "negative",
+        "part": "infer",
+        "state": "DIVERGENT",
+        "value": "59faed5a9c9af152",
+        "reference": "bd2ec6922360115b",
+        "detail": "this box 59faed5a9c9af152, reference bd2ec6922360115b"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "negative",
+        "part": "model",
+        "state": "DIVERGENT",
+        "value": "a8b438c753a1ed2d",
+        "reference": "07ec20a482720819",
+        "detail": "this box a8b438c753a1ed2d, reference 07ec20a482720819"
+      },
+      {
+        "lane": "gbdt-tensor-ctr-tables",
+        "fixture": "negative",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "a0afc95fb2f5918e",
+        "reference": "5f5b1ec0201d785a",
+        "detail": "this box a0afc95fb2f5918e, reference 5f5b1ec0201d785a"
+      },
+      {
+        "lane": "linalg-eigh",
+        "fixture": "hashed",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "b9fbef5ac1a935fa",
+        "reference": "e82b2fc7717585f7",
+        "detail": "this box b9fbef5ac1a935fa, reference e82b2fc7717585f7"
+      },
+      {
+        "lane": "linalg-eigh",
+        "fixture": "wide",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "0bacc5a7abb94155",
+        "reference": "5e43302bdb326356",
+        "detail": "this box 0bacc5a7abb94155, reference 5e43302bdb326356"
+      },
+      {
+        "lane": "linalg-eigh",
+        "fixture": "odd",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "3669f722bb066f85",
+        "reference": "f1365330d997190e",
+        "detail": "this box 3669f722bb066f85, reference f1365330d997190e"
+      },
+      {
+        "lane": "linalg-eigh",
+        "fixture": "negative",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "f7011f958bc15a4c",
+        "reference": "4e9ff8a8392ad98a",
+        "detail": "this box f7011f958bc15a4c, reference 4e9ff8a8392ad98a"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "denormal_ftz",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "8b57a988be892273",
+        "reference": "c4959835bac7497b",
+        "detail": "this box 8b57a988be892273, reference c4959835bac7497b"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "odd",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "53eb5211e71f5b1d",
+        "reference": "fbf6b7ad7abc1f59",
+        "detail": "this box 53eb5211e71f5b1d, reference fbf6b7ad7abc1f59"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "negative",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "4f39e011682e5ec5",
+        "reference": "f88cea437981878a",
+        "detail": "this box 4f39e011682e5ec5, reference f88cea437981878a"
+      }
+    ],
+    "divergent_parts_matching_recorded_apple": 72,
+    "cross_check": {
+      "ran": true,
+      "passed": false,
+      "complete": false,
+      "agree": 1854,
+      "differ": 0,
+      "compared": 1872,
+      "missing_parts": 72,
+      "missing_parts_by_lane": {
+        "radius": 18,
+        "radius-chebyshev": 18,
+        "radius-manhattan": 18,
+        "radius-minkowski-p3": 18
+      },
+      "skipped_cases": 36,
+      "skip_reasons": {
+        "ImportError: mojolearn: the host HostRadiusNeighbors serves _mojolearn only, not _mojolearn_x_neighbors": 36
+      }
+    },
+    "profile": "routine",
+    "evidence": {
+      "json": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/full.json",
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/full.log"
+    }
+  },
+  "diagnostic-numpy-2.5.2": {
+    "exit": 1,
+    "verdict": "MISMATCH",
+    "elapsed_s": 45.66,
+    "device": {
+      "commit": "0db362a62516faef0a52b112e93f7cba5e212a2b",
+      "commit_source": "wheel COMMIT witness",
+      "cpu_model": "Apple M4",
+      "device": "Apple M4 / Mac16,12",
+      "device_class": "apple",
+      "mojolearn_version": "0.8.42",
+      "numeric_mode": "identical",
+      "numpy": "2.5.2",
+      "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+      "python": "3.14.6",
+      "requested_parallel_devices": [
+        0
+      ],
+      "vendor": "metal",
+      "verifier_cpu_threads": "1"
+    },
+    "counts": {
+      "DIVERGENT": 9,
+      "IDENTICAL": 143,
+      "N/A": 126,
+      "OWED": 0,
+      "REFUSED": 0
+    },
+    "lane_count": 2,
+    "fixture_count": 9,
+    "execution": {
+      "completed_cells": 18,
+      "interrupted": null,
+      "mode": "fresh-process-per-cell",
+      "timeout_s": 120.0,
+      "total_cells": 18
+    },
+    "failures_by_lane": {
+      "linalg-eigh": 4,
+      "trees-oob-cv-link": 5
+    },
+    "failure_details": [
+      {
+        "lane": "linalg-eigh",
+        "fixture": "hashed",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "b9fbef5ac1a935fa",
+        "reference": "e82b2fc7717585f7",
+        "detail": "this box b9fbef5ac1a935fa, reference e82b2fc7717585f7"
+      },
+      {
+        "lane": "linalg-eigh",
+        "fixture": "wide",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "0bacc5a7abb94155",
+        "reference": "5e43302bdb326356",
+        "detail": "this box 0bacc5a7abb94155, reference 5e43302bdb326356"
+      },
+      {
+        "lane": "linalg-eigh",
+        "fixture": "odd",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "3669f722bb066f85",
+        "reference": "f1365330d997190e",
+        "detail": "this box 3669f722bb066f85, reference f1365330d997190e"
+      },
+      {
+        "lane": "linalg-eigh",
+        "fixture": "negative",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "f7011f958bc15a4c",
+        "reference": "4e9ff8a8392ad98a",
+        "detail": "this box f7011f958bc15a4c, reference 4e9ff8a8392ad98a"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "hashed",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "9b55c42bce5eb135",
+        "reference": "d68716fd06acbb3b",
+        "detail": "this box 9b55c42bce5eb135, reference d68716fd06acbb3b"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "wide",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "5cd8e0840575e844",
+        "reference": "4da7195a7add04df",
+        "detail": "this box 5cd8e0840575e844, reference 4da7195a7add04df"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "denormal_ftz",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "92e7160dc5a729a7",
+        "reference": "c4959835bac7497b",
+        "detail": "this box 92e7160dc5a729a7, reference c4959835bac7497b"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "dupes",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "33b118d1817c16d4",
+        "reference": "afb1c33d5041a450",
+        "detail": "this box 33b118d1817c16d4, reference afb1c33d5041a450"
+      },
+      {
+        "lane": "trees-oob-cv-link",
+        "fixture": "odd",
+        "part": "train",
+        "state": "DIVERGENT",
+        "value": "a4e6e901ae4dd453",
+        "reference": "fbf6b7ad7abc1f59",
+        "detail": "this box a4e6e901ae4dd453, reference fbf6b7ad7abc1f59"
+      }
+    ],
+    "divergent_parts_matching_recorded_apple": 0,
+    "cross_check": {
+      "ran": false,
+      "passed": null,
+      "complete": null,
+      "agree": null,
+      "differ": null,
+      "compared": null,
+      "missing_parts": 0,
+      "missing_parts_by_lane": {},
+      "skipped_cases": 0,
+      "skip_reasons": {}
+    },
+    "profile": "routine",
+    "evidence": {
+      "json": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/diagnostic-numpy-2.5.2.json",
+      "log": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/diagnostic-numpy-2.5.2.log"
+    }
+  },
+  "installation": {
+    "pip-install": 0,
+    "pip-verify-extra": 0,
+    "pip-check": 0
+  },
+  "commands": {
+    "install": "python -m pip install mojolearn",
+    "verification_support": "python -m pip install mojolearn[verify]==0.8.42",
+    "quick": "python -I -u -m mojolearn verify --quick --json-out quick.json",
+    "full": "python -I -u -m mojolearn verify --full --json-out full.json",
+    "diagnostic": "python -I -u -m mojolearn verify --full --lanes linalg-eigh,trees-oob-cv-link --json-out diagnostic-numpy-2.5.2.json"
+  },
+  "scope_note": "Published macOS arm64 wheel in an isolated environment. Routine verification excludes neural training and physical multi-device identity. The diagnostic used a separate environment with the same package and NumPy 2.5.2. No repair or new release is claimed."
+}

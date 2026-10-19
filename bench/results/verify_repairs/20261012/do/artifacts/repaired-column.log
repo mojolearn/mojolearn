@@ -1,0 +1,1124 @@
+# vendor=amd-mi325x-gfx942 commit=87e6005eaad08b3f67a25d4e344a555bb2590e7e (MOJOLEARN_COMMIT)
+# identity_break  mode=identical  2026-10-13 02:42:41  Linux-6.8.0-59-generic-x86_64-with-glibc2.39
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START radius/base repeat=1/train
+# DONE radius/base repeat=1/train 0.322s
+# START radius/base repeat=1/infer-save-reload
+# DONE radius/base repeat=1/infer-save-reload 0.024s
+# START radius/base repeat=1/batch
+# DONE radius/base repeat=1/batch 0.086s
+# START radius/base repeat=1/batchgrad
+# DONE radius/base repeat=1/batchgrad 0.000s
+# START radius/base repeat=1/batchscale
+# DONE radius/base repeat=1/batchscale 0.000s
+# START radius/base repeat=1/ragged
+# DONE radius/base repeat=1/ragged 0.000s
+# START radius/base repeat=1/stepfull
+# DONE radius/base repeat=1/stepfull 0.000s
+# CELL radius/base STABLE 0.432s
+# START radius/ties repeat=1/train
+# DONE radius/ties repeat=1/train 0.013s
+# START radius/ties repeat=1/infer-save-reload
+# DONE radius/ties repeat=1/infer-save-reload 0.024s
+# START radius/ties repeat=1/batch
+# DONE radius/ties repeat=1/batch 0.093s
+# START radius/ties repeat=1/batchgrad
+# DONE radius/ties repeat=1/batchgrad 0.000s
+# START radius/ties repeat=1/batchscale
+# DONE radius/ties repeat=1/batchscale 0.000s
+# START radius/ties repeat=1/ragged
+# DONE radius/ties repeat=1/ragged 0.000s
+# START radius/ties repeat=1/stepfull
+# DONE radius/ties repeat=1/stepfull 0.000s
+# CELL radius/ties STABLE 0.131s
+# START radius/hashed repeat=1/train
+# DONE radius/hashed repeat=1/train 0.012s
+# START radius/hashed repeat=1/infer-save-reload
+# DONE radius/hashed repeat=1/infer-save-reload 0.024s
+# START radius/hashed repeat=1/batch
+# DONE radius/hashed repeat=1/batch 0.095s
+# START radius/hashed repeat=1/batchgrad
+# DONE radius/hashed repeat=1/batchgrad 0.000s
+# START radius/hashed repeat=1/batchscale
+# DONE radius/hashed repeat=1/batchscale 0.000s
+# START radius/hashed repeat=1/ragged
+# DONE radius/hashed repeat=1/ragged 0.000s
+# START radius/hashed repeat=1/stepfull
+# DONE radius/hashed repeat=1/stepfull 0.000s
+# CELL radius/hashed STABLE 0.132s
+# START radius/wide repeat=1/train
+# DONE radius/wide repeat=1/train 0.007s
+# START radius/wide repeat=1/infer-save-reload
+# DONE radius/wide repeat=1/infer-save-reload 0.016s
+# START radius/wide repeat=1/batch
+# DONE radius/wide repeat=1/batch 0.076s
+# START radius/wide repeat=1/batchgrad
+# DONE radius/wide repeat=1/batchgrad 0.000s
+# START radius/wide repeat=1/batchscale
+# DONE radius/wide repeat=1/batchscale 0.000s
+# START radius/wide repeat=1/ragged
+# DONE radius/wide repeat=1/ragged 0.000s
+# START radius/wide repeat=1/stepfull
+# DONE radius/wide repeat=1/stepfull 0.000s
+# CELL radius/wide STABLE 0.099s
+# START radius/denormal repeat=1/train
+# DONE radius/denormal repeat=1/train 0.012s
+# START radius/denormal repeat=1/infer-save-reload
+# DONE radius/denormal repeat=1/infer-save-reload 0.024s
+# START radius/denormal repeat=1/batch
+# DONE radius/denormal repeat=1/batch 0.096s
+# START radius/denormal repeat=1/batchgrad
+# DONE radius/denormal repeat=1/batchgrad 0.000s
+# START radius/denormal repeat=1/batchscale
+# DONE radius/denormal repeat=1/batchscale 0.000s
+# START radius/denormal repeat=1/ragged
+# DONE radius/denormal repeat=1/ragged 0.000s
+# START radius/denormal repeat=1/stepfull
+# DONE radius/denormal repeat=1/stepfull 0.000s
+# CELL radius/denormal STABLE 0.132s
+# START radius/denormal_ftz repeat=1/train
+# DONE radius/denormal_ftz repeat=1/train 0.012s
+# START radius/denormal_ftz repeat=1/infer-save-reload
+# DONE radius/denormal_ftz repeat=1/infer-save-reload 0.024s
+# START radius/denormal_ftz repeat=1/batch
+# DONE radius/denormal_ftz repeat=1/batch 0.095s
+# START radius/denormal_ftz repeat=1/batchgrad
+# DONE radius/denormal_ftz repeat=1/batchgrad 0.000s
+# START radius/denormal_ftz repeat=1/batchscale
+# DONE radius/denormal_ftz repeat=1/batchscale 0.000s
+# START radius/denormal_ftz repeat=1/ragged
+# DONE radius/denormal_ftz repeat=1/ragged 0.000s
+# START radius/denormal_ftz repeat=1/stepfull
+# DONE radius/denormal_ftz repeat=1/stepfull 0.000s
+# CELL radius/denormal_ftz STABLE 0.131s
+# START radius/dupes repeat=1/train
+# DONE radius/dupes repeat=1/train 0.011s
+# START radius/dupes repeat=1/infer-save-reload
+# DONE radius/dupes repeat=1/infer-save-reload 0.023s
+# START radius/dupes repeat=1/batch
+# DONE radius/dupes repeat=1/batch 0.090s
+# START radius/dupes repeat=1/batchgrad
+# DONE radius/dupes repeat=1/batchgrad 0.000s
+# START radius/dupes repeat=1/batchscale
+# DONE radius/dupes repeat=1/batchscale 0.000s
+# START radius/dupes repeat=1/ragged
+# DONE radius/dupes repeat=1/ragged 0.000s
+# START radius/dupes repeat=1/stepfull
+# DONE radius/dupes repeat=1/stepfull 0.000s
+# CELL radius/dupes STABLE 0.124s
+# START radius/odd repeat=1/train
+# DONE radius/odd repeat=1/train 0.012s
+# START radius/odd repeat=1/infer-save-reload
+# DONE radius/odd repeat=1/infer-save-reload 0.023s
+# START radius/odd repeat=1/batch
+# DONE radius/odd repeat=1/batch 0.103s
+# START radius/odd repeat=1/batchgrad
+# DONE radius/odd repeat=1/batchgrad 0.000s
+# START radius/odd repeat=1/batchscale
+# DONE radius/odd repeat=1/batchscale 0.000s
+# START radius/odd repeat=1/ragged
+# DONE radius/odd repeat=1/ragged 0.000s
+# START radius/odd repeat=1/stepfull
+# DONE radius/odd repeat=1/stepfull 0.000s
+# CELL radius/odd STABLE 0.138s
+# START radius/negative repeat=1/train
+# DONE radius/negative repeat=1/train 0.011s
+# START radius/negative repeat=1/infer-save-reload
+# DONE radius/negative repeat=1/infer-save-reload 0.022s
+# START radius/negative repeat=1/batch
+# DONE radius/negative repeat=1/batch 0.086s
+# START radius/negative repeat=1/batchgrad
+# DONE radius/negative repeat=1/batchgrad 0.000s
+# START radius/negative repeat=1/batchscale
+# DONE radius/negative repeat=1/batchscale 0.000s
+# START radius/negative repeat=1/ragged
+# DONE radius/negative repeat=1/ragged 0.000s
+# START radius/negative repeat=1/stepfull
+# DONE radius/negative repeat=1/stepfull 0.000s
+# CELL radius/negative STABLE 0.119s
+| radius                 | b4fa4ebf9623f5d0 | d4e4484a004f4042 | cdc57602d696879d | 4ea06c29cad72c3a | b31c83097872381e | b31c83097872381e | ad02d42d5b3fded7 | 99a3e94304f0d55a | 4b7b50fe64e2d7af |
+| radius infer           | 3eb3a2ab621fbb97 | 5f3eec45e2afb437 | 362bee6da9e01a6a | 2561486a5ba9ea00 | 0d8e5847c0de67f1 | 0d8e5847c0de67f1 | 469e7731aa72a0fd | ef0450b6bc48f488 | 9a8506316edc0a0a |
+| radius model           | 2ee81955e923d21f | 57306f414d5af0b4 | d6588b0e2d717746 | 76078d052fa5fc25 | c6abf4949fd3ef45 | 83650c2063c0b192 | 5167cd08ec11b8bd | 5f50d73e7a4f1146 | 86a355173ea5999a |
+| radius batch           | 82dc025f5d11958f | 92534521f997d952 | 61666507b6f28324 | 512219b638664e57 | 077d53f576613c46 | 077d53f576613c46 | 4d7333803753c329 | a47b832ad72fd8ef | 232527c96d938269 |
+# START gbdt-feature-freq/base repeat=1/train
+# DONE gbdt-feature-freq/base repeat=1/train 0.039s
+# START gbdt-feature-freq/base repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/base repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/base repeat=1/batch
+# DONE gbdt-feature-freq/base repeat=1/batch 0.045s
+# START gbdt-feature-freq/base repeat=1/batchgrad
+# DONE gbdt-feature-freq/base repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/base repeat=1/batchscale
+# DONE gbdt-feature-freq/base repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/base repeat=1/ragged
+# DONE gbdt-feature-freq/base repeat=1/ragged 0.000s
+# START gbdt-feature-freq/base repeat=1/stepfull
+# DONE gbdt-feature-freq/base repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/base STABLE 0.087s
+# START gbdt-feature-freq/ties repeat=1/train
+# DONE gbdt-feature-freq/ties repeat=1/train 0.014s
+# START gbdt-feature-freq/ties repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/ties repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/ties repeat=1/batch
+# DONE gbdt-feature-freq/ties repeat=1/batch 0.042s
+# START gbdt-feature-freq/ties repeat=1/batchgrad
+# DONE gbdt-feature-freq/ties repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/ties repeat=1/batchscale
+# DONE gbdt-feature-freq/ties repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/ties repeat=1/ragged
+# DONE gbdt-feature-freq/ties repeat=1/ragged 0.000s
+# START gbdt-feature-freq/ties repeat=1/stepfull
+# DONE gbdt-feature-freq/ties repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/ties STABLE 0.059s
+# START gbdt-feature-freq/hashed repeat=1/train
+# DONE gbdt-feature-freq/hashed repeat=1/train 0.014s
+# START gbdt-feature-freq/hashed repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/hashed repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/hashed repeat=1/batch
+# DONE gbdt-feature-freq/hashed repeat=1/batch 0.042s
+# START gbdt-feature-freq/hashed repeat=1/batchgrad
+# DONE gbdt-feature-freq/hashed repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/hashed repeat=1/batchscale
+# DONE gbdt-feature-freq/hashed repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/hashed repeat=1/ragged
+# DONE gbdt-feature-freq/hashed repeat=1/ragged 0.000s
+# START gbdt-feature-freq/hashed repeat=1/stepfull
+# DONE gbdt-feature-freq/hashed repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/hashed STABLE 0.060s
+# START gbdt-feature-freq/wide repeat=1/train
+# DONE gbdt-feature-freq/wide repeat=1/train 0.014s
+# START gbdt-feature-freq/wide repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/wide repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/wide repeat=1/batch
+# DONE gbdt-feature-freq/wide repeat=1/batch 0.047s
+# START gbdt-feature-freq/wide repeat=1/batchgrad
+# DONE gbdt-feature-freq/wide repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/wide repeat=1/batchscale
+# DONE gbdt-feature-freq/wide repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/wide repeat=1/ragged
+# DONE gbdt-feature-freq/wide repeat=1/ragged 0.000s
+# START gbdt-feature-freq/wide repeat=1/stepfull
+# DONE gbdt-feature-freq/wide repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/wide STABLE 0.065s
+# START gbdt-feature-freq/denormal repeat=1/train
+# DONE gbdt-feature-freq/denormal repeat=1/train 0.014s
+# START gbdt-feature-freq/denormal repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/denormal repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/denormal repeat=1/batch
+# DONE gbdt-feature-freq/denormal repeat=1/batch 0.042s
+# START gbdt-feature-freq/denormal repeat=1/batchgrad
+# DONE gbdt-feature-freq/denormal repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/denormal repeat=1/batchscale
+# DONE gbdt-feature-freq/denormal repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/denormal repeat=1/ragged
+# DONE gbdt-feature-freq/denormal repeat=1/ragged 0.000s
+# START gbdt-feature-freq/denormal repeat=1/stepfull
+# DONE gbdt-feature-freq/denormal repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/denormal STABLE 0.059s
+# START gbdt-feature-freq/denormal_ftz repeat=1/train
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/train 0.014s
+# START gbdt-feature-freq/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/denormal_ftz repeat=1/batch
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/batch 0.042s
+# START gbdt-feature-freq/denormal_ftz repeat=1/batchgrad
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/denormal_ftz repeat=1/batchscale
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/denormal_ftz repeat=1/ragged
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/ragged 0.000s
+# START gbdt-feature-freq/denormal_ftz repeat=1/stepfull
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/denormal_ftz STABLE 0.059s
+# START gbdt-feature-freq/dupes repeat=1/train
+# DONE gbdt-feature-freq/dupes repeat=1/train 0.014s
+# START gbdt-feature-freq/dupes repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/dupes repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/dupes repeat=1/batch
+# DONE gbdt-feature-freq/dupes repeat=1/batch 0.041s
+# START gbdt-feature-freq/dupes repeat=1/batchgrad
+# DONE gbdt-feature-freq/dupes repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/dupes repeat=1/batchscale
+# DONE gbdt-feature-freq/dupes repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/dupes repeat=1/ragged
+# DONE gbdt-feature-freq/dupes repeat=1/ragged 0.000s
+# START gbdt-feature-freq/dupes repeat=1/stepfull
+# DONE gbdt-feature-freq/dupes repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/dupes STABLE 0.059s
+# START gbdt-feature-freq/odd repeat=1/train
+# DONE gbdt-feature-freq/odd repeat=1/train 0.013s
+# START gbdt-feature-freq/odd repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/odd repeat=1/infer-save-reload 0.002s
+# START gbdt-feature-freq/odd repeat=1/batch
+# DONE gbdt-feature-freq/odd repeat=1/batch 0.028s
+# START gbdt-feature-freq/odd repeat=1/batchgrad
+# DONE gbdt-feature-freq/odd repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/odd repeat=1/batchscale
+# DONE gbdt-feature-freq/odd repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/odd repeat=1/ragged
+# DONE gbdt-feature-freq/odd repeat=1/ragged 0.000s
+# START gbdt-feature-freq/odd repeat=1/stepfull
+# DONE gbdt-feature-freq/odd repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/odd STABLE 0.043s
+# START gbdt-feature-freq/negative repeat=1/train
+# DONE gbdt-feature-freq/negative repeat=1/train 0.014s
+# START gbdt-feature-freq/negative repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/negative repeat=1/infer-save-reload 0.003s
+# START gbdt-feature-freq/negative repeat=1/batch
+# DONE gbdt-feature-freq/negative repeat=1/batch 0.041s
+# START gbdt-feature-freq/negative repeat=1/batchgrad
+# DONE gbdt-feature-freq/negative repeat=1/batchgrad 0.000s
+# START gbdt-feature-freq/negative repeat=1/batchscale
+# DONE gbdt-feature-freq/negative repeat=1/batchscale 0.000s
+# START gbdt-feature-freq/negative repeat=1/ragged
+# DONE gbdt-feature-freq/negative repeat=1/ragged 0.000s
+# START gbdt-feature-freq/negative repeat=1/stepfull
+# DONE gbdt-feature-freq/negative repeat=1/stepfull 0.000s
+# CELL gbdt-feature-freq/negative STABLE 0.058s
+| gbdt-feature-freq      | 2e40ac8c72cec81e | 89c5d3e02d63546e | c310336c0ee737a2 | 56d9c4a78878a065 | 5d8a7e5ee3f7d3cd | 5d8a7e5ee3f7d3cd | ee190a2609c96645 | e17786f44ac0057f | 40adac2ea355d375 |
+| gbdt-feature-freq infer | ca19b5ae5a25b5dd | ec1aa08e2341245f | 62fc84510b6bc3a8 | 96ceeaf23f60401e | b7be104689a87350 | b7be104689a87350 | d1e1dde14617d560 | 25d67a6f8c13ec14 | eaf98019c4922873 |
+| gbdt-feature-freq model | 83a9f7d6f18e09cb | ad4b961b8bb6ef8e | f562af5de73ea31d | f9c8b067914d0075 | d10fb7fd530439a2 | d10fb7fd530439a2 | 668691d0ec68ef4f | 2f0bc175fa896a52 | ad209b43e360282b |
+| gbdt-feature-freq batch | 47ac338196dff3d2 | 6931c25cdd1c2f8d | 2bacc278d00f25e7 | 14b7b5a6718be7e9 | 43f3c7d476814041 | 43f3c7d476814041 | 4be0d2790f870c30 | 3031046b3f20af72 | 40e4954f6c8d8921 |
+# START gbdt-tensor-ctr-tables/base repeat=1/train
+# DONE gbdt-tensor-ctr-tables/base repeat=1/train 0.016s
+# START gbdt-tensor-ctr-tables/base repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/base repeat=1/infer-save-reload 0.009s
+# START gbdt-tensor-ctr-tables/base repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/base repeat=1/batch 0.051s
+# START gbdt-tensor-ctr-tables/base repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/base repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/base repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/base repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/base repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/base repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/base repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/base repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/base STABLE 0.076s
+# START gbdt-tensor-ctr-tables/ties repeat=1/train
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/train 0.013s
+# START gbdt-tensor-ctr-tables/ties repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/infer-save-reload 0.007s
+# START gbdt-tensor-ctr-tables/ties repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/batch 0.045s
+# START gbdt-tensor-ctr-tables/ties repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/ties repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/ties repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/ties repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/ties STABLE 0.064s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/train
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/train 0.015s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/infer-save-reload 0.009s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/batch 0.046s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/hashed STABLE 0.070s
+# START gbdt-tensor-ctr-tables/wide repeat=1/train
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/train 0.015s
+# START gbdt-tensor-ctr-tables/wide repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/infer-save-reload 0.009s
+# START gbdt-tensor-ctr-tables/wide repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/batch 0.046s
+# START gbdt-tensor-ctr-tables/wide repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/wide repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/wide repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/wide repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/wide STABLE 0.070s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/train
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/train 0.015s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/infer-save-reload 0.009s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/batch 0.051s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/denormal STABLE 0.075s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/train
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/train 0.015s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/infer-save-reload 0.009s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batch 0.046s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/denormal_ftz STABLE 0.071s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/train
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/train 0.014s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/infer-save-reload 0.009s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/batch 0.045s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/dupes STABLE 0.069s
+# START gbdt-tensor-ctr-tables/odd repeat=1/train
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/train 0.012s
+# START gbdt-tensor-ctr-tables/odd repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/infer-save-reload 0.006s
+# START gbdt-tensor-ctr-tables/odd repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/batch 0.030s
+# START gbdt-tensor-ctr-tables/odd repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/odd repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/odd repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/odd repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/odd STABLE 0.049s
+# START gbdt-tensor-ctr-tables/negative repeat=1/train
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/train 0.015s
+# START gbdt-tensor-ctr-tables/negative repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/infer-save-reload 0.009s
+# START gbdt-tensor-ctr-tables/negative repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/batch 0.046s
+# START gbdt-tensor-ctr-tables/negative repeat=1/batchgrad
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/batchgrad 0.000s
+# START gbdt-tensor-ctr-tables/negative repeat=1/batchscale
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/batchscale 0.000s
+# START gbdt-tensor-ctr-tables/negative repeat=1/ragged
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/ragged 0.000s
+# START gbdt-tensor-ctr-tables/negative repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/negative STABLE 0.070s
+| gbdt-tensor-ctr-tables | f62faa823560afe9 | 539f87a10593c9b6 | 506f680eb791af3f | 6e159a763187c767 | 40a718febb7e0161 | 40a718febb7e0161 | 108bf3c60468a49a | 97f3a390a2735037 | 5f5b1ec0201d785a |
+| gbdt-tensor-ctr-tables infer | 40f7894b27192eff | bfca4def2fae85dc | 535865bbbcd9e3b2 | f1597e8a2d9aa26e | 6b0f7aeb099ff693 | 6b0f7aeb099ff693 | f55f6218b2958539 | 4ef49ff7abbe6af5 | bd2ec6922360115b |
+| gbdt-tensor-ctr-tables model | 96028a3fbfd3aea3 | cdb6da3ebb724acb | 13f2b3cdee953101 | 6fd42a71b576ff29 | 22ff19a377ad2b6b | 22ff19a377ad2b6b | 338f8c6bea61770f | 941397fdc13e87e2 | 07ec20a482720819 |
+| gbdt-tensor-ctr-tables batch | bef672a21deff182 | e0e0d5648206b367 | 044d47acfe88b370 | 286c2ac72d232205 | 86f11d76f0418857 | 86f11d76f0418857 | a5770f39df1bac10 | a4b3092ba32bfd4e | 47ce31a46e6be115 |
+# START radius-manhattan/base repeat=1/train
+# DONE radius-manhattan/base repeat=1/train 0.011s
+# START radius-manhattan/base repeat=1/infer-save-reload
+# DONE radius-manhattan/base repeat=1/infer-save-reload 0.019s
+# START radius-manhattan/base repeat=1/batch
+# DONE radius-manhattan/base repeat=1/batch 0.058s
+# START radius-manhattan/base repeat=1/batchgrad
+# DONE radius-manhattan/base repeat=1/batchgrad 0.000s
+# START radius-manhattan/base repeat=1/batchscale
+# DONE radius-manhattan/base repeat=1/batchscale 0.000s
+# START radius-manhattan/base repeat=1/ragged
+# DONE radius-manhattan/base repeat=1/ragged 0.000s
+# START radius-manhattan/base repeat=1/stepfull
+# DONE radius-manhattan/base repeat=1/stepfull 0.000s
+# CELL radius-manhattan/base STABLE 0.089s
+# START radius-manhattan/ties repeat=1/train
+# DONE radius-manhattan/ties repeat=1/train 0.010s
+# START radius-manhattan/ties repeat=1/infer-save-reload
+# DONE radius-manhattan/ties repeat=1/infer-save-reload 0.020s
+# START radius-manhattan/ties repeat=1/batch
+# DONE radius-manhattan/ties repeat=1/batch 0.058s
+# START radius-manhattan/ties repeat=1/batchgrad
+# DONE radius-manhattan/ties repeat=1/batchgrad 0.000s
+# START radius-manhattan/ties repeat=1/batchscale
+# DONE radius-manhattan/ties repeat=1/batchscale 0.000s
+# START radius-manhattan/ties repeat=1/ragged
+# DONE radius-manhattan/ties repeat=1/ragged 0.000s
+# START radius-manhattan/ties repeat=1/stepfull
+# DONE radius-manhattan/ties repeat=1/stepfull 0.000s
+# CELL radius-manhattan/ties STABLE 0.089s
+# START radius-manhattan/hashed repeat=1/train
+# DONE radius-manhattan/hashed repeat=1/train 0.010s
+# START radius-manhattan/hashed repeat=1/infer-save-reload
+# DONE radius-manhattan/hashed repeat=1/infer-save-reload 0.020s
+# START radius-manhattan/hashed repeat=1/batch
+# DONE radius-manhattan/hashed repeat=1/batch 0.058s
+# START radius-manhattan/hashed repeat=1/batchgrad
+# DONE radius-manhattan/hashed repeat=1/batchgrad 0.000s
+# START radius-manhattan/hashed repeat=1/batchscale
+# DONE radius-manhattan/hashed repeat=1/batchscale 0.000s
+# START radius-manhattan/hashed repeat=1/ragged
+# DONE radius-manhattan/hashed repeat=1/ragged 0.000s
+# START radius-manhattan/hashed repeat=1/stepfull
+# DONE radius-manhattan/hashed repeat=1/stepfull 0.000s
+# CELL radius-manhattan/hashed STABLE 0.088s
+# START radius-manhattan/wide repeat=1/train
+# DONE radius-manhattan/wide repeat=1/train 0.005s
+# START radius-manhattan/wide repeat=1/infer-save-reload
+# DONE radius-manhattan/wide repeat=1/infer-save-reload 0.011s
+# START radius-manhattan/wide repeat=1/batch
+# DONE radius-manhattan/wide repeat=1/batch 0.053s
+# START radius-manhattan/wide repeat=1/batchgrad
+# DONE radius-manhattan/wide repeat=1/batchgrad 0.000s
+# START radius-manhattan/wide repeat=1/batchscale
+# DONE radius-manhattan/wide repeat=1/batchscale 0.000s
+# START radius-manhattan/wide repeat=1/ragged
+# DONE radius-manhattan/wide repeat=1/ragged 0.000s
+# START radius-manhattan/wide repeat=1/stepfull
+# DONE radius-manhattan/wide repeat=1/stepfull 0.000s
+# CELL radius-manhattan/wide STABLE 0.069s
+# START radius-manhattan/denormal repeat=1/train
+# DONE radius-manhattan/denormal repeat=1/train 0.010s
+# START radius-manhattan/denormal repeat=1/infer-save-reload
+# DONE radius-manhattan/denormal repeat=1/infer-save-reload 0.020s
+# START radius-manhattan/denormal repeat=1/batch
+# DONE radius-manhattan/denormal repeat=1/batch 0.060s
+# START radius-manhattan/denormal repeat=1/batchgrad
+# DONE radius-manhattan/denormal repeat=1/batchgrad 0.000s
+# START radius-manhattan/denormal repeat=1/batchscale
+# DONE radius-manhattan/denormal repeat=1/batchscale 0.000s
+# START radius-manhattan/denormal repeat=1/ragged
+# DONE radius-manhattan/denormal repeat=1/ragged 0.000s
+# START radius-manhattan/denormal repeat=1/stepfull
+# DONE radius-manhattan/denormal repeat=1/stepfull 0.000s
+# CELL radius-manhattan/denormal STABLE 0.090s
+# START radius-manhattan/denormal_ftz repeat=1/train
+# DONE radius-manhattan/denormal_ftz repeat=1/train 0.010s
+# START radius-manhattan/denormal_ftz repeat=1/infer-save-reload
+# DONE radius-manhattan/denormal_ftz repeat=1/infer-save-reload 0.020s
+# START radius-manhattan/denormal_ftz repeat=1/batch
+# DONE radius-manhattan/denormal_ftz repeat=1/batch 0.060s
+# START radius-manhattan/denormal_ftz repeat=1/batchgrad
+# DONE radius-manhattan/denormal_ftz repeat=1/batchgrad 0.000s
+# START radius-manhattan/denormal_ftz repeat=1/batchscale
+# DONE radius-manhattan/denormal_ftz repeat=1/batchscale 0.000s
+# START radius-manhattan/denormal_ftz repeat=1/ragged
+# DONE radius-manhattan/denormal_ftz repeat=1/ragged 0.000s
+# START radius-manhattan/denormal_ftz repeat=1/stepfull
+# DONE radius-manhattan/denormal_ftz repeat=1/stepfull 0.000s
+# CELL radius-manhattan/denormal_ftz STABLE 0.089s
+# START radius-manhattan/dupes repeat=1/train
+# DONE radius-manhattan/dupes repeat=1/train 0.010s
+# START radius-manhattan/dupes repeat=1/infer-save-reload
+# DONE radius-manhattan/dupes repeat=1/infer-save-reload 0.020s
+# START radius-manhattan/dupes repeat=1/batch
+# DONE radius-manhattan/dupes repeat=1/batch 0.058s
+# START radius-manhattan/dupes repeat=1/batchgrad
+# DONE radius-manhattan/dupes repeat=1/batchgrad 0.000s
+# START radius-manhattan/dupes repeat=1/batchscale
+# DONE radius-manhattan/dupes repeat=1/batchscale 0.000s
+# START radius-manhattan/dupes repeat=1/ragged
+# DONE radius-manhattan/dupes repeat=1/ragged 0.000s
+# START radius-manhattan/dupes repeat=1/stepfull
+# DONE radius-manhattan/dupes repeat=1/stepfull 0.000s
+# CELL radius-manhattan/dupes STABLE 0.088s
+# START radius-manhattan/odd repeat=1/train
+# DONE radius-manhattan/odd repeat=1/train 0.009s
+# START radius-manhattan/odd repeat=1/infer-save-reload
+# DONE radius-manhattan/odd repeat=1/infer-save-reload 0.019s
+# START radius-manhattan/odd repeat=1/batch
+# DONE radius-manhattan/odd repeat=1/batch 0.056s
+# START radius-manhattan/odd repeat=1/batchgrad
+# DONE radius-manhattan/odd repeat=1/batchgrad 0.000s
+# START radius-manhattan/odd repeat=1/batchscale
+# DONE radius-manhattan/odd repeat=1/batchscale 0.000s
+# START radius-manhattan/odd repeat=1/ragged
+# DONE radius-manhattan/odd repeat=1/ragged 0.000s
+# START radius-manhattan/odd repeat=1/stepfull
+# DONE radius-manhattan/odd repeat=1/stepfull 0.000s
+# CELL radius-manhattan/odd STABLE 0.084s
+# START radius-manhattan/negative repeat=1/train
+# DONE radius-manhattan/negative repeat=1/train 0.010s
+# START radius-manhattan/negative repeat=1/infer-save-reload
+# DONE radius-manhattan/negative repeat=1/infer-save-reload 0.019s
+# START radius-manhattan/negative repeat=1/batch
+# DONE radius-manhattan/negative repeat=1/batch 0.056s
+# START radius-manhattan/negative repeat=1/batchgrad
+# DONE radius-manhattan/negative repeat=1/batchgrad 0.000s
+# START radius-manhattan/negative repeat=1/batchscale
+# DONE radius-manhattan/negative repeat=1/batchscale 0.000s
+# START radius-manhattan/negative repeat=1/ragged
+# DONE radius-manhattan/negative repeat=1/ragged 0.000s
+# START radius-manhattan/negative repeat=1/stepfull
+# DONE radius-manhattan/negative repeat=1/stepfull 0.000s
+# CELL radius-manhattan/negative STABLE 0.085s
+| radius-manhattan       | adbab4c619ab70dc | f4469b7cc5451c2b | f520a1cd60de3a00 | 96656c718463c3c0 | b3066725061ddd46 | b3066725061ddd46 | f57dcac1b9d84889 | 372fb9c534550f4d | 39bcca9c46c29872 |
+| radius-manhattan infer | 51e361a7911b9eb7 | c641c75dd063a967 | 80d08244b239ac42 | f5b2dde4c595864e | d467cf36242844c9 | d467cf36242844c9 | b3ebfcda94a96aa3 | b28b2b565e51540d | d7960118855980db |
+| radius-manhattan model | a57f1f07d75f73e1 | d893a0c29ba99797 | d9fb91586aa3aa55 | f4956308528d332e | 06e4242143d325b2 | 18e8bdf07ef319ba | d1c5d251599b1830 | 3440191387c43af8 | 80b5baa8c1aabd6b |
+| radius-manhattan batch | 2b54e52e49b2b3c9 | e7b7266b64bcfa5a | 819c03be5fab9500 | 3c074b0ddf67d9e5 | 4bb3a9fa1f0a054c | 4bb3a9fa1f0a054c | d8ac4219b67b2a4c | 84928b8dd182e647 | 60115615ac598373 |
+# START radius-chebyshev/base repeat=1/train
+# DONE radius-chebyshev/base repeat=1/train 0.010s
+# START radius-chebyshev/base repeat=1/infer-save-reload
+# DONE radius-chebyshev/base repeat=1/infer-save-reload 0.020s
+# START radius-chebyshev/base repeat=1/batch
+# DONE radius-chebyshev/base repeat=1/batch 0.057s
+# START radius-chebyshev/base repeat=1/batchgrad
+# DONE radius-chebyshev/base repeat=1/batchgrad 0.000s
+# START radius-chebyshev/base repeat=1/batchscale
+# DONE radius-chebyshev/base repeat=1/batchscale 0.000s
+# START radius-chebyshev/base repeat=1/ragged
+# DONE radius-chebyshev/base repeat=1/ragged 0.000s
+# START radius-chebyshev/base repeat=1/stepfull
+# DONE radius-chebyshev/base repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/base STABLE 0.087s
+# START radius-chebyshev/ties repeat=1/train
+# DONE radius-chebyshev/ties repeat=1/train 0.010s
+# START radius-chebyshev/ties repeat=1/infer-save-reload
+# DONE radius-chebyshev/ties repeat=1/infer-save-reload 0.016s
+# START radius-chebyshev/ties repeat=1/batch
+# DONE radius-chebyshev/ties repeat=1/batch 0.057s
+# START radius-chebyshev/ties repeat=1/batchgrad
+# DONE radius-chebyshev/ties repeat=1/batchgrad 0.000s
+# START radius-chebyshev/ties repeat=1/batchscale
+# DONE radius-chebyshev/ties repeat=1/batchscale 0.000s
+# START radius-chebyshev/ties repeat=1/ragged
+# DONE radius-chebyshev/ties repeat=1/ragged 0.000s
+# START radius-chebyshev/ties repeat=1/stepfull
+# DONE radius-chebyshev/ties repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/ties STABLE 0.084s
+# START radius-chebyshev/hashed repeat=1/train
+# DONE radius-chebyshev/hashed repeat=1/train 0.010s
+# START radius-chebyshev/hashed repeat=1/infer-save-reload
+# DONE radius-chebyshev/hashed repeat=1/infer-save-reload 0.027s
+# START radius-chebyshev/hashed repeat=1/batch
+# DONE radius-chebyshev/hashed repeat=1/batch 0.061s
+# START radius-chebyshev/hashed repeat=1/batchgrad
+# DONE radius-chebyshev/hashed repeat=1/batchgrad 0.000s
+# START radius-chebyshev/hashed repeat=1/batchscale
+# DONE radius-chebyshev/hashed repeat=1/batchscale 0.000s
+# START radius-chebyshev/hashed repeat=1/ragged
+# DONE radius-chebyshev/hashed repeat=1/ragged 0.000s
+# START radius-chebyshev/hashed repeat=1/stepfull
+# DONE radius-chebyshev/hashed repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/hashed STABLE 0.098s
+# START radius-chebyshev/wide repeat=1/train
+# DONE radius-chebyshev/wide repeat=1/train 0.005s
+# START radius-chebyshev/wide repeat=1/infer-save-reload
+# DONE radius-chebyshev/wide repeat=1/infer-save-reload 0.010s
+# START radius-chebyshev/wide repeat=1/batch
+# DONE radius-chebyshev/wide repeat=1/batch 0.052s
+# START radius-chebyshev/wide repeat=1/batchgrad
+# DONE radius-chebyshev/wide repeat=1/batchgrad 0.000s
+# START radius-chebyshev/wide repeat=1/batchscale
+# DONE radius-chebyshev/wide repeat=1/batchscale 0.000s
+# START radius-chebyshev/wide repeat=1/ragged
+# DONE radius-chebyshev/wide repeat=1/ragged 0.000s
+# START radius-chebyshev/wide repeat=1/stepfull
+# DONE radius-chebyshev/wide repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/wide STABLE 0.068s
+# START radius-chebyshev/denormal repeat=1/train
+# DONE radius-chebyshev/denormal repeat=1/train 0.010s
+# START radius-chebyshev/denormal repeat=1/infer-save-reload
+# DONE radius-chebyshev/denormal repeat=1/infer-save-reload 0.019s
+# START radius-chebyshev/denormal repeat=1/batch
+# DONE radius-chebyshev/denormal repeat=1/batch 0.058s
+# START radius-chebyshev/denormal repeat=1/batchgrad
+# DONE radius-chebyshev/denormal repeat=1/batchgrad 0.000s
+# START radius-chebyshev/denormal repeat=1/batchscale
+# DONE radius-chebyshev/denormal repeat=1/batchscale 0.000s
+# START radius-chebyshev/denormal repeat=1/ragged
+# DONE radius-chebyshev/denormal repeat=1/ragged 0.000s
+# START radius-chebyshev/denormal repeat=1/stepfull
+# DONE radius-chebyshev/denormal repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/denormal STABLE 0.087s
+# START radius-chebyshev/denormal_ftz repeat=1/train
+# DONE radius-chebyshev/denormal_ftz repeat=1/train 0.010s
+# START radius-chebyshev/denormal_ftz repeat=1/infer-save-reload
+# DONE radius-chebyshev/denormal_ftz repeat=1/infer-save-reload 0.019s
+# START radius-chebyshev/denormal_ftz repeat=1/batch
+# DONE radius-chebyshev/denormal_ftz repeat=1/batch 0.057s
+# START radius-chebyshev/denormal_ftz repeat=1/batchgrad
+# DONE radius-chebyshev/denormal_ftz repeat=1/batchgrad 0.000s
+# START radius-chebyshev/denormal_ftz repeat=1/batchscale
+# DONE radius-chebyshev/denormal_ftz repeat=1/batchscale 0.000s
+# START radius-chebyshev/denormal_ftz repeat=1/ragged
+# DONE radius-chebyshev/denormal_ftz repeat=1/ragged 0.000s
+# START radius-chebyshev/denormal_ftz repeat=1/stepfull
+# DONE radius-chebyshev/denormal_ftz repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/denormal_ftz STABLE 0.086s
+# START radius-chebyshev/dupes repeat=1/train
+# DONE radius-chebyshev/dupes repeat=1/train 0.010s
+# START radius-chebyshev/dupes repeat=1/infer-save-reload
+# DONE radius-chebyshev/dupes repeat=1/infer-save-reload 0.019s
+# START radius-chebyshev/dupes repeat=1/batch
+# DONE radius-chebyshev/dupes repeat=1/batch 0.057s
+# START radius-chebyshev/dupes repeat=1/batchgrad
+# DONE radius-chebyshev/dupes repeat=1/batchgrad 0.000s
+# START radius-chebyshev/dupes repeat=1/batchscale
+# DONE radius-chebyshev/dupes repeat=1/batchscale 0.000s
+# START radius-chebyshev/dupes repeat=1/ragged
+# DONE radius-chebyshev/dupes repeat=1/ragged 0.000s
+# START radius-chebyshev/dupes repeat=1/stepfull
+# DONE radius-chebyshev/dupes repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/dupes STABLE 0.085s
+# START radius-chebyshev/odd repeat=1/train
+# DONE radius-chebyshev/odd repeat=1/train 0.010s
+# START radius-chebyshev/odd repeat=1/infer-save-reload
+# DONE radius-chebyshev/odd repeat=1/infer-save-reload 0.020s
+# START radius-chebyshev/odd repeat=1/batch
+# DONE radius-chebyshev/odd repeat=1/batch 0.060s
+# START radius-chebyshev/odd repeat=1/batchgrad
+# DONE radius-chebyshev/odd repeat=1/batchgrad 0.000s
+# START radius-chebyshev/odd repeat=1/batchscale
+# DONE radius-chebyshev/odd repeat=1/batchscale 0.000s
+# START radius-chebyshev/odd repeat=1/ragged
+# DONE radius-chebyshev/odd repeat=1/ragged 0.000s
+# START radius-chebyshev/odd repeat=1/stepfull
+# DONE radius-chebyshev/odd repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/odd STABLE 0.090s
+# START radius-chebyshev/negative repeat=1/train
+# DONE radius-chebyshev/negative repeat=1/train 0.009s
+# START radius-chebyshev/negative repeat=1/infer-save-reload
+# DONE radius-chebyshev/negative repeat=1/infer-save-reload 0.017s
+# START radius-chebyshev/negative repeat=1/batch
+# DONE radius-chebyshev/negative repeat=1/batch 0.054s
+# START radius-chebyshev/negative repeat=1/batchgrad
+# DONE radius-chebyshev/negative repeat=1/batchgrad 0.000s
+# START radius-chebyshev/negative repeat=1/batchscale
+# DONE radius-chebyshev/negative repeat=1/batchscale 0.000s
+# START radius-chebyshev/negative repeat=1/ragged
+# DONE radius-chebyshev/negative repeat=1/ragged 0.000s
+# START radius-chebyshev/negative repeat=1/stepfull
+# DONE radius-chebyshev/negative repeat=1/stepfull 0.000s
+# CELL radius-chebyshev/negative STABLE 0.081s
+| radius-chebyshev       | 1be89376fd4bbea3 | 93e842a257c1cbb1 | d616368af4777cd7 | 345e90650359bb7f | 61ce01e6618e5028 | 61ce01e6618e5028 | 99b1b6404107eda5 | e5d80437361c13b9 | a251b503af39d952 |
+| radius-chebyshev infer | 47f179252c05327e | 7b5a2419abc8f304 | 6f0dd5e75ecfd9e4 | abcd9366c6e9697a | 32fdf6cafa080fdd | 32fdf6cafa080fdd | 4f42e54d861fc686 | 43e568967a392b5e | 67e8e395dc4ee1ba |
+| radius-chebyshev model | 8574229ff00211a8 | bf872c24d7a8d1fe | 0aace3ef999bbb6e | aec9f7d9470bfb08 | 05714d9a99844882 | ff352d0646ae192f | 368e386bc9afc1ce | fe3eb2f5e2415c40 | 12fa5e85b29c9861 |
+| radius-chebyshev batch | 49212cdc3335248f | 5f798a0fb8253a07 | d45dd9c711c40e9e | d4f14c8e7f4394ad | 87eeb1e332711a36 | 87eeb1e332711a36 | d12572b1d2b4c056 | 8cd116af9f03e67c | b10293002d0f345a |
+# START radius-minkowski-p3/base repeat=1/train
+# DONE radius-minkowski-p3/base repeat=1/train 0.009s
+# START radius-minkowski-p3/base repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/base repeat=1/infer-save-reload 0.020s
+# START radius-minkowski-p3/base repeat=1/batch
+# DONE radius-minkowski-p3/base repeat=1/batch 0.103s
+# START radius-minkowski-p3/base repeat=1/batchgrad
+# DONE radius-minkowski-p3/base repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/base repeat=1/batchscale
+# DONE radius-minkowski-p3/base repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/base repeat=1/ragged
+# DONE radius-minkowski-p3/base repeat=1/ragged 0.000s
+# START radius-minkowski-p3/base repeat=1/stepfull
+# DONE radius-minkowski-p3/base repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/base STABLE 0.132s
+# START radius-minkowski-p3/ties repeat=1/train
+# DONE radius-minkowski-p3/ties repeat=1/train 0.009s
+# START radius-minkowski-p3/ties repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/ties repeat=1/infer-save-reload 0.015s
+# START radius-minkowski-p3/ties repeat=1/batch
+# DONE radius-minkowski-p3/ties repeat=1/batch 0.098s
+# START radius-minkowski-p3/ties repeat=1/batchgrad
+# DONE radius-minkowski-p3/ties repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/ties repeat=1/batchscale
+# DONE radius-minkowski-p3/ties repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/ties repeat=1/ragged
+# DONE radius-minkowski-p3/ties repeat=1/ragged 0.000s
+# START radius-minkowski-p3/ties repeat=1/stepfull
+# DONE radius-minkowski-p3/ties repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/ties STABLE 0.122s
+# START radius-minkowski-p3/hashed repeat=1/train
+# DONE radius-minkowski-p3/hashed repeat=1/train 0.008s
+# START radius-minkowski-p3/hashed repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/hashed repeat=1/infer-save-reload 0.017s
+# START radius-minkowski-p3/hashed repeat=1/batch
+# DONE radius-minkowski-p3/hashed repeat=1/batch 0.105s
+# START radius-minkowski-p3/hashed repeat=1/batchgrad
+# DONE radius-minkowski-p3/hashed repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/hashed repeat=1/batchscale
+# DONE radius-minkowski-p3/hashed repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/hashed repeat=1/ragged
+# DONE radius-minkowski-p3/hashed repeat=1/ragged 0.000s
+# START radius-minkowski-p3/hashed repeat=1/stepfull
+# DONE radius-minkowski-p3/hashed repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/hashed STABLE 0.131s
+# START radius-minkowski-p3/wide repeat=1/train
+# DONE radius-minkowski-p3/wide repeat=1/train 0.007s
+# START radius-minkowski-p3/wide repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/wide repeat=1/infer-save-reload 0.014s
+# START radius-minkowski-p3/wide repeat=1/batch
+# DONE radius-minkowski-p3/wide repeat=1/batch 0.083s
+# START radius-minkowski-p3/wide repeat=1/batchgrad
+# DONE radius-minkowski-p3/wide repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/wide repeat=1/batchscale
+# DONE radius-minkowski-p3/wide repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/wide repeat=1/ragged
+# DONE radius-minkowski-p3/wide repeat=1/ragged 0.000s
+# START radius-minkowski-p3/wide repeat=1/stepfull
+# DONE radius-minkowski-p3/wide repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/wide STABLE 0.103s
+# START radius-minkowski-p3/denormal repeat=1/train
+# DONE radius-minkowski-p3/denormal repeat=1/train 0.009s
+# START radius-minkowski-p3/denormal repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/denormal repeat=1/infer-save-reload 0.019s
+# START radius-minkowski-p3/denormal repeat=1/batch
+# DONE radius-minkowski-p3/denormal repeat=1/batch 0.101s
+# START radius-minkowski-p3/denormal repeat=1/batchgrad
+# DONE radius-minkowski-p3/denormal repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/denormal repeat=1/batchscale
+# DONE radius-minkowski-p3/denormal repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/denormal repeat=1/ragged
+# DONE radius-minkowski-p3/denormal repeat=1/ragged 0.000s
+# START radius-minkowski-p3/denormal repeat=1/stepfull
+# DONE radius-minkowski-p3/denormal repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/denormal STABLE 0.129s
+# START radius-minkowski-p3/denormal_ftz repeat=1/train
+# DONE radius-minkowski-p3/denormal_ftz repeat=1/train 0.009s
+# START radius-minkowski-p3/denormal_ftz repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/denormal_ftz repeat=1/infer-save-reload 0.019s
+# START radius-minkowski-p3/denormal_ftz repeat=1/batch
+# DONE radius-minkowski-p3/denormal_ftz repeat=1/batch 0.101s
+# START radius-minkowski-p3/denormal_ftz repeat=1/batchgrad
+# DONE radius-minkowski-p3/denormal_ftz repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/denormal_ftz repeat=1/batchscale
+# DONE radius-minkowski-p3/denormal_ftz repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/denormal_ftz repeat=1/ragged
+# DONE radius-minkowski-p3/denormal_ftz repeat=1/ragged 0.000s
+# START radius-minkowski-p3/denormal_ftz repeat=1/stepfull
+# DONE radius-minkowski-p3/denormal_ftz repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/denormal_ftz STABLE 0.128s
+# START radius-minkowski-p3/dupes repeat=1/train
+# DONE radius-minkowski-p3/dupes repeat=1/train 0.009s
+# START radius-minkowski-p3/dupes repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/dupes repeat=1/infer-save-reload 0.019s
+# START radius-minkowski-p3/dupes repeat=1/batch
+# DONE radius-minkowski-p3/dupes repeat=1/batch 0.098s
+# START radius-minkowski-p3/dupes repeat=1/batchgrad
+# DONE radius-minkowski-p3/dupes repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/dupes repeat=1/batchscale
+# DONE radius-minkowski-p3/dupes repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/dupes repeat=1/ragged
+# DONE radius-minkowski-p3/dupes repeat=1/ragged 0.000s
+# START radius-minkowski-p3/dupes repeat=1/stepfull
+# DONE radius-minkowski-p3/dupes repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/dupes STABLE 0.127s
+# START radius-minkowski-p3/odd repeat=1/train
+# DONE radius-minkowski-p3/odd repeat=1/train 0.009s
+# START radius-minkowski-p3/odd repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/odd repeat=1/infer-save-reload 0.019s
+# START radius-minkowski-p3/odd repeat=1/batch
+# DONE radius-minkowski-p3/odd repeat=1/batch 0.111s
+# START radius-minkowski-p3/odd repeat=1/batchgrad
+# DONE radius-minkowski-p3/odd repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/odd repeat=1/batchscale
+# DONE radius-minkowski-p3/odd repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/odd repeat=1/ragged
+# DONE radius-minkowski-p3/odd repeat=1/ragged 0.000s
+# START radius-minkowski-p3/odd repeat=1/stepfull
+# DONE radius-minkowski-p3/odd repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/odd STABLE 0.140s
+# START radius-minkowski-p3/negative repeat=1/train
+# DONE radius-minkowski-p3/negative repeat=1/train 0.009s
+# START radius-minkowski-p3/negative repeat=1/infer-save-reload
+# DONE radius-minkowski-p3/negative repeat=1/infer-save-reload 0.019s
+# START radius-minkowski-p3/negative repeat=1/batch
+# DONE radius-minkowski-p3/negative repeat=1/batch 0.103s
+# START radius-minkowski-p3/negative repeat=1/batchgrad
+# DONE radius-minkowski-p3/negative repeat=1/batchgrad 0.000s
+# START radius-minkowski-p3/negative repeat=1/batchscale
+# DONE radius-minkowski-p3/negative repeat=1/batchscale 0.000s
+# START radius-minkowski-p3/negative repeat=1/ragged
+# DONE radius-minkowski-p3/negative repeat=1/ragged 0.000s
+# START radius-minkowski-p3/negative repeat=1/stepfull
+# DONE radius-minkowski-p3/negative repeat=1/stepfull 0.000s
+# CELL radius-minkowski-p3/negative STABLE 0.131s
+| radius-minkowski-p3    | b132db7ad58141aa | 1ffd20a4b0de4753 | 26b9387b18775ebd | e00b98e48925e909 | 6c81dc794832ad12 | 6c81dc794832ad12 | 570ca9be0cd30129 | 719f2301e2d663c0 | 24200fcd26a4d801 |
+| radius-minkowski-p3 infer | 2d41cf8a43dd0a2c | e5a4d7644387eab9 | 00c1a2ba4f724cc8 | 839efe755774007f | a50411d34da25d30 | a50411d34da25d30 | 6853e189dcd43a88 | d844548968cd9cdd | 89ddc1bb6f4ad18c |
+| radius-minkowski-p3 model | a0553fab96a1dc7b | dcecf77c7d145391 | ff131fad95a0692d | a0b829aeceba0c60 | 818a729393600e6a | 13a625e9f116f256 | 2eab5f990f27ab24 | 1c1ce2c17f53816f | 6631c4ffcdc95d16 |
+| radius-minkowski-p3 batch | 84477c7df1b3807f | bef0bf1314b15764 | b0b5f135ed972f45 | 161e485ace70e983 | 841ca0e2de306f70 | 841ca0e2de306f70 | d0aca4463baeb5ad | 135d2d40bc054f26 | 9cbfcf1f2ab62a1e |
+# START linalg-eigh/base repeat=1/train
+# DONE linalg-eigh/base repeat=1/train 0.010s
+# START linalg-eigh/base repeat=1/infer-save-reload
+# DONE linalg-eigh/base repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/base repeat=1/batch
+# DONE linalg-eigh/base repeat=1/batch 0.000s
+# START linalg-eigh/base repeat=1/batchgrad
+# DONE linalg-eigh/base repeat=1/batchgrad 0.000s
+# START linalg-eigh/base repeat=1/batchscale
+# DONE linalg-eigh/base repeat=1/batchscale 0.000s
+# START linalg-eigh/base repeat=1/ragged
+# DONE linalg-eigh/base repeat=1/ragged 0.000s
+# START linalg-eigh/base repeat=1/stepfull
+# DONE linalg-eigh/base repeat=1/stepfull 0.000s
+# CELL linalg-eigh/base STABLE 0.010s
+# START linalg-eigh/ties repeat=1/train
+# DONE linalg-eigh/ties repeat=1/train 0.001s
+# START linalg-eigh/ties repeat=1/infer-save-reload
+# DONE linalg-eigh/ties repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/ties repeat=1/batch
+# DONE linalg-eigh/ties repeat=1/batch 0.000s
+# START linalg-eigh/ties repeat=1/batchgrad
+# DONE linalg-eigh/ties repeat=1/batchgrad 0.000s
+# START linalg-eigh/ties repeat=1/batchscale
+# DONE linalg-eigh/ties repeat=1/batchscale 0.000s
+# START linalg-eigh/ties repeat=1/ragged
+# DONE linalg-eigh/ties repeat=1/ragged 0.000s
+# START linalg-eigh/ties repeat=1/stepfull
+# DONE linalg-eigh/ties repeat=1/stepfull 0.000s
+# CELL linalg-eigh/ties STABLE 0.001s
+# START linalg-eigh/hashed repeat=1/train
+# DONE linalg-eigh/hashed repeat=1/train 0.001s
+# START linalg-eigh/hashed repeat=1/infer-save-reload
+# DONE linalg-eigh/hashed repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/hashed repeat=1/batch
+# DONE linalg-eigh/hashed repeat=1/batch 0.000s
+# START linalg-eigh/hashed repeat=1/batchgrad
+# DONE linalg-eigh/hashed repeat=1/batchgrad 0.000s
+# START linalg-eigh/hashed repeat=1/batchscale
+# DONE linalg-eigh/hashed repeat=1/batchscale 0.000s
+# START linalg-eigh/hashed repeat=1/ragged
+# DONE linalg-eigh/hashed repeat=1/ragged 0.000s
+# START linalg-eigh/hashed repeat=1/stepfull
+# DONE linalg-eigh/hashed repeat=1/stepfull 0.000s
+# CELL linalg-eigh/hashed STABLE 0.001s
+# START linalg-eigh/wide repeat=1/train
+# DONE linalg-eigh/wide repeat=1/train 0.001s
+# START linalg-eigh/wide repeat=1/infer-save-reload
+# DONE linalg-eigh/wide repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/wide repeat=1/batch
+# DONE linalg-eigh/wide repeat=1/batch 0.000s
+# START linalg-eigh/wide repeat=1/batchgrad
+# DONE linalg-eigh/wide repeat=1/batchgrad 0.000s
+# START linalg-eigh/wide repeat=1/batchscale
+# DONE linalg-eigh/wide repeat=1/batchscale 0.000s
+# START linalg-eigh/wide repeat=1/ragged
+# DONE linalg-eigh/wide repeat=1/ragged 0.000s
+# START linalg-eigh/wide repeat=1/stepfull
+# DONE linalg-eigh/wide repeat=1/stepfull 0.000s
+# CELL linalg-eigh/wide STABLE 0.001s
+# START linalg-eigh/denormal repeat=1/train
+# DONE linalg-eigh/denormal repeat=1/train 0.001s
+# START linalg-eigh/denormal repeat=1/infer-save-reload
+# DONE linalg-eigh/denormal repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/denormal repeat=1/batch
+# DONE linalg-eigh/denormal repeat=1/batch 0.000s
+# START linalg-eigh/denormal repeat=1/batchgrad
+# DONE linalg-eigh/denormal repeat=1/batchgrad 0.000s
+# START linalg-eigh/denormal repeat=1/batchscale
+# DONE linalg-eigh/denormal repeat=1/batchscale 0.000s
+# START linalg-eigh/denormal repeat=1/ragged
+# DONE linalg-eigh/denormal repeat=1/ragged 0.000s
+# START linalg-eigh/denormal repeat=1/stepfull
+# DONE linalg-eigh/denormal repeat=1/stepfull 0.000s
+# CELL linalg-eigh/denormal STABLE 0.001s
+# START linalg-eigh/denormal_ftz repeat=1/train
+# DONE linalg-eigh/denormal_ftz repeat=1/train 0.001s
+# START linalg-eigh/denormal_ftz repeat=1/infer-save-reload
+# DONE linalg-eigh/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/denormal_ftz repeat=1/batch
+# DONE linalg-eigh/denormal_ftz repeat=1/batch 0.000s
+# START linalg-eigh/denormal_ftz repeat=1/batchgrad
+# DONE linalg-eigh/denormal_ftz repeat=1/batchgrad 0.000s
+# START linalg-eigh/denormal_ftz repeat=1/batchscale
+# DONE linalg-eigh/denormal_ftz repeat=1/batchscale 0.000s
+# START linalg-eigh/denormal_ftz repeat=1/ragged
+# DONE linalg-eigh/denormal_ftz repeat=1/ragged 0.000s
+# START linalg-eigh/denormal_ftz repeat=1/stepfull
+# DONE linalg-eigh/denormal_ftz repeat=1/stepfull 0.000s
+# CELL linalg-eigh/denormal_ftz STABLE 0.001s
+# START linalg-eigh/dupes repeat=1/train
+# DONE linalg-eigh/dupes repeat=1/train 0.001s
+# START linalg-eigh/dupes repeat=1/infer-save-reload
+# DONE linalg-eigh/dupes repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/dupes repeat=1/batch
+# DONE linalg-eigh/dupes repeat=1/batch 0.000s
+# START linalg-eigh/dupes repeat=1/batchgrad
+# DONE linalg-eigh/dupes repeat=1/batchgrad 0.000s
+# START linalg-eigh/dupes repeat=1/batchscale
+# DONE linalg-eigh/dupes repeat=1/batchscale 0.000s
+# START linalg-eigh/dupes repeat=1/ragged
+# DONE linalg-eigh/dupes repeat=1/ragged 0.000s
+# START linalg-eigh/dupes repeat=1/stepfull
+# DONE linalg-eigh/dupes repeat=1/stepfull 0.000s
+# CELL linalg-eigh/dupes STABLE 0.001s
+# START linalg-eigh/odd repeat=1/train
+# DONE linalg-eigh/odd repeat=1/train 0.001s
+# START linalg-eigh/odd repeat=1/infer-save-reload
+# DONE linalg-eigh/odd repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/odd repeat=1/batch
+# DONE linalg-eigh/odd repeat=1/batch 0.000s
+# START linalg-eigh/odd repeat=1/batchgrad
+# DONE linalg-eigh/odd repeat=1/batchgrad 0.000s
+# START linalg-eigh/odd repeat=1/batchscale
+# DONE linalg-eigh/odd repeat=1/batchscale 0.000s
+# START linalg-eigh/odd repeat=1/ragged
+# DONE linalg-eigh/odd repeat=1/ragged 0.000s
+# START linalg-eigh/odd repeat=1/stepfull
+# DONE linalg-eigh/odd repeat=1/stepfull 0.000s
+# CELL linalg-eigh/odd STABLE 0.001s
+# START linalg-eigh/negative repeat=1/train
+# DONE linalg-eigh/negative repeat=1/train 0.001s
+# START linalg-eigh/negative repeat=1/infer-save-reload
+# DONE linalg-eigh/negative repeat=1/infer-save-reload 0.000s
+# START linalg-eigh/negative repeat=1/batch
+# DONE linalg-eigh/negative repeat=1/batch 0.000s
+# START linalg-eigh/negative repeat=1/batchgrad
+# DONE linalg-eigh/negative repeat=1/batchgrad 0.000s
+# START linalg-eigh/negative repeat=1/batchscale
+# DONE linalg-eigh/negative repeat=1/batchscale 0.000s
+# START linalg-eigh/negative repeat=1/ragged
+# DONE linalg-eigh/negative repeat=1/ragged 0.000s
+# START linalg-eigh/negative repeat=1/stepfull
+# DONE linalg-eigh/negative repeat=1/stepfull 0.000s
+# CELL linalg-eigh/negative STABLE 0.001s
+| linalg-eigh            | ff7344e191a4ade2 | 0599f6c090355117 | 3aa9896590a5d2be | 7a015b4135fefe9d | d8f2374750b00a9c | d8f2374750b00a9c | ff7344e191a4ade2 | 201c6518fd73dee2 | 09f0369a2c06a86b |
+# START trees-oob-cv-link/base repeat=1/train
+# DONE trees-oob-cv-link/base repeat=1/train 0.273s
+# START trees-oob-cv-link/base repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/base repeat=1/infer-save-reload 0.004s
+# START trees-oob-cv-link/base repeat=1/batch
+# DONE trees-oob-cv-link/base repeat=1/batch 0.114s
+# START trees-oob-cv-link/base repeat=1/batchgrad
+# DONE trees-oob-cv-link/base repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/base repeat=1/batchscale
+# DONE trees-oob-cv-link/base repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/base repeat=1/ragged
+# DONE trees-oob-cv-link/base repeat=1/ragged 0.000s
+# START trees-oob-cv-link/base repeat=1/stepfull
+# DONE trees-oob-cv-link/base repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/base STABLE 0.390s
+# START trees-oob-cv-link/ties repeat=1/train
+# DONE trees-oob-cv-link/ties repeat=1/train 0.218s
+# START trees-oob-cv-link/ties repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/ties repeat=1/infer-save-reload 0.003s
+# START trees-oob-cv-link/ties repeat=1/batch
+# DONE trees-oob-cv-link/ties repeat=1/batch 0.108s
+# START trees-oob-cv-link/ties repeat=1/batchgrad
+# DONE trees-oob-cv-link/ties repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/ties repeat=1/batchscale
+# DONE trees-oob-cv-link/ties repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/ties repeat=1/ragged
+# DONE trees-oob-cv-link/ties repeat=1/ragged 0.000s
+# START trees-oob-cv-link/ties repeat=1/stepfull
+# DONE trees-oob-cv-link/ties repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/ties STABLE 0.330s
+# START trees-oob-cv-link/hashed repeat=1/train
+# DONE trees-oob-cv-link/hashed repeat=1/train 0.221s
+# START trees-oob-cv-link/hashed repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/hashed repeat=1/infer-save-reload 0.003s
+# START trees-oob-cv-link/hashed repeat=1/batch
+# DONE trees-oob-cv-link/hashed repeat=1/batch 0.113s
+# START trees-oob-cv-link/hashed repeat=1/batchgrad
+# DONE trees-oob-cv-link/hashed repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/hashed repeat=1/batchscale
+# DONE trees-oob-cv-link/hashed repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/hashed repeat=1/ragged
+# DONE trees-oob-cv-link/hashed repeat=1/ragged 0.000s
+# START trees-oob-cv-link/hashed repeat=1/stepfull
+# DONE trees-oob-cv-link/hashed repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/hashed STABLE 0.337s
+# START trees-oob-cv-link/wide repeat=1/train
+# DONE trees-oob-cv-link/wide repeat=1/train 0.221s
+# START trees-oob-cv-link/wide repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/wide repeat=1/infer-save-reload 0.003s
+# START trees-oob-cv-link/wide repeat=1/batch
+# DONE trees-oob-cv-link/wide repeat=1/batch 0.109s
+# START trees-oob-cv-link/wide repeat=1/batchgrad
+# DONE trees-oob-cv-link/wide repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/wide repeat=1/batchscale
+# DONE trees-oob-cv-link/wide repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/wide repeat=1/ragged
+# DONE trees-oob-cv-link/wide repeat=1/ragged 0.000s
+# START trees-oob-cv-link/wide repeat=1/stepfull
+# DONE trees-oob-cv-link/wide repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/wide STABLE 0.332s
+# START trees-oob-cv-link/denormal repeat=1/train
+# DONE trees-oob-cv-link/denormal repeat=1/train 0.222s
+# START trees-oob-cv-link/denormal repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/denormal repeat=1/infer-save-reload 0.003s
+# START trees-oob-cv-link/denormal repeat=1/batch
+# DONE trees-oob-cv-link/denormal repeat=1/batch 0.115s
+# START trees-oob-cv-link/denormal repeat=1/batchgrad
+# DONE trees-oob-cv-link/denormal repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/denormal repeat=1/batchscale
+# DONE trees-oob-cv-link/denormal repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/denormal repeat=1/ragged
+# DONE trees-oob-cv-link/denormal repeat=1/ragged 0.000s
+# START trees-oob-cv-link/denormal repeat=1/stepfull
+# DONE trees-oob-cv-link/denormal repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/denormal STABLE 0.340s
+# START trees-oob-cv-link/denormal_ftz repeat=1/train
+# DONE trees-oob-cv-link/denormal_ftz repeat=1/train 0.221s
+# START trees-oob-cv-link/denormal_ftz repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/denormal_ftz repeat=1/infer-save-reload 0.003s
+# START trees-oob-cv-link/denormal_ftz repeat=1/batch
+# DONE trees-oob-cv-link/denormal_ftz repeat=1/batch 0.108s
+# START trees-oob-cv-link/denormal_ftz repeat=1/batchgrad
+# DONE trees-oob-cv-link/denormal_ftz repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/denormal_ftz repeat=1/batchscale
+# DONE trees-oob-cv-link/denormal_ftz repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/denormal_ftz repeat=1/ragged
+# DONE trees-oob-cv-link/denormal_ftz repeat=1/ragged 0.000s
+# START trees-oob-cv-link/denormal_ftz repeat=1/stepfull
+# DONE trees-oob-cv-link/denormal_ftz repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/denormal_ftz STABLE 0.331s
+# START trees-oob-cv-link/dupes repeat=1/train
+# DONE trees-oob-cv-link/dupes repeat=1/train 0.213s
+# START trees-oob-cv-link/dupes repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/dupes repeat=1/infer-save-reload 0.002s
+# START trees-oob-cv-link/dupes repeat=1/batch
+# DONE trees-oob-cv-link/dupes repeat=1/batch 0.106s
+# START trees-oob-cv-link/dupes repeat=1/batchgrad
+# DONE trees-oob-cv-link/dupes repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/dupes repeat=1/batchscale
+# DONE trees-oob-cv-link/dupes repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/dupes repeat=1/ragged
+# DONE trees-oob-cv-link/dupes repeat=1/ragged 0.000s
+# START trees-oob-cv-link/dupes repeat=1/stepfull
+# DONE trees-oob-cv-link/dupes repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/dupes STABLE 0.322s
+# START trees-oob-cv-link/odd repeat=1/train
+# DONE trees-oob-cv-link/odd repeat=1/train 0.209s
+# START trees-oob-cv-link/odd repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/odd repeat=1/infer-save-reload 0.002s
+# START trees-oob-cv-link/odd repeat=1/batch
+# DONE trees-oob-cv-link/odd repeat=1/batch 0.077s
+# START trees-oob-cv-link/odd repeat=1/batchgrad
+# DONE trees-oob-cv-link/odd repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/odd repeat=1/batchscale
+# DONE trees-oob-cv-link/odd repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/odd repeat=1/ragged
+# DONE trees-oob-cv-link/odd repeat=1/ragged 0.000s
+# START trees-oob-cv-link/odd repeat=1/stepfull
+# DONE trees-oob-cv-link/odd repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/odd STABLE 0.289s
+# START trees-oob-cv-link/negative repeat=1/train
+# DONE trees-oob-cv-link/negative repeat=1/train 0.221s
+# START trees-oob-cv-link/negative repeat=1/infer-save-reload
+# DONE trees-oob-cv-link/negative repeat=1/infer-save-reload 0.003s
+# START trees-oob-cv-link/negative repeat=1/batch
+# DONE trees-oob-cv-link/negative repeat=1/batch 0.113s
+# START trees-oob-cv-link/negative repeat=1/batchgrad
+# DONE trees-oob-cv-link/negative repeat=1/batchgrad 0.000s
+# START trees-oob-cv-link/negative repeat=1/batchscale
+# DONE trees-oob-cv-link/negative repeat=1/batchscale 0.000s
+# START trees-oob-cv-link/negative repeat=1/ragged
+# DONE trees-oob-cv-link/negative repeat=1/ragged 0.000s
+# START trees-oob-cv-link/negative repeat=1/stepfull
+# DONE trees-oob-cv-link/negative repeat=1/stepfull 0.000s
+# CELL trees-oob-cv-link/negative STABLE 0.337s
+| trees-oob-cv-link      | ab42dad40e47c7e8 | 1f760e1d18b2a59e | d68716fd06acbb3b | 4da7195a7add04df | c4959835bac7497b | c4959835bac7497b | afb1c33d5041a450 | fbf6b7ad7abc1f59 | f88cea437981878a |
+| trees-oob-cv-link infer | ff7201cd8a627b66 | 03352b960ddc86c8 | 39403afdc15f9eb4 | 714d510f3a19a74f | ff7201cd8a627b66 | ff7201cd8a627b66 | f58bafae25607d1a | 92a68dc719994911 | 0c5a1ad7cb99eb48 |
+| trees-oob-cv-link batch | 98746b7918ae7ec8 | ef775c590dbbc21c | 0c22d48c0c7ce5c5 | 27bb6ffcef1f50a1 | 98746b7918ae7ec8 | 98746b7918ae7ec8 | bb113b23cce2a096 | 8c88375ca3f55fcc | e25493438a81cfea |
+
+cells=72 stable=72 moved=0 refused=0
+infer: stable=63 n/a=9
+model: stable=54 n/a=18
+batch: stable=63 n/a=9
+batchgrad: n/a=72
+batchscale: n/a=72
+ragged: n/a=72
+stepfull: n/a=72
+n/a: gbdt-feature-freq batchgrad n/a:no-backward, gbdt-feature-freq batchscale n/a:not-in-the-serving-set, gbdt-feature-freq ragged n/a:no-sequence-axis, gbdt-feature-freq stepfull n/a:no-decode-state, gbdt-tensor-ctr-tables batchgrad n/a:no-backward, gbdt-tensor-ctr-tables batchscale n/a:not-in-the-serving-set, gbdt-tensor-ctr-tables ragged n/a:no-sequence-axis, gbdt-tensor-ctr-tables stepfull n/a:no-decode-state, linalg-eigh batch n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output), linalg-eigh batchgrad n/a:no-backward, linalg-eigh batchscale n/a:not-in-the-serving-set, linalg-eigh infer n/a:function, linalg-eigh model n/a:no-save, linalg-eigh ragged n/a:no-sequence-axis, linalg-eigh stepfull n/a:no-decode-state, radius batchgrad n/a:no-backward, radius batchscale n/a:not-in-the-serving-set, radius ragged n/a:no-sequence-axis, radius stepfull n/a:no-decode-state, radius-chebyshev batchgrad n/a:no-backward, radius-chebyshev batchscale n/a:not-in-the-serving-set, radius-chebyshev ragged n/a:no-sequence-axis, radius-chebyshev stepfull n/a:no-decode-state, radius-manhattan batchgrad n/a:no-backward, radius-manhattan batchscale n/a:not-in-the-serving-set, radius-manhattan ragged n/a:no-sequence-axis, radius-manhattan stepfull n/a:no-decode-state, radius-minkowski-p3 batchgrad n/a:no-backward, radius-minkowski-p3 batchscale n/a:not-in-the-serving-set, radius-minkowski-p3 ragged n/a:no-sequence-axis, radius-minkowski-p3 stepfull n/a:no-decode-state, trees-oob-cv-link batchgrad n/a:no-backward, trees-oob-cv-link batchscale n/a:not-in-the-serving-set, trees-oob-cv-link model n/a:no-save, trees-oob-cv-link ragged n/a:no-sequence-axis, trees-oob-cv-link stepfull n/a:no-decode-state
+wrote /root/ml-verify/artifacts/repaired-column.json

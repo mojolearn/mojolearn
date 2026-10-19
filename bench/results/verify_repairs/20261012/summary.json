@@ -1,0 +1,241 @@
+{
+  "implementation_commit": "87e6005eaad08b3f67a25d4e344a555bb2590e7e",
+  "published_package": "mojolearn==0.8.42",
+  "published_source_commit": "0db362a62516faef0a52b112e93f7cba5e212a2b",
+  "native_builds": "Reused the installed published binaries; no numerical native source changed. Binding hashes are retained in every report.",
+  "fixes": {
+    "radius": "HostRadiusNeighbors permits the native host segmented-sort helper; all four metrics execute GPU/CPU comparisons.",
+    "trees": "DARTClassifier keeps its zero-score Array alive until x_trees_stack_w64 consumes the borrowed address. This fixes first-row probability corruption and Kernel SHAP.",
+    "eigh": "Test-only Gram construction now specifies separate float32 products and ascending-row sums, with a new lane revision. All three vendors received the same changed fixture.",
+    "feature_frequency": "Apple is compared with its recorded Apple value; NVIDIA/AMD decide their own common reference.",
+    "neural": "All three published-wheel full neural runs agree. Their retained, witnessed values replace stale references; no neural kernel changed."
+  },
+  "routine": {
+    "kind": "retained full run plus affected-lane reruns, judged against repaired references",
+    "original_report": "bench/results/pip_verify/20261012-205427/full.json",
+    "affected_record": "bench/results/verify_repairs/20261012/apple-repaired-column.json",
+    "counts": {
+      "IDENTICAL": 11240,
+      "N/A": 19980
+    },
+    "failures": [],
+    "rerun_parts": 576,
+    "original_completed_cells": 3456,
+    "original_total_cells": 3456
+  },
+  "neural": {
+    "apple": {
+      "execution": {
+        "completed_cells": 576,
+        "interrupted": null,
+        "mode": "fresh-process-per-cell",
+        "timeout_s": 120.0,
+        "total_cells": 576
+      },
+      "original_exit": 1,
+      "original_counts": {
+        "DIVERGENT": 1336,
+        "IDENTICAL": 1013,
+        "N/A": 2835,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "repaired_reference_counts": {
+        "IDENTICAL": 2349,
+        "N/A": 2835
+      },
+      "repaired_reference_failures": [],
+      "elapsed_s": 1185.93,
+      "report_sha256": "a99f1a12ada7c605bf871e748d9a42e42444fe3762d15c66d875ebbbad69c96a"
+    },
+    "nvidia": {
+      "execution": {
+        "completed_cells": 576,
+        "interrupted": null,
+        "mode": "fresh-process-per-cell",
+        "timeout_s": 120.0,
+        "total_cells": 576
+      },
+      "original_exit": 1,
+      "original_counts": {
+        "DIVERGENT": 1336,
+        "IDENTICAL": 1013,
+        "N/A": 2835,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "repaired_reference_counts": {
+        "IDENTICAL": 2349,
+        "N/A": 2835
+      },
+      "repaired_reference_failures": [],
+      "elapsed_s": 679.81,
+      "report_sha256": "5f3e9acb9b8c9040947ba9eb0a0e0939725061bac44b2d112e3ce876421592a5"
+    },
+    "amd": {
+      "execution": {
+        "completed_cells": 576,
+        "interrupted": null,
+        "mode": "fresh-process-per-cell",
+        "timeout_s": 120.0,
+        "total_cells": 576
+      },
+      "original_exit": 1,
+      "original_counts": {
+        "DIVERGENT": 1336,
+        "IDENTICAL": 1013,
+        "N/A": 2835,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "repaired_reference_counts": {
+        "IDENTICAL": 2349,
+        "N/A": 2835
+      },
+      "repaired_reference_failures": [],
+      "elapsed_s": 415.41,
+      "report_sha256": "ea9ea4fd4b64253132f99b6935d6773fecf451bdcb2d27cfc19a509c96b724e3"
+    }
+  },
+  "fresh_checks": {
+    "apple": {
+      "verdict": "VERIFIED",
+      "exit": 0,
+      "execution": {
+        "completed_cells": 64,
+        "interrupted": null,
+        "mode": "fresh-process-per-cell",
+        "timeout_s": 120.0,
+        "total_cells": 64
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 191,
+        "N/A": 129,
+        "OWED": 0,
+        "REFUSED": 0
+      }
+    },
+    "nvidia": {
+      "verdict": "VERIFIED",
+      "exit": 0,
+      "execution": {
+        "completed_cells": 64,
+        "interrupted": null,
+        "mode": "fresh-process-per-cell",
+        "timeout_s": 120.0,
+        "total_cells": 64
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 191,
+        "N/A": 129,
+        "OWED": 0,
+        "REFUSED": 0
+      }
+    },
+    "amd": {
+      "verdict": "VERIFIED",
+      "exit": 0,
+      "execution": {
+        "completed_cells": 64,
+        "interrupted": null,
+        "mode": "fresh-process-per-cell",
+        "timeout_s": 120.0,
+        "total_cells": 64
+      },
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 191,
+        "N/A": 129,
+        "OWED": 0,
+        "REFUSED": 0
+      }
+    }
+  },
+  "radius_cross_check": {
+    "apple": {
+      "lanes": 4,
+      "fixtures": 9,
+      "compared_parts": 72,
+      "agree": 72,
+      "differ": 0,
+      "skipped_cases": 0
+    },
+    "nvidia": {
+      "lanes": 4,
+      "fixtures": 9,
+      "compared_parts": 72,
+      "agree": 72,
+      "differ": 0,
+      "skipped_cases": 0
+    },
+    "amd": {
+      "lanes": 4,
+      "fixtures": 9,
+      "compared_parts": 72,
+      "agree": 72,
+      "differ": 0,
+      "skipped_cases": 0
+    }
+  },
+  "reference_builder": {
+    "records": 112,
+    "cells": 4563,
+    "parts": 40509,
+    "removed_parts": 0,
+    "added_parts": 3843,
+    "ptx_divergent": 0,
+    "conflicts": 0,
+    "removed_by_lane": {},
+    "ptx_by_lane": {}
+  },
+  "tests": {
+    "reference_admission_and_roles": {
+      "passed": 103,
+      "log": "bench/results/verify_repairs/20261012/reference-regression-final-tests.log"
+    },
+    "fixture_and_report_evidence": {
+      "passed": 13,
+      "log": "bench/results/verify_repairs/20261012/fixture-reference-tests.log"
+    },
+    "radius_roundtrip": {
+      "passed": 5,
+      "log": "bench/results/verify_repairs/20261012/radius-roundtrip-test.log"
+    },
+    "dart_lifetime": {
+      "passed": 1,
+      "log": "bench/results/verify_repairs/20261012/dart-lifetime-test.log"
+    }
+  },
+  "rentals": {
+    "runpod": {
+      "id": "3q39n7b8tvbyf3",
+      "phase": "terminated",
+      "cost_per_hour": 0.89,
+      "created_at": 1791858528.518924,
+      "captured_at": 1791860022.29806,
+      "capture_sha256": "21a734d5416a43349b7dc1780659619c38d3dbde75f0b2522a675cad8881d0a6",
+      "terminated_at": 1791860091.277601,
+      "estimated_compute_cost_usd": 0.38634867292642594,
+      "retained_archive": "bench/results/verify_repairs/20261012/runpod/capture.tar.gz"
+    },
+    "do": {
+      "id": 608570916,
+      "phase": "terminated",
+      "cost_per_hour": 3.8,
+      "created_at": 1791858529.6736488,
+      "captured_at": 1791860008.7107022,
+      "capture_sha256": "38f74958ff819274d005d64c801f57d1fdc40fc0e87578e051c13fc0c2a62058",
+      "terminated_at": 1791860103.391264,
+      "estimated_compute_cost_usd": 1.661146371523539,
+      "retained_archive": "bench/results/verify_repairs/20261012/do/capture.tar.gz"
+    }
+  },
+  "limitations": [
+    "This is a source repair and a patched installation check; PyPI 0.8.42 itself is unchanged.",
+    "The 3,456-cell routine run was reused with fresh execution of the eight affected lanes; it was not repeated in full.",
+    "Neural full runs used one fit per cell, all nine fixtures and all nine properties; additional live checks used the base fixture.",
+    "No claim is made for hardware or routes not exercised in these runs."
+  ]
+}

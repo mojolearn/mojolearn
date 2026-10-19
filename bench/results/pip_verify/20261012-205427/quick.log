@@ -1,0 +1,142 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: metal (apple), 32 lanes x 1 fixtures, harness wheel copy, table /private/tmp/mojolearn-pip-verify-sWrlqV/venv/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
+# incremental evidence: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/quick.json.cells.jsonl; progress: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/quick.json.progress.json
+# comparator self-test preflight (fresh process)
+  [1/32] rf-clf/base
+    0.7s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [2/32] et-clf/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [3/32] gbdt-symmetric/base
+    0.9s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [4/32] kmeans/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [5/32] dbscan/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [6/32] lasso/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [7/32] svc/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [8/32] spectral/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [9/32] holtwinters/base
+    0.4s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [10/32] gemm-pinned/base
+    0.3s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [11/32] arima/base
+    0.4s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [12/32] gp/base
+    0.4s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [13/32] standard-scaler/base
+    0.4s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [14/32] byte-lm-host-infer/base
+    0.7s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [15/32] saved-model-host-infer/base
+    1.1s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [16/32] tokenizer/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [17/32] hf-causal-lm/base
+    0.8s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [18/32] cross-val-folds/base
+    0.4s: verified 1 of 5 cell parts (0 divergent, 0 owed, 0 refused, 4 n/a)
+  [19/32] kernel-ridge/base
+    0.4s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [20/32] gmm/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [21/32] hdbscan/base
+    0.6s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [22/32] bootstrap/base
+    1.1s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [23/32] ivf/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [24/32] x-ann-ivf-pq/base
+    0.4s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [25/32] x-cluster-minibatch-kmeans/base
+    0.6s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [26/32] x-decomp-ipca/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [27/32] x-sgd-clf/base
+    0.4s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [28/32] x-metrics-classification/base
+    0.7s: verified 1 of 5 cell parts (0 divergent, 0 owed, 0 refused, 4 n/a)
+  [29/32] x-neighbors-lof/base
+    0.5s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [30/32] x-prep-robust-scaler/base
+    0.4s: verified 3 of 5 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [31/32] sequence-autoarima/base
+    0.7s: verified 2 of 5 cell parts (0 divergent, 0 owed, 0 refused, 3 n/a)
+  [32/32] trees-dt-clf/base
+    0.5s: verified 4 of 5 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+# cross-check batch: base, lanes 1-11 of 11
+# cross-check (default): 11 of 108 intersection lanes x 1 fixture(s)
+  arima                      base     batch=agree infer=agree        0.41s
+  embedding                  base     batch=agree infer=agree        0.16s
+  gmm                        base     batch=agree infer=agree        0.37s
+  gp                         base     batch=agree infer=agree        0.23s
+  hdbscan                    base     batch=agree infer=agree        0.61s
+  ivf                        base     batch=agree infer=agree        0.29s
+  knn                        base     batch=agree infer=agree        0.30s
+  ols                        base     batch=agree infer=agree        0.20s
+  rf-clf                     base     batch=agree infer=agree        0.51s
+  svc                        base     batch=agree infer=agree        0.32s
+  umap                       base     batch=agree infer=agree        1.11s
+# python -m mojolearn verify --all
+# mojolearn 0.8.42  commit 0db362a62516faef0a52b112e93f7cba5e212a2b (wheel COMMIT witness)
+# mode identical  vendor metal (class apple)  device Apple M4 / Mac16,12
+# cpu Apple M4  macOS-26.5.2-arm64-arm-64bit-Mach-O  python 3.14.6  numpy 2.5.4
+# reference table /private/tmp/mojolearn-pip-verify-sWrlqV/venv/lib/python3.14/site-packages/mojolearn/verify_reference/table.json (sha256 ebb6008648977155, 271 records)
+# depth quick: 32 lanes x 1 fixtures, 1 repeat(s), 58 portable model(s)
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| rf              |     1 |         4 |         0 |    0 |       0 |   1 |
+| trees           |     1 |         4 |         0 |    0 |       0 |   1 |
+| gbdt            |     1 |         4 |         0 |    0 |       0 |   1 |
+| core            |     1 |         4 |         0 |    0 |       0 |   1 |
+| estimators      |     1 |         4 |         0 |    0 |       0 |   1 |
+| solver          |     1 |         4 |         0 |    0 |       0 |   1 |
+| svm             |     1 |         4 |         0 |    0 |       0 |   1 |
+| metrics         |     1 |         4 |         0 |    0 |       0 |   1 |
+| tsa             |     1 |         4 |         0 |    0 |       0 |   1 |
+| linalg          |     1 |         2 |         0 |    0 |       0 |   3 |
+| arima           |     1 |         4 |         0 |    0 |       0 |   1 |
+| gp              |     1 |         4 |         0 |    0 |       0 |   1 |
+| preprocessing   |     1 |         4 |         0 |    0 |       0 |   1 |
+| byte_lm         |     1 |         3 |         0 |    0 |       0 |   2 |
+| forest          |     1 |         3 |         0 |    0 |       0 |   2 |
+| tokenizer       |     1 |         3 |         0 |    0 |       0 |   2 |
+| neural          |     1 |         3 |         0 |    0 |       0 |   2 |
+| other           |     1 |         1 |         0 |    0 |       0 |   4 |
+| kernel_methods  |     1 |         4 |         0 |    0 |       0 |   1 |
+| mixture         |     1 |         4 |         0 |    0 |       0 |   1 |
+| hdbscan         |     1 |         4 |         0 |    0 |       0 |   1 |
+| resample        |     1 |         2 |         0 |    0 |       0 |   3 |
+| ivf             |     1 |         4 |         0 |    0 |       0 |   1 |
+| x_ann           |     1 |         4 |         0 |    0 |       0 |   1 |
+| x_cluster       |     1 |         3 |         0 |    0 |       0 |   2 |
+| x_decomp        |     1 |         3 |         0 |    0 |       0 |   2 |
+| x_linear        |     1 |         3 |         0 |    0 |       0 |   2 |
+| x_metrics       |     1 |         1 |         0 |    0 |       0 |   4 |
+| x_neighbors     |     1 |         3 |         0 |    0 |       0 |   2 |
+| x_prep          |     1 |         3 |         0 |    0 |       0 |   2 |
+| x_sequence      |     1 |         2 |         0 |    0 |       0 |   3 |
+| x_trees         |     1 |         4 |         0 |    0 |       0 |   1 |
+| portable models |    10 |       116 |         0 |    0 |       0 |   0 |
+| all             |    42 |       223 |         0 |    0 |       0 |  53 |
+
+LANE ACCOUNTING: 507 of 507 harness lanes accounted for; 32 VERIFIED, 475 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (416): agglomerative, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, bpe-trainer, ... 410 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establish physical multi-device identity. Default verification skips execution; --lanes selects a local diagnostic explicitly. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 32 lanes, 32 VERIFIED, 0 not applicable, 0 not checked
+
+Batch invariance: IDENTICAL=88, DIVERGENT=0, OWED=0, REFUSED=0, N/A=2
+Profile: routine — classical training and inference, plus bundled saved-model inference; neural training excluded.
+Neural training excluded (68 lanes): byte-lm, byte-lm-host-train, byte-lm-resident, cross-entropy-arms, embedding, embedding-sort, grad-accumulation, mamba1, mamba1-bf16w, mamba1-decode-session, mamba1-int8w, mamba2, mamba2-bf16w, mamba2-dtlimit, mamba2-int8w, mamba3, mamba3-bf16w, mamba3-int8w, mlp, mlp-bf16w, mlp-int8w, optim-adam-clip, optim-maximize, optim-sgd, ordered-gradient-sum, par-causal-lm, par-mlp, par-samba, par-samba-clip, samba, samba-bf16w, samba-int8w, samba-untied-dropout-accum, sequence-adafactor, sequence-adagrad, sequence-adamax, sequence-gru, sequence-lamb, sequence-layernorm, sequence-lion, sequence-lr-schedulers, sequence-lstm, sequence-mlp, sequence-moe, sequence-nadam, sequence-rmsprop, sequence-rnn, training-primitives, transformer, transformer-bf16w, transformer-decode-session, transformer-int8w, transformer-window, x-cnn-batchnorm, x-cnn-bn-options, x-cnn-conv-options, x-cnn-conv1d, x-cnn-conv2d, x-cnn-dropout2d, x-cnn-gcn, x-cnn-globalpool, x-cnn-gnn-options, x-cnn-pool, x-cnn-pool-options, x-cnn-resnet-block, x-cnn-sage, x-cnn-trainer, x-cnn-trainer-options
+Run explicitly: python -m mojolearn verify --neural-training
+GPU/CPU inference: 22 agreeing parts, 0 differences; complete=True.
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: VERIFIED (verified 223 of 276 cell parts (0 divergent, 0 owed, 0 refused, 53 n/a); 32 verified, 0 not applicable, 0 owed, 0 held, of 32 lanes). 26.4s. exit 0
+# evidence written to /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/pip_verify/20261012-205427/quick.json

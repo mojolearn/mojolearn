@@ -1,0 +1,7 @@
+IDCOLUMN bench/results/identity_break/2026-10-12-verify-repairs/apple/neural.from-verify.json admissible=yes class=apple vendor=apple commit=0db362a62516 repeats=1 lanes=64 cells=576 [STABLE=576]
+IDCOLUMN bench/results/identity_break/2026-10-12-verify-repairs/apple/routine.from-verify.json admissible=yes class=apple vendor=apple commit=0db362a62516 repeats=1 lanes=384 cells=3456 [STABLE=3456]
+IDCOLUMN bench/results/identity_break/2026-10-12-verify-repairs/nvidia/neural.from-verify.json admissible=yes class=nvidia vendor=nvidia commit=0db362a62516 repeats=1 lanes=64 cells=576 [STABLE=576]
+IDCOLUMN bench/results/identity_break/2026-10-12-verify-repairs/amd/neural.from-verify.json admissible=yes class=amd vendor=amd commit=0db362a62516 repeats=1 lanes=64 cells=576 [STABLE=576]
+IDCOLUMN bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired.identical.json admissible=yes class=amd vendor=amd-mi325x-gfx942 commit=87e6005eaad0 repeats=1 lanes=8 cells=72 [STABLE=72]
+IDCOLUMN bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired.identical.json admissible=yes class=apple vendor=apple-m4 commit=87e6005eaad0 repeats=1 lanes=8 cells=72 [STABLE=72]
+IDCOLUMN bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired.identical.json admissible=yes class=nvidia vendor=nvidia-rtx4090-sm_89 commit=87e6005eaad0 repeats=1 lanes=8 cells=72 [STABLE=72]

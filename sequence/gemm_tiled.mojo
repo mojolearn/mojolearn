@@ -438,7 +438,11 @@ comptime GR_TILE16 = 5
 # Slab page (64 x 33 + 32 x 65) x 4 B = 16.8 KB (< the 32 KB limit).
 # -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF (or MOJOLEARN_IDN_ALL_OFF): the 16 x 16
 # tile for every product with both edges >= 8 (arm A).
-comptime GT_MICRO = not (
+# DEFAULT OFF since 2026-10-19 (orchestrator): the 64x64 micro-tile lost on both vendors on the HIGGS MLP, one run per arm
+# (NVIDIA L40S 0.1735 -> 0.1954 s with it, AMD MI325X 0.336 -> 0.362; average 1.11x), same bits (8f410a4ae2d620af). Its target
+# shapes (square products with edges >= 64 at the opbench sizes) were never timed with it on; -D MOJOLEARN_IDN_SEQ_GEMM_MICRO
+# opts in for that A/B. MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF / IDN_ALL_OFF still force it off.
+comptime GT_MICRO = is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO"]() and not (
     is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime GT_MICRO_EDGE = 64

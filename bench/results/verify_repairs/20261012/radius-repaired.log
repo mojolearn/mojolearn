@@ -1,0 +1,145 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# cross-check (all): 4 of 108 intersection lanes x 9 fixture(s)
+# cross-check batch: base, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     base     batch=agree infer=agree        1.43s
+  radius-chebyshev           base     batch=agree infer=agree        0.38s
+  radius-manhattan           base     batch=agree infer=agree        0.37s
+  radius-minkowski-p3        base     batch=agree infer=agree        0.46s
+# cross-check batch: ties, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     ties     batch=agree infer=agree        0.43s
+  radius-chebyshev           ties     batch=agree infer=agree        0.33s
+  radius-manhattan           ties     batch=agree infer=agree        0.39s
+  radius-minkowski-p3        ties     batch=agree infer=agree        0.42s
+# cross-check batch: hashed, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     hashed   batch=agree infer=agree        0.46s
+  radius-chebyshev           hashed   batch=agree infer=agree        0.43s
+  radius-manhattan           hashed   batch=agree infer=agree        0.42s
+  radius-minkowski-p3        hashed   batch=agree infer=agree        0.47s
+# cross-check batch: wide, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     wide     batch=agree infer=agree        0.39s
+  radius-chebyshev           wide     batch=agree infer=agree        0.32s
+  radius-manhattan           wide     batch=agree infer=agree        0.32s
+  radius-minkowski-p3        wide     batch=agree infer=agree        0.50s
+# cross-check batch: denormal, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     denormal batch=agree infer=agree        0.43s
+  radius-chebyshev           denormal batch=agree infer=agree        0.38s
+  radius-manhattan           denormal batch=agree infer=agree        0.38s
+  radius-minkowski-p3        denormal batch=agree infer=agree        0.47s
+# cross-check batch: denormal_ftz, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     denormal_ftz batch=agree infer=agree        0.48s
+  radius-chebyshev           denormal_ftz batch=agree infer=agree        0.39s
+  radius-manhattan           denormal_ftz batch=agree infer=agree        0.38s
+  radius-minkowski-p3        denormal_ftz batch=agree infer=agree        0.48s
+# cross-check batch: dupes, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     dupes    batch=agree infer=agree        0.41s
+  radius-chebyshev           dupes    batch=agree infer=agree        0.37s
+  radius-manhattan           dupes    batch=agree infer=agree        0.38s
+  radius-minkowski-p3        dupes    batch=agree infer=agree        0.47s
+# cross-check batch: odd, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     odd      batch=agree infer=agree        0.41s
+  radius-chebyshev           odd      batch=agree infer=agree        0.39s
+  radius-manhattan           odd      batch=agree infer=agree        0.37s
+  radius-minkowski-p3        odd      batch=agree infer=agree        0.49s
+# cross-check batch: negative, lanes 1-4 of 4
+# cross-check (default): 4 of 108 intersection lanes x 1 fixture(s)
+  radius                     negative batch=agree infer=agree        0.41s
+  radius-chebyshev           negative batch=agree infer=agree        0.34s
+  radius-manhattan           negative batch=agree infer=agree        0.37s
+  radius-minkowski-p3        negative batch=agree infer=agree        0.48s
+# python -m mojolearn verify --cross-check
+
+Fitted each lane ONCE on this machine's GPU (metal), then asked the same
+fitted model for the same held-out answer twice: from the GPU estimator, and from
+the saved model reloaded through the CPU host binding. Same digest both times.
+
+`infer` is cross-vendor identity: same input, different hardware, same bits.
+`batch` is batch invariance: same row, different batch neighbours, same bits --
+a different axis, and the one that bites a serving system batching dynamically.
+
+Scope: custom; 4 of 108 eligible lanes, 9 of 9 fixtures.
+
+  radius                     base     batch  gpu=82dc025f5d11958f  cpu=82dc025f5d11958f  agree
+  radius                     base     infer  gpu=3eb3a2ab621fbb97  cpu=3eb3a2ab621fbb97  agree
+  radius-chebyshev           base     batch  gpu=49212cdc3335248f  cpu=49212cdc3335248f  agree
+  radius-chebyshev           base     infer  gpu=47f179252c05327e  cpu=47f179252c05327e  agree
+  radius-manhattan           base     batch  gpu=2b54e52e49b2b3c9  cpu=2b54e52e49b2b3c9  agree
+  radius-manhattan           base     infer  gpu=51e361a7911b9eb7  cpu=51e361a7911b9eb7  agree
+  radius-minkowski-p3        base     batch  gpu=84477c7df1b3807f  cpu=84477c7df1b3807f  agree
+  radius-minkowski-p3        base     infer  gpu=2d41cf8a43dd0a2c  cpu=2d41cf8a43dd0a2c  agree
+  radius                     ties     batch  gpu=92534521f997d952  cpu=92534521f997d952  agree
+  radius                     ties     infer  gpu=5f3eec45e2afb437  cpu=5f3eec45e2afb437  agree
+  radius-chebyshev           ties     batch  gpu=5f798a0fb8253a07  cpu=5f798a0fb8253a07  agree
+  radius-chebyshev           ties     infer  gpu=7b5a2419abc8f304  cpu=7b5a2419abc8f304  agree
+  radius-manhattan           ties     batch  gpu=e7b7266b64bcfa5a  cpu=e7b7266b64bcfa5a  agree
+  radius-manhattan           ties     infer  gpu=c641c75dd063a967  cpu=c641c75dd063a967  agree
+  radius-minkowski-p3        ties     batch  gpu=bef0bf1314b15764  cpu=bef0bf1314b15764  agree
+  radius-minkowski-p3        ties     infer  gpu=e5a4d7644387eab9  cpu=e5a4d7644387eab9  agree
+  radius                     hashed   batch  gpu=61666507b6f28324  cpu=61666507b6f28324  agree
+  radius                     hashed   infer  gpu=362bee6da9e01a6a  cpu=362bee6da9e01a6a  agree
+  radius-chebyshev           hashed   batch  gpu=d45dd9c711c40e9e  cpu=d45dd9c711c40e9e  agree
+  radius-chebyshev           hashed   infer  gpu=6f0dd5e75ecfd9e4  cpu=6f0dd5e75ecfd9e4  agree
+  radius-manhattan           hashed   batch  gpu=819c03be5fab9500  cpu=819c03be5fab9500  agree
+  radius-manhattan           hashed   infer  gpu=80d08244b239ac42  cpu=80d08244b239ac42  agree
+  radius-minkowski-p3        hashed   batch  gpu=b0b5f135ed972f45  cpu=b0b5f135ed972f45  agree
+  radius-minkowski-p3        hashed   infer  gpu=00c1a2ba4f724cc8  cpu=00c1a2ba4f724cc8  agree
+  radius                     wide     batch  gpu=512219b638664e57  cpu=512219b638664e57  agree
+  radius                     wide     infer  gpu=2561486a5ba9ea00  cpu=2561486a5ba9ea00  agree
+  radius-chebyshev           wide     batch  gpu=d4f14c8e7f4394ad  cpu=d4f14c8e7f4394ad  agree
+  radius-chebyshev           wide     infer  gpu=abcd9366c6e9697a  cpu=abcd9366c6e9697a  agree
+  radius-manhattan           wide     batch  gpu=3c074b0ddf67d9e5  cpu=3c074b0ddf67d9e5  agree
+  radius-manhattan           wide     infer  gpu=f5b2dde4c595864e  cpu=f5b2dde4c595864e  agree
+  radius-minkowski-p3        wide     batch  gpu=161e485ace70e983  cpu=161e485ace70e983  agree
+  radius-minkowski-p3        wide     infer  gpu=839efe755774007f  cpu=839efe755774007f  agree
+  radius                     denormal batch  gpu=077d53f576613c46  cpu=077d53f576613c46  agree
+  radius                     denormal infer  gpu=0d8e5847c0de67f1  cpu=0d8e5847c0de67f1  agree
+  radius-chebyshev           denormal batch  gpu=87eeb1e332711a36  cpu=87eeb1e332711a36  agree
+  radius-chebyshev           denormal infer  gpu=32fdf6cafa080fdd  cpu=32fdf6cafa080fdd  agree
+  radius-manhattan           denormal batch  gpu=4bb3a9fa1f0a054c  cpu=4bb3a9fa1f0a054c  agree
+  radius-manhattan           denormal infer  gpu=d467cf36242844c9  cpu=d467cf36242844c9  agree
+  radius-minkowski-p3        denormal batch  gpu=841ca0e2de306f70  cpu=841ca0e2de306f70  agree
+  radius-minkowski-p3        denormal infer  gpu=a50411d34da25d30  cpu=a50411d34da25d30  agree
+  radius                     denormal_ftz batch  gpu=077d53f576613c46  cpu=077d53f576613c46  agree
+  radius                     denormal_ftz infer  gpu=0d8e5847c0de67f1  cpu=0d8e5847c0de67f1  agree
+  radius-chebyshev           denormal_ftz batch  gpu=87eeb1e332711a36  cpu=87eeb1e332711a36  agree
+  radius-chebyshev           denormal_ftz infer  gpu=32fdf6cafa080fdd  cpu=32fdf6cafa080fdd  agree
+  radius-manhattan           denormal_ftz batch  gpu=4bb3a9fa1f0a054c  cpu=4bb3a9fa1f0a054c  agree
+  radius-manhattan           denormal_ftz infer  gpu=d467cf36242844c9  cpu=d467cf36242844c9  agree
+  radius-minkowski-p3        denormal_ftz batch  gpu=841ca0e2de306f70  cpu=841ca0e2de306f70  agree
+  radius-minkowski-p3        denormal_ftz infer  gpu=a50411d34da25d30  cpu=a50411d34da25d30  agree
+  radius                     dupes    batch  gpu=4d7333803753c329  cpu=4d7333803753c329  agree
+  radius                     dupes    infer  gpu=469e7731aa72a0fd  cpu=469e7731aa72a0fd  agree
+  radius-chebyshev           dupes    batch  gpu=d12572b1d2b4c056  cpu=d12572b1d2b4c056  agree
+  radius-chebyshev           dupes    infer  gpu=4f42e54d861fc686  cpu=4f42e54d861fc686  agree
+  radius-manhattan           dupes    batch  gpu=d8ac4219b67b2a4c  cpu=d8ac4219b67b2a4c  agree
+  radius-manhattan           dupes    infer  gpu=b3ebfcda94a96aa3  cpu=b3ebfcda94a96aa3  agree
+  radius-minkowski-p3        dupes    batch  gpu=d0aca4463baeb5ad  cpu=d0aca4463baeb5ad  agree
+  radius-minkowski-p3        dupes    infer  gpu=6853e189dcd43a88  cpu=6853e189dcd43a88  agree
+  radius                     odd      batch  gpu=a47b832ad72fd8ef  cpu=a47b832ad72fd8ef  agree
+  radius                     odd      infer  gpu=ef0450b6bc48f488  cpu=ef0450b6bc48f488  agree
+  radius-chebyshev           odd      batch  gpu=8cd116af9f03e67c  cpu=8cd116af9f03e67c  agree
+  radius-chebyshev           odd      infer  gpu=43e568967a392b5e  cpu=43e568967a392b5e  agree
+  radius-manhattan           odd      batch  gpu=84928b8dd182e647  cpu=84928b8dd182e647  agree
+  radius-manhattan           odd      infer  gpu=b28b2b565e51540d  cpu=b28b2b565e51540d  agree
+  radius-minkowski-p3        odd      batch  gpu=135d2d40bc054f26  cpu=135d2d40bc054f26  agree
+  radius-minkowski-p3        odd      infer  gpu=d844548968cd9cdd  cpu=d844548968cd9cdd  agree
+  radius                     negative batch  gpu=232527c96d938269  cpu=232527c96d938269  agree
+  radius                     negative infer  gpu=9a8506316edc0a0a  cpu=9a8506316edc0a0a  agree
+  radius-chebyshev           negative batch  gpu=b10293002d0f345a  cpu=b10293002d0f345a  agree
+  radius-chebyshev           negative infer  gpu=67e8e395dc4ee1ba  cpu=67e8e395dc4ee1ba  agree
+  radius-manhattan           negative batch  gpu=60115615ac598373  cpu=60115615ac598373  agree
+  radius-manhattan           negative infer  gpu=d7960118855980db  cpu=d7960118855980db  agree
+  radius-minkowski-p3        negative batch  gpu=9cbfcf1f2ab62a1e  cpu=9cbfcf1f2ab62a1e  agree
+  radius-minkowski-p3        negative infer  gpu=89ddc1bb6f4ad18c  cpu=89ddc1bb6f4ad18c  agree
+
+RESULT: YOUR GPU AND YOUR CPU AGREE on 72 of 72 compared cell parts,
+across 4 of 4 lanes and 9 fixture(s), in 17.7s.
+You generated both sides on two different pieces of hardware in this machine,
+so this result depends on trusting nobody: not our recorded columns, not us.

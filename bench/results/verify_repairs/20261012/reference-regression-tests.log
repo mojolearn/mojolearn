@@ -1,0 +1,65 @@
+........................F............................................... [ 69%]
+...............................                                          [100%]
+=================================== FAILURES ===================================
+_ test_documented_metal_incident_is_quarantined_without_hiding_clean_gp_records _
+
+    def test_documented_metal_incident_is_quarantined_without_hiding_clean_gp_records():
+        import json
+        from pathlib import Path
+        incident = Path(__file__).resolve().parents[3] / RECORDS / "2026-09-15_gp-sample-y" / "metal-transient"
+        for path in incident.glob("*.json"):
+            column = json.loads(path.read_text())
+            assert "quarantined Metal incident" in vref.admit(column, str(path))
+>       assert (incident / "apple-m4.merged-rerun1.json").is_file()
+E       AssertionError: assert False
+E        +  where False = is_file()
+E        +    where is_file = (PosixPath('/private/bench/results/identity_break/2026-09-15_gp-sample-y/metal-transient') / 'apple-m4.merged-rerun1.json').is_file
+
+/tmp/mojolearn-pip-verify-sWrlqV/repair-tests/test_verify_reference_admit.py:158: AssertionError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _SambaResidentSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteParallelTrainer has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteOffloadedReplay has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteModelPool has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba1DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba2DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3ForwardTape has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3PrefillSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerForwardTape has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerDecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _CausalLMSession has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../../tmp/mojolearn-pip-verify-sWrlqV/repair-tests/test_verify_reference_admit.py::test_documented_metal_incident_is_quarantined_without_hiding_clean_gp_records
+1 failed, 102 passed, 14 warnings in 0.47s

@@ -1,0 +1,5 @@
+apple routine adapter_exit 0
+apple neural adapter_exit 0
+nvidia neural adapter_exit 0
+amd neural adapter_exit 0
+RECORDS_READY /Users/andrewhendel/mojolearn-wt/verify-neural-20261012/bench/results/identity_break/2026-10-12-verify-repairs

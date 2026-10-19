@@ -1,0 +1,1 @@
+/root/ml-verify/job.sh: line 17: nvidia-smi: command not found

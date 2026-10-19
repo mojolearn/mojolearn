@@ -1,0 +1,11 @@
+{
+  "records": 112,
+  "cells": 4563,
+  "parts": 40509,
+  "removed_parts": 0,
+  "added_parts": 3843,
+  "ptx_divergent": 0,
+  "conflicts": 0,
+  "removed_by_lane": {},
+  "ptx_by_lane": {}
+}

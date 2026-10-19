@@ -1,0 +1,27 @@
+[fix/verify-neural-20261012 fa2fe4ff3] Refresh neural references from verified vendor evidence and separate Apple identity
+ 32 files changed, 214736 insertions(+), 19 deletions(-)
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/README.md
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/neural.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/neural.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/radius-cross-check.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired-column.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired-neural-base.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/repaired.identical.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/amd/validation.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/neural.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/neural.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired-neural-base.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired-quick.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/repaired.identical.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/routine.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/apple/routine.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/neural.from-verify.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/neural.from-verify.source-report.json.gz
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/radius-cross-check.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired-column.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired-neural-base.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/repaired.identical.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/nvidia/validation.exit
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/provenance.json
+ create mode 100644 bench/results/identity_break/2026-10-12-verify-repairs/summary.json
+ create mode 100644 tools/test_identity_verify_record.py

@@ -1,0 +1,19 @@
+{
+  "name": "mojolearn-verify-neural-runpod-20261013022848",
+  "imageName": "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+  "gpuTypeIds": [
+    "NVIDIA GeForce RTX 4090"
+  ],
+  "gpuCount": 1,
+  "cloudType": "SECURE",
+  "containerDiskInGb": 80,
+  "volumeInGb": 0,
+  "ports": [
+    "22/tcp"
+  ],
+  "supportPublicIp": true,
+  "interruptible": false,
+  "allowedCudaVersions": [
+    "13.0"
+  ]
+}

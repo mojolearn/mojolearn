@@ -1,0 +1,301 @@
+[
+  {
+    "lane": "linalg-eigh",
+    "fixture": "base",
+    "parts": [
+      {
+        "gram_w": "2fbed25d4a7eef90",
+        "gram_v": "ac5625ae7bd08335",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "2fbed25d4a7eef90",
+        "gram_v": "ac5625ae7bd08335",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "2fbed25d4a7eef90",
+      "gram_v": "ac5625ae7bd08335",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "ties",
+    "parts": [
+      {
+        "gram_w": "ec53bd416eba2950",
+        "gram_v": "6fb0f7769c4656e7",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "ec53bd416eba2950",
+        "gram_v": "6fb0f7769c4656e7",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "ec53bd416eba2950",
+      "gram_v": "6fb0f7769c4656e7",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "hashed",
+    "parts": [
+      {
+        "gram_w": "50f7007d6fc72ae0",
+        "gram_v": "abb3a5464f7faa3f",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "50f7007d6fc72ae0",
+        "gram_v": "abb3a5464f7faa3f",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "8f71c5e80856b104",
+      "gram_v": "6d251e096720fdfd",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [
+      "gram_w",
+      "gram_v"
+    ],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "wide",
+    "parts": [
+      {
+        "gram_w": "fcdecb1284608078",
+        "gram_v": "00c6a34aed8fe74b",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "fcdecb1284608078",
+        "gram_v": "00c6a34aed8fe74b",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "1bfa54c4891c5995",
+      "gram_v": "00c6a34aed8fe74b",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [
+      "gram_w"
+    ],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "denormal",
+    "parts": [
+      {
+        "gram_w": "fa99f733cfca0c8a",
+        "gram_v": "f108aee7574b4c4f",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "fa99f733cfca0c8a",
+        "gram_v": "f108aee7574b4c4f",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "fa99f733cfca0c8a",
+      "gram_v": "f108aee7574b4c4f",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "denormal_ftz",
+    "parts": [
+      {
+        "gram_w": "fa99f733cfca0c8a",
+        "gram_v": "f108aee7574b4c4f",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "fa99f733cfca0c8a",
+        "gram_v": "f108aee7574b4c4f",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "fa99f733cfca0c8a",
+      "gram_v": "f108aee7574b4c4f",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "dupes",
+    "parts": [
+      {
+        "gram_w": "2fbed25d4a7eef90",
+        "gram_v": "ac5625ae7bd08335",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "2fbed25d4a7eef90",
+        "gram_v": "ac5625ae7bd08335",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "2fbed25d4a7eef90",
+      "gram_v": "ac5625ae7bd08335",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "odd",
+    "parts": [
+      {
+        "gram_w": "955f3fb7f4e1e405",
+        "gram_v": "9443ab1c3f4a8025",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "955f3fb7f4e1e405",
+        "gram_v": "9443ab1c3f4a8025",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "468a56dfbdc5c88a",
+      "gram_v": "a746fd1e4f39c53b",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [
+      "gram_w",
+      "gram_v"
+    ],
+    "unstable_parts": []
+  },
+  {
+    "lane": "linalg-eigh",
+    "fixture": "negative",
+    "parts": [
+      {
+        "gram_w": "fe13675a6a21ebc8",
+        "gram_v": "705b57523ee23096",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      },
+      {
+        "gram_w": "fe13675a6a21ebc8",
+        "gram_v": "705b57523ee23096",
+        "repeated_w": "b1d6dbf8c13d72c6",
+        "repeated_v": "6eb39dd967bed15e",
+        "diagonal_w": "35820ac9f186a429",
+        "diagonal_v": "1451a5fb0ae89dd3"
+      }
+    ],
+    "reference": {
+      "gram_w": "9d41313623c7d69c",
+      "gram_v": "07c74f62b1ae17b9",
+      "repeated_w": "b1d6dbf8c13d72c6",
+      "repeated_v": "6eb39dd967bed15e",
+      "diagonal_w": "35820ac9f186a429",
+      "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    "changed_parts": [
+      "gram_w",
+      "gram_v"
+    ],
+    "unstable_parts": []
+  }
+]

@@ -1,0 +1,6 @@
+Requirement already satisfied: mojolearn==0.8.42 in ./venv/lib/python3.14/site-packages (from mojolearn[verify]==0.8.42) (0.8.42)
+Collecting numpy>=1.26.4 (from mojolearn[verify]==0.8.42)
+  Using cached numpy-2.5.4-cp314-cp314-macosx_14_0_arm64.whl.metadata (6.6 kB)
+Using cached numpy-2.5.4-cp314-cp314-macosx_14_0_arm64.whl (5.5 MB)
+Installing collected packages: numpy
+Successfully installed numpy-2.5.4

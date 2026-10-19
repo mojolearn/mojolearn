@@ -1,0 +1,5 @@
+Collecting mojolearn
+  Using cached mojolearn-0.8.42-py3-none-macosx_11_0_arm64.whl.metadata (16 kB)
+Using cached mojolearn-0.8.42-py3-none-macosx_11_0_arm64.whl (102.1 MB)
+Installing collected packages: mojolearn
+Successfully installed mojolearn-0.8.42

@@ -1,0 +1,29 @@
+{
+  "name": "mojolearn-verify-neural-runpod-20261013022848",
+  "provider": "runpod",
+  "created_at": 1791858528.518924,
+  "phase": "terminated",
+  "id": "3q39n7b8tvbyf3",
+  "cost_per_hour": 0.89,
+  "ssh": [
+    "-p",
+    "19860",
+    "-i",
+    "/Users/andrewhendel/.ssh/id_ed25519",
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=15",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=4",
+    "root@213.173.108.139"
+  ],
+  "job_pid": 152,
+  "capture_sha256": "21a734d5416a43349b7dc1780659619c38d3dbde75f0b2522a675cad8881d0a6",
+  "captured_at": 1791860022.29806,
+  "terminated_at": 1791860091.277601
+}

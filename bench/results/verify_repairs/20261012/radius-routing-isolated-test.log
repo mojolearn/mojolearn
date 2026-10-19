@@ -1,0 +1,76 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_radius_sort_helper_routes_only_to_the_host ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1129c1350>
+
+    def test_radius_sort_helper_routes_only_to_the_host(monkeypatch):
+        loaded = []
+        monkeypatch.setattr(_backend, 'load_host_module', lambda name: loaded.append(name) or name)
+        host = object.__new__(_classical_host.HostRadiusNeighbors)
+        host._bind('_mojolearn')
+>       host._bind('_mojolearn_x_neighbors')
+
+/tmp/mojolearn-pip-verify-sWrlqV/repair-tests/test_host_radius_bindings.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostRadiusNeighbors object at 0x1120d30e0>
+name = '_mojolearn_x_neighbors'
+
+    def _bind(self, name=None):
+        name = name or self._BINDING
+        if (name != self._BINDING and name not in self._HOST_AUX_BINDINGS) or name not in _HOST_BASENAMES:
+>           raise ImportError(
+                f"mojolearn: the host {type(self).__name__} serves "
+                f"{self._BINDING} only, not {name}"
+            )
+E           ImportError: mojolearn: the host HostRadiusNeighbors serves _mojolearn only, not _mojolearn_x_neighbors
+
+repair-venv/lib/python3.14/site-packages/mojolearn/_classical_host.py:143: ImportError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _SambaResidentSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteParallelTrainer has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteOffloadedReplay has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteModelPool has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba1DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba2DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3ForwardTape has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3PrefillSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerForwardTape has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerDecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _CausalLMSession has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ../../../tmp/mojolearn-pip-verify-sWrlqV/repair-tests/test_host_radius_bindings.py::test_radius_sort_helper_routes_only_to_the_host
+1 failed, 4 deselected, 14 warnings in 17.35s

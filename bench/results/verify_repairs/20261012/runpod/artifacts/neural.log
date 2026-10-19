@@ -1,0 +1,1275 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: cuda (nvidia), 64 lanes x 9 fixtures, harness wheel copy, table /root/ml-verify/venv/lib/python3.11/site-packages/mojolearn/verify_reference/table.json
+# incremental evidence: /root/ml-verify/artifacts/neural.json.cells.jsonl; progress: /root/ml-verify/artifacts/neural.json.progress.json
+# comparator self-test preflight (fresh process)
+  [1/576] mlp/base
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [2/576] mlp/ties
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [3/576] mlp/hashed
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [4/576] mlp/wide
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [5/576] mlp/denormal
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [6/576] mlp/denormal_ftz
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [7/576] mlp/dupes
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [8/576] mlp/odd
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [9/576] mlp/negative
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [10/576] byte-lm/base
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [11/576] byte-lm/ties
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [12/576] byte-lm/hashed
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [13/576] byte-lm/wide
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [14/576] byte-lm/denormal
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [15/576] byte-lm/denormal_ftz
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [16/576] byte-lm/dupes
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [17/576] byte-lm/odd
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [18/576] byte-lm/negative
+    1.7s: verified 7 of 9 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+  [19/576] byte-lm-host-train/base
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [20/576] byte-lm-host-train/ties
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [21/576] byte-lm-host-train/hashed
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [22/576] byte-lm-host-train/wide
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [23/576] byte-lm-host-train/denormal
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [24/576] byte-lm-host-train/denormal_ftz
+    1.3s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [25/576] byte-lm-host-train/dupes
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [26/576] byte-lm-host-train/odd
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [27/576] byte-lm-host-train/negative
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [28/576] mamba1/base
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [29/576] mamba1/ties
+    1.3s: verified 7 of 9 cell parts (1 divergent, 0 owed, 0 refused, 1 n/a)
+  [30/576] mamba1/hashed
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [31/576] mamba1/wide
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [32/576] mamba1/denormal
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [33/576] mamba1/denormal_ftz
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [34/576] mamba1/dupes
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [35/576] mamba1/odd
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [36/576] mamba1/negative
+    1.3s: verified 2 of 9 cell parts (6 divergent, 0 owed, 0 refused, 1 n/a)
+  [37/576] mamba2/base
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [38/576] mamba2/ties
+    1.8s: verified 3 of 9 cell parts (5 divergent, 0 owed, 0 refused, 1 n/a)
+  [39/576] mamba2/hashed
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [40/576] mamba2/wide
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [41/576] mamba2/denormal
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [42/576] mamba2/denormal_ftz
+    1.9s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [43/576] mamba2/dupes
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [44/576] mamba2/odd
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [45/576] mamba2/negative
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [46/576] mamba3/base
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [47/576] mamba3/ties
+    1.5s: verified 5 of 9 cell parts (3 divergent, 0 owed, 0 refused, 1 n/a)
+  [48/576] mamba3/hashed
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [49/576] mamba3/wide
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [50/576] mamba3/denormal
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [51/576] mamba3/denormal_ftz
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [52/576] mamba3/dupes
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [53/576] mamba3/odd
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [54/576] mamba3/negative
+    1.5s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [55/576] transformer/base
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [56/576] transformer/ties
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [57/576] transformer/hashed
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [58/576] transformer/wide
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [59/576] transformer/denormal
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [60/576] transformer/denormal_ftz
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [61/576] transformer/dupes
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [62/576] transformer/odd
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [63/576] transformer/negative
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [64/576] transformer-bf16w/base
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [65/576] transformer-bf16w/ties
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [66/576] transformer-bf16w/hashed
+    1.4s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [67/576] transformer-bf16w/wide
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [68/576] transformer-bf16w/denormal
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [69/576] transformer-bf16w/denormal_ftz
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [70/576] transformer-bf16w/dupes
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [71/576] transformer-bf16w/odd
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [72/576] transformer-bf16w/negative
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [73/576] transformer-int8w/base
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [74/576] transformer-int8w/ties
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [75/576] transformer-int8w/hashed
+    1.4s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [76/576] transformer-int8w/wide
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [77/576] transformer-int8w/denormal
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [78/576] transformer-int8w/denormal_ftz
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [79/576] transformer-int8w/dupes
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [80/576] transformer-int8w/odd
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [81/576] transformer-int8w/negative
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [82/576] mamba1-bf16w/base
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [83/576] mamba1-bf16w/ties
+    1.3s: verified 7 of 9 cell parts (1 divergent, 0 owed, 0 refused, 1 n/a)
+  [84/576] mamba1-bf16w/hashed
+    1.4s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [85/576] mamba1-bf16w/wide
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [86/576] mamba1-bf16w/denormal
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [87/576] mamba1-bf16w/denormal_ftz
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [88/576] mamba1-bf16w/dupes
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [89/576] mamba1-bf16w/odd
+    1.4s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [90/576] mamba1-bf16w/negative
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [91/576] mamba1-int8w/base
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [92/576] mamba1-int8w/ties
+    1.3s: verified 7 of 9 cell parts (1 divergent, 0 owed, 0 refused, 1 n/a)
+  [93/576] mamba1-int8w/hashed
+    1.4s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [94/576] mamba1-int8w/wide
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [95/576] mamba1-int8w/denormal
+    1.4s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [96/576] mamba1-int8w/denormal_ftz
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [97/576] mamba1-int8w/dupes
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [98/576] mamba1-int8w/odd
+    1.3s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [99/576] mamba1-int8w/negative
+    1.3s: verified 3 of 9 cell parts (5 divergent, 0 owed, 0 refused, 1 n/a)
+  [100/576] mamba2-bf16w/base
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [101/576] mamba2-bf16w/ties
+    1.8s: verified 3 of 9 cell parts (4 divergent, 0 owed, 0 refused, 2 n/a)
+  [102/576] mamba2-bf16w/hashed
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [103/576] mamba2-bf16w/wide
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [104/576] mamba2-bf16w/denormal
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [105/576] mamba2-bf16w/denormal_ftz
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [106/576] mamba2-bf16w/dupes
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [107/576] mamba2-bf16w/odd
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [108/576] mamba2-bf16w/negative
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [109/576] mamba2-int8w/base
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [110/576] mamba2-int8w/ties
+    1.9s: verified 3 of 9 cell parts (4 divergent, 0 owed, 0 refused, 2 n/a)
+  [111/576] mamba2-int8w/hashed
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [112/576] mamba2-int8w/wide
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [113/576] mamba2-int8w/denormal
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [114/576] mamba2-int8w/denormal_ftz
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [115/576] mamba2-int8w/dupes
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [116/576] mamba2-int8w/odd
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [117/576] mamba2-int8w/negative
+    1.8s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [118/576] mamba3-bf16w/base
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [119/576] mamba3-bf16w/ties
+    1.4s: verified 5 of 9 cell parts (2 divergent, 0 owed, 0 refused, 2 n/a)
+  [120/576] mamba3-bf16w/hashed
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [121/576] mamba3-bf16w/wide
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [122/576] mamba3-bf16w/denormal
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [123/576] mamba3-bf16w/denormal_ftz
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [124/576] mamba3-bf16w/dupes
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [125/576] mamba3-bf16w/odd
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [126/576] mamba3-bf16w/negative
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [127/576] mamba3-int8w/base
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [128/576] mamba3-int8w/ties
+    1.4s: verified 5 of 9 cell parts (2 divergent, 0 owed, 0 refused, 2 n/a)
+  [129/576] mamba3-int8w/hashed
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [130/576] mamba3-int8w/wide
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [131/576] mamba3-int8w/denormal
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [132/576] mamba3-int8w/denormal_ftz
+    1.5s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [133/576] mamba3-int8w/dupes
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [134/576] mamba3-int8w/odd
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [135/576] mamba3-int8w/negative
+    1.4s: verified 0 of 9 cell parts (7 divergent, 0 owed, 0 refused, 2 n/a)
+  [136/576] mlp-bf16w/base
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [137/576] mlp-bf16w/ties
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [138/576] mlp-bf16w/hashed
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [139/576] mlp-bf16w/wide
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [140/576] mlp-bf16w/denormal
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [141/576] mlp-bf16w/denormal_ftz
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [142/576] mlp-bf16w/dupes
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [143/576] mlp-bf16w/odd
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [144/576] mlp-bf16w/negative
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [145/576] mlp-int8w/base
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [146/576] mlp-int8w/ties
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [147/576] mlp-int8w/hashed
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [148/576] mlp-int8w/wide
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [149/576] mlp-int8w/denormal
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [150/576] mlp-int8w/denormal_ftz
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [151/576] mlp-int8w/dupes
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [152/576] mlp-int8w/odd
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [153/576] mlp-int8w/negative
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [154/576] samba-bf16w/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [155/576] samba-bf16w/ties
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [156/576] samba-bf16w/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [157/576] samba-bf16w/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [158/576] samba-bf16w/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [159/576] samba-bf16w/denormal_ftz
+    1.3s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [160/576] samba-bf16w/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [161/576] samba-bf16w/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [162/576] samba-bf16w/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [163/576] samba-int8w/base
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [164/576] samba-int8w/ties
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [165/576] samba-int8w/hashed
+    1.3s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [166/576] samba-int8w/wide
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [167/576] samba-int8w/denormal
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [168/576] samba-int8w/denormal_ftz
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [169/576] samba-int8w/dupes
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [170/576] samba-int8w/odd
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [171/576] samba-int8w/negative
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [172/576] samba/base
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [173/576] samba/ties
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [174/576] samba/hashed
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [175/576] samba/wide
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [176/576] samba/denormal
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [177/576] samba/denormal_ftz
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [178/576] samba/dupes
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [179/576] samba/odd
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [180/576] samba/negative
+    1.6s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [181/576] mamba2-dtlimit/base
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [182/576] mamba2-dtlimit/ties
+    1.9s: verified 2 of 9 cell parts (6 divergent, 0 owed, 0 refused, 1 n/a)
+  [183/576] mamba2-dtlimit/hashed
+    1.9s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [184/576] mamba2-dtlimit/wide
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [185/576] mamba2-dtlimit/denormal
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [186/576] mamba2-dtlimit/denormal_ftz
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [187/576] mamba2-dtlimit/dupes
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [188/576] mamba2-dtlimit/odd
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [189/576] mamba2-dtlimit/negative
+    1.8s: verified 0 of 9 cell parts (8 divergent, 0 owed, 0 refused, 1 n/a)
+  [190/576] transformer-window/base
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [191/576] transformer-window/ties
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [192/576] transformer-window/hashed
+    1.4s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [193/576] transformer-window/wide
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [194/576] transformer-window/denormal
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [195/576] transformer-window/denormal_ftz
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [196/576] transformer-window/dupes
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [197/576] transformer-window/odd
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [198/576] transformer-window/negative
+    1.3s: verified 8 of 9 cell parts (0 divergent, 0 owed, 0 refused, 1 n/a)
+  [199/576] byte-lm-resident/base
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [200/576] byte-lm-resident/ties
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [201/576] byte-lm-resident/hashed
+    1.6s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [202/576] byte-lm-resident/wide
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [203/576] byte-lm-resident/denormal
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [204/576] byte-lm-resident/denormal_ftz
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [205/576] byte-lm-resident/dupes
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [206/576] byte-lm-resident/odd
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [207/576] byte-lm-resident/negative
+    1.5s: verified 6 of 9 cell parts (1 divergent, 0 owed, 0 refused, 2 n/a)
+  [208/576] samba-untied-dropout-accum/base
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [209/576] samba-untied-dropout-accum/ties
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [210/576] samba-untied-dropout-accum/hashed
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [211/576] samba-untied-dropout-accum/wide
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [212/576] samba-untied-dropout-accum/denormal
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [213/576] samba-untied-dropout-accum/denormal_ftz
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [214/576] samba-untied-dropout-accum/dupes
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [215/576] samba-untied-dropout-accum/odd
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [216/576] samba-untied-dropout-accum/negative
+    1.7s: verified 0 of 9 cell parts (9 divergent, 0 owed, 0 refused, 0 n/a)
+  [217/576] optim-sgd/base
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [218/576] optim-sgd/ties
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [219/576] optim-sgd/hashed
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [220/576] optim-sgd/wide
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [221/576] optim-sgd/denormal
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [222/576] optim-sgd/denormal_ftz
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [223/576] optim-sgd/dupes
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [224/576] optim-sgd/odd
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [225/576] optim-sgd/negative
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [226/576] optim-adam-clip/base
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [227/576] optim-adam-clip/ties
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [228/576] optim-adam-clip/hashed
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [229/576] optim-adam-clip/wide
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [230/576] optim-adam-clip/denormal
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [231/576] optim-adam-clip/denormal_ftz
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [232/576] optim-adam-clip/dupes
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [233/576] optim-adam-clip/odd
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [234/576] optim-adam-clip/negative
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [235/576] optim-maximize/base
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [236/576] optim-maximize/ties
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [237/576] optim-maximize/hashed
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [238/576] optim-maximize/wide
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [239/576] optim-maximize/denormal
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [240/576] optim-maximize/denormal_ftz
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [241/576] optim-maximize/dupes
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [242/576] optim-maximize/odd
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [243/576] optim-maximize/negative
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [244/576] cross-entropy-arms/base
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [245/576] cross-entropy-arms/ties
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [246/576] cross-entropy-arms/hashed
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [247/576] cross-entropy-arms/wide
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [248/576] cross-entropy-arms/denormal
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [249/576] cross-entropy-arms/denormal_ftz
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [250/576] cross-entropy-arms/dupes
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [251/576] cross-entropy-arms/odd
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [252/576] cross-entropy-arms/negative
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [253/576] ordered-gradient-sum/base
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [254/576] ordered-gradient-sum/ties
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [255/576] ordered-gradient-sum/hashed
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [256/576] ordered-gradient-sum/wide
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [257/576] ordered-gradient-sum/denormal
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [258/576] ordered-gradient-sum/denormal_ftz
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [259/576] ordered-gradient-sum/dupes
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [260/576] ordered-gradient-sum/odd
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [261/576] ordered-gradient-sum/negative
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [262/576] grad-accumulation/base
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [263/576] grad-accumulation/ties
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [264/576] grad-accumulation/hashed
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [265/576] grad-accumulation/wide
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [266/576] grad-accumulation/denormal
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [267/576] grad-accumulation/denormal_ftz
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [268/576] grad-accumulation/dupes
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [269/576] grad-accumulation/odd
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [270/576] grad-accumulation/negative
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [271/576] training-primitives/base
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [272/576] training-primitives/ties
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [273/576] training-primitives/hashed
+    1.3s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [274/576] training-primitives/wide
+    1.3s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [275/576] training-primitives/denormal
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [276/576] training-primitives/denormal_ftz
+    1.3s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [277/576] training-primitives/dupes
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [278/576] training-primitives/odd
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [279/576] training-primitives/negative
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [280/576] embedding/base
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [281/576] embedding/ties
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [282/576] embedding/hashed
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [283/576] embedding/wide
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [284/576] embedding/denormal
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [285/576] embedding/denormal_ftz
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [286/576] embedding/dupes
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [287/576] embedding/odd
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [288/576] embedding/negative
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [289/576] embedding-sort/base
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [290/576] embedding-sort/ties
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [291/576] embedding-sort/hashed
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [292/576] embedding-sort/wide
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [293/576] embedding-sort/denormal
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [294/576] embedding-sort/denormal_ftz
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [295/576] embedding-sort/dupes
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [296/576] embedding-sort/odd
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [297/576] embedding-sort/negative
+    1.2s: verified 4 of 9 cell parts (0 divergent, 0 owed, 0 refused, 5 n/a)
+  [298/576] mamba1-decode-session/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [299/576] mamba1-decode-session/ties
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [300/576] mamba1-decode-session/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [301/576] mamba1-decode-session/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [302/576] mamba1-decode-session/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [303/576] mamba1-decode-session/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [304/576] mamba1-decode-session/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [305/576] mamba1-decode-session/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [306/576] mamba1-decode-session/negative
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [307/576] transformer-decode-session/base
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [308/576] transformer-decode-session/ties
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [309/576] transformer-decode-session/hashed
+    1.3s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [310/576] transformer-decode-session/wide
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [311/576] transformer-decode-session/denormal
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [312/576] transformer-decode-session/denormal_ftz
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [313/576] transformer-decode-session/dupes
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [314/576] transformer-decode-session/odd
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [315/576] transformer-decode-session/negative
+    1.2s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [316/576] x-cnn-conv2d/base
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [317/576] x-cnn-conv2d/ties
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [318/576] x-cnn-conv2d/hashed
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [319/576] x-cnn-conv2d/wide
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [320/576] x-cnn-conv2d/denormal
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [321/576] x-cnn-conv2d/denormal_ftz
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [322/576] x-cnn-conv2d/dupes
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [323/576] x-cnn-conv2d/odd
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [324/576] x-cnn-conv2d/negative
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [325/576] x-cnn-conv1d/base
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [326/576] x-cnn-conv1d/ties
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [327/576] x-cnn-conv1d/hashed
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [328/576] x-cnn-conv1d/wide
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [329/576] x-cnn-conv1d/denormal
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [330/576] x-cnn-conv1d/denormal_ftz
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [331/576] x-cnn-conv1d/dupes
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [332/576] x-cnn-conv1d/odd
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [333/576] x-cnn-conv1d/negative
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [334/576] x-cnn-pool/base
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [335/576] x-cnn-pool/ties
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [336/576] x-cnn-pool/hashed
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [337/576] x-cnn-pool/wide
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [338/576] x-cnn-pool/denormal
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [339/576] x-cnn-pool/denormal_ftz
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [340/576] x-cnn-pool/dupes
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [341/576] x-cnn-pool/odd
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [342/576] x-cnn-pool/negative
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [343/576] x-cnn-trainer/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [344/576] x-cnn-trainer/ties
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [345/576] x-cnn-trainer/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [346/576] x-cnn-trainer/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [347/576] x-cnn-trainer/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [348/576] x-cnn-trainer/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [349/576] x-cnn-trainer/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [350/576] x-cnn-trainer/odd
+    1.3s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [351/576] x-cnn-trainer/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [352/576] x-cnn-batchnorm/base
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [353/576] x-cnn-batchnorm/ties
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [354/576] x-cnn-batchnorm/hashed
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [355/576] x-cnn-batchnorm/wide
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [356/576] x-cnn-batchnorm/denormal
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [357/576] x-cnn-batchnorm/denormal_ftz
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [358/576] x-cnn-batchnorm/dupes
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [359/576] x-cnn-batchnorm/odd
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [360/576] x-cnn-batchnorm/negative
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [361/576] x-cnn-dropout2d/base
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [362/576] x-cnn-dropout2d/ties
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [363/576] x-cnn-dropout2d/hashed
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [364/576] x-cnn-dropout2d/wide
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [365/576] x-cnn-dropout2d/denormal
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [366/576] x-cnn-dropout2d/denormal_ftz
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [367/576] x-cnn-dropout2d/dupes
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [368/576] x-cnn-dropout2d/odd
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [369/576] x-cnn-dropout2d/negative
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [370/576] x-cnn-globalpool/base
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [371/576] x-cnn-globalpool/ties
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [372/576] x-cnn-globalpool/hashed
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [373/576] x-cnn-globalpool/wide
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [374/576] x-cnn-globalpool/denormal
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [375/576] x-cnn-globalpool/denormal_ftz
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [376/576] x-cnn-globalpool/dupes
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [377/576] x-cnn-globalpool/odd
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [378/576] x-cnn-globalpool/negative
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [379/576] x-cnn-resnet-block/base
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [380/576] x-cnn-resnet-block/ties
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [381/576] x-cnn-resnet-block/hashed
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [382/576] x-cnn-resnet-block/wide
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [383/576] x-cnn-resnet-block/denormal
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [384/576] x-cnn-resnet-block/denormal_ftz
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [385/576] x-cnn-resnet-block/dupes
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [386/576] x-cnn-resnet-block/odd
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [387/576] x-cnn-resnet-block/negative
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [388/576] x-cnn-gcn/base
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [389/576] x-cnn-gcn/ties
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [390/576] x-cnn-gcn/hashed
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [391/576] x-cnn-gcn/wide
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [392/576] x-cnn-gcn/denormal
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [393/576] x-cnn-gcn/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [394/576] x-cnn-gcn/dupes
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [395/576] x-cnn-gcn/odd
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [396/576] x-cnn-gcn/negative
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [397/576] x-cnn-sage/base
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [398/576] x-cnn-sage/ties
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [399/576] x-cnn-sage/hashed
+    1.3s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [400/576] x-cnn-sage/wide
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [401/576] x-cnn-sage/denormal
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [402/576] x-cnn-sage/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [403/576] x-cnn-sage/dupes
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [404/576] x-cnn-sage/odd
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [405/576] x-cnn-sage/negative
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [406/576] x-cnn-conv-options/base
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [407/576] x-cnn-conv-options/ties
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [408/576] x-cnn-conv-options/hashed
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [409/576] x-cnn-conv-options/wide
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [410/576] x-cnn-conv-options/denormal
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [411/576] x-cnn-conv-options/denormal_ftz
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [412/576] x-cnn-conv-options/dupes
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [413/576] x-cnn-conv-options/odd
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [414/576] x-cnn-conv-options/negative
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [415/576] x-cnn-pool-options/base
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [416/576] x-cnn-pool-options/ties
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [417/576] x-cnn-pool-options/hashed
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [418/576] x-cnn-pool-options/wide
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [419/576] x-cnn-pool-options/denormal
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [420/576] x-cnn-pool-options/denormal_ftz
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [421/576] x-cnn-pool-options/dupes
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [422/576] x-cnn-pool-options/odd
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [423/576] x-cnn-pool-options/negative
+    0.5s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [424/576] x-cnn-bn-options/base
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [425/576] x-cnn-bn-options/ties
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [426/576] x-cnn-bn-options/hashed
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [427/576] x-cnn-bn-options/wide
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [428/576] x-cnn-bn-options/denormal
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [429/576] x-cnn-bn-options/denormal_ftz
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [430/576] x-cnn-bn-options/dupes
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [431/576] x-cnn-bn-options/odd
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [432/576] x-cnn-bn-options/negative
+    0.5s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [433/576] x-cnn-gnn-options/base
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [434/576] x-cnn-gnn-options/ties
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [435/576] x-cnn-gnn-options/hashed
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [436/576] x-cnn-gnn-options/wide
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [437/576] x-cnn-gnn-options/denormal
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [438/576] x-cnn-gnn-options/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [439/576] x-cnn-gnn-options/dupes
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [440/576] x-cnn-gnn-options/odd
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [441/576] x-cnn-gnn-options/negative
+    1.2s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [442/576] x-cnn-trainer-options/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [443/576] x-cnn-trainer-options/ties
+    1.3s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [444/576] x-cnn-trainer-options/hashed
+    1.3s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [445/576] x-cnn-trainer-options/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [446/576] x-cnn-trainer-options/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [447/576] x-cnn-trainer-options/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [448/576] x-cnn-trainer-options/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [449/576] x-cnn-trainer-options/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [450/576] x-cnn-trainer-options/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [451/576] sequence-lstm/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [452/576] sequence-lstm/ties
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [453/576] sequence-lstm/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [454/576] sequence-lstm/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [455/576] sequence-lstm/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [456/576] sequence-lstm/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [457/576] sequence-lstm/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [458/576] sequence-lstm/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [459/576] sequence-lstm/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [460/576] sequence-gru/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [461/576] sequence-gru/ties
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [462/576] sequence-gru/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [463/576] sequence-gru/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [464/576] sequence-gru/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [465/576] sequence-gru/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [466/576] sequence-gru/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [467/576] sequence-gru/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [468/576] sequence-gru/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [469/576] sequence-rmsprop/base
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [470/576] sequence-rmsprop/ties
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [471/576] sequence-rmsprop/hashed
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [472/576] sequence-rmsprop/wide
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [473/576] sequence-rmsprop/denormal
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [474/576] sequence-rmsprop/denormal_ftz
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [475/576] sequence-rmsprop/dupes
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [476/576] sequence-rmsprop/odd
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [477/576] sequence-rmsprop/negative
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [478/576] sequence-adagrad/base
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [479/576] sequence-adagrad/ties
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [480/576] sequence-adagrad/hashed
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [481/576] sequence-adagrad/wide
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [482/576] sequence-adagrad/denormal
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [483/576] sequence-adagrad/denormal_ftz
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [484/576] sequence-adagrad/dupes
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [485/576] sequence-adagrad/odd
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [486/576] sequence-adagrad/negative
+    1.2s: verified 2 of 9 cell parts (0 divergent, 0 owed, 0 refused, 7 n/a)
+  [487/576] sequence-mlp/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [488/576] sequence-mlp/ties
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [489/576] sequence-mlp/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [490/576] sequence-mlp/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [491/576] sequence-mlp/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [492/576] sequence-mlp/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [493/576] sequence-mlp/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [494/576] sequence-mlp/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [495/576] sequence-mlp/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [496/576] sequence-rnn/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [497/576] sequence-rnn/ties
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [498/576] sequence-rnn/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [499/576] sequence-rnn/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [500/576] sequence-rnn/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [501/576] sequence-rnn/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [502/576] sequence-rnn/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [503/576] sequence-rnn/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [504/576] sequence-rnn/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [505/576] sequence-lion/base
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [506/576] sequence-lion/ties
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [507/576] sequence-lion/hashed
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [508/576] sequence-lion/wide
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [509/576] sequence-lion/denormal
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [510/576] sequence-lion/denormal_ftz
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [511/576] sequence-lion/dupes
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [512/576] sequence-lion/odd
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [513/576] sequence-lion/negative
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [514/576] sequence-adafactor/base
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [515/576] sequence-adafactor/ties
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [516/576] sequence-adafactor/hashed
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [517/576] sequence-adafactor/wide
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [518/576] sequence-adafactor/denormal
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [519/576] sequence-adafactor/denormal_ftz
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [520/576] sequence-adafactor/dupes
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [521/576] sequence-adafactor/odd
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [522/576] sequence-adafactor/negative
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [523/576] sequence-lamb/base
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [524/576] sequence-lamb/ties
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [525/576] sequence-lamb/hashed
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [526/576] sequence-lamb/wide
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [527/576] sequence-lamb/denormal
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [528/576] sequence-lamb/denormal_ftz
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [529/576] sequence-lamb/dupes
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [530/576] sequence-lamb/odd
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [531/576] sequence-lamb/negative
+    1.2s: verified 1 of 9 cell parts (0 divergent, 0 owed, 0 refused, 8 n/a)
+  [532/576] sequence-adamax/base
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [533/576] sequence-adamax/ties
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [534/576] sequence-adamax/hashed
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [535/576] sequence-adamax/wide
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [536/576] sequence-adamax/denormal
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [537/576] sequence-adamax/denormal_ftz
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [538/576] sequence-adamax/dupes
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [539/576] sequence-adamax/odd
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [540/576] sequence-adamax/negative
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [541/576] sequence-nadam/base
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [542/576] sequence-nadam/ties
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [543/576] sequence-nadam/hashed
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [544/576] sequence-nadam/wide
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [545/576] sequence-nadam/denormal
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [546/576] sequence-nadam/denormal_ftz
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [547/576] sequence-nadam/dupes
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [548/576] sequence-nadam/odd
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [549/576] sequence-nadam/negative
+    1.2s: verified 1 of 9 cell parts (1 divergent, 0 owed, 0 refused, 7 n/a)
+  [550/576] sequence-lr-schedulers/base
+    1.6s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [551/576] sequence-lr-schedulers/ties
+    1.5s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [552/576] sequence-lr-schedulers/hashed
+    1.5s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [553/576] sequence-lr-schedulers/wide
+    1.6s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [554/576] sequence-lr-schedulers/denormal
+    1.5s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [555/576] sequence-lr-schedulers/denormal_ftz
+    1.5s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [556/576] sequence-lr-schedulers/dupes
+    1.5s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [557/576] sequence-lr-schedulers/odd
+    1.6s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [558/576] sequence-lr-schedulers/negative
+    1.5s: verified 0 of 9 cell parts (2 divergent, 0 owed, 0 refused, 7 n/a)
+  [559/576] sequence-layernorm/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [560/576] sequence-layernorm/ties
+    1.2s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [561/576] sequence-layernorm/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [562/576] sequence-layernorm/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [563/576] sequence-layernorm/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [564/576] sequence-layernorm/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [565/576] sequence-layernorm/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [566/576] sequence-layernorm/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [567/576] sequence-layernorm/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [568/576] sequence-moe/base
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [569/576] sequence-moe/ties
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [570/576] sequence-moe/hashed
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [571/576] sequence-moe/wide
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [572/576] sequence-moe/denormal
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [573/576] sequence-moe/denormal_ftz
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [574/576] sequence-moe/dupes
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [575/576] sequence-moe/odd
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+  [576/576] sequence-moe/negative
+    1.2s: verified 0 of 9 cell parts (3 divergent, 0 owed, 0 refused, 6 n/a)
+# python -m mojolearn verify --all
+# mojolearn 0.8.42  commit 0db362a62516faef0a52b112e93f7cba5e212a2b (wheel COMMIT witness)
+# mode identical  vendor cuda (class nvidia)  device NVIDIA NVIDIA GeForce RTX 4090, 580.126.20
+# cpu AMD Ryzen 9 7950X 16-Core Processor  Linux-6.8.0-106-generic-x86_64-with-glibc2.35  python 3.11.10  numpy 2.4.6
+# reference table /root/ml-verify/venv/lib/python3.11/site-packages/mojolearn/verify_reference/table.json (sha256 ebb6008648977155, 271 records)
+# depth full: 64 lanes x 9 fixtures, 1 repeat(s), 0 portable model(s)
+
+| family      | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-------------|-------|-----------|-----------|------|---------|-----|
+| training    |    14 |       243 |       198 |    0 |       0 | 693 |
+| byte_lm     |     3 |       135 |         9 |    0 |       0 |  99 |
+| mamba       |    11 |        57 |       654 |    0 |       0 | 180 |
+| transformer |     5 |       315 |         0 |    0 |       0 |  90 |
+| embedding   |     2 |        72 |         0 |    0 |       0 |  90 |
+| x_cnn       |    15 |       108 |       270 |    0 |       0 | 837 |
+| x_sequence  |    14 |        83 |       205 |    0 |       0 | 846 |
+| all         |    64 |      1013 |      1336 |    0 |       0 | 2835 |
+
+DIVERGENT (1336):
+  mamba1/base batch: this box 838c0d75ea3222c1, reference fbb1f3233000006e
+  mamba1/base batchgrad: this box ecbb91ed46f0cedb, reference 6dc76b046d9dfd07
+  mamba1/base batchscale: this box 5b23986398de787a, reference 5481e0dff3303591
+  mamba1/base infer: this box 4b1a55216dbb7ec0, reference 97e86b9db80719a7
+  mamba1/base ragged: this box 41f05031b7c80495, reference e560b542fc558190
+  mamba1/base rlpair: this box ff636772c73787d3, reference 3fd0b9d19f53c9c1
+  mamba1/base stepfull: this box 6e21208f557bb185, reference f582474b00117f8e
+  mamba1/base train: this box 1071378012826a8a, reference 1609902abaf80a04
+  mamba1/ties rlpair: this box 569f7b9e9b13f62f, reference 29e18589720b7474
+  mamba1/hashed batch: this box b49e3eebae2d59be, reference 29fc3810bca1e78a
+  mamba1/hashed batchgrad: this box c54ff6319069b69c, reference 02307cd514fceb2d
+  mamba1/hashed batchscale: this box e19a926fe82a9927, reference d44c4d814a35d216
+  mamba1/hashed infer: this box f0d77318ead92bdf, reference b2e6c1006bf3a5ce
+  mamba1/hashed ragged: this box e13766d4ae28def0, reference 8fbfb081c0991539
+  mamba1/hashed rlpair: this box 8af646368e7e1f61, reference 08398a6bfcc8570a
+  mamba1/hashed stepfull: this box 6eed8ac97395eaee, reference f7a84796f87ea6e0
+  mamba1/hashed train: this box 83b9f945d38539e8, reference 062931419c55ee5a
+  mamba1/wide batch: this box 68ab75fb0f24817b, reference e83173af858d8291
+  mamba1/wide batchgrad: this box 43843b65fab31188, reference 44ae6f0520c58bb3
+  mamba1/wide batchscale: this box c594a2f34e258360, reference 54da89a0749a8c64
+  mamba1/wide infer: this box 390252fd8bd0be24, reference 905c98cf2a276d1d
+  mamba1/wide ragged: this box 76ed0c5f846ccf6d, reference 93bf5f8aa3430649
+  mamba1/wide rlpair: this box 9149a43e6278ca41, reference 8a4cd7a1b49c65a8
+  mamba1/wide stepfull: this box c5e91a1b6407328b, reference a663c1d24961f690
+  mamba1/wide train: this box 51eb7aeeebe37db3, reference 0e7b2cee60a53003
+  mamba1/denormal batch: this box dda6d27db6f7c542, reference a17b09e0f608dab7
+  mamba1/denormal batchgrad: this box 29e096359189faf9, reference 6a7023d45d75092c
+  mamba1/denormal batchscale: this box 8e666c0490a6ed82, reference 6cefa2fe4b8e937a
+  mamba1/denormal infer: this box fb87c58d32c74e4a, reference 79e0f910c5525ef7
+  mamba1/denormal ragged: this box 53f34801afe92a75, reference 820e4e6bfba11c24
+  mamba1/denormal rlpair: this box 0a9f684afd3caf84, reference 7b0bbb310451668a
+  mamba1/denormal stepfull: this box 8df6d9c75db900b9, reference 77aea1d61808fd10
+  mamba1/denormal train: this box 25fe029dfa309979, reference b7b8e653d7d0f153
+  mamba1/denormal_ftz batch: this box dda6d27db6f7c542, reference a17b09e0f608dab7
+  mamba1/denormal_ftz batchgrad: this box 29e096359189faf9, reference 6a7023d45d75092c
+  mamba1/denormal_ftz batchscale: this box 8e666c0490a6ed82, reference 6cefa2fe4b8e937a
+  mamba1/denormal_ftz infer: this box fb87c58d32c74e4a, reference 79e0f910c5525ef7
+  mamba1/denormal_ftz ragged: this box 53f34801afe92a75, reference 820e4e6bfba11c24
+  mamba1/denormal_ftz rlpair: this box 387f64add994cd54, reference deb7fd8a06a24ed9
+  mamba1/denormal_ftz stepfull: this box 8df6d9c75db900b9, reference 77aea1d61808fd10
+  ... 1296 more in --json
+
+LANE ACCOUNTING: 507 of 507 harness lanes accounted for; 27 VERIFIED, 480 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (384): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 378 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establish physical multi-device identity. Default verification skips execution; --lanes selects a local diagnostic explicitly. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  DIVERGENT (37)  [not checked]: byte-lm-resident, mamba1, mamba1-bf16w, mamba1-decode-session, mamba1-int8w, mamba2, ... 31 more
+      a part disagrees with the reference
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 68 lanes, 27 VERIFIED, 4 not applicable, 37 not checked; the verdict cannot be VERIFIED
+
+UNVERIFIED LANES (37):
+  mamba1: DIVERGENT: a part disagrees with the reference
+  mamba2: DIVERGENT: a part disagrees with the reference
+  mamba3: DIVERGENT: a part disagrees with the reference
+  mamba1-bf16w: DIVERGENT: a part disagrees with the reference
+  mamba1-int8w: DIVERGENT: a part disagrees with the reference
+  mamba2-bf16w: DIVERGENT: a part disagrees with the reference
+  mamba2-int8w: DIVERGENT: a part disagrees with the reference
+  mamba3-bf16w: DIVERGENT: a part disagrees with the reference
+  mamba3-int8w: DIVERGENT: a part disagrees with the reference
+  samba-bf16w: DIVERGENT: a part disagrees with the reference
+  samba-int8w: DIVERGENT: a part disagrees with the reference
+  samba: DIVERGENT: a part disagrees with the reference
+  mamba2-dtlimit: DIVERGENT: a part disagrees with the reference
+  byte-lm-resident: DIVERGENT: a part disagrees with the reference
+  samba-untied-dropout-accum: DIVERGENT: a part disagrees with the reference
+  mamba1-decode-session: DIVERGENT: a part disagrees with the reference
+  x-cnn-conv2d: DIVERGENT: a part disagrees with the reference
+  x-cnn-conv1d: DIVERGENT: a part disagrees with the reference
+  x-cnn-trainer: DIVERGENT: a part disagrees with the reference
+  x-cnn-batchnorm: DIVERGENT: a part disagrees with the reference
+  x-cnn-resnet-block: DIVERGENT: a part disagrees with the reference
+  x-cnn-gcn: DIVERGENT: a part disagrees with the reference
+  x-cnn-sage: DIVERGENT: a part disagrees with the reference
+  x-cnn-conv-options: DIVERGENT: a part disagrees with the reference
+  x-cnn-bn-options: DIVERGENT: a part disagrees with the reference
+  x-cnn-gnn-options: DIVERGENT: a part disagrees with the reference
+  x-cnn-trainer-options: DIVERGENT: a part disagrees with the reference
+  sequence-lstm: DIVERGENT: a part disagrees with the reference
+  sequence-gru: DIVERGENT: a part disagrees with the reference
+  sequence-mlp: DIVERGENT: a part disagrees with the reference
+  sequence-rnn: DIVERGENT: a part disagrees with the reference
+  sequence-lion: DIVERGENT: a part disagrees with the reference
+  sequence-adamax: DIVERGENT: a part disagrees with the reference
+  sequence-nadam: DIVERGENT: a part disagrees with the reference
+  sequence-lr-schedulers: DIVERGENT: a part disagrees with the reference
+  sequence-layernorm: DIVERGENT: a part disagrees with the reference
+  sequence-moe: DIVERGENT: a part disagrees with the reference
+Batch invariance: IDENTICAL=217, DIVERGENT=233, OWED=0, REFUSED=0, N/A=126
+batchgrad: IDENTICAL=75, DIVERGENT=69, OWED=0, REFUSED=0, N/A=432
+batchscale: IDENTICAL=60, DIVERGENT=102, OWED=0, REFUSED=0, N/A=414
+ragged: IDENTICAL=60, DIVERGENT=102, OWED=0, REFUSED=0, N/A=414
+rlpair: IDENTICAL=54, DIVERGENT=108, OWED=0, REFUSED=0, N/A=414
+Profile: neural-training — neural training and backward/optimizer fixtures.
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: MISMATCH (verified 1013 of 5184 cell parts (1336 divergent, 0 owed, 0 refused, 2835 n/a); 27 verified, 4 not applicable, 0 owed, 0 held, 37 DIVERGENT, of 68 lanes). 679.8s. exit 1
+# evidence written to /root/ml-verify/artifacts/neural.json

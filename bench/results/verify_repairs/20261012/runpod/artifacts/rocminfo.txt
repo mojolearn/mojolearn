@@ -1,0 +1,1 @@
+/root/ml-verify/job.sh: line 18: rocminfo: command not found

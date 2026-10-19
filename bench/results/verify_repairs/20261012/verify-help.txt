@@ -1,0 +1,223 @@
+usage: python -m mojolearn verify [-h] [--json] [--all] [--batch-checks]
+                                  [--coverage] [--smoke] [--include-pending]
+                                  [--models-only | --training |
+                                  --neural-training] [--cpu-threads N]
+                                  [--quick] [--full] [--lanes LANES]
+                                  [--fixtures FIXTURES] [--repeats REPEATS]
+                                  [--cell-timeout CELL_TIMEOUT] [--no-models]
+                                  [--self-test]
+                                  [--cross-check [{quick,default,all}]]
+                                  [--par [{quick,default,all}]]
+                                  [--par-devices PAR_DEVICES]
+                                  [--par-self-test] [--compare A B]
+                                  [--commitment DOC] [--commitment-a C]
+                                  [--commitment-b C] [--challenge DOC]
+                                  [--challenge-from C_A C_B]
+                                  [--challenge-commitment-a C]
+                                  [--challenge-commitment-b C]
+                                  [--json-out PATH] [--reference-table PATH]
+                                  [--records DIR] [--emit-models DIR]
+                                  [--all-stages] [--keep]
+                                  [--reference-name REFERENCE_NAME]
+                                  [--emit-reference PATH]
+                                  [--confirm-reference PEER_CARD]
+
+Default: every applicable routine lane on the base fixture, combining classical training and inference with bundled saved-model inference. --quick selects representative routine checks. --all or --full runs the complete routine scope on every fixture. Neural training and backward/optimizer fixtures require --neural-training. Reports name the selected scope and every excluded neural lane.
+
+options:
+  -h, --help            show this help message and exit
+  --json                emit one JSON object instead of the human report
+  --all                 check every applicable routine lane on every fixture:
+                        the identity_break lanes (every lane on a GPU install,
+                        the public CPU reference lanes on a CPU-only one) plus
+                        the portable GPU-trained models, including applicable
+                        gradient, batch-size, ragged and sampler/replay
+                        probes; each cell part compared with the reference
+                        table shipped in the wheel (docs/VERIFY.md,
+                        python/mojolearn/_verify_all.py)
+  --batch-checks        include gradient, batch-size, ragged and
+                        sampler/replay probes in quick or selected-lane runs
+                        (already included in --all/--full); missing references
+                        read OWED
+  --coverage            inspect all appendix variants, lane availability and
+                        batch contracts without fitting
+  --smoke               for lanes this box can run but cannot judge (the par-*
+                        multi-GPU drivers on one device), fit each TWICE on
+                        the base fixture and report whether it ran, kept its
+                        shape, stayed finite and gave the same bits both
+                        times. SMOKE is never VERIFIED and is counted
+                        separately; a FAILED smoke is a real defect and fails
+                        the run. Off by default because two full fits per lane
+                        is real work
+  --include-pending     also execute unqualified CPU routes and supported
+                        logical-shard drivers; stale references read OWED, and
+                        missing routes remain scope gaps
+  --models-only, --inference
+                        check bundled GPU-trained models through the saved-
+                        model loader, including HostForest and HostGBDT,
+                        without training
+  --training            classical fit-based checks only; the default already
+                        combines these with inference
+  --neural-training     explicitly run neural training, backward and optimizer
+                        fixtures; separate from routine verification
+  --cpu-threads N       thread setting for supported CPU libraries (default:
+                        1); capped below the available logical CPU count where
+                        possible; not a hard CPU or memory limit
+  --quick               representative checks from the selected profile on the
+                        base fixture
+  --full                alias for --all: every applicable lane and property in
+                        the selected profile on all fixtures
+  --lanes LANES         only these comma separated lanes within the selected
+                        profile
+  --fixtures FIXTURES   with --all: only these comma separated fixtures
+  --repeats REPEATS     with --all: fits per cell; two or more also catch a
+                        cell that moves on this box (default 1)
+  --cell-timeout CELL_TIMEOUT
+                        with --all: seconds allowed for each isolated cell,
+                        self-test, or portable-model worker; timeout stops the
+                        sweep (default 120.0)
+  --no-models           with --all: skip the portable models
+  --self-test           SHOW THAT THIS VERIFIER CAN FAIL. Runs one lane twice
+                        through the ordinary comparison, once untouched and
+                        once with every value of the input's first column
+                        moved up by one ULP, and requires the first to read
+                        IDENTICAL and the second DIVERGENT. The perturbation
+                        is real arithmetic at run time, not a printed verdict,
+                        and it needs no sabotage build. Exit 0 only if the
+                        comparison both reproduced the reference and caught
+                        the wrong answer
+  --cross-check [{quick,default,all}]
+                        COMPARE YOUR GPU AGAINST YOUR CPU, on this machine.
+                        Fits each lane once on the GPU, then asks the same
+                        fitted model for the same held-out answer twice: from
+                        the GPU estimator, and from the saved model reloaded
+                        through the CPU host binding. It requires trusting
+                        nobody, because you generated both sides on two
+                        different pieces of hardware. It compares the infer
+                        part (cross-vendor identity) and, where the lane has
+                        one, the batch part (batch invariance, a different
+                        axis). 'quick' is one lane per family on the base
+                        fixture, seconds; the default is up to 24 lanes on the
+                        base fixture; 'all' runs every eligible lane on every
+                        fixture, including on Apple, in sequential process
+                        batches. --lanes and --fixtures explicitly select a
+                        custom scope. Missing or failed checks exit nonzero.
+                        On a CPU-only install it says so rather than silently
+                        skipping
+  --par [{quick,default,all}]
+                        THE TWO-DEVICE COLUMN, on this box, against the
+                        recorded one-device values. A `par-*` driver lane's
+                        whole claim is that sharding its work across devices
+                        does not move a bit. This runs each par-* lane ONCE,
+                        with MOJOLEARN_PAR_DEVICES=0,1, and compares it cell
+                        for cell with the one-device values the shipped
+                        reference table records. The two-device column is
+                        WITNESSED: every device pool it starts is inventoried,
+                        and a column that never sharded is refused instead of
+                        reported as agreement. 'quick' is one lane per family,
+                        the default is all 59 par-* lanes on the base fixture,
+                        'all' runs the same lanes over all nine fixtures.
+                        --fixtures overrides the fixtures in every mode. Apple
+                        is refused structurally: DevicePool admits metal only
+                        at one device
+  --par-devices PAR_DEVICES
+                        with --par: the device group the second column runs
+                        on, comma separated, at least two distinct indices
+                        (default 0,1). The first index is also the one-device
+                        column
+  --par-self-test       SHOW THAT --par CAN FAIL. Runs one par-* lane's two
+                        columns with every value of the two-device arm's first
+                        input column moved up by one ULP, and requires every
+                        compared part to read DIVERGENT. A comparison never
+                        seen to fail is not a comparison
+  --compare A B         DIFF TWO EVIDENCE DOCUMENTS, with us out of the loop.
+                        Two people on different hardware each run `verify
+                        --all --json-out mine.json`, swap files, and run this:
+                        it compares every cell hash and bundled GPU/CPU
+                        result, reports where they agree and differ, shows the
+                        two provenance blocks side by side, and says whether
+                        the machines were genuinely different. A cell present
+                        in only one document is INCOMPARABLE, never a match.
+                        Needs no GPU, no bindings and no network
+  --commitment DOC      COMMIT TO YOUR OWN EVIDENCE DOCUMENT BEFORE YOU SEE
+                        THEIRS. Writes a random nonce into DOC and prints a
+                        64-character commitment over the document's cells, its
+                        provenance block, its verification contract, its
+                        binding digests and its own verdict. Publish that line
+                        anywhere, by any means, BEFORE the two parties
+                        exchange documents; then exchange them, nonces
+                        included, and pass both lines back to --compare.
+                        Without this step nothing stops whoever receives the
+                        other file first from pasting its numbers into a
+                        document carrying their own hardware. Adds no network
+                        code and needs no GPU, no bindings and no repo
+  --commitment-a C      with --compare: the commitment published for the FIRST
+                        document before the exchange, as the 64-character line
+                        itself or a path to the .commitment file. A comparison
+                        without commitments is not an error; it is labelled a
+                        weaker result
+  --commitment-b C      with --compare: the same, for the SECOND document
+  --challenge DOC       ANSWER A CHALLENGE NEITHER PARTY CHOSE, so the
+                        document cannot have been written without running. A
+                        commitment settles the ORDER of two documents; it says
+                        nothing about execution, because the reference table
+                        ships in the wheel with every expected cell hash in it
+                        and a document can be written straight out of it.
+                        After both parties publish their commitments and
+                        exchange the two lines, this reruns DOC's own lanes on
+                        a fixture derived from that pair, appends the answers
+                        and prints a SECOND line to publish. Needs
+                        --challenge-from. Costs about a ninth of what --all
+                        cost on the same box
+  --challenge-from C_A C_B
+                        with --challenge: the two commitments published before
+                        the exchange, as the 64-character lines themselves or
+                        paths to the .commitment files. The challenge is those
+                        two hashed together in sorted order, so neither party
+                        controls it alone and neither could have known it
+                        before both were published
+  --challenge-commitment-a C
+                        with --compare: the SECOND line the FIRST party
+                        published, over their challenge response, before the
+                        documents were exchanged. Two honest responses are
+                        identical, so a response nobody was bound to can be
+                        copied out of the other file. A comparison without
+                        these is not an error; it is labelled a weaker result
+  --challenge-commitment-b C
+                        with --compare: the same, for the SECOND document
+  --json-out PATH       with --all: also write the full evidence document
+                        (per-cell hashes computed here and expected, per-lane
+                        timings, the sha256 of every binding loaded, and the
+                        committed column each reference came from) to PATH
+  --reference-table PATH
+                        with --all or --par: compare against this table
+                        instead of the one shipped in the wheel; with --emit-
+                        reference and --lanes, update only those lanes in this
+                        base table
+  --records DIR         MAINTAINER PATH, with --all --emit-reference: the
+                        identity_break record directories or JSONs to build
+                        the table from (default: the checkout's
+                        bench/results/identity_break)
+  --emit-models DIR     MAINTAINER PATH, GPU install: save the portable models
+                        and their manifest to DIR, keeping only models whose
+                        file bytes equal the table's model reference; every
+                        model the shipped bundle carries, or --lanes x
+                        --fixtures (default base)
+  --all-stages          without --all: on a mismatch of the pinned k-means
+                        card, list every diverging stage rather than only the
+                        first
+  --keep                keep the card this run produced even when it matched
+                        (a mismatched card is always kept)
+  --reference-name REFERENCE_NAME
+                        which reference card in reference_cards/ to compare
+                        against (default kmeans.identical.fp32.v1)
+  --emit-reference PATH
+                        MAINTAINER PATH. Run the fixture and write a
+                        provenance-stamped candidate reference card to PATH
+                        instead of comparing. Refuses on a FAST build.
+  --confirm-reference PEER_CARD
+                        MAINTAINER PATH, second box. Run the fixture here,
+                        stamp a local candidate (at --emit-reference PATH if
+                        given), and compare it against PEER_CARD with the one
+                        comparator. Exit 0 = the pair is ready for install-
+                        reference.

@@ -1,0 +1,8 @@
+{
+  "mojolearn_version": "0.8.42",
+  "numpy_version": "2.5.4",
+  "package_path": "/private/tmp/mojolearn-pip-verify-sWrlqV/venv/lib/python3.14/site-packages/mojolearn/__init__.py",
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "executable": "/private/tmp/mojolearn-pip-verify-sWrlqV/venv/bin/python",
+  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+}

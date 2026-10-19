@@ -1,0 +1,70 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: metal (apple), 1 lanes x 9 fixtures, harness wheel copy, table /private/tmp/mojolearn-pip-verify-sWrlqV/repair-venv/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
+# incremental evidence: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/trees-capture.json.cells.jsonl; progress: /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/trees-capture.json.progress.json
+# comparator self-test preflight (fresh process)
+  [1/9] trees-oob-cv-link/base
+    2.4s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [2/9] trees-oob-cv-link/ties
+    2.3s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [3/9] trees-oob-cv-link/hashed
+    2.3s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [4/9] trees-oob-cv-link/wide
+    2.3s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [5/9] trees-oob-cv-link/denormal
+    2.5s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [6/9] trees-oob-cv-link/denormal_ftz
+    1.9s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [7/9] trees-oob-cv-link/dupes
+    1.9s: verified 3 of 9 cell parts (0 divergent, 0 owed, 0 refused, 6 n/a)
+  [8/9] trees-oob-cv-link/odd
+    1.6s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+  [9/9] trees-oob-cv-link/negative
+    1.7s: verified 2 of 9 cell parts (1 divergent, 0 owed, 0 refused, 6 n/a)
+# python -m mojolearn verify --all
+# mojolearn 0.8.42  commit 0db362a62516faef0a52b112e93f7cba5e212a2b (wheel COMMIT witness)
+# mode identical  vendor metal (class apple)  device Apple M4 / Mac16,12
+# cpu Apple M4  macOS-26.5.2-arm64-arm-64bit-Mach-O  python 3.14.6  numpy 2.5.4
+# reference table /private/tmp/mojolearn-pip-verify-sWrlqV/repair-venv/lib/python3.14/site-packages/mojolearn/verify_reference/table.json (sha256 ebb6008648977155, 271 records)
+# depth full: 1 lanes x 9 fixtures, 2 repeat(s), 58 portable model(s)
+# note: this harness is not the one the table was generated with; a lane added or changed since then reads OWED or DIVERGENT until the table is regenerated
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| x_trees         |     1 |        19 |         8 |    0 |       0 |  54 |
+| portable models |    10 |       116 |         0 |    0 |       0 |   0 |
+| all             |    11 |       135 |         8 |    0 |       0 |  54 |
+
+DIVERGENT (8):
+  trees-oob-cv-link/base train: this box 08c32c1c15c6bdf9, reference ab42dad40e47c7e8
+  trees-oob-cv-link/ties train: this box 3b95837f7219305d, reference 1f760e1d18b2a59e
+  trees-oob-cv-link/hashed train: this box 9b55c42bce5eb135, reference d68716fd06acbb3b
+  trees-oob-cv-link/wide train: this box 5cd8e0840575e844, reference 4da7195a7add04df
+  trees-oob-cv-link/denormal train: this box 92e7160dc5a729a7, reference c4959835bac7497b
+  trees-oob-cv-link/denormal_ftz train: this box 92e7160dc5a729a7, reference c4959835bac7497b
+  trees-oob-cv-link/odd train: this box a4e6e901ae4dd453, reference fbf6b7ad7abc1f59
+  trees-oob-cv-link/negative train: this box 45211e38f2b5021d, reference f88cea437981878a
+
+LANE ACCOUNTING: 507 of 507 harness lanes accounted for; 0 VERIFIED, 507 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (447): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 441 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establish physical multi-device identity. Default verification skips execution; --lanes selects a local diagnostic explicitly. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  DIVERGENT (1)  [not checked]: trees-oob-cv-link
+      a part disagrees with the reference
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 1 lanes, 0 VERIFIED, 0 not applicable, 1 not checked; the verdict cannot be VERIFIED
+
+UNVERIFIED LANES (1):
+  trees-oob-cv-link: DIVERGENT: a part disagrees with the reference
+Batch invariance: IDENTICAL=67, DIVERGENT=0, OWED=0, REFUSED=0, N/A=0
+batchgrad: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=0, N/A=9
+batchscale: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=0, N/A=9
+ragged: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=0, N/A=9
+rlpair: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=0, N/A=9
+Profile: routine — classical training and inference, plus bundled saved-model inference; neural training excluded.
+Neural training excluded (68 lanes): byte-lm, byte-lm-host-train, byte-lm-resident, cross-entropy-arms, embedding, embedding-sort, grad-accumulation, mamba1, mamba1-bf16w, mamba1-decode-session, mamba1-int8w, mamba2, mamba2-bf16w, mamba2-dtlimit, mamba2-int8w, mamba3, mamba3-bf16w, mamba3-int8w, mlp, mlp-bf16w, mlp-int8w, optim-adam-clip, optim-maximize, optim-sgd, ordered-gradient-sum, par-causal-lm, par-mlp, par-samba, par-samba-clip, samba, samba-bf16w, samba-int8w, samba-untied-dropout-accum, sequence-adafactor, sequence-adagrad, sequence-adamax, sequence-gru, sequence-lamb, sequence-layernorm, sequence-lion, sequence-lr-schedulers, sequence-lstm, sequence-mlp, sequence-moe, sequence-nadam, sequence-rmsprop, sequence-rnn, training-primitives, transformer, transformer-bf16w, transformer-decode-session, transformer-int8w, transformer-window, x-cnn-batchnorm, x-cnn-bn-options, x-cnn-conv-options, x-cnn-conv1d, x-cnn-conv2d, x-cnn-dropout2d, x-cnn-gcn, x-cnn-globalpool, x-cnn-gnn-options, x-cnn-pool, x-cnn-pool-options, x-cnn-resnet-block, x-cnn-sage, x-cnn-trainer, x-cnn-trainer-options
+Run explicitly: python -m mojolearn verify --neural-training
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: MISMATCH (verified 135 of 197 cell parts (8 divergent, 0 owed, 0 refused, 54 n/a); 0 verified, 0 not applicable, 0 owed, 0 held, 1 DIVERGENT, of 1 lanes). 22.4s. exit 1
+# evidence written to /Users/andrewhendel/CascadeProjects/mojolearn/bench/results/verify_repairs/20261012/trees-capture.json
