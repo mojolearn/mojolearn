@@ -17,7 +17,8 @@ from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
-from core.label_encode_device import device_unique_inverse
+from autograd.pyapi import model_gather_labels_py
+from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
 from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
@@ -186,16 +187,22 @@ def model_predict_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonO
     return model_predict_py(ex, addrs, prog, ptab, ip)
 
 
-def model_labels_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
-                         classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
+def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
     """Sorted distinct labels and one int32 code per row for Sequential's
-    classification losses, on the device (`core/label_encode_device.mojo`, the base binding's `unique_inverse`): n 64-bit labels at src_addr (kind 0
-    float64, 1 int64), the classes' bits into classes_addr (n slots), codes
-    into codes_addr. Returns the class count."""
-    var nk = model_labels_check(src_addr, n, kind, classes_addr, codes_addr)
+    classification losses, on the device (`core/label_cast_device.mojo`
+    around the base binding's `unique_inverse` sort): `src` the user's
+    labels as they are (autograd/pyapi.mojo cast_in_of descriptor, one per
+    row), the classes in the labels' own dtype into classes_addr (n slots),
+    codes into codes_addr. Returns the class count."""
+    var ck = model_labels_check(src, classes_addr, codes_addr)
     var ctx = sequence_ctx()
-    var k = device_unique_inverse(ctx, Int(py=src_addr), nk[0], nk[1], Int(py=classes_addr), Int(py=codes_addr))
+    var k = device_unique_inverse_cast(ctx, ck[0], ck[1], Int(py=classes_addr), Int(py=codes_addr))
     return model_labels_result(k)
+
+
+def model_gather_labels_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return model_gather_labels_py(ex, addrs, ip)
 
 
 def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
@@ -416,6 +423,7 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[model_labels_binding]("model_labels")
+        m.def_function[model_gather_labels_binding]("model_gather_labels")
         # the operation session (autograd/ops_api.mojo)
         m.def_function[ops_open_binding]("ops_open")
         m.def_function[ops_close_binding]("ops_close")

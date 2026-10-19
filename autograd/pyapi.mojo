@@ -136,17 +136,16 @@ def model_labels_result(k: Int) raises -> PythonObject:
     return PythonObject(k)
 
 
-def model_gather_labels_py[E: Exec](
-    mut ex: E, codes: PythonObject, n: PythonObject, classes: PythonObject, k: PythonObject,
-    itemsize: PythonObject, out: PythonObject,
-) raises -> PythonObject:
-    """out[i] = classes[codes[i]]: n float32 class codes at `codes`, k
-    classes of `itemsize` bytes at `classes` (classes_), n items into `out`
-    (an array of classes_' dtype), gathered on the executor
+def model_gather_labels_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """out[i] = classes[codes[i]]. addrs = [codes (n float32 class codes),
+    classes (classes_, k items), out (an array of classes_' dtype, n
+    items)]; ip = [n, k, item size]. Gathered on the executor
     (autograd/cast_ops.mojo gather_labels). Returns n. Sequential refuses
     non-numeric labels at fit, so classes_ is always a numeric array."""
-    gather_labels(ex, Int(py=codes), Int(py=n), Int(py=classes), Int(py=k), Int(py=itemsize), Int(py=out))
-    return PythonObject(Int(py=n))
+    if len(addrs) != 3 or len(ip) != 3:
+        raise Error("model_gather_labels: requires 3 addresses and [n, k, item size]")
+    gather_labels(ex, ival(addrs, 0), ival(ip, 0), ival(addrs, 1), ival(ip, 1), ival(ip, 2), ival(addrs, 2))
+    return PythonObject(ival(ip, 0))
 
 
 def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:

@@ -19,7 +19,8 @@ from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
-from core.label_encode import host_unique_inverse
+from autograd.pyapi import model_gather_labels_py
+from core.label_cast import host_unique_inverse_cast
 from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
     ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
@@ -107,19 +108,21 @@ def model_predict_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonO
     return model_predict_py(ex, addrs, prog, ptab, ip)
 
 
-def model_labels_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
-                         classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
+def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
     """Sorted distinct labels and one int32 code per row for Sequential's
-    classification losses, by the host twin (`core/label_encode.mojo`, the same statements as the device sort): n 64-bit labels at src_addr (kind 0
-    float64, 1 int64), the classes' bits into classes_addr (n slots), codes
+    classification losses, by the host twin (`core/label_cast.mojo`, the
+    same statements as the device path): `src` the user's labels as they
+    are (autograd/pyapi.mojo cast_in_of descriptor, one per row), the
+    classes in the labels' own dtype into classes_addr (n slots), codes
     into codes_addr. Returns the class count."""
-    var nk = model_labels_check(src_addr, n, kind, classes_addr, codes_addr)
-    var k = host_unique_inverse(
-        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr)), nk[0], nk[1],
-        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr)),
-        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr)),
-    )
+    var ck = model_labels_check(src, classes_addr, codes_addr)
+    var k = host_unique_inverse_cast(ck[0], ck[1], Int(py=classes_addr), Int(py=codes_addr))
     return model_labels_result(k)
+
+
+def model_gather_labels_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return model_gather_labels_py(ex, addrs, ip)
 
 
 def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
@@ -289,6 +292,7 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[model_labels_binding]("model_labels")
+        m.def_function[model_gather_labels_binding]("model_gather_labels")
         # the operation session (autograd/ops_api.mojo)
         m.def_function[ops_open_binding]("ops_open")
         m.def_function[ops_close_binding]("ops_close")
