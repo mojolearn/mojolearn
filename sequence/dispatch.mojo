@@ -151,6 +151,7 @@ from autograd.ops import OP_AG_SOFTMAX_FWD, OP_AG_SOFTMAX_VJP
 from autograd.row_ops import OP_ROW_FIRST, OP_ROW_LAST, ROW_COOP, apply_rows, row_softmax_fwd, row_softmax_vjp
 from autograd.fold_ops import OP_AGS_FIRST, OP_AGS_LAST, apply_fold_ops
 from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_split
+from autograd.embedding_ops import OP_EMB_FIRST, OP_EMB_LAST, apply_embedding
 
 
 @always_inline
@@ -319,6 +320,14 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
         OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
     ), "pass-6 gemm opcode collides with recurrent scan"
+    # The embedding tape op's family (autograd/embedding_ops.mojo OP_EMB_*,
+    # 2700..; lane ag-embedding-op), above every other autograd range.
+    comptime assert OP_EMB_FIRST <= OP_EMB_LAST, "embedding opcode range is empty"
+    comptime assert OP_EMB_FIRST > OP_AGH_LAST and OP_EMB_FIRST > OP_AGS_LAST and OP_EMB_FIRST > OP_ROW_LAST and OP_EMB_FIRST > OP_GK_LAST and OP_EMB_FIRST > OP_AGC_LAST, "embedding opcodes overlap a lower family"
+    comptime assert OP_EMB_FIRST > OP_AG_LAST and OP_EMB_FIRST > OP_AGD_LAST and OP_EMB_FIRST > OP_AGO_LAST and OP_EMB_FIRST > OP_LS_LAST and OP_EMB_FIRST > OP_AGM_LAST and OP_EMB_FIRST > OP_AGK_LAST and OP_EMB_FIRST > OP_P1_LAST and OP_EMB_FIRST > OP_AGF_LAST and OP_EMB_FIRST > OP_MLP_LB_LAST, "embedding opcodes overlap an autograd family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_EMB_FIRST or OP_CELL_FWD_SCAN > OP_EMB_LAST) and (
+        OP_CELL_BWD_SCAN < OP_EMB_FIRST or OP_CELL_BWD_SCAN > OP_EMB_LAST
+    ), "embedding opcode collides with recurrent scan"
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -355,6 +364,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_optim_fused[OP](t, a)
     elif OP >= OP_AGS_FIRST and OP <= OP_AGS_LAST:
         apply_fold_ops[OP](t, a)
+    elif OP >= OP_EMB_FIRST and OP <= OP_EMB_LAST:
+        apply_embedding[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
