@@ -21,4 +21,4 @@ Croston family	prediction intervals, fitted values	statsforecast/models.py	point
 ETS	seasonal components, multiplicative trend, 'Z' model selection, prediction intervals	statsforecast/ets.py	non-seasonal A/M error with N/A(d) trend
 GARCH	non-normal distributions, AR/HAR/LS means, power != 2, rescale	arch/univariate	constant or zero mean, normal errors
 ProphetForecaster	logistic and flat growth, uncertainty intervals, MCMC, extra regressors beyond holiday columns, conditional seasonalities	prophet/forecaster.py	linear growth MAP point forecasts
-MoEBlock	backward pass, router jitter noise, activations other than SiLU, auxiliary load-balancing loss	transformers/models/mixtral/modeling_mixtral.py	forward only
+MoEBlock	router jitter noise, activations other than SiLU, auxiliary load-balancing loss	transformers/models/mixtral/modeling_mixtral.py	forward and backward (backward on the tape, autograd/route_ops.mojo)

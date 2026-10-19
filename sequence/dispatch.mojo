@@ -151,6 +151,7 @@ from autograd.ops import OP_AG_SOFTMAX_FWD, OP_AG_SOFTMAX_VJP
 from autograd.row_ops import OP_ROW_FIRST, OP_ROW_LAST, ROW_COOP, apply_rows, row_softmax_fwd, row_softmax_vjp
 from autograd.fold_ops import OP_AGS_FIRST, OP_AGS_LAST, apply_fold_ops
 from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_split
+from sequence.moe_backward import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
 
 
 @always_inline
@@ -319,6 +320,26 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
         OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
     ), "pass-6 gemm opcode collides with recurrent scan"
+    # The MoE backward family (sequence/moe_backward.mojo OP_MOEB_*, 2900..;
+    # lane ag-moe-backward), disjoint from every autograd range and the scans.
+    comptime assert OP_MOEB_FIRST <= OP_MOEB_LAST, "MoE backward opcode range is empty"
+    comptime assert OP_MOEB_FIRST > OP_AG_LAST or OP_MOEB_LAST < OP_AG_FIRST, "MoE backward opcodes overlap the tape's"
+    comptime assert OP_MOEB_FIRST > OP_AGD_LAST or OP_MOEB_LAST < OP_AGD_FIRST, "MoE backward opcodes overlap the data family"
+    comptime assert OP_MOEB_FIRST > OP_AGO_LAST or OP_MOEB_LAST < OP_AGO_FIRST, "MoE backward opcodes overlap the optim family"
+    comptime assert OP_MOEB_FIRST > OP_LS_LAST or OP_MOEB_LAST < OP_LS_FIRST, "MoE backward opcodes overlap the loss family"
+    comptime assert OP_MOEB_FIRST > OP_AGM_LAST or OP_MOEB_LAST < OP_AGM_FIRST, "MoE backward opcodes overlap the model family"
+    comptime assert OP_MOEB_FIRST > OP_AGK_LAST or OP_MOEB_LAST < OP_AGK_FIRST, "MoE backward opcodes overlap the kernel family"
+    comptime assert OP_MOEB_FIRST > OP_P1_LAST or OP_MOEB_LAST < OP_P1_FIRST, "MoE backward opcodes overlap the fused family"
+    comptime assert OP_MOEB_FIRST > OP_MLP_LB_LAST or OP_MOEB_LAST < OP_MLP_LB_FIRST, "MoE backward opcodes overlap the MLP loss block"
+    comptime assert OP_MOEB_FIRST > OP_AGF_LAST or OP_MOEB_LAST < OP_AGF_FIRST, "MoE backward opcodes overlap the fold levels"
+    comptime assert OP_MOEB_FIRST > OP_AGC_LAST or OP_MOEB_LAST < OP_AGC_FIRST, "MoE backward opcodes overlap the composed step"
+    comptime assert OP_MOEB_FIRST > OP_ROW_LAST or OP_MOEB_LAST < OP_ROW_FIRST, "MoE backward opcodes overlap the rows family"
+    comptime assert OP_MOEB_FIRST > OP_AGH_LAST or OP_MOEB_LAST < OP_AGH_FIRST, "MoE backward opcodes overlap the pass-6 host family"
+    comptime assert OP_MOEB_FIRST > OP_AGS_LAST or OP_MOEB_LAST < OP_AGS_FIRST, "MoE backward opcodes overlap the loss-leaf family"
+    comptime assert OP_MOEB_FIRST > OP_GK_LAST or OP_MOEB_LAST < OP_GK_FIRST, "MoE backward opcodes overlap the pass-6 gemm family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_MOEB_FIRST or OP_CELL_FWD_SCAN > OP_MOEB_LAST) and (
+        OP_CELL_BWD_SCAN < OP_MOEB_FIRST or OP_CELL_BWD_SCAN > OP_MOEB_LAST
+    ), "MoE backward opcode collides with recurrent scan"
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -355,6 +376,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_optim_fused[OP](t, a)
     elif OP >= OP_AGS_FIRST and OP <= OP_AGS_LAST:
         apply_fold_ops[OP](t, a)
+    elif OP >= OP_MOEB_FIRST and OP <= OP_MOEB_LAST:
+        apply_moe_backward[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

@@ -27,6 +27,7 @@ from autograd.pyapi import (
 )
 from autograd.ops_api import OPS_HOST
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import moe_backward_py
 
 
 def host_numeric_mode_binding() raises -> PythonObject:
@@ -259,6 +260,11 @@ def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return moe_forward_py(ex, addrs, ip)
 
 
+def moe_backward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return moe_backward_py(ex, addrs, ip)
+
+
 @export
 def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
     try:
@@ -314,6 +320,7 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[prophet_fit_binding]("prophet_fit")
         m.def_function[prophet_predict_binding]("prophet_predict")
         m.def_function[moe_forward_binding]("moe_forward")
+        m.def_function[moe_backward_binding]("moe_backward")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))
