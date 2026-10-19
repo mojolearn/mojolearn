@@ -1203,6 +1203,8 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
         arrays["X"] = rng.standard_normal((steps, d["batch"], 8)).astype(np.float32)
         arrays["y"] = rng.integers(0, 3, (steps, d["batch"])).astype(np.int32)
         rec["inputs"] = "weights uniform(+-1/sqrt(fan_in)); X standard normal; labels 0..2"
+    elif lane in FIT_LANES:
+        arrays.update(fit_arrays(lane, shape, rec))
     np.savez(path, **arrays)
     rec["sha256"] = {k: _sha(np.ascontiguousarray(v).tobytes())[:16] for k, v in sorted(arrays.items())}
     rec["steps"] = steps
@@ -1211,6 +1213,81 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
 
 def _weights(data):
     return {k[2:]: data[k] for k in data if k.startswith("w:")}
+
+
+def higgs_path():
+    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists)."""
+    got = os.environ.get(HIGGS_ENV, "").strip()
+    if got:
+        return os.path.expanduser(got)
+    for cand in HIGGS_DEFAULTS:
+        if os.path.exists(os.path.expanduser(cand)):
+            return os.path.expanduser(cand)
+    raise SystemExit("bench_board_neural: the fit lanes read HIGGS (gbm-bench/higgs/higgs_speed.npz from R2, "
+                     "docs/REMOTE_DATA_R2.md); pass --higgs or set %s (looked in %s)"
+                     % (HIGGS_ENV, ", ".join(HIGGS_DEFAULTS)))
+
+
+def _npz_pick(z, stem):
+    """z[stem_train] / z[stem_test]-style lookup as tools/sequence_speed.py load() does."""
+    keys = list(z.keys())
+    if stem in keys:
+        return stem
+    low = stem[0].lower()
+    hits = [k for k in keys if k.lower().startswith(low) and k.lower().endswith(stem.split("_")[1])]
+    return hits[0] if hits else None
+
+
+def fit_arrays(lane, shape, rec):
+    """The fit lanes' input arrays from HIGGS: X_train / y_train (the first FIT_ROWS[shape]["train"] rows
+    of the training split, the rows tools/sequence_speed.py fits on) and X_test / y_test (the first
+    FIT_ROWS[shape]["test"] rows of the npz's test split, else the training rows right after the fitted
+    ones). Columns standardized with the fitted rows' float64 mean and std, stored float32. Labels 0/1 as
+    float32 (the classifiers' class labels, the recurrent regressors' target). The recurrent lanes cut
+    consecutive rows into FIT_SEQ_LEN-step sequences, the target the label of each sequence's last row
+    (sequence_speed.case_recurrent). Bench-side preparation before every clock; no arm computes it."""
+    import numpy as np
+    want = FIT_ROWS[shape]
+    path = higgs_path()
+    with np.load(path) as z:
+        kx, ky = _npz_pick(z, "X_train"), _npz_pick(z, "y_train")
+        if kx is None or ky is None:
+            raise SystemExit("bench_board_neural: %s holds no X_train / y_train (keys %s)" % (path, list(z.keys())))
+        X, y = z[kx], z[ky]
+        kxt, kyt = _npz_pick(z, "X_test"), _npz_pick(z, "y_test")
+        need = want["train"] + (0 if kxt is not None and kyt is not None else want["test"])
+        if len(X) < need:
+            raise SystemExit("bench_board_neural: %s has %d training rows; the %s fit lanes need %d"
+                             % (path, len(X), shape, need))
+        Xtr, ytr = X[:want["train"]], y[:want["train"]]
+        if kxt is not None and kyt is not None and len(z[kxt]) >= want["test"]:
+            Xte, yte = z[kxt][:want["test"]], z[kyt][:want["test"]]
+            held = "%s[:%d], %s[:%d]" % (kxt, want["test"], kyt, want["test"])
+        else:
+            Xte, yte = X[want["train"]:want["train"] + want["test"]], y[want["train"]:want["train"] + want["test"]]
+            held = "%s[%d:%d] (the npz has no test split)" % (kx, want["train"], want["train"] + want["test"])
+    mu = Xtr.astype(np.float64).mean(0)
+    sd = Xtr.astype(np.float64).std(0)
+    sd[sd == 0] = 1.0
+    out = {}
+    for name, a, lab in (("train", Xtr, ytr), ("test", Xte, yte)):
+        xs = ((a.astype(np.float64) - mu) / sd).astype(np.float32)
+        lab = (np.asarray(lab, dtype=np.float64).ravel() > 0.5).astype(np.float32)
+        if lane in FIT_CELL:
+            n = len(xs) // FIT_SEQ_LEN
+            xs = xs[:n * FIT_SEQ_LEN].reshape(n, FIT_SEQ_LEN, xs.shape[1])
+            lab = lab[FIT_SEQ_LEN - 1:n * FIT_SEQ_LEN:FIT_SEQ_LEN]
+        out["X_" + name] = np.ascontiguousarray(xs, dtype=np.float32)
+        out["y_" + name] = np.ascontiguousarray(lab, dtype=np.float32)
+    with open(path, "rb") as fh:
+        head = fh.read(1 << 20)
+    rec.update(higgs={"path": path, "bytes": os.path.getsize(path), "sha256_first_mib": _sha(head)[:16],
+                      "train": "%s[:%d], %s[:%d]" % (kx, want["train"], ky, want["train"]), "held_out": held},
+               inputs=("HIGGS, standardized with the fitted rows' float64 mean/std; labels 0/1"
+                       + ("; %d-step sequences of consecutive rows, target the last row's label" % FIT_SEQ_LEN
+                          if lane in FIT_CELL else "")),
+               shapes={k: list(v.shape) for k, v in out.items()})
+    return out
 
 
 # ---------------------------------------------------------------------------
