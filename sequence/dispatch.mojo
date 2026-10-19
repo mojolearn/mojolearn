@@ -131,6 +131,7 @@ from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
 from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
+from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
 
 
 @always_inline
@@ -148,10 +149,19 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_AGD_FIRST or OP_CELL_FWD_SCAN > OP_AGD_LAST) and (
         OP_CELL_BWD_SCAN < OP_AGD_FIRST or OP_CELL_BWD_SCAN > OP_AGD_LAST
     ), "autograd data opcode collides with recurrent scan"
+    # The autograd optimizer family (autograd/optim.mojo), a range of its own.
+    comptime assert OP_AGO_FIRST <= OP_AGO_LAST, "autograd optim opcode range is empty"
+    comptime assert OP_AGO_LAST < OP_AG_FIRST or OP_AGO_FIRST > OP_AG_LAST, "autograd optim opcodes overlap the tape's"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGO_FIRST or OP_CELL_FWD_SCAN > OP_AGO_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGO_FIRST or OP_CELL_BWD_SCAN > OP_AGO_LAST
+    ), "autograd optim opcode collides with recurrent scan"
+    comptime assert OP_AGO_LAST < OP_AGD_FIRST or OP_AGO_FIRST > OP_AGD_LAST, "autograd optim opcodes overlap the data family"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
         apply_autograd_data[OP](t, a)
+    elif OP >= OP_AGO_FIRST and OP <= OP_AGO_LAST:
+        apply_optim[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

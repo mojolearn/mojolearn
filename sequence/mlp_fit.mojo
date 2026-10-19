@@ -55,6 +55,7 @@ from autograd.ops import RELU as AG_RELU
 from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
+from autograd.optim import OptimizerState, optimizer_config, step_lr
 
 # The tape-assembled backward is the default (promoted 2026-10-18). A/B
 # fad4bec3e, tools/sequence_speed.py case_mlp, HIGGS 1M x 28, (256,) b512
@@ -77,6 +78,18 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # (256,) b512: NV 0.388 -> 0.387 s, AMD 0.602 -> 0.599 s, same digest as the default
 # (B = 512 is a power of two, so the scaling rounds identically); noise.
 # Restore: git checkout 91ebd1cb4 -- sequence/mlp_fit.mojo (then merge by hand).
+
+# Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM updates
+# the parameters through autograd/optim.mojo (OptimizerState + step_lr)
+# instead of the hand-built OP_OPT launch below. Bits: the same. step_lr
+# issues the same one OP_OPT launch over Gr with the same words the body
+# reads (sklearn Adam: f1 b1, f2 b2, f3 eps, f5 lr sqrt(1 - b2^t) / (1 - b1^t)
+# from running products advanced by one identical_mul a step, as here;
+# sklearn SGD: f0 lr, f1 momentum, i2 Nesterov); the words it sets that the
+# hand path leaves 0 (f0 and i1 for Adam) are not read by those bodies. No
+# fold is involved (the clip is off, the schedule is the caller's lr).
+# The state buffers are the module's (s1, s2 here shrink to one float).
+comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -336,9 +349,19 @@ def mlp_fit[E: Exec](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(np_)
-    var s2 = ex.alloc(np_)
-    var s3 = ex.alloc(np_)
+    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    # -D MOJOLEARN_AUTOGRAD_OPTIM: the optimizer and its state on the executor
+    var opt_cfg = optimizer_config(OPT_SK_ADAM if solver == SOLVER_ADAM else OPT_SK_SGD, lr_init)
+    opt_cfg.beta1 = b1
+    opt_cfg.beta2 = b2
+    opt_cfg.eps = eps
+    opt_cfg.momentum = momentum
+    opt_cfg.nesterov = nesterov
+    var opt_state = OptimizerState()
+    comptime if AUTOGRAD_OPTIM:
+        opt_state = OptimizerState(ex, opt_cfg, np_)
     var acts = List[FP]()
     var deltas = List[FP]()
     var tape = Tape()
@@ -493,28 +516,33 @@ def mlp_fit[E: Exec](
                         gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
                                  EPI_ACT_BWD, acts[i], net.act, Float32(0.0), Float32(0.0))
                     i -= 1
-            var o = Args()
-            o.p0 = P
-            o.p1 = Gr
-            o.p2 = s1
-            o.p3 = s2
-            o.p4 = s3
-            if solver == SOLVER_ADAM:
+            comptime if AUTOGRAD_OPTIM:
+                # one OP_OPT launch through autograd/optim.mojo (same words)
                 t_upd += 1
-                pw1 = ftz(identical_mul(pw1, b1))
-                pw2 = ftz(identical_mul(pw2, b2))
-                o.i0 = OPT_SK_ADAM
-                o.f1 = b1
-                o.f2 = b2
-                o.f3 = eps
-                o.f5 = ftz(identical_div(ftz(identical_mul(lr, ftz(identical_sqrt(Float32(1.0) - pw2)))),
-                                         Float32(1.0) - pw1))
+                step_lr(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr)
             else:
-                o.i0 = OPT_SK_SGD
-                o.i2 = 1 if nesterov else 0
-                o.f0 = lr
-                o.f1 = momentum
-            ex.launch[OP_OPT](o, np_)
+                var o = Args()
+                o.p0 = P
+                o.p1 = Gr
+                o.p2 = s1
+                o.p3 = s2
+                o.p4 = s3
+                if solver == SOLVER_ADAM:
+                    t_upd += 1
+                    pw1 = ftz(identical_mul(pw1, b1))
+                    pw2 = ftz(identical_mul(pw2, b2))
+                    o.i0 = OPT_SK_ADAM
+                    o.f1 = b1
+                    o.f2 = b2
+                    o.f3 = eps
+                    o.f5 = ftz(identical_div(ftz(identical_mul(lr, ftz(identical_sqrt(Float32(1.0) - pw2)))),
+                                             Float32(1.0) - pw1))
+                else:
+                    o.i0 = OPT_SK_SGD
+                    o.i2 = 1 if nesterov else 0
+                    o.f0 = lr
+                    o.f1 = momentum
+                ex.launch[OP_OPT](o, np_)
         var loss: Float64
         comptime if MLP_EPOCH_DEV:
             var el = Args()
@@ -558,6 +586,8 @@ def mlp_fit[E: Exec](
     comptime if AUTOGRAD_MLP:
         # lane ag-fusion: return the tape's storage now, not at the end of ex
         tape.release(ex)
+    comptime if AUTOGRAD_OPTIM:
+        opt_state.release(ex)
     ex.sync()
     ex.download(Pio, P, np_)
     _ = perm^

@@ -146,3 +146,42 @@ deleted with the tombstone procedure. A digest change between arms is a
 bit version only when the define intentionally changes a fold; for the
 RNN define it is a bug. Rows go into `docs/apple-fast/EXPERIMENTS.md` when
 the A/B runs.
+
+## Optimizer sites
+
+Survey for lane ag-optim (2026-10-19), formula level. `g` gradient, `p`
+parameter, `m`/`v` moments, `t` one-based step. Every site flushes
+denormals (`ftz`) on load and store and pins products and fused adds
+(`identical_mul`, `identical_mul_add`) under IDENTICAL.
+
+| Site | Kinds | Momentum / Nesterov | Weight decay | Clip | LR schedule | Bias correction | eps |
+|---|---|---|---|---|---|---|---|
+| `sequence/mlp_fit.mojo` (OP_OPT with OPT_SK_ADAM / OPT_SK_SGD) | sklearn Adam, sklearn SGD | SGD: velocity form, Nesterov flag | none (L2 `alpha` is added to the gradient before the step) | none | host, per epoch: constant, invscaling `lr0 / (t_samples + 1)^power_t`, adaptive (`lr / 5` on plateau) | running products `b1^t`, `b2^t` (one `identical_mul` a step); `lr_t = lr sqrt(1 - b2^t) / (1 - b1^t)` | outside the root |
+| `sequence/recurrent.mojo` (OptConfig / opt_scalars / opt_step, OP_OPT) | torch SGD, Adam, AdamW, RMSprop (centered), Adagrad, Lion, Adamax, NAdam | SGD: torch buffer form with dampening, Nesterov; RMSprop momentum | coupled (`g += wd p`) for SGD/Adam/RMSprop/Adagrad/Adamax/NAdam; decoupled (`p *= 1 - lr wd`) for AdamW, Lion, NAdam flag | none | per-step `lrs[k]` array from the caller | running products; `f5 = lr / (1 - b1^t)`, `f6 = sqrt(1 - b2^t)` | outside the root |
+| `training/estimator.mojo` -> `training/checks/optimizer.mojo` (`identical_optimizer_step`) | SGD, Adam, AdamW (`mojolearn.identical.optimizer.fp32.v1`) | SGD torch buffer form (first step copies g), dampening, Nesterov | coupled for SGD/Adam, decoupled for AdamW | global norm: per-tensor sumsq, per-tensor sqrt, norm of norms by GEMM, `coef = min(1, max_norm / (norm + 1e-6))`, unconditional scale | caller sets `lr` per step | `b^t` by square-and-multiply (`pow_int_f32`), not a running product; `step = lr / bc1`, `denom = sqrt(v) / sqrt(bc2) + eps` | outside the root |
+| `training/afn_optim.mojo` (Apple FAST only) | Adam, AdamW, SGD | as the certified step | as the certified step | fused free-order norm, coefficient on device | caller | as the certified step, unpinned | outside the root |
+| `training/mlp_fast.mojo` (FAST fused MLP) | AdamW only, fused with the gradient fold | none | decoupled | none | caller | `_pow_f32` square-and-multiply, unpinned | outside the root |
+
+Update formulas (the OP_OPT body, `sequence/ops.mojo::op_opt`, which both
+sequence trainers share):
+
+- torch SGD: `g += wd p`; `buf = g` at `t = 1`, else `buf = mu buf + (1 - damp) g`; Nesterov `g = g + mu buf`, else `g = buf`; `p = p - lr g`.
+- torch Adam / AdamW: AdamW `p *= 1 - lr wd`, Adam `g += wd p`; `m = b1 m + (1 - b1) g`; `v = b2 v + (1 - b2) g g`; `p = p - (lr / bc1) m / (sqrt(v) / sqrt(bc2) + eps)`.
+- sklearn Adam: `m`, `v` as Adam; `p = p + (-lr_t m) / (sqrt(v) + eps)`.
+- sklearn SGD: `vel = mu vel - lr g`; Nesterov step `mu vel - lr g` with the new `vel`, else `vel`; `p = p + step`.
+- RMSprop, Adagrad, Lion, Adamax, NAdam: torch's rules as written in `op_opt`.
+
+The certified LM step differs from OP_OPT's Adam in two places: its
+`b^t` is square-and-multiply rather than a running product, and its
+quotient is `m / (sqrt(v) / sqrt(bc2) + eps)` with `step_size = lr / bc1`
+(the same algebra as OP_OPT's `f5`/`f6`, with a different `b^t` rounding).
+So the LM trainers keep their own step until a separate A/B moves them.
+
+`autograd/optim.mojo` is the tape trainers' set: every OP_OPT kind (a
+superset of what the MLP and recurrent trainers use), the same element
+body and the same host scalars, plus a global-norm clip (blocked fold, two
+launches, then one scale launch) and host learning-rate schedules
+(constant, step, cosine, linear warmup). Under `-D MOJOLEARN_AUTOGRAD_OPTIM`
+the MLP and recurrent trainers update through it; with the clip off and a
+constant schedule the launches and their arguments are the ones the hand
+update issues, so the bits are the same.
