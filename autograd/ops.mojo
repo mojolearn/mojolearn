@@ -47,8 +47,9 @@
 # the tape binds every other slot to the Args() placeholder, as every other
 # sequence operation does, and never binds one buffer to two slots of a
 # launch. No body reads back a slot it writes, except OP_AG_ACCUMULATE's
-# element-wise read-modify-write of its own destination word and
-# OP_AG_SOFTMAX_FWD's read-back of its own row's exponentials.
+# element-wise read-modify-write of its own destination word,
+# OP_AG_SOFTMAX_FWD's read-back of its own row's exponentials and
+# OP_AGF_LEVEL's in-place fold of its own group of partials.
 from sequence.ops import Args, FP, ld, st, add, sub, mul
 from checks.numerics import (
     ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_sqrt,
