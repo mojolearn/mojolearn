@@ -65,6 +65,18 @@ from autograd.ops import TANH as AG_TANH
 # (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
 # -D MOJOLEARN_AUTOGRAD_MLP_OFF restores the hand-assembled backward (arm A).
 comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
+# Lane ag-fusion2, A/B pending: -D MOJOLEARN_AUTOGRAD_MLP_FUSED (default off;
+# arm A the current tape path, arm B this) records each layer as one fused
+# tape.linear_into node and backpropagates p - y with
+# backward_from_preactivation. Per layer that is the hand path's launches
+# with the hand path's arguments: forward 1 (gemm_epi EPI_BIAS_ACT, + the
+# softmax launch for a softmax output), backward 3 (gemm_epi EPI_L2GRAD,
+# OP_COLSUM_DIV, gemm_epi EPI_ACT_BWD; 2 for the first layer), no seed copy,
+# no L2GRAD/DIVS export. Expected bits: equal to the hand path's digest
+# (AUTOGRAD_MLP_OFF), different from the current tape's (its bias gradient
+# is the blocked fold and its activation derivative the tape's VJP body).
+# Either is allowed within a version. No effect under AUTOGRAD_MLP_OFF.
+comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and is_defined["MOJOLEARN_AUTOGRAD_MLP_FUSED"]()
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
 # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
 # It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
@@ -175,6 +187,7 @@ def _mlp_autograd_unary(act: Int) -> Int:
 
 def mlp_forward_autograd[E: Exec](
     mut tape: Tape, mut ex: E, net: MLPNet, P: FP, Gr: FP, acts: List[FP], B: Int,
+    alpha: Float32 = 0,
 ) raises -> Tensor:
     # The graph is recorded from the forward computation. No reverse-layer
     # loop or manually connected activation gradients remains in this path.
@@ -182,6 +195,18 @@ def mlp_forward_autograd[E: Exec](
     # each parameter's gradient lands in its slot of Gr (no export copy).
     tape.reset()
     var h = tape.variable(ex, acts[0], B, net.sizes[0], False)
+    comptime if AUTOGRAD_MLP_FUSED:
+        # One fused node a layer; its weight gradient comes out of the GEMM
+        # as (dW + alpha W) / B and its bias gradient as colsum / B, the
+        # hand path's EPI_L2GRAD and OP_COLSUM_DIV. Returns the output
+        # layer's node; its seed is the pre-activation gradient p - y.
+        for i in range(net.n_layers()):  # driver-loop: over layers
+            var fw = tape.variable_into(ex, P + net.w_off(i), Gr + net.w_off(i), net.sizes[i], net.sizes[i + 1])
+            var fb = tape.variable_into(ex, P + net.b_off(i), Gr + net.b_off(i), 1, net.sizes[i + 1])
+            var fact = net.out_act if i == net.n_layers() - 1 else net.act
+            h = tape.linear_into(ex, h, fw, Optional[Tensor](fb), _mlp_autograd_unary(fact), acts[i + 1],
+                                 alpha, Float32(B))
+        return h
     var logits = h
     for i in range(net.n_layers()):  # driver-loop: over layers
         var w = tape.variable_into(ex, P + net.w_off(i), Gr + net.w_off(i), net.sizes[i], net.sizes[i + 1])
@@ -224,6 +249,15 @@ def mlp_backward_autograd[E: Exec](
     # respect to LOGITS, not probabilities. Seed that precise graph boundary.
     var O = net.sizes[net.n_layers()]
     var seed = tape.variable(ex, delta, B, O, False)
+    comptime if AUTOGRAD_MLP_FUSED:
+        # LAUNCHES PER LAYER, fused (lane ag-fusion2): backward 3 (dW
+        # gemm_epi EPI_L2GRAD into Gr, db OP_COLSUM_DIV into Gr, dX gemm_epi
+        # EPI_ACT_BWD with the layer below's act'), 2 for the first layer;
+        # forward 1 (+1 softmax for a softmax output). No seed copy (the
+        # seed is the output node's dZ, read in place) and no export:
+        # hand path 4 (1 + 3) a layer, unfused tape 12 (3 + 9).
+        tape.backward_from_preactivation(ex, logits, seed)
+        return
     tape.backward_from(ex, logits, seed)
     # Preserve sklearn's parameter-gradient convention: add alpha*W then
     # divide by batch size. Output-width normalization of reported squared
@@ -402,7 +436,7 @@ def mlp_fit[E: Exec](
             gx.i3 = O
             ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
             comptime if AUTOGRAD_MLP:
-                tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B)
+                tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
             else:
                 mlp_forward(ex, net, P, acts, B)
             var a = Args()
