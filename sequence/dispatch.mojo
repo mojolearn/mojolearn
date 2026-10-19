@@ -130,6 +130,7 @@ from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_
 from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
+from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
 
 
 @always_inline
@@ -140,8 +141,17 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_AG_FIRST or OP_CELL_FWD_SCAN > OP_AG_LAST) and (
         OP_CELL_BWD_SCAN < OP_AG_FIRST or OP_CELL_BWD_SCAN > OP_AG_LAST
     ), "autograd opcode collides with recurrent scan"
+    # The loss and metric family (autograd/loss_ops.mojo) is a second
+    # contiguous range, disjoint from the autograd ops and the scan codes.
+    comptime assert OP_LS_FIRST <= OP_LS_LAST, "loss opcode range is empty"
+    comptime assert OP_LS_FIRST > OP_AG_LAST or OP_LS_LAST < OP_AG_FIRST, "loss opcodes collide with autograd ops"
+    comptime assert (OP_CELL_FWD_SCAN < OP_LS_FIRST or OP_CELL_FWD_SCAN > OP_LS_LAST) and (
+        OP_CELL_BWD_SCAN < OP_LS_FIRST or OP_CELL_BWD_SCAN > OP_LS_LAST
+    ), "loss opcode collides with recurrent scan"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
+    elif OP >= OP_LS_FIRST and OP <= OP_LS_LAST:
+        apply_losses[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
