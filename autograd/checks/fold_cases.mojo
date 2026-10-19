@@ -31,12 +31,14 @@ def _mix(i: Int, salt: Int) -> UInt64:
 
 
 def _data(n: Int, salt: Int, exact: Bool) -> List[Float32]:
-    """exact: integers -4 .. 3; otherwise [-1, 1) on a 2^-23 grid."""
+    """exact: integers -3 .. 3 with mean 0 (so sums stay far below 2^24);
+    otherwise [-1, 1) on a 2^-23 grid."""
     var v = List[Float32](length=n, fill=0)
     for i in range(n):
         var h = _mix(i, salt)
         if exact:
-            v[i] = Float32(Int(h >> UInt64(61))) - Float32(4.0)
+            var k = Int(h >> UInt64(61))
+            v[i] = Float32(k - 4) if k != 0 else Float32(0.0)
         else:
             v[i] = Float32(Int(h >> UInt64(40))) / Float32(8388608.0) - Float32(1.0)
     return v^
@@ -127,7 +129,7 @@ def _vjp[E: Exec](
 
 
 def run_fold_cases[E: Exec](mut ex: E) raises:
-    print("FOLD geometry", "v2" if AUTOGRAD_FOLD_V2 else "v1")
+    print("FOLD geometry", String("v2") if AUTOGRAD_FOLD_V2 else String("v1"))
     var shapes = List[List[Int]]()
     shapes.append([512, 1])
     shapes.append([512, 256])
@@ -151,7 +153,7 @@ def run_fold_cases[E: Exec](mut ex: E) raises:
             for ai in range(len(axes)):
                 var axis = axes[ai]
                 var base = (String(rows) + "x" + String(cols) + "/" + _axis_name(axis) + "/"
-                            + ("exact" if exact else "round"))
+                            + (String("exact") if exact else String("round")))
                 var extent = fold_extent(rows, cols, axis)
                 var sums = List[Float64]()
                 var mags = List[Float64]()
