@@ -17,7 +17,6 @@ epoch on the host (the reference's is numpy's RandomState, which is not
 restated).
 """
 from sequence.ops import FP, Args, add, fma3, gemm_dot, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
-from autograd.ops import ag_fold_block
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.adafactor import AF_NORM_BLOCK, af_fold_parts
@@ -56,33 +55,6 @@ comptime MLP_DEVICE_EPOCH_ORDER = MLP_EPOCH_DEV and is_defined[
 ]()
 comptime MLP_L2_BLOCK = AF_NORM_BLOCK
 comptime MLP_ROW_BLOCK = 256
-#: BIT VERSION (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea
-#: 3 and the AMD phase-2 profile, amd-02/AMD_PHASE2_2026-10-19.md: the loss
-#: block was ~30% of the profiled tape step, OP_MLP_L2PART 0.1 ms a launch for
-#: 3 threads each folding a 4096-weight chain, OP_MLP_ROWPART 2 threads of
-#: 256-row chains). Under MLP_BLOCKED_FOLDS with at most 4 layers the
-#: batch's reported loss is 3 launches instead of 5, every chain short:
-#:   OP_MLP_LOSS_A: the row losses (op_mlp_rowloss, a thread a row) and the
-#:     ||W_l||^2 block partials as a second thread range of the same launch,
-#:     blocks of R = ag_fold_block(count_l) weights (sqrt-sized: 128 for
-#:     7168 weights, 64 for 256), each one ascending fma chain from zero;
-#:   OP_MLP_ROWPART: the row-loss block sums, blocks of ag_fold_block(B)
-#:     rows (64 for 512) added ascending from zero;
-#:   OP_MLP_LOSS_C: op_mlp_bloss with each layer's partials folded ascending
-#:     in place of op_mlp_l2fold's launch (layer order, then the layer sums
-#:     added ascending as before).
-#: New fold block sizes, so new reported-loss bits (loss_curve_, and n_iter
-#: through the stopping rule) on every column and the host together; the
-#: gradients, hence the parameters of an epoch, are untouched. A layer of at
-#: most 64 weights or a batch of at most 64 rows is one block (the old chain).
-#: Shared by the hand path and the tape (the loss block is the trainer's).
-#: -D MOJOLEARN_AUTOGRAD_LOSS3_OFF restores the 5-launch block (4096 / 256).
-comptime MLP_LOSS3 = MLP_BLOCKED_FOLDS and not is_defined["MOJOLEARN_AUTOGRAD_LOSS3_OFF"]()
-#: the lane's opcode range (registered in sequence/dispatch.mojo)
-comptime OP_MLP_LOSS_A = 1500
-comptime OP_MLP_LOSS_C = 1501
-comptime OP_MLP3_FIRST = OP_MLP_LOSS_A
-comptime OP_MLP3_LAST = OP_MLP_LOSS_C
 
 comptime ACT_IDENTITY = 0
 comptime ACT_LOGISTIC = 1
@@ -444,68 +416,6 @@ def op_mlp_rowpart(t: Int, a: Args):
     for k in range(lo, hi):
         s = add(s, ld(a.p0, k))
     st(a.p1, t, s)
-
-
-# ------------------------------------------------------------------ pass-3 loss block (MLP_LOSS3)
-@always_inline
-def mlp_l2_blocks(count: Int) -> Int:
-    """MLP_LOSS3: the number of ||W||^2 blocks of a layer of `count` weights
-    (blocks of ag_fold_block(count))."""
-    var r = ag_fold_block(count)
-    return (count + r - 1) // r
-
-
-@always_inline
-def op_mlp_loss_a(t: Int, a: Args):
-    """MLP_LOSS3, launch 1 of the loss block, i3 + (weight blocks) threads.
-    t < i3 (the batch rows): op_mlp_rowloss's row t (p0 prediction, p1
-    target, p2 delta, p3 row loss, i0 loss, i1 O). t >= i3: weight block
-    t - i3 of the i2 = L <= 4 layers (op_sumsq's (offset, count) pairs in
-    i4..i11) concatenated in layer order; layer l's blocks are
-    ag_fold_block(count_l) weights: p5[t - i3] = the block's p4[off + lo + k]^2
-    folded k ascending from zero (sumsq_fold)."""
-    if t < a.i3:
-        op_mlp_rowloss(t, a)
-        return
-    var rest = t - a.i3
-    for l in range(a.i2):
-        var oc = _layer_oc(a, l)
-        var r = ag_fold_block(oc[1])
-        var nb = (oc[1] + r - 1) // r
-        if rest < nb:
-            var lo = rest * r
-            st(a.p5, t - a.i3, sumsq_fold(a.p4, oc[0] + lo, min(r, oc[1] - lo), 1))
-            return
-        rest -= nb
-
-
-@always_inline
-def op_mlp_loss_c(t: Int, a: Args):
-    """MLP_LOSS3, launch 3, one thread: op_mlp_bloss (p0 row losses unused,
-    p2[i0] the batch loss, i1 B, i2 O, i3 L, i4 loss, f0 = 0.5 alpha, p3 the
-    i5 row-block sums) with ||W_l||^2 = layer l's i(6 + l) block partials of
-    p1 (layers concatenated) added ascending from zero, then the layer sums
-    added ascending, as op_mlp_l2fold then op_mlp_bloss add them."""
-    var B = a.i1
-    var s = af_fold_parts(a.p3, a.i5)
-    var data: Float32
-    if a.i4 == LOSS_SQUARED:
-        data = div(div(s, Float32(B * a.i2)), Float32(2.0))
-    else:
-        data = div(s, Float32(B))
-    var q = Float32(0.0)
-    var start = 0
-    for l in range(a.i3):
-        var nb = a.i6
-        if l == 1:
-            nb = a.i7
-        elif l == 2:
-            nb = a.i8
-        elif l == 3:
-            nb = a.i9
-        q = add(q, af_fold_parts(a.p1 + start, nb))
-        start += nb
-    st(a.p2, a.i0, add(data, div(mul(a.f0, q), Float32(B))))
 
 
 # ------------------------------------------------------------------ nr-small device epoch (D13)

@@ -306,12 +306,14 @@ def mlp_backward_autograd[E: Exec](
         # MLP D 28, (256,), O 1, b512, adam, NVIDIA/AMD identical):
         #   tape default before this pass (composed graph, below): 28 =
         #     gather 1, forward 6, loss 5, seed copy 1, backward 11, export 4.
-        #   now: 11 = gather 1; forward 2 (gemm_epi EPI_BIAS_ACT a layer);
-        #     loss 3 (MLP_LOSS_TWO_RANGE); backward 4: layer 2 dW (N = 1, off
+        #   now: 13 = gather 1; forward 2 (gemm_epi EPI_BIAS_ACT a layer);
+        #     loss 5 (the trainer's block, unchanged); backward 4: layer 2 dW (N = 1, off
         #     the tile: one-thread gemm_epi + OP_COLSUM_DIV) 2, dH (gemm_epi
         #     EPI_ACT_BWD, tiled) 1, layer 1 dW + db (tiled, column-sum
         #     epilogue) 1, no dX; optimizer 1.
-        #   hand path (AUTOGRAD_MLP_OFF): 14 -> 12 (the loss block).
+        #   hand path (AUTOGRAD_MLP_OFF): 14 (gather 1, forward 2, loss 5,
+        #     backward 5, optimizer 1); the tape now issues one launch fewer
+        #     (db rides in the tiled dW1 launch).
         # Per layer: backward 1 on the tile (dW with db) + 1 (dX with the
         # layer below's act'); dX absent for the first layer; +1 OP_COLSUM_DIV
         # when dW falls off the tile (an edge under GT_MIN_EDGE, Apple, the
