@@ -75,22 +75,29 @@ comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
 # mlp_predict_py predicts through the tape's forward in inference mode
 # (mlp_predict_autograd) instead of the fused hand forward (mlp_predict).
 comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
-# Lane ag-fusion2, A/B pending: -D MOJOLEARN_AUTOGRAD_MLP_FUSED (default off;
-# arm A the current tape path, arm B this) records each layer as one fused
-# tape.linear_into node and backpropagates p - y with
-# backward_from_preactivation. Per layer that is the hand path's launches
-# with the hand path's arguments: forward 1 (gemm_epi EPI_BIAS_ACT, + the
-# softmax launch for a softmax output), backward 3 (gemm_epi EPI_L2GRAD,
-# OP_COLSUM_DIV, gemm_epi EPI_ACT_BWD; 2 for the first layer), no seed copy,
-# no L2GRAD/DIVS export. Expected bits: equal to the hand path's digest
-# (AUTOGRAD_MLP_OFF), different from the current tape's (its bias gradient
-# is the blocked fold and its activation derivative the tape's VJP body).
-# Either is allowed within a version. No effect under AUTOGRAD_MLP_OFF.
-# Lane ag-pass2-kernels: with MOJOLEARN_AUTOGRAD_PASS2_FOLD (default on) the
-# fused node's bias gradient is the tape's blocked fold for batches over 64
-# rows, so this arm equals the hand path's digest only for batches of at most
-# 64 rows; -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF keeps OP_COLSUM_DIV (equal).
-comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and is_defined["MOJOLEARN_AUTOGRAD_MLP_FUSED"]()
+# The fused tape node is the tape default (lane ag-pass3-impl, 2026-10-19,
+# PASS3_IDEAS idea 1; lane ag-fusion2 wrote it as the opt-in
+# MOJOLEARN_AUTOGRAD_MLP_FUSED). Each layer is one tape.linear_into node and
+# the backward seeds p - y with backward_from_preactivation. Per layer that is
+# the hand path's launches with the hand path's arguments, on the tiled GEMM
+# (OP_AGK_GEMM_EPI) where the hand path runs the one-thread OP_GEMM_EPI:
+# forward 1 (gemm_epi EPI_BIAS_ACT, + the softmax launch for a softmax
+# output), backward dW gemm_epi EPI_L2GRAD with db from the same launch
+# (AUTOGRAD_PASS3_DB: the tile's column-sum epilogue, or OP_COLSUM_DIV after
+# a GEMM off the tile) and dX gemm_epi EPI_ACT_BWD; no seed copy, no
+# L2GRAD/DIVS export.
+# BIT VERSION against the composed tape default it replaces (digest
+# aee3b17ef66dc060 on the HIGGS recipe: tools/sequence_speed.py case_mlp,
+# HIGGS 1M x 28, (256,) b512 1 epoch adam, identical): act' is op_act_bwd's
+# body instead of op_ag_unary_vjp's and db is OP_COLSUM_DIV's chain instead
+# of the blocked fold. Expected digest: the hand path's (2c2662ecb00cceed,
+# -D MOJOLEARN_AUTOGRAD_MLP_OFF) on every column (host, Metal, NVIDIA, AMD),
+# since every launch is a hand-path body with the hand path's fold order
+# (the tiled GEMM is op_gemm's chain term for term). A/B owed: arm A
+# -D MOJOLEARN_AUTOGRAD_MLP_UNFUSED (the composed matmul + add + activation
+# tape graph below, untouched), arm B this default; -D MOJOLEARN_AUTOGRAD_MLP_OFF
+# keeps the hand path.
+comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"]()
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
 # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
 # It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
@@ -295,12 +302,21 @@ def mlp_backward_autograd[E: Exec](
     var O = net.sizes[net.n_layers()]
     var seed = tape.variable(ex, delta, B, O, False)
     comptime if AUTOGRAD_MLP_FUSED:
-        # LAUNCHES PER LAYER, fused (lane ag-fusion2): backward 3 (dW
-        # gemm_epi EPI_L2GRAD into Gr, db OP_COLSUM_DIV into Gr, dX gemm_epi
-        # EPI_ACT_BWD with the layer below's act'), 2 for the first layer;
-        # forward 1 (+1 softmax for a softmax output). No seed copy (the
-        # seed is the output node's dZ, read in place) and no export:
-        # hand path 4 (1 + 3) a layer, unfused tape 12 (3 + 9).
+        # LAUNCHES PER BATCH (lane ag-pass3-impl, read from the code; HIGGS
+        # MLP D 28, (256,), O 1, b512, adam, NVIDIA/AMD identical):
+        #   tape default before this pass (composed graph, below): 28 =
+        #     gather 1, forward 6, loss 5, seed copy 1, backward 11, export 4.
+        #   now: 11 = gather 1; forward 2 (gemm_epi EPI_BIAS_ACT a layer);
+        #     loss 3 (MLP_LOSS_TWO_RANGE); backward 4: layer 2 dW (N = 1, off
+        #     the tile: one-thread gemm_epi + OP_COLSUM_DIV) 2, dH (gemm_epi
+        #     EPI_ACT_BWD, tiled) 1, layer 1 dW + db (tiled, column-sum
+        #     epilogue) 1, no dX; optimizer 1.
+        #   hand path (AUTOGRAD_MLP_OFF): 14 -> 12 (the loss block).
+        # Per layer: backward 1 on the tile (dW with db) + 1 (dX with the
+        # layer below's act'); dX absent for the first layer; +1 OP_COLSUM_DIV
+        # when dW falls off the tile (an edge under GT_MIN_EDGE, Apple, the
+        # host). No seed copy (the seed is the output node's dZ, read in
+        # place) and no export.
         tape.backward_from_preactivation(ex, logits, seed)
         return
     tape.backward_from(ex, logits, seed)

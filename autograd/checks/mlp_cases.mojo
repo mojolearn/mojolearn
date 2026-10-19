@@ -51,7 +51,7 @@ def run_mlp_cases[E: Exec](mut ex: E) raises:
                         print("LOSS", cases, i, curve[i])
                     # Bitwise digest of the fitted parameters and the loss
                     # curve: compare it across builds (AUTOGRAD_MLP_OFF hand
-                    # path, default tape, AUTOGRAD_MLP_FUSED) and executors.
+                    # path, default fused tape, AUTOGRAD_MLP_UNFUSED) and executors.
                     var digest = UInt64(1469598103934665603)
                     for i in range(len(params)):
                         digest = (digest ^ UInt64(bitcast[DType.uint32](params[i]))) * UInt64(1099511628211)
