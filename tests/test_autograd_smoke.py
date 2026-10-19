@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Autograd smoke: a tiny MLP and a tiny LSTM fit through the installed bindings' default training
-path (the MLP's backward runs on the autograd tape by default; the recurrent models' runs there when
-the binding is built with -D MOJOLEARN_AUTOGRAD_RNN), in identical mode. Each fit must give finite
+path (the MLP's and the recurrent models' backward runs on the autograd tape), in identical mode. Each fit must give finite
 losses and predictions, and its digest is checked against tests/autograd_smoke_digests.json, the
 expected-digest file, which must exist. A digest the file does not hold yet (null) is written to
 $MOJOLEARN_AUTOGRAD_SMOKE_OUT for the orchestrator to record; once recorded, every vendor must give

@@ -2201,7 +2201,7 @@ def _ours_sequential(ml, d_in):
 
 class OursFit(Ours):
     """The fit lanes through the public estimators: MLPClassifier (the tape path is the MLP's default),
-    LSTM/GRU/RNNRegressor (the tape path when the binding is built with -D MOJOLEARN_AUTOGRAD_RNN) and
+    LSTM/GRU/RNNRegressor (the tape path, their only backward since 2026-10-19) and
     mojolearn.Sequential. call() is one whole fit from random_state=SEED; outputs() predicts the
     held-out rows after the clock."""
 
@@ -2264,8 +2264,7 @@ class OursFit(Ours):
         self.info.update(call=LANE_TEXT[lane][0], fit_rows=int(self.Xtr.shape[0]), held_out_rows=int(self.Xte.shape[0]),
                          training_path=("the autograd tape (MLPClassifier's default since 9542fadae)" if lane == "mlp-fit"
                                         else "the autograd tape (mojolearn.Sequential)" if lane == "tape-user-model"
-                                        else "the tape when the binding was built with -D MOJOLEARN_AUTOGRAD_RNN, "
-                                             "else the hand-written backward (a build setting, not read back)"))
+                                        else "the autograd tape (the recurrent trainer's only backward since 2026-10-19)"))
         self.record = fit_record(lane, "mojolearn", cls, d_in, **readback)
 
     def call(self):

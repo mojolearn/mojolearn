@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Recurrent trainer on the tape (-D MOJOLEARN_AUTOGRAD_RNN, default off).
+# Recurrent trainer on the tape (rnn_fit's only backward since 2026-10-19).
 #
 # The hand-written recurrence kernels stay: OP_CELL_FWD_H / OP_CELL_BWD_H
 # (sequence/ops.mojo) and the scan OP_CELL_FWD_SCAN / OP_CELL_BWD_SCAN
@@ -25,8 +25,8 @@
 # and no ACCUMULATE runs; parameter gradients land in Gr (variable_into),
 # the loss derivative w.dy is the head's gradient storage (custom_into),
 # and a rule's destination is zero-filled only where the hand path fills
-# (zeroed_destination). The gradients in Gr carry the same bits as
-# HandStep. The A/B is HandStep (arm A) against this step (arm B).
+# (zeroed_destination). The gradients in Gr carried the same bits as the
+# deleted hand step (HandStep) on Apple, NVIDIA and AMD.
 # Scratch comes from the trainer's Work buffers, not tape.reserve, so the
 # tape allocates only node gradients and contributions.
 from std.sys.compile import is_defined
@@ -56,12 +56,14 @@ from sequence.recurrent import (
     wgrad_blocked,
 )
 
-# The recurrent trainer's backward runs on the tape by default (promoted 2026-10-19). One run per arm, HIGGS
+# The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
 # 1M rows, 16-step sequences, hidden 64, b512, 1 epoch, identical: NVIDIA L40S lstm 0.1419 -> 0.1397 s, gru 0.1256 ->
 # 0.1129, rnn 0.0689 -> 0.0645; AMD MI325X lstm 0.1234 -> 0.1236, gru 0.1053 -> 0.1054, rnn 0.0709 -> 0.0718. Bits equal
-# to the hand step on Apple, NVIDIA and AMD (same launches, same arguments). MOJOLEARN_AUTOGRAD_RNN_OFF restores the hand
-# step (HandStep) for the A/B; the old opt-in spelling is accepted too.
-comptime AUTOGRAD_RNN = not is_defined["MOJOLEARN_AUTOGRAD_RNN_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_RNN"]()
+# to the hand step on Apple, NVIDIA and AMD (same launches, same arguments).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+# MOJOLEARN_AUTOGRAD_RNN_OFF (the hand step) and the old opt-in spelling MOJOLEARN_AUTOGRAD_RNN are refused in
+# core/six_lane_experiment_guards.mojo.
 
 # Tags in a range of their own, clear of autograd/layers.mojo (LAYER_NORM = 1),
 # so one NeuralRules can later dispatch both families.
@@ -159,7 +161,7 @@ def rnn_layer[E: Exec](
     var whh = tape.value(w_hh)
     var bhh = tape.value(b_hh)
     var scanned = False
-    # The IDENTICAL default, as recurrent.forward (HandStep): the two steps
+    # The IDENTICAL default, as recurrent.forward (rnn_predict): the two
     # take the same route under the same defines, so they stay equal.
     comptime if SEQ_LSTM_SCAN:
         if scan_routes(H, gates_of(cell)):
@@ -423,7 +425,8 @@ struct AutogradRnnStep(RnnStep):
     # recurrent.forward + head on both paths). L layers, T steps, per-step
     # cell path; W = one weight-gradient group (a GEMM, or wgrad_blocked's
     # launches), S = one bias sum (colsum or its blocked twin).
-    #   HandStep:  head W + S + fill(dh_out) + GEMM(dh_T)                  4
+    #   HandStep (deleted 2026-10-19), for the record:
+    #              head W + S + fill(dh_out) + GEMM(dh_T)                  4
     #              per layer: fill(dh) + fill(dc) + T cells + 2 W + 2 S
     #              (+ GEMM dX for l > 0)                    L (T + 6) + L - 1
     #   tape, before lane ag-rnn-fix: the same, plus a seed copy, three

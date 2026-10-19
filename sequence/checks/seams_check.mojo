@@ -34,7 +34,9 @@ from sequence.garch import garch_sigma2
 from sequence.mlp import LOSS_BINARY_LOG, SplitMix, fisher_yates, mlp_epoch_key, mlp_perm_args
 from sequence.stl import stl_rwts
 from sequence.nm import Objective, nelder_mead
-from sequence.recurrent import Net, Work, forward, head, backward
+from sequence.recurrent import Net, Work
+from autograd.tape import Tape, Tensor
+from autograd.rules_recurrent import RNN_INPUT_BIAS_IN_GX, rnn_backward_autograd, rnn_head, rnn_layer, rnn_linear
 from sequence.checks.oracle import (
     o_gemm, o_gemm_split, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle, o_mlp_perm,
     o_stl_rwts, o_colscale, o_cholsolve, o_nm_quantized, quant_obj, o_moe_route, o_layer_norm, o_croston,
@@ -210,7 +212,14 @@ def _perm_col[E: Exec](mut ex: E, n: Int, key: UInt64) raises -> List[Float32]:
 
 # ------------------------------------------------------------ 5504 BPTT
 def _bptt[E: Exec](mut ex: E, net: Net, P: List[Float32], x: List[Float32], dy: List[Float32], T: Int, B: Int) raises -> Tuple[List[Float32], List[Float32]]:
-    """(dW_ih of layer 0, dgx) after forward, head and backward."""
+    """(dW_ih of layer 0, dgx of layer 0) after the trainer's forward and
+    head and its tape backward (autograd/rules_recurrent.mojo, recorded as
+    rnn_forward_autograd records it, keeping layer 0's gx node so its
+    gradient can be read back)."""
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+    # This seam used to read the hand backward (recurrent.backward, w.dgx); it now reads the tape's, which is
+    # rnn_fit's only backward, against the same oracle.
     var np_ = net.n_params()
     var Pd = ex.alloc(np_)
     var Gr = ex.alloc(np_)
@@ -221,16 +230,32 @@ def _bptt[E: Exec](mut ex: E, net: Net, P: List[Float32], x: List[Float32], dy: 
     ex.upload(Pd, _host_ptr(pc), np_)
     ex.upload(xd, _host_ptr(xc), len(x))
     var w = Work(ex, net, T, B, True)
-    var hT = forward(ex, net, Pd, xd, T, B, w)
-    head(ex, net, Pd, hT, B, w.yhat)
+    var tape = Tape()
+    var H = net.H
+    var GH = net.G() * H
+    var inp = tape.variable(ex, xd, T * B, net.D, False)
+    var gx0 = Tensor(0, 0, -1)
+    for l in range(net.L):  # driver-loop: over layers
+        var din = net.din(l)
+        var w_ih = tape.variable_into(ex, Pd + net.w_ih(l), Gr + net.w_ih(l), GH, din)
+        var w_hh = tape.variable_into(ex, Pd + net.w_hh(l), Gr + net.w_hh(l), GH, H)
+        var b_ih = tape.variable_into(ex, Pd + net.b_ih(l), Gr + net.b_ih(l), 1, GH)
+        var b_hh = tape.variable_into(ex, Pd + net.b_hh(l), Gr + net.b_hh(l), 1, GH)
+        var gx = rnn_linear(tape, ex, inp, w_ih, b_ih, w.gx[l], RNN_INPUT_BIAS_IN_GX, True, l > 0, w)
+        if l == 0:
+            gx0 = gx
+        inp = rnn_layer(tape, ex, gx, w_hh, b_hh, Pd + net.b_ih(l), net.cell, T, B, w, l)
+    var w_o = tape.variable_into(ex, Pd + net.head(), Gr + net.head(), net.O, H)
+    var b_o = tape.variable_into(ex, Pd + net.head() + net.O * H, Gr + net.head() + net.O * H, 1, net.O)
+    var logits = rnn_head(tape, ex, inp, w_o, b_o, B, w.yhat, w.dy, w)
     ex.upload(w.dy, _host_ptr(dyc), len(dy))
-    backward(ex, net, Pd, Gr, xd, T, B, w)
+    rnn_backward_autograd(tape, ex, net, logits, w.dy, B)
     ex.sync()
-    var GH = net.G() * net.H
     var dw = List[Float32](length=GH * net.D, fill=Float32(0.0))
     ex.download(_host_ptr(dw), Gr + net.w_ih(0), GH * net.D)
     var dgx = List[Float32](length=T * B * GH, fill=Float32(0.0))
-    ex.download(_host_ptr(dgx), w.dgx, T * B * GH)
+    ex.download(_host_ptr(dgx), tape.gradient(gx0), T * B * GH)
+    tape.release(ex)
     _ = pc^
     _ = xc^
     _ = dyc^

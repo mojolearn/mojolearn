@@ -344,13 +344,10 @@ struct Work(Movable):
     var act: List[FP]
     var hall: List[FP]
     var call: List[FP]
-    var dgx: FP
     var dgh: FP
     var dh: FP
     var dhn: FP
     var dc: FP
-    var dhout0: FP
-    var dhout1: FP
     var xb: FP
     var yb: FP
     var yhat: FP
@@ -374,13 +371,13 @@ struct Work(Movable):
             self.hall.append(ex.alloc((T + 1) * B * H))
             self.call.append(ex.alloc((T + 1) * B * H))
         var tb = T * B if train else 1
-        self.dgx = ex.alloc(tb * GH)
+        # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
+        # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+        # w.dgx, w.dhout0 and w.dhout1 were the hand backward's dGX and dH_out buffers; the tape owns those gradients.
         self.dgh = ex.alloc(tb * GH)
         self.dh = ex.alloc(B * H if train else 1)
         self.dhn = ex.alloc(B * H if train else 1)
         self.dc = ex.alloc(B * H if train else 1)
-        self.dhout0 = ex.alloc(tb * H)
-        self.dhout1 = ex.alloc(tb * H)
         self.xb = ex.alloc(T * B * net.D)
         self.yb = ex.alloc(B * net.O)
         self.yhat = ex.alloc(B * net.O)
@@ -472,104 +469,13 @@ def head[E: Exec](mut ex: E, net: Net, P: FP, hT: FP, B: Int, yhat: FP) raises:
     bias_rows(ex, yhat, P + net.head() + O * H, yhat, B, O)
 
 
-def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
-    """Gradients of every parameter into Gr, given dy [B, O] in w.dy."""
-    var H = net.H
-    var O = net.O
-    var GH = net.G() * H
-    var hT = w.hall[net.L - 1] + T * B * H
-    gemm(ex, w.dy, hT, Gr + net.head(), O, H, B, 1, O, H, 1, False, H)
-    colsum(ex, w.dy, Gr + net.head() + O * H, B, O)
-    var cur = w.dhout0
-    var other = w.dhout1
-    fill(ex, cur, T * B * H, Float32(0.0))
-    gemm(ex, w.dy, P + net.head(), cur + (T - 1) * B * H, B, H, O, O, 1, H, 1, False, H)
-    var l = net.L - 1
-    while l >= 0:
-        var din = net.din(l)
-        var dh = w.dh
-        var dhn = w.dhn
-        var scanned = False
-        comptime if SEQ_LSTM_SCAN:
-            if scan_routes(H, net.G()):
-                # every step from T - 1 down, one block per row (dh = dc = 0
-                # inside): sequence/recurrent_scan.mojo
-                var sa = Args()
-                sa.p0 = w.act[l]
-                sa.p1 = w.gh[l]
-                sa.p2 = w.hall[l]
-                sa.p3 = w.call[l]
-                sa.p4 = w.call[l] + B * H
-                sa.p5 = dh
-                sa.p6 = cur
-                sa.p7 = w.dc
-                sa.p8 = w.dgx
-                sa.p9 = w.dgh
-                sa.p10 = dhn
-                sa.p11 = P + net.w_hh(l)
-                sa.i0 = net.cell
-                sa.i1 = B
-                sa.i2 = H
-                sa.i3 = T
-                sa.i4 = B * GH
-                ex.launch[OP_CELL_BWD_SCAN](sa, B)
-                scanned = True
-        if not scanned:
-            fill(ex, dh, B * H, Float32(0.0))
-            fill(ex, w.dc, B * H, Float32(0.0))
-        var s = T - 1 if not scanned else -1
-        while s >= 0:
-            var a = Args()
-            a.p0 = w.act[l] + s * B * GH
-            a.p1 = w.gh[l] + s * B * GH
-            a.p2 = w.hall[l] + s * B * H
-            a.p3 = w.call[l] + s * B * H
-            a.p4 = w.call[l] + (s + 1) * B * H
-            a.p5 = dh
-            a.p6 = cur + s * B * H
-            a.p7 = w.dc
-            a.p8 = w.dgx + s * B * GH
-            a.p9 = w.dgh + s * B * GH
-            a.p10 = dhn
-            a.p11 = P + net.w_hh(l)
-            a.i0 = net.cell
-            a.i1 = B
-            a.i2 = H
-            # one launch: the later step's recurrent GEMM dh += dGH_{s+1} W_hh
-            # (it was a launch after that step's cell backward), then this
-            # step's cell backward (ops.mojo::op_cell_bwd_h). After s = 0 that
-            # GEMM would only produce the gradient into the zero h_0, which
-            # nothing reads, so it is not run.
-            a.i3 = 1 if s < T - 1 else 0
-            a.i4 = B * GH
-            ex.launch[OP_CELL_BWD_H](a, B * H)
-            var t = dh
-            dh = dhn
-            dhn = t
-            s -= 1
-        var inp = x if l == 0 else w.hall[l - 1] + B * H
-        # TOMBSTONE: MOJOLEARN_SEQ_FAST_LSTM_WGRAD (DROPPED-quality bundle) deleted 2026-10-09 on lane/owed-deletions-D2;
-        # code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_WGRAD.patch
-        comptime if SEQ_WGRAD_BLOCKED:
-            wgrad_blocked(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, din, w.wsplit)
-            wgrad_blocked(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
-            if wgrad_block(T * B) < T * B:
-                wgrad_blocked(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
-                wgrad_blocked(ex, w.one, w.dgh, Gr + net.b_hh(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
-            else:
-                colsum(ex, w.dgx, Gr + net.b_ih(l), T * B, GH)
-                colsum(ex, w.dgh, Gr + net.b_hh(l), T * B, GH)
-        else:
-            gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, False, din)
-            gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, False, H)
-            colsum(ex, w.dgx, Gr + net.b_ih(l), T * B, GH)
-            colsum(ex, w.dgh, Gr + net.b_hh(l), T * B, GH)
-        if l > 0:
-            gemm(ex, w.dgx, P + net.w_ih(l), other, T * B, din, GH, GH, 1, din, 1, False, din)
-            var t2 = cur
-            cur = other
-            other = t2
-        l -= 1
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+# The hand-chained backward (`backward`: head dW/db, the zeroed h_T delta, per layer the cell or scan
+# backward, dW/db of both projections and the input-projection delta) is gone: rnn_fit's backward is the tape's
+# (autograd/rules_recurrent.mojo AutogradRnnStep, RecurrentRules), which runs the same launches with the same
+# arguments. The cell, scan and weight-gradient kernels it called stay. This function also carried the
+# MOJOLEARN_SEQ_FAST_LSTM_WGRAD tombstone (deleted 2026-10-09, lane/owed-deletions-D2, recoverable at b639a2bd2).
 
 
 # ------------------------------------------------------------------ optimizer
@@ -676,7 +582,9 @@ trait RnnStep(Defaultable & Movable & Deinitable):
     """One optimizer step's differentiation: forward_head leaves the head's
     output in w.yhat; backward reads dy [B, O] from w.dy and writes every
     parameter gradient into Gr (the `Net` layout). rnn_fit keeps the loss,
-    shuffle, batching and optimizer; only this assembly is swappable.
+    shuffle, batching and optimizer. AutogradRnnStep
+    (autograd/rules_recurrent.mojo) is the one step; the trait stays because
+    that module imports this one.
     forward_head also receives Gr so a step can name it as the gradient
     destination when it records the forward (the tape step does)."""
 
@@ -689,24 +597,13 @@ trait RnnStep(Defaultable & Movable & Deinitable):
         ...
 
 
-struct HandStep(RnnStep):
-    """The hand-assembled backward above (`forward`, `head`, `backward`)."""
-
-    def __init__(out self):
-        pass
-
-    def forward_head[E: Exec](
-        mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
-    ) raises:
-        var hT = forward(ex, net, P, x, T, B, w)
-        head(ex, net, P, hT, B, w.yhat)
-
-    def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
-        backward(ex, net, P, Gr, x, T, B, w)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+# HandStep (the hand-assembled step over forward, head and backward) is gone: AutogradRnnStep is the only step.
 
 
 # ------------------------------------------------------------------ fit / predict
-def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
+def rnn_fit[E: Exec, //, S: RnnStep](
     mut ex: E, net: Net, task: Int,
     X: FP, Y: FP, N: Int, T: Int,
     epochs: Int, bs: Int, shuffle: Bool, seed: UInt64,

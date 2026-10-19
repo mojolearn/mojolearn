@@ -17,7 +17,7 @@ from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import AUTOGRAD_PREDICT, MLPNet, mlp_fit, mlp_predict, mlp_predict_autograd
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
-from autograd.rules_recurrent import AUTOGRAD_RNN, AutogradRnnStep
+from autograd.rules_recurrent import AutogradRnnStep
 from autograd.route_ops import moe_tape_train_step
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_fit_begin, ag_profile_fit_end
@@ -138,13 +138,11 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
     # counted by the executor, printed after it (the MLP trainer's table;
     # the recurrent fit used to count its launches and print nothing)
     var profile = ag_profile_fit_begin()
-    comptime if AUTOGRAD_RNN:
-        # -D MOJOLEARN_AUTOGRAD_RNN: the same fit with the tape-assembled backward
-        rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
-                                 fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
-    else:
-        rnn_fit(ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
-                fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
+    # the backward runs on the tape (AutogradRnnStep)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
+    rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
+                             fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))
     if profile:
         ag_profile_fit_end("rnn_fit cell=" + String(ival(ip, 0)))
     return PythonObject(net.n_params())

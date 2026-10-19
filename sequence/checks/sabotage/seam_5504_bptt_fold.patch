@@ -1,16 +1,16 @@
-diff --git a/sequence/recurrent.mojo b/sequence/recurrent.mojo
---- a/sequence/recurrent.mojo
-+++ b/sequence/recurrent.mojo
-@@ -522,7 +522,11 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
-             wgrad_gemm(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
-             wgrad_gemm(ex, w.one, w.dgh, Gr + net.b_hh(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
-         elif SEQ_WGRAD_BLOCKED:
--            wgrad_blocked(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, din, w.wsplit)
-+            fill(ex, Gr + net.w_ih(l), GH * din, Float32(0.0))
-+            var s2 = T - 1
-+            while s2 >= 0:
-+                gemm(ex, w.dgx + s2 * B * GH, inp + s2 * B * din, Gr + net.w_ih(l), GH, din, B, 1, GH, din, 1, True, din)
-+                s2 -= 1
-             wgrad_blocked(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
-             if wgrad_block(T * B) < T * B:
-                 wgrad_blocked(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+diff --git a/autograd/rules_recurrent.mojo b/autograd/rules_recurrent.mojo
+--- a/autograd/rules_recurrent.mojo
++++ b/autograd/rules_recurrent.mojo
+@@ -249,7 +249,11 @@
+     var done = False
+     comptime if SEQ_WGRAD_BLOCKED:
+         if saved.i1 != 0:
+-            wgrad_blocked(ex, up, xin, gradients[1], dout, din, R, 1, dout, din, 1, din, saved.p0)
++            fill(ex, gradients[1], dout * din, Float32(0.0))
++            var r2 = R - 1
++            while r2 >= 0:
++                gemm(ex, up + r2 * dout, xin + r2 * din, gradients[1], dout, din, 1, 1, dout, din, 1, True, din)
++                r2 -= 1
+             if wgrad_block(R) < R:
+                 wgrad_blocked(ex, saved.p1, up, gradients[2], 1, dout, R, 0, 0, dout, 1, dout, saved.p0)
+             else:

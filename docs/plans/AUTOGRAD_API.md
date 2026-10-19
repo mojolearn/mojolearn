@@ -426,8 +426,9 @@ What moves is model-level assembly: the hand-chained order of head GEMMs,
 column sums, residual adds, per-layer deltas and the calls into the block
 kernels. What stays hand-written becomes a custom rule.
 
-1. Recurrent (`sequence/recurrent.mojo::backward`): done under
-   `MOJOLEARN_AUTOGRAD_RNN`. Stay: `op_cell_fwd_h`/`op_cell_bwd_h`, the scan
+1. Recurrent (`sequence/recurrent.mojo::backward`): done; the tape is the
+   only backward and the hand `backward`/`HandStep` were deleted 2026-10-19
+   (docs/TOMBSTONES.md, `MOJOLEARN_AUTOGRAD_RNN_OFF`). Stay: `op_cell_fwd_h`/`op_cell_bwd_h`, the scan
    `OP_CELL_FWD_SCAN`/`OP_CELL_BWD_SCAN`, `wgrad_blocked`. The rules reuse
    every hand launch with its arguments, so the expected result is the same
    bits as the hand path.
