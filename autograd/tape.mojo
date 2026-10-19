@@ -1179,9 +1179,11 @@ struct Tape(Movable):
         A dense node is (value, cols, 1, 0); a view of a rows x cols node
         P is (P's value, 1, rows, 1): element (r, c) is P's (c, r) word."""
         var n = self._nodes[i]
+        var one: Int = 1
+        var zero: Int = 0
         if self._pending(i):
-            return (n.saved.p0, 1, n.rows, 1)
-        return (n.value, n.cols, 1, 0)
+            return (n.saved.p0, one, n.rows, one)
+        return (n.value, n.cols, one, zero)
 
     def reshape[E: Exec](mut self, mut ex: E, x: Tensor, rows: Int, cols: Int) raises -> Tensor:
         self._shape(rows, cols)
