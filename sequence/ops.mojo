@@ -392,6 +392,20 @@ comptime GEMM_STAGE_V2 = not has_apple_gpu_accelerator() and not (
 )
 comptime GEMM_STAGE = 16
 comptime GEMM_STAGE_V2_WIDE = 64
+#: lane ag-pass5-recurrent (2026-10-19, orchestrator p6-01 AMD bisect): the
+#: recurrent trainers ran 2.7x slower on the AMD MI325X after GEMM_STAGE_V2
+#: landed (426dc4b2c, after d85d180f7): lstm 0.1206 -> 0.329, gru 0.102 ->
+#: 0.289, rnn 0.067 -> 0.196 s a fit, with every pass-6 define off, while the
+#: MLP (tiled kernels, not gemm_dot) got faster. The recurrent ops fold
+#: through gemm_dot inside one-thread-per-element bodies that keep the cell's
+#: state live around it: the forward cell (G gate folds over K = H), the
+#: backward cell (K = G H) and the recurrent weight gradients' split-K stage 0
+#: (OP_GEMM_SPLITK, K = a 512-row block). 64 + 64 staged floats on top of
+#: that state are where idea 3 (d) expected spills. So those three bodies take
+#: the 16-wide staging (the pre-V2 code, word for word) by default; -D
+#: MOJOLEARN_SEQ_REC_STAGE64 gives them V2's width (the A/B arm). A register
+#: rule on the body, never a shape; same bits either way (one fold chain).
+comptime SEQ_REC_GEMM_STAGE_V2 = GEMM_STAGE_V2 and is_defined["MOJOLEARN_SEQ_REC_STAGE64"]()
 comptime COLSUM_STAGE = 32
 comptime SUMSQ_VEC = 4
 
@@ -448,7 +462,9 @@ def tanh_(x: Float32) -> Float32:
 
 # ------------------------------------------------------------------ bodies
 @always_inline
-def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int, acc0: Float32) -> Float32:
+def gemm_dot[wide: Bool = GEMM_STAGE_V2](
+    pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int, acc0: Float32
+) -> Float32:
     """THE GEMM REDUCTION: acc0 + sum_k pa[abase + k sak] pb[k sbk + bbase],
     k ascending, one fused multiply-add per term. `op_gemm` and the fused
     recurrent steps (`op_cell_fwd_h`, `op_cell_bwd_h`) all fold through it, so
@@ -464,7 +480,7 @@ def gemm_dot(pa: FP, abase: Int, sak: Int, pb: FP, bbase: Int, sbk: Int, K: Int,
         # that many loads in flight instead of waiting out each one); the
         # fold is the same chain of fmas in the same order.
         var k = 0
-        comptime if GEMM_STAGE_V2:
+        comptime if wide:
             # GEMM_STAGE_V2_WIDE terms a round, then guarded rounds of
             # GEMM_STAGE for the remainder: a term k >= K is neither loaded
             # nor folded, so the chain is the plain loop's, k ascending
@@ -538,7 +554,7 @@ def op_gemm_splitk(t: Int, a: Args):
         var n = mn - m * N
         var k0 = s * a.i10
         var kc = min(a.i2, k0 + a.i10) - k0
-        st(a.p3, t, gemm_dot(a.p0, m * a.i3 + k0 * a.i4, a.i4, a.p1, n * a.i6 + k0 * a.i5, a.i5, kc, Float32(0.0)))
+        st(a.p3, t, gemm_dot[SEQ_REC_GEMM_STAGE_V2](a.p0, m * a.i3 + k0 * a.i4, a.i4, a.p1, n * a.i6 + k0 * a.i5, a.i5, kc, Float32(0.0)))
         return
     var m = t // N
     var n = t - m * N
@@ -710,7 +726,7 @@ def op_cell_fwd_h(t: Int, a: Args):
         comptime if NN42_INPUT_BIAS_FUSED:
             if a.i5 != 0:
                 st(a.p0, b * GH + n, add(ld(a.p0, b * GH + n), ld(a.p9, n)))
-        var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
+        var acc = gemm_dot[SEQ_REC_GEMM_STAGE_V2](a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
         st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
     op_cell_fwd(t, a)
 
@@ -730,7 +746,7 @@ def op_cell_bwd_h(t: Int, a: Args):
         var GH = gates_of(a.i0) * H
         var b = t // H
         var u = t - b * H
-        var acc = gemm_dot(a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
+        var acc = gemm_dot[SEQ_REC_GEMM_STAGE_V2](a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
         st(a.p5, t, acc)
     op_cell_bwd(t, a)
 
