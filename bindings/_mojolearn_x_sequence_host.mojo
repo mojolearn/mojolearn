@@ -19,6 +19,11 @@ from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from autograd.pyapi import model_fit_py, model_n_params_py, model_predict_py
+from autograd.pyapi import (
+    ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
+    ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
+)
+from autograd.ops_api import OPS_HOST
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 
 
@@ -101,6 +106,56 @@ def model_predict_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonO
 
 def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
     return model_n_params_py(prog, ptab)
+
+
+# The operation session (autograd/ops_api.mojo): one HostExec and one tape kept
+# between calls, tensors by handle.
+def ops_open_binding(record: PythonObject) raises -> PythonObject:
+    return ops_open_py[HostExec, OPS_HOST](HostExec(), record)
+
+
+def ops_close_binding(sid: PythonObject) raises -> PythonObject:
+    return ops_close_py[HostExec, OPS_HOST](sid)
+
+
+def ops_upload_binding(sid: PythonObject, addr: PythonObject, ip: PythonObject) raises -> PythonObject:
+    return ops_upload_py[HostExec, OPS_HOST](sid, addr, ip)
+
+
+def ops_download_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) raises -> PythonObject:
+    return ops_download_py[HostExec, OPS_HOST](sid, h, addr)
+
+
+def ops_op_binding(sid: PythonObject, code: PythonObject, hs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    return ops_op_py[HostExec, OPS_HOST](sid, code, hs, ip, fp)
+
+
+def ops_scalar_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    return ops_scalar_py[HostExec, OPS_HOST](sid, h)
+
+
+def ops_shape_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    return ops_shape_py[HostExec, OPS_HOST](sid, h)
+
+
+def ops_free_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    return ops_free_py[HostExec, OPS_HOST](sid, h)
+
+
+def ops_reset_binding(sid: PythonObject) raises -> PythonObject:
+    return ops_reset_py[HostExec, OPS_HOST](sid)
+
+
+def ops_metric_binding(sid: PythonObject, kind: PythonObject, hs: PythonObject) raises -> PythonObject:
+    return ops_metric_py[HostExec, OPS_HOST](sid, kind, hs)
+
+
+def ops_backward_binding(sid: PythonObject, h: PythonObject, accumulate: PythonObject) raises -> PythonObject:
+    return ops_backward_py[HostExec, OPS_HOST](sid, h, accumulate)
+
+
+def ops_grad_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) raises -> PythonObject:
+    return ops_grad_py[HostExec, OPS_HOST](sid, h, addr)
 
 
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -198,6 +253,19 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[model_fit_binding]("model_fit")
         m.def_function[model_predict_binding]("model_predict")
         m.def_function[model_n_params_binding]("model_n_params")
+        # the operation session (autograd/ops_api.mojo)
+        m.def_function[ops_open_binding]("ops_open")
+        m.def_function[ops_close_binding]("ops_close")
+        m.def_function[ops_upload_binding]("ops_upload")
+        m.def_function[ops_download_binding]("ops_download")
+        m.def_function[ops_op_binding]("ops_op")
+        m.def_function[ops_scalar_binding]("ops_scalar")
+        m.def_function[ops_shape_binding]("ops_shape")
+        m.def_function[ops_free_binding]("ops_free")
+        m.def_function[ops_reset_binding]("ops_reset")
+        m.def_function[ops_metric_binding]("ops_metric")
+        m.def_function[ops_backward_binding]("ops_backward")
+        m.def_function[ops_grad_binding]("ops_grad")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         m.def_function[layer_norm_binding]("layer_norm")
