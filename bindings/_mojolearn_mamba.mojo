@@ -223,7 +223,7 @@ from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward, 
 from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
 # The Mamba-1 / Mamba-2 backward entries assemble the VJP on the tape
 # (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
 from mamba.impl.modeling.modeling_mamba_prefill_backward import Mamba1PrefillGradients
@@ -488,7 +488,7 @@ def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     w.d_skip = _read_f32(a[9], di)
     w.w_out = _read_f32(a[10], dm * di)
 
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward arm) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward arm) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
     var gradients: Mamba1PrefillGradients = mamba1_tape_backward(
         w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
@@ -2992,7 +2992,7 @@ def _mamba2_backward_run(a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32, 
     w.d_skip = _read_f32(a[7], nh)
     w.gnorm_w = _read_f32(a[8], di)
     w.w_out = _read_f32(a[9], dm * di)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward arm) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward arm) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
     var gradients: Mamba2PrefillGradients = mamba2_tape_backward(
         w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,

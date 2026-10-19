@@ -204,7 +204,7 @@ from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
 # NVIDIA L40S m1 1.942 -> 2.035 ms, m2 6.462 -> 6.554; AMD MI325X m1 5.131 -> 5.285, m2 17.620 -> 18.458; averages
 # 1.04 / 1.03; accepted for one backward path instead of two). Every gradient word equals the hand path on Apple,
 # NVIDIA and AMD (MAMBA_TAPE_BACKWARD_PASS).
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (the hand Mamba-1/2 backward arm and its MOJOLEARN_AUTOGRAD_MAMBA opt-in spelling; superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (the hand Mamba-1/2 backward arm and its MOJOLEARN_AUTOGRAD_MAMBA opt-in spelling; superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 
 # Tags in a range of their own, clear of LayerNorm (1) and recurrent (16-18).

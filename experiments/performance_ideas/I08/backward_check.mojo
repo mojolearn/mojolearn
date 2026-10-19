@@ -8,7 +8,7 @@ fixture alone does not establish host/four-column identity or speed.
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from mamba.checks.mamba2_fixture import m2_case_weights,m2_case_x,m2_corpus_case
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 from autograd.rules_mamba import mamba2_tape_backward
 

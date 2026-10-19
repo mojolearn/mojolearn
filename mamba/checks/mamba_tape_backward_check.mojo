@@ -28,7 +28,7 @@ from mamba.checks.mamba_fixture import MambaDims, MambaWeights, corpus_case, cor
 from mamba.checks.mamba2_fixture import Mamba2Weights, m2_case_weights, m2_case_x, m2_corpus_case
 from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
 from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 from autograd.rules_mamba import (
     mamba1_tape_backward,

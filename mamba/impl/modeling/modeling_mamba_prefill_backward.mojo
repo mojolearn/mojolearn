@@ -68,6 +68,6 @@ def m1_conv_w_interleave_kernel(
     out_ptr.unsafe_store(base + Int(p3), t3_ptr.unsafe_load(d))
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward glue, superseded by the tape) deleted 2026-10-19 by e378999c7; code recoverable at e378999c7^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 # (the CPU column keeps the same walk as generator input: mamba/host/mamba1_prefill_chain.mojo)

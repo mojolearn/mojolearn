@@ -33,6 +33,6 @@ struct Mamba2PrefillGradients(Movable):
         self.out_proj_weight = List[Float32]()
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by e378999c7; code recoverable at e378999c7^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 # (the CPU column keeps the same walk as generator input: mamba/host/mamba2_prefill_chain.mojo)

@@ -4,7 +4,7 @@ from max.gpu.host import DeviceContext
 from std.time import perf_counter_ns
 from gemm.checks.gemm_step_arms import gemm_step_env_int
 from mamba.checks.mamba2_fixture import m2_case_weights,m2_corpus_case,m2_case_seed,corpus_tensor,M2_TID_X
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 from autograd.rules_mamba import mamba2_tape_backward
 
