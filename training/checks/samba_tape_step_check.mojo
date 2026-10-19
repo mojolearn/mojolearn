@@ -1,18 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The Samba train step's tape backward (autograd/rules_samba.mojo) against the hand walk, word for word.
+"""The Samba train step's tape backward (autograd/rules_samba.mojo) against stored words.
 
 For each case (d_model 64, vocab 256, B 2, L 32; a mixed Mamba-3 / attention
 stack tied and untied, and a Mamba-3-only stack), runs one resident train
-step (forward, loss, backward, AdamW update) on two fresh sessions with the
-same parameters, ids and targets, one through the hand walk and one through
-the tape, and requires the loss, every registry gradient word and every
-updated parameter word to be equal. Prints one FNV-1a digest per gradient
-tensor so columns can be compared across vendors.
+step (forward, loss, backward, AdamW update) on a fresh session and requires
+the loss bits, the FNV-1a digest of every registry gradient tensor and the
+digest of the updated parameters to equal the stored ones
+(training/checks/samba_tape_step_digests.tsv: the words the tape and the
+deleted hand walk both produced on Metal, NVIDIA and AMD). Prints every
+digest so columns can be compared across vendors. Run from the repo root:
 
     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/samba_tape_step_check.mojo
 """
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
+
+from checks.identity_trace_read import read_trace_lines
 
 from mamba.checks.mamba3_fixture import M3_D_STATE, Mamba3Dims
 from training.checks.loss_contract import IGNORE_INDEX_DEFAULT
@@ -103,7 +106,36 @@ def params(offsets: List[Int], norm: List[Bool]) -> List[Float32]:
     return out^
 
 
-def step[tape: Bool](ctx: DeviceContext, c: Case) raises -> Tuple[Float32, List[Float32], List[Float32]]:
+#: case, tensor, words, value (the loss's float32 bits or a tensor's FNV-1a digest)
+comptime STORED_PATH = "training/checks/samba_tape_step_digests.tsv"
+
+
+@fieldwise_init
+struct Stored(Copyable, Movable):
+    var keys: List[String]
+    var values: List[String]
+
+    def lookup(self, key: String) raises -> String:
+        for i in range(len(self.keys)):
+            if self.keys[i] == key:
+                return self.values[i].copy()
+        raise Error("samba_tape_step_check: no stored word for " + key + " in " + STORED_PATH)
+
+
+def load_stored() raises -> Stored:
+    var keys = List[String]()
+    var values = List[String]()
+    var lines = read_trace_lines(STORED_PATH)
+    for k in range(len(lines)):
+        var fields = lines[k].split("\t")
+        if len(fields) != 4:
+            raise Error("samba_tape_step_check: malformed stored line: " + lines[k])
+        keys.append(String(fields[0]) + "\t" + String(fields[1]) + "\t" + String(fields[2]))
+        values.append(String(fields[3]))
+    return Stored(keys^, values^)
+
+
+def step(ctx: DeviceContext, c: Case) raises -> Tuple[Float32, List[Float32], List[Float32]]:
     """One resident train step on a fresh session: (loss, gradient, updated parameters)."""
     var reg = registry(c)
     var offsets = reg[0].copy()
@@ -134,7 +166,7 @@ def step[tape: Bool](ctx: DeviceContext, c: Case) raises -> Tuple[Float32, List[
     var p_stage = ctx.enqueue_create_host_buffer[DType.float32](n_total)
     var g_stage = ctx.enqueue_create_host_buffer[DType.float32](n_total)
     ctx.synchronize()
-    _ = samba_resident_train_step[tape](
+    _ = samba_resident_train_step(
         s,
         p.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         ids.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
@@ -164,48 +196,40 @@ def step[tape: Bool](ctx: DeviceContext, c: Case) raises -> Tuple[Float32, List[
     return (l0, grad^, p^)
 
 
-def compare_words(tag: String, name: String, hand: List[Float32], tape: List[Float32], lo: Int, hi: Int) -> Int:
-    var diff = 0
-    var first = -1
-    for i in range(lo, hi):
-        if bitcast[DType.uint32](hand[i]) != bitcast[DType.uint32](tape[i]):
-            diff += 1
-            if first < 0:
-                first = i - lo
-    print("SAMBA_TAPE", tag, name, hi - lo, "hand", digest(hand, lo, hi), "tape", digest(tape, lo, hi),
-          "SAME" if diff == 0 else "DIFFER words=" + String(diff) + " first=" + String(first))
-    return diff
+def check_word(stored: Stored, tag: String, name: String, words: Int, got: String) raises -> Int:
+    var want = stored.lookup(tag + "\t" + name + "\t" + String(words))
+    var same = got == want
+    print("SAMBA_TAPE", tag, name, words, "tape", got, "stored", want, "SAME" if same else "DIFFER")
+    return 0 if same else 1
 
 
-def run_case(ctx: DeviceContext, c: Case) raises -> Int:
-    var hand = step[False](ctx, c)
-    var tape = step[True](ctx, c)
+def run_case(ctx: DeviceContext, stored: Stored, c: Case) raises -> Int:
+    var tape = step(ctx, c)
     var bad = 0
-    var lh = bitcast[DType.uint32](hand[0])
-    var lt = bitcast[DType.uint32](tape[0])
-    print("SAMBA_TAPE", c.tag, "loss hand", lh, "tape", lt, "SAME" if lh == lt else "DIFFER")
-    if lh != lt:
-        bad += 1
-    if len(hand[1]) != len(tape[1]) or len(hand[2]) != len(tape[2]):
-        raise Error(c.tag + ": gradient or parameter length differs")
+    bad += check_word(stored, c.tag, "loss", 1, String(bitcast[DType.uint32](tape[0])))
     var reg = registry(c)
     var offsets = reg[0].copy()
     var names = reg[2].copy()
+    if len(tape[1]) != offsets[len(names)] or len(tape[2]) != offsets[len(names)]:
+        raise Error(c.tag + ": gradient or parameter length is not the registry's")
     for j in range(len(names)):
-        bad += compare_words(c.tag, String("grad.") + names[j], hand[1], tape[1], offsets[j], offsets[j + 1])
-    bad += compare_words(c.tag, "params_after", hand[2], tape[2], 0, len(hand[2]))
+        var lo = offsets[j]
+        var hi = offsets[j + 1]
+        bad += check_word(stored, c.tag, String("grad.") + names[j], hi - lo, String(digest(tape[1], lo, hi)))
+    bad += check_word(stored, c.tag, "params_after", len(tape[2]), String(digest(tape[2], 0, len(tape[2]))))
     return bad
 
 
 def main() raises:
     var ctx = DeviceContext()
+    var stored = load_stored()
     var bad = 0
     var m3 = SAMBA_LAYER_MAMBA3
     var at = SAMBA_LAYER_ATTENTION
     # tag, kinds, vocab, d_model, n_heads, n_kv, head_dim, intermediate, tie, B, L, max_norm
-    bad += run_case(ctx, Case("tied_m3_attn", [m3, at, m3, at], 256, 64, 8, 4, 8, 128, True, 2, 32, Float32(1.0)))
-    bad += run_case(ctx, Case("untied_attn_m3_m3_attn", [at, m3, m3, at], 256, 64, 8, 4, 8, 128, False, 2, 32, Float32(0.0)))
-    bad += run_case(ctx, Case("tied_m3_only", [m3, m3], 256, 64, 0, 0, 0, 0, True, 2, 32, Float32(0.0)))
+    bad += run_case(ctx, stored, Case("tied_m3_attn", [m3, at, m3, at], 256, 64, 8, 4, 8, 128, True, 2, 32, Float32(1.0)))
+    bad += run_case(ctx, stored, Case("untied_attn_m3_m3_attn", [at, m3, m3, at], 256, 64, 8, 4, 8, 128, False, 2, 32, Float32(0.0)))
+    bad += run_case(ctx, stored, Case("tied_m3_only", [m3, m3], 256, 64, 0, 0, 0, 0, True, 2, 32, Float32(0.0)))
     if bad != 0:
-        raise Error("SAMBA_TAPE_STEP_FAIL " + String(bad) + " differing loss / gradient / parameter tensors")
-    print("SAMBA_TAPE_STEP_PASS every gradient and updated parameter word equals the hand path")
+        raise Error("SAMBA_TAPE_STEP_FAIL " + String(bad) + " loss / gradient / parameter words differ from the stored ones")
+    print("SAMBA_TAPE_STEP_PASS every loss, gradient and updated parameter digest equals the stored one")

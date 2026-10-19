@@ -5,7 +5,8 @@
 # this module never imports samba_resident).
 #
 # ---------------------------------------------------------------- launch inventory
-# The hand path, training/samba_resident.mojo::samba_resident_train_step after
+# The hand path (deleted 2026-10-19, MOJOLEARN_AUTOGRAD_SAMBA_OFF, tombstone
+# below; the launches the rules reproduce), samba_resident_train_step after
 # the loss (identical_ce_loss_resident already left dlogits on the device),
 # for an n-layer stack, in launch order ("s." the session, "bst[j]" / "fwd[j]"
 # attention slot j's LlamaBackwardStages / LlamaDeviceStages, "st[j]" Mamba-3
@@ -71,9 +72,8 @@
 #   - the embedding reads G(0) in place (no copy into s.dh first).
 # One wait at the end (ex.sync(), before the keep list and the views go).
 #
-# Refused (they keep the hand path, samba_tape_eligible): an attention layer
-# with non-default block options (the resident session builds default ones).
-from std.sys.compile import is_defined
+# Refused (samba_resident_train_step raises, samba_tape_eligible): an attention
+# layer with non-default block options (the resident session builds default ones).
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from autograd.tape import BackwardRules
@@ -102,10 +102,11 @@ from autograd.rules_mamba3 import (
     Mamba3BlockRules,
 )
 
-# The Samba train step's backward runs on the tape by default (Andrew 2026-10-19: a tape default
-# flips on the word-for-word check, training/checks/samba_tape_step_check.mojo; timing is recorded once after).
-# MOJOLEARN_AUTOGRAD_SAMBA_OFF restores the hand walk for the A/B; the opt-in spelling is accepted too.
-comptime AUTOGRAD_SAMBA = not is_defined["MOJOLEARN_AUTOGRAD_SAMBA_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_SAMBA"]()
+# The Samba train step's backward runs on the tape only (training/checks/samba_tape_step_check.mojo
+# checks it against stored digests).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by SHA_X; code recoverable at SHA_X^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch
+# (the AUTOGRAD_SAMBA switch; MOJOLEARN_AUTOGRAD_SAMBA and MOJOLEARN_AUTOGRAD_SAMBA_OFF are refused in core/six_lane_experiment_guards.mojo)
 
 # Tags 88-95 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
 # LM 64-71, Mamba-3 72-87).
