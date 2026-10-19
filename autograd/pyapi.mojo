@@ -147,17 +147,17 @@ def _arg_floats(p: PythonObject) raises -> List[Float32]:
     return out^
 
 
-def ops_open_py[E: Exec & Movable, KIND: Int](var ex: E, record: PythonObject) raises -> PythonObject:
+def ops_open_py[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, record: PythonObject) raises -> PythonObject:
     """A new session; record = 1 records a graph for backward. Returns its id."""
     return PythonObject(ops_session_open[E, KIND](ex^, Int(py=record) != 0))
 
 
-def ops_close_py[E: Exec & Movable, KIND: Int](sid: PythonObject) raises -> PythonObject:
+def ops_close_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject) raises -> PythonObject:
     ops_session_close[E, KIND](Int(py=sid))
     return PythonObject(0)
 
 
-def ops_upload_py[E: Exec & Movable, KIND: Int](
+def ops_upload_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, addr: PythonObject, ip: PythonObject,
 ) raises -> PythonObject:
     """addr: the caller's C-contiguous float32 (rows, cols); ip = [rows, cols,
@@ -168,7 +168,7 @@ def ops_upload_py[E: Exec & Movable, KIND: Int](
     return PythonObject(p[].upload(fptr(addr, "data"), ival(ip, 0), ival(ip, 1), ival(ip, 2) != 0))
 
 
-def ops_download_py[E: Exec & Movable, KIND: Int](
+def ops_download_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, h: PythonObject, addr: PythonObject,
 ) raises -> PythonObject:
     """The tensor's values into the caller's float32 array of its shape."""
@@ -177,7 +177,7 @@ def ops_download_py[E: Exec & Movable, KIND: Int](
     return PythonObject(0)
 
 
-def ops_op_py[E: Exec & Movable, KIND: Int](
+def ops_op_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, code: PythonObject, hs: PythonObject, ip: PythonObject, fp: PythonObject,
 ) raises -> PythonObject:
     """Operation `code` (autograd/ops_api.mojo OPS_*) on the tensor handles
@@ -187,13 +187,13 @@ def ops_op_py[E: Exec & Movable, KIND: Int](
     return PythonObject(p[].op(Int(py=code), _handle_list(hs), _arg_ints(ip), _arg_floats(fp)))
 
 
-def ops_scalar_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
+def ops_scalar_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
     """The one value of a (1, 1) tensor."""
     var p = ops_session[E, KIND](Int(py=sid))
     return PythonObject(Float64(p[].scalar(Int(py=h))))
 
 
-def ops_shape_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
+def ops_shape_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
     """[rows, cols] of a tensor."""
     var p = ops_session[E, KIND](Int(py=sid))
     var shape = p[].shape(Int(py=h))
@@ -203,20 +203,20 @@ def ops_shape_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObjec
     return out
 
 
-def ops_free_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
+def ops_free_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
     var p = ops_session[E, KIND](Int(py=sid))
     p[].free(Int(py=h))
     return PythonObject(0)
 
 
-def ops_reset_py[E: Exec & Movable, KIND: Int](sid: PythonObject) raises -> PythonObject:
+def ops_reset_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject) raises -> PythonObject:
     """Drop computed tensors and the graph; uploaded tensors stay."""
     var p = ops_session[E, KIND](Int(py=sid))
     p[].reset()
     return PythonObject(0)
 
 
-def ops_metric_py[E: Exec & Movable, KIND: Int](
+def ops_metric_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, kind: PythonObject, hs: PythonObject,
 ) raises -> PythonObject:
     """Metric `kind` (OPS_METRIC_*) of the handles [y_true, prediction]."""
@@ -224,7 +224,7 @@ def ops_metric_py[E: Exec & Movable, KIND: Int](
     return PythonObject(Float64(p[].metric(Int(py=kind), _handle_list(hs))))
 
 
-def ops_backward_py[E: Exec & Movable, KIND: Int](
+def ops_backward_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, h: PythonObject, accumulate: PythonObject,
 ) raises -> PythonObject:
     """Differentiate the (1, 1) tensor `h` of a recording session."""
@@ -233,7 +233,7 @@ def ops_backward_py[E: Exec & Movable, KIND: Int](
     return PythonObject(0)
 
 
-def ops_grad_py[E: Exec & Movable, KIND: Int](
+def ops_grad_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, h: PythonObject, addr: PythonObject,
 ) raises -> PythonObject:
     """The gradient of tensor `h` into the caller's float32 array of its shape."""

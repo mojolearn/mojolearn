@@ -109,7 +109,7 @@ def _seed(lo: Int, hi: Int) raises -> UInt64:
     return (UInt64(hi) << 32) | UInt64(lo)
 
 
-struct OpsSession[E: Exec & Movable](Movable):
+struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     """One executor, one tape and the live tensors of a composition."""
     var ex: Self.E
     var tape: Tape
@@ -484,7 +484,7 @@ comptime _OPS_NAME = "MojoAutogradOpsSessionsIdentical" if GLOBAL_NUMERIC_MODE =
 comptime _OPS_SESSIONS = _Global[StorageType=_OpsStore, name=_OPS_NAME, init_fn=_OpsStore.__init__]
 
 
-def ops_session_open[E: Exec & Movable, KIND: Int](var ex: E, record: Bool) raises -> Int:
+def ops_session_open[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, record: Bool) raises -> Int:
     """A new session on `ex`; returns its id (>= 1)."""
     var p = alloc[OpsSession[E]](1)
     p.init_pointee_move(OpsSession[E](ex^, record))
@@ -507,14 +507,14 @@ def _find(sid: Int, kind: Int) raises -> Int:
     raise Error("ops: session " + String(sid) + " is not open")
 
 
-def ops_session[E: Exec & Movable, KIND: Int](sid: Int) raises -> UnsafePointer[OpsSession[E], MutUntrackedOrigin]:
+def ops_session[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raises -> UnsafePointer[OpsSession[E], MutUntrackedOrigin]:
     """The open session `sid` of this executor kind."""
     var s = _OPS_SESSIONS.get_or_create_ptr()
     var i = _find(sid, KIND)
     return UnsafePointer[OpsSession[E], MutUntrackedOrigin](unsafe_from_address=s[].addr[i])
 
 
-def ops_session_close[E: Exec & Movable, KIND: Int](sid: Int) raises:
+def ops_session_close[E: Exec & Movable & Deinitable, KIND: Int](sid: Int) raises:
     """Release session `sid`'s storage and drop it from the table."""
     var i = _find(sid, KIND)
     var s = _OPS_SESSIONS.get_or_create_ptr()
