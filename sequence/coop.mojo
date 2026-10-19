@@ -37,6 +37,7 @@ from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, add, mul, sub
 from sequence.vecar import pow2_scale
 from sequence.layernorm import div as ln_div
 from sequence.layernorm import LN_ROW_WARP, LN_RW_LANES, ln_bwd_g
+from sequence.layernorm import ln_bwd_x_rw_one_pass, ln_fwd_rw_one_pass, ln_one_pass_on
 from std.gpu.primitives.warp import shuffle_xor
 from checks.numerics import ftz, identical_rsqrt
 from sequence.theta_spec import THETA_SPEC, op_theta_spec
@@ -438,12 +439,19 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
             af_rmean_tail(a, s)
     elif OP == OP_LN_FWD:
         comptime if LN_ROW_WARP:
-            coop_ln_fwd_rw(cell, lane, a)
+            # lane ag-pass6-host idea L: the row in registers (same bits)
+            if ln_one_pass_on(a.i0):
+                ln_fwd_rw_one_pass(cell, lane, a)
+            else:
+                coop_ln_fwd_rw(cell, lane, a)
         else:
             coop_ln_fwd(cell, lane, a)
     elif OP == OP_LN_BWD_X:
         comptime if LN_ROW_WARP:
-            coop_ln_bwd_x_rw(cell, lane, a)
+            if ln_one_pass_on(a.i0):
+                ln_bwd_x_rw_one_pass(cell, lane, a)
+            else:
+                coop_ln_bwd_x_rw(cell, lane, a)
         else:
             coop_ln_bwd_x(cell, lane, a)
     elif OP == OP_GEMM:
