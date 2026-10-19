@@ -188,10 +188,10 @@ def _check_dropout[E: Exec](mut ex: E) raises:
     if _differences(same, values) != 0:
         raise Error("dropout: same seed and counter gave a different result")
     var y_next = tape.dropout(ex, x2, p, seed, counter + 1)
-    var next = tape.values(ex, y_next)
-    if _differences(next, values) == 0:
+    var shifted = tape.values(ex, y_next)
+    if _differences(shifted, values) == 0:
         raise Error("dropout: counters 7 and 8 gave the same mask")
-    print("PASS dropout/replay digest", _digest(same), "next", _digest(next))
+    print("PASS dropout/replay digest", _digest(same), "next", _digest(shifted))
     # p = 0 keeps every element unchanged.
     var y_none = tape.dropout(ex, x2, Float32(0), seed, counter)
     var none = tape.values(ex, y_none)
