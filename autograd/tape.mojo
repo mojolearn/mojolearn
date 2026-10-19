@@ -20,7 +20,7 @@ from autograd.ops import (
     LEAF, ADD, SUBTRACT, MULTIPLY,
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
-    ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE,
+    ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
     OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD,
 )
 from autograd.loss_ops import (
@@ -29,6 +29,7 @@ from autograd.loss_ops import (
 )
 from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dropout_args
 from std.memory import memcmp
+from autograd.pass1_ops import OP_P1_SCE_VJP
 
 comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
 comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it was used: record the graph again"
@@ -69,6 +70,9 @@ struct _Node(ImplicitlyCopyable, Movable):
     # dL/d(output): its activation derivative was already applied, by its
     # one consumer's dX epilogue or in place by its own backward.
     var grad_preact: Bool
+    # The gradient buffer is caller storage (variable_into, custom_into,
+    # binary_recorded with caller_grad): never re-pointed by a backward.
+    var caller_grad: Bool
 
 
 trait BackwardRules:
@@ -85,6 +89,17 @@ trait BackwardRules:
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         ...
 
+    # True: destination `edge` is the input's gradient buffer itself, never
+    # scratch, and the tape adds nothing to it afterwards. The rule writes
+    # that input's whole gradient there (or, for a graph whose rules share
+    # the join, leaves it to the rule that does), including whatever other
+    # consumers contributed. It is never zero-filled. A driver that records
+    # a fixed graph uses it to run a fan-in or residual join inside the
+    # kernel that already reads the operands, as a hand-written backward
+    # does. False everywhere is the plain contract above.
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        ...
+
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
@@ -99,6 +114,9 @@ struct NoCustomRules(BackwardRules):
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         return True
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
 
     def apply[E: Exec](
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
@@ -198,6 +216,14 @@ def _gemm[E: Exec](
     args.i6 = bc
     args.i8 = n
     ex.launch[OP_GEMM](args, m * n)
+
+
+@always_inline
+def _passes_upstream(n: _Node, edge: Int, p: _Node) -> Bool:
+    """True when binary node n's VJP into operand `edge` (node p) is n's
+    upstream gradient itself: either operand of an add, or the left operand
+    of a subtraction, at the output's shape (no broadcast)."""
+    return (n.op == ADD or (n.op == SUBTRACT and edge == 0)) and p.rows == n.rows and p.cols == n.cols
 
 
 struct Tape(Movable):
@@ -518,7 +544,7 @@ struct Tape(Movable):
                 self._stale.append(self._stale_of(parents))
             var at = len(self._nodes)
             self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
-                                     saved, False, True, False))
+                                     saved, False, True, False, False))
             return Tensor(Int(self._identity.value()), self._generation, at)
         var requires = leaf_grad
         var start = len(self._parents)
@@ -540,7 +566,8 @@ struct Tape(Movable):
         if len(self._stale) > 0:
             self._stale.append(self._stale_of(parents))
         var index = len(self._nodes)
-        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False))
+        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False,
+                                 requires and caller_grad))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
@@ -1054,6 +1081,51 @@ struct Tape(Movable):
         ex.launch[OP_LS_CE_FWD](args, a.rows)
         return self._record(ex, output, a.rows, 1, LOSS_CE, [logits, codes], Args())
 
+    def softmax_cross_entropy[E: Exec](mut self, mut ex: E, logits: Tensor, codes: Tensor) raises -> Tensor:
+        """Mean softmax cross-entropy of logits (rows, classes) against class
+        codes (rows, 1, the class index as a float value), as one node.
+
+        The value and the logits' gradient equal those of
+        cross_entropy_rows followed by mean, bit for bit; the backward is a
+        single launch that writes (softmax - onehot) / rows into the
+        logits' gradient. The codes take no gradient; a code outside
+        [0, classes) gives NaN.
+
+        Example::
+
+            var logits = tape.linear(ex, h, w, b)
+            var loss = tape.softmax_cross_entropy(ex, logits, codes)
+            tape.backward(ex, loss)
+        """
+        # LAUNCHES (read from the code). cross_entropy_rows + mean: forward
+        # 3 (OP_LS_CE_FWD, the two-launch blocked fold), backward 2
+        # (OP_AG_REDUCE_VJP, OP_LS_CE_VJP). Tape.cross_entropy (dense
+        # targets): forward 7, backward 5. This node: forward 3 (the same
+        # row losses and the same fold; a mean in one launch would need a
+        # serial or an unpinned reduction), backward 1 (OP_P1_SCE_VJP).
+        var a = self._nodes[self._check(logits)]
+        var b = self._nodes[self._check(codes)]
+        if b.rows != a.rows or b.cols != 1:
+            raise Error("cross-entropy codes must have shape (rows, 1)")
+        if b.requires_grad:
+            raise Error("cross-entropy codes cannot require a gradient")
+        if Int(a.value) == Int(b.value):
+            raise Error("cross-entropy logits and codes must be distinct tensors")
+        var terms = self._alloc(ex, a.rows)
+        var args = Args()
+        args.p0 = a.value
+        args.p1 = b.value
+        args.p2 = terms
+        args.i1 = a.cols
+        ex.launch[OP_LS_CE_FWD](args, a.rows)
+        var output = self._alloc(ex, 1)
+        # Tape.mean's factor and fold over the (rows, 1) row losses
+        var factor = identical_div(Float32(1), Float32(a.rows))
+        self._fold(ex, output, terms, a.rows, 1, AXIS_ALL, factor)
+        var saved = Args()
+        saved.f0 = factor
+        return self._record(ex, output, 1, 1, LOSS_SCE, [logits, codes], saved)
+
     def custom[E: Exec](
         mut self, mut ex: E, inputs: List[Tensor], output: FP,
         rows: Int, cols: Int, tag: Int, saved: Args,
@@ -1161,12 +1233,20 @@ struct Tape(Movable):
             a.p4 = contribution
             ex.launch[OP_AG_BIN_VJP](a, n.rows * n.cols)
             return
+        var axis = AXIS_ALL if reduce_rows and reduce_cols else (AXIS_ROWS if reduce_rows else AXIS_COLS)
+        if n.op == ADD or (n.op == SUBTRACT and edge == 0):
+            # The elementwise VJP is the upstream itself (ftz(g), stored
+            # flushed), and the fold flushes each term on load, so folding
+            # n.grad directly gives the same bits without the elementwise
+            # launch or its scratch. (Not the subtraction's right operand:
+            # -1 * fold(g) and fold(-g) differ in the sign of a zero sum.)
+            self._fold(ex, contribution, n.grad, n.rows, n.cols, axis, Float32(1))
+            return
         # Lane ag-pass2-kernels: the VJP terms go straight into the blocked
         # fold's partials (OP_AGK_BIN_VJP_PART), the same terms in the same
         # order as OP_AG_BIN_VJP into an output-sized scratch then
         # OP_AG_REDUCE_PART: one launch and one write + read of the
         # rows x cols matrix fewer, the same bits.
-        var axis = AXIS_ALL if reduce_rows and reduce_cols else (AXIS_ROWS if reduce_rows else AXIS_COLS)
         var block = fold_block(n.rows, n.cols, axis)
         var partials = self._alloc(ex, fold_partials(n.rows, n.cols, axis))
         a.p4 = partials
@@ -1192,8 +1272,17 @@ struct Tape(Movable):
             raise Error("non-scalar backward requires an explicit seed tensor")
         self._refuse_stale(output._index)
         self._profile_phase(PROFILE_OTHER)
+        if not n.requires_grad:
+            raise Error("output has no differentiable ancestors")
         var cursor = self._cursor
-        var seed = self._alloc(ex, 1)
+        # The seed 1 is written straight into the root's own gradient (one
+        # launch, no seed copy) unless the root is a leaf whose gradient
+        # accumulates, which must add the 1 to what it holds.
+        var seed: FP
+        if accumulate and n.op == LEAF:
+            seed = self._alloc(ex, 1)
+        else:
+            seed = n.grad
         _fill(ex, seed, 1, 1)
         try:
             self._backward(ex, output, seed, rules, accumulate)
@@ -1389,10 +1478,37 @@ struct Tape(Movable):
         # copy-first, add-the-rest schedule. A VJP reads parent VALUES and
         # the node's own grad, never a parent's grad, so writing the parent's
         # grad in place is safe. Leaves start touched only when
-        # accumulate=True (a leaf never written before is zeroed first, as
-        # record time used to). After the traversal an unreached
-        # differentiable leaf is zeroed (gradient 0); an unreached
-        # intermediate has no gradient (gradient() refuses).
+        # accumulate=True and they already hold a gradient (a leaf never
+        # written before takes its first contribution in place, so where
+        # that contribution is -0.0 it keeps the sign the old 0 + c fill
+        # dropped). After the traversal an unreached differentiable leaf is
+        # zeroed (gradient 0); an unreached intermediate has no gradient
+        # (gradient() refuses).
+        #
+        # LAUNCHES THE TRAVERSAL ADDS (lane ag-pass1-launches, from the code;
+        # the operations' own VJP launches are listed at each operation).
+        # Before this pass, per backward and per node:
+        #   seed: scalar backward fill + copy (2); explicit seed copy 1
+        #   custom node: 1 zero fill per input (zeroed_destination True in
+        #     every rule set but the recurrent one)
+        #   later contribution to an input: scratch VJP + 1 ACCUMULATE
+        #     (a same-shape add: its 1 copy VJP + 1 ACCUMULATE)
+        #   broadcast add operand: elementwise VJP 1 + fold 2
+        #   reshape, first contribution: 1 copy
+        #   accumulate=True leaf never written before: 1 fill
+        # After:
+        #   seed: scalar backward 1 fill into the root's gradient (none
+        #     copied); explicit seed copy 1, 0 when the root's gradient is
+        #     the seed's storage (custom_into / variable_into)
+        #   custom node: a fill only where the rule asks for one (the
+        #     transformer, Mamba-1 and Mamba-2 rules ask for none); 0
+        #     scratch and 0 ACCUMULATE for a writes_total input
+        #   later contribution: same-shape add 1 ACCUMULATE straight from
+        #     the upstream (no VJP launch); others unchanged
+        #   broadcast add operand: fold 2 (the upstream folded directly)
+        #   reshape, first contribution: 0 when the operand is consumed only
+        #     there and its gradient is tape storage (it shares the buffer)
+        #   accumulate=True leaf never written before: 0
         var touched = List[Bool](length=len(self._nodes), fill=False)
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             self._nodes[i].grad_preact = False
@@ -1400,10 +1516,12 @@ struct Tape(Movable):
             if not n.requires_grad:
                 continue
             if accumulate and n.op == LEAF:
-                if not n.grad_ready:
-                    _fill(ex, n.grad, n.rows * n.cols)
-                    self._nodes[i].grad_ready = True
-                touched[i] = True
+                # A leaf never written before holds no value to add to: it
+                # stays untouched, so its first contribution is written in
+                # place like any other (no fill before use) and, if no path
+                # reaches it, the zero fill after the traversal gives it 0.
+                if n.grad_ready:
+                    touched[i] = True
             else:
                 self._nodes[i].grad_ready = False
         # Preserve the seed before overwriting a leaf root's gradient. A
@@ -1436,17 +1554,35 @@ struct Tape(Movable):
             # scratch for a later one (and, for a custom rule, for an input
             # that needs no gradient: the rule writes every destination).
             var first = List[Bool](length=n.count, fill=False)
+            var total = List[Bool](length=n.count, fill=False)
             var contributions = List[FP]()
             for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]
                 var p = self._nodes[parent]
-                if p.requires_grad and not touched[parent]:
+                if p.requires_grad and n.op >= CUSTOM and rules.writes_total(n.op - CUSTOM, n.saved, edge):
+                    # the rule writes this input's whole gradient in place
                     first[edge] = True
+                    total[edge] = True
                     touched[parent] = True
                     contributions.append(p.grad)
-                elif p.requires_grad and n.op == RESHAPE:
-                    # a reshape's VJP is its upstream gradient itself: add it
-                    # straight from n.grad, no scratch and no launch
+                elif p.requires_grad and not touched[parent]:
+                    first[edge] = True
+                    touched[parent] = True
+                    if (n.op == RESHAPE and consumers[parent] == 1 and p.op != LEAF and p.op < CUSTOM
+                            and p.op != LINEAR and not p.caller_grad):
+                        # A reshape's only-consumed, tape-owned operand takes
+                        # the reshape's gradient buffer as its own: the copy
+                        # it replaces is a copy of bits, and no later write
+                        # reaches either (one consumer; its backward never
+                        # writes its own gradient, unlike LINEAR's act' in
+                        # place). No launch.
+                        self._nodes[parent].grad = n.grad
+                    contributions.append(self._nodes[parent].grad)
+                elif p.requires_grad and (n.op == RESHAPE or _passes_upstream(n, edge, p)):
+                    # a reshape's VJP, and a same-shape add's, is its upstream
+                    # gradient itself: add it straight from n.grad, no scratch
+                    # and no VJP launch (ACCUMULATE flushes on load exactly as
+                    # the add's VJP would have before storing)
                     contributions.append(n.grad)
                 elif p.requires_grad or n.op >= CUSTOM:
                     contributions.append(self._alloc(ex, p.rows * p.cols))
@@ -1470,8 +1606,10 @@ struct Tape(Movable):
                     rows.append(p.rows)
                     cols.append(p.cols)
                     # BackwardRules receive distinct destinations, zeroed
-                    # unless the rule overwrites (or ignores) that one.
-                    if rules.zeroed_destination(n.op - CUSTOM, n.saved, edge):
+                    # unless the rule overwrites (or ignores) that one, or
+                    # writes the input's whole gradient there (writes_total:
+                    # it may already hold other consumers' terms).
+                    if not total[edge] and rules.zeroed_destination(n.op - CUSTOM, n.saved, edge):
                         _fill(ex, contributions[edge], p.rows * p.cols)
                 rules.apply(ex, n.op - CUSTOM, n.saved, n.value, n.grad, inputs, contributions, rows, cols)
             for edge in range(n.count):  # driver-loop: over node inputs
@@ -1484,8 +1622,11 @@ struct Tape(Movable):
                 # then writes the parent's gradient directly), else scratch.
                 var contribution = contributions[edge]
                 if n.op == RESHAPE:
-                    if first[edge]:
-                        _copy(ex, p.grad, n.grad, p.rows * p.cols)
+                    # (no copy when the operand took this buffer above)
+                    if first[edge] and Int(contribution) != Int(n.grad):
+                        _copy(ex, contribution, n.grad, p.rows * p.cols)
+                elif not first[edge] and _passes_upstream(n, edge, p):
+                    pass  # the accumulate below adds n.grad itself
                 elif n.op < CUSTOM:
                     if n.op == LINEAR:
                         self._linear_vjp(ex, n, edge, contribution, first[edge], dz, consumers)
@@ -1537,6 +1678,17 @@ struct Tape(Movable):
                         a.p3 = contribution
                         a.i1 = p.cols
                         ex.launch[OP_LS_CE_VJP](a, p.rows)
+                    elif n.op == LOSS_SCE:
+                        # the logits only (edge 0), in one launch: the mean's
+                        # factor rides in the row body (autograd/pass1_ops.mojo)
+                        var a = Args()
+                        a.p0 = p.value
+                        a.p1 = self._nodes[self._parents[n.start + 1]].value
+                        a.p2 = n.grad
+                        a.p3 = contribution
+                        a.i1 = p.cols
+                        a.f0 = n.saved.f0
+                        ex.launch[OP_P1_SCE_VJP](a, p.rows)
                     elif n.op == SOFTMAX or n.op == LOG_SOFTMAX:
                         var a = Args()
                         a.p0 = n.value

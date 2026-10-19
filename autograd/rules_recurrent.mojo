@@ -339,6 +339,9 @@ struct RecurrentRules(BackwardRules):
     def supports(self, tag: Int) -> Bool:
         return tag == RNN_LINEAR or tag == RNN_LAYER or tag == RNN_LAST_STEP
 
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
+
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         # Fill only where recurrent.backward fills. RNN_LINEAR: dW (GEMM or
         # blocked wgrad) and db (column sum) overwrite every element; dX is

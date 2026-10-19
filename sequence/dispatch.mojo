@@ -135,6 +135,7 @@ from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
 from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
 from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
 from autograd.model_ops import OP_AGM_FIRST, OP_AGM_LAST, apply_model_ops
+from autograd.pass1_ops import OP_P1_FIRST, OP_P1_LAST, apply_pass1
 
 
 @always_inline
@@ -189,6 +190,17 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_AGK_FIRST or OP_CELL_FWD_SCAN > OP_AGK_LAST) and (
         OP_CELL_BWD_SCAN < OP_AGK_FIRST or OP_CELL_BWD_SCAN > OP_AGK_LAST
     ), "autograd kernel opcode collides with recurrent scan"
+    # The tape's fused nodes (autograd/pass1_ops.mojo), a range of their own.
+    comptime assert OP_P1_FIRST <= OP_P1_LAST, "autograd fused opcode range is empty"
+    comptime assert OP_P1_FIRST > OP_AG_LAST or OP_P1_LAST < OP_AG_FIRST, "fused opcodes collide with autograd"
+    comptime assert (OP_CELL_FWD_SCAN < OP_P1_FIRST or OP_CELL_FWD_SCAN > OP_P1_LAST) and (
+        OP_CELL_BWD_SCAN < OP_P1_FIRST or OP_CELL_BWD_SCAN > OP_P1_LAST
+    ), "fused opcode collides with recurrent scan"
+    comptime assert OP_P1_LAST < OP_AGD_FIRST or OP_P1_FIRST > OP_AGD_LAST, "fused opcodes overlap the data family"
+    comptime assert OP_P1_LAST < OP_AGO_FIRST or OP_P1_FIRST > OP_AGO_LAST, "fused opcodes overlap the optim family"
+    comptime assert OP_P1_LAST < OP_LS_FIRST or OP_P1_FIRST > OP_LS_LAST, "fused opcodes overlap the loss family"
+    comptime assert OP_P1_LAST < OP_AGM_FIRST or OP_P1_FIRST > OP_AGM_LAST, "fused opcodes overlap the model family"
+    comptime assert OP_P1_LAST < OP_AGK_FIRST or OP_P1_FIRST > OP_AGK_LAST, "fused opcodes overlap the kernel family"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
@@ -205,6 +217,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_gemm_epi(t, a)
     elif OP >= OP_AGK_FIRST and OP <= OP_AGK_LAST:
         apply_autograd_kernels[OP](t, a)
+    elif OP >= OP_P1_FIRST and OP <= OP_P1_LAST:
+        apply_pass1[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

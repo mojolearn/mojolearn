@@ -121,6 +121,9 @@ comptime LOG_SOFTMAX = 24
 # Their bodies are the loss family in autograd/loss_ops.mojo.
 comptime LOSS_ELEM = 25
 comptime LOSS_CE = 26
+# Mean softmax cross-entropy over rows as one node (tape.softmax_cross_entropy):
+# its backward writes (softmax - onehot) / rows into the logits' gradient.
+comptime LOSS_SCE = 27
 comptime MATMUL = 30
 # act(x @ W + b) as one node (tape.linear / linear_into): the forward and
 # backward launches of the hand-assembled MLP, no new element bodies.
