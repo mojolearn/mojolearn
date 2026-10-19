@@ -98,8 +98,10 @@
 #                 hand path's launches, one for one, nothing else
 #
 # Scope: one decoder layer, the unit both bindings differentiate. The
-# embedding gather and LM head belong to the language-model trainers
-# (training/byte_lm.mojo, migration item 4) and get their rules there.
+# recording itself is llama_decoder_layer_record (the layer input is any
+# recorded tensor, d(residual2) any storage), which the language-model
+# trainers chain over their layers on one tape with the embedding gather,
+# the LM head and the loss (autograd/rules_lm.mojo, migration item 4).
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -486,10 +488,119 @@ struct TransformerRules(BackwardRules):
             )
 
 
-def _dx_mode(mode: Int) -> Args:
+def _dx_mode(mode: Int, layer: Int = 0) -> Args:
     var a = Args()
     a.i0 = mode
+    a.i11 = layer
     return a^
+
+
+def _at(a: Args, layer: Int) -> Args:
+    """`a` with the layer index in i11 (TF_LAYER_SLOT). TransformerRules
+    ignores it; a multi-layer rule set (autograd/rules_lm.mojo) picks the
+    layer's stages with it."""
+    var r = a
+    r.i11 = layer
+    return r^
+
+
+# Args slots the multi-layer drivers read and TransformerRules never does:
+# i11 the layer index of every node of the layer, i10 = 1 on the layer's
+# output node (residual2, where the hand path's refusal scan of d_out runs).
+comptime TF_LAYER_SLOT = 11
+comptime TF_LAYER_OUTPUT_SLOT = 10
+
+
+def llama_decoder_layer_record(
+    mut tape: Tape,
+    mut ex: DeviceExec,
+    x: Tensor,
+    mut bst: LlamaBackwardStages,
+    mut fwd: LlamaDeviceStages,
+    mut w: LlamaDeviceWeights,
+    din: FP,
+    b: Int,
+    l: Int,
+    layer: Int,
+) raises -> Tensor:
+    """Record ONE decoder layer's saved forward on `tape` (nothing is
+    relaunched) and return its output, residual2.
+
+    `x` is the layer input as already recorded (a leaf, or the previous
+    layer's residual2, or an embedding node); its gradient storage receives
+    the hand path's d_x (S36) through the norm1 rule. `din` is the storage
+    of d(residual2): the gradient the consumer of this layer's output
+    writes, read in place by the down GEMMs and the norm2 residual join
+    (the hand path's IDN_BWD_ENTRY_ALIAS readers). The nine weight
+    gradients land in `bst`'s dw fields, every stage gradient in the
+    `bst` field the hand path writes. Every node carries `layer` in Args
+    slot i11 (TF_LAYER_SLOT) and residual2 carries 1 in i10
+    (TF_LAYER_OUTPUT_SLOT)."""
+    if not w.opts.is_default():
+        raise Error("llama backward (autograd): only the default Llama block is recorded")
+    var dims = fwd.dims.copy()
+    dims.validate()
+    var dm = dims.d_model
+    var nh = dims.n_heads
+    var nkv = dims.n_kv
+    var hd = dims.head_dim
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var it = dims.intermediate
+    var m = b * l
+    if b != bst.b or l != bst.l:
+        raise Error("llama backward: the stage buffers do not match (B, L)")
+    # ---- leaves: the nine weights, gradients into bst
+    var g_norm1 = tape.variable_into(ex, _fp(w.norm1_w), _fp(bst.dw_norm1), 1, dm)
+    var g_q = tape.variable_into(ex, _fp(w.w_q), _fp(bst.dw_q), qw, dm)
+    var g_k = tape.variable_into(ex, _fp(w.w_k), _fp(bst.dw_k), kw, dm)
+    var g_v = tape.variable_into(ex, _fp(w.w_v), _fp(bst.dw_v), kw, dm)
+    var g_o = tape.variable_into(ex, _fp(w.w_o), _fp(bst.dw_o), dm, qw)
+    var g_norm2 = tape.variable_into(ex, _fp(w.norm2_w), _fp(bst.dw_norm2), 1, dm)
+    var g_gate = tape.variable_into(ex, _fp(w.w_gate), _fp(bst.dw_gate), it, dm)
+    var g_up = tape.variable_into(ex, _fp(w.w_up), _fp(bst.dw_up), it, dm)
+    var g_down = tape.variable_into(ex, _fp(w.w_down), _fp(bst.dw_down), dm, it)
+
+    # ---- the forward as it ran, recorded (nothing is relaunched)
+    # down's gradient is din (d_down_proj_out is a view of d(residual2)),
+    # o's is d_residual1 (d_o_proj_out is a view of d_residual1).
+    var s_norm1 = Args()
+    s_norm1.p0 = _fp(fwd.norm1_sumsq)
+    s_norm1.p1 = _fp(bst.norm1_dot)
+    s_norm1.p2 = _fp(bst.d_residual1)
+    var norm1 = tape.custom_into(ex, [x, g_norm1], _fp(fwd.norm1_out), _fp(bst.d_norm1_out), m, dm, TF_RMS_NORM_INPUT, _at(s_norm1, layer))
+    # v, k, q in the tape's reverse order q, k, v: dX into tmp0, tmp1, then
+    # tmp2 and S32's add3 (q + k) + v into d(norm1.out)
+    var v = tape.custom_into(ex, [norm1, g_v], _fp(fwd.v_proj), _fp(bst.d_v_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP2_ADD3, layer))
+    var k = tape.custom_into(ex, [norm1, g_k], _fp(fwd.k_proj), _fp(bst.d_k_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP1, layer))
+    var q = tape.custom_into(ex, [norm1, g_q], _fp(fwd.q_proj), _fp(bst.d_q_proj_out), m, qw, TF_LINEAR, _dx_mode(TF_DX_TMP0, layer))
+    var s_rope_k = Args()
+    s_rope_k.i0 = nkv
+    s_rope_k.i1 = hd
+    var k_rope = tape.custom_into(ex, [k], _fp(fwd.k_rope), _fp(bst.d_k_rope), m, kw, TF_ROPE, _at(s_rope_k, layer))
+    var s_rope_q = Args()
+    s_rope_q.i0 = nh
+    s_rope_q.i1 = hd
+    var q_rope = tape.custom_into(ex, [q], _fp(fwd.q_rope), _fp(bst.d_q_rope), m, qw, TF_ROPE, _at(s_rope_q, layer))
+    var attn = tape.custom_into(ex, [q_rope, k_rope, v], _fp(fwd.ctxv), _fp(bst.d_attn_ctx), m, qw, TF_ATTENTION, _at(Args(), layer))
+    var o = tape.custom_into(ex, [attn, g_o], _fp(fwd.o_proj), _fp(bst.d_residual1), m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN, layer))
+    var residual1 = tape.custom_into_shared(ex, [x, o], _fp(fwd.residual1), o, m, dm, TF_RESIDUAL, _at(Args(), layer))
+    var s_norm2 = Args()
+    s_norm2.p0 = _fp(fwd.norm2_sumsq)
+    s_norm2.p1 = _fp(bst.norm2_dot)
+    s_norm2.p2 = din
+    var norm2 = tape.custom_into(ex, [residual1, g_norm2], _fp(fwd.norm2_out), _fp(bst.d_norm2_out), m, dm, TF_RMS_NORM_POST, _at(s_norm2, layer))
+    # gate, up in the tape's reverse order up, gate: dX into tmp1, then tmp0
+    # and S9's add2 into d(norm2.out)
+    var gate = tape.custom_into(ex, [norm2, g_gate], _fp(fwd.gate_proj), _fp(bst.d_gate_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP0_ADD2, layer))
+    var up = tape.custom_into(ex, [norm2, g_up], _fp(fwd.up_proj), _fp(bst.d_up_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP1, layer))
+    var s_swiglu = Args()
+    s_swiglu.p0 = _fp(fwd.silu_out)
+    var gated = tape.custom_into(ex, [gate, up], _fp(fwd.gated), _fp(bst.d_mlp_gated), m, it, TF_SWIGLU, _at(s_swiglu, layer))
+    var down = tape.custom_into(ex, [gated, g_down], _fp(fwd.down_proj), din, m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN, layer))
+    var s_out = Args()
+    s_out.i10 = 1
+    return tape.custom_into_shared(ex, [residual1, down], _fp(fwd.residual2), down, m, dm, TF_RESIDUAL, _at(s_out, layer))
 
 
 def llama_decoder_layer_backward_autograd(
@@ -519,12 +630,6 @@ def llama_decoder_layer_backward_autograd(
     var dims = fwd.dims.copy()
     dims.validate()
     var dm = dims.d_model
-    var nh = dims.n_heads
-    var nkv = dims.n_kv
-    var hd = dims.head_dim
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
-    var it = dims.intermediate
     var m = b * l
     # The hand path's refusals, before any launch.
     if l <= 0 or b <= 0 or pos0 < 0:
@@ -544,59 +649,12 @@ def llama_decoder_layer_backward_autograd(
 
     var ex = DeviceExec(ctx)
     var tape = Tape()
-    # ---- leaves: the block input and the nine weights, gradients into bst
-    var x = tape.variable_into(ex, _fp(x_dev), _fp(bst.d_x), m, dm)
-    var g_norm1 = tape.variable_into(ex, _fp(w.norm1_w), _fp(bst.dw_norm1), 1, dm)
-    var g_q = tape.variable_into(ex, _fp(w.w_q), _fp(bst.dw_q), qw, dm)
-    var g_k = tape.variable_into(ex, _fp(w.w_k), _fp(bst.dw_k), kw, dm)
-    var g_v = tape.variable_into(ex, _fp(w.w_v), _fp(bst.dw_v), kw, dm)
-    var g_o = tape.variable_into(ex, _fp(w.w_o), _fp(bst.dw_o), dm, qw)
-    var g_norm2 = tape.variable_into(ex, _fp(w.norm2_w), _fp(bst.dw_norm2), 1, dm)
-    var g_gate = tape.variable_into(ex, _fp(w.w_gate), _fp(bst.dw_gate), it, dm)
-    var g_up = tape.variable_into(ex, _fp(w.w_up), _fp(bst.dw_up), it, dm)
-    var g_down = tape.variable_into(ex, _fp(w.w_down), _fp(bst.dw_down), dm, it)
-
-    # ---- the forward as it ran, recorded (nothing is relaunched)
+    # ---- the block input, gradient into bst.d_x; then the layer
     # d(residual2): the seed's own storage under the hand path's entry alias
     # (used in place), else in_d_residual2 (the tape's one bit copy, S0-1).
-    # down's gradient shares it (d_down_proj_out is a view of d(residual2)),
-    # o's shares d_residual1 (d_o_proj_out is a view of d_residual1).
+    var x = tape.variable_into(ex, _fp(x_dev), _fp(bst.d_x), m, dm)
     var din = _fp(d_out) if IDN_BWD_ENTRY_ALIAS else _fp(bst.in_d_residual2)
-    var s_norm1 = Args()
-    s_norm1.p0 = _fp(fwd.norm1_sumsq)
-    s_norm1.p1 = _fp(bst.norm1_dot)
-    s_norm1.p2 = _fp(bst.d_residual1)
-    var norm1 = tape.custom_into(ex, [x, g_norm1], _fp(fwd.norm1_out), _fp(bst.d_norm1_out), m, dm, TF_RMS_NORM_INPUT, s_norm1)
-    # v, k, q in the tape's reverse order q, k, v: dX into tmp0, tmp1, then
-    # tmp2 and S32's add3 (q + k) + v into d(norm1.out)
-    var v = tape.custom_into(ex, [norm1, g_v], _fp(fwd.v_proj), _fp(bst.d_v_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP2_ADD3))
-    var k = tape.custom_into(ex, [norm1, g_k], _fp(fwd.k_proj), _fp(bst.d_k_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP1))
-    var q = tape.custom_into(ex, [norm1, g_q], _fp(fwd.q_proj), _fp(bst.d_q_proj_out), m, qw, TF_LINEAR, _dx_mode(TF_DX_TMP0))
-    var s_rope_k = Args()
-    s_rope_k.i0 = nkv
-    s_rope_k.i1 = hd
-    var k_rope = tape.custom_into(ex, [k], _fp(fwd.k_rope), _fp(bst.d_k_rope), m, kw, TF_ROPE, s_rope_k)
-    var s_rope_q = Args()
-    s_rope_q.i0 = nh
-    s_rope_q.i1 = hd
-    var q_rope = tape.custom_into(ex, [q], _fp(fwd.q_rope), _fp(bst.d_q_rope), m, qw, TF_ROPE, s_rope_q)
-    var attn = tape.custom_into(ex, [q_rope, k_rope, v], _fp(fwd.ctxv), _fp(bst.d_attn_ctx), m, qw, TF_ATTENTION, Args())
-    var o = tape.custom_into(ex, [attn, g_o], _fp(fwd.o_proj), _fp(bst.d_residual1), m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN))
-    var residual1 = tape.custom_into_shared(ex, [x, o], _fp(fwd.residual1), o, m, dm, TF_RESIDUAL, Args())
-    var s_norm2 = Args()
-    s_norm2.p0 = _fp(fwd.norm2_sumsq)
-    s_norm2.p1 = _fp(bst.norm2_dot)
-    s_norm2.p2 = din
-    var norm2 = tape.custom_into(ex, [residual1, g_norm2], _fp(fwd.norm2_out), _fp(bst.d_norm2_out), m, dm, TF_RMS_NORM_POST, s_norm2)
-    # gate, up in the tape's reverse order up, gate: dX into tmp1, then tmp0
-    # and S9's add2 into d(norm2.out)
-    var gate = tape.custom_into(ex, [norm2, g_gate], _fp(fwd.gate_proj), _fp(bst.d_gate_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP0_ADD2))
-    var up = tape.custom_into(ex, [norm2, g_up], _fp(fwd.up_proj), _fp(bst.d_up_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP1))
-    var s_swiglu = Args()
-    s_swiglu.p0 = _fp(fwd.silu_out)
-    var gated = tape.custom_into(ex, [gate, up], _fp(fwd.gated), _fp(bst.d_mlp_gated), m, it, TF_SWIGLU, s_swiglu)
-    var down = tape.custom_into(ex, [gated, g_down], _fp(fwd.down_proj), din, m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN))
-    var residual2 = tape.custom_into_shared(ex, [residual1, down], _fp(fwd.residual2), down, m, dm, TF_RESIDUAL, Args())
+    var residual2 = llama_decoder_layer_record(tape, ex, x, bst, fwd, w, din, b, l, 0)
 
     # ---- one backward from d(residual2)
     var seed = tape.variable(ex, _fp(d_out), m, dm, False)
