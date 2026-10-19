@@ -155,8 +155,8 @@ struct TransformerRules(BackwardRules):
     outputs) and saved forward stages; both must outlive the backward."""
 
     var ctx: DeviceContext
-    var bst: MutPointer[LlamaBackwardStages, MutAnyOrigin]
-    var fwd: MutPointer[LlamaDeviceStages, MutAnyOrigin]
+    var bst: MutPointer[LlamaBackwardStages, MutUntrackedOrigin]
+    var fwd: MutPointer[LlamaDeviceStages, MutUntrackedOrigin]
     var cos_tab: FP
     var sin_tab: FP
     var eps: Float32
@@ -166,8 +166,8 @@ struct TransformerRules(BackwardRules):
 
     def __init__(
         out self, ctx: DeviceContext,
-        bst: MutPointer[LlamaBackwardStages, MutAnyOrigin],
-        fwd: MutPointer[LlamaDeviceStages, MutAnyOrigin],
+        bst: MutPointer[LlamaBackwardStages, MutUntrackedOrigin],
+        fwd: MutPointer[LlamaDeviceStages, MutUntrackedOrigin],
         cos_tab: FP, sin_tab: FP, eps: Float32, b: Int, l: Int, pos0: Int,
     ):
         self.ctx = ctx.copy()
@@ -467,8 +467,8 @@ def llama_decoder_layer_backward_autograd(
     var seed = tape.variable(ex, _fp(d_out), m, dm, False)
     var rules = TransformerRules(
         ctx,
-        MutPointer(to=bst).unsafe_origin_cast[MutAnyOrigin](),
-        MutPointer(to=fwd).unsafe_origin_cast[MutAnyOrigin](),
+        MutPointer[LlamaBackwardStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=bst))),
+        MutPointer[LlamaDeviceStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=fwd))),
         _fp(cos_tab), _fp(sin_tab), w.eps, b, l, pos0,
     )
     tape.backward_with_rules(ex, residual2, seed, rules)
