@@ -95,6 +95,65 @@ HIGGS 1M x 28, one run per arm): NVIDIA L40S 0.334 -> 0.388 s, AMD MI325X
 1.107 -> 0.602 s, average 0.85x; quality equal or better on 200k held-out
 rows; each arm's digest the same on NVIDIA and AMD. Transformer, Mamba,
 
+## Accumulation order
+
+When a tensor feeds several consumers, its gradient is the sum of one
+contribution per consumer edge, and the tape applies them in one canonical
+order: decreasing consumer-node index (reverse record order), and within one
+consumer that reads the tensor through several inputs (`x * x`), increasing
+input index. The first contribution applied is written into the gradient
+(with `accumulate=True` on a leaf, added to the gradient it already holds);
+each later one is added with the tape's accumulate kernel
+(`OP_AG_ACCUMULATE`, `add(gradient, contribution)` per element). The order
+is a function of the recorded graph only, never of the executor, the vendor
+or the launch geometry. So recording the same consumers in a different
+order changes the bits exactly where float addition order matters (three or
+more contributions whose partial sums round differently) and nowhere else.
+Every node kind follows it: the plain VJPs, the linear node (its fused dX
+epilogue applies only to a sole consumer), the loss nodes, reshapes and
+custom rules (a rule writes distinct per-input destinations; the tape adds
+them in input order). `_backward` asserts the order as it applies each
+contribution and refuses if it is ever violated. The transformer graph
+relies on it: q, k and v are recorded v, k, q so the reverse traversal sums
+d(norm1) as (q + k) + v, the hand path's order.
+`autograd/checks/order_cpu.mojo` and `order_gpu.mojo` check it against a
+host oracle of the stated order (bit for bit, so the CPU, Metal, NVIDIA and
+AMD digests are equal) with three to five consumers recorded in several
+orders.
+
+## Aliasing and mutation
+
+Between record and backward, storage the tape has seen (every recorded
+tensor's value and gradient) is read-only except through tape operations.
+The caller-storage entries check this at record time (a scan over the
+recorded nodes, host side, over graph structure only):
+
+- `variable_into`: the gradient destination may not overlap any recorded
+  value or gradient, nor the leaf's own data; the data may not overlap a
+  recorded gradient (two leaves may read the same data).
+- `linear_into`, `unary_into`, `binary_into`: the output may not overlap a
+  recorded value or gradient; refused before anything is launched.
+- `custom_into` and `binary_recorded`: the output and the gradient
+  destination may not overlap a recorded value or gradient, nor each other.
+- `backward_with_rules`, `backward_from`, `backward_from_preactivation`:
+  the seed may not overlap a recorded gradient, except the seed-in-place
+  case, where it is exactly the root's gradient range (custom_into's
+  `grad_destination` passed as the seed); an in-place seed cannot also
+  accumulate into a leaf root.
+
+Inference mode (`no_grad`) keeps no gradients and skips these checks. The
+plain operations, `variable` and `custom` take no caller output range (a
+`custom` output may be a view of an input's value, as the recurrent last
+step is). Mutation that the tape cannot see is the caller's to declare:
+`tape.mark_mutated(x)` marks every tensor recorded before it that depends on
+x (through x's consumers) stale, and a backward from a stale output
+refuses; tensors recorded afterwards read x's new value and stay valid.
+`tape.watch(ex, x)` keeps a host copy of x's value and
+`tape.assert_unchanged(ex, x)` compares the current value with it bit for
+bit (a download and a memcmp; a debug entry, never on a training path),
+marking x mutated and raising when they differ. `reset()` clears the
+marks and the copies.
+
 ## Validation
 
 Environment: Mojo 1.0.0 (`ed45d567`), MAX 26.5.0, Mac16,12, macOS 26.5.2.
