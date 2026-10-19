@@ -16,6 +16,12 @@ RNN_SCAN_CASE line a case (with an FNV-1a digest of the step arm's words, the
 value to compare across vendors) and RNN_SCAN_CHECK status=PASS|FAIL; it
 raises on any difference.
 
+On a build whose target does not run the scan (an Apple build without
+-D MOJOLEARN_SEQ_RNN_SCAN_APPLE: its recurrent layers take the per-step
+chain, recurrent_scan.mojo SEQ_RNN_SCAN_ON_THIS_TARGET) the device scan
+cases are SKIPPED and only the chain is checked on the device (device ==
+host); with the define the scan cases run, the Metal probe arm.
+
     tools/with_identical_mode.sh pixi run mojo run -I . sequence/checks/rnn_scan_check.mojo
     tools/with_identical_mode.sh pixi run mojo run -I . sequence/checks/rnn_scan_check.mojo host
 """
@@ -37,7 +43,7 @@ from sequence.ops import (
     OP_FILL,
     gates_of,
 )
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, scan_applies
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_RNN_SCAN_ON_THIS_TARGET, scan_applies
 
 comptime POISON = Float32(7.0)
 
@@ -256,6 +262,8 @@ def main() raises:
     var Hs: List[Int] = [64, 40, 32]
     var bad = 0
     var cases = 0
+    var scanned = 0
+    var skipped = 0
     for ci in range(len(cells)):
         var cell = cells[ci]
         for si in range(len(Ts)):
@@ -269,7 +277,17 @@ def main() raises:
             var hc = _host(cell, T, B, H, True)
             var n = _differ("host scan-vs-step " + tag, hs, hc)
             var line = "RNN_SCAN_CASE " + tag + " host_scan_vs_step=" + String(n)
-            if not host_only:
+            if not host_only and not SEQ_RNN_SCAN_ON_THIS_TARGET:
+                # this target routes every layer to the per-step chain:
+                # check that chain on the device, skip the device scan
+                var ds = _dev(cell, T, B, H, False)
+                var n2 = _differ("device-vs-host step " + tag, ds, hs)
+                line += " device_vs_host_step=" + String(n2) + " device_scan=SKIPPED"
+                line += " device_digest=" + hex(_digest(ds))
+                n += n2
+                skipped += 1
+            elif not host_only:
+                scanned += 1
                 var ds = _dev(cell, T, B, H, False)
                 var dc = _dev(cell, T, B, H, True)
                 var n1 = _differ("device scan-vs-step " + tag, ds, dc)
@@ -285,6 +303,7 @@ def main() raises:
                 bad += 1
     var status = "PASS" if bad == 0 else "FAIL"
     print("RNN_SCAN_CHECK status=" + status + " cases=" + String(cases) + " failed=" + String(bad)
+          + " scanned=" + String(scanned) + " skipped=" + String(skipped)
           + (" (host only)" if host_only else ""))
     if bad > 0:
         raise Error("rnn_scan_check: the scan differs from the per-step chain")

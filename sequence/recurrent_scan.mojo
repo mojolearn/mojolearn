@@ -101,8 +101,25 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 # property of the build host: an Apple build's host column takes the chain too,
 # with the same bits.
 comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not has_apple_gpu_accelerator() or is_defined["MOJOLEARN_SEQ_RNN_SCAN_APPLE"]()
-comptime SEQ_RNN_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and SEQ_RNN_SCAN_ON_THIS_TARGET and not (
-    is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# THE DEFAULT, one line (orchestrator sets it after the NV numbers).
+# A/B so far (one run per arm, bits equal scan == per-step on both vendors;
+# rnn_scan_check 12/12 PASS on NV and AMD, 12/12 FAIL on the M4, see above):
+#   AMD MI325X, s a fit, per-step -> scan: lstm 0.1206 -> 0.1388 (1.15x slower),
+#   gru 0.1021 -> 0.1138 (1.11x slower), rnn 0.0672 -> 0.0591 (0.88x, faster).
+#   NVIDIA L40S: owed.
+# True: the scan is the IDENTICAL default and -D MOJOLEARN_SEQ_RNN_SCAN_OFF is
+# arm A. False: the per-step chain is the default everywhere and
+# -D MOJOLEARN_SEQ_RNN_SCAN opts in (the scan's arm B, and the Metal probe
+# with MOJOLEARN_SEQ_RNN_SCAN_APPLE).
+comptime SEQ_RNN_SCAN_DEFAULT = True
+comptime SEQ_RNN_SCAN_REQUESTED = (
+    is_defined["MOJOLEARN_SEQ_RNN_SCAN"]() or (SEQ_RNN_SCAN_DEFAULT and not is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"]())
+)
+comptime SEQ_RNN_SCAN_IDN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and SEQ_RNN_SCAN_ON_THIS_TARGET
+    and SEQ_RNN_SCAN_REQUESTED
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime SEQ_LSTM_SCAN_IDN = SEQ_RNN_SCAN_IDN
 # NI49's row-serial arm (MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN: one GPU thread
