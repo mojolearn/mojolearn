@@ -91,12 +91,12 @@ def _check_permutations[E: Exec](mut ex: E) raises:
             raise Error(name + ": differs from OP_MLP_PERM with the trainers' key")
         print("PASS", name, "digest", _digest(e0), _digest(e1))
     # Without shuffle the order is 0..n-1.
-    var n = 53
-    var d = ex.alloc(n)
-    epoch_order(ex, False, UInt64(731), 4, n, d)
-    var iota = _download(ex, d, n)
+    var m = 53
+    var d = ex.alloc(m)
+    epoch_order(ex, False, UInt64(731), 4, m, d)
+    var iota = _download(ex, d, m)
     ex.free(d)
-    for i in range(n):
+    for i in range(m):
         if iota[i] != Float32(i):
             raise Error("epoch_order/no_shuffle: row " + String(i) + " out of place")
     print("PASS epoch_order/no_shuffle digest", _digest(iota))
@@ -183,15 +183,18 @@ def _check_dropout[E: Exec](mut ex: E) raises:
     # counter gives another mask.
     tape.reset()
     var x2 = tape.tensor(ex, xs, rows, cols, True)
-    var same = tape.values(ex, tape.dropout(ex, x2, p, seed, counter))
+    var y_same = tape.dropout(ex, x2, p, seed, counter)
+    var same = tape.values(ex, y_same)
     if _differences(same, values) != 0:
         raise Error("dropout: same seed and counter gave a different result")
-    var next = tape.values(ex, tape.dropout(ex, x2, p, seed, counter + 1))
+    var y_next = tape.dropout(ex, x2, p, seed, counter + 1)
+    var next = tape.values(ex, y_next)
     if _differences(next, values) == 0:
         raise Error("dropout: counters 7 and 8 gave the same mask")
     print("PASS dropout/replay digest", _digest(same), "next", _digest(next))
     # p = 0 keeps every element unchanged.
-    var none = tape.values(ex, tape.dropout(ex, x2, Float32(0), seed, counter))
+    var y_none = tape.dropout(ex, x2, Float32(0), seed, counter)
+    var none = tape.values(ex, y_none)
     if _differences(none, xs) != 0:
         raise Error("dropout: p = 0 changed a value")
     print("PASS dropout/p0 digest", _digest(none))
