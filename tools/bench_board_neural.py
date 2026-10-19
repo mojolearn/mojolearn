@@ -377,7 +377,11 @@ NOT_PLANNED = {
         "amd": ["mamba-ssm-tf32: TF32 is an NVIDIA CUDA mode; mamba_ssm races in float32 "
                 "(mamba-ssm-fp32, from its ROCm/HIP source build) on AMD"]}.get(v, [])
        + ["mamba-ssm bf16: our Mamba blocks are float32, so mamba_ssm races in float32 (and its "
-          "TF32 setting on NVIDIA)"])
+          "TF32 setting on NVIDIA)"]
+       # 2026-10-19 (lane ag-bench): the fit lanes' MLX arm and Apple's tier
+       + (["mlx-fp32 on the fit lanes: MLX runs on Apple silicon only"] if v != "apple" else
+          ["ours (identical) on the fit lanes: identical is never timed on Apple; the fit lanes race "
+           "ours-fast there"]))
     for v in VENDORS}
 
 #: The board's "Not covered" lines for the neural family.
@@ -405,6 +409,10 @@ NOT_COVERED = [
     "their GPU twins are the *-forward, *-decode and mlp-predict rows.",
     "The GPT-3-small target shape is not on the board (the LM lanes use the smaller control "
     "shape so one shape runs on every box, a 16 GB Mac included).",
+    # 2026-10-19 (lane ag-bench)
+    "The fit lanes time one whole fit (one epoch at the recipe's batch size); the held-out "
+    "prediction after it is not timed, and multi-epoch fits, early stopping and the classifier "
+    "variants of the recurrent models are not raced.",
 ]
 
 # FAIRNESS FIX (2026-10-13 audit): the torch twins of these lanes are pure-PyTorch REFERENCE
@@ -541,6 +549,25 @@ SAMBA_SHAPES = {
                   n_heads=2, intermediate=128),
 }
 MLP_SHAPES = {"full": dict(batch=256), "small": dict(batch=32)}
+#: THE FIT LANES' RECIPE (2026-10-19, lane ag-bench), every value explicit and the same on every arm.
+#: Rows: tools/sequence_speed.py's 1M HIGGS training rows (`full`) and a held-out block; `small` is the
+#: smoke. The recurrent lanes cut consecutive rows into FIT_SEQ_LEN-step sequences, so they fit on
+#: train // FIT_SEQ_LEN sequences (sequence_speed.case_recurrent).
+FIT_ROWS = {"full": dict(train=1_000_000, test=100_000), "small": dict(train=4096, test=1024)}
+FIT_SEQ_LEN = 16
+#: HIGGS's feature count, for the settings text only (every arm reads its width from the data)
+HIGGS_FEATURES = 28
+FIT_BATCH, FIT_EPOCHS = 512, 1
+FIT_MLP_HIDDEN = (256,)
+FIT_RNN_HIDDEN = 64
+FIT_TAPE_HIDDEN = (64, 64)
+#: Adam on every fit lane and arm (no weight decay, no amsgrad): ours' MLPClassifier (beta_1, beta_2,
+#: epsilon), the recurrent estimators (optimizer_options), torch.optim.Adam and mlx.optimizers.Adam.
+FIT_ADAM = {"lr": 1e-3, "betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0}
+#: Where the conductor reads HIGGS: --higgs, else this variable, else the first default that exists
+#: (tools/sequence_speed.py's defaults).
+HIGGS_ENV = "MOJOLEARN_BENCH_HIGGS"
+HIGGS_DEFAULTS = ("~/data/higgs_speed.npz", "~/datasets/gbm-bench/higgs/higgs_speed.npz")
 #: The CPU lanes' sequence cap in `full` (the host binding on a laptop CPU).
 CPU_LENGTH_CAP = 512
 
@@ -574,6 +601,9 @@ def opponents(vendor, lane):
         return tuple("torch-" + s for s in GPU_SETTINGS[vendor] if s.endswith("bf16"))
     if lane in DECODE_LANES and lane not in DECODE_TORCH_TWIN:
         return ()
+    if lane in FIT_LANES:
+        # 2026-10-19 (lane ag-bench): torch at every GPU setting of the box, and MLX on Apple
+        return tuple("torch-" + s for s in GPU_SETTINGS[vendor]) + (MLX_ARMS if vendor == "apple" else ())
     if DEVICE_OF[lane] == "cpu":
         arms = ["torch-cpu-" + s for s in CPU_SETTINGS]
     else:
@@ -626,6 +656,11 @@ def _dims_of(lane, shape):
         d = dict(SAMBA_SHAPES[shape])
     elif model == "mlp":
         d = dict(MLP_SHAPES[shape])
+    elif lane in FIT_LANES:
+        d = dict(FIT_ROWS[shape], batch=FIT_BATCH, epochs=FIT_EPOCHS)
+        if lane in FIT_CELL:
+            d.update(length=FIT_SEQ_LEN, hidden=FIT_RNN_HIDDEN)
+        return d
     else:
         d = dict(BLOCK_SHAPES[model][shape])
     if DEVICE_OF[lane] == "cpu" and "length" in d and shape == "full":
@@ -653,6 +688,14 @@ def shape_record(lane, shape):
             "+".join(d["layers"]))
     elif model == "mlp":
         rec["label"] = "rows%d 8-16-3" % d["batch"]
+    elif lane in FIT_LANES:
+        if lane in FIT_CELL:
+            net = "%s h%d T%d" % (FIT_CELL[lane], FIT_RNN_HIDDEN, FIT_SEQ_LEN)
+        else:
+            hidden = FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN
+            net = "%d-%s-1" % (HIGGS_FEATURES, "-".join(str(h) for h in hidden))
+        rec["label"] = "HIGGS train %d test %d %s b%d %d epoch adam" % (
+            d["train"], d["test"], net, d["batch"], d["epochs"])
     else:
         rec["label"] = "B%d L%d DM%d" % (d["batch"], d["length"], d["d_model"])
     return rec
@@ -732,6 +775,34 @@ LANE_TEXT = {
                      "step(ids[:, t], state) for t < L -> logits (B, L, vocab)", "none (ours alone)"),
     "mlp-predict": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X) (GPU)",
                     "F.linear, ReLU, F.linear on the GPU; .cpu()"),
+    # 2026-10-19 (lane ag-bench): whole fits through the tape
+    "mlp-fit": ("mojolearn.MLPClassifier(hidden_layer_sizes=(256,), activation='relu', solver='adam', "
+                "alpha=0.0, batch_size=512, learning_rate_init=1e-3, max_iter=1, shuffle=True, "
+                "random_state=7, tol=0.0, n_iter_no_change=1000).fit(X, y) (the tape path, the MLP's "
+                "default)",
+                "torch.nn.Sequential(Linear(28, 256), ReLU, Linear(256, 1)), Glorot-uniform init, "
+                "X and y moved to the device, one epoch of torch.randperm minibatches of 512: zero_grad, "
+                "BCE with logits, backward, torch.optim.Adam step; losses .cpu() (sklearn's Adam folds "
+                "the bias correction into the step size, torch adds eps after it: same algorithm, eps "
+                "placement differs)"),
+    "lstm-fit": ("mojolearn.LSTMRegressor(hidden_size=64, num_layers=1, optimizer='adam', "
+                 "learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+                 "torch.nn.LSTM(28, 64, batch_first=True) + nn.Linear(64, 1) on the last hidden state, "
+                 "MSE, torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
+    "gru-fit": ("mojolearn.GRURegressor(hidden_size=64, num_layers=1, optimizer='adam', "
+                "learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+                "torch.nn.GRU(28, 64, batch_first=True) + nn.Linear(64, 1) on the last hidden state, "
+                "MSE, torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
+    "rnn-fit": ("mojolearn.RNNRegressor(hidden_size=64, num_layers=1, nonlinearity='tanh', optimizer='adam', "
+                "learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+                "torch.nn.RNN(28, 64, nonlinearity='tanh', batch_first=True) + nn.Linear(64, 1) on the last "
+                "hidden state, MSE, torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside "
+                "the clock"),
+    "tape-user-model": ("mojolearn.Sequential(): Linear(28, 64), ReLU, Linear(64, 64), ReLU, Linear(64, 1); "
+                        "compile(loss='bce_with_logits', optimizer='adam', lr=1e-3); fit(X, y, epochs=1, "
+                        "batch_size=512, shuffle=True, seed=7)",
+                        "the same torch.nn.Sequential, Glorot-uniform init, BCE with logits, "
+                        "torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
 }
 
 
@@ -749,6 +820,19 @@ def lane_settings(lane):
                  "default_rng(%d) file; torch arms also call torch.manual_seed(%d); ours' neural "
                  "classes take no seed argument (nothing in them draws)" % (SEED, SEED, SEED))
     s["explicit_params"] = _lane_params(lane)
+    if lane in FIT_LANES:
+        # 2026-10-19 (lane ag-bench): one round = one whole fit
+        s["clock"] = FIT_SPAN["inside_clock"]
+        s["seed_rule"] = ("seed %d on every arm: ours random_state=%d (its initialization and shuffle draw "
+                          "in Mojo), torch.manual_seed(%d) before each fit, mx.random.seed(%d) on MLX; the "
+                          "draws differ between libraries (a different random start, not a different "
+                          "setting)" % (SEED, SEED, SEED, SEED))
+        s["optimizer"] = ("Adam lr %g, betas %s, eps %g, no weight decay, no amsgrad, passed explicitly "
+                          "on every arm" % (FIT_ADAM["lr"], FIT_ADAM["betas"], FIT_ADAM["eps"]))
+        s["quality"] = ("held-out accuracy, log_loss, auc" if FIT_TASK[lane] == "classification"
+                        else "held-out rmse, auc of the score") + (
+            ", train_loss_last_step; *_diff_vs_ours for every other arm")
+        return s
     if lane in TRAIN_LANES:
         s["optimizer"] = ("AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no "
                           "amsgrad, passed explicitly on both" + (", no clipping (max_norm=None)"
@@ -1187,6 +1271,8 @@ def _lane_params(lane):
     board's parameter check compares them by their canonical names)."""
     model = MODEL_OF[lane]
     out = {}
+    if lane in FIT_LANES:
+        return fit_params(lane)
     if lane in TRAIN_LANES:
         out.update(lr=ADAMW["lr"], betas=list(ADAMW["betas"]), eps=ADAMW["eps"],
                    weight_decay=ADAMW["weight_decay"], amsgrad=False)
@@ -1202,6 +1288,54 @@ def _lane_params(lane):
         # torch arm's call() runs no clip_grad_norm_ (TorchArm.call: zero_grad, backward, opt.step).
         out.update(dropout=SAMBA_DROPOUT, max_grad_norm=SAMBA_CLIP_OFF if lane in TRAIN_LANES else "n/a")
     return out
+
+
+def fit_layers(lane, d_in, hidden, d_out=1):
+    """The network of a fit lane as every arm reads it back from what it built: one string per layer."""
+    if lane in FIT_CELL:
+        return ["%s %d %d bias batch_first" % (FIT_CELL[lane], d_in, int(hidden[0])),
+                "linear %d %d bias (last time step)" % (int(hidden[0]), d_out)]
+    sizes = [int(d_in)] + [int(h) for h in hidden] + [int(d_out)]
+    out = []
+    for i in range(len(sizes) - 1):
+        out.append("linear %d %d bias" % (sizes[i], sizes[i + 1]))
+        if i < len(sizes) - 2:
+            out.append("relu")
+    return out
+
+
+def fit_params(lane, d_in=HIGGS_FEATURES, **readback):
+    """The work settings of a fit lane, the same explicit values on every arm (the board's parameter
+    check compares them by these names). `readback` overrides a value with what the arm read back
+    from the object it built, so a difference shows as a mismatch, never as the lane's constant."""
+    hidden = (FIT_RNN_HIDDEN,) if lane in FIT_CELL else (FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN)
+    out = dict(optimizer="adam", learning_rate=FIT_ADAM["lr"], betas=list(FIT_ADAM["betas"]),
+               eps=FIT_ADAM["eps"], weight_decay=FIT_ADAM["weight_decay"], amsgrad=False, maximize=False,
+               batch_size=FIT_BATCH, epochs=FIT_EPOCHS, shuffle=True, layers=fit_layers(lane, d_in, hidden),
+               seed=SEED)
+    if lane == "mlp-fit":
+        # alpha: scikit-learn's L2 term, 0 so that no arm adds a penalty (torch's loss has none)
+        out.update(loss="log_loss", alpha=0.0)
+    elif lane in FIT_CELL:
+        out.update(loss="mse", num_layers=1, timesteps=FIT_SEQ_LEN)
+        if lane == "rnn-fit":
+            out["nonlinearity"] = "tanh"
+    else:
+        out.update(loss="bce_with_logits")
+    for k, v in readback.items():
+        if k not in out:
+            raise KeyError("fit_params(%s): %r is not one of the lane's settings" % (lane, k))
+        out[k] = list(v) if isinstance(v, tuple) else v
+    return out
+
+
+def fit_record(lane, library, implementation, d_in, **readback):
+    """A fit arm's parameter record for tools/bench_board_params.py."""
+    rec = {"__library__": library}
+    if implementation is not None:
+        rec["__implementation__"] = implementation
+    rec.update(fit_params(lane, d_in, **readback))
+    return rec
 
 
 def _ours_record(lane, config_readback=None):
