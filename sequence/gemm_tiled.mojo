@@ -47,6 +47,18 @@
 # (accumulate ? C : +0.0), then the same epilogue: the same words on every
 # route, so no bit moves on any opcode, column or the host.
 #
+# PASS 6 (lane ag-pass6-gemm, default; the split is a BIT VERSION on every
+# column, sequence/gemm_split.mojo): _launch first takes the split-K order
+# where gemm_split_shape holds (K > 64 and few cells for the shape's tile
+# family), then seq_gemm_route: GR_TILE runs the 64 x 64 micro-tile when
+# both edges are >= 64, else the 16 x 16 tile; thin products under 2^15
+# cells take the thin tile whether or not the launch is fused.
+#  Z1  512x256 K 28   micro-tile, 8 x 4 = 32 blocks (same words)
+#  Z2  512x1   K 256  split, 4 blocks of 64 terms: 2048 threads (new words)
+#  dW2 256x1   K 512  split, 8 blocks of 64 terms + the db column block
+#  dH  512x256 K 1    cell (unchanged)
+#  dW1 28x256  K 512  split, 8 blocks of 64: 57344 threads (new words)
+#
 # WHY 1401 COST 2.3x OP_GEMM ON MI325X (AMD phase 2/3, AG_PROFILE=2):
 #  (a) NOT a different tiling: 1 and 1401 take the same route on all five
 #      shapes (exec_device.mojo, the two `seq_gemm_tiled_on` tests).
