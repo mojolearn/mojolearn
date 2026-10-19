@@ -701,6 +701,29 @@ struct Tape(Movable):
         self._nodes[result._index].op = CUSTOM + tag
         return result
 
+    def binary_recorded[E: Exec](
+        mut self, mut ex: E, x: Tensor, y: Tensor, op: Int, output: FP,
+        grad_destination: FP = dummy_ptr(), caller_grad: Bool = False,
+    ) raises -> Tensor:
+        """Record an already executed add/subtract/multiply/divide.
+
+        `output` already holds the broadcast result of x op y (computed by
+        the caller's own kernel); nothing is launched. The backward is the
+        tape's own binary VJP, which reads the operands' values (multiply,
+        divide) and `output` (divide). With caller_grad=True the gradient
+        lands in `grad_destination`, as in custom_into.
+        """
+        if op != ADD and op != SUBTRACT and op != MULTIPLY and op != DIVIDE:
+            raise Error("binary_recorded takes ADD, SUBTRACT, MULTIPLY or DIVIDE")
+        var a = self._nodes[self._check(x)]
+        var b = self._nodes[self._check(y)]
+        if (a.rows != b.rows and a.rows != 1 and b.rows != 1) or (a.cols != b.cols and a.cols != 1 and b.cols != 1):
+            raise Error("incompatible tensor shapes for broadcasting")
+        var rows = max(a.rows, b.rows)
+        var cols = max(a.cols, b.cols)
+        return self._record(ex, output, rows, cols, op, [x, y], Args(), False,
+                            grad_destination, caller_grad)
+
     def _binary_vjp[E: Exec](
         mut self, mut ex: E, n: _Node, edge: Int, contribution: FP, rows: Int, cols: Int,
     ) raises:

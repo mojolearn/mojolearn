@@ -470,6 +470,31 @@ struct DeviceExec(Exec):
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
 
+    def __init__(out self, ctx: DeviceContext) raises:
+        """An executor on a caller's context (lane ag-transformer: the
+        autograd tape records over the transformer's own DeviceContext, so
+        its launches and the transformer's kernels share one in-order queue).
+        It never takes pooled storage: the pool's buffers belong to the
+        shared sequence context. Its destructor drains `ctx`."""
+        self.ctx = ctx.copy()
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.base = List[Int]()
+        self.size = List[Int]()
+        self.staged = List[HostBuffer[DType.float32]]()
+        self.pend_host = List[HostBuffer[DType.float32]]()
+        self.pend_dst = List[Int]()
+        self.pend_n = List[Int]()
+        self.pooled = False
+        self.pdev = List[Int]()
+        self.pstaged = List[Int]()
+        self.ppend_host = List[Int]()
+        self.pipe_dst = List[Int]()
+        self.pipe_src = List[Int]()
+        self.pipe_n = List[Int]()
+        self.moe_poff = List[Int]()
+        self.retired = List[DeviceBuffer[DType.float32]]()
+        self.retired_pdev = List[Int]()
+
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
 
