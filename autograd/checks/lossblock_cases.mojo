@@ -194,6 +194,7 @@ def _batch_case[E: Exec](
 
 
 def _epoch_case[E: Exec](mut ex: E, name: String, n_batches: Int, bs: Int, last: Int) raises -> Bool:
+    """`last` (1 <= last <= bs) rows in the last batch, as mlp_fit's batches."""
     var N = (n_batches - 1) * bs + last
     var bl = List[Float32](length=n_batches, fill=0)
     for bi in range(n_batches):
@@ -223,29 +224,34 @@ def run_lossblock_cases[E: Exec](mut ex: E) raises:
     var passed = 0
     var total = 0
     # one block everywhere (layers 15, 20, 8 weights; 11 rows): the old bits
+    var s1: List[Int] = [3, 5, 4, 2]
     total += 1
-    if _batch_case(ex, "one_block_squared", [3, 5, 4, 2], 11, LOSS_SQUARED, Float32(0.02), True):
+    if _batch_case(ex, "one_block_squared", s1^, 11, LOSS_SQUARED, Float32(0.02), True):
         passed += 1
+    var s2: List[Int] = [3, 5, 4, 1]
     total += 1
-    if _batch_case(ex, "one_block_binary", [3, 5, 4, 1], 11, LOSS_BINARY_LOG, Float32(0.02), True):
+    if _batch_case(ex, "one_block_binary", s2^, 11, LOSS_BINARY_LOG, Float32(0.02), True):
         passed += 1
     # the HIGGS shape: 28 -> 256 -> 1, 512 rows, binary log loss
+    var s3: List[Int] = [28, 256, 1]
     total += 1
-    if _batch_case(ex, "higgs_shape", [28, 256, 1], 512, LOSS_BINARY_LOG, Float32(1.0e-4), False):
+    if _batch_case(ex, "higgs_shape", s3^, 512, LOSS_BINARY_LOG, Float32(1.0e-4), False):
         passed += 1
     # multiclass log loss, uneven block tails
+    var s4: List[Int] = [7, 300, 129, 5]
     total += 1
-    if _batch_case(ex, "softmax_tails", [7, 300, 129, 5], 1000, LOSS_LOG, Float32(0.02), False):
+    if _batch_case(ex, "softmax_tails", s4^, 1000, LOSS_LOG, Float32(0.02), False):
         passed += 1
     # six layers (two groups of four), a short last batch
+    var s5: List[Int] = [3, 1100, 70, 90, 60, 40, 2]
     total += 1
-    if _batch_case(ex, "six_layers", [3, 1100, 70, 90, 60, 40, 2], 37, LOSS_SQUARED, Float32(0.5), False):
+    if _batch_case(ex, "six_layers", s5^, 37, LOSS_SQUARED, Float32(0.5), False):
         passed += 1
     total += 1
     if _epoch_case(ex, "epoch_short", 7, 64, 9):
         passed += 1
     total += 1
-    if _epoch_case(ex, "epoch_higgs", 1954, 512, 576):
+    if _epoch_case(ex, "epoch_higgs", 1954, 512, 64):
         passed += 1
     if passed == total:
         print("PASS lossblock_cases", passed)
