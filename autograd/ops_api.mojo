@@ -34,6 +34,8 @@ from autograd.layers import NeuralRules, layer_norm
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
 from autograd.data import permutation, gather_rows
 from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
+from core.cast_in import CastIn
+from autograd.cast_ops import upload_cast
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -214,16 +216,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self.tape.is_recording()
 
     # ------------------------------------------------------------ data in and out
-    def upload(mut self, src: FP, rows: Int, cols: Int, requires_grad: Bool) raises -> Int:
-        """A new tensor holding the caller's rows x cols floats (row-major);
-        the caller's memory may change once this returns."""
+    def upload(mut self, src: CastIn, requires_grad: Bool) raises -> Int:
+        """A new (src.rows, src.cols) tensor holding the caller's array as
+        float32 (core/cast_in.mojo: any accepted dtype, C or Fortran order,
+        cast on the executor by autograd/cast_ops.mojo upload_cast); the
+        caller's memory may change once this returns."""
+        src.check("ops: tensor")
+        var rows = src.rows
+        var cols = src.cols
         if rows <= 0 or cols <= 0 or rows > ((1 << 60) // 4) // cols:
             raise Error("ops: tensor dimensions must be positive")
         if requires_grad and not self.tape.is_recording():
             raise Error("ops: requires_grad needs a recording session (Session(record=True))")
         var n = rows * cols
         var buf = self.ex.alloc(n)
-        self.ex.upload(buf, src, n)
+        upload_cast(self.ex, buf, src)
         var t = self.tape.variable(self.ex, buf, rows, cols, requires_grad)
         return self._add(t, Int(buf), requires_grad, 0)
 
