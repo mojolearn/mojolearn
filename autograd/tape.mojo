@@ -7,7 +7,7 @@ from sequence.mlp import (
     EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD,
 )
 from checks.numerics import identical_div
-from autograd.fold import blocked_fold, blocked_fold_finish, fold_block, fold_partials
+from autograd.fold import blocked_fold, blocked_fold_finish, fold_block, fold_partials, fold_single_launch
 from autograd.profile import ag_profile_report
 from sequence.launch_profile import (
     launch_profile_level, launch_profile_mark, PROFILE_FORWARD, PROFILE_BACKWARD, PROFILE_OTHER,
@@ -1308,12 +1308,21 @@ struct Tape(Movable):
         # OP_AG_REDUCE_PART: one launch and one write + read of the
         # rows x cols matrix fewer, the same bits.
         var block = fold_block(n.rows, n.cols, axis)
-        var partials = self._alloc(ex, fold_partials(n.rows, n.cols, axis))
-        a.p4 = partials
         a.i0 = axis
         a.i9 = block
         var extent = n.rows * n.cols if axis == AXIS_ALL else (n.rows if axis == AXIS_ROWS else n.cols)
         var outputs = 1 if axis == AXIS_ALL else (n.cols if axis == AXIS_ROWS else n.rows)
+        if fold_single_launch(n.rows, n.cols, axis):
+            # Lane ag-pass3-fold (AUTOGRAD_FOLD_V2): one block an output, so
+            # the one launch writes the contribution (+0.0 + the chain, the
+            # fold's one-partial chain at factor 1): the same bits, no
+            # partials and no second launch. p4 is unused: left unbound.
+            a.p5 = contribution
+            a.i11 = 1
+            ex.launch[OP_AGK_BIN_VJP_PART](a, outputs)
+            return
+        var partials = self._alloc(ex, fold_partials(n.rows, n.cols, axis))
+        a.p4 = partials
         ex.launch[OP_AGK_BIN_VJP_PART](a, ((extent + block - 1) // block) * outputs)
         blocked_fold_finish(ex, contribution, partials, n.rows, n.cols, axis, Float32(1))
 

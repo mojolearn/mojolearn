@@ -47,14 +47,16 @@ def fold_partials_bound(max_extent: Int) -> Int:
     length is a constant, so ceil(max_extent / 64) blocks."""
     comptime if AUTOGRAD_FOLD_V2:
         return max((max_extent + AG_FOLD_LEAF - 1) // AG_FOLD_LEAF, 1)
-    return ag_fold_block(max(max_extent, 1))
+    else:
+        return ag_fold_block(max(max_extent, 1))
 
 
 def fold_block(rows: Int, cols: Int, axis: Int) -> Int:
     """The block length of a fold of a rows x cols source over `axis`."""
     comptime if AUTOGRAD_FOLD_V2:
         return AG_FOLD_LEAF
-    return ag_fold_block(fold_extent(rows, cols, axis))
+    else:
+        return ag_fold_block(fold_extent(rows, cols, axis))
 
 
 def fold_single_launch(rows: Int, cols: Int, axis: Int) -> Bool:
@@ -62,7 +64,8 @@ def fold_single_launch(rows: Int, cols: Int, axis: Int) -> Bool:
     launch can write the finished outputs (no partials, no second launch)."""
     comptime if AUTOGRAD_FOLD_V2:
         return fold_extent(rows, cols, axis) <= AG_FOLD_LEAF
-    return False
+    else:
+        return False
 
 
 def blocked_fold_finish[E: Exec](
@@ -132,7 +135,7 @@ def blocked_fold[E: Exec](
     a.i3 = block
     if fold_single_launch(rows, cols, axis):
         # v2: one block an output; PART writes dst itself (same bits).
-        a.p1 = Args().p1
+        # p1 stays bound to the (unused) partials: live storage.
         a.p2 = dst
         a.i4 = 1
         if divide:
