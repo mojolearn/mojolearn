@@ -336,6 +336,24 @@ struct Tape(Movable):
             raise Error("tensor does not require a gradient")
         if not n.grad_ready:
             raise Error("tensor has no gradient: run backward from an output that depends on it")
+        if n.grad_preact:
+            raise Error("this linear output holds its pre-activation gradient: use preactivation_gradient")
+        return n.grad
+
+    def preactivation_gradient(self, x: Tensor) raises -> FP:
+        """Return the gradient with respect to a linear output's pre-activation.
+
+        Available after a backward for an output recorded by linear or
+        linear_into whose activation derivative was applied in place, and
+        for one without an activation.
+        """
+        var n = self._nodes[self._check(x)]
+        if n.op != LINEAR:
+            raise Error("preactivation_gradient takes an output of linear or linear_into")
+        if not n.requires_grad or not n.grad_ready:
+            raise Error("tensor has no gradient: run backward from an output that depends on it")
+        if not n.grad_preact and n.saved.i0 != ACT_IDENTITY:
+            raise Error("the pre-activation gradient of this output was not kept")
         return n.grad
 
     def rows(self, x: Tensor) raises -> Int:
@@ -785,6 +803,110 @@ struct Tape(Movable):
         """Compute a vector-Jacobian product using a seed of the output's shape."""
         self.backward_with_rules(ex, output, seed, NoCustomRules(), accumulate)
 
+    def backward_from_preactivation[E: Exec](
+        mut self, mut ex: E, output: Tensor, seed: Tensor, accumulate: Bool = False,
+    ) raises:
+        """Backpropagate a seed that is the gradient with respect to a linear
+        output's pre-activation (x @ W + b), not its activated output.
+
+        Use it when the loss derivative already includes the output
+        activation, as the softmax or sigmoid with log loss derivative
+        p - y does. `output` comes from linear or linear_into and `seed` has
+        its shape. The seed is read in place (no copy); keep it unchanged
+        until backward finishes. The output's own gradient is not stored.
+        """
+        self.backward_from_preactivation_with_rules(ex, output, seed, NoCustomRules(), accumulate)
+
+    def backward_from_preactivation_with_rules[E: Exec, R: BackwardRules](
+        mut self, mut ex: E, output: Tensor, seed: Tensor, rules: R, accumulate: Bool = False,
+    ) raises:
+        var n = self._nodes[self._check(output)]
+        var s = self._nodes[self._check(seed)]
+        if n.op != LINEAR:
+            raise Error("backward_from_preactivation takes an output of linear or linear_into")
+        if n.rows != s.rows or n.cols != s.cols:
+            raise Error("backward seed shape must equal output shape")
+        var cursor = self._cursor
+        try:
+            self._backward(ex, output, s.value, rules, accumulate, True)
+        except e:
+            self._cursor = cursor
+            raise e
+        self._cursor = cursor
+
+    def _linear_dz[E: Exec](mut self, mut ex: E, i: Int) raises -> FP:
+        """dL/dZ of linear node i from its output gradient dY: dY itself
+        without an activation; act'(Y) applied in place (OP_ACT_BWD, the
+        hand path's body) for an elementwise one; the softmax VJP into
+        backward scratch for softmax."""
+        var n = self._nodes[i]
+        var act = n.saved.i0
+        if act == ACT_IDENTITY:
+            return n.grad
+        if act == ACT_SOFTMAX:
+            var d = self._alloc(ex, n.rows * n.cols)
+            var s = Args()
+            s.p0 = n.value
+            s.p1 = n.grad
+            s.p2 = d
+            s.i0 = 0
+            s.i1 = n.cols
+            ex.launch[OP_AG_SOFTMAX_VJP](s, n.rows)
+            return d
+        var a = Args()
+        a.p0 = n.grad
+        a.p1 = n.value
+        a.i0 = act
+        ex.launch[OP_ACT_BWD](a, n.rows * n.cols)
+        self._nodes[i].grad_preact = True
+        return n.grad
+
+    def _linear_vjp[E: Exec](
+        mut self, mut ex: E, n: _Node, edge: Int, dst: FP, first: Bool, dz: FP, consumers: List[Int],
+    ) raises:
+        """Edge `edge` of linear node n into `dst` (the parent's gradient
+        for a first contribution, else scratch), from dz = dL/dZ. The calls
+        and arguments are the hand MLP backward's (sequence/mlp_fit.mojo)."""
+        var xi = self._parents[n.start]
+        var x = self._nodes[xi]
+        var w = self._nodes[self._parents[n.start + 1]]
+        var rows = n.rows
+        var fi = x.cols
+        var fo = n.cols
+        var divisor = n.saved.f1
+        if edge == 1:
+            # dW = x^T dz (+ l2 W) / divisor
+            if divisor > 0:
+                _gemm_epi(ex, x.value, dz, dst, fi, fo, rows, 1, fi, fo, 1,
+                          EPI_L2GRAD, w.value, 0, n.saved.f0, divisor)
+            else:
+                _gemm(ex, dst, x.value, dz, fi, fo, rows, 1, fi, fo, 1)
+        elif edge == 2:
+            # db = column sum of dz over the rows (/ divisor)
+            var c = Args()
+            c.p0 = dz
+            c.p1 = dst
+            c.i0 = rows
+            c.i2 = fo
+            if divisor > 0:
+                c.f0 = divisor
+                ex.launch[OP_COLSUM_DIV](c, fo)
+            else:
+                ex.launch[OP_COLSUM](c, fo)
+        else:
+            # dX = dz W^T. When x is a linear node whose only consumer is
+            # this node, its activation derivative rides in the epilogue
+            # and x's gradient holds its pre-activation gradient: the hand
+            # path's EPI_ACT_BWD (act' read from x's output values).
+            var x_act = x.saved.i0
+            if first and consumers[xi] == 1 and x.op == LINEAR and x_act != ACT_SOFTMAX:
+                _gemm_epi(ex, dz, w.value, dst, rows, fi, fo, fo, 1, 1, fo,
+                          EPI_ACT_BWD, x.value, x_act, Float32(0.0), Float32(0.0))
+                if x_act != ACT_IDENTITY:
+                    self._nodes[xi].grad_preact = True
+            else:
+                _gemm(ex, dst, dz, w.value, rows, fi, fo, fo, 1, 1, fo)
+
     def backward_with_rules[E: Exec, R: BackwardRules](
         mut self, mut ex: E, output: Tensor, seed: Tensor, rules: R, accumulate: Bool = False,
     ) raises:
@@ -802,11 +924,15 @@ struct Tape(Movable):
 
     def _backward[E: Exec, R: BackwardRules](
         mut self, mut ex: E, output: Tensor, seed: FP, rules: R, accumulate: Bool,
+        preact: Bool = False,
     ) raises:
         var root = self._check(output)
         if not self._nodes[root].requires_grad:
             raise Error("output has no differentiable ancestors")
         var active = List[Bool](length=len(self._nodes), fill=False)
+        # Edges from differentiated nodes into each node (a linear node's
+        # dX epilogue may apply its input's act' only for a sole consumer).
+        var consumers = List[Int](length=len(self._nodes), fill=0)
         active[root] = True
         # Creation order is topological. Mark only ancestors of this output;
         # disconnected invalid-domain operations are never differentiated.
@@ -821,6 +947,7 @@ struct Tape(Movable):
                 var p = self._parents[n.start + edge]
                 if self._nodes[p].requires_grad:
                     active[p] = True
+                    consumers[p] += 1
         # GRADIENT WRITE INVARIANT (lane ag-fusion). Gradients are never
         # zero-filled before use. touched[i] says node i's gradient already
         # holds a contribution. The FIRST contribution to a parent is written
@@ -836,6 +963,7 @@ struct Tape(Movable):
         # intermediate has no gradient (gradient() refuses).
         var touched = List[Bool](length=len(self._nodes), fill=False)
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
+            self._nodes[i].grad_preact = False
             var n = self._nodes[i]
             if not n.requires_grad:
                 continue
@@ -846,8 +974,12 @@ struct Tape(Movable):
                 touched[i] = True
             else:
                 self._nodes[i].grad_ready = False
-        # Preserve the seed before overwriting a leaf root's gradient.
-        if touched[root]:
+        # Preserve the seed before overwriting a leaf root's gradient. A
+        # pre-activation seed (backward_from_preactivation) is read in place
+        # as the root linear node's dZ: no copy.
+        if preact:
+            pass
+        elif touched[root]:
             _accumulate(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         else:
             _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
@@ -881,6 +1013,14 @@ struct Tape(Movable):
                     contributions.append(self._alloc(ex, p.rows * p.cols))
                 else:
                     contributions.append(dummy_ptr())
+            # A linear node's dL/dZ: the pre-activation seed at the root, its
+            # gradient when a consumer already applied act', else formed here.
+            var dz = n.grad
+            if n.op == LINEAR:
+                if i == root and preact:
+                    dz = seed
+                elif not n.grad_preact:
+                    dz = self._linear_dz(ex, i)
             if n.op >= CUSTOM:
                 var inputs = List[FP]()
                 var rows = List[Int]()
@@ -906,7 +1046,9 @@ struct Tape(Movable):
                     if first[edge]:
                         _copy(ex, p.grad, n.grad, p.rows * p.cols)
                 elif n.op < CUSTOM:
-                    if n.op == MATMUL:
+                    if n.op == LINEAR:
+                        self._linear_vjp(ex, n, edge, contribution, first[edge], dz, consumers)
+                    elif n.op == MATMUL:
                         var left = self._nodes[self._parents[n.start]]
                         var right = self._nodes[self._parents[n.start + 1]]
                         if edge == 0:
@@ -960,3 +1102,6 @@ struct Tape(Movable):
                 # unreached differentiable leaf: its gradient is zero
                 _fill(ex, n.grad, n.rows * n.cols)
                 self._nodes[i].grad_ready = True
+        if preact:
+            # the root's gradient buffer was never written: the seed was used
+            self._nodes[root].grad_ready = False
