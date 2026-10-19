@@ -122,6 +122,8 @@ from transformer.checks.transformer_backward import (
     llama_decoder_layer_backward_device,
 )
 from transformer.checks.transformer_fixture import RMS_EPS
+from autograd.rules_lm import AUTOGRAD_LM
+from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 from transformer.impl.llama.fused_attention import fused_forward_supported_head_dim
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_EAGER,
@@ -697,10 +699,22 @@ def _backward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
             s.ctx.synchronize()
             _ = g^
         else:
-            llama_decoder_layer_backward_device(
-                s.ctx, s.t_bst[j], s.t_stages[j], s.t_w[j], s.rope.value().cos, s.rope.value().sin,
-                s.acts[i], s.dh, b, l, 0, trace, String("samba.resident.attn.bwd"),
-            )
+            # -D MOJOLEARN_AUTOGRAD_LM: a default attention block's backward
+            # through the transformer tape entry (the same launches, the
+            # same bst fields); the Mamba-3 blocks stay hand-chained.
+            var on_tape = False
+            comptime if AUTOGRAD_LM:
+                on_tape = s.t_w[j].opts.is_default()
+            if on_tape:
+                llama_decoder_layer_backward_autograd(
+                    s.ctx, s.t_bst[j], s.t_stages[j], s.t_w[j], s.rope.value().cos, s.rope.value().sin,
+                    s.acts[i], s.dh, b, l, 0, trace, String("samba.resident.attn.bwd"),
+                )
+            else:
+                llama_decoder_layer_backward_device(
+                    s.ctx, s.t_bst[j], s.t_stages[j], s.t_w[j], s.rope.value().cos, s.rope.value().sin,
+                    s.acts[i], s.dh, b, l, 0, trace, String("samba.resident.attn.bwd"),
+                )
             _d2d(s.ctx, s.grad, s.offsets[base + 0], s.t_bst[j].dw_norm1, s.tensor_size(base + 0))
             _d2d(s.ctx, s.grad, s.offsets[base + 1], s.t_bst[j].dw_norm2, s.tensor_size(base + 1))
             _d2d(s.ctx, s.grad, s.offsets[base + 2], s.t_bst[j].dw_q, s.tensor_size(base + 2))
