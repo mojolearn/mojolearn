@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr, OP_COPY, OP_FILL, OP_GEMM
+from sequence.ops import OP_ACT, OP_ACT_BWD, OP_COLSUM, OP_COLSUM_DIV, OP_GEMM_EPI, OP_SOFTMAX
+from sequence.mlp import (
+    ACT_IDENTITY, ACT_LOGISTIC, ACT_TANH, ACT_RELU, ACT_SOFTMAX,
+    EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD,
+)
 from checks.numerics import identical_div
 from autograd.ops import (
     OP_AG_BIN_FWD, OP_AG_BIN_VJP, OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_TRANSPOSE,
@@ -8,7 +13,7 @@ from autograd.ops import (
     OP_AG_SOFTMAX_VJP, OP_AG_ACCUMULATE,
     LEAF, ADD, SUBTRACT, MULTIPLY,
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
-    REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
+    REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output,
 )
 
@@ -35,6 +40,10 @@ struct _Node(ImplicitlyCopyable, Movable):
     # The gradient buffer holds a value: written by a backward (or zeroed for
     # an unreached leaf), or caller storage from variable_into.
     var grad_ready: Bool
+    # A LINEAR node's gradient buffer holds dL/d(pre-activation), not
+    # dL/d(output): its activation derivative was already applied, by its
+    # one consumer's dX epilogue or in place by its own backward.
+    var grad_preact: Bool
 
 
 trait BackwardRules:
@@ -91,6 +100,48 @@ def _transpose[E: Exec](mut ex: E, dst: FP, src: FP, src_rows: Int, src_cols: In
     a.i0 = src_rows
     a.i1 = src_cols
     ex.launch[OP_AG_TRANSPOSE](a, src_rows * src_cols)
+
+
+def _gemm_epi[E: Exec](
+    mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, epi: Int, p3: FP, i10: Int, f0: Float32, f1: Float32,
+) raises:
+    """A GEMM and its elementwise follower in one launch, with the argument
+    layout of the MLP trainer's gemm_epi (sequence/mlp_fit.mojo), so the
+    fused linear node launches what the hand-assembled MLP launches."""
+    var a = Args()
+    a.p0 = A
+    a.p1 = Bm
+    a.p2 = C
+    a.p3 = p3
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    a.i3 = sam
+    a.i4 = sak
+    a.i5 = sbk
+    a.i6 = sbn
+    a.i8 = N
+    a.i9 = epi
+    a.i10 = i10
+    a.f0 = f0
+    a.f1 = f1
+    ex.launch[OP_GEMM_EPI](a, M * N)
+
+
+def _linear_act(activation: Int) raises -> Int:
+    """The MLP activation code of a linear node's activation."""
+    if activation == 0:
+        return ACT_IDENTITY
+    if activation == SIGMOID:
+        return ACT_LOGISTIC
+    if activation == TANH:
+        return ACT_TANH
+    if activation == RELU:
+        return ACT_RELU
+    if activation == SOFTMAX:
+        return ACT_SOFTMAX
+    raise Error("linear takes activation 0 (none), RELU, SIGMOID, TANH or SOFTMAX")
 
 
 def _gemm[E: Exec](
@@ -234,7 +285,7 @@ struct Tape(Movable):
             else:
                 grad = self._alloc(ex, rows * cols)
         var index = len(self._nodes)
-        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready))
+        self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
