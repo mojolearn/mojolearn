@@ -482,6 +482,20 @@ comptime BWD_FUSE_GATED_SILU = (
     and not BWD_ANY_SABOTAGE
     and not BWD_GATED_SILU_SPLIT_TRIAL
 )
+#: lane ag-pass1-launches: the predicate `llama_decoder_layer_backward_device`
+#: computes inline for `fuse_norm2_residual` (stages 10-13), spelled once more
+#: for the autograd RMSNorm rule (`autograd/rules_transformer.mojo`), which
+#: runs the same fused residual. Keep the two equal.
+comptime BWD_FUSE_NORM2_RESIDUAL = (
+    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
+    and (
+        TARGET_COLUMN == COLUMN_APPLE
+        or TARGET_COLUMN == COLUMN_NVIDIA
+        or TARGET_COLUMN == COLUMN_AMD
+        or BWD_NORM2_RESIDUAL_FUSED_TRIAL
+    )
+    and not BWD_NORM2_RESIDUAL_SPLIT_TRIAL
+)
 
 
 def llama_backward_sabotage_name() -> String:
