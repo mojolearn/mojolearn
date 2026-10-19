@@ -464,6 +464,14 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_OFF"](), "removed 2026-10-19 (lane/del-mamba, 47582a7fb): the hand Mamba-1/2 prefill backward arm is deleted; the tape (autograd/rules_mamba.mojo) is the only GPU backward, same bits on Apple, NVIDIA and AMD. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch"
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA"](), "removed 2026-10-19 (lane/del-mamba, 47582a7fb): MOJOLEARN_AUTOGRAD_MAMBA was the opt-in spelling of the tape backward, now the only path; drop the define"
     # ---- end lane del-mamba
+    # ---- orchestrator (2026-10-19): the other hand-path deletions whose lanes kept their refusal beside the code
+    # (del-mlp, del-transformer, del-lm, del-cnn, del-smallmlp); repeated here so every removed define is refused centrally.
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"](), "removed 2026-10-19 (lane/del-mlp, 6784245b2): the hand MLP backward is deleted; the tape is the only backward (same 48 digests on every column). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]() and not is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"](), "removed 2026-10-19 (lane/del-transformer, dd4194a23): the transformer bindings call the tape only; drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LM_OFF"]() and not is_defined["MOJOLEARN_AUTOGRAD_LM"](), "removed 2026-10-19 (lane/del-lm, a54a5fb2e): the hand LM backward walk is deleted; the tape is the only backward. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN_OFF"]() and not is_defined["MOJOLEARN_AUTOGRAD_CNN"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): the hand CNN fit-epoch backward is deleted; the tape is the only backward. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"]() and not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): the hand small-MLP backward arm is deleted; the tape is the only backward. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+    # ---- end orchestrator block
     # ---- lane del-samba (2026-10-19): the hand Samba train-step backward walk, deleted; the tape is the only backward
     # (word for word equal on Metal, NVIDIA and AMD; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED) deleted 2026-10-19 by 70ce81192; code recoverable at 70ce81192^.
