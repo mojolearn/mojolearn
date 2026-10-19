@@ -195,13 +195,15 @@ def run_alias_checks[E: Exec](mut ex: E) raises:
     # recorded after it differentiates.
     tape.reset()
     var p = tape.tensor(ex, [Float32(2), Float32(3)], 1, 2, True)
-    var old_loss = tape.sum(ex, tape.multiply(ex, p, p))
+    var old_square = tape.multiply(ex, p, p)
+    var old_loss = tape.sum(ex, old_square)
     tape.mark_mutated(p)
     try:
         tape.backward(ex, old_loss)
     except:
         refusals += 1
-    var new_loss = tape.sum(ex, tape.multiply(ex, p, p))
+    var new_square = tape.multiply(ex, p, p)
+    var new_loss = tape.sum(ex, new_square)
     tape.backward(ex, new_loss)
     check_values("after_mark_mutated", tape.gradients(ex, p), [Float32(4), Float32(6)])
 
@@ -211,7 +213,8 @@ def run_alias_checks[E: Exec](mut ex: E) raises:
     var start_values: List[Float32] = [Float32(1), Float32(2), Float32(3), Float32(4)]
     _upload(ex, free_d, start_values)
     var v = tape.variable(ex, free_d, 2, 2)
-    var v_loss = tape.sum(ex, tape.multiply(ex, v, v))
+    var v_square = tape.multiply(ex, v, v)
+    var v_loss = tape.sum(ex, v_square)
     tape.watch(ex, v)
     tape.assert_unchanged(ex, v)
     var changed_values: List[Float32] = [Float32(1), Float32(2), Float32(3), Float32(5)]
