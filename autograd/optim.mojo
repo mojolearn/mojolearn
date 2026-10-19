@@ -28,6 +28,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import (
     FP,
     Args,
+    dummy_ptr,
     OP_FILL,
     OP_OPT,
     OPT_ADAGRAD,
@@ -311,6 +312,23 @@ struct OptimizerState(Movable):
     var pw1: Float32
     var pw2: Float32
     var mu_prod: Float32
+
+    def __init__(out self):
+        """An empty state that owns nothing (no allocation): a placeholder a
+        trainer replaces with a real state when its optimizer seam is on.
+        Never stepped and never released."""
+        var d = dummy_ptr()
+        self.s1 = d
+        self.s2 = d
+        self.s3 = d
+        self.parts = d
+        self.cell = d
+        self.n = 0
+        self.block = 1
+        self.nparts = 0
+        self.pw1 = Float32(1.0)
+        self.pw2 = Float32(1.0)
+        self.mu_prod = Float32(1.0)
 
     def __init__[E: Exec](out self, mut ex: E, cfg: OptimizerConfig, n: Int, init_acc: Float32 = Float32(0.0)) raises:
         """`init_acc` fills the second state buffer (Adagrad's
