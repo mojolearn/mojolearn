@@ -1,0 +1,140 @@
+diff --git a/sequence/mlp_fit.mojo b/sequence/mlp_fit.mojo
+index 0d9b7c0c8..d8c628e5b 100644
+--- a/sequence/mlp_fit.mojo
++++ b/sequence/mlp_fit.mojo
+@@ -80,11 +80,8 @@ from sequence.ops import dummy_ptr
+ # held-out rows: acc 0.68186 -> 0.68230, logloss 0.59475 -> 0.59462, AUC
+ # 0.74755 -> 0.74781. Same digest on NVIDIA and AMD for each arm
+ # (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
+-# It was the hand-assembled backward (arm A above): per layer gemm_epi EPI_L2GRAD
+-# (dW), OP_COLSUM_DIV (db), gemm_epi EPI_ACT_BWD (dX); the tape trains every MLP
+-# with the same 48 check digests (autograd/checks/mlp_cases_digests.tsv).
++# -D MOJOLEARN_AUTOGRAD_MLP_OFF restores the hand-assembled backward (arm A).
++comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
+ # -D MOJOLEARN_AUTOGRAD_PREDICT (lane ag-forward, default off, A/B owed):
+ # mlp_predict_py predicts through the tape's forward in inference mode
+ # (mlp_predict_autograd) instead of the fused hand forward (mlp_predict).
+@@ -104,18 +101,19 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
+ # aee3b17ef66dc060 on the HIGGS recipe: tools/sequence_speed.py case_mlp,
+ # HIGGS 1M x 28, (256,) b512 1 epoch adam, identical): act' is op_act_bwd's
+ # body instead of op_ag_unary_vjp's and db is OP_COLSUM_DIV's chain instead
+-# of the blocked fold. Expected digest: the deleted hand path's (2c2662ecb00cceed,
++# of the blocked fold. Expected digest: the hand path's (2c2662ecb00cceed,
+ # -D MOJOLEARN_AUTOGRAD_MLP_OFF) on every column (host, Metal, NVIDIA, AMD),
+ # since every launch is a hand-path body with the hand path's fold order
+ # (the tiled GEMM is op_gemm's chain term for term). A/B owed: arm A
+ # -D MOJOLEARN_AUTOGRAD_MLP_UNFUSED (the composed matmul + add + activation
+-# tape graph below, untouched), arm B this default.
+-comptime AUTOGRAD_MLP_FUSED = not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"]()
++# tape graph below, untouched), arm B this default; -D MOJOLEARN_AUTOGRAD_MLP_OFF
++# keeps the hand path.
++comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"]()
+ # Lane ag-pass5-composed (PASS5_IDEAS idea 5): the composed graph's export
+ # (OP_L2GRAD + OP_DIVS a layer) rides in the optimizer launch
+ # (autograd/optim.mojo AUTOGRAD_OPT_FUSE, -D MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF
+ # for arm A). Identical by construction; the fused default has no export.
+-comptime MLP_COMPOSED_OPT_FUSE = not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
++comptime MLP_COMPOSED_OPT_FUSE = AUTOGRAD_MLP and not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
+ # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
+ # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
+ # It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
+@@ -335,7 +333,7 @@ def mlp_backward_autograd[E: Exec](
+         #     the tile: one-thread gemm_epi + OP_COLSUM_DIV) 2, dH (gemm_epi
+         #     EPI_ACT_BWD, tiled) 1, layer 1 dW + db (tiled, column-sum
+         #     epilogue) 1, no dX; optimizer 1.
+-        #   deleted hand path (AUTOGRAD_MLP_OFF): 14 (gather 1, forward 2, loss 5,
++        #   hand path (AUTOGRAD_MLP_OFF): 14 (gather 1, forward 2, loss 5,
+         #     backward 5, optimizer 1); the tape now issues one launch fewer
+         #     (db rides in the tiled dW1 launch).
+         # Per layer: backward 1 on the tile (dW with db) + 1 (dX with the
+@@ -696,12 +694,12 @@ def mlp_fit[E: Exec](
+     comptime if AUTOGRAD_OPTIM:
+         opt_state = OptimizerState(ex, opt_cfg, np_)
+     var acts = List[FP]()
++    var deltas = List[FP]()
+     var tape = Tape()
+     var tape_logits = Tensor(0, 0, -1)
+     for i in range(L + 1):
+         acts.append(ex.alloc(bs * net.sizes[i]))
+-    # the gradient seed p - y at the logits (OP_MLP_ROWLOSS / the loss block)
+-    var dlogits = ex.alloc(bs * O)
++        deltas.append(ex.alloc(bs * net.sizes[i]))
+     var yb = ex.alloc(bs * O)
+     # Lane ag-pass5-composed (PASS5_IDEAS idea 6), AUTOGRAD_GATHER_EPOCH: when
+     # the permuted copy of X and y fits (autograd/data.mojo
+@@ -797,9 +795,10 @@ def mlp_fit[E: Exec](
+                 gx.i2 = off
+                 gx.i3 = O
+                 ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
+-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+-            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
+-            tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
++            comptime if AUTOGRAD_MLP:
++                tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
++            else:
++                mlp_forward(ex, net, P, acts, B)
+             comptime if MLP_LOSSBLOCK:
+                 # lane ag-pass3-lossblock: seed, row-loss and L2 sums and the
+                 # batch loss in 2 launches (was 5; sequence/mlp.mojo's
+@@ -809,14 +808,14 @@ def mlp_fit[E: Exec](
+                 comptime if AUTOGRAD_LOSS:
+                     loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
+                 mlp_loss_block(
+-                    ex, net, P, acts[L], yb, dlogits, lb_rowparts, lb_l2parts, l2, dloss, bi, B, loss_kind,
++                    ex, net, P, acts[L], yb, deltas[L], lb_rowparts, lb_l2parts, l2, dloss, bi, B, loss_kind,
+                     ftz(identical_mul(Float32(0.5), alpha)), loss_sum, 1 if AUTOGRAD_LOSS else 0, rowloss,
+                 )
+             else:
+                 var a = Args()
+                 a.p0 = acts[L]
+                 a.p1 = yb
+-                a.p2 = dlogits
++                a.p2 = deltas[L]
+                 a.p3 = rowloss
+                 a.i0 = loss_kind
+                 a.i1 = O
+@@ -879,9 +878,27 @@ def mlp_fit[E: Exec](
+                     bl.p3 = rowparts
+                     bl.i5 = nrb
+                 ex.launch[OP_MLP_BLOSS](bl, 1)
+-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+-            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
+-            mlp_backward_autograd(tape, ex, net, tape_logits, dlogits, P, Gr, B, alpha)
++            comptime if AUTOGRAD_MLP:
++                mlp_backward_autograd(tape, ex, net, tape_logits, deltas[L], P, Gr, B, alpha)
++            else:
++                var i = L - 1
++                while i >= 0:
++                    var fi = net.sizes[i]
++                    var fo = net.sizes[i + 1]
++                    # one launch each: GEMM + L2 term, column sum + mean, GEMM + act'
++                    gemm_epi(ex, acts[i], deltas[i + 1], Gr + net.w_off(i), fi, fo, B, 1, fi, fo, 1,
++                             EPI_L2GRAD, P + net.w_off(i), 0, alpha, Float32(B))
++                    var cs = Args()
++                    cs.p0 = deltas[i + 1]
++                    cs.p1 = Gr + net.b_off(i)
++                    cs.i0 = B
++                    cs.i2 = fo
++                    cs.f0 = Float32(B)
++                    ex.launch[OP_COLSUM_DIV](cs, fo)
++                    if i > 0:
++                        gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
++                                 EPI_ACT_BWD, acts[i], net.act, Float32(0.0), Float32(0.0))
++                    i -= 1
+             comptime if AUTOGRAD_OPTIM:
+                 # one OP_OPT launch through autograd/optim.mojo (same words)
+                 t_upd += 1
+@@ -962,8 +979,9 @@ def mlp_fit[E: Exec](
+                 no_imp = 0
+             else:
+                 break
+-    # lane ag-fusion: return the tape's storage now, not at the end of ex
+-    tape.release(ex)
++    comptime if AUTOGRAD_MLP:
++        # lane ag-fusion: return the tape's storage now, not at the end of ex
++        tape.release(ex)
+     comptime if AUTOGRAD_OPTIM:
+         opt_state.release(ex)
+     comptime if AUTOGRAD_LOSS:
