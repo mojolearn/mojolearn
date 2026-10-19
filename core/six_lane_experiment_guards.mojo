@@ -464,6 +464,13 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_OFF"](), "removed 2026-10-19 (lane/del-mamba, 47582a7fb): the hand Mamba-1/2 prefill backward arm is deleted; the tape (autograd/rules_mamba.mojo) is the only GPU backward, same bits on Apple, NVIDIA and AMD. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch"
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA"](), "removed 2026-10-19 (lane/del-mamba, 47582a7fb): MOJOLEARN_AUTOGRAD_MAMBA was the opt-in spelling of the tape backward, now the only path; drop the define"
     # ---- end lane del-mamba
+    # ---- lane del-samba (2026-10-19): the hand Samba train-step backward walk, deleted; the tape is the only backward
+    # (word for word equal on Metal, NVIDIA and AMD; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED) deleted 2026-10-19 by 70ce81192; code recoverable at 70ce81192^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SAMBA_OFF"](), "removed 2026-10-19 (lane/del-samba, 70ce81192): MOJOLEARN_AUTOGRAD_SAMBA_OFF (the hand Samba train-step backward walk) was deleted: the tape backward is the only one and gave the same words on Metal, NVIDIA and AMD. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch."
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SAMBA"](), "removed 2026-10-19 (lane/del-samba, 70ce81192): MOJOLEARN_AUTOGRAD_SAMBA (the Samba tape opt-in) is gone: the tape is always on. Restore the switch with experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch."
+    # ---- end lane del-samba
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

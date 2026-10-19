@@ -36,6 +36,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_LM_OFF`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_AUTOGRAD_RNN_OFF`](#mojolearn_autograd_rnn_off) | Neural | removed (hand glue, tape is the only path) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_RNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_SAMBA_OFF`](#mojolearn_autograd_samba_off) | Neural | DELETED (hand path; tape only) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch) |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
 | [`MOJOLEARN_ET_DEVICE_BATCH_65536`](#mojolearn_et_device_batch_65536) | Trees | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ET_DEVICE_BATCH_65536.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch) |
@@ -2501,6 +2502,16 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 - Guard refusal (core/six_lane_experiment_guards.mojo:242): removed 2026-10-09 (lane/owed-deletions-D2): MOJOLEARN_AFN_OPT_VEC4 (and alias MOJOLEARN_AFN26_OPT_VEC4), the 4-wide FAST Adam update, was DROPPED-noise: M3 rab19 adam within +-2%, digest moves, no quality metric; code at main b639a2bd2; see docs/TOMBSTONES.md
 - EXPERIMENTS.md:1415 (rab19): `AFN_OPT_FUSE_SCAN`, `AFN_OPT_VEC4`, `AFN_OPT_RESIDENT_STATE` on adam / board, within +-2%, **DROPPED-noise**: digest changes, no quality metric; stay off
 - EXPERIMENTS.md:1824 (Owed deletions D2): **DELETED**.
+
+### MOJOLEARN_AUTOGRAD_SAMBA_OFF
+
+- What it was: the hand-written backward walk of the Samba resident train step (`samba_resident_train_step` after the loss): the head's two backward GEMMs, the final-norm backward, `_backward_blocks` (per block the Mamba-3 prefill backward or the attention layer backward, then 9 + 1 device copies into the registry gradient and `dh`, and one extra wait per Mamba-3 block), the embedding backward and the tied pair add; selected by `MOJOLEARN_AUTOGRAD_SAMBA_OFF` (the opt-in spelling `MOJOLEARN_AUTOGRAD_SAMBA` was accepted too). The tape backward (`autograd/rules_samba.mojo`, `_backward_tape`) launches the same fused kernels on the same buffers, so the kernels, `_pair_add_device` and `mamba3_prefill_backward_on` stay.
+- Verdict: DELETED (hand glue, 2026-10-19; Andrew: every trainer's backward runs on the tape by default with word-for-word checks passed). Deleted 2026-10-19 by `70ce81192` on `lane/del-samba` (shas filled and refusals added in `c64d14bab`). A non-default attention layer, which the session never builds, is now refused before device work instead of falling back to the hand walk.
+- Evidence (one run per arm): `training/checks/samba_tape_step_check.mojo` hand vs tape, every loss, gradient and updated parameter word SAME on three stacks (tied Mamba-3 / attention, untied attention / Mamba-3, tied Mamba-3 only; d_model 64, vocab 256, B 2, L 32) on Metal (`~/mojolearn-evidence/autograd-buildout-20261019/compile-23/samba-check-run.log`), NVIDIA L40S and AMD MI325X (`final-02/nv/samba-run.log`, `final-02/amd/samba-run.log`); all 100 tensor digests and 3 loss words equal across the three columns. Loss bits 1085371236 / 1085405410 / 1085365865; params_after digests 15220976296272529917 / 1959233116799578026 / 3774922285386379867. Now stored in `training/checks/samba_tape_step_digests.tsv`, which the check compares against. No Samba train-step timing was taken: `final-01/TM_LM_TIMING_2026-10-19.md`, `nv-04/NV_PASS5_2026-10-19.md`, `amd-08/AMD_PASS5_2026-10-19.md` and `p6-01/*` have no Samba row; the tape removes the per-layer copies and waits listed in the `autograd/rules_samba.mojo` header. Quality: same words, unchanged.
+- Recoverable at `70ce81192^` (= main `66e0842f8`). Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch` (`git diff c64d14bab 66e0842f8` over the code files; also restores the hand-vs-tape check).
+- Files the patch restores: `training/samba_resident.mojo`, `autograd/rules_samba.mojo`, `training/checks/samba_tape_step_check.mojo`
+- Guard refusals (core/six_lane_experiment_guards.mojo, lane del-samba block): `MOJOLEARN_AUTOGRAD_SAMBA_OFF` and `MOJOLEARN_AUTOGRAD_SAMBA`. No grid_controls entry existed.
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_SAMBA_OFF`, **DELETED**.
 
 ### MOJOLEARN_IDN_AF_VEC_FUSED
 
