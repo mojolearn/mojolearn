@@ -45,7 +45,7 @@ from x_cnn.device import (
 )
 from x_cnn.device import cnn_ctx
 # the step backward on the tape (autograd/rules_cnn.mojo)
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch; record in docs/TOMBSTONES.md.
 from autograd.rules_cnn import cnn_backward_autograd
 from core.device_zero import enqueue_fill
@@ -1332,7 +1332,7 @@ def fit_epoch_r_binding(
             var loss = softmax_xent_into[True](_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]))
             losses[st] = Float64(loss)
             # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
             cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
             var h = List[Float32]()
@@ -1494,7 +1494,7 @@ def fit_epoch_d_binding(
             linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
             softmax_xent_res_loss(_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]), lbuf, st)
             # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
             cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
             if adam:

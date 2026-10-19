@@ -17,7 +17,7 @@ Prints one FNV-1a digest per tensor so columns can be compared across vendors.
 Run from the repo root (the digest file path is relative). A fixture whose
 gradients are all zero, or whose parameters do not move, is refused as
 VACUOUS. There is no float64 oracle for this trainer step."""
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by lane/del-cnn; code recoverable at the deletion commit^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand arm and the tape-vs-hand compare)
 from std.memory import bitcast
 from x_cnn.ops import FP, IP, conv_params, pool_params, AH_ROW, adam_hyper_base, NN14_BOUNDED_IM2COL

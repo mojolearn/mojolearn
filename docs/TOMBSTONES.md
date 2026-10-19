@@ -30,6 +30,7 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [`MOJOLEARN_AUTOGRAD_CNN_OFF`](#mojolearn_autograd_cnn_off) | Neural | removed | 2026-10-19 | [MOJOLEARN_AUTOGRAD_CNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
@@ -3181,3 +3182,28 @@ the parent of its deletion commit.
   `oracle_interface.mojo`; it also removes the host-interface kernels that commit added). Restoring it alone does not route a fit
   to the host walker: `_estimate_and_apply` refuses any walk no device walker takes.
 - Guard: `MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` refused in `gbdt/methods/leaves_estimation/pointwise_oracle.mojo` (`_check_removed_defines`, forced by `make_bin_optimized_oracle`), not in core: a core line rebuilds every binding.
+
+
+## MOJOLEARN_AUTOGRAD_CNN_OFF
+
+- What it was: the hand-chained CNNClassifier backward in `bindings/_mojolearn_x_cnn.mojo` `fit_epoch_r_binding` and
+  `fit_epoch_d_binding`: per step `linear_backward_into[True]` for the head into the last block's gout, then
+  `conv_block_backward_into[True]` per block from last to first, chaining each block's input gradient by hand. The
+  `AUTOGRAD_CNN` switch in `autograd/rules_cnn.mojo` (default on; `MOJOLEARN_AUTOGRAD_CNN_OFF` selected the hand walk,
+  `MOJOLEARN_AUTOGRAD_CNN` the opt-in spelling) picked it against `cnn_backward_autograd`. The fused kernels stay: the tape
+  rules (`CNN_CONV_BLOCK`, `CNN_LINEAR`) call them with the same arguments in the same order.
+- Files: `bindings/_mojolearn_x_cnn.mojo`, `autograd/rules_cnn.mojo`, `x_cnn/checks/tape_check.mojo` (its hand arm and the
+  tape-vs-hand compare).
+- Verdict: removed (Andrew 2026-10-19: every trainer runs its backward on the tape by default; delete the hand glue). Not an
+  A/B loser: the default was flipped on the word-for-word check without timing, and no hand-vs-tape timing run exists for the
+  CNN trainer (TM_LM_TIMING, NV_PASS5, AMD_PASS5 and the pass-6 reports have no CNN row), so there are no NV/AMD ratios.
+  Quality unchanged by construction: same bits.
+- Evidence: `x_cnn/checks/tape_check.mojo`, tape vs hand, 96 rows (per case 3 losses and 21 tensor digests; cases
+  sgd/adam x pool+saved / nopool+recompute) all SAME on integration fda883af2: Metal compile-22 (`cnn-tape-run.log`), NVIDIA L40S
+  and AMD MI325X p6-01 (`checks/cnn-tape-run.log`) and final-02 (`cnn-run.log`), all five printing the same 96 rows
+  (~/mojolearn-evidence/autograd-buildout-20261019/). Those rows are now stored in `x_cnn/checks/tape_check_digests.tsv`
+  and the check compares the tape against them (e.g. sgd.pool.saved loss step 0 2.3037658, block0.w grad 8104314183148238768).
+- Deleted 2026-10-19 by `ddd4fa509` on lane/del-cnn; recoverable at `ddd4fa509^`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch` (the three code files, from the lane head back to
+  `ddd4fa509^`; it also removes the inline tombstones). Also delete the two refusals in `core/six_lane_experiment_guards.mojo`
+  (block "lane del-cnn") before building with the define. No `grid_controls` entry existed.

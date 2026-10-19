@@ -450,6 +450,12 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_RF_FAST_QSAMPLE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): RF_FAST_QSAMPLE (split candidates from >= 65,536 sampled rows) was DROPPED-slower: M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise). Restore with experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
+    # ---- lane del-cnn (2026-10-19): hand CNN fit-epoch backward walk deleted; the tape is the only backward.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN_OFF"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN_OFF (the hand CNN fit-epoch backward walk) is deleted; the tape is the only backward (word for word equal on Metal, NVIDIA and AMD). Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN (opt-in spelling) is deleted; the tape is the only CNN backward"
+    # ---- end lane del-cnn
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()
