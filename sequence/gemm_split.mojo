@@ -142,13 +142,16 @@ def gemm_split_args[OP: Int](a: Args) -> Args:
 
 
 @always_inline
-def gemm_split_partial(a: Args, m: Int, n: Int, s: Int, R: Int) -> Float32:
-    """Block s of cell (m, n): gemm_dot's chain from +0.0 over the terms
+def gemm_split_partial(
+    pa: FP, sam: Int, sak: Int, pb: FP, sbk: Int, sbn: Int, K: Int, m: Int, n: Int, s: Int, R: Int,
+) -> Float32:
+    """Block s of cell (m, n) of A(m, k) = pa[m sam + k sak], B(k, n) =
+    pb[k sbk + n sbn]: gemm_dot's chain from +0.0 over the terms
     [s R, min(K, (s + 1) R)). The device kernel and the host body both
     call this, so a partial is the same word on every column."""
     var k0 = s * R
-    var kc = min(a.i2, k0 + R) - k0
-    return gemm_dot(a.p0, m * a.i3 + k0 * a.i4, a.i4, a.p1, n * a.i6 + k0 * a.i5, a.i5, kc, Float32(0.0))
+    var kc = min(K, k0 + R) - k0
+    return gemm_dot(pa, m * sam + k0 * sak, sak, pb, n * sbn + k0 * sbk, sbk, kc, Float32(0.0))
 
 
 def op_gk_split(t: Int, a: Args):
@@ -167,5 +170,5 @@ def op_gk_split(t: Int, a: Args):
     if a.i7 != 0:
         acc = ld(a.p2, ci)
     for s in range(S):
-        acc = add(acc, gemm_split_partial(a, m, n, s, R))
+        acc = add(acc, gemm_split_partial(a.p0, a.i3, a.i4, a.p1, a.i5, a.i6, a.i2, m, n, s, R))
     st(a.p2, ci, gemm_epi_value(acc, ci, n, a.i9, a.i10, a.p3, a.f0, a.f1))
