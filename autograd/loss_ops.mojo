@@ -19,6 +19,7 @@ from checks.numerics import (
     ftz, identical_div, identical_exp, identical_log, identical_log1p, identical_sigmoid,
     identical_sqrt,
 )
+from autograd.row_ops import ROW_COOP, ROW_SORT_PAD, row_ce_fwd, row_ce_grad, row_bitonic_exchange
 
 # Codes 1000..1010 are the autograd ops (autograd/ops.mojo); this family is
 # the contiguous range below, asserted free in sequence/dispatch.mojo.
@@ -64,7 +65,7 @@ comptime FIN_R2 = 2
 comptime FIN_AUC = 3
 
 # Label value of a padding slot in the AUC sort (real labels are 0 or 1).
-comptime AUC_PAD = Float32(2)
+comptime AUC_PAD = ROW_SORT_PAD
 
 
 @always_inline
@@ -204,7 +205,13 @@ def op_ls_ce_fwd(t: Int, a: Args):
     """Softmax cross-entropy of row t from logits: p0 logits (rows x i1),
     p1 codes (rows, float values), p2 row loss. log(sum exp(z - m)) -
     (z_y - m), the max subtracted first: the row loss of sequence/ops.mojo
-    op_ce, term for term. A code outside [0, i1) gives NaN."""
+    op_ce, term for term. A code outside [0, i1) gives NaN. Under ROW_COOP
+    (autograd/row_ops.mojo, the IDENTICAL default) the exponential sum is
+    the fold32 order (row_ce_fwd; DeviceExec runs rows of >= 32 columns on
+    a coop cell, sequence/coop.mojo coop_row_ce_fwd, the same adds)."""
+    comptime if ROW_COOP:
+        row_ce_fwd(t, a)
+        return
     var cols = a.i1
     var base = t * cols
     var y = Int(ld(a.p1, t))
@@ -220,7 +227,11 @@ def op_ls_ce_fwd(t: Int, a: Args):
 def op_ls_ce_vjp(t: Int, a: Args):
     """Row t of the cross-entropy VJP: p0 logits (rows x i1), p1 codes, p2
     upstream (rows), p3 destination (rows x i1) = (softmax - onehot) * g:
-    op_ce's gradient expression with its scale replaced by the upstream."""
+    op_ce's gradient expression with its scale replaced by the upstream.
+    Under ROW_COOP the sum is the fold32 order (row_ce_grad)."""
+    comptime if ROW_COOP:
+        row_ce_grad(t, a, ld(a.p2, t))
+        return
     var cols = a.i1
     var base = t * cols
     var y = Int(ld(a.p1, t))
@@ -298,16 +309,6 @@ def op_ls_pack(t: Int, a: Args):
 
 
 @always_inline
-def _after(ka: Float32, la: Float32, kb: Float32, lb: Float32) -> Bool:
-    """(ka, la) sorts after (kb, lb): padding last, then by score."""
-    if la == AUC_PAD:
-        return lb != AUC_PAD
-    if lb == AUC_PAD:
-        return False
-    return ka > kb
-
-
-@always_inline
 def op_ls_bitonic(t: Int, a: Args):
     """One compare-exchange stage of a bitonic sort network over the padded
     power-of-two length: p0 keys, p1 labels (exchanged together), i0 the
@@ -316,22 +317,7 @@ def op_ls_bitonic(t: Int, a: Args):
     pairs of a stage are disjoint, so the network is the same on every
     executor and the result is independent of thread order."""
     var j = a.i1
-    var i = 2 * j * (t // j) + t % j
-    var l = i + j
-    var ka = ld(a.p0, i)
-    var la = ld(a.p1, i)
-    var kb = ld(a.p0, l)
-    var lb = ld(a.p1, l)
-    var swap: Bool
-    if (i & a.i0) == 0:
-        swap = _after(ka, la, kb, lb)
-    else:
-        swap = _after(kb, lb, ka, la)
-    if swap:
-        st(a.p0, i, kb)
-        st(a.p1, i, lb)
-        st(a.p0, l, ka)
-        st(a.p1, l, la)
+    row_bitonic_exchange(a.p0, a.p1, 2 * j * (t // j) + t % j, j, a.i0)
 
 
 @always_inline

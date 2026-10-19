@@ -46,6 +46,12 @@ from autograd.ops import OP_AG_FIRST, OP_AG_LAST
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
+# lane ag-pass6-rows: the softmax family's coop rows and the AUC in-block sort
+from autograd.ops import OP_AG_SOFTMAX_FWD, OP_AG_SOFTMAX_VJP
+from autograd.loss_ops import OP_LS_CE_FWD, OP_LS_CE_VJP, OP_LS_METRIC_TERM, MT_ARGMAX_EQUAL
+from autograd.pass1_ops import OP_P1_SCE_VJP
+from autograd.row_ops import ROW_COOP, OP_ROW_BITONIC_BLOCK
+from autograd.row_sort import row_bitonic_block_kernel
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
 from sequence.gemm_tiled import seq_gemm_epi_tiled_kernel
 from sequence.gemm_tiled import (
@@ -1001,6 +1007,16 @@ struct DeviceExec(Exec, Movable):
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
+        # lane ag-pass6-rows (pass-6 idea I, MOJOLEARN_IDN_AUC_BLOCK_SORT): the
+        # AUC sort's in-block stages, one threadgroup of i2 / 2 threads per
+        # i2 elements (autograd/row_sort.mojo; op_row_bitonic_block is the
+        # host twin, the same exchanges). Never one thread a block.
+        comptime if OP == OP_ROW_BITONIC_BLOCK:
+            self.ctx.enqueue_function[row_bitonic_block_kernel](
+                a.p0, a.p1, Int32(a.i0), Int32(a.i1), Int32(a.i2),
+                grid_dim=(n, 1, 1), block_dim=(a.i2 // 2, 1, 1),
+            )
+            return
         # THETA_SPEC: FAST + Apple, and the IDENTICAL twin by default (off: -D MOJOLEARN_IDN_NM_SPEC_OFF)
         # (sequence/theta_spec.mojo); ETS_SPEC: that define's no-season ETS (sequence/ets_spec.mojo).
         # Both admitted on NVIDIA/AMD by SEQ_COOP_NVAMD; same bits as op_theta / op_ets.
@@ -1010,10 +1026,21 @@ struct DeviceExec(Exec, Movable):
                                    or (ETS_SPEC and OP == OP_ETS)
                                    or (SEQ_FAST_VAR_COOP and (OP == OP_COLSCALE or OP == OP_VAR_SIGMA)))) or (
                 SEQ_LN_COOP and (OP == OP_LN_FWD or OP == OP_LN_BWD_X)) or (
-                SEQ_AF_COOP and (OP == OP_AF_ROW or OP == OP_AF_RMEAN)):
+                SEQ_AF_COOP and (OP == OP_AF_ROW or OP == OP_AF_RMEAN)) or (
+                ROW_COOP and (OP == OP_AG_SOFTMAX_FWD or OP == OP_AG_SOFTMAX_VJP or OP == OP_LS_CE_FWD
+                              or OP == OP_LS_CE_VJP or OP == OP_P1_SCE_VJP or OP == OP_LS_METRIC_TERM)):
             var coop = True
             comptime if OP == OP_LN_FWD or OP == OP_LN_BWD_X or OP == OP_AF_ROW or OP == OP_AF_RMEAN:
                 coop = a.i0 >= COOP_W
+            elif OP == OP_AG_SOFTMAX_FWD or OP == OP_AG_SOFTMAX_VJP or OP == OP_LS_CE_FWD or OP == OP_LS_CE_VJP or OP == OP_P1_SCE_VJP:
+                # lane ag-pass6-rows (MOJOLEARN_IDN_ROW_COOP): a row of at least
+                # one cell's width (i1 = cols) on a cell; a narrower row would
+                # idle lanes and runs one thread a row (row_ops' fold32 twin,
+                # the same adds), so the route never moves a bit
+                coop = a.i1 >= COOP_W
+            elif OP == OP_LS_METRIC_TERM:
+                # only the argmax rows; every other metric kind is one term a thread
+                coop = a.i0 == MT_ARGMAX_EQUAL and a.i1 >= COOP_W
             elif OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
                 comptime if SEQ_FAST_VAR_COOP:

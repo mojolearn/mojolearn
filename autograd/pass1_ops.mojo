@@ -10,6 +10,7 @@
 from sequence.ops import Args, ld, st, sub, mul
 from checks.numerics import ftz, identical_div, identical_exp
 from autograd.loss_ops import _row_max, _row_expsum
+from autograd.row_ops import ROW_COOP, row_ce_grad
 
 comptime OP_P1_SCE_VJP = 1300
 comptime OP_P1_FIRST = OP_P1_SCE_VJP
@@ -26,7 +27,12 @@ def op_p1_sce_vjp(t: Int, a: Args):
     g is the value the mean's VJP stores for every row (op_ag_reduce_vjp:
     mul(ld(upstream), factor)) and the row body is op_ls_ce_vjp's term for
     term, so the gradient equals cross_entropy_rows followed by mean bit for
-    bit, in one launch instead of two."""
+    bit, in one launch instead of two. Under ROW_COOP (the IDENTICAL default)
+    the row is row_ce_grad's (fold32 sum), op_ls_ce_vjp's under the same
+    define, so the equality holds in both arms."""
+    comptime if ROW_COOP:
+        row_ce_grad(t, a, mul(ld(a.p2, 0), a.f0))
+        return
     var cols = a.i1
     var base = t * cols
     var y = Int(ld(a.p1, t))
