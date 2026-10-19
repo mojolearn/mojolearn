@@ -52,6 +52,35 @@ CPU lanes (the *Inference classes run on the host binding, on the CPU):
                        Mamba{1,2,3}BlockInference(weights).forward(x).
   samba-infer          SambaInference(config, weights).forward(inputs).
   mlp-infer            MLPInference(w1, b1, w2, b2).predict_logits(X).
+GPU fit lanes (2026-10-19, lane ag-bench: the trainers whose backward runs
+through the autograd tape; one round is ONE WHOLE FIT, the held-out
+prediction runs after the clock and is scored by the conductor):
+  mlp-fit              MLPClassifier(hidden_layer_sizes=(256,), solver='adam',
+                       batch_size=512, max_iter=1, alpha=0.0, ...).fit(X, y)
+                       on HIGGS (tools/sequence_speed.py case_mlp's recipe:
+                       1M rows x 28 standardized; one logit, binary log loss).
+  lstm-fit / gru-fit / rnn-fit
+                       {LSTM,GRU,RNN}Regressor(hidden_size=64, num_layers=1,
+                       batch_size=512, max_epochs=1, optimizer='adam')
+                       .fit(X, y) on HIGGS rows cut into 16-step sequences
+                       (case_recurrent's recipe; the target is the label of
+                       each sequence's last row, MSE).
+  tape-user-model      mojolearn.Sequential: Linear(28, 64), ReLU,
+                       Linear(64, 64), ReLU, Linear(64, 1), BCE with logits,
+                       Adam: a model the user describes, trained through the
+                       tape (the model API of lane ag-pyapi; the arm refuses
+                       by name while that class is absent).
+  Their opponents are the same networks in torch.nn (nn.Sequential of
+  nn.Linear/nn.ReLU, nn.LSTM / nn.GRU / nn.RNN with an nn.Linear head on the
+  last hidden state) trained by torch.optim.Adam with the same sizes, batch
+  size, epoch count, learning rate, betas, eps and seed, every training row
+  moved to the device inside the clock (TorchFitArm), at every torch setting
+  of the box (TORCH_SETTINGS); on Apple also MLX (`mlx-fp32`: mlx.nn and
+  mlx.optimizers.Adam with bias correction, MlxFitArm). On Apple the fit
+  lanes race `ours-fast` only: identical is never timed on Apple.
+  Quality beside every time (held-out rows, float64 in the conductor):
+  accuracy, log loss and AUC for the classifiers, RMSE and AUC of the score
+  for the recurrent regressors (tools/speed_gbdt_arm.py's metric helpers).
 The Mamba blocks and TransformerBlock expose a backward (a VJP), not a
 training step; they have no optimizer, so they race forward only.
 
@@ -227,6 +256,9 @@ LANES = ("lm-train-step", "lm-forward", "gemm",
          # bf16 and int8 GEMM profiles (SmallByteLanguageModelTrainer IS
          # LanguageModelTrainer, raced by lm-train-step and lm-forward)
          "lm-infer", "lm-host-train-step", "gemm-bf16", "gemm-int8")
+#: 2026-10-19 (lane ag-bench): whole fits of the tape-trained models on HIGGS (see the docstring)
+FIT_LANES = ("mlp-fit", "lstm-fit", "gru-fit", "rnn-fit", "tape-user-model")
+LANES = LANES + FIT_LANES
 #: The model each lane runs.
 MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "transformer-forward": "transformer", "transformer-infer": "transformer",
@@ -238,7 +270,11 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "lm-infer": "lm", "lm-host-train-step": "lm", "gemm-bf16": "gemm", "gemm-int8": "gemm",
             "transformer-decode": "transformer", "mamba1-decode": "mamba1",
             "mamba2-decode": "mamba2", "mamba3-decode": "mamba3", "samba-decode": "samba",
-            "mlp-predict": "mlp"}
+            "mlp-predict": "mlp",
+            "mlp-fit": "mlpfit", "lstm-fit": "rnnfit", "gru-fit": "rnnfit", "rnn-fit": "rnnfit",
+            "tape-user-model": "tapefit"}
+#: The recurrent cell of each recurrent fit lane.
+FIT_CELL = {"lstm-fit": "lstm", "gru-fit": "gru", "rnn-fit": "rnn"}
 #: GPU incremental-decode lanes: one public step call per token over the
 #: lane's whole sequence, from a zero state each round.
 DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-decode",
@@ -248,11 +284,17 @@ DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-
 #: carried-state step, and Samba stacks Mamba-3, so those lanes race ours alone.
 DECODE_TORCH_TWIN = ("transformer-decode",)
 TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
+#: Whole-fit lanes (2026-10-19, lane ag-bench): FIT_LANES above. Every arm's round is one fit
+#: from a fresh seeded initialization; nothing carries over between rounds, so the per-round
+#: digest of an identical arm repeats (digest_stable is meaningful).
+FIT_TASK = {"mlp-fit": "classification", "tape-user-model": "classification",
+            "lstm-fit": "regression", "gru-fit": "regression", "rnn-fit": "regression"}
 #: Where OUR class runs: the *Inference classes are the host binding.
 DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") or lane == "lm-host-train-step" else "gpu")
              for lane in LANES}
 #: The data each lane reads (the board's `dataset` column).
-DATA_OF = {lane: ("bytes" if MODEL_OF[lane] in ("lm", "samba") else "gaussian") for lane in LANES}
+DATA_OF = {lane: ("higgs" if lane in FIT_LANES else "bytes" if MODEL_OF[lane] in ("lm", "samba")
+                  else "gaussian") for lane in LANES}
 
 #: torch settings, in tools/torch_lm_step_opponent.py COLUMNS order.
 TORCH_SETTINGS = ("eager-fp32", "eager-tf32", "compile-fp32", "compile-tf32",
@@ -301,9 +343,11 @@ MAMBA_SSM_VENDORS = tuple(MAMBA_SSM_VENDOR_ARMS)
 #: Our arms: `ours` IDENTICAL, `ours-fast` the Apple FAST neural tier.
 OUR_ARMS = ("ours", "ours-fast")
 OUR_MODE = {"ours": "identical", "ours-fast": "fast"}
+#: 2026-10-19 (lane ag-bench): MLX on Apple, the fit lanes' second Apple opponent (MlxFitArm)
+MLX_ARMS = ("mlx-fp32",)
 ARMS = OUR_ARMS + tuple("torch-" + s for s in TORCH_SETTINGS) \
     + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8") \
-    + MAMBA_SSM_ARMS
+    + MAMBA_SSM_ARMS + MLX_ARMS
 #: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
 INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
                 "compile_int8": dict(tf32=False, compile=True, autocast=None)}
@@ -333,7 +377,11 @@ NOT_PLANNED = {
         "amd": ["mamba-ssm-tf32: TF32 is an NVIDIA CUDA mode; mamba_ssm races in float32 "
                 "(mamba-ssm-fp32, from its ROCm/HIP source build) on AMD"]}.get(v, [])
        + ["mamba-ssm bf16: our Mamba blocks are float32, so mamba_ssm races in float32 (and its "
-          "TF32 setting on NVIDIA)"])
+          "TF32 setting on NVIDIA)"]
+       # 2026-10-19 (lane ag-bench): the fit lanes' MLX arm and Apple's tier
+       + (["mlx-fp32 on the fit lanes: MLX runs on Apple silicon only"] if v != "apple" else
+          ["ours (identical) on the fit lanes: identical is never timed on Apple; the fit lanes race "
+           "ours-fast there"]))
     for v in VENDORS}
 
 #: The board's "Not covered" lines for the neural family.
@@ -361,6 +409,10 @@ NOT_COVERED = [
     "their GPU twins are the *-forward, *-decode and mlp-predict rows.",
     "The GPT-3-small target shape is not on the board (the LM lanes use the smaller control "
     "shape so one shape runs on every box, a 16 GB Mac included).",
+    # 2026-10-19 (lane ag-bench)
+    "The fit lanes time one whole fit (one epoch at the recipe's batch size); the held-out "
+    "prediction after it is not timed, and multi-epoch fits, early stopping and the classifier "
+    "variants of the recurrent models are not raced.",
 ]
 
 # FAIRNESS FIX (2026-10-13 audit): the torch twins of these lanes are pure-PyTorch REFERENCE
@@ -497,6 +549,25 @@ SAMBA_SHAPES = {
                   n_heads=2, intermediate=128),
 }
 MLP_SHAPES = {"full": dict(batch=256), "small": dict(batch=32)}
+#: THE FIT LANES' RECIPE (2026-10-19, lane ag-bench), every value explicit and the same on every arm.
+#: Rows: tools/sequence_speed.py's 1M HIGGS training rows (`full`) and a held-out block; `small` is the
+#: smoke. The recurrent lanes cut consecutive rows into FIT_SEQ_LEN-step sequences, so they fit on
+#: train // FIT_SEQ_LEN sequences (sequence_speed.case_recurrent).
+FIT_ROWS = {"full": dict(train=1_000_000, test=100_000), "small": dict(train=4096, test=1024)}
+FIT_SEQ_LEN = 16
+#: HIGGS's feature count, for the settings text only (every arm reads its width from the data)
+HIGGS_FEATURES = 28
+FIT_BATCH, FIT_EPOCHS = 512, 1
+FIT_MLP_HIDDEN = (256,)
+FIT_RNN_HIDDEN = 64
+FIT_TAPE_HIDDEN = (64, 64)
+#: Adam on every fit lane and arm (no weight decay, no amsgrad): ours' MLPClassifier (beta_1, beta_2,
+#: epsilon), the recurrent estimators (optimizer_options), torch.optim.Adam and mlx.optimizers.Adam.
+FIT_ADAM = {"lr": 1e-3, "betas": (0.9, 0.999), "eps": 1e-8, "weight_decay": 0.0}
+#: Where the conductor reads HIGGS: --higgs, else this variable, else the first default that exists
+#: (tools/sequence_speed.py's defaults).
+HIGGS_ENV = "MOJOLEARN_BENCH_HIGGS"
+HIGGS_DEFAULTS = ("~/data/higgs_speed.npz", "~/datasets/gbm-bench/higgs/higgs_speed.npz")
 #: The CPU lanes' sequence cap in `full` (the host binding on a laptop CPU).
 CPU_LENGTH_CAP = 512
 
@@ -530,6 +601,9 @@ def opponents(vendor, lane):
         return tuple("torch-" + s for s in GPU_SETTINGS[vendor] if s.endswith("bf16"))
     if lane in DECODE_LANES and lane not in DECODE_TORCH_TWIN:
         return ()
+    if lane in FIT_LANES:
+        # 2026-10-19 (lane ag-bench): torch at every GPU setting of the box, and MLX on Apple
+        return tuple("torch-" + s for s in GPU_SETTINGS[vendor]) + (MLX_ARMS if vendor == "apple" else ())
     if DEVICE_OF[lane] == "cpu":
         arms = ["torch-cpu-" + s for s in CPU_SETTINGS]
     else:
@@ -582,6 +656,11 @@ def _dims_of(lane, shape):
         d = dict(SAMBA_SHAPES[shape])
     elif model == "mlp":
         d = dict(MLP_SHAPES[shape])
+    elif lane in FIT_LANES:
+        d = dict(FIT_ROWS[shape], batch=FIT_BATCH, epochs=FIT_EPOCHS)
+        if lane in FIT_CELL:
+            d.update(length=FIT_SEQ_LEN, hidden=FIT_RNN_HIDDEN)
+        return d
     else:
         d = dict(BLOCK_SHAPES[model][shape])
     if DEVICE_OF[lane] == "cpu" and "length" in d and shape == "full":
@@ -609,6 +688,14 @@ def shape_record(lane, shape):
             "+".join(d["layers"]))
     elif model == "mlp":
         rec["label"] = "rows%d 8-16-3" % d["batch"]
+    elif lane in FIT_LANES:
+        if lane in FIT_CELL:
+            net = "%s h%d T%d" % (FIT_CELL[lane], FIT_RNN_HIDDEN, FIT_SEQ_LEN)
+        else:
+            hidden = FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN
+            net = "%d-%s-1" % (HIGGS_FEATURES, "-".join(str(h) for h in hidden))
+        rec["label"] = "HIGGS train %d test %d %s b%d %d epoch adam" % (
+            d["train"], d["test"], net, d["batch"], d["epochs"])
     else:
         rec["label"] = "B%d L%d DM%d" % (d["batch"], d["length"], d["d_model"])
     return rec
@@ -688,6 +775,34 @@ LANE_TEXT = {
                      "step(ids[:, t], state) for t < L -> logits (B, L, vocab)", "none (ours alone)"),
     "mlp-predict": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X) (GPU)",
                     "F.linear, ReLU, F.linear on the GPU; .cpu()"),
+    # 2026-10-19 (lane ag-bench): whole fits through the tape
+    "mlp-fit": ("mojolearn.MLPClassifier(hidden_layer_sizes=(256,), activation='relu', solver='adam', "
+                "alpha=0.0, batch_size=512, learning_rate_init=1e-3, max_iter=1, shuffle=True, "
+                "random_state=7, tol=0.0, n_iter_no_change=1000).fit(X, y) (the tape path, the MLP's "
+                "default)",
+                "torch.nn.Sequential(Linear(28, 256), ReLU, Linear(256, 1)), Glorot-uniform init, "
+                "X and y moved to the device, one epoch of torch.randperm minibatches of 512: zero_grad, "
+                "BCE with logits, backward, torch.optim.Adam step; losses .cpu() (sklearn's Adam folds "
+                "the bias correction into the step size, torch adds eps after it: same algorithm, eps "
+                "placement differs)"),
+    "lstm-fit": ("mojolearn.LSTMRegressor(hidden_size=64, num_layers=1, optimizer='adam', "
+                 "learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+                 "torch.nn.LSTM(28, 64, batch_first=True) + nn.Linear(64, 1) on the last hidden state, "
+                 "MSE, torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
+    "gru-fit": ("mojolearn.GRURegressor(hidden_size=64, num_layers=1, optimizer='adam', "
+                "learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+                "torch.nn.GRU(28, 64, batch_first=True) + nn.Linear(64, 1) on the last hidden state, "
+                "MSE, torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
+    "rnn-fit": ("mojolearn.RNNRegressor(hidden_size=64, num_layers=1, nonlinearity='tanh', optimizer='adam', "
+                "learning_rate=1e-3, batch_size=512, max_epochs=1, shuffle=True, random_state=7).fit(X, y)",
+                "torch.nn.RNN(28, 64, nonlinearity='tanh', batch_first=True) + nn.Linear(64, 1) on the last "
+                "hidden state, MSE, torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside "
+                "the clock"),
+    "tape-user-model": ("mojolearn.Sequential(): Linear(28, 64), ReLU, Linear(64, 64), ReLU, Linear(64, 1); "
+                        "compile(loss='bce_with_logits', optimizer='adam', lr=1e-3); fit(X, y, epochs=1, "
+                        "batch_size=512, shuffle=True, seed=7)",
+                        "the same torch.nn.Sequential, Glorot-uniform init, BCE with logits, "
+                        "torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
 }
 
 
@@ -705,6 +820,19 @@ def lane_settings(lane):
                  "default_rng(%d) file; torch arms also call torch.manual_seed(%d); ours' neural "
                  "classes take no seed argument (nothing in them draws)" % (SEED, SEED, SEED))
     s["explicit_params"] = _lane_params(lane)
+    if lane in FIT_LANES:
+        # 2026-10-19 (lane ag-bench): one round = one whole fit
+        s["clock"] = FIT_SPAN["inside_clock"]
+        s["seed_rule"] = ("seed %d on every arm: ours random_state=%d (its initialization and shuffle draw "
+                          "in Mojo), torch.manual_seed(%d) before each fit, mx.random.seed(%d) on MLX; the "
+                          "draws differ between libraries (a different random start, not a different "
+                          "setting)" % (SEED, SEED, SEED, SEED))
+        s["optimizer"] = ("Adam lr %g, betas %s, eps %g, no weight decay, no amsgrad, passed explicitly "
+                          "on every arm" % (FIT_ADAM["lr"], FIT_ADAM["betas"], FIT_ADAM["eps"]))
+        s["quality"] = ("held-out accuracy, log_loss, auc" if FIT_TASK[lane] == "classification"
+                        else "held-out rmse, auc of the score") + (
+            ", train_loss_last_step; *_diff_vs_ours for every other arm")
+        return s
     if lane in TRAIN_LANES:
         s["optimizer"] = ("AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no "
                           "amsgrad, passed explicitly on both" + (", no clipping (max_norm=None)"
@@ -1075,6 +1203,8 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
         arrays["X"] = rng.standard_normal((steps, d["batch"], 8)).astype(np.float32)
         arrays["y"] = rng.integers(0, 3, (steps, d["batch"])).astype(np.int32)
         rec["inputs"] = "weights uniform(+-1/sqrt(fan_in)); X standard normal; labels 0..2"
+    elif lane in FIT_LANES:
+        arrays.update(fit_arrays(lane, shape, rec))
     np.savez(path, **arrays)
     rec["sha256"] = {k: _sha(np.ascontiguousarray(v).tobytes())[:16] for k, v in sorted(arrays.items())}
     rec["steps"] = steps
@@ -1083,6 +1213,81 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
 
 def _weights(data):
     return {k[2:]: data[k] for k in data if k.startswith("w:")}
+
+
+def higgs_path():
+    """The HIGGS npz the fit lanes read (HIGGS_ENV, else the first of HIGGS_DEFAULTS that exists)."""
+    got = os.environ.get(HIGGS_ENV, "").strip()
+    if got:
+        return os.path.expanduser(got)
+    for cand in HIGGS_DEFAULTS:
+        if os.path.exists(os.path.expanduser(cand)):
+            return os.path.expanduser(cand)
+    raise SystemExit("bench_board_neural: the fit lanes read HIGGS (gbm-bench/higgs/higgs_speed.npz from R2, "
+                     "docs/REMOTE_DATA_R2.md); pass --higgs or set %s (looked in %s)"
+                     % (HIGGS_ENV, ", ".join(HIGGS_DEFAULTS)))
+
+
+def _npz_pick(z, stem):
+    """z[stem_train] / z[stem_test]-style lookup as tools/sequence_speed.py load() does."""
+    keys = list(z.keys())
+    if stem in keys:
+        return stem
+    low = stem[0].lower()
+    hits = [k for k in keys if k.lower().startswith(low) and k.lower().endswith(stem.split("_")[1])]
+    return hits[0] if hits else None
+
+
+def fit_arrays(lane, shape, rec):
+    """The fit lanes' input arrays from HIGGS: X_train / y_train (the first FIT_ROWS[shape]["train"] rows
+    of the training split, the rows tools/sequence_speed.py fits on) and X_test / y_test (the first
+    FIT_ROWS[shape]["test"] rows of the npz's test split, else the training rows right after the fitted
+    ones). Columns standardized with the fitted rows' float64 mean and std, stored float32. Labels 0/1 as
+    float32 (the classifiers' class labels, the recurrent regressors' target). The recurrent lanes cut
+    consecutive rows into FIT_SEQ_LEN-step sequences, the target the label of each sequence's last row
+    (sequence_speed.case_recurrent). Bench-side preparation before every clock; no arm computes it."""
+    import numpy as np
+    want = FIT_ROWS[shape]
+    path = higgs_path()
+    with np.load(path) as z:
+        kx, ky = _npz_pick(z, "X_train"), _npz_pick(z, "y_train")
+        if kx is None or ky is None:
+            raise SystemExit("bench_board_neural: %s holds no X_train / y_train (keys %s)" % (path, list(z.keys())))
+        X, y = z[kx], z[ky]
+        kxt, kyt = _npz_pick(z, "X_test"), _npz_pick(z, "y_test")
+        need = want["train"] + (0 if kxt is not None and kyt is not None else want["test"])
+        if len(X) < need:
+            raise SystemExit("bench_board_neural: %s has %d training rows; the %s fit lanes need %d"
+                             % (path, len(X), shape, need))
+        Xtr, ytr = X[:want["train"]], y[:want["train"]]
+        if kxt is not None and kyt is not None and len(z[kxt]) >= want["test"]:
+            Xte, yte = z[kxt][:want["test"]], z[kyt][:want["test"]]
+            held = "%s[:%d], %s[:%d]" % (kxt, want["test"], kyt, want["test"])
+        else:
+            Xte, yte = X[want["train"]:want["train"] + want["test"]], y[want["train"]:want["train"] + want["test"]]
+            held = "%s[%d:%d] (the npz has no test split)" % (kx, want["train"], want["train"] + want["test"])
+    mu = Xtr.astype(np.float64).mean(0)
+    sd = Xtr.astype(np.float64).std(0)
+    sd[sd == 0] = 1.0
+    out = {}
+    for name, a, lab in (("train", Xtr, ytr), ("test", Xte, yte)):
+        xs = ((a.astype(np.float64) - mu) / sd).astype(np.float32)
+        lab = (np.asarray(lab, dtype=np.float64).ravel() > 0.5).astype(np.float32)
+        if lane in FIT_CELL:
+            n = len(xs) // FIT_SEQ_LEN
+            xs = xs[:n * FIT_SEQ_LEN].reshape(n, FIT_SEQ_LEN, xs.shape[1])
+            lab = lab[FIT_SEQ_LEN - 1:n * FIT_SEQ_LEN:FIT_SEQ_LEN]
+        out["X_" + name] = np.ascontiguousarray(xs, dtype=np.float32)
+        out["y_" + name] = np.ascontiguousarray(lab, dtype=np.float32)
+    with open(path, "rb") as fh:
+        head = fh.read(1 << 20)
+    rec.update(higgs={"path": path, "bytes": os.path.getsize(path), "sha256_first_mib": _sha(head)[:16],
+                      "train": "%s[:%d], %s[:%d]" % (kx, want["train"], ky, want["train"]), "held_out": held},
+               inputs=("HIGGS, standardized with the fitted rows' float64 mean/std; labels 0/1"
+                       + ("; %d-step sequences of consecutive rows, target the last row's label" % FIT_SEQ_LEN
+                          if lane in FIT_CELL else "")),
+               shapes={k: list(v.shape) for k, v in out.items()})
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1143,6 +1348,8 @@ def _lane_params(lane):
     board's parameter check compares them by their canonical names)."""
     model = MODEL_OF[lane]
     out = {}
+    if lane in FIT_LANES:
+        return fit_params(lane)
     if lane in TRAIN_LANES:
         out.update(lr=ADAMW["lr"], betas=list(ADAMW["betas"]), eps=ADAMW["eps"],
                    weight_decay=ADAMW["weight_decay"], amsgrad=False)
@@ -1158,6 +1365,54 @@ def _lane_params(lane):
         # torch arm's call() runs no clip_grad_norm_ (TorchArm.call: zero_grad, backward, opt.step).
         out.update(dropout=SAMBA_DROPOUT, max_grad_norm=SAMBA_CLIP_OFF if lane in TRAIN_LANES else "n/a")
     return out
+
+
+def fit_layers(lane, d_in, hidden, d_out=1):
+    """The network of a fit lane as every arm reads it back from what it built: one string per layer."""
+    if lane in FIT_CELL:
+        return ["%s %d %d bias batch_first" % (FIT_CELL[lane], d_in, int(hidden[0])),
+                "linear %d %d bias (last time step)" % (int(hidden[0]), d_out)]
+    sizes = [int(d_in)] + [int(h) for h in hidden] + [int(d_out)]
+    out = []
+    for i in range(len(sizes) - 1):
+        out.append("linear %d %d bias" % (sizes[i], sizes[i + 1]))
+        if i < len(sizes) - 2:
+            out.append("relu")
+    return out
+
+
+def fit_params(lane, d_in=HIGGS_FEATURES, **readback):
+    """The work settings of a fit lane, the same explicit values on every arm (the board's parameter
+    check compares them by these names). `readback` overrides a value with what the arm read back
+    from the object it built, so a difference shows as a mismatch, never as the lane's constant."""
+    hidden = (FIT_RNN_HIDDEN,) if lane in FIT_CELL else (FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN)
+    out = dict(optimizer="adam", learning_rate=FIT_ADAM["lr"], betas=list(FIT_ADAM["betas"]),
+               eps=FIT_ADAM["eps"], weight_decay=FIT_ADAM["weight_decay"], amsgrad=False, maximize=False,
+               batch_size=FIT_BATCH, epochs=FIT_EPOCHS, shuffle=True, layers=fit_layers(lane, d_in, hidden),
+               seed=SEED)
+    if lane == "mlp-fit":
+        # alpha: scikit-learn's L2 term, 0 so that no arm adds a penalty (torch's loss has none)
+        out.update(loss="log_loss", alpha=0.0)
+    elif lane in FIT_CELL:
+        out.update(loss="mse", num_layers=1, timesteps=FIT_SEQ_LEN)
+        if lane == "rnn-fit":
+            out["nonlinearity"] = "tanh"
+    else:
+        out.update(loss="bce_with_logits")
+    for k, v in readback.items():
+        if k not in out:
+            raise KeyError("fit_params(%s): %r is not one of the lane's settings" % (lane, k))
+        out[k] = list(v) if isinstance(v, tuple) else v
+    return out
+
+
+def fit_record(lane, library, implementation, d_in, **readback):
+    """A fit arm's parameter record for tools/bench_board_params.py."""
+    rec = {"__library__": library}
+    if implementation is not None:
+        rec["__implementation__"] = implementation
+    rec.update(fit_params(lane, d_in, **readback))
+    return rec
 
 
 def _ours_record(lane, config_readback=None):
@@ -1899,6 +2154,169 @@ class OursResidualDropout(Ours):
         return {"y": self.np.asarray(self.out), "d_values": self.np.asarray(self.dx), "d_residual": self.np.asarray(self.dr)}
 
 
+# ---------------------------------------------------------------------------
+# The fit lanes (2026-10-19, lane ag-bench): one round = one whole fit
+# ---------------------------------------------------------------------------
+
+#: tape-user-model's loss, by its name in the model API (lane ag-pyapi)
+TAPE_LOSS = "bce_with_logits"
+#: rows per prediction chunk on the opponents' held-out pass (after the clock)
+FIT_PREDICT_CHUNK = 65536
+
+
+def _ours_sequential(ml, d_in):
+    """tape-user-model's network through mojolearn.Sequential (lane ag-pyapi's model API): Linear,
+    ReLU, ..., Linear(., 1), compiled with BCE with logits and Adam. The layer builders are the classes
+    of Sequential's own module when it defines them (model.add(Linear(fi, fo))), else add(name, *args).
+    Refuses by name when this mojolearn has no Sequential. Returns (model, the settings it accepted)."""
+    Seq = getattr(ml, "Sequential", None)
+    if Seq is None:
+        raise ImportError("REFUSED: tape-user-model races mojolearn.Sequential, the model-description API "
+                          "over the autograd tape; this mojolearn (%s, %s) has no Sequential"
+                          % (getattr(ml, "__version__", "?"), getattr(ml, "__file__", "?")))
+    model = Seq()
+    home = sys.modules.get(Seq.__module__)
+
+    def add(kind, *args):
+        cls = getattr(home, kind, None)
+        if cls is not None:
+            model.add(cls(*args))
+        else:
+            model.add(kind.lower(), *args)
+    sizes = [int(d_in)] + [int(h) for h in FIT_TAPE_HIDDEN] + [1]
+    for i in range(len(sizes) - 1):
+        add("Linear", sizes[i], sizes[i + 1])
+        if i < len(sizes) - 2:
+            add("ReLU")
+    accepted = dict(loss=TAPE_LOSS, optimizer="adam", lr=FIT_ADAM["lr"], betas=tuple(FIT_ADAM["betas"]),
+                    eps=FIT_ADAM["eps"], weight_decay=FIT_ADAM["weight_decay"])
+    try:
+        model.compile(**accepted)
+    except TypeError as exc:
+        raise RuntimeError("REFUSED: tape-user-model: mojolearn.Sequential.compile does not take the lane's "
+                           "explicit Adam settings %s (%r); every work setting is passed on every arm"
+                           % (sorted(accepted), exc))
+    return model, accepted
+
+
+class OursFit(Ours):
+    """The fit lanes through the public estimators: MLPClassifier (the tape path is the MLP's default),
+    LSTM/GRU/RNNRegressor (the tape path when the binding is built with -D MOJOLEARN_AUTOGRAD_RNN) and
+    mojolearn.Sequential. call() is one whole fit from random_state=SEED; outputs() predicts the
+    held-out rows after the clock."""
+
+    def __init__(self, lane, shape, data):
+        import numpy as np
+        self.np, self.lane = np, lane
+        ml = _ours_module()
+        self.ml = ml
+        self.Xtr = np.ascontiguousarray(data["X_train"], dtype=np.float32)
+        self.Xte = np.ascontiguousarray(data["X_test"], dtype=np.float32)
+        ytr = np.asarray(data["y_train"])
+        # the classifier takes class labels, the regressors the float target (prepared before the clock)
+        self.ytr = (np.ascontiguousarray((ytr > 0.5).astype(np.int64)) if FIT_TASK[lane] == "classification"
+                    and lane != "tape-user-model" else np.ascontiguousarray(ytr, dtype=np.float32))
+        d_in = int(self.Xtr.shape[-1])
+        self.model = None
+        self._score = None
+        if lane == "tape-user-model":
+            probe, accepted = _ours_sequential(ml, d_in)
+            cls = type(probe)
+            readback = dict(learning_rate=accepted["lr"], betas=list(accepted["betas"]), eps=accepted["eps"],
+                            weight_decay=accepted["weight_decay"], loss=accepted["loss"])
+        elif lane == "mlp-fit":
+            cls = ml.MLPClassifier
+            self.kwargs = dict(hidden_layer_sizes=FIT_MLP_HIDDEN, activation="relu", solver="adam", alpha=0.0,
+                               batch_size=FIT_BATCH, learning_rate="constant", learning_rate_init=FIT_ADAM["lr"],
+                               max_iter=FIT_EPOCHS, shuffle=True, random_state=SEED, tol=0.0,
+                               n_iter_no_change=1000, beta_1=FIT_ADAM["betas"][0], beta_2=FIT_ADAM["betas"][1],
+                               epsilon=FIT_ADAM["eps"])
+            probe = cls(**self.kwargs)
+            g = probe.get_params()
+            readback = dict(optimizer=g["solver"], learning_rate=g["learning_rate_init"],
+                            betas=[g["beta_1"], g["beta_2"]], eps=g["epsilon"], batch_size=g["batch_size"],
+                            epochs=g["max_iter"], shuffle=g["shuffle"], seed=g["random_state"], alpha=g["alpha"],
+                            layers=fit_layers(lane, d_in, list(g["hidden_layer_sizes"])))
+            if g["activation"] != "relu":
+                readback["layers"] = [l.replace("relu", g["activation"]) for l in readback["layers"]]
+        else:
+            cls = {"lstm-fit": ml.LSTMRegressor, "gru-fit": ml.GRURegressor, "rnn-fit": ml.RNNRegressor}[lane]
+            self.kwargs = dict(hidden_size=FIT_RNN_HIDDEN, num_layers=1, optimizer="adam",
+                               learning_rate=FIT_ADAM["lr"], batch_size=FIT_BATCH, max_epochs=FIT_EPOCHS,
+                               shuffle=True, random_state=SEED,
+                               optimizer_options=dict(betas=tuple(FIT_ADAM["betas"]), eps=FIT_ADAM["eps"],
+                                                      weight_decay=FIT_ADAM["weight_decay"]))
+            if lane == "rnn-fit":
+                self.kwargs["nonlinearity"] = "tanh"
+            probe = cls(**self.kwargs)
+            g = probe.get_params()
+            opts = g.get("optimizer_options") or {}
+            readback = dict(optimizer=g["optimizer"], learning_rate=g["learning_rate"],
+                            betas=list(opts.get("betas", (None, None))), eps=opts.get("eps"),
+                            weight_decay=opts.get("weight_decay"), batch_size=g["batch_size"],
+                            epochs=g["max_epochs"], shuffle=g["shuffle"], seed=g["random_state"],
+                            num_layers=g["num_layers"], timesteps=int(self.Xtr.shape[1]),
+                            layers=fit_layers(lane, d_in, [g["hidden_size"]]))
+            if lane == "rnn-fit":
+                readback["nonlinearity"] = g["nonlinearity"]
+        self.cls = cls
+        self.info = _ours_info(ml, getattr(sys.modules[cls.__module__], "__file__", None), ml.numeric_mode(), "gpu")
+        self.info.update(call=LANE_TEXT[lane][0], fit_rows=int(self.Xtr.shape[0]), held_out_rows=int(self.Xte.shape[0]),
+                         training_path=("the autograd tape (MLPClassifier's default since 9542fadae)" if lane == "mlp-fit"
+                                        else "the autograd tape (mojolearn.Sequential)" if lane == "tape-user-model"
+                                        else "the tape when the binding was built with -D MOJOLEARN_AUTOGRAD_RNN, "
+                                             "else the hand-written backward (a build setting, not read back)"))
+        self.record = fit_record(lane, "mojolearn", cls, d_in, **readback)
+
+    def call(self):
+        import warnings
+        if self.lane == "tape-user-model":
+            m, _ = _ours_sequential(self.ml, int(self.Xtr.shape[-1]))
+            m.fit(self.Xtr, self.ytr, epochs=FIT_EPOCHS, batch_size=FIT_BATCH, shuffle=True, seed=SEED)
+        else:
+            m = self.cls(**self.kwargs)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")      # one epoch: scikit-learn's ConvergenceWarning
+                m.fit(self.Xtr, self.ytr)
+        self.model = m
+        self._score = None
+
+    def _predict(self):
+        np = self.np
+        if self._score is None:
+            m = self.model
+            if self.lane == "mlp-fit":
+                p = np.asarray(m.predict_proba(self.Xte))[:, 1]
+            elif self.lane == "tape-user-model":
+                p = np.asarray(m.predict_proba(self.Xte) if hasattr(m, "predict_proba") else m.predict(self.Xte))
+                if p.ndim == 2 and p.shape[1] == 2:
+                    p = p[:, 1]
+            else:
+                p = np.asarray(m.predict(self.Xte))
+            self._score = np.ascontiguousarray(np.asarray(p, dtype=np.float32).ravel())
+        return self._score
+
+    def _loss_curve(self):
+        curve = getattr(self.model, "loss_curve_", None)     # a list (MLP) or an array (recurrent)
+        return self.np.asarray([] if curve is None else curve, dtype=self.np.float64).ravel()
+
+    def outputs(self):
+        return {"score": self._predict(), "loss_curve": self._loss_curve()}
+
+    def digest(self):
+        np = self.np
+        parts = [self._predict()]
+        m = self.model
+        if self.lane == "mlp-fit":
+            parts += [np.asarray(a) for a in m.coefs_] + [np.asarray(a) for a in m.intercepts_]
+        elif self.lane in FIT_CELL:
+            parts.append(np.asarray(m.params_))
+        h = hashlib.sha256()
+        for a in parts:
+            h.update(np.ascontiguousarray(a).tobytes())
+        return h.hexdigest()[:16]
+
+
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
         "mamba2": OursBlock, "mamba3": OursBlock, "samba": OursSamba, "mlp": OursMLP}
 
@@ -2523,6 +2941,354 @@ class TorchArm:
         return None if self.train else _sha(self.np.ascontiguousarray(self.out).data)[:16]
 
 
+class TorchFitArm:
+    """The fit lanes' torch opponent at one setting (2026-10-19, lane ag-bench): the same network in
+    torch.nn, torch.optim.Adam, the lane's batch size and epoch count. The clock covers what ours'
+    fit() covers: a fresh seeded initialization, the training rows to the device, the shuffle, every
+    minibatch step (zero_grad, forward under the setting's autocast, loss, backward, Adam) and the loss
+    curve back on the host. The held-out prediction runs after the clock (outputs()). The module is
+    built (and compiled) once and re-initialized in place each round, so a compile arm compiles in its
+    untimed warm-up fit only."""
+
+    def __init__(self, lane, shape, data, arm):
+        import math
+        import numpy as np
+        self.np, self.lane, self.shape, self.arm = np, lane, shape, arm
+        where, setting = arm_setting(arm)
+        if where != "gpu":
+            raise RuntimeError("REFUSED: %s: the fit lanes race torch on the GPU only" % arm)
+        twin = _load("torch_lm_step_opponent")
+        col = twin.COLUMNS[setting.replace("-", "_")]
+        torch, dev, kind, name, sync = _torch_device()
+        self.torch, self.dev, self.kind, self._sync = torch, dev, kind, sync
+        torch.manual_seed(SEED)
+        hip = getattr(torch.version, "hip", None)
+        if col["tf32"] and not (kind == "cuda" and not hip):
+            raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA matmul mode; torch on %s "
+                               "accepts the flag and changes nothing" % (arm, "ROCm" if hip else kind))
+        precision = twin.set_precision(torch, col["tf32"])
+        self.autocast, probe = None, None
+        if col["autocast"]:
+            probe = twin.probe_autocast(torch, dev, col["autocast"], sync)
+            if not probe.get("applicable"):
+                raise RuntimeError("REFUSED: %s: torch.autocast(%r, %s) does not work on this box: %s"
+                                   % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
+            self.autocast = getattr(torch, col["autocast"])
+        self.compile = bool(col["compile"])
+        # host tensors (no copy): moved to the device inside every timed fit
+        self.Xtr = torch.from_numpy(np.ascontiguousarray(data["X_train"], dtype=np.float32))
+        self.ytr = torch.from_numpy(np.ascontiguousarray(data["y_train"], dtype=np.float32))
+        self.Xte = torch.from_numpy(np.ascontiguousarray(data["X_test"], dtype=np.float32))
+        d_in = int(self.Xtr.shape[-1])
+        nn, F = torch.nn, torch.nn.functional
+        recurrent = lane in FIT_CELL
+        task = FIT_TASK[lane]
+        if recurrent:
+            cls = {"lstm": nn.LSTM, "gru": nn.GRU, "rnn": nn.RNN}[FIT_CELL[lane]]
+            extra = {"nonlinearity": "tanh"} if lane == "rnn-fit" else {}
+            body = cls(d_in, FIT_RNN_HIDDEN, num_layers=1, bias=True, batch_first=True, device=dev, **extra)
+            head = nn.Linear(FIT_RNN_HIDDEN, 1, device=dev)
+            impl = type(body)
+            self.linears = []
+        else:
+            hidden = FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN
+            sizes = [d_in] + list(hidden) + [1]
+            mods = []
+            for i in range(len(sizes) - 1):
+                mods.append(nn.Linear(sizes[i], sizes[i + 1], device=dev))
+                if i < len(sizes) - 2:
+                    mods.append(nn.ReLU())
+            body, head = nn.Sequential(*mods), None
+            impl = type(body)
+            self.linears = [m for m in mods if isinstance(m, nn.Linear)]
+
+        class FitNet(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.body = body
+                self.head = head
+
+            def forward(self, x, y=None):
+                if recurrent:
+                    z = self.head(self.body(x)[0][:, -1]).squeeze(-1)
+                else:
+                    z = self.body(x).squeeze(-1)
+                if y is None:
+                    return z
+                if task == "classification":
+                    return F.binary_cross_entropy_with_logits(z.float(), y, reduction="mean")
+                return F.mse_loss(z.float(), y, reduction="mean")
+
+        self.module = FitNet()
+        self.body = body
+        self.head = head
+        self.recurrent = recurrent
+        self.task = task
+        self.fn = torch.compile(self.module) if self.compile else self.module
+        # every Adam flag explicit where this torch takes it (fused/foreach left to torch: implementation)
+        import inspect
+        try:
+            sig = inspect.signature(torch.optim.Adam).parameters
+        except (TypeError, ValueError):
+            sig = {}
+        self.opt_kwargs = dict(lr=FIT_ADAM["lr"], betas=tuple(FIT_ADAM["betas"]), eps=FIT_ADAM["eps"],
+                               weight_decay=FIT_ADAM["weight_decay"])
+        self.opt_kwargs.update({k: False for k in ("amsgrad", "maximize", "capturable", "differentiable")
+                                if k in sig})
+        back = torch.optim.Adam(self.module.parameters(), **self.opt_kwargs).defaults
+        try:
+            torch.randperm(4, device=dev)
+            self.perm_where = "torch.randperm on the device"
+        except Exception:  # noqa: BLE001  (a backend without a device randperm)
+            self.perm_where = "torch.randperm on the host, moved to the device inside the clock"
+        if recurrent:
+            layers = fit_layers(lane, d_in, [body.hidden_size])
+            extra_rb = dict(num_layers=body.num_layers, timesteps=int(self.Xtr.shape[1]))
+            if lane == "rnn-fit":
+                extra_rb["nonlinearity"] = body.nonlinearity
+        else:
+            layers = []
+            for m in body:
+                layers.append("linear %d %d %s" % (m.in_features, m.out_features, "bias" if m.bias is not None
+                                                   else "nobias") if isinstance(m, nn.Linear)
+                              else type(m).__name__.lower())
+            extra_rb = {}
+        self.record = fit_record(lane, "torch", impl, d_in, optimizer="adam", learning_rate=back["lr"],
+                                 betas=list(back["betas"]), eps=back["eps"], weight_decay=back["weight_decay"],
+                                 amsgrad=back.get("amsgrad", False), maximize=back.get("maximize", False),
+                                 layers=layers, **extra_rb)
+        self.info = {"library": "torch", "version": torch.__version__,
+                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
+                     "torch_backend": kind, "device": "gpu", "device_name": name,
+                     "setting": setting, "precision": precision_text(setting),
+                     "compile": "torch.compile (inductor, default mode)" if self.compile else "eager",
+                     "mode": "torch %s, %s" % ("compile" if self.compile else "eager", precision_text(setting)),
+                     "precision_readback": precision, "autocast_probe": probe,
+                     "column": setting.replace("-", "_") + " (tools/torch_lm_step_opponent.py COLUMNS)",
+                     "torch_threads": torch.get_num_threads(), "pre_clock_fit": False, "input_home": "host",
+                     "call": LANE_TEXT[lane][1], "shuffle": self.perm_where,
+                     "init": ("torch's own reset_parameters (U(+-1/sqrt(hidden)) on the cell, nn.Linear's "
+                              "default on the head: the same bound)" if recurrent else
+                              "Glorot uniform sqrt(6/(fan_in+fan_out)) on every weight and bias (scikit-learn's "
+                              "bounds, ours' rule)"),
+                     "fit_rows": int(self.Xtr.shape[0]), "held_out_rows": int(self.Xte.shape[0])}
+        self._glorot = lambda m: math.sqrt(6.0 / (m.in_features + m.out_features))
+        self.losses = None
+        self._score = None
+        sync()
+
+    def _ctx(self, grad=True):
+        import contextlib
+        torch = self.torch
+        stack = contextlib.ExitStack()
+        if self.autocast is not None:
+            stack.enter_context(torch.autocast(device_type=self.dev.type, dtype=self.autocast))
+        if not grad:
+            stack.enter_context(torch.no_grad())
+        return stack
+
+    def _reinit(self):
+        torch = self.torch
+        with torch.no_grad():
+            if self.recurrent:
+                self.body.reset_parameters()
+                self.head.reset_parameters()
+            else:
+                for m in self.linears:
+                    b = self._glorot(m)
+                    m.weight.uniform_(-b, b)
+                    m.bias.uniform_(-b, b)
+
+    def _perm(self, n):
+        torch = self.torch
+        if self.perm_where.endswith("on the device"):
+            return torch.randperm(n, device=self.dev)
+        return torch.randperm(n).to(self.dev)
+
+    def call(self):
+        np, torch = self.np, self.torch
+        torch.manual_seed(SEED)
+        self._reinit()
+        opt = torch.optim.Adam(self.module.parameters(), **self.opt_kwargs)
+        X, y = self.Xtr.to(self.dev), self.ytr.to(self.dev)
+        n = int(X.shape[0])
+        bs = max(1, min(FIT_BATCH, n))
+        losses = []
+        for _epoch in range(FIT_EPOCHS):
+            perm = self._perm(n)
+            for s in range(0, n, bs):
+                idx = perm[s:s + bs]
+                opt.zero_grad(set_to_none=True)
+                with self._ctx():
+                    loss = self.fn(X[idx], y[idx])
+                loss.backward()
+                opt.step()
+                losses.append(loss.detach())
+        self.losses = torch.stack(losses).float().cpu().numpy().astype(np.float64)
+        self._score = None
+
+    def sync(self):
+        self._sync()
+
+    def _predict(self):
+        torch = self.torch
+        if self._score is None:
+            parts = []
+            with self._ctx(grad=False):
+                X = self.Xte.to(self.dev)
+                for s in range(0, int(X.shape[0]), FIT_PREDICT_CHUNK):
+                    z = self.module(X[s:s + FIT_PREDICT_CHUNK]).float()
+                    parts.append(torch.sigmoid(z) if self.task == "classification" else z)
+            self._score = self.np.ascontiguousarray(torch.cat(parts).cpu().numpy().astype(self.np.float32))
+        return self._score
+
+    def outputs(self):
+        return {"score": self._predict(), "loss_curve": self.losses}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self._predict()).data)[:16]
+
+
+class MlxFitArm:
+    """The fit lanes' MLX opponent on Apple silicon (2026-10-19, lane ag-bench): mlx.nn (Linear/ReLU,
+    LSTM/GRU/RNN with a Linear head on the last hidden state), mlx.optimizers.Adam with bias correction,
+    nn.value_and_grad, mx.eval after every step (MLX's own training-loop pattern), float32. Same clock as
+    TorchFitArm: a fresh seeded model, the training rows into MLX arrays, the shuffle, every step and the
+    loss curve back on the host; the held-out prediction after the clock."""
+
+    def __init__(self, lane, shape, data, arm):
+        import numpy as np
+        if arm != "mlx-fp32":
+            raise RuntimeError("REFUSED: no MLX arm %r (mlx-fp32 only)" % arm)
+        if sys.platform != "darwin" or platform.machine() != "arm64":
+            raise RuntimeError("REFUSED: %s: MLX runs on Apple silicon only" % arm)
+        try:
+            import mlx.core as mx
+            import mlx.nn as mnn
+            import mlx.optimizers as mopt
+        except ImportError as exc:
+            raise RuntimeError("REFUSED: %s: mlx is not installed in this environment (%r)" % (arm, exc))
+        self.np, self.mx, self.mnn, self.mopt = np, mx, mnn, mopt
+        self.lane, self.arm = lane, arm
+        self.Xtr = np.ascontiguousarray(data["X_train"], dtype=np.float32)
+        self.ytr = np.ascontiguousarray(data["y_train"], dtype=np.float32)
+        self.Xte = np.ascontiguousarray(data["X_test"], dtype=np.float32)
+        self.d_in = int(self.Xtr.shape[-1])
+        self.recurrent = lane in FIT_CELL
+        self.task = FIT_TASK[lane]
+        mx.random.seed(SEED)
+        model = self._build()
+        opt = self._optimizer()
+        layers = (fit_layers(lane, self.d_in, [FIT_RNN_HIDDEN]) if self.recurrent else
+                  ["linear %d %d bias" % (m.weight.shape[1], m.weight.shape[0]) if isinstance(m, mnn.Linear)
+                   else type(m).__name__.lower() for m in model.body.layers])
+        extra = dict(num_layers=1, timesteps=int(self.Xtr.shape[1])) if self.recurrent else {}
+        if lane == "rnn-fit":
+            extra["nonlinearity"] = "tanh"
+        lr = float(np.asarray(opt.learning_rate))
+        self.record = fit_record(lane, "mlx", type(model.body), self.d_in, optimizer="adam", learning_rate=lr,
+                                 betas=[float(b) for b in opt.betas], eps=float(opt.eps), weight_decay=0.0,
+                                 layers=layers, **extra)
+        self.info = {"library": "mlx", "version": getattr(mx, "__version__", "unknown"), "device": "gpu",
+                     "device_name": str(mx.default_device()), "setting": "fp32",
+                     "precision": "float32", "mode": "mlx eager, float32", "pre_clock_fit": False,
+                     "input_home": "host", "call": "mlx.nn twin of: " + LANE_TEXT[lane][1],
+                     "shuffle": "mx.random.permutation", "init": (
+                         "mlx's own init (U(+-1/sqrt(hidden)) on the cell and the head)" if self.recurrent
+                         else "Glorot uniform sqrt(6/(fan_in+fan_out)) on every weight and bias"),
+                     "fit_rows": int(self.Xtr.shape[0]), "held_out_rows": int(self.Xte.shape[0])}
+        self.model, self.losses, self._score = None, None, None
+
+    def _build(self):
+        import math
+        mx, mnn = self.mx, self.mnn
+        recurrent, task = self.recurrent, self.task
+        if recurrent:
+            cls = {"lstm": mnn.LSTM, "gru": mnn.GRU, "rnn": mnn.RNN}[FIT_CELL[self.lane]]
+            body, head = cls(self.d_in, FIT_RNN_HIDDEN, bias=True), mnn.Linear(FIT_RNN_HIDDEN, 1)
+        else:
+            hidden = FIT_MLP_HIDDEN if self.lane == "mlp-fit" else FIT_TAPE_HIDDEN
+            sizes = [self.d_in] + list(hidden) + [1]
+            mods = []
+            for i in range(len(sizes) - 1):
+                lin = mnn.Linear(sizes[i], sizes[i + 1])
+                b = math.sqrt(6.0 / (sizes[i] + sizes[i + 1]))
+                lin.weight = mx.random.uniform(-b, b, lin.weight.shape)
+                lin.bias = mx.random.uniform(-b, b, lin.bias.shape)
+                mods.append(lin)
+                if i < len(sizes) - 2:
+                    mods.append(mnn.ReLU())
+            body, head = mnn.Sequential(*mods), None
+
+        class FitNet(mnn.Module):
+            def __init__(self):
+                super().__init__()
+                self.body = body
+                if head is not None:
+                    self.head = head
+
+            def __call__(self, x):
+                if recurrent:
+                    out = self.body(x)
+                    h = out[0] if isinstance(out, tuple) else out
+                    return self.head(h[:, -1, :]).squeeze(-1)
+                return self.body(x).squeeze(-1)
+
+        self._loss = ((lambda m, x, y: mnn.losses.binary_cross_entropy(m(x), y, with_logits=True,
+                                                                        reduction="mean"))
+                      if task == "classification" else
+                      (lambda m, x, y: mnn.losses.mse_loss(m(x), y, reduction="mean")))
+        return FitNet()
+
+    def _optimizer(self):
+        try:
+            return self.mopt.Adam(learning_rate=FIT_ADAM["lr"], betas=list(FIT_ADAM["betas"]), eps=FIT_ADAM["eps"],
+                                  bias_correction=True)
+        except TypeError as exc:
+            raise RuntimeError("REFUSED: %s: this mlx's Adam has no bias_correction (ours and torch correct "
+                               "the bias; a different update) (%r)" % (self.arm, exc))
+
+    def call(self):
+        np, mx, mnn = self.np, self.mx, self.mnn
+        mx.random.seed(SEED)
+        model = self._build()
+        opt = self._optimizer()
+        step = mnn.value_and_grad(model, self._loss)
+        X, y = mx.array(self.Xtr), mx.array(self.ytr)
+        n = int(X.shape[0])
+        bs = max(1, min(FIT_BATCH, n))
+        losses = []
+        for _epoch in range(FIT_EPOCHS):
+            perm = mx.random.permutation(n)
+            for s in range(0, n, bs):
+                idx = perm[s:s + bs]
+                loss, grads = step(model, X[idx], y[idx])
+                opt.update(model, grads)
+                mx.eval(model.parameters(), opt.state, loss)
+                losses.append(loss)
+        self.losses = np.asarray(mx.stack(losses), dtype=np.float64)
+        self.model, self._score = model, None
+
+    def sync(self):
+        self.mx.synchronize() if hasattr(self.mx, "synchronize") else None
+
+    def _predict(self):
+        np, mx = self.np, self.mx
+        if self._score is None:
+            parts = []
+            for s in range(0, len(self.Xte), FIT_PREDICT_CHUNK):
+                z = self.model(mx.array(self.Xte[s:s + FIT_PREDICT_CHUNK]))
+                parts.append(np.asarray(mx.sigmoid(z) if self.task == "classification" else z, dtype=np.float32))
+            self._score = np.ascontiguousarray(np.concatenate(parts))
+        return self._score
+
+    def outputs(self):
+        return {"score": self._predict(), "loss_curve": self.losses}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self._predict()).data)[:16]
+
+
 def _restore_torch(torch, threads, info):
     """gen_corpus.py switches torch to deterministic algorithms and one thread
     at import; an opponent runs at torch's defaults (tools/speed_torch_seq.py
@@ -2951,6 +3717,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
                                % (arm, OUR_MODE[arm], os.environ.get("MOJOLEARN_NUMERIC_MODE")))
         model = MODEL_OF[lane]
         runtime = (ab_config or {}).get("runtime", {})
+        if lane in FIT_LANES:
+            if operation != "model_default":
+                raise RuntimeError("REFUSED: the fit lanes have no experimental operation")
+            return OursFit(lane, shape, data)
         if operation == "residual_dropout_forward_vjp":
             return OursResidualDropout(lane, shape, data, runtime)
         if operation == "mlp_inference_sessions":
@@ -2978,6 +3748,12 @@ def build_runner(lane, arm, shape, data, ab_config=None):
         return OURS[model](lane, shape, data)
     if operation != "model_default":
         raise RuntimeError("REFUSED: experimental operation has no matched opponent implementation")
+    if lane in FIT_LANES:                # 2026-10-19 (lane ag-bench): whole fits
+        if arm in MLX_ARMS:
+            return MlxFitArm(lane, shape, data, arm)
+        return TorchFitArm(lane, shape, data, arm)
+    if arm in MLX_ARMS:
+        raise RuntimeError("REFUSED: %s races the fit lanes only" % arm)
     if arm in MAMBA_SSM_ARMS:            # FAIRNESS FIX (2026-10-13 audit): the real Mamba kernels
         return MambaSsmArm(lane, shape, data, arm)
     return TorchArm(lane, shape, data, arm)
@@ -3299,6 +4075,8 @@ def scorer_preflight(lane, shape, data_path, arms, operation):
             need.append("batches")
         if MODEL_OF.get(lane) == "gemm":
             need += ["a", "b"]
+        if lane in FIT_LANES:
+            need += ["X_test", "y_test"]
         absent = [k for k in need if k not in keys]
         receipt["checks"].append({"check": "reference data", "need": need, "absent": absent,
                                   "status": "failed" if absent else "ok"})
@@ -3368,9 +4146,48 @@ def mark_forward_quality_failures(result):
                        result.get("quality", {}).get("error", "missing saved output or host reference"))})
 
 
+def fit_quality(lane, data, outs):
+    """The fit lanes' quality (2026-10-19, lane ag-bench), float64, on the held-out rows, with
+    tools/speed_gbdt_arm.py's metric helpers: accuracy (score > 0.5), log_loss and auc for the
+    classifiers (the score is P(y = 1)); rmse and the auc of the score for the regressors (the target
+    is the 0/1 label). Every other arm also gets its difference from ours' value."""
+    import numpy as np
+    M = _load("speed_gbdt_arm")
+    y = np.asarray(data["y_test"], dtype=np.float64).ravel()
+    q = {}
+    for arm, o in outs.items():
+        row = q[arm] = {"held_out_rows": int(y.size)}
+        score = np.asarray(o.get("score"), dtype=np.float64).ravel()
+        if score.shape != y.shape:
+            row["shape_mismatch"] = "%s vs %s" % (list(score.shape), list(y.shape))
+            continue
+        if not np.isfinite(score).all():
+            row["nonfinite_scores"] = int((~np.isfinite(score)).sum())
+            continue
+        if FIT_TASK[lane] == "classification":
+            row.update(accuracy=M.accuracy(y > 0.5, score > 0.5), log_loss=M.logloss(y, score),
+                       auc=M.auc(y, score))
+        else:
+            row.update(rmse=M.rmse(y, score), auc=M.auc(y, score))
+        curve = np.asarray(o.get("loss_curve") if o.get("loss_curve") is not None else [], dtype=np.float64).ravel()
+        if curve.size:
+            row.update(train_loss_last_step=float(curve[-1]), loss_curve_length=int(curve.size),
+                       train_loss_finite=bool(np.isfinite(curve).all()))
+    ref = q.get("ours") or q.get("ours-fast")
+    for arm, row in q.items():
+        if ref is None or row is ref:
+            continue
+        for k in ("accuracy", "log_loss", "auc", "rmse"):
+            if k in row and k in ref:
+                row[k + "_diff_vs_ours"] = row[k] - ref[k]
+    return q
+
+
 def quality(lane, data, outs, *, shape="full"):
     import numpy as np
     q = {}
+    if lane in FIT_LANES:
+        return fit_quality(lane, data, outs)
     if lane in TRAIN_LANES:
         for arm, o in outs.items():
             losses = [float(x) for x in o["losses"]]
@@ -3441,6 +4258,13 @@ def _worker_env(arm):
 
 SPAN = {"input_home": "host", "pre_clock_fit": False,
         "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized"}
+APPLE_FIT_IDENTICAL_REFUSED = ("refused: identical is never timed on Apple (CLAUDE.md: Apple is for same-bits "
+                               "checks only); the fit lanes race ours-fast on Apple")
+#: the fit lanes' comparability span (2026-10-19, lane ag-bench), the same on every arm
+FIT_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": None,
+            "inside_clock": "one whole fit: a fresh seeded initialization, the training rows to the device, "
+                            "the shuffle, every minibatch step (forward, loss, backward, Adam), the loss curve "
+                            "back on the host, synchronized; the held-out prediction is after the clock"}
 
 
 def _worker_message(worker, seconds, stage, command=None):
@@ -3536,6 +4360,8 @@ def race(args):
     if operation != "model_default":
         tag += "-" + operation
     data_path = os.path.join(args.work, "neural-%s-%s.npz" % (lane, shape))
+    if getattr(args, "higgs", None):
+        os.environ[HIGGS_ENV] = os.path.abspath(os.path.expanduser(args.higgs))   # fit_arrays reads it
     inputs = make_inputs(lane, shape, args.rounds + 1, data_path)
     srec = shape_record(lane, shape)
     result = {"lane": lane, "dataset": DATA_OF[lane], "shape": srec["label"], "shape_record": srec,
@@ -3581,6 +4407,9 @@ def race(args):
     # this change were wrong for this lane; apply extra scrutiny.
     refused_before = {a: REFERENCE_TWIN_LANES[lane] for a in arms
                       if lane in REFERENCE_TWIN_LANES and a.startswith("torch-")}
+    if lane in FIT_LANES and sys.platform == "darwin" and "ours" in arms:
+        # 2026-10-19 (lane ag-bench): identical is never timed on Apple; the fit lanes race ours-fast there
+        refused_before["ours"] = APPLE_FIT_IDENTICAL_REFUSED
     for arm in arms:
         if arm in refused_before:
             workers[arm] = RefusedArm()
@@ -3697,7 +4526,8 @@ def race(args):
                 result["arms"][arm]["outputs_digest"] = outputs_digest(outs[arm])
                 print("NEURAL-DIGEST lane=%s arm=%s digest=%s"
                       % (lane, arm, result["arms"][arm]["outputs_digest"]), flush=True)
-                if getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES:
+                if (getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES
+                        or lane in FIT_LANES):
                     # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
@@ -3765,7 +4595,7 @@ def race(args):
         # a training step changes the state every round (no repeat to compare),
         # and one timed round has nothing to compare against either
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
-        a["span"] = dict(SPAN)
+        a["span"] = dict(FIT_SPAN if lane in FIT_LANES else SPAN)
         print("NEURAL lane=%s arm=%s status=%s median_ms=%s quality=%s"
               % (lane, arm, a["status"], a["median_ms"],
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True)), flush=True)
@@ -3813,6 +4643,9 @@ def build_parser():
                    help="warm-up deadline of a torch.compile arm (its compile is the untimed "
                         "warm-up round); default 8 x --round-seconds")
     r.add_argument("--round-seconds", type=int, default=1800)
+    r.add_argument("--higgs", default=None,
+                   help="the HIGGS npz the fit lanes read (default: $%s, else %s)"
+                        % (HIGGS_ENV, " or ".join(HIGGS_DEFAULTS)))
     r.add_argument("--keep-outputs", action="store_true",
                    help="keep every arm's saved outputs as <out>/<lane>-<data>-<arm>.outputs.npz "
                         "(y for a forward lane, losses for a train lane): tools/afn_ab.sh's judge "

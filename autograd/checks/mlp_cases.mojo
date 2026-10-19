@@ -3,6 +3,7 @@ from sequence.exec_trait import Exec
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.mlp import LOSS_SQUARED, LOSS_BINARY_LOG, LOSS_LOG, ACT_SOFTMAX
 from sequence.ops import FP
+from std.memory import bitcast
 
 
 def _ptr(mut values: List[Float32]) -> FP:
@@ -48,5 +49,14 @@ def run_mlp_cases[E: Exec](mut ex: E) raises:
                         print("PARAM", cases, i, params[i])
                     for i in range(n):
                         print("LOSS", cases, i, curve[i])
+                    # Bitwise digest of the fitted parameters and the loss
+                    # curve: compare it across builds (AUTOGRAD_MLP_OFF hand
+                    # path, default fused tape, AUTOGRAD_MLP_UNFUSED) and executors.
+                    var digest = UInt64(1469598103934665603)
+                    for i in range(len(params)):
+                        digest = (digest ^ UInt64(bitcast[DType.uint32](params[i]))) * UInt64(1099511628211)
+                    for i in range(n):
+                        digest = (digest ^ UInt64(bitcast[DType.uint32](curve[i]))) * UInt64(1099511628211)
+                    print("DIGEST", cases, digest)
                     cases += 1
     print("PASS mlp_cases", cases)

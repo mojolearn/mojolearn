@@ -48,6 +48,23 @@ Caller storage and storage lifetime (lane `ag-fusion`):
   never released go when the executor ends. The MLP trainer releases its
   tape when the fit finishes.
 
+Inference (lane `ag-forward`): `tape.no_grad()` puts a tape in inference
+mode until `tape.record()`; the mode survives `reset()` and `release()`.
+Every operation still allocates its value through the tape's reusable
+storage (or writes caller storage for the `*_into` variants) and runs the
+same launch helper, then `_record` keeps no parents, allocates no gradient
+storage and marks the node inferred. `_record` never launches a value
+kernel, so a recorded and a non-recorded forward give the same bits by
+construction. `backward`, `backward_from` and `gradient()` refuse an
+inferred tensor; inside a later recorded graph it is a constant.
+`sequence/mlp_fit.mojo` `mlp_predict_autograd` predicts through
+`mlp_forward_autograd` on an inference tape, chunked like `mlp_predict`;
+`mlp_predict_py` uses it under `-D MOJOLEARN_AUTOGRAD_PREDICT` (default off,
+A/B owed). `autograd/checks/infer_cpu.mojo` and `infer_gpu.mojo` check the
+recorded/inference bit match on seven small models, the absence of graph
+edges and gradient slots, chunked prediction against the full-batch
+forward, and the refusals.
+
 The MLP tape path records each layer's output into the trainer's
 activation buffers and lands parameter gradients in the trainer's gradient
 vector, so the per-layer launch count drops from about 28 to 8 or 9 (with the per-opcode bodies and the bias gradient's blocked fold) (the
@@ -77,6 +94,74 @@ The MLP A/B (`~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-
 HIGGS 1M x 28, one run per arm): NVIDIA L40S 0.334 -> 0.388 s, AMD MI325X
 1.107 -> 0.602 s, average 0.85x; quality equal or better on 200k held-out
 rows; each arm's digest the same on NVIDIA and AMD. Transformer, Mamba,
+
+## Accumulation order
+
+When a tensor feeds several consumers, its gradient is the sum of one
+contribution per consumer edge, and the tape applies them in one canonical
+order: decreasing consumer-node index (reverse record order), and within one
+consumer that reads the tensor through several inputs (`x * x`), increasing
+input index. The first contribution applied is written into the gradient
+(with `accumulate=True` on a leaf, added to the gradient it already holds);
+each later one is added with the tape's accumulate kernel
+(`OP_AG_ACCUMULATE`, `add(gradient, contribution)` per element). The order
+is a function of the recorded graph only, never of the executor, the vendor
+or the launch geometry. So recording the same consumers in a different
+order changes the bits exactly where float addition order matters (three or
+more contributions whose partial sums round differently) and nowhere else.
+Every node kind follows it: the plain VJPs, the linear node (its fused dX
+epilogue applies only to a sole consumer), the loss nodes, reshapes and
+custom rules (a rule writes distinct per-input destinations; the tape adds
+them in input order). `_backward` asserts the order as it applies each
+contribution and refuses if it is ever violated. The transformer graph
+relies on it: q, k and v are recorded v, k, q so the reverse traversal sums
+d(norm1) as (q + k) + v, the hand path's order.
+`autograd/checks/order_cpu.mojo` and `order_gpu.mojo` check it against a
+host oracle of the stated order (bit for bit, so the CPU, Metal, NVIDIA and
+AMD digests are equal) with three to five consumers recorded in several
+orders.
+
+## Aliasing and mutation
+
+Between record and backward, storage the tape has seen (every recorded
+tensor's value and gradient) is read-only except through tape operations.
+The caller-storage entries check this at record time (a scan over the
+recorded nodes, host side, over graph structure only):
+
+- `variable_into`: the gradient destination may not overlap any recorded
+  value or gradient, nor the leaf's own data; the data may not overlap a
+  recorded gradient (two leaves may read the same data).
+- `linear_into`, `unary_into`, `binary_into`: the output may not overlap a
+  recorded value or gradient; refused before anything is launched.
+- `custom_into` and `binary_recorded`: the output and the gradient
+  destination may not overlap a recorded value or gradient, nor each other.
+- `custom_into_shared(inputs, output, shares, ...)`: the one declared alias.
+  The node's gradient storage is exactly the gradient range of `shares`, one
+  of its inputs whose gradient is caller storage (a pass-through edge: the
+  op's VJP into `shares` is the identity, as a residual add's is into its
+  branch). The node joins `shares`' alias group (`alias_of`); a range equal
+  to a group member's gradient is accepted for that entry only, and every
+  other overlap, a partial one included, stays refused. The transformer and
+  Mamba residual nodes use it.
+- `backward_with_rules`, `backward_from`, `backward_from_preactivation`:
+  the seed may not overlap a recorded gradient, except the seed-in-place
+  case, where it is exactly the root's gradient range (custom_into's
+  `grad_destination` passed as the seed), which every member of the root's
+  alias group shares; an in-place seed cannot also accumulate into a leaf
+  root.
+
+Inference mode (`no_grad`) keeps no gradients and skips these checks. The
+plain operations, `variable` and `custom` take no caller output range (a
+`custom` output may be a view of an input's value, as the recurrent last
+step is). Mutation that the tape cannot see is the caller's to declare:
+`tape.mark_mutated(x)` marks every tensor recorded before it that depends on
+x (through x's consumers) stale, and a backward from a stale output
+refuses; tensors recorded afterwards read x's new value and stay valid.
+`tape.watch(ex, x)` keeps a host copy of x's value and
+`tape.assert_unchanged(ex, x)` compares the current value with it bit for
+bit (a download and a memcmp; a debug entry, never on a training path),
+marking x mutated and raising when they differ. `reset()` clears the
+marks and the copies.
 
 ## Validation
 
@@ -137,6 +222,7 @@ collide with the recurrent scan codes. Every body is `@always_inline`.
 | 1004 | `OP_AG_TRANSPOSE` | elements | p0 | p1 |
 | 1005 | `OP_AG_REDUCE_PART` | blocks x outputs | p0 | p1 partials |
 | 1006 | `OP_AG_REDUCE_FOLD` | outputs | p0 partials | p1 |
+| 1700 | `OP_AGF_LEVEL` | groups x outputs | p0 partials | p0 (in place, one slot a group) |
 | 1007 | `OP_AG_REDUCE_VJP` | input elements | p0 upstream | p1 |
 | 1008 | `OP_AG_SOFTMAX_FWD` | rows | p0 x | p1 y |
 | 1009 | `OP_AG_SOFTMAX_VJP` | rows | p0 y, p1 upstream | p2 |
@@ -167,6 +253,19 @@ columns) and the row sum (axis 1). A broadcast operand's gradient (a
 at the output's shape into tape scratch, then that blocked row/column/total
 fold. An extent of at most 64 is one block. Partials come from the tape's
 storage (`_alloc`), reused after `reset()`.
+
+Fold v2 (lane ag-pass3-fold, the default; `-D MOJOLEARN_AUTOGRAD_FOLD_V2_OFF`
+restores the rule above). Leaf blocks are a fixed 64 terms, and the partials
+fold as a tree of fan-in 64: while an output has more than 64 partials,
+`OP_AGF_LEVEL` (1700) adds each run of 64 consecutive partials ascending
+from +0.0, in place, into the run's first slot; `OP_AG_REDUCE_FOLD` adds the
+last level ascending and applies the factor. A fold of at most 64 terms an
+output is one launch (the first launch applies the factor itself). Every
+chain issues its loads eight at a time ahead of its adds, which keep their
+order. Folds of at most 4096 terms are the rule above term for term (its
+R is 64 there), so they keep their bits; longer folds have new bits on
+every executor together. The launch geometry before and after, per axis,
+is written at the top of the fold section of `autograd/ops.mojo`.
 
 Bits: the total sum, the broadcast-operand gradients and folds over more
 than 64 terms change bits against `4cea8ebd9` (a single chain before); the

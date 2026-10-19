@@ -37,11 +37,22 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
+from sequence.launch_profile import launch_profile_level, launch_profile_record
+from std.time import perf_counter_ns
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
+from sequence.gemm_tiled import seq_gemm_epi_tiled_kernel
+from sequence.gemm_tiled import (
+    GEMM_DISPATCH_V1, GR_CELL, GR_TILE, GR_THIN_N, GR_THIN_M, GT_M, GT_N, GT_K, GT_THIN, GT_THIN_K,
+    GK_PLAIN, GK_BIAS, GK_BIAS_RELU, GK_BIAS_ACT, GK_L2GRAD, GK_ACT_BWD,
+    seq_gemm_route, seq_gemm_epi_kind, seq_gemm_tile_blocks, seq_gemm_tile_kernel,
+)
+from sequence.ops import OP_GEMM_EPI
+from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
+from sequence.ops import OP_COLSUM_DIV
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
 from sequence.adafactor import AF_COL_CHUNK_FOLD
@@ -415,7 +426,9 @@ def _pool_release_host(i: Int) raises:
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
     pool[].host_free[i] = True
 
-struct DeviceExec(Exec):
+# Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
+# owns its executor across binding calls; moving changes no value.
+struct DeviceExec(Exec, Movable):
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
     var base: List[Int]
@@ -447,6 +460,9 @@ struct DeviceExec(Exec):
     #: the next sync or the end of this Exec drains the queue.
     var retired: List[DeviceBuffer[DType.float32]]
     var retired_pdev: List[Int]
+    #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
+    #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
+    var profile: Int
     # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
@@ -469,6 +485,33 @@ struct DeviceExec(Exec):
         self.moe_poff = List[Int]()
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
+        self.profile = launch_profile_level()
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        """An executor on a caller's context (lane ag-transformer: the
+        autograd tape records over the transformer's own DeviceContext, so
+        its launches and the transformer's kernels share one in-order queue).
+        It never takes pooled storage: the pool's buffers belong to the
+        shared sequence context. Its destructor drains `ctx`."""
+        self.ctx = ctx.copy()
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.base = List[Int]()
+        self.size = List[Int]()
+        self.staged = List[HostBuffer[DType.float32]]()
+        self.pend_host = List[HostBuffer[DType.float32]]()
+        self.pend_dst = List[Int]()
+        self.pend_n = List[Int]()
+        self.pooled = False
+        self.pdev = List[Int]()
+        self.pstaged = List[Int]()
+        self.ppend_host = List[Int]()
+        self.pipe_dst = List[Int]()
+        self.pipe_src = List[Int]()
+        self.pipe_n = List[Int]()
+        self.moe_poff = List[Int]()
+        self.retired = List[DeviceBuffer[DType.float32]]()
+        self.retired_pdev = List[Int]()
+        self.profile = launch_profile_level()
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
@@ -659,6 +702,27 @@ struct DeviceExec(Exec):
         self.pend_n.append(n)
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
+        # lane ag-pass2-kernels: the launch profile (MOJOLEARN_AG_PROFILE).
+        # Off, one Int test. Level 2 drains the queue before and after the
+        # launch so the host clock brackets this launch alone: a relative
+        # profile, the syncs change the timing.
+        if self.profile == 0:
+            self._launch[OP](a, n)
+            return
+        if n <= 0:
+            return
+        var t0 = 0
+        if self.profile >= 2:
+            self.sync()
+            t0 = Int(perf_counter_ns())
+        self._launch[OP](a, n)
+        var ns = 0
+        if self.profile >= 2:
+            self.sync()
+            ns = Int(perf_counter_ns()) - t0
+        launch_profile_record(OP, n, ns, self.profile)
+
+    def _launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
             return
         # The autograd family (OP_AG_FIRST..OP_AG_LAST, autograd/ops.mojo) runs
@@ -930,15 +994,49 @@ struct DeviceExec(Exec):
                     block_dim=(TPB, 1, 1),
                 )
                 return
+        # lane ag-pass4-gemm: OP_GEMM, the tape's OP_AGK_GEMM_EPI and the hand
+        # MLP's OP_GEMM_EPI take the shape-aware route (sequence/gemm_tiled.mojo
+        # seq_gemm_route: one thread a cell for K < 4, the 16 x 16 tile when
+        # both edges are >= 8, else the thin tile along the long edge when the
+        # launch fuses an epilogue or column sums, one thread a cell if not); every
+        # route is op_gemm's chain and op_gemm_epi's follower, the same words.
+        comptime if SEQ_GEMM_TILED and not GEMM_DISPATCH_V1 and (
+                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+            # fused work: an epilogue (not the plain kind) or the column sums
+            var fused = False
+            comptime if OP != OP_GEMM:
+                fused = seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN
+                comptime if OP == OP_AGK_GEMM_EPI:
+                    fused = fused or a.i11 != 0
+            self.gemm_launch_route[OP](a, n, seq_gemm_route(a.i0, a.i1, a.i2, fused))
+            return
+        # The pass-3 routes below are -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.
         # nr-small D1: op_gemm's chain with the A/B slabs staged in
         # threadgroup memory (sequence/gemm_tiled.mojo), same words
-        comptime if SEQ_GEMM_TILED and OP == OP_GEMM:
+        comptime if SEQ_GEMM_TILED and GEMM_DISPATCH_V1 and OP == OP_GEMM:
             if seq_gemm_tiled_on(a.i0, a.i1):
                 self.ctx.enqueue_function[seq_gemm_tiled_kernel](
                     a.p0, a.p1, a.p2,
                     Int32(a.i0), Int32(a.i1), Int32(a.i2),
                     Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
                     Int32(a.i7), Int32(a.i8),
+                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
+                    block_dim=(GT_TPB, 1, 1),
+                )
+                return
+        # lane ag-pass2-kernels: the tape's GEMM with epilogue on the same
+        # tile as OP_GEMM (same chain, then op_gemm_epi's follower on the
+        # stored word): the same words as the one-thread op_gemm_epi. The
+        # hand MLP's OP_GEMM_EPI keeps its one-thread launch.
+        # Lane ag-pass3-impl: i11 = 1 also folds B's column sums into p4
+        # (the fused linear node's bias gradient) inside the tile.
+        comptime if SEQ_GEMM_TILED and GEMM_DISPATCH_V1 and OP == OP_AGK_GEMM_EPI:
+            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
+                self.ctx.enqueue_function[seq_gemm_epi_tiled_kernel](
+                    a.p0, a.p1, a.p2, a.p3, a.p4,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
+                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+                    Int32(a.i9), Int32(a.i10), Int32(a.i11), a.f0, a.f1,
                     grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
                     block_dim=(GT_TPB, 1, 1),
                 )
@@ -955,6 +1053,81 @@ struct DeviceExec(Exec):
                 grid_dim=((n + TPB - 1) // TPB, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
+        comptime if OP == OP_AGK_GEMM_EPI:
+            # the GEMM ran off the tile (one-thread launch, Apple): its
+            # column sums are the hand path's own OP_COLSUM_DIV launch
+            if a.i11 != 0:
+                self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
+
+    def gemm_launch_route[OP: Int](mut self, a: Args, n: Int, route: Int) raises:
+        """OP_GEMM, OP_AGK_GEMM_EPI or OP_GEMM_EPI on the given route (GR_*,
+        sequence/gemm_tiled.mojo): `_launch` passes seq_gemm_route's, and the
+        GEMM shape check (autograd/checks/gemm_cases.mojo) passes each in
+        turn to compare their words. A tile route on an epilogue opcode needs
+        a dense C without accumulate (i7 = 0, i8 = i1, as every caller
+        launches it); otherwise, and for GR_CELL, one thread a cell
+        (seq_kernel), then, for OP_AGK_GEMM_EPI with i11 = 1, the column sums'
+        own OP_COLSUM_DIV launch."""
+        comptime assert OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI, "gemm_launch_route: a GEMM opcode"
+        if n <= 0:
+            return
+        comptime if SEQ_GEMM_TILED:
+            if route != GR_CELL:
+                var ek = GK_PLAIN
+                var dense = True
+                comptime if OP != OP_GEMM:
+                    ek = seq_gemm_epi_kind(a.i9, a.i10)
+                    dense = a.i7 == 0 and a.i8 == a.i1
+                if dense:
+                    # op_gemm_epi (60) has no column sums; the tape's 1401 does (i11)
+                    var colsum = a.i11 if OP == OP_AGK_GEMM_EPI else 0
+                    if route == GR_THIN_N:
+                        self._gemm_tile[GT_THIN, 1, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
+                    elif route == GR_THIN_M:
+                        self._gemm_tile[1, GT_THIN, GT_THIN_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
+                    else:
+                        self._gemm_tile[GT_M, GT_N, GT_K](a, ek, colsum, seq_gemm_tile_blocks(route, a.i0, a.i1))
+                    return
+        self.ctx.enqueue_function[seq_kernel[OP]](
+            a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+            _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+            _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+            _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+            Int64(n),
+            grid_dim=((n + TPB - 1) // TPB, 1, 1),
+            block_dim=(TPB, 1, 1),
+        )
+        comptime if OP == OP_AGK_GEMM_EPI:
+            # off the tile: the column sums are the hand path's OP_COLSUM_DIV
+            if a.i11 != 0:
+                self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
+
+    def _gemm_tile[TM: Int, TN: Int, TK: Int](mut self, a: Args, ek: Int, colsum: Int, blocks: Int) raises:
+        """seq_gemm_tile_kernel[TM, TN, TK, ek] (the epilogue kind is a
+        compile-time parameter of the kernel, chosen here)."""
+        if ek == GK_BIAS:
+            self._gemm_tile_k[TM, TN, TK, GK_BIAS](a, colsum, blocks)
+        elif ek == GK_BIAS_RELU:
+            self._gemm_tile_k[TM, TN, TK, GK_BIAS_RELU](a, colsum, blocks)
+        elif ek == GK_BIAS_ACT:
+            self._gemm_tile_k[TM, TN, TK, GK_BIAS_ACT](a, colsum, blocks)
+        elif ek == GK_L2GRAD:
+            self._gemm_tile_k[TM, TN, TK, GK_L2GRAD](a, colsum, blocks)
+        elif ek == GK_ACT_BWD:
+            self._gemm_tile_k[TM, TN, TK, GK_ACT_BWD](a, colsum, blocks)
+        else:
+            self._gemm_tile_k[TM, TN, TK, GK_PLAIN](a, colsum, blocks)
+
+    def _gemm_tile_k[TM: Int, TN: Int, TK: Int, EK: Int](mut self, a: Args, colsum: Int, blocks: Int) raises:
+        comptime kern = seq_gemm_tile_kernel[TM, TN, TK, EK]
+        self.ctx.enqueue_function[kern](
+            a.p0, a.p1, a.p2, a.p3, a.p4,
+            Int32(a.i0), Int32(a.i1), Int32(a.i2),
+            Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+            Int32(a.i7), Int32(a.i8), Int32(a.i10), Int32(colsum), a.f0, a.f1,
+            grid_dim=(blocks, 1, 1),
+            block_dim=(GT_TPB, 1, 1),
+        )
 
     def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int, wf: IP, woff: Int, nonce: Int32) raises:
         """`team_kernel[OP]` (lane neural-pass143): one block of tpb threads

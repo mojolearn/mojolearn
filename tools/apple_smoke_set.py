@@ -33,6 +33,12 @@ has a one-float stub workspace that is never written or read, so a
 workspace-read-before-write defect COULD NOT ARISE there. The smoke set is a
 tripwire for gross breakage on the vendor we cannot afford to run. It is not
 evidence of Apple identity, and nothing that needs such evidence may cite it.
+
+THE AUTOGRAD ENTRIES (2026-10-19, lane ag-bench) are pinned beside the derived set: the tape is
+under every neural trainer, so a broken tape must stop a release even when no derived lane lands
+on its files first. They are tools/autograd_smoke.py's ENTRIES (the gradient suite, the MLP
+identity check, the tiny fit test), each a 5 s "does it start" row on the vendor (`metal` here),
+listed by `--autograd` and run by `tools/autograd_smoke.py run --vendor metal`.
 """
 import argparse, sys, os
 
@@ -72,7 +78,14 @@ def main():
     ap.add_argument("-n", type=int, default=5, help="how many lanes (3 to 5 is the intended range)")
     ap.add_argument("--lanes-only", action="store_true", help="print just the comma list, for a command line")
     ap.add_argument("--include-par", action="store_true", help="do not drop par-* (they cannot state their claim on one GPU)")
+    ap.add_argument("--autograd", action="store_true",
+                    help="print only the pinned autograd entries (tools/autograd_smoke.py), one per line")
     a = ap.parse_args()
+    import autograd_smoke
+    if a.autograd:
+        for e in autograd_smoke.ENTRIES:
+            print("%s %s" % (e["name"], e.get("source") or e.get("pytest")))
+        return 0
     chosen, total = derive(a.n, a.include_par)
     if a.lanes_only:
         print(",".join(c[0] for c in chosen))
@@ -80,6 +93,9 @@ def main():
     print(f"# apple smoke set, {len(chosen)} lanes, derived over {total} device .mojo files")
     for i, (lane, gain, cum, tot) in enumerate(chosen, 1):
         print(f"{i}. {lane:<30} +{gain:4d} new    {cum}/{tot}  {100*cum//tot}%")
+    print("# pinned autograd entries (5 s each, tools/autograd_smoke.py run --vendor metal):")
+    for e in autograd_smoke.ENTRIES:
+        print(f"   {e['name']:<30} {e.get('source') or e.get('pytest')}")
     print("#")
     print("# A TRIPWIRE, NOT EVIDENCE. File coverage is not kernel coverage and")
     print("# neither is defect coverage. Nothing that needs Apple identity evidence")
