@@ -430,11 +430,11 @@ def mlp_lb_row_parts(max_rows: Int) -> Int:
 
 
 def mlp_loss_block[E: Exec](
-    mut ex: E, net: MLPNet, P: FP, out: FP, y: FP, seed: FP, rowparts: FP, l2parts: FP, l2: FP,
+    mut ex: E, net: MLPNet, P: FP, pred: FP, y: FP, seed: FP, rowparts: FP, l2parts: FP, l2: FP,
     dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, data: FP, data_parts: Int,
 ) raises:
     """MLP_LOSSBLOCK (sequence/mlp.mojo): one batch's loss block. seed[0:B O]
-    = out - y, l2[i] = ||W_i||^2 and dloss[bi] = the batch's reported loss
+    = pred - y, l2[i] = ||W_i||^2 and dloss[bi] = the batch's reported loss
     (data term + half_alpha sum(l2) / B), every sum a blocked fold with the
     tape's block rule. `data_parts` = 0: the data term is the B row losses'
     blocked sum (row partials written to `rowparts`); > 0: it is `data`'s
@@ -447,7 +447,7 @@ def mlp_loss_block[E: Exec](
     var pstart = 0
     for g in range(groups):  # driver-loop: over groups of four layers
         var p = Args()
-        p.p0 = out
+        p.p0 = pred
         p.p1 = y
         p.p2 = seed
         p.p3 = rowparts
