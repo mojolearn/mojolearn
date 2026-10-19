@@ -14,6 +14,7 @@ from sequence.exec_trait import Exec
 from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FitConfig, ModelSpec, model_fit, model_predict, parse_model
+from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 
 # Training options ahead of the per-layer float table in model_fit's fp.
 comptime FIT_INTS = 14
@@ -63,8 +64,16 @@ def model_fit_py[E: Exec](
         ival(ip, 7), ival(ip, 8), ival(ip, 9) != 0, _seed(ip, 10), ival(ip, 12),
         Float64(py=fp[6]), fval(fp, 8), ival(ip, 13) != 0,
     )
+    # MOJOLEARN_AG_PROFILE (lane ag-pass2-kernels): this fit's launch
+    # profile, counted by the executor, printed after it
+    var profile = ag_profile_on()
+    if profile:
+        ag_profile_reset()
     var n_iter = model_fit(ex, spec, cfg, fptr(addrs[0], "X"), fptr(addrs[1], "Y"), N,
                            fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"))
+    if profile:
+        print("AG_PROFILE fit=model_fit")
+        print(ag_profile_report())
     return PythonObject(n_iter)
 
 
