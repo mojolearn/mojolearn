@@ -121,7 +121,7 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.ops import FP, add, fma3, ld, st
-from sequence.mlp import div, gemm_epi_value
+from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_IDENTITY, ACT_RELU
 
 comptime GT_V2 = not (
     is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -336,4 +336,219 @@ def seq_gemm_epi_tiled_kernel(
     if cs_on:
         # op_divs on op_colsum's stored word: div(ld(st(cs)), f0) = div(cs, f1)
         # (cs is already flushed by add)
+        st(p4, n, div(cs, f1))
+
+
+# ---------------------------------------------------------------- shape-aware routes (lane ag-pass4-gemm)
+# The route rule (the table at the top of this file). Every number below is
+# a cost boundary, never a data shape:
+#  - GT_MIN_K: a cell's chain of K < 4 terms is at most 3 dependent load
+#    round trips with no barrier and no shared staging; any tile pays one
+#    global round trip, two barriers and the slab stores for the same cells,
+#    so short-K products (an outer product, K = 1) stay one thread a cell.
+#  - GT_MIN_EDGE (8, above): a 16 x 16 tile with an edge under 8 is mostly
+#    dead cells; such products (a matrix-vector product, N = 1 or M = 1)
+#    take a thin tile instead of one thread a cell: 16 cells along the long
+#    edge, all 256 threads staging 256-term slabs (16 words a thread in
+#    flight), so a K-long chain costs K / 256 global round trips instead of
+#    K / 16 + K mod 16. The chain itself (K dependent fmas) is the floor on
+#    every route.
+# -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1 restores the pass-3 routes (tile iff
+# both edges >= 8 for OP_GEMM and OP_AGK_GEMM_EPI, OP_GEMM_EPI never tiled,
+# the old kernels with full-slab staging): the A/B arm. Bits are the same on
+# both arms.
+comptime GEMM_DISPATCH_V1 = is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"]()
+comptime GT_MIN_K = 4
+#: the thin tile: GT_THIN cells along the long edge, GT_THIN_K-term slabs
+comptime GT_THIN = 16
+comptime GT_THIN_K = 256
+
+comptime GR_CELL = 0
+comptime GR_TILE = 1
+comptime GR_THIN_N = 2
+comptime GR_THIN_M = 3
+
+#: the epilogue kinds of seq_gemm_tile_kernel (comptime, so each kernel
+#: carries only its own epilogue's code): GK_PLAIN op_gemm (accumulate, row
+#: stride ldc); the others op_gemm_epi's follower on a dense C, as
+#: gemm_epi_value computes it: GK_BIAS bias, no activation; GK_BIAS_RELU bias
+#: then ReLU; GK_BIAS_ACT bias then the runtime activation (sigmoid, tanh,
+#: anything else); GK_L2GRAD (acc + f0 p3[ci]) / f1; GK_ACT_BWD acc act'(p3[ci]).
+comptime GK_PLAIN = 0
+comptime GK_BIAS = 1
+comptime GK_BIAS_RELU = 2
+comptime GK_BIAS_ACT = 3
+comptime GK_L2GRAD = 4
+comptime GK_ACT_BWD = 5
+
+
+@always_inline
+def seq_gemm_route(M: Int, N: Int, K: Int) -> Int:
+    """The kernel for an M x N x K product (GR_*), from the cost rule above."""
+    comptime if GEMM_DISPATCH_V1:
+        return GR_TILE if seq_gemm_tiled_on(M, N) else GR_CELL
+    if K < GT_MIN_K:
+        return GR_CELL
+    if M >= GT_MIN_EDGE and N >= GT_MIN_EDGE:
+        return GR_TILE
+    # the thin tile runs along the long edge
+    if N <= M:
+        return GR_THIN_N
+    return GR_THIN_M
+
+
+@always_inline
+def seq_gemm_epi_kind(epi: Int, act: Int) -> Int:
+    """GK_* for op_gemm_epi's (i9, i10). EPI_BIAS_ACT with activation 0 or
+    ACT_IDENTITY is a bias alone (gemm_epi_value applies no activation for 0;
+    act_value leaves z for identity); ReLU has its own kind; every other
+    activation code runs act_value at run time, as before. An unknown epi
+    code is gemm_epi_value's plain accumulator."""
+    if epi == EPI_BIAS_ACT:
+        if act == 0 or act == ACT_IDENTITY:
+            return GK_BIAS
+        if act == ACT_RELU:
+            return GK_BIAS_RELU
+        return GK_BIAS_ACT
+    if epi == EPI_L2GRAD:
+        return GK_L2GRAD
+    if epi == EPI_ACT_BWD:
+        return GK_ACT_BWD
+    return GK_PLAIN
+
+
+@always_inline
+def seq_gemm_tile_blocks(route: Int, M: Int, N: Int) -> Int:
+    if route == GR_THIN_N:
+        return ((M + GT_THIN - 1) // GT_THIN) * N
+    if route == GR_THIN_M:
+        return M * ((N + GT_THIN - 1) // GT_THIN)
+    return seq_gemm_tiled_blocks(M, N)
+
+
+@always_inline
+def _tile_epi[EK: Int](
+    acc: Float32, ci: Int, n: Int, epi_arg: Int, p3: FP, f0: Float32, f1: Float32,
+) -> Float32:
+    """gemm_epi_value's branch for kind EK, chosen at compile time (the same
+    operations on the same operands, so the same word)."""
+    var v = acc
+    comptime if EK == GK_BIAS:
+        v = add(acc, ld(p3, n))
+    elif EK == GK_BIAS_RELU:
+        # act_value's ACT_RELU branch on gemm_epi_value's z
+        var z = add(acc, ld(p3, n))
+        v = z if z > Float32(0.0) else Float32(0.0)
+    elif EK == GK_BIAS_ACT:
+        v = gemm_epi_value(acc, ci, n, EPI_BIAS_ACT, epi_arg, p3, f0, f1)
+    elif EK == GK_L2GRAD:
+        v = div(fma3(f0, ld(p3, ci), acc), f1)
+    elif EK == GK_ACT_BWD:
+        v = act_bwd_value(acc, ld(p3, ci), epi_arg)
+    return v
+
+
+def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
+    pa: FP, pb: FP, pc: FP, p3: FP, p4: FP,
+    m_rows: Int32, n_cols: Int32, k_len: Int32,
+    sam: Int32, sak: Int32, sbk: Int32, sbn: Int32,
+    accumulate: Int32, ldc: Int32, epi_arg: Int32, colsum: Int32, f0: Float32, f1: Float32,
+):
+    """One block of GT_TPB threads per TM x TN tile of C (TM TN <= GT_TPB;
+    the threads past TM TN only stage), TK-term slabs. Cell (m, n):
+    acc = (accumulate ? C[m, n] : +0.0); acc = fma3(A(m, k), B(k, n), acc),
+    k ascending (slabs ascending, terms ascending in a slab): gemm_dot's
+    chain term for term, so op_gemm's word. EK != GK_PLAIN: dense C (ldc = N,
+    no accumulate) and the epilogue _tile_epi[EK], op_gemm_epi's word.
+    colsum != 0: also p4[n] = div(sum_k B(k, n), f1), k ascending from +0.0
+    over the staged words, by the one thread of tile row 0 in column n
+    (OP_COLSUM_DIV's word; B dense). Each slab stores only its cnt live
+    terms (the fold reads no other slot), loaded along the operand's unit
+    stride; neither changes a word or the order it is folded in."""
+    comptime AS = TK + 1
+    comptime BS = TN + 1
+    comptime assert TM * TN <= GT_TPB, "seq_gemm_tile: more cells than threads"
+    comptime assert (TM * AS + TK * BS) * 4 <= 32768, "seq_gemm_tile: the slab page must fit every column"
+    var M = Int(m_rows)
+    var N = Int(n_cols)
+    var K = Int(k_len)
+    var SAM = Int(sam)
+    var SAK = Int(sak)
+    var SBK = Int(sbk)
+    var SBN = Int(sbn)
+    var a_rows_fast = SAM == 1 and SAK != 1
+    var b_terms_fast = SBK == 1 and SBN != 1
+    var ntn = (N + TN - 1) // TN
+    var b = Int(block_idx.x)
+    var tm = b // ntn
+    var tn = b - tm * ntn
+    var m0 = tm * TM
+    var n0 = tn * TN
+    var tid = Int(thread_idx.x)
+    var cell = tid < TM * TN
+    var r = tid // TN
+    var c = tid - r * TN
+    var m = m0 + r
+    var n = n0 + c
+    var live = cell and m < M and n < N
+    var ci = m * Int(ldc) + n
+    var acc = Float32(0.0)
+    comptime if EK == GK_PLAIN:
+        if live and accumulate != 0:
+            acc = ld(pc, ci)
+    var cs_on = colsum != 0 and cell and tm == 0 and r == 0 and n < N
+    var cs = Float32(0.0)
+    var a_s = stack_allocation[TM * AS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var b_s = stack_allocation[TK * BS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var k0 = 0
+    while k0 < K:
+        var cnt = min(TK, K - k0)
+        # the A slab: TM rows of cnt terms (a_s[row * AS + kk])
+        var q = tid
+        while q < TM * cnt:
+            var row: Int
+            var kk: Int
+            if a_rows_fast:
+                kk = q // TM
+                row = q - kk * TM
+            else:
+                row = q // cnt
+                kk = q - row * cnt
+            var v = Float32(0.0)
+            if m0 + row < M:
+                v = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
+            a_s[row * AS + kk] = v
+            q += GT_TPB
+        # the B slab: cnt terms of TN columns (b_s[kk * BS + col])
+        q = tid
+        while q < cnt * TN:
+            var kk: Int
+            var col: Int
+            if b_terms_fast:
+                col = q // cnt
+                kk = q - col * cnt
+            else:
+                kk = q // TN
+                col = q - kk * TN
+            var v = Float32(0.0)
+            if n0 + col < N:
+                v = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
+            b_s[kk * BS + col] = v
+            q += GT_TPB
+        barrier()
+        if live:
+            for i in range(cnt):
+                acc = fma3(a_s[r * AS + i], b_s[i * BS + c], acc)
+        if cs_on:
+            # op_colsum: acc = add(acc, ld(X, r * i2 + c)), r ascending
+            for i in range(cnt):
+                cs = add(cs, b_s[i * BS + c])
+        barrier()
+        k0 += TK
+    if live:
+        comptime if EK == GK_PLAIN:
+            st(pc, ci, acc)
+        else:
+            st(pc, ci, _tile_epi[EK](acc, ci, n, Int(epi_arg), p3, f0, f1))
+    if cs_on:
         st(p4, n, div(cs, f1))
