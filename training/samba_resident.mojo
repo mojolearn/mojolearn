@@ -740,7 +740,7 @@ def _backward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
             # A default attention block's backward through the transformer
             # tape entry (the same launches, the same bst fields); the
             # Mamba-3 blocks stay hand-chained.
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by @SHA@; code recoverable at @SHA@^.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
             var on_tape = s.t_w[j].opts.is_default()
             if on_tape:

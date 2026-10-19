@@ -117,7 +117,7 @@ from autograd.rules_transformer import (
 # lm-train-step, ours, full shape: NVIDIA L40S 34.611 -> 35.351 ms (1.02), AMD MI325X 42.939 -> 42.953 ms (1.00); average 1.01;
 # same loss_first_step 9.0155868. Every gradient and updated parameter equalled the hand walk word for word on Metal, NVIDIA
 # and AMD (44/44); training/checks/lm_tape_backward_check.mojo now compares against those stored digests.
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by @SHA@; code recoverable at @SHA@^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
 
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: each

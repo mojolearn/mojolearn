@@ -1791,7 +1791,7 @@ def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: Byt
 
     The forward and loss, then the backward half on the autograd tape
     (`_byte_backward_tape`)."""
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by @SHA@; code recoverable at @SHA@^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
     tr.released_eager_cells = 0
     var trace = IdentityTrace.disabled()
