@@ -163,6 +163,10 @@ def oracle_walk(c: MoeCase, inp: MoeInputs) raises -> MoeResult:
     a.i3 = c.renorm
     for t in range(T):
         op_moe_route(t, a)
+    # KEEP-ALIVE (Mojo frees a local at its last named use): `pr` is named
+    # only in `_fp(pr)` above, so without this use it is freed before the
+    # loop writes the probabilities through a.p5 (a heap write after free).
+    _ = len(pr)
     var h = List[Float32](length=P * F, fill=Float32(0.0))
     var b = Args()
     b.p0 = _fp(inp.x)
@@ -231,6 +235,7 @@ def oracle_walk(c: MoeCase, inp: MoeInputs) raises -> MoeResult:
     g.i2 = k
     for t in range(P * F):
         op_moeb_dgu(t, g)
+    _ = len(dh)  # keep-alive: g.p4 points into dh (read by every element above)
     var dx = List[Float32](length=T * D, fill=Float32(0.0))
     for tok in range(T):
         for d in range(D):
@@ -262,6 +267,7 @@ def oracle_walk(c: MoeCase, inp: MoeInputs) raises -> MoeResult:
     rv.i3 = c.renorm
     for t in range(T * En):
         op_moeb_route_vjp(t, rv)
+    _ = len(dw)  # keep-alive: rv.p3 points into dw (read by every element above)
     for tok in range(T):
         for d in range(D):
             var r = moe_bwd_cell(_fp(dl) + tok * En, 1, _fp(inp.wg) + d, D, En)
