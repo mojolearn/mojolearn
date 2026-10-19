@@ -45,7 +45,8 @@ from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_A
 from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
 from sequence.gemm_tiled import seq_gemm_epi_tiled_kernel
-from autograd.ops import OP_AGK_GEMM_EPI
+from autograd.ops import OP_AGK_GEMM_EPI, agk_colsum_args
+from sequence.ops import OP_COLSUM_DIV
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
 from sequence.adafactor import AF_COL_CHUNK_FOLD
@@ -1004,13 +1005,15 @@ struct DeviceExec(Exec, Movable):
         # tile as OP_GEMM (same chain, then op_gemm_epi's follower on the
         # stored word): the same words as the one-thread op_gemm_epi. The
         # hand MLP's OP_GEMM_EPI keeps its one-thread launch.
+        # Lane ag-pass3-impl: i11 = 1 also folds B's column sums into p4
+        # (the fused linear node's bias gradient) inside the tile.
         comptime if SEQ_GEMM_TILED and OP == OP_AGK_GEMM_EPI:
             if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
                 self.ctx.enqueue_function[seq_gemm_epi_tiled_kernel](
-                    a.p0, a.p1, a.p2, a.p3,
+                    a.p0, a.p1, a.p2, a.p3, a.p4,
                     Int32(a.i0), Int32(a.i1), Int32(a.i2),
                     Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
-                    Int32(a.i9), Int32(a.i10), a.f0, a.f1,
+                    Int32(a.i9), Int32(a.i10), Int32(a.i11), a.f0, a.f1,
                     grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
                     block_dim=(GT_TPB, 1, 1),
                 )
@@ -1027,6 +1030,11 @@ struct DeviceExec(Exec, Movable):
                 grid_dim=((n + TPB - 1) // TPB, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
+        comptime if OP == OP_AGK_GEMM_EPI:
+            # the GEMM ran off the tile (one-thread launch, Apple): its
+            # column sums are the hand path's own OP_COLSUM_DIV launch
+            if a.i11 != 0:
+                self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
 
     def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int, wf: IP, woff: Int, nonce: Int32) raises:
         """`team_kernel[OP]` (lane neural-pass143): one block of tpb threads

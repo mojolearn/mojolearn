@@ -126,7 +126,7 @@ class Pipelines(Base):
         self.assertFalse(r.recorded("publish-macos"))
         self.assertIn("gpu-column-nvidia", order)
         self.assertIn("gpu-column-amd", order)
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "nvidia"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "nvidia", "nvidia-ptx"])
         text = "\n".join(r.lines)
         self.assertIn("macos: FAILED at macos-smoke", text)
         self.assertIn("core-linux: PUBLISHED", text)
@@ -145,7 +145,7 @@ class Pipelines(Base):
         r.step_publish_macos = pub
         self.assertEqual(r.go(), 0)
         self.assertLess(order.index("publish-macos"), order.index("linux-assemble"))
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "macos", "nvidia"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "macos", "nvidia", "nvidia-ptx"])
 
     def test_a_rerun_resumes_only_what_is_not_done(self):
         r, _ = self.staged(fail={"linux-pack"})
@@ -159,7 +159,7 @@ class Pipelines(Base):
         self.assertIn("linux-pack", order)
         # the finish line and the record run again for the newly published platforms
         self.assertIn("finish-line", order)
-        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "macos", "nvidia"])
+        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "macos", "nvidia", "nvidia-ptx"])
         self.assertNotIn("linux-pack", r2.state.get("failures", {}))
 
     def test_without_publish_both_pipelines_are_held(self):
@@ -390,7 +390,7 @@ class Status(Base):
         self.assertIn("rerun: relaunch it", text)
         self.assertRegex(text, r"hip-gfx942 +running +pid ")
         self.assertRegex(text, r"nvidia +owed +no final Linux wheel yet")
-        self.assertIn("== macos: failed at macos-smoke, core-linux: owed, nvidia: owed, amd: owed", text)
+        self.assertIn("== macos: failed at macos-smoke, core-linux: owed, nvidia: owed, nvidia-ptx: owed, amd: owed", text)
         self.assertIn("a rerun would:", text)
 
     def test_the_flag_parses_alone(self):

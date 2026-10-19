@@ -26,11 +26,11 @@ def inputs(root, include_byte_lm=False):
     return dirs, root / 'sets/cuda/sm_80'
 
 
-def pack(root, dirs, wheels='nvidia', extra=()):
+def pack(root, dirs, wheels='nvidia,nvidia-ptx', extra=()):
     args = [arg for directory in dirs for arg in ('--set', directory)]
     args += ['--wheels', wheels, '--out', str(root/'out'), *extra]
     assert pw.main(args, _gates=False) == 0
-    return next((root/'out').glob('mojolearn_nvidia-*.whl'))
+    return next((root/'out').glob('mojolearn_nvidia_ptx-*.whl'))
 
 
 def rewrite(path, files):
@@ -48,19 +48,26 @@ def test_ptx_set_lands_at_cuda_ptx_with_its_bytes_and_a_native_marker(tmp_path):
         assert files[prefix+row['file']]==(ptx/row['file']).read_bytes()
     assert files[prefix+pw.gpu_plugins.BASELINE_MANIFEST]==manifest
     marker=json.loads(next(data for name,data in files.items() if name.endswith('/gpu_plugin.json')))
-    assert marker['arches']==['sm_89']
+    assert marker['arches']==['sm_80']
     assert marker['bundled_ptx']==dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
-    assert marker['ptx']==dict(arch='sm_80',directory='cuda_ptx')
-    assert not wheel_api_audit.split_audit([wheel])['problems']
-    assert [p.name.split('-')[0] for p in (tmp_path/'out').glob('*.whl')]==['mojolearn_nvidia']
+    assert marker['role']=='payload'
+    assert marker['code_format']=='ptx'
+    wheels=list((tmp_path/'out').glob('*.whl'))
+    assert not wheel_api_audit.split_audit(wheels)['problems']
+    assert sorted(p.name.split('-')[0] for p in wheels)==['mojolearn_nvidia','mojolearn_nvidia_ptx']
+    native=members(next(p for p in wheels if p.name.startswith('mojolearn_nvidia-')))
+    native_marker=json.loads(next(b for n,b in native.items() if n.endswith('/gpu_plugin.json')))
+    assert native_marker['bundled_ptx']==marker['bundled_ptx']
+    assert not any(n.startswith(prefix) for n in native)
 
 
-def test_no_separate_ptx_payload_or_bundle_flags_remain():
+def test_ptx_payload_owns_only_its_slot_without_bundle_flags():
     gp=pw.gpu_plugins
     assert 'nvidia-ptx80' not in gp.PAYLOADS
-    assert [r['profile'] for r in gp.distribution_rows(include_experimental=True)]==['nvidia','amd']
-    assert gp.owns_member('nvidia','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
-    assert gp.owns_member('nvidia','mojolearn/cuda/sm_80/identical/_mojolearn_x.so')
+    assert [r['profile'] for r in gp.distribution_rows(include_experimental=True)]==['nvidia','amd','nvidia-ptx']
+    assert gp.owns_member('nvidia-ptx','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
+    assert gp.owns_member('nvidia-ptx','mojolearn/cuda/sm_80/identical/_mojolearn_x.so')
+    assert not gp.owns_member('nvidia','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
     assert gp.installed_member('mojolearn/cuda/sm_80/_mojolearn_x.so')=='mojolearn/cuda_ptx/sm_80/_mojolearn_x.so'
     assert not gp.owns_member('amd','mojolearn/cuda_ptx/sm_80/_mojolearn_x.so')
     assert gp.required_sets('cuda')=={('cuda','sm_89'),('cuda','sm_80')}

@@ -2,6 +2,12 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.53 (published 2026-10-19)
+
+- Linux installs include NVIDIA PTX through the automatically installed, exact-version
+  `mojolearn-nvidia-ptx` dependency. Native NVIDIA and PTX payloads each fit within PyPI's per-file limit.
+  The installation command remains `pip install mojolearn`.
+
 ## 0.8.52 (published 2026-10-18)
 
 - `SGDClassifier`, `SGDRegressor`, `Perceptron` and the passive-aggressive estimators fit small and unscaled datasets as

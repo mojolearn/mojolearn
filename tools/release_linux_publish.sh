@@ -158,6 +158,7 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
                 || NOTES="$NOTES Installed per-architecture qualification was not run for this release."
   # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): one package per release.
   case "$(basename "$WHL")" in
+    mojolearn_nvidia_ptx-*) NOTES="mojolearn-nvidia-ptx: the NVIDIA PTX set of mojolearn $VERSION for Linux x86-64, installed through the exact dependency of mojolearn-nvidia; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
     mojolearn_nvidia-*) NOTES="mojolearn-nvidia: the NVIDIA (CUDA) sets of mojolearn $VERSION for Linux x86-64, installed by pip install mojolearn (the Linux core $VERSION requires it; published before the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
     mojolearn_amd-*) NOTES="mojolearn-amd: the AMD (ROCm/HIP) sets of mojolearn $VERSION for Linux x86-64, installed by pip install mojolearn (the Linux core $VERSION requires it; published before the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
     *manylinux*) if python3 -c 'import sys,zipfile; sys.exit(0 if any(n.endswith(".dist-info/gpu_plugins.json") for n in zipfile.ZipFile(sys.argv[1]).namelist()) else 1)' "$WHL"; then

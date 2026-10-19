@@ -9,15 +9,15 @@
         --set bench/results/wheels/<stamp3>-amd/sets/hip \\
         --out python/dist
 
-THREE NATIVE WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py):
-core and two vendor packages. NVIDIA carries Ada and Hopper together; AMD
-carries gfx942. The core requires both vendors, which pin the core exactly.
-Default pip installation still includes every released native target.
+FOUR WHEELS BY DEFAULT (python/mojolearn/gpu_plugins.py): core, NVIDIA
+native sm_89, AMD gfx942 and NVIDIA PTX sm_80. The core requires both
+vendors, and NVIDIA requires PTX, all pinned to the same version.
+Default pip installation includes every released target.
 
-`--wheels nvidia` emits the complete NVIDIA vendor wheel: its native sets
-and the PTX slot (`cuda/sm_80`, installed at `cuda_ptx/sm_80`), which is a
-regular release set with its own build proof (Andrew 2026-10-10: PTX is a
-normal target; no flag). The vendor marker binds the PTX manifest's SHA256.
+`--wheels nvidia,nvidia-ptx` emits the native NVIDIA wheel and its exactly
+pinned PTX dependency. The PTX slot (`cuda/sm_80`, installed at
+`cuda_ptx/sm_80`) has its own build proof. Both package markers bind the
+same PTX manifest SHA256; native and PTX files have disjoint owners.
 Every wheel is checked against PyPI's 100 MiB file limit here, at pack time;
 an oversize wheel fails the pack with its per-set compressed sizes.
 Kernel bytes are unchanged. Native roots move to cuda_native/ and hip_native/
@@ -985,7 +985,7 @@ def main(argv=None, _gates=True):
                     help="platform tag; default " + SPLIT_PLAT + " for the split profiles, "
                          "linux_x86_64 (for audit.sh to retag) for the combined ones")
     # DEVIATION 2290: `release-0.6.1` is the deprecated alias of release-linux3.
-    # THE DEFAULT IS THE SPLIT (2026-09-25): three wheels, the core and one
+    # THE DEFAULT IS THE SPLIT: the core, the PTX payload and one
     # plugin per GPU vendor. `generic` and `release-linux3` still pack the one
     # combined wheel and are what tools/release.py asks for by name.
     ap.add_argument('--profile', choices=SPLIT_PROFILES + ('generic', RELEASE_PROFILE, 'release-0.6.1'),
@@ -1052,7 +1052,16 @@ def main(argv=None, _gates=True):
         # core alone (host bindings and runtime) from whichever release sets
         # were given. Either way every set given is proven like release-linux3's,
         # the PTX set by its own leg's proof.
-        required = (split_release_slots(plugin_vendors) if plugin_vendors
+        package_slots = set()
+        for kind in kinds:
+            if kind == gpu_plugins.CORE_PROFILE:
+                continue
+            package = gpu_plugins.package(kind)
+            if package["role"] == "vendor":
+                package_slots.update(split_release_slots({package["vendor"]}))
+            else:
+                package_slots.update((package["vendor"], slot[0]) for slot in package["slots"])
+        required = (package_slots if plugin_vendors
                     else {("cuda", "sm_90") if k in RELEASE_HOPPER_ALTS else k for k in keys}
                     & (RELEASE_061_SETS | RELEASE_SPLIT_SETS))
         inventory = release_inventory(sets, a.build_proof, version, required=required,
@@ -1418,8 +1427,8 @@ def split_kinds(text, vendors_given, keys=None):
     when given, else the core plus the plugin of every vendor a set was given
     for. A plugin asked for with no set of its vendor is refused."""
     if not text:
-        kinds = [gpu_plugins.CORE_PROFILE] + [row["profile"] for v, row in gpu_plugins.PLUGINS.items()
-                                             if v in vendors_given]
+        kinds = [gpu_plugins.CORE_PROFILE] + [row["profile"] for row in gpu_plugins.distribution_rows()
+                                             if row["vendor"] in vendors_given]
     else:
         kinds = [k.strip() for k in text.split(",") if k.strip()]
         unknown = [k for k in kinds if k not in WHEEL_KINDS]
@@ -1437,7 +1446,7 @@ def split_kinds(text, vendors_given, keys=None):
                 arches = [a for v, a in keys if v == row["vendor"] and a in row["arches"]]
                 if not gpu_plugins.valid_arches(kind, arches):
                     raise SystemExit(f"pack_wheel: {kind} requires one set per registered architecture slot; found {arches}")
-                if (row.get("ptx") and row.get("ptx_shipped", True)   # the PTX slot is out while over PyPI's limit (2026-10-12)
+                if (row.get("ptx") and row.get("ptx_shipped", True)
                         and (row["vendor"], row["ptx"]["arch"]) not in keys):
                     raise SystemExit(f"pack_wheel: {kind} requires one set per registered architecture slot, "
                                      f"the PTX slot {row['vendor']}/{row['ptx']['arch']} included; found {arches}")
@@ -1512,7 +1521,7 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
                 pgen[pdist + arc[len(dist):]] = data
             try:
                 marker = gpu_plugins.package_marker(kind, version, arches,
-                                                    bundled_ptx=bundled_ptx if row.get("ptx") else None)
+                                                    bundled_ptx=bundled_ptx if row.get("ptx") or row["code_format"] == "ptx" else None)
             except ValueError as exc:
                 raise SystemExit(f"pack_wheel: {row['distribution']}: {exc}") from exc
             pgen[f"{pdist}/{gpu_plugins.PLUGIN_MARKER}"] = (json.dumps(

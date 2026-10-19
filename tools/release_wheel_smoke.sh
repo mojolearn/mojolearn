@@ -362,7 +362,7 @@ for _p in ${PLUGINS[@]+"${PLUGINS[@]}"}; do
     _p=$(cd "$(dirname "$_p")" && pwd)/$(basename "$_p")
     _b=$(basename "$_p")
     case "$_b" in
-        "mojolearn_nvidia-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm89-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm90-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd_gfx942-$VERSION-"*-manylinux*_x86_64.whl) ;;
+        "mojolearn_nvidia-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_ptx-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm89-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_nvidia_sm90-$VERSION-"*-manylinux*_x86_64.whl|"mojolearn_amd_gfx942-$VERSION-"*-manylinux*_x86_64.whl) ;;
         *) die "$_b is not a mojolearn_nvidia/mojolearn_amd $VERSION manylinux x86_64 plugin (the $_pfx plugin of --vendor $VENDOR is required)" ;;
     esac
     case " $PLUGIN_BASES " in *" ${_b%%-*}-"*) die "two --plugin wheels of ${_b%%-*}" ;; esac

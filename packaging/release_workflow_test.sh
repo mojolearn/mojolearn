@@ -134,7 +134,7 @@ ZIP
   ( cd "$1/stage" && shasum -a 256 "$2" > "$2.sha256" ); }
 stage_payloads(){
   local profile
-  for profile in nvidia amd nvidia_sm89 nvidia_sm90 amd_gfx942; do
+  for profile in nvidia amd nvidia_ptx; do
     stage_zip "$1" "mojolearn_${profile}-0.3.0-py3-none-manylinux_2_35_x86_64.whl"
   done
 }
@@ -186,10 +186,12 @@ echo "== admit: the split Linux set (core + plugins) =="
 CORE=mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl
 NVIDIA=mojolearn_nvidia-0.3.0-py3-none-manylinux_2_35_x86_64.whl
 AMD=mojolearn_amd-0.3.0-py3-none-manylinux_2_35_x86_64.whl
+PTX=mojolearn_nvidia_ptx-0.3.0-py3-none-manylinux_2_35_x86_64.whl
 B=$(mkbox 0.3.0); stage_complete "$B"
 run_admit "$B" && [ -f "$B/python/dist/$CORE" ] && [ -f "$B/python/dist/$NVIDIA" ] && [ -f "$B/python/dist/$AMD" ] \
   && grep -q '"release-split"' "$B/verifier-invocation.json" && grep -q "$AMD" "$B/split-audit-invocation.txt" \
   && grep -qx 'plugins=\["amd","nvidia"\]' "$B/gho.txt" \
+  && grep -qx 'payloads=\["nvidia-ptx"\]' "$B/gho.txt" && [ -f "$B/python/dist/$PTX" ] \
   && ok "the split set is admitted, split-audited and qualified as a set" || no "split set admitted" "$(tail -3 "$B/admit.out")"
 
 B=$(mkbox 0.3.0); stage_complete "$B"; rmdir "$B/stage/qualification"
@@ -205,6 +207,9 @@ refuses "$B" "a split core without the AMD plugin is REFUSED" "complete Linux re
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$AMD"
 refuses "$B" "a split core without the NVIDIA plugin is REFUSED" "complete Linux release"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$AMD"; stage_zip "$B" "$NVIDIA"
+refuses "$B" "a split set without the PTX dependency is REFUSED" "complete Linux release"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage_zip "$B" "$NVIDIA"
 refuses "$B" "a plugin beside a COMBINED wheel is REFUSED" "split-package marker"
@@ -228,17 +233,18 @@ B=$(mkbox 0.3.0); run_digest "$B" \
 B=$(mkbox 0.3.0); stage "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"
 run_admit "$B" && run_digest "$B" \
   && [ -s "$B/verifier-invocation.json" ] \
-  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 7 ] \
+  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 5 ] \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
-  && ok "seven wheels, macOS FIRST in the manifest" \
-  || no "two-wheel manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
+  && ok "five wheels, macOS FIRST in the manifest" \
+  || no "five-wheel manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
 
 B=$(mkbox 0.3.0); stage_complete "$B"
 run_admit "$B" && run_digest "$B" \
-  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 7 ] \
+  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 5 ] \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
   && sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -q "  $AMD\$" \
-  && ok "the split set's seven wheels, macOS FIRST, plugins in the manifest" \
+  && sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -q "  $PTX\$" \
+  && ok "the split set's five wheels, macOS FIRST, plugins and PTX in the manifest" \
   || no "split manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
 
 echo "== publish =="

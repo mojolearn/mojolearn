@@ -16,7 +16,7 @@ adaptive division by 5. Shuffling is ours: a splitmix64 Fisher-Yates per
 epoch on the host (the reference's is numpy's RandomState, which is not
 restated).
 """
-from sequence.ops import FP, Args, add, fma3, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
+from sequence.ops import FP, Args, add, fma3, gemm_dot, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.adafactor import AF_NORM_BLOCK, af_fold_parts
@@ -235,6 +235,82 @@ def gemm_epi_tail(t: Int, a: Args):
 
 def op_gemm_epi_tail(t: Int, a: Args):
     gemm_epi_tail(t, a)
+
+
+# ------------------------------------------------------------------ the tape's in-register epilogue
+# Lane ag-pass3-impl (AMD phase-2 profile: the pass-2 tiled OP_AGK_GEMM_EPI
+# cost 2x the plain tiled OP_GEMM per launch on MI325X, 636 vs 316 ms for the
+# same five GEMMs a batch). The follower ran AFTER the store: st(C), then an
+# Args record and op_bias / op_act / op_l2grad / op_act_bwd re-loading the
+# word from C and storing it again (a second pass over the output and two
+# Args records a thread). Here the follower's arithmetic is applied to the
+# accumulator in registers and the cell is stored once. SAME BITS: the
+# reloaded word was ld(st(acc)) = ftz(ftz(acc)) = acc (fma3 already flushes),
+# and every other operand and operation is the follower's, in its order.
+# The bodies below are op_act's and op_act_bwd's verbatim (the hand path's
+# own ops are left as they are).
+@always_inline
+def act_value(z_in: Float32, k: Int) -> Float32:
+    """op_act's body on a value: act(z), activation code k (not softmax)."""
+    var z = z_in
+    if k == ACT_LOGISTIC:
+        z = ftz(identical_sigmoid(z))
+    elif k == ACT_TANH:
+        z = ftz(identical_tanh(z))
+    elif k == ACT_RELU:
+        z = z if z > Float32(0.0) else Float32(0.0)
+    return z
+
+
+@always_inline
+def act_bwd_value(d_in: Float32, z: Float32, k: Int) -> Float32:
+    """op_act_bwd's body on values: delta times act'(z), z the activation."""
+    var d = d_in
+    if k == ACT_LOGISTIC:
+        d = mul(mul(d, z), sub(Float32(1.0), z))
+    elif k == ACT_TANH:
+        d = mul(d, sub(Float32(1.0), mul(z, z)))
+    elif k == ACT_RELU:
+        if z == Float32(0.0):
+            d = Float32(0.0)
+    return d
+
+
+@always_inline
+def gemm_epi_value(
+    acc: Float32, ci: Int, n: Int, epi: Int, epi_arg: Int, p3: FP, f0: Float32, f1: Float32,
+) -> Float32:
+    """gemm_epi_tail's result for dense cell ci (column n) computed from the
+    GEMM's accumulator: EPI_BIAS_ACT act(acc + p3[n]) (epi_arg the activation,
+    0 none); EPI_L2GRAD (acc + f0 p3[ci]) / f1; EPI_ACT_BWD acc act'(p3[ci]);
+    otherwise acc."""
+    if epi == EPI_BIAS_ACT:
+        var z = add(acc, ld(p3, n))
+        if epi_arg != 0:
+            z = act_value(z, epi_arg)
+        return z
+    if epi == EPI_L2GRAD:
+        return div(fma3(f0, ld(p3, ci), acc), f1)
+    if epi == EPI_ACT_BWD:
+        return act_bwd_value(acc, ld(p3, ci), epi_arg)
+    return acc
+
+
+@always_inline
+def op_agk_gemm_epi(t: Int, a: Args):
+    """OP_AGK_GEMM_EPI's one-thread body (the launch where the tile is off:
+    an edge under GT_MIN_EDGE, Apple): op_gemm's chain for cell t, then
+    gemm_epi_value, one store. The same word as op_gemm_epi. Dense C
+    (i8 = i1), no accumulate (i7 = 0), as the tape launches it."""
+    var n_cols = a.i1
+    var m = t // n_cols
+    var n = t - m * n_cols
+    var ci = m * a.i8 + n
+    var acc = Float32(0.0)
+    if a.i7 != 0:
+        acc = ld(a.p2, ci)
+    acc = gemm_dot(a.p0, m * a.i3, a.i4, a.p1, n * a.i6, a.i5, a.i2, acc)
+    st(a.p2, ci, gemm_epi_value(acc, ci, n, a.i9, a.i10, a.p3, a.f0, a.f1))
 
 
 def op_colsum_div(t: Int, a: Args):

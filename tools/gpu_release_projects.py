@@ -96,7 +96,7 @@ def classify(wheels, *, version=None, require_complete=False):
     if require_complete:
         expected = {r["profile"] for r in gpu_plugins.distribution_rows()}
         if profiles != expected or len(core_wheels) != 1:
-            raise ValueError("complete Linux release requires one core and both native vendor packages")
+            raise ValueError("complete Linux release requires one core and every registered vendor and payload package")
     return dict(core=bool(core_wheels), plugins=sorted(roles["vendor"]),
                 payloads=sorted(roles["payload"]), version=next(iter(versions)))
 

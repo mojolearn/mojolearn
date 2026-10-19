@@ -4,11 +4,10 @@
 
 The core pins mojolearn-nvidia and mojolearn-amd automatically. Each vendor
 wheel contains its registered architecture sets; architecture selection
-happens in the loader. mojolearn-nvidia supports the PTX set
-(`cuda_ptx/sm_80`) as a regular slot beside its native sets; a release
-omits it while `ptx_shipped=False` (PyPI's file-size limit). (Andrew
-2026-10-10: PTX is a normal target; no flag). Native directory depth stays
-unchanged to preserve binding RUNPATHs.
+happens in the loader. mojolearn-nvidia requires mojolearn-nvidia-ptx at
+the same version. The PTX package owns cuda_ptx/sm_80, and the NVIDIA
+vendor marker binds its manifest. PTX is a normal target; no flag.
+Native directory depth stays unchanged to preserve binding RUNPATHs.
 """
 
 #: The NVIDIA PTX slot: one rounding-pinned PTX build for compute capability
@@ -17,6 +16,7 @@ unchanged to preserve binding RUNPATHs.
 #: depth (mojolearn/cuda_ptx/sm_80/...), so every RUNPATH resolves the same.
 PTX_ARCH = "sm_80"
 PTX_DIRECTORY = "cuda_ptx"
+PTX_PROFILE = "nvidia-ptx"
 
 PLUGINS = {
     "cuda": dict(distribution="mojolearn-nvidia", wheel_name="mojolearn_nvidia",
@@ -30,12 +30,10 @@ PLUGINS = {
         # the PTX slot. Andrew 2026-10-10: PTX is a normal target; no flag.
         arches=("sm_89", "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_103", "sm_103a",
                 "sm_120", "sm_120a", "sm_121", "sm_121a"), slots=(("sm_89",),),
-        # Andrew 2026-10-10: PTX is a normal target; no flag. The PTX slot is required like sm_89 ...
-        # ... once PyPI raises the mojolearn-nvidia file limit: with cuda_ptx/sm_80 beside sm_89 the 0.8.39
-        # wheel packed at 134.1 MiB (67.0 + 67.0 MiB compressed), over the 100 MiB limit, exactly the sm_90a
-        # case above. `ptx_shipped=False` (2026-10-12) keeps the slot registered (a wheel that carries it
-        # loads it) but lets a release ship without it; flip it back with the limit increase.
-        ptx=dict(arch=PTX_ARCH, directory=PTX_DIRECTORY), ptx_shipped=False,
+        # 2026-10-19: native + PTX exceeded PyPI's per-file limit (134.1 MiB
+        # in 0.8.39). A separate, exactly pinned distribution owns the PTX
+        # files at the existing location; the vendor still binds their manifest.
+        ptx=dict(arch=PTX_ARCH, directory=PTX_DIRECTORY), ptx_shipped=True,
         directory="cuda_native", code_format="native", release_enabled=True),
     "hip": dict(distribution="mojolearn-amd", wheel_name="mojolearn_amd",
         profile="amd", label="AMD (ROCm/HIP)", vendor="hip", role="vendor",
@@ -43,12 +41,15 @@ PLUGINS = {
         code_format="native", release_enabled=True),
 }
 PAYLOADS = {row["profile"]: row for row in PLUGINS.values()}  # glue: index vendor package metadata by release profile
+PAYLOADS[PTX_PROFILE] = dict(
+    distribution="mojolearn-nvidia-ptx", wheel_name="mojolearn_nvidia_ptx",
+    profile=PTX_PROFILE, label="NVIDIA PTX", vendor="cuda", role="payload",
+    arches=(PTX_ARCH,), slots=((PTX_ARCH,),), directory=PTX_DIRECTORY,
+    ptx=None, code_format="ptx", release_enabled=True)
 
 
 def distribution_rows(include_experimental=False):
-    """Every vendor distribution. There is no experimental payload any more
-    (the PTX set is a slot of mojolearn-nvidia); the argument is kept for
-    callers that still pass it."""
+    """Every released vendor and payload distribution."""
     return tuple(PAYLOADS.values())
 
 
@@ -70,6 +71,8 @@ def package(profile):
 
 
 def payload_for(vendor, arch):
+    if vendor == "cuda" and arch == PTX_ARCH:
+        return PAYLOADS[PTX_PROFILE]
     for row in PAYLOADS.values():  # glue: look up metadata for a vendor and architecture target
         if row["vendor"] == vendor and (arch in row["arches"] or is_ptx_arch(row, arch)):
             return row
@@ -88,11 +91,11 @@ def set_directory(row, arch):
 
 
 def required_sets(vendor):
-    """{(vendor, arch)} a complete vendor wheel carries: the first spelling
-    of every native slot, plus the PTX slot when enabled for shipping."""
+    """{(vendor, arch)} a complete vendor installation carries: the first
+    spelling of every native slot, plus its required PTX dependency."""
     row = PLUGINS[vendor]
     out = {(vendor, slot[0]) for slot in row["slots"]}  # glue: one entry per registered slot
-    if row.get("ptx") and row.get("ptx_shipped", True):   # PTX slot out of the wheel while over PyPI's limit (2026-10-12)
+    if row.get("ptx") and row.get("ptx_shipped", True):
         out.add((vendor, row["ptx"]["arch"]))
     return out
 
@@ -102,8 +105,8 @@ def native_directory(vendor):
 
 
 def payload_requirements(vendor, version):
-    """Vendor projects have no architecture-package dependencies."""
-    return []
+    """The NVIDIA vendor installs its PTX payload at the same version."""
+    return [f"{PAYLOADS[PTX_PROFILE]['distribution']}=={version}"] if vendor == "cuda" else []
 
 
 def member_payload(arcname):
@@ -115,7 +118,7 @@ def member_payload(arcname):
             return key
         if (row.get("ptx") and parts[1] in (row["vendor"], row["ptx"]["directory"])
                 and parts[2] == row["ptx"]["arch"]):
-            return key
+            return PTX_PROFILE
     if parts[1] in (*PLUGINS, "cuda_native", "hip_native", "cuda_ptx"):
         raise ValueError(f"unregistered GPU payload member: {arcname}")
     return None
@@ -204,19 +207,19 @@ def core_marker(version):
 def plugin_marker(vendor, version, arches, bundled_ptx=None):
     """`arches` are the NATIVE architecture directories. A vendor with a PTX
     slot (NVIDIA) must name its PTX set's manifest digest in `bundled_ptx`
-    ({"manifest_sha256": hex}); the PTX slot is part of every such wheel."""
+    ({"manifest_sha256": hex}); the exact-version PTX dependency owns it."""
     row = PLUGINS[vendor]
     marker = {"schema": PLUGIN_SCHEMA, "role": "vendor", "vendor": vendor, "version": version,
             "distribution": row["distribution"], "requires": f"{CORE_DISTRIBUTION}=={version}",
             "arches": sorted(arches), "directory": row["directory"], "code_format": "native"}  # glue: canonicalize architecture identifiers in metadata
     if row.get("ptx"):
         if bundled_ptx is None and row.get("ptx_shipped", True):
-            raise ValueError(f"{row['distribution']} carries the PTX slot; its PTX manifest digest is required")
+            raise ValueError(f"{row['distribution']} requires the PTX slot; its PTX manifest digest is required")
         if bundled_ptx is not None:
             validate_bundle_descriptor(bundled_ptx)
             marker["bundled_ptx"] = dict(bundled_ptx)
-        # the slot stays named in the marker; without `bundled_ptx` the wheel ships without it (ptx_shipped=False,
-        # PyPI's 100 MiB limit, 2026-10-12) and the loader runs the native sets alone
+        # Keep the established marker field so the loader validates the same
+        # bytes regardless of which distribution owns the PTX directory.
         marker["ptx"] = dict(row["ptx"])
     elif bundled_ptx is not None:
         raise ValueError("only the NVIDIA vendor package carries a PTX slot")
@@ -226,8 +229,11 @@ def plugin_marker(vendor, version, arches, bundled_ptx=None):
 def package_requirements(profile, version):
     if profile == CORE_PROFILE:
         return core_requirements(version)
-    package(profile)  # Validate that the profile is registered.
-    return [f"{CORE_DISTRIBUTION}=={version}"]
+    row = package(profile)
+    dependencies = [f"{CORE_DISTRIBUTION}=={version}"]
+    if row["role"] == "vendor":
+        dependencies += payload_requirements(row["vendor"], version)
+    return dependencies
 
 
 def package_marker(profile, version, arches=(), bundled_ptx=None):
@@ -235,7 +241,16 @@ def package_marker(profile, version, arches=(), bundled_ptx=None):
         if bundled_ptx is not None:
             raise ValueError("only the NVIDIA vendor package carries a PTX slot")
         return core_marker(version)
-    package(profile)  # Validate that the profile is registered.
+    row = package(profile)
+    if row["role"] == "payload":
+        if bundled_ptx is None:
+            raise ValueError("the PTX payload must bind its manifest digest")
+        validate_bundle_descriptor(bundled_ptx)
+        return dict(schema=PLUGIN_SCHEMA, role="payload", vendor=row["vendor"],
+                    version=version, distribution=row["distribution"],
+                    requires=f"{CORE_DISTRIBUTION}=={version}", arches=sorted(arches),  # glue: canonicalize build-time package metadata
+                    directory=row["directory"], code_format=row["code_format"],
+                    bundled_ptx=dict(bundled_ptx))
     return plugin_marker(by_profile(profile), version, arches, bundled_ptx=bundled_ptx)
 
 
@@ -307,8 +322,7 @@ def validate_bundle_descriptor(descriptor):
 
 
 def owns_member(profile, member, bundled_ptx=None):
-    """Does the package `profile` own the wheel member `member`? The PTX
-    slot is owned by the NVIDIA vendor package like its native sets."""
+    """Does the package `profile` own the wheel member `member`?"""
     return member_payload(member) == profile
 
 

@@ -29,7 +29,7 @@ from sequence.dispatch import apply
 from sequence.ets_team import IDN_ETS_TEAM, ets_team_replay, ets_team_replay_applies
 from sequence.exec_trait import Exec
 from sequence.launch_profile import launch_profile_level, launch_profile_record
-from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART
+from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART, agk_colsum_args
 from std.time import perf_counter_ns
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.ops import (
@@ -270,6 +270,11 @@ struct HostExec(Exec, Movable):
         comptime if OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI:
             self._gemm(a)
             self._launch[OP_GEMM_EPI_TAIL](a, n)
+            comptime if OP == OP_AGK_GEMM_EPI:
+                # i11 = 1 (lane ag-pass3-impl): B's column sums, the device
+                # tile's epilogue, as the hand path's OP_COLSUM_DIV
+                if a.i11 != 0:
+                    self.launch[OP_COLSUM_DIV](agk_colsum_args(a), a.i1)
             return
         comptime if OP == OP_CELL_FWD_H:
             # h_prev @ W_hh^T into GH, + b_hh, then the cell

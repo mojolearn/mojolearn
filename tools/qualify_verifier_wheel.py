@@ -16,7 +16,7 @@ import zipfile
 #: (python/mojolearn/gpu_plugins.py; spelled here because this driver ships
 #: alone to the box, stdlib only, with no checkout beside it).
 PLUGIN_DISTRIBUTIONS = {name.replace("-", "_"): name for name in (
-    "mojolearn-nvidia", "mojolearn-amd")}
+    "mojolearn-nvidia", "mojolearn-amd", "mojolearn-nvidia-ptx")}
 
 
 def admit(kind, doc, models):
@@ -205,7 +205,7 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
 LOCATE_INSTALLED = """import importlib.metadata as md,importlib.util,json
 spec=importlib.util.find_spec('mojolearn')
 dists={}
-for n in ('mojolearn','mojolearn-nvidia','mojolearn-amd'):
+for n in ('mojolearn','mojolearn-nvidia','mojolearn-amd','mojolearn-nvidia-ptx'):
     try: dists[n]=md.version(n)
     except md.PackageNotFoundError: dists[n]=None
 print(json.dumps(dict(package=list(spec.submodule_search_locations)[0] if spec else None,distributions=dists)))

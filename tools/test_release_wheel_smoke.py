@@ -497,16 +497,17 @@ class SmokeTests(unittest.TestCase):
         self.assertIn('plugin_sha256=', (out / 'smoke.txt').read_text())
         self.assertIn('--plugin', (out / 'box.sh').read_text())
 
-    def test_split_ssh_path_ships_both_plugins_as_pip_installs_them(self):
-        """The core requires both plugins, so a release column installs all
-        three: every --plugin is shipped, hashed, installed and named."""
-        nvidia, amd = self.plugin(), self.plugin('mojolearn_amd')
-        r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(amd), '--plugin', str(nvidia), vendor='hip')
+    def test_split_ssh_path_ships_all_dependencies_as_pip_installs_them(self):
+        """Every dependency is shipped, hashed, installed and named."""
+        nvidia, amd, ptx = self.plugin(), self.plugin('mojolearn_amd'), self.plugin('mojolearn_nvidia_ptx')
+        r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(amd), '--plugin', str(nvidia),
+                               '--plugin', str(ptx), vendor='hip')
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         receipt = json.loads((out / 'results.json').read_text())
-        self.assertEqual(sorted(p['wheel'].rsplit('/', 1)[-1] for p in receipt['plugins']), sorted([nvidia.name, amd.name]))
+        self.assertEqual(sorted(p['wheel'].rsplit('/', 1)[-1] for p in receipt['plugins']),
+                         sorted([nvidia.name, amd.name, ptx.name]))
         box = (out / 'box.sh').read_text()
-        self.assertEqual(box.count(f'--plugin {self.dir / "box" / "wheel-smoke"}/'), 2)
+        self.assertEqual(box.count(f'--plugin {self.dir / "box" / "wheel-smoke"}/'), 3)
         self.assertIn(nvidia.name, (out / 'smoke.txt').read_text())
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
 
@@ -569,11 +570,12 @@ runpy.run_path(str(pathlib.Path(__file__).with_name('timeout.real')), run_name='
 # ---------------------------------------------------------------- --from-index
 IV = '0.9.0'
 PROJECTS = {name: name.replace('-', '_') for name in (
-    'mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')}
+    'mojolearn', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')}
 PROJECT_REQUIRES = {
     'mojolearn': ('mojolearn-nvidia', 'mojolearn-amd'),
-    'mojolearn-nvidia': ('mojolearn',),
+    'mojolearn-nvidia': ('mojolearn', 'mojolearn-nvidia-ptx'),
     'mojolearn-amd': ('mojolearn',),
+    'mojolearn-nvidia-ptx': ('mojolearn',),
 }
 
 
@@ -620,7 +622,7 @@ FAKE_BOX = r'''import json, os, pathlib
 d = pathlib.Path(os.environ['FAKE_BOX_DIR']); v = os.environ['FAKE_VERSION']
 vendor = os.environ.get('FAKE_VENDOR', 'cuda'); index = os.environ.get('FAKE_INDEX', 'testpypi')
 (d / 'install.exit').write_text('0\n'); (d / 'box.txt').write_text('fake box\n')
-projects = ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')
+projects = ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')
 (d / 'install.log').write_text('Successfully installed ' + ' '.join(projects) + ' numpy\n')
 (d / 'pip_report.json').write_text(json.dumps({'install': []}))
 (d / 'dists.txt').write_text(''.join(n + '==' + v + '\n' for n in projects))

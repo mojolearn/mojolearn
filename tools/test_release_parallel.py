@@ -72,7 +72,7 @@ class Columns(unittest.TestCase):
         self.final = final
         # the split set: the core above and both plugins beside it
         self.plugins = {}
-        for prefix in ("mojolearn_nvidia", "mojolearn_amd"):
+        for prefix in ("mojolearn_nvidia", "mojolearn_amd", "mojolearn_nvidia_ptx"):
             p = final.parent / WHEEL.replace("mojolearn-", prefix + "-", 1)
             with zipfile.ZipFile(p, "w") as z:
                 z.writestr(f"mojolearn/{prefix}.txt", prefix)

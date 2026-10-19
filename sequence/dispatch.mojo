@@ -118,6 +118,7 @@ from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, o
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
+from sequence.mlp import op_agk_gemm_epi
 from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
@@ -212,9 +213,10 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP >= OP_AGM_FIRST and OP <= OP_AGM_LAST:
         apply_model_ops[OP](t, a)
     elif OP == OP_AGK_GEMM_EPI:
-        # the tape's GEMM with epilogue: op_gemm_epi's body (DeviceExec tiles
-        # it where OP_GEMM is tiled; sequence/gemm_tiled.mojo)
-        op_gemm_epi(t, a)
+        # the tape's GEMM with epilogue: op_gemm_epi's words with the follower
+        # applied before the one store (lane ag-pass3-impl; DeviceExec tiles
+        # it where OP_GEMM is tiled, sequence/gemm_tiled.mojo)
+        op_agk_gemm_epi(t, a)
     elif OP >= OP_AGK_FIRST and OP <= OP_AGK_LAST:
         apply_autograd_kernels[OP](t, a)
     elif OP >= OP_P1_FIRST and OP <= OP_P1_LAST:
