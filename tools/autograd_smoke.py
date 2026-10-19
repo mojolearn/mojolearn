@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE AUTOGRAD SMOKE ENTRIES (2026-10-19, lane ag-bench): does the tape start on this vendor.
 
-Three "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
+Four "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
 
   autograd-gradients     autograd/checks/gpu.mojo, the gradient suite on the vendor's GPU (every
                          case prints PASS and its digest; the digests equal the CPU column's).
@@ -12,6 +12,8 @@ Three "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing
   autograd-fit-smoke     tests/test_autograd_smoke.py through the installed bindings: a tiny MLP
                          and a tiny LSTM fit on the default (tape) path, finite losses, the
                          expected-digest file present.
+  autograd-public        python/mojolearn/tests/test_autograd_public.py: the docs' Sequential and
+                         ops.Session examples run verbatim; PUBLIC_DIGEST lines in its log.
 
 A check binary is built ONCE per vendor by the orchestrator (`build-commands` prints the lines; this
 tool never builds), then `run` starts each entry with a 5 s timer:
@@ -46,6 +48,8 @@ ENTRIES = (
      "what": "the MLP tape fits against the hand-written trainer on the vendor's GPU"},
     {"name": "autograd-fit-smoke", "pytest": "tests/test_autograd_smoke.py",
      "what": "a tiny MLP and LSTM fit through the installed bindings' default path"},
+    {"name": "autograd-public", "pytest": "python/mojolearn/tests/test_autograd_public.py",
+     "what": "the public Sequential and ops.Session examples of the docs, PUBLIC_DIGEST lines"},
 )
 
 
