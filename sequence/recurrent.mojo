@@ -52,6 +52,17 @@ from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 from std.sys.compile import is_defined, get_defined_int
+from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
+
+# Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM runs
+# rnn_fit's update through autograd/optim.mojo (OptimizerState + step_lr)
+# instead of opt_step below. Bits: the same. optimizer_config_packed maps
+# OptConfig's words to named fields that pack back to the same words,
+# optimizer_scalars is opt_scalars word for word, and the update is the same
+# one OP_OPT launch over Gr; a slot word the kind's body never reads may
+# differ (RMSprop's f1, a non-SGD kind's flags) and moves no bit. No fold is
+# involved (no clip; the rate is lrs[k] as before).
+comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
 
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
@@ -685,11 +696,18 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(np_)
-    var s2 = ex.alloc(np_)
-    var s3 = ex.alloc(np_)
-    if init_acc != Float32(0.0):
-        fill(ex, s2, np_, init_acc)
+    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var opt_cfg = optimizer_config_packed(cfg.kind, cfg.flags, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, Float32(0.0))
+    var opt_state = OptimizerState()
+    comptime if AUTOGRAD_OPTIM:
+        # -D MOJOLEARN_AUTOGRAD_OPTIM: the state on the executor, s2 filled
+        # with init_acc as below
+        opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
+    else:
+        if init_acc != Float32(0.0):
+            fill(ex, s2, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
     var st = OptState()
@@ -730,7 +748,12 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
             ex.launch[OP_CE](a, B)
             sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
         step.backward(ex, net, P, Gr, w.xb, T, B, w)
-        opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+        comptime if AUTOGRAD_OPTIM:
+            step_lr(ex, opt_cfg, opt_state, P, Gr, np_, k + 1, ftz(lrs.unsafe_load(k)))
+        else:
+            opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+    comptime if AUTOGRAD_OPTIM:
+        opt_state.release(ex)
     ex.sync()
     ex.download(Pio, P, np_)
     ex.download(losses, dloss, n_steps)
