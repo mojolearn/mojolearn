@@ -847,9 +847,11 @@ LANE_TEXT = {
                 "torch.nn.RNN(28, 64, nonlinearity='tanh', batch_first=True) + nn.Linear(64, 1) on the last "
                 "hidden state, MSE, torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside "
                 "the clock"),
-    "tape-user-model": ("mojolearn.Sequential(): Linear(28, 64), ReLU, Linear(64, 64), ReLU, Linear(64, 1); "
-                        "compile(loss='bce_with_logits', optimizer='adam', lr=1e-3); fit(X, y, epochs=1, "
-                        "batch_size=512, shuffle=True, seed=7)",
+    # ag-board-twins (2026-10-19): the calls the arm makes (Sequential.linear takes the output width)
+    "tape-user-model": ("mojolearn.Sequential().linear(64).relu().linear(64).relu().linear(1); "
+                        "compile(loss='bce_with_logits', optimizer='adam', lr=1e-3, beta1=0.9, beta2=0.999, "
+                        "eps=1e-8, weight_decay=0.0, schedule='constant', tol=0.0, n_iter_no_change=0); "
+                        "fit(X, y, epochs=1, batch_size=512, shuffle=True, seed=7)",
                         "the same torch.nn.Sequential, Glorot-uniform init, BCE with logits, "
                         "torch.optim.Adam, one epoch of minibatches of 512, inputs moved inside the clock"),
     # 2026-10-19 (lane ag-board-twins)
@@ -1392,7 +1394,7 @@ def synthetic_fit_arrays(shape, rec):
     z = np.zeros(n, dtype=np.float64)
     for j in range(SEQFIT_FEATURES):          # one fixed order, elementwise: the same bits on every box
         z += X[:, j].astype(np.float64) * w[j]
-    z = z / np.float64(SEQFIT_FEATURES) ** 0.5 + 0.5 * (X[:, 0].astype(np.float64) * X[:, 1].astype(np.float64)) \
+    z = z / np.sqrt(np.float64(SEQFIT_FEATURES)) + 0.5 * (X[:, 0].astype(np.float64) * X[:, 1].astype(np.float64)) \
         + 0.3 * noise
     y = (z > 0).astype(np.float32)
     ntr = want["train"]
@@ -2340,39 +2342,55 @@ TAPE_LOSS = "bce_with_logits"
 FIT_PREDICT_CHUNK = 65536
 
 
-def _ours_sequential(ml, d_in):
-    """tape-user-model's network through mojolearn.Sequential (lane ag-pyapi's model API): Linear,
-    ReLU, ..., Linear(., 1), compiled with BCE with logits and Adam. The layer builders are the classes
-    of Sequential's own module when it defines them (model.add(Linear(fi, fo))), else add(name, *args).
-    Refuses by name when this mojolearn has no Sequential. Returns (model, the settings it accepted)."""
+def _ours_sequential(ml, lane):
+    """A Sequential fit lane's network through the public mojolearn.Sequential: linear(h), relu, ...,
+    linear(1) (Sequential.linear takes the output width; the input width comes from X at fit), compiled with
+    BCE with logits and Adam, every work setting passed explicitly. Refuses by name when this mojolearn has
+    no Sequential. Returns (model, its read-back: the layers it recorded and the options it accepted).
+
+    ag-board-twins (2026-10-19): the earlier helper (lane ag-bench, written while the class was absent)
+    called add("linear", fan_in, fan_out), which Sequential.add reads as units=fan_in, bias=fan_out, and
+    compile(betas=...), which Sequential.compile does not take (beta1, beta2): tape-user-model refused on
+    every box. This one speaks the class's own signatures (python/mojolearn/_x_sequence_model.py)."""
     Seq = getattr(ml, "Sequential", None)
     if Seq is None:
-        raise ImportError("REFUSED: tape-user-model races mojolearn.Sequential, the model-description API "
-                          "over the autograd tape; this mojolearn (%s, %s) has no Sequential"
-                          % (getattr(ml, "__version__", "?"), getattr(ml, "__file__", "?")))
+        raise ImportError("REFUSED: %s races mojolearn.Sequential, the model-description API over the autograd "
+                          "tape; this mojolearn (%s, %s) has no Sequential"
+                          % (lane, getattr(ml, "__version__", "?"), getattr(ml, "__file__", "?")))
     model = Seq()
-    home = sys.modules.get(Seq.__module__)
-
-    def add(kind, *args):
-        cls = getattr(home, kind, None)
-        if cls is not None:
-            model.add(cls(*args))
-        else:
-            model.add(kind.lower(), *args)
-    sizes = [int(d_in)] + [int(h) for h in FIT_TAPE_HIDDEN] + [1]
-    for i in range(len(sizes) - 1):
-        add("Linear", sizes[i], sizes[i + 1])
-        if i < len(sizes) - 2:
-            add("ReLU")
-    accepted = dict(loss=TAPE_LOSS, optimizer="adam", lr=FIT_ADAM["lr"], betas=tuple(FIT_ADAM["betas"]),
-                    eps=FIT_ADAM["eps"], weight_decay=FIT_ADAM["weight_decay"])
+    for h in FIT_HIDDEN[lane]:
+        model.linear(int(h))
+        model.relu()
+    model.linear(1)
+    accepted = dict(loss=TAPE_LOSS, optimizer="adam", lr=FIT_ADAM["lr"], beta1=FIT_ADAM["betas"][0],
+                    beta2=FIT_ADAM["betas"][1], eps=FIT_ADAM["eps"], weight_decay=FIT_ADAM["weight_decay"],
+                    schedule="constant", tol=0.0, n_iter_no_change=0)
     try:
         model.compile(**accepted)
     except TypeError as exc:
-        raise RuntimeError("REFUSED: tape-user-model: mojolearn.Sequential.compile does not take the lane's "
-                           "explicit Adam settings %s (%r); every work setting is passed on every arm"
-                           % (sorted(accepted), exc))
+        raise RuntimeError("REFUSED: %s: mojolearn.Sequential.compile does not take the lane's explicit Adam "
+                           "settings %s (%r); every work setting is passed on every arm" % (lane, sorted(accepted), exc))
     return model, accepted
+
+
+def _sequential_readback(model, accepted, d_in):
+    """fit_params read-back of a compiled Sequential: the layers from its public `layers` list (widths chained
+    from the data's d_in), the optimizer settings from what compile recorded (its option table when it keeps
+    one, else the values it accepted)."""
+    layers, width = [], int(d_in)
+    for kind, a0, a1, _f in model.layers:
+        if kind == "linear":
+            layers.append("linear %d %d %s" % (width, int(a0), "bias" if a1 else "nobias"))
+            width = int(a0)
+        else:
+            layers.append(kind)
+    opts = getattr(model, "_options", None) or {}
+    adam = opts.get("opt") == 1 if "opt" in opts else accepted["optimizer"] == "adam"
+    return dict(optimizer="adam" if adam else "other (code %r)" % (opts.get("opt"),),
+                learning_rate=opts.get("lr", accepted["lr"]),
+                betas=[opts.get("f1", accepted["beta1"]), opts.get("f2", accepted["beta2"])],
+                eps=opts.get("eps", accepted["eps"]), weight_decay=opts.get("weight_decay", accepted["weight_decay"]),
+                loss=opts.get("loss", accepted["loss"]), layers=layers)
 
 
 class OursFit(Ours):
@@ -2391,15 +2409,14 @@ class OursFit(Ours):
         ytr = np.asarray(data["y_train"])
         # the classifier takes class labels, the regressors the float target (prepared before the clock)
         self.ytr = (np.ascontiguousarray((ytr > 0.5).astype(np.int64)) if FIT_TASK[lane] == "classification"
-                    and lane != "tape-user-model" else np.ascontiguousarray(ytr, dtype=np.float32))
+                    and MODEL_OF[lane] != "tapefit" else np.ascontiguousarray(ytr, dtype=np.float32))
         d_in = int(self.Xtr.shape[-1])
         self.model = None
         self._score = None
-        if lane == "tape-user-model":
-            probe, accepted = _ours_sequential(ml, d_in)
+        if MODEL_OF[lane] == "tapefit":
+            probe, accepted = _ours_sequential(ml, lane)
             cls = type(probe)
-            readback = dict(learning_rate=accepted["lr"], betas=list(accepted["betas"]), eps=accepted["eps"],
-                            weight_decay=accepted["weight_decay"], loss=accepted["loss"])
+            readback = _sequential_readback(probe, accepted, d_in)
         elif lane == "mlp-fit":
             cls = ml.MLPClassifier
             self.kwargs = dict(hidden_layer_sizes=FIT_MLP_HIDDEN, activation="relu", solver="adam", alpha=0.0,
@@ -2439,14 +2456,14 @@ class OursFit(Ours):
         self.info = _ours_info(ml, getattr(sys.modules[cls.__module__], "__file__", None), ml.numeric_mode(), "gpu")
         self.info.update(call=LANE_TEXT[lane][0], fit_rows=int(self.Xtr.shape[0]), held_out_rows=int(self.Xte.shape[0]),
                          training_path=("the autograd tape (MLPClassifier's default since 9542fadae)" if lane == "mlp-fit"
-                                        else "the autograd tape (mojolearn.Sequential)" if lane == "tape-user-model"
+                                        else "the autograd tape (mojolearn.Sequential)" if MODEL_OF[lane] == "tapefit"
                                         else "the autograd tape (the recurrent trainer's only backward since 2026-10-19)"))
         self.record = fit_record(lane, "mojolearn", cls, d_in, **readback)
 
     def call(self):
         import warnings
-        if self.lane == "tape-user-model":
-            m, _ = _ours_sequential(self.ml, int(self.Xtr.shape[-1]))
+        if MODEL_OF[self.lane] == "tapefit":
+            m, _ = _ours_sequential(self.ml, self.lane)
             m.fit(self.Xtr, self.ytr, epochs=FIT_EPOCHS, batch_size=FIT_BATCH, shuffle=True, seed=SEED)
         else:
             m = self.cls(**self.kwargs)
@@ -2455,6 +2472,8 @@ class OursFit(Ours):
                 m.fit(self.Xtr, self.ytr)
         self.model = m
         self._score = None
+        if self.lane in FIT_PREDICT_IN_CLOCK:
+            self._predict()               # sequential-fit: predict_proba of the held-out rows inside the clock
 
     def _predict(self):
         np = self.np
@@ -2462,8 +2481,8 @@ class OursFit(Ours):
             m = self.model
             if self.lane == "mlp-fit":
                 p = np.asarray(m.predict_proba(self.Xte))[:, 1]
-            elif self.lane == "tape-user-model":
-                p = np.asarray(m.predict_proba(self.Xte) if hasattr(m, "predict_proba") else m.predict(self.Xte))
+            elif MODEL_OF[self.lane] == "tapefit":
+                p = np.asarray(m.predict_proba(self.Xte))
                 if p.ndim == 2 and p.shape[1] == 2:
                     p = p[:, 1]
             else:
@@ -2484,7 +2503,7 @@ class OursFit(Ours):
         m = self.model
         if self.lane == "mlp-fit":
             parts += [np.asarray(a) for a in m.coefs_] + [np.asarray(a) for a in m.intercepts_]
-        elif self.lane in FIT_CELL:
+        elif self.lane in FIT_CELL or MODEL_OF[self.lane] == "tapefit":
             parts.append(np.asarray(m.params_))
         h = hashlib.sha256()
         for a in parts:
@@ -3166,8 +3185,7 @@ class TorchFitArm:
             impl = type(body)
             self.linears = []
         else:
-            hidden = FIT_MLP_HIDDEN if lane == "mlp-fit" else FIT_TAPE_HIDDEN
-            sizes = [d_in] + list(hidden) + [1]
+            sizes = [d_in] + list(FIT_HIDDEN[lane]) + [1]
             mods = []
             for i in range(len(sizes) - 1):
                 mods.append(nn.Linear(sizes[i], sizes[i + 1], device=dev))
@@ -3301,6 +3319,8 @@ class TorchFitArm:
                 losses.append(loss.detach())
         self.losses = torch.stack(losses).float().cpu().numpy().astype(np.float64)
         self._score = None
+        if self.lane in FIT_PREDICT_IN_CLOCK:
+            self._predict()               # sequential-fit: the held-out probabilities inside the clock
 
     def sync(self):
         self._sync()
@@ -3382,8 +3402,7 @@ class MlxFitArm:
             cls = {"lstm": mnn.LSTM, "gru": mnn.GRU, "rnn": mnn.RNN}[FIT_CELL[self.lane]]
             body, head = cls(self.d_in, FIT_RNN_HIDDEN, bias=True), mnn.Linear(FIT_RNN_HIDDEN, 1)
         else:
-            hidden = FIT_MLP_HIDDEN if self.lane == "mlp-fit" else FIT_TAPE_HIDDEN
-            sizes = [self.d_in] + list(hidden) + [1]
+            sizes = [self.d_in] + list(FIT_HIDDEN[self.lane]) + [1]
             mods = []
             for i in range(len(sizes) - 1):
                 lin = mnn.Linear(sizes[i], sizes[i + 1])
@@ -3443,6 +3462,8 @@ class MlxFitArm:
                 losses.append(loss)
         self.losses = np.asarray(mx.stack(losses), dtype=np.float64)
         self.model, self._score = model, None
+        if self.lane in FIT_PREDICT_IN_CLOCK:
+            self._predict()               # sequential-fit: the held-out probabilities inside the clock
 
     def sync(self):
         self.mx.synchronize() if hasattr(self.mx, "synchronize") else None
@@ -4440,6 +4461,22 @@ FIT_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": N
             "inside_clock": "one whole fit: a fresh seeded initialization, the training rows to the device, "
                             "the shuffle, every minibatch step (forward, loss, backward, Adam), the loss curve "
                             "back on the host, synchronized; the held-out prediction is after the clock"}
+#: sequential-fit's span (2026-10-19, lane ag-board-twins): the fit AND the held-out predict_proba
+FIT_PREDICT_SPAN = dict(FIT_SPAN, inside_clock=(
+    "one whole fit and the held-out prediction: a fresh seeded initialization, the training rows to the device, "
+    "the shuffle, every minibatch step (forward, loss, backward, Adam), the loss curve back on the host, then the "
+    "held-out rows to the device and their class probabilities back on the host, synchronized"))
+#: ops-session-step's span (2026-10-19, lane ag-board-twins), the same on every arm
+OPS_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": None,
+            "inside_clock": "one training step: the batch, labels and parameters from the host to the device, "
+                            "forward, softmax cross-entropy, backward, the loss and every gradient back on the "
+                            "host, the SGD update on the device, every updated parameter back on the host, "
+                            "synchronized"}
+
+
+def fit_span(lane):
+    """The comparability span of a fit lane."""
+    return dict(FIT_PREDICT_SPAN if lane in FIT_PREDICT_IN_CLOCK else FIT_SPAN)
 
 
 def _worker_message(worker, seconds, stage, command=None):
@@ -4770,7 +4807,8 @@ def race(args):
         # a training step changes the state every round (no repeat to compare),
         # and one timed round has nothing to compare against either
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
-        a["span"] = dict(FIT_SPAN if lane in FIT_LANES else SPAN)
+        a["span"] = (fit_span(lane) if lane in FIT_LANES else dict(OPS_SPAN) if lane in OPS_LANES
+                     else dict(SPAN))
         print("NEURAL lane=%s arm=%s status=%s median_ms=%s quality=%s"
               % (lane, arm, a["status"], a["median_ms"],
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True)), flush=True)
