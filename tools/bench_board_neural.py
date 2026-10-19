@@ -4258,6 +4258,8 @@ def _worker_env(arm):
 
 SPAN = {"input_home": "host", "pre_clock_fit": False,
         "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized"}
+APPLE_FIT_IDENTICAL_REFUSED = ("refused: identical is never timed on Apple (CLAUDE.md: Apple is for same-bits "
+                               "checks only); the fit lanes race ours-fast on Apple")
 #: the fit lanes' comparability span (2026-10-19, lane ag-bench), the same on every arm
 FIT_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": None,
             "inside_clock": "one whole fit: a fresh seeded initialization, the training rows to the device, "
@@ -4358,6 +4360,8 @@ def race(args):
     if operation != "model_default":
         tag += "-" + operation
     data_path = os.path.join(args.work, "neural-%s-%s.npz" % (lane, shape))
+    if getattr(args, "higgs", None):
+        os.environ[HIGGS_ENV] = os.path.abspath(os.path.expanduser(args.higgs))   # fit_arrays reads it
     inputs = make_inputs(lane, shape, args.rounds + 1, data_path)
     srec = shape_record(lane, shape)
     result = {"lane": lane, "dataset": DATA_OF[lane], "shape": srec["label"], "shape_record": srec,
@@ -4403,6 +4407,9 @@ def race(args):
     # this change were wrong for this lane; apply extra scrutiny.
     refused_before = {a: REFERENCE_TWIN_LANES[lane] for a in arms
                       if lane in REFERENCE_TWIN_LANES and a.startswith("torch-")}
+    if lane in FIT_LANES and sys.platform == "darwin" and "ours" in arms:
+        # 2026-10-19 (lane ag-bench): identical is never timed on Apple; the fit lanes race ours-fast there
+        refused_before["ours"] = APPLE_FIT_IDENTICAL_REFUSED
     for arm in arms:
         if arm in refused_before:
             workers[arm] = RefusedArm()
@@ -4519,7 +4526,8 @@ def race(args):
                 result["arms"][arm]["outputs_digest"] = outputs_digest(outs[arm])
                 print("NEURAL-DIGEST lane=%s arm=%s digest=%s"
                       % (lane, arm, result["arms"][arm]["outputs_digest"]), flush=True)
-                if getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES:
+                if (getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES
+                        or lane in FIT_LANES):
                     # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
@@ -4587,7 +4595,7 @@ def race(args):
         # a training step changes the state every round (no repeat to compare),
         # and one timed round has nothing to compare against either
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
-        a["span"] = dict(SPAN)
+        a["span"] = dict(FIT_SPAN if lane in FIT_LANES else SPAN)
         print("NEURAL lane=%s arm=%s status=%s median_ms=%s quality=%s"
               % (lane, arm, a["status"], a["median_ms"],
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True)), flush=True)
@@ -4635,6 +4643,9 @@ def build_parser():
                    help="warm-up deadline of a torch.compile arm (its compile is the untimed "
                         "warm-up round); default 8 x --round-seconds")
     r.add_argument("--round-seconds", type=int, default=1800)
+    r.add_argument("--higgs", default=None,
+                   help="the HIGGS npz the fit lanes read (default: $%s, else %s)"
+                        % (HIGGS_ENV, " or ".join(HIGGS_DEFAULTS)))
     r.add_argument("--keep-outputs", action="store_true",
                    help="keep every arm's saved outputs as <out>/<lane>-<data>-<arm>.outputs.npz "
                         "(y for a forward lane, losses for a train lane): tools/afn_ab.sh's judge "
