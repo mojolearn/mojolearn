@@ -99,3 +99,20 @@ deleted with the tombstone procedure. A digest change between arms is a
 bit version only when the define intentionally changes a fold; for the
 RNN define it is a bug. Rows go into `docs/apple-fast/EXPERIMENTS.md` when
 the A/B runs.
+
+## (e) Measurement
+
+The tape-trained models race on the neural board (`tools/bench_board_neural.py`) as whole fits on
+HIGGS, one fit per round, the held-out prediction after the clock and quality beside every time:
+`mlp-fit` (`MLPClassifier`, 1M x 28, one hidden layer of 256, batch 512, one epoch, Adam),
+`lstm-fit`, `gru-fit` and `rnn-fit` (the recurrent regressors on 16-step sequences, hidden 64,
+batch 512, one epoch, Adam) and `tape-user-model` (a user-described `Sequential`, 28-64-64-1 with
+BCE with logits). Every arm gets the same explicit sizes, batch size, epoch count, learning rate,
+betas, eps and seed, and moves its training rows to the device inside its clock. The opponents are
+the same networks in torch (`nn.Sequential`, `nn.LSTM`/`nn.GRU`/`nn.RNN` with an `nn.Linear`
+head, `torch.optim.Adam`) at every torch setting of the box: CUDA on NVIDIA, ROCm on AMD, MPS on
+Apple, plus MLX (`mlx.nn`, `mlx.optimizers.Adam`) on Apple. Quality is held-out accuracy, log loss
+and AUC for the classifiers and RMSE and AUC for the regressors. On Apple the fit lanes race the
+fast tier only; identical is timed on NVIDIA and AMD. A broken tape is caught before a release by
+the autograd smoke entries (`tools/autograd_smoke.py`: the gradient suite, the MLP identity check
+and `tests/test_autograd_smoke.py`), 5 s each on every vendor.

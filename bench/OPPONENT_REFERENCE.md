@@ -1110,6 +1110,26 @@ step on the same VM.
    moved the kNN tooling off HIGGS, which is retired; the "kNN second kind
    (HIGGS rows)" table above is history), H100, k 10 and 15, measured once
    by `tools/knn_selection_gate.sh` under `MOJOLEARN_KNN_SELECTION_OPPONENT=1`.
+7. (2026-10-19, lane ag-bench) The neural fit lanes' opponents, measured once
+   per box tuple by `tools/bench_board_neural.py race` and kept in the board's
+   opponent store (`tools/bench_board_store.py`), never re-scored:
+   `mlp-fit`, `lstm-fit`, `gru-fit`, `rnn-fit` and `tape-user-model` on HIGGS
+   (1M training rows, 100k held-out rows; the recurrent lanes on 16-step
+   sequences), one whole fit per round. Arms: torch `torch-<eager|compile>-
+   <fp32|tf32|bf16>` (TF32 on NVIDIA CUDA only) through `TorchFitArm`
+   (`nn.Sequential` / `nn.LSTM` / `nn.GRU` / `nn.RNN` + `nn.Linear` head,
+   `torch.optim.Adam` lr 1e-3, betas (0.9, 0.999), eps 1e-8, no weight decay,
+   batch 512, one epoch, seed 7) with CUDA on the L40S, ROCm on the MI325X,
+   MPS on Apple; `mlx-fp32` (`MlxFitArm`, mlx 0.26.1, Adam with bias
+   correction) on Apple only. Comparability span, every arm: `input_home`
+   host, `inside_clock` "one whole fit: a fresh seeded initialization, the
+   training rows to the device, the shuffle, every minibatch step, the loss
+   curve back on the host" (the held-out prediction is outside it),
+   `upload_ms_untimed` none: whole/whole, comparable as is. Quality per arm:
+   held-out accuracy, log loss and AUC (classifiers), RMSE and AUC
+   (regressors). Recorded difference: scikit-learn's Adam (ours' `mlp-fit`)
+   folds the bias correction into the step size, so its eps sits at
+   eps * sqrt(1 - beta2^t) relative to torch's; same algorithm and settings.
 
 ## Rows never to quote
 
