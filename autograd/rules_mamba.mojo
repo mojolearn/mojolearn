@@ -1061,19 +1061,27 @@ def mamba2_tape_backward_stack(
     tape.backward_with_rules(ex, x_t, seed, rules)
 
     var result = List[Mamba2PrefillGradients]()
+    # The gradients recorded as the hand path's output fields live in the
+    # stack's own device buffers, which DeviceExec did not allocate (its
+    # download refuses them): they are read with the hand path's download,
+    # after the tape's queue drains. w_in and w_out keep tape storage.
+    ex.sync()
     for k in range(nb):  # driver-loop: over blocks
         var g = Mamba2PrefillGradients()
         var base = 9 * k
-        g.block_norm_weight = tape.gradients(ex, params[base + 0])
+        ref T = S.tail[k]
+        ref cv = S.conv[k]
+        ref disc = S.disc[k]
+        g.block_norm_weight = mamba_download(ctx, T.d_block_w, dm)
         g.in_proj_weight = tape.gradients(ex, params[base + 1])
-        g.conv1d_weight = tape.gradients(ex, params[base + 2])
-        g.conv1d_bias = tape.gradients(ex, params[base + 3])
-        g.dt_bias = tape.gradients(ex, params[base + 4])
-        g.A_log = tape.gradients(ex, params[base + 5])
-        g.D = tape.gradients(ex, params[base + 6])
-        g.norm_weight = tape.gradients(ex, params[base + 7])
+        g.conv1d_weight = mamba_download(ctx, cv.d_w, cd * M2_D_CONV)
+        g.conv1d_bias = mamba_download(ctx, cv.d_b, cd)
+        g.dt_bias = mamba_download(ctx, disc.d_dt_bias, nh)
+        g.A_log = mamba_download(ctx, disc.d_a_log, nh)
+        g.D = mamba_download(ctx, T.d_d, nh)
+        g.norm_weight = mamba_download(ctx, T.d_gnorm_w, di)
         g.out_proj_weight = tape.gradients(ex, params[base + 8])
-        g.x = tape.gradients(ex, xs[k])
+        g.x = mamba_download(ctx, T.d_block_x, m * dm)
         result.append(g^)
     tape.release(ex)
     ctx.synchronize()
