@@ -19,9 +19,12 @@ that decides each migration. Implementation record: `NATIVE_AUTOGRAD.md`.
   `tape.rows/cols`, storage via `tape.value/gradient`.
 - `BackwardRules` trait + `tape.custom(inputs, output, rows, cols, tag,
   saved)`: an already-executed native op with a VJP. The tape hands the rule
-  one zeroed destination per input and owns ordering and accumulation.
+  one destination per input and owns ordering and accumulation; it zeroes a
+  destination unless `zeroed_destination(tag, saved, edge)` says the rule
+  overwrites it. `tape.custom_into` also names caller storage for the op's
+  gradient; a seed that is that storage is used in place.
 - Adapters: `autograd/layers.mojo` (`layer_norm`, `NeuralRules`) and
-  `autograd/rules_recurrent.mojo` (`rnn_linear`, `rnn_layer`,
+  `autograd/rules_recurrent.mojo` (`rnn_linear`, `rnn_layer`, `rnn_head`,
   `rnn_last_step`, `RecurrentRules`, `AutogradRnnStep`).
 - Trainers on the tape, opt-in: MLP (`-D MOJOLEARN_AUTOGRAD_MLP`,
   `sequence/mlp_fit.mojo`), recurrent (`-D MOJOLEARN_AUTOGRAD_RNN`, the

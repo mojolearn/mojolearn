@@ -632,9 +632,13 @@ trait RnnStep(Defaultable & Movable & Deinitable):
     """One optimizer step's differentiation: forward_head leaves the head's
     output in w.yhat; backward reads dy [B, O] from w.dy and writes every
     parameter gradient into Gr (the `Net` layout). rnn_fit keeps the loss,
-    shuffle, batching and optimizer; only this assembly is swappable."""
+    shuffle, batching and optimizer; only this assembly is swappable.
+    forward_head also receives Gr so a step can name it as the gradient
+    destination when it records the forward (the tape step does)."""
 
-    def forward_head[E: Exec](mut self, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises:
+    def forward_head[E: Exec](
+        mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    ) raises:
         ...
 
     def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
@@ -647,7 +651,9 @@ struct HandStep(RnnStep):
     def __init__(out self):
         pass
 
-    def forward_head[E: Exec](mut self, mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises:
+    def forward_head[E: Exec](
+        mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    ) raises:
         var hT = forward(ex, net, P, x, T, B, w)
         head(ex, net, P, hT, B, w.yhat)
 
@@ -706,7 +712,7 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
         var off = j * bs
         var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
-        step.forward_head(ex, net, P, w.xb, T, B, w)
+        step.forward_head(ex, net, P, Gr, w.xb, T, B, w)
         if task == TASK_MSE:
             gather_rows(ex, dY, dord, w.yb, B, net.O, off)
             var a = Args()
