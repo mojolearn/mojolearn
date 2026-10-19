@@ -70,7 +70,7 @@ class Sequential:
     >>> import numpy as np, mojolearn
     >>> rng = np.random.default_rng(0)
     >>> X = rng.random((256, 4), dtype=np.float32)
-    >>> y = X @ np.array([1.0, -2.0, 0.5, 3.0], dtype=np.float32)
+    >>> y = (X[:, 0] - 2 * X[:, 1]) + (0.5 * X[:, 2] + 3 * X[:, 3])
     >>> model = mojolearn.Sequential().linear(16).relu().linear(1)
     >>> model = model.compile(loss="mse", optimizer="adam", lr=0.01)
     >>> model = model.fit(X, y, epochs=20, batch_size=32, seed=0)
