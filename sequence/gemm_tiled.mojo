@@ -124,7 +124,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from sequence.ops import FP, add, fma3, ld, st
+from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI, OP_GEMM_SPLITK, add, fma3, ld, st
+from autograd.ops import OP_AGK_GEMM_EPI
 from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_IDENTITY, ACT_RELU
 
 comptime GT_V2 = not (
@@ -669,3 +670,50 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
             st(pc, ci, _tile_epi[EK](acc, ci, n, Int(epi_arg), p3, f0, f1))
     if cs_on:
         st(p4, n, div(cs, f1))
+
+
+# ---------------------------------------------------------------- the launch profile's route (lane ag-pass5-gemm)
+#: route codes of the profile's GEMM shape rows beyond GR_*: the coop
+#: launch (sequence/coop.mojo), the pass-3 V1 tiles, and the two stages of
+#: OP_GEMM_SPLITK (the recurrent blocked weight gradients)
+comptime GR_PROF_COOP = 8
+comptime GR_PROF_V1_TILE = 9
+comptime GR_PROF_SPLITK_PART = 10
+comptime GR_PROF_SPLITK_FOLD = 11
+
+
+@always_inline
+def seq_gemm_profile_route[OP: Int](a: Args, coop_on: Bool, coop_i11: Bool) -> Int:
+    """The route `DeviceExec._launch` takes for this GEMM launch (OP_GEMM,
+    OP_GEMM_EPI, OP_AGK_GEMM_EPI or OP_GEMM_SPLITK), for the launch
+    profile's shape rows only (host bookkeeping, read at MOJOLEARN_AG_PROFILE
+    >= 1). `coop_on`: the executor's SEQ_COOP; `coop_i11`: its FAST VAR coop
+    rule (OP_GEMM with i11 = 1). It restates `_launch`'s tests in the same
+    order, so the row names the kernel that ran."""
+    comptime if OP == OP_GEMM_SPLITK:
+        return GR_PROF_SPLITK_FOLD if a.i11 == 1 else GR_PROF_SPLITK_PART
+    comptime if OP == OP_GEMM:
+        if coop_on and ((a.i0 * a.i1 <= 1024 and a.i2 >= 32768) or (coop_i11 and a.i11 == 1)):
+            return GR_PROF_COOP
+    comptime if not SEQ_GEMM_TILED:
+        return GR_CELL
+    comptime if GEMM_DISPATCH_V1:
+        comptime if OP == OP_GEMM:
+            return GR_PROF_V1_TILE if seq_gemm_tiled_on(a.i0, a.i1) else GR_CELL
+        elif OP == OP_AGK_GEMM_EPI:
+            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
+                return GR_PROF_V1_TILE
+            return GR_CELL
+        else:
+            return GR_CELL
+    var fused = False
+    comptime if OP != OP_GEMM:
+        fused = seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN
+        comptime if OP == OP_AGK_GEMM_EPI:
+            fused = fused or a.i11 != 0
+    var route = seq_gemm_route(a.i0, a.i1, a.i2, fused)
+    comptime if OP != OP_GEMM:
+        # gemm_launch_route: a tile on an epilogue opcode needs a dense C
+        if route != GR_CELL and not (a.i7 == 0 and a.i8 == a.i1):
+            return GR_CELL
+    return route
