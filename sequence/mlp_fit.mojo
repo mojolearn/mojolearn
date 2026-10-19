@@ -80,8 +80,6 @@ from sequence.ops import dummy_ptr
 # held-out rows: acc 0.68186 -> 0.68230, logloss 0.59475 -> 0.59462, AUC
 # 0.74755 -> 0.74781. Same digest on NVIDIA and AMD for each arm
 # (~/mojolearn-evidence/native-autograd-20261018/AB_MLP_RESULTS_2026-10-18.md).
-# -D MOJOLEARN_AUTOGRAD_MLP_OFF restores the hand-assembled backward (arm A).
-comptime AUTOGRAD_MLP = not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"]()
 # -D MOJOLEARN_AUTOGRAD_PREDICT (lane ag-forward, default off, A/B owed):
 # mlp_predict_py predicts through the tape's forward in inference mode
 # (mlp_predict_autograd) instead of the fused hand forward (mlp_predict).
@@ -108,12 +106,12 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # -D MOJOLEARN_AUTOGRAD_MLP_UNFUSED (the composed matmul + add + activation
 # tape graph below, untouched), arm B this default; -D MOJOLEARN_AUTOGRAD_MLP_OFF
 # keeps the hand path.
-comptime AUTOGRAD_MLP_FUSED = AUTOGRAD_MLP and not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"]()
+comptime AUTOGRAD_MLP_FUSED = not is_defined["MOJOLEARN_AUTOGRAD_MLP_UNFUSED"]()
 # Lane ag-pass5-composed (PASS5_IDEAS idea 5): the composed graph's export
 # (OP_L2GRAD + OP_DIVS a layer) rides in the optimizer launch
 # (autograd/optim.mojo AUTOGRAD_OPT_FUSE, -D MOJOLEARN_AUTOGRAD_OPT_FUSE_OFF
 # for arm A). Identical by construction; the fused default has no export.
-comptime MLP_COMPOSED_OPT_FUSE = AUTOGRAD_MLP and not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
+comptime MLP_COMPOSED_OPT_FUSE = not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE (DROPPED-noise) deleted 2026-10-18 on
 # feature/native-autograd-20261018; code recoverable at 91ebd1cb4 (never on main, no patch).
 # It folded the 1/B into the backward seed (one divide of the B x O seed, then L2GRAD with
@@ -694,12 +692,12 @@ def mlp_fit[E: Exec](
     comptime if AUTOGRAD_OPTIM:
         opt_state = OptimizerState(ex, opt_cfg, np_)
     var acts = List[FP]()
-    var deltas = List[FP]()
     var tape = Tape()
     var tape_logits = Tensor(0, 0, -1)
     for i in range(L + 1):
         acts.append(ex.alloc(bs * net.sizes[i]))
-        deltas.append(ex.alloc(bs * net.sizes[i]))
+    # the gradient seed p - y at the logits (OP_MLP_ROWLOSS / the loss block)
+    var dlogits = ex.alloc(bs * O)
     var yb = ex.alloc(bs * O)
     # Lane ag-pass5-composed (PASS5_IDEAS idea 6), AUTOGRAD_GATHER_EPOCH: when
     # the permuted copy of X and y fits (autograd/data.mojo
@@ -795,10 +793,7 @@ def mlp_fit[E: Exec](
                 gx.i2 = off
                 gx.i3 = O
                 ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
-            comptime if AUTOGRAD_MLP:
-                tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
-            else:
-                mlp_forward(ex, net, P, acts, B)
+            tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
             comptime if MLP_LOSSBLOCK:
                 # lane ag-pass3-lossblock: seed, row-loss and L2 sums and the
                 # batch loss in 2 launches (was 5; sequence/mlp.mojo's
@@ -808,14 +803,14 @@ def mlp_fit[E: Exec](
                 comptime if AUTOGRAD_LOSS:
                     loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
                 mlp_loss_block(
-                    ex, net, P, acts[L], yb, deltas[L], lb_rowparts, lb_l2parts, l2, dloss, bi, B, loss_kind,
+                    ex, net, P, acts[L], yb, dlogits, lb_rowparts, lb_l2parts, l2, dloss, bi, B, loss_kind,
                     ftz(identical_mul(Float32(0.5), alpha)), loss_sum, 1 if AUTOGRAD_LOSS else 0, rowloss,
                 )
             else:
                 var a = Args()
                 a.p0 = acts[L]
                 a.p1 = yb
-                a.p2 = deltas[L]
+                a.p2 = dlogits
                 a.p3 = rowloss
                 a.i0 = loss_kind
                 a.i1 = O
@@ -878,27 +873,7 @@ def mlp_fit[E: Exec](
                     bl.p3 = rowparts
                     bl.i5 = nrb
                 ex.launch[OP_MLP_BLOSS](bl, 1)
-            comptime if AUTOGRAD_MLP:
-                mlp_backward_autograd(tape, ex, net, tape_logits, deltas[L], P, Gr, B, alpha)
-            else:
-                var i = L - 1
-                while i >= 0:
-                    var fi = net.sizes[i]
-                    var fo = net.sizes[i + 1]
-                    # one launch each: GEMM + L2 term, column sum + mean, GEMM + act'
-                    gemm_epi(ex, acts[i], deltas[i + 1], Gr + net.w_off(i), fi, fo, B, 1, fi, fo, 1,
-                             EPI_L2GRAD, P + net.w_off(i), 0, alpha, Float32(B))
-                    var cs = Args()
-                    cs.p0 = deltas[i + 1]
-                    cs.p1 = Gr + net.b_off(i)
-                    cs.i0 = B
-                    cs.i2 = fo
-                    cs.f0 = Float32(B)
-                    ex.launch[OP_COLSUM_DIV](cs, fo)
-                    if i > 0:
-                        gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
-                                 EPI_ACT_BWD, acts[i], net.act, Float32(0.0), Float32(0.0))
-                    i -= 1
+            mlp_backward_autograd(tape, ex, net, tape_logits, dlogits, P, Gr, B, alpha)
             comptime if AUTOGRAD_OPTIM:
                 # one OP_OPT launch through autograd/optim.mojo (same words)
                 t_upd += 1
@@ -979,9 +954,8 @@ def mlp_fit[E: Exec](
                 no_imp = 0
             else:
                 break
-    comptime if AUTOGRAD_MLP:
-        # lane ag-fusion: return the tape's storage now, not at the end of ex
-        tape.release(ex)
+    # lane ag-fusion: return the tape's storage now, not at the end of ex
+    tape.release(ex)
     comptime if AUTOGRAD_OPTIM:
         opt_state.release(ex)
     comptime if AUTOGRAD_LOSS:
