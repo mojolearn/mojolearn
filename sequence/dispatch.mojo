@@ -132,6 +132,7 @@ from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
 from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
 from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
+from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
 
 
 @always_inline
@@ -156,12 +157,23 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_AGO_FIRST or OP_CELL_BWD_SCAN > OP_AGO_LAST
     ), "autograd optim opcode collides with recurrent scan"
     comptime assert OP_AGO_LAST < OP_AGD_FIRST or OP_AGO_FIRST > OP_AGD_LAST, "autograd optim opcodes overlap the data family"
+    # The loss and metric family (autograd/loss_ops.mojo) is a second
+    # contiguous range, disjoint from the autograd ops and the scan codes.
+    comptime assert OP_LS_FIRST <= OP_LS_LAST, "loss opcode range is empty"
+    comptime assert OP_LS_FIRST > OP_AG_LAST or OP_LS_LAST < OP_AG_FIRST, "loss opcodes collide with autograd ops"
+    comptime assert (OP_CELL_FWD_SCAN < OP_LS_FIRST or OP_CELL_FWD_SCAN > OP_LS_LAST) and (
+        OP_CELL_BWD_SCAN < OP_LS_FIRST or OP_CELL_BWD_SCAN > OP_LS_LAST
+    ), "loss opcode collides with recurrent scan"
+    comptime assert OP_LS_LAST < OP_AGD_FIRST or OP_LS_FIRST > OP_AGD_LAST, "loss opcodes overlap the data family"
+    comptime assert OP_LS_LAST < OP_AGO_FIRST or OP_LS_FIRST > OP_AGO_LAST, "loss opcodes overlap the optim family"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
         apply_autograd_data[OP](t, a)
     elif OP >= OP_AGO_FIRST and OP <= OP_AGO_LAST:
         apply_optim[OP](t, a)
+    elif OP >= OP_LS_FIRST and OP <= OP_LS_LAST:
+        apply_losses[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

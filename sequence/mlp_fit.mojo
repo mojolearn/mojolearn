@@ -56,6 +56,10 @@ from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
 from autograd.optim import OptimizerState, optimizer_config, step_lr
+from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_SUM
+from autograd.loss_ops import LS_MSE, LS_LOG_PROB, LS_BINARY_LOG_PROB
+from sequence.mlp import LOSS_SQUARED, LOSS_BINARY_LOG
+from sequence.ops import dummy_ptr
 
 # The tape-assembled backward is the default (promoted 2026-10-18). A/B
 # fad4bec3e, tools/sequence_speed.py case_mlp, HIGGS 1M x 28, (256,) b512
@@ -78,6 +82,25 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # (256,) b512: NV 0.388 -> 0.387 s, AMD 0.602 -> 0.599 s, same digest as the default
 # (B = 512 is a power of two, so the scaling rounds identically); noise.
 # Restore: git checkout 91ebd1cb4 -- sequence/mlp_fit.mojo (then merge by hand).
+# A/B define (lane ag-loss, default off): -D MOJOLEARN_AUTOGRAD_LOSS computes
+# the data term of each batch's reported loss through autograd/losses.mojo
+# (loss_value_into: one term per element of the B x O output, the same
+# clipped-probability terms as op_mlp_rowloss, summed by the tape's blocked
+# fold) and hands that sum to op_mlp_bloss as its one partial. The L2 term,
+# the batch divide, the epoch fold and the stopping rule are unchanged;
+# OP_MLP_ROWLOSS still writes the gradient seed (the delta at the logits).
+# New bits in the reported loss (and so possibly in n_iter) under the define;
+# the gradients, hence the parameters per epoch, are untouched.
+comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
+
+
+def _mlp_loss_kind(loss_kind: Int) -> Int:
+    """The autograd/loss_ops.mojo kind of an MLP loss code."""
+    if loss_kind == LOSS_SQUARED:
+        return LS_MSE
+    if loss_kind == LOSS_BINARY_LOG:
+        return LS_BINARY_LOG_PROB
+    return LS_LOG_PROB
 
 # Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM updates
 # the parameters through autograd/optim.mojo (OptimizerState + step_lr)
@@ -382,6 +405,12 @@ def mlp_fit[E: Exec](
         l2_nb += (net.sizes[i] * net.sizes[i + 1] + MLP_L2_BLOCK - 1) // MLP_L2_BLOCK
     var l2parts = ex.alloc(l2_nb if MLP_BLOCKED_FOLDS else 1)
     var rowparts = ex.alloc((bs + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK if MLP_BLOCKED_FOLDS else 1)
+    # MOJOLEARN_AUTOGRAD_LOSS: the loss module's scratch and the batch's data sum
+    var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
+    var loss_sum = dummy_ptr()
+    comptime if AUTOGRAD_LOSS:
+        loss_ws = loss_scratch(ex, bs * O)
+        loss_sum = ex.alloc(1)
     # MLP_EPOCH_DEV: the epoch losses stay on the executor, one word read back
     var dcurve = ex.alloc(max_iter if MLP_EPOCH_DEV else 1)
     var loss_word = List[Float32](length=1, fill=Float32(0.0))
@@ -484,7 +513,11 @@ def mlp_fit[E: Exec](
             bl.i3 = L
             bl.i4 = loss_kind
             bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
-            comptime if MLP_BLOCKED_FOLDS:
+            comptime if AUTOGRAD_LOSS:
+                loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
+                bl.p3 = loss_sum
+                bl.i5 = 1
+            elif MLP_BLOCKED_FOLDS:
                 var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
                 var rp = Args()
                 rp.p0 = rowloss
@@ -588,6 +621,9 @@ def mlp_fit[E: Exec](
         tape.release(ex)
     comptime if AUTOGRAD_OPTIM:
         opt_state.release(ex)
+    comptime if AUTOGRAD_LOSS:
+        release_loss_scratch(ex, loss_ws)
+        ex.free(loss_sum)
     ex.sync()
     ex.download(Pio, P, np_)
     _ = perm^
