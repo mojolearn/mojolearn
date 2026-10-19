@@ -3205,5 +3205,7 @@ the parent of its deletion commit.
   and the check compares the tape against them (e.g. sgd.pool.saved loss step 0 2.3037658, block0.w grad 8104314183148238768).
 - Deleted 2026-10-19 by `ddd4fa509` on lane/del-cnn; recoverable at `ddd4fa509^`.
 - Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch` (the three code files, from the lane head back to
-  `ddd4fa509^`; it also removes the inline tombstones). Also delete the two refusals in `core/six_lane_experiment_guards.mojo`
-  (block "lane del-cnn") before building with the define. No `grid_controls` entry existed.
+  `ddd4fa509^`; it also removes the inline tombstones and the refusals).
+- Guard: `MOJOLEARN_AUTOGRAD_CNN_OFF` and the opt-in spelling `MOJOLEARN_AUTOGRAD_CNN` refused in `autograd/rules_cnn.mojo`
+  (`cnn_backward_autograd`, reached by every CNN trainer step), not in core: a core line rebuilds every binding (the
+  pre-push rebuild fence refuses it). No `grid_controls` entry existed.

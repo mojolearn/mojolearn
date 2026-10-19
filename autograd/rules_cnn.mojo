@@ -65,6 +65,8 @@
 # The rules launch on cnn_ctx(), the context every x_cnn entry uses, and keep
 # the entries' slot workspaces; the DeviceExec wraps that same context, so its
 # one sync drains the queue the kernels ran on.
+from std.sys.compile import is_defined
+
 from autograd.tape import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
 from sequence.exec_device import DeviceExec
@@ -260,6 +262,12 @@ def cnn_backward_autograd(
     cs / ps / pools: the step's plan per block; m rows, flat head inputs, k
     classes. seed_addr: one resident word holding 1.0; loss_addr: one
     resident word the tape records as the loss's value (never read)."""
+    # removed-define refusals (lane del-cnn), here and not in core/six_lane_experiment_guards.mojo: a core line
+    # rebuilds every binding. Every CNN trainer step reaches this function, so the asserts are evaluated.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN_OFF"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN_OFF (the hand CNN fit-epoch backward walk) is deleted; the tape is the only backward (word for word equal on Metal, NVIDIA and AMD). Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN (opt-in spelling) is deleted; the tape is the only CNN backward"
     var nb = len(bh)
     if len(cs) != nb or len(ps) != nb or len(pools) != nb:
         raise Error("CNN backward (autograd): one plan per block")

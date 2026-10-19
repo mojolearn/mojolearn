@@ -1,5 +1,5 @@
 diff --git b/autograd/rules_cnn.mojo a/autograd/rules_cnn.mojo
-index 942157483..ae26d2de5 100644
+index e23aae641..ae26d2de5 100644
 --- b/autograd/rules_cnn.mojo
 +++ a/autograd/rules_cnn.mojo
 @@ -1,9 +1,9 @@
@@ -15,16 +15,7 @@ index 942157483..ae26d2de5 100644
  # fit_epoch_d_binding, per step after the forward (the pair gather, every
  # block's conv_block_forward_into[True], the head's linear_forward_into[True]
  # and softmax_xent_into[True] / softmax_xent_res_loss, which already writes
-@@ -65,6 +65,8 @@
- # The rules launch on cnn_ctx(), the context every x_cnn entry uses, and keep
- # the entries' slot workspaces; the DeviceExec wraps that same context, so its
- # one sync drains the queue the kernels ran on.
-+from std.sys.compile import is_defined
-+
- from autograd.tape import Tape, Tensor, BackwardRules
- from sequence.exec_trait import Exec
- from sequence.exec_device import DeviceExec
-@@ -73,9 +75,12 @@ from x_cnn.ops import FP as XFP, IP as XIP
+@@ -75,9 +75,12 @@ from x_cnn.ops import FP as XFP, IP as XIP
  from x_cnn.ops import CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_N, PP_C, PP_OH, PP_OW
  from x_cnn.device import cnn_ctx, conv_block_backward_into, linear_backward_into
  
@@ -40,6 +31,19 @@ index 942157483..ae26d2de5 100644
  
  # Tags 96-111 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
  # LM 64-71). 99-111 are reserved for the per-layer rules (bare conv, pools,
+@@ -262,12 +265,6 @@ def cnn_backward_autograd(
+     cs / ps / pools: the step's plan per block; m rows, flat head inputs, k
+     classes. seed_addr: one resident word holding 1.0; loss_addr: one
+     resident word the tape records as the loss's value (never read)."""
+-    # removed-define refusals (lane del-cnn), here and not in core/six_lane_experiment_guards.mojo: a core line
+-    # rebuilds every binding. Every CNN trainer step reaches this function, so the asserts are evaluated.
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch
+-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN_OFF"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN_OFF (the hand CNN fit-epoch backward walk) is deleted; the tape is the only backward (word for word equal on Metal, NVIDIA and AMD). Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch"
+-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN (opt-in spelling) is deleted; the tape is the only CNN backward"
+     var nb = len(bh)
+     if len(cs) != nb or len(ps) != nb or len(pools) != nb:
+         raise Error("CNN backward (autograd): one plan per block")
 diff --git b/bindings/_mojolearn_x_cnn.mojo a/bindings/_mojolearn_x_cnn.mojo
 index b1fd546b0..df1d4078b 100644
 --- b/bindings/_mojolearn_x_cnn.mojo
