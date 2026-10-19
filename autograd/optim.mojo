@@ -45,8 +45,10 @@ from sequence.ops import (
     fma3,
     ld,
     mul,
+    op_opt,
     st,
 )
+from std.memory import bitcast
 from autograd.ops import ag_fold_block
 from autograd.composed_ops import OP_AGC_OPT_FINISH, AGC_FINISH_TENSORS, agc_set_bound
 from checks.numerics import ftz, identical_cos, identical_div, identical_mul, identical_pow64, identical_sqrt
@@ -73,6 +75,25 @@ comptime OP_AGO_CLIP_COEF = 1111
 comptime OP_AGO_CLIP_SCALE = 1112
 comptime OP_AGO_FIRST = OP_AGO_SUMSQ_PART
 comptime OP_AGO_LAST = OP_AGO_CLIP_SCALE
+
+# Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea H(2)), default on: the
+# clip's coefficient and scale run inside the update launch. After the
+# OP_AGO_SUMSQ_PART partials, OP_AGH_OPT_CLIP's thread t adds the nparts
+# partials ascending from +0.0 (OP_AGO_CLIP_COEF's chain, word for word),
+# forms the same coefficient, stores coef * g_t (OP_AGO_CLIP_SCALE's word)
+# and runs op_opt on it; thread 0 also stores [total_norm, coef] in the
+# cell, as CLIP_COEF did. Bits: identical by construction (the same
+# operations on the same words in the same order; each thread redoes the
+# nparts ~ sqrt(n) adds). Launches: 2 fewer a step with a clip (CLIP_COEF
+# and CLIP_SCALE). -D MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF keeps the three
+# clip launches before OP_OPT (arm A).
+comptime AUTOGRAD_OPT_CLIP_FUSE = not is_defined["MOJOLEARN_AUTOGRAD_OPT_CLIP_FUSE_OFF"]()
+
+# The pass-6 host lane's family (2400..; sequence/dispatch.mojo routes the
+# range and asserts it overlaps no other family).
+comptime OP_AGH_OPT_CLIP = 2400
+comptime OP_AGH_FIRST = OP_AGH_OPT_CLIP
+comptime OP_AGH_LAST = OP_AGH_OPT_CLIP
 
 # torch.nn.utils.clip_grad_norm_: coef = max_norm / (total_norm + 1e-6)
 # (the certified LM clip's clip_eps, training/checks/optimizer_contract.mojo).
@@ -121,6 +142,41 @@ def op_ago_clip_scale(t: Int, a: Args):
     element (no skip at coef = 1: the multiply's flushes are part of the
     result, as in the certified clip)."""
     st(a.p0, t, mul(ld(a.p1, 1), ld(a.p0, t)))
+
+
+@always_inline
+def _clip_norm_coef(parts: FP, nparts: Int, max_norm: Float32) -> Tuple[Float32, Float32]:
+    """(total_norm, coef) from the partials: op_ago_clip_coef's chain."""
+    var s = Float32(0)
+    for k in range(nparts):
+        s = add(s, ld(parts, k))
+    var norm = ftz(identical_sqrt(s))
+    var coef = ftz(identical_div(max_norm, add(norm, CLIP_EPS)))
+    if not (coef < Float32(1.0)):
+        coef = Float32(1.0)
+    return (norm, coef)
+
+
+@always_inline
+def op_agh_opt_clip(t: Int, a: Args):
+    """The clip's coefficient and scale, then op_opt, on parameter t.
+
+    op_opt's slots (p0 params, p1 grads, p2..p4 state, i0 kind, i1 step,
+    i2 flags, f0..f7) plus: p5 the sum-of-squares partials, p6 the cell
+    [total_norm, coef], i3 the partial count, i4 the bit pattern of
+    max_norm (every float slot is op_opt's). Thread 0 writes the cell."""
+    var nc = _clip_norm_coef(a.p5, a.i3, bitcast[DType.float32](UInt32(a.i4)))
+    if t == 0:
+        st(a.p6, 0, nc[0])
+        st(a.p6, 1, nc[1])
+    st(a.p1, t, mul(nc[1], ld(a.p1, t)))
+    op_opt(t, a)
+
+
+@always_inline
+def apply_optim_fused[OP: Int](t: Int, a: Args):
+    comptime if OP == OP_AGH_OPT_CLIP:
+        op_agh_opt_clip(t, a)
 
 
 @always_inline
@@ -454,8 +510,18 @@ def step_lr[E: Exec](
     calls it every step in order (the running bias-correction products)."""
     if n != state.n:
         raise Error("autograd optim: the parameter count differs from the state's")
+    var fuse_clip = AUTOGRAD_OPT_CLIP_FUSE and cfg.clip > Float32(0.0)
     if cfg.clip > Float32(0.0):
-        clip_grad_norm(ex, cfg.clip, state, grads, n)
+        if fuse_clip:
+            # the partials only; the coefficient and scale run in the update
+            var p = Args()
+            p.p0 = grads
+            p.p1 = state.parts
+            p.i0 = n
+            p.i1 = state.block
+            ex.launch[OP_AGO_SUMSQ_PART](p, state.nparts)
+        else:
+            clip_grad_norm(ex, cfg.clip, state, grads, n)
     var a = Args()
     a.p0 = params
     a.p1 = grads
@@ -474,6 +540,13 @@ def step_lr[E: Exec](
     a.f5 = sc[0]
     a.f6 = sc[1]
     a.f7 = sc[2]
+    if fuse_clip:
+        a.p5 = state.parts
+        a.p6 = state.cell
+        a.i3 = state.nparts
+        a.i4 = Int(bitcast[DType.uint32](cfg.clip))
+        ex.launch[OP_AGH_OPT_CLIP](a, n)
+        return
     ex.launch[OP_OPT](a, n)
 
 
