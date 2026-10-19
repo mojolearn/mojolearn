@@ -311,6 +311,12 @@ def mlp_backward_autograd[E: Exec](
     # Per batch on top: the seed copy into the root gradient (1). (The base
     # tape's bias VJP was one launch with a serial
     # per-column fold; the blocked fold replaces it.)
+    # Lane ag-pass5-composed (read from the code; HIGGS (256,), O 1): 25 a
+    # batch -> 15 (+1 an epoch): the per-batch gather -> one an epoch
+    # (AUTOGRAD_GATHER_EPOCH), the seed copy and the product's add VJP a
+    # layer borrowed (AUTOGRAD_GRAD_ALIAS), the output layer's matmul dX + dW
+    # one launch (AUTOGRAD_PAIR), and L2GRAD + DIVS (4) inside the optimizer
+    # launch (MLP_COMPOSED_OPT_FUSE). Every one keeps the same words.
     #
     # Existing row-loss produces the combined loss/link derivative p-y with
     # respect to LOGITS, not probabilities. Seed that precise graph boundary.
