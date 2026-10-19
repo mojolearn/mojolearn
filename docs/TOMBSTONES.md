@@ -381,11 +381,12 @@ Deletions reversed by new evidence. The code is back on main; the section and th
   8759336185958287388. They are stored in `training/checks/lm_tape_backward_digests.tsv`; the check now compares the tape
   against them and word for word against `byte_host_train_step`.
 - Deleted 2026-10-19 by `a54a5fb2e` on lane/del-lm; recoverable at `a54a5fb2e^` (main `66e0842f8`).
-- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch` (`git diff a54a5fb2e a54a5fb2e^` over `training/byte_lm.mojo`,
-  `autograd/rules_lm.mojo`, `training/samba_resident.mojo`; it also drops the tombstone comments). The hand arm calls
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch` (lane/del-lm's head back to `66e0842f8` over `training/byte_lm.mojo`,
+  `autograd/rules_lm.mojo`, `training/samba_resident.mojo`; it also drops the tombstone comments and the refusals). The hand arm calls
   `llama_decoder_layer_backward_device`; if lane del-transformer has removed that walk, restore it too.
-- Guard: `MOJOLEARN_AUTOGRAD_LM_OFF` and `MOJOLEARN_AUTOGRAD_LM` refused in `core/six_lane_experiment_guards.mojo` (lane del-lm
-  block). No `grid_controls` entry existed.
+- Guard: `MOJOLEARN_AUTOGRAD_LM_OFF` and `MOJOLEARN_AUTOGRAD_LM` refused in `autograd/rules_lm.mojo` (`_check_removed_defines`, forced
+  by `byte_backward_autograd`), not in core: a core line rebuilds every binding (the push fence refuses it). No `grid_controls`
+  entry existed.
 - EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_LM_OFF`, **removed**.
 
 ### MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE
