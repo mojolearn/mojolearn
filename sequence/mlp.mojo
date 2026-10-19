@@ -105,6 +105,62 @@ def op_act_bwd(t: Int, a: Args):
     st(a.p0, t, d)
 
 
+# ------------------------------------------------------------------ the loss block
+#: THE PER-BATCH LOSS AND L2 BLOCK (lane ag-pass3-lossblock, 2026-10-19).
+#: Shared by the hand trainer and every tape arm (sequence/mlp_fit.mojo runs
+#: it between the forward and the backward of each batch). Measured on AMD
+#: MI325X, HIGGS 1M x 28, (256,) b512, 1954 batches, MOJOLEARN_AG_PROFILE=2:
+#: codes 26/28/90/91/92 are ~360 ms of a 1218 ms profiled tape step.
+#:
+#: Before (MLP_BLOCKED_FOLDS, -D MOJOLEARN_MLP_LOSSBLOCK_OFF keeps it), per
+#: batch, L <= 4 layers: 5 launches (L > 4: 2 L + 3).
+#:   OP_MLP_ROWLOSS (26)  B threads; chain O loss terms a row.
+#:   OP_MLP_L2PART  (90)  one thread per AF_NORM_BLOCK = 4096 weights; chain
+#:                        up to 4096 fmas (HIGGS: 3 threads, chains 4096,
+#:                        3072, 256; 0.1 ms a launch, latency-bound).
+#:   OP_MLP_L2FOLD  (91)  L threads; chain ceil(count / 4096) adds.
+#:   OP_MLP_ROWPART (92)  one thread per MLP_ROW_BLOCK = 256 rows; chain up
+#:                        to 256 adds (HIGGS: 2 threads).
+#:   OP_MLP_BLOSS   (28)  1 thread; chain ceil(B / 256) + L adds.
+#:   OP_MLP_EPOCH_LOSS (94), once an epoch: 1 thread; chain n_batches fmas
+#:                        (HIGGS: 1954).
+#: After (MLP_LOSSBLOCK, the default under MLP_BLOCKED_FOLDS), per batch,
+#: L <= 4 layers: 2 launches (L > 4: 2 ceil(L / 4)). Every block length is
+#: the tape's fold rule, autograd/ops.mojo ag_fold_block (R = the smallest
+#: power of two >= 64 with R R >= extent): R and the block count both grow
+#: as sqrt(extent), so no chain is long and no launch is a few threads.
+#:   OP_MLP_LB_PART (1600) B O seed threads (delta = p - y, one sub each),
+#:                        ceil(B / R(B)) row-block threads (chain R(B) rows
+#:                        of O loss terms, the rows' losses added ascending
+#:                        from +0.0), and per layer ceil(c / R(c)) weight-
+#:                        block threads (chain R(c) fmas, sumsq_fold).
+#:                        HIGGS: 512 + 8 (64 rows) + 56 (128 weights) + 4 (64).
+#:   OP_MLP_LB_FOLD (1601) 1 thread; chain sum over layers of their block
+#:                        counts + the row-block count + L adds (HIGGS:
+#:                        56 + 4 + 8 + 2 = 70).
+#:   Once an epoch: OP_MLP_LB_EPOCH_PART (1602), ceil(n / R(n)) threads over
+#:   the n batch losses (chain R(n) fmas, HIGGS 64), and OP_MLP_LB_EPOCH_FOLD
+#:   (1603), 1 thread (chain ceil(n / R(n)) adds, HIGGS 31).
+#: BIT VERSION "mlp-lossblock-1": the blocked order of ||W_l||^2, of the
+#:   batch's row-loss sum and of the epoch loss changes, so the REPORTED loss
+#:   (the curve, loss_) gets new bits on every column together (host, Metal,
+#:   NVIDIA, AMD) for any layer of more than 64 weights, any batch of more
+#:   than 64 rows or any fit of more than 64 batches. The gradients do not
+#:   read these sums (alpha W is OP_L2GRAD's), so the parameters move only if
+#:   n_iter does (the stopping rule reads the curve). HIGGS recipe, old
+#:   digests hand 2c2662ecb00cceed and tape aee3b17ef66dc060; the new ones
+#:   are recorded by the orchestrator. A layer, batch and fit of at most 64
+#:   each is one block: the old chain, the old bits (the 48 fits of
+#:   autograd/checks/mlp_cases.mojo keep theirs).
+#: Why the L2 term stays per batch: scikit-learn's reported loss adds
+#:   0.5 alpha ||W||^2 / B to each batch's loss with the weights that batch
+#:   saw, and the epoch loss weights each batch by B / N, so the epoch's L2
+#:   part is 0.5 alpha / N times the sum over batches of ||W_b||^2: a
+#:   once-an-epoch norm would report a different number. The curve feeds
+#:   tol / n_iter_no_change every epoch, so the term is always consumed; it
+#:   is made cheap instead (2 launches, short chains, many threads).
+
+
 @always_inline
 def _clip(p: Float32) -> Float32:
     comptime EPS: Float32 = 1.1920928955078125e-07
