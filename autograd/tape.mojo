@@ -11,6 +11,7 @@ from autograd.ops import (
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output,
 )
+from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dropout_args
 
 
 @fieldwise_init
@@ -428,6 +429,37 @@ struct Tape(Movable):
     def log_softmax[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         return self._unary(ex, x, LOG_SOFTMAX)
 
+    def dropout[E: Exec](
+        mut self, mut ex: E, x: Tensor, p: Float32, seed: UInt64, counter: Int,
+    ) raises -> Tensor:
+        """Zero each element with probability p and scale the rest by 1 / (1 - p).
+
+        The mask is a pure function of (seed, counter, element index), so the
+        same seed and counter give the same mask on every executor and every
+        run. Use a new counter for every training step (for example the step
+        number) and the same one when a step is replayed. 0 <= p < 1 and
+        0 <= counter < 2^32.
+
+        Example::
+
+            var h = tape.relu(ex, tape.matmul(ex, x, w))
+            var d = tape.dropout(ex, h, 0.1, seed, step)
+        """
+        if not (p >= Float32(0) and p < Float32(1)):
+            raise Error("dropout probability must be in [0, 1)")
+        if counter < 0 or counter > 0xFFFFFFFF:
+            raise Error("dropout counter must be in [0, 2^32)")
+        var n = self._nodes[self._check(x)]
+        var output = self._alloc(ex, n.rows * n.cols)
+        # s = 1 / (1 - p) once here in float32; every element then takes one
+        # rounded multiply by s (autograd/data_ops.mojo).
+        var scale = identical_div(Float32(1), Float32(1) - p)
+        var a = dropout_args(seed, counter, p, scale)
+        a.p0 = n.value
+        a.p1 = output
+        ex.launch[OP_AG_DROPOUT_FWD](a, n.rows * n.cols)
+        return self._record(ex, output, n.rows, n.cols, DROPOUT, [x], dropout_args(seed, counter, p, scale))
+
     def matmul[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor) raises -> Tensor:
         """Multiply two matrices using the existing native GEMM executor."""
         var a = self._nodes[self._check(x)]
@@ -758,6 +790,13 @@ struct Tape(Movable):
                         a.i2 = p.cols
                         a.f0 = n.saved.f0
                         ex.launch[OP_AG_REDUCE_VJP](a, p.rows * p.cols)
+                    elif n.op == DROPOUT:
+                        # The mask is re-derived from the saved (seed,
+                        # counter) slots, never stored (autograd/data_ops.mojo).
+                        var a = n.saved
+                        a.p0 = n.grad
+                        a.p1 = contribution
+                        ex.launch[OP_AG_DROPOUT_VJP](a, p.rows * p.cols)
                     elif n.op == SOFTMAX or n.op == LOG_SOFTMAX:
                         var a = Args()
                         a.p0 = n.value
