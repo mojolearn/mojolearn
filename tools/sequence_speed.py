@@ -10,6 +10,7 @@ speed change can show its bits did not move.
         --data ~/data/higgs_speed.npz --out /root/speed/before.json [--algos lstm,gru]
     MOJOLEARN_VENDOR=cpu ...                  # the CPU column: digests only, never timed
     python tools/sequence_speed.py --compare before.json after.json
+    ... --algos lstm,gru,rnn --expect sequence/checks/rnn_fit_digests.json
 
 Data: HIGGS (gbm-bench/higgs/higgs_speed.npz from R2, docs/REMOTE_DATA_R2.md),
 1M rows by default. The neural lanes read its rows (sequences cut from
@@ -19,6 +20,11 @@ consecutive rows); the forecasters read its columns as series (1M values as
 Shapes are the lane's working sizes at 1M rows; each record carries them,
 the seconds, and the output digest. `--compare` prints before -> after and
 refuses when a digest moved (IDENTICAL: the bits must not change).
+`--expect FILE` checks each record's digest against a stored-digest file
+(`{"rows": .., "digests": {algo: {"shape": .., "digest": ..}}}`), prints one
+`EXPECT <algo> got=<d> want=<d> MATCH|DIFFER|SKIPPED` line per stored algo
+it ran, and exits 1 on any DIFFER or error (the recurrent fits' check since
+the hand backward was deleted: sequence/checks/rnn_fit_digests.json).
 
 OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): on the host column (MOJOLEARN_VENDOR=cpu
 or a CPU-only install) every *_s field is dropped and SEQ_PROFILE is refused; the
@@ -295,6 +301,26 @@ def compare(a, b):
     return 0
 
 
+def expect(path, recs, rows):
+    """EXPECT lines against a stored-digest file; 1 when any differs."""
+    want = json.load(open(os.path.expanduser(path)))
+    bad = 0
+    for r in recs:
+        w = want["digests"].get(r["algo"])
+        if w is None:
+            continue
+        if want.get("rows") not in (None, rows) or "error" in r or r.get("shape") != w["shape"]:
+            why = r.get("error", "") or f"shape {r.get('shape')} rows {rows} (stored {w['shape']} rows {want.get('rows')})"
+            print(f"EXPECT {r['algo']} got={r.get('digest', '-')} want={w['digest']} SKIPPED {why[:120]}", flush=True)
+            bad += 1
+            continue
+        ok = r["digest"] == w["digest"]
+        bad += 0 if ok else 1
+        print(f"EXPECT {r['algo']} got={r['digest']} want={w['digest']} {'MATCH' if ok else 'DIFFER'}", flush=True)
+    print(f"EXPECT status={'PASS' if bad == 0 else 'FAIL'} failed={bad}", flush=True)
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=next((p for p in ("~/data/higgs_speed.npz",
@@ -304,6 +330,7 @@ def main():
     ap.add_argument("--algos", default=",".join(ALL))
     ap.add_argument("--out", default="")
     ap.add_argument("--compare", nargs=2)
+    ap.add_argument("--expect", default="", help="stored-digest JSON to check the records against")
     ap.add_argument("--profile", nargs="?", const="1", default="", choices=["1", "2"],
                     help="mlp, lstm, gru, rnn cases: MOJOLEARN_AG_PROFILE for the measured fit (1 launch "
                          "counts, 2 also host-clock times between syncs: a relative profile); the binding "
@@ -379,6 +406,8 @@ def main():
             out.write_text(json.dumps(dict(
                 mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", ""), vendor=os.environ.get("MOJOLEARN_VENDOR", "gpu"),
                 host=platform.node(), rows=args.rows, data=args.data, records=recs), indent=1))
+    if args.expect:
+        return expect(args.expect, recs, args.rows)
     return 0
 
 

@@ -1,0 +1,11 @@
+{
+ "about": "Stored digests of the recurrent fits (rnn_fit, the tape backward) at the speed harness's large shape: tools/sequence_speed.py --algos lstm,gru,rnn --expect sequence/checks/rnn_fit_digests.json, HIGGS 1M rows, MOJOLEARN_NUMERIC_MODE=identical. Recorded from the pass-6 race (integration fda883af2, default build): NVIDIA L40S and AMD MI325X gave the same digests. The deleted hand backward (MOJOLEARN_AUTOGRAD_RNN_OFF) gave the same bits as the tape in every pass-5 build (nv-04, amd-08). A digest moves only with a declared bit version; then re-record this file from one run on each vendor.",
+ "mode": "identical",
+ "rows": 1000000,
+ "source": "~/mojolearn-evidence/autograd-buildout-20261019/p6-01/{nv,amd}/race-default-lstm,gru,rnn.json",
+ "digests": {
+  "lstm": {"shape": "62500x16x28 h64 b512 1 epoch adam", "digest": "4e66c1cbd7407de4"},
+  "gru": {"shape": "62500x16x28 h64 b512 1 epoch adam", "digest": "9c78fa0c45f3086c"},
+  "rnn": {"shape": "62500x16x28 h64 b512 1 epoch adam", "digest": "2e01911ac0fd527a"}
+ }
+}
