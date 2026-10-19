@@ -145,6 +145,7 @@ from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
 from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
 from autograd.model_ops import OP_AGM_FIRST, OP_AGM_LAST, apply_model_ops
 from autograd.pass1_ops import OP_P1_FIRST, OP_P1_LAST, apply_pass1
+from autograd.composed_ops import OP_AGC_FIRST, OP_AGC_LAST, apply_composed
 
 
 @always_inline
@@ -237,6 +238,21 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_AGF_FIRST or OP_CELL_BWD_SCAN > OP_AGF_LAST
     ), "fold level opcode collides with recurrent scan"
     comptime assert OP_AGF_FIRST > OP_MLP_LB_LAST or OP_AGF_LAST < OP_MLP_LB_FIRST, "fold level opcodes overlap the MLP loss block"
+    # The composed-step family (autograd/composed_ops.mojo OP_AGC_*, 2000..;
+    # lane ag-pass5-composed), disjoint from every other autograd range and the scans.
+    comptime assert OP_AGC_FIRST <= OP_AGC_LAST, "composed-step opcode range is empty"
+    comptime assert OP_AGC_FIRST > OP_AG_LAST or OP_AGC_LAST < OP_AG_FIRST, "composed-step opcodes overlap the tape's"
+    comptime assert OP_AGC_FIRST > OP_AGD_LAST or OP_AGC_LAST < OP_AGD_FIRST, "composed-step opcodes overlap the data family"
+    comptime assert OP_AGC_FIRST > OP_AGO_LAST or OP_AGC_LAST < OP_AGO_FIRST, "composed-step opcodes overlap the optim family"
+    comptime assert OP_AGC_FIRST > OP_LS_LAST or OP_AGC_LAST < OP_LS_FIRST, "composed-step opcodes overlap the loss family"
+    comptime assert OP_AGC_FIRST > OP_AGM_LAST or OP_AGC_LAST < OP_AGM_FIRST, "composed-step opcodes overlap the model family"
+    comptime assert OP_AGC_FIRST > OP_AGK_LAST or OP_AGC_LAST < OP_AGK_FIRST, "composed-step opcodes overlap the kernel family"
+    comptime assert OP_AGC_FIRST > OP_P1_LAST or OP_AGC_LAST < OP_P1_FIRST, "composed-step opcodes overlap the fused family"
+    comptime assert OP_AGC_FIRST > OP_MLP_LB_LAST or OP_AGC_LAST < OP_MLP_LB_FIRST, "composed-step opcodes overlap the MLP loss block"
+    comptime assert OP_AGC_FIRST > OP_AGF_LAST or OP_AGC_LAST < OP_AGF_FIRST, "composed-step opcodes overlap the fold levels"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGC_FIRST or OP_CELL_FWD_SCAN > OP_AGC_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGC_FIRST or OP_CELL_BWD_SCAN > OP_AGC_LAST
+    ), "composed-step opcode collides with recurrent scan"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
@@ -258,6 +274,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_pass1[OP](t, a)
     elif OP >= OP_AGF_FIRST and OP <= OP_AGF_LAST:
         apply_autograd_fold[OP](t, a)
+    elif OP >= OP_AGC_FIRST and OP <= OP_AGC_LAST:
+        apply_composed[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

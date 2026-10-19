@@ -19,9 +19,28 @@ autograd/data_ops.mojo.
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_GATHER_ROWS, OP_MLP_PERM, OP_SEQ_IOTA
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
+from std.sys.compile import is_defined
 
 # Row indices are float32 words: every integer below 2^24 is exact.
 comptime DATA_MAX_ROWS = 1 << 24
+
+# Lane ag-pass5-composed (2026-10-19, PASS5_IDEAS idea 6), default on: a
+# trainer whose permuted training set fits GATHER_EPOCH_MAX_BYTES gathers
+# it once per epoch (gather_epoch) and reads each batch as a contiguous
+# slice of that copy, instead of one gather launch a batch. Bits: identical
+# by construction (op_gather_rows copies the same words in both layouts;
+# a batch slice holds the rows the batch gather would have written).
+# Launches: one a batch fewer, plus one an epoch (none after the first
+# epoch of an unshuffled fit). -D MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF keeps
+# the per-batch gather (arm A).
+comptime AUTOGRAD_GATHER_EPOCH = not is_defined["MOJOLEARN_AUTOGRAD_GATHER_EPOCH_OFF"]()
+# The copy doubles the resident training set (X and y are already on the
+# executor). A memory rule, not a shape rule: 1 GiB of extra storage is a
+# small part of every supported device's memory (Apple unified memory from
+# 16 GB, NVIDIA and AMD data-center cards from 24 GB) and leaves the
+# allocator's headroom for the model; above it the per-batch gather keeps
+# the footprint flat.
+comptime GATHER_EPOCH_MAX_BYTES = 1 << 30
 
 
 def _check_rows(n: Int) raises:
@@ -72,3 +91,30 @@ def gather_rows[E: Exec](
     a.i1 = D
     a.i2 = start
     ex.launch[OP_GATHER_ROWS](a, count * D)
+
+
+def gather_epoch_fits(n: Int, width: Int) -> Bool:
+    """Whether a permuted copy of n rows of `width` float32 words (the
+    features plus the targets) stays within GATHER_EPOCH_MAX_BYTES."""
+    return n >= 1 and width >= 1 and n <= GATHER_EPOCH_MAX_BYTES // (4 * width)
+
+
+def gather_epoch[E: Exec](
+    mut ex: E, X: FP, Y: FP, idx: FP, n: Int, D: Int, O: Int, Xp: FP, Yp: FP,
+) raises:
+    """Xp[r, c] = X[idx[r], c] (D columns) and Yp[r, o] = Y[idx[r], o]
+    (O columns) for every r < n, in one launch (OP_GATHER_ROWS's two-gather
+    form). Batch b of the epoch is then rows [b B, b B + B) of Xp and Yp."""
+    if n < 1 or D < 1 or O < 1:
+        raise Error("gather_epoch needs n >= 1, D >= 1 and O >= 1")
+    var a = Args()
+    a.p0 = X
+    a.p1 = idx
+    a.p2 = Xp
+    a.p3 = Y
+    a.p4 = Yp
+    a.i0 = n
+    a.i1 = D
+    a.i2 = 0
+    a.i3 = O
+    ex.launch[OP_GATHER_ROWS](a, n * (D + O))
