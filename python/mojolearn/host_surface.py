@@ -2810,6 +2810,8 @@ FAMILIES = (
             "mamba/host/device_shim.mojo",
             "mamba/host/gen/modeling_mamba_prefill_backward.mojo",
             "mamba/host/gen/mamba2_prefill_backward.mojo",
+            "mamba/host/gen/mamba1_prefill_chain.mojo",
+            "mamba/host/gen/mamba2_prefill_chain.mojo",
             "mamba/host/gen/mamba3_prefill_backward.mojo",
             "gemm/host/gemm_oracle.mojo",
             # the shim's GEMM: neural_gemm's profile door over the host rows,

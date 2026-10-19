@@ -1,25 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Times the hand-chained Mamba-1 / Mamba-2 prefill backward against the tape
-assembly (autograd/rules_mamba.mojo), one build, one run per arm.
+"""Times the tape-assembled Mamba-1 / Mamba-2 prefill backward
+(autograd/rules_mamba.mojo), one build, one run.
 
 For the largest fixture case of each family (Mamba-1 comp_b2_l257_d8,
 Mamba-2 m2_statepass_b2_l770_d64), runs one warm-up call and then N timed
-calls of the hand backward and N of the tape backward, and N of a 4-block
-tape stack (no hand path exists for a stack). Prints
+calls of the one-block tape backward and N of a 4-block tape stack. Prints
 
-    TIME m1.hand median_ms=<x> n=<N>
     TIME m1.tape median_ms=<x> n=<N>
     TIME m1.stack4.tape median_ms=<x> n=<N>
     (the same for m2)
 
-N comes from MOJOLEARN_MAMBA_TAPE_TIME (default 10). Both arms take host
-lists and return host lists, so each timed call includes the same uploads
-and downloads in both arms; the device is synchronized before each clock
-reading. With MOJOLEARN_AG_PROFILE=1 each arm also prints
-`LAUNCHES <arm> <n>` for its last timed call: the launches that go through
-DeviceExec. The hand path enqueues on the context directly, so it prints
-n/a; the tape's custom rules launch the hand kernels on the context too, so
-its count covers the tape's own DeviceExec launches only.
+N comes from MOJOLEARN_MAMBA_TAPE_TIME (default 10). The arms take host
+lists and return host lists, so each timed call includes the uploads and
+downloads; the device is synchronized before each clock reading. With
+MOJOLEARN_AG_PROFILE=1 each arm also prints `LAUNCHES <arm> <n>` for its
+last timed call: the launches that go through DeviceExec. The tape's custom
+rules launch the hand kernels on the context, so the count covers the tape's
+own DeviceExec launches only. The hand-chained arm this file timed against is
+deleted (lane del-mamba, 2026-10-19); its last numbers are in
+autograd/rules_mamba.mojo and docs/TOMBSTONES.md.
 
 The gradients are not compared here (mamba_tape_backward_check.mojo does
 that); the first word of each arm's x gradient is printed so a run that
@@ -35,8 +34,8 @@ from max.gpu.host import DeviceContext
 
 from mamba.checks.mamba_fixture import MambaWeights, corpus_case, corpus_case_weights, corpus_case_x
 from mamba.checks.mamba2_fixture import Mamba2Weights, m2_case_weights, m2_case_x, m2_corpus_case
-from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
-from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 from autograd.rules_mamba import (
     mamba1_tape_backward,
     mamba1_tape_backward_stack,
@@ -115,19 +114,13 @@ def main() raises:
     for _ in range(STACK_BLOCKS):  # driver-loop: over stack blocks
         stack.append(w.copy())
     print("CASE m1", c.name, "b", c.b, "l", c.l, "d_model", c.d_model, "blocks", STACK_BLOCKS)
-    var hand = List[Int]()
     var tape = List[Int]()
     var stk = List[Int]()
     for k in range(n + 1):  # driver-loop: over timed calls, call 0 the warm-up
         var last = k == n
         ctx.synchronize()
         profile_start(prof, last)
-        var t0 = Int(perf_counter_ns())
-        var h = mamba1_prefill_backward(w, x, dy, c.b, c.l, ctx.copy())
-        ctx.synchronize()
         var t1 = Int(perf_counter_ns())
-        profile_report(prof, last, "m1.hand", False)
-        profile_start(prof, last)
         var t = mamba1_tape_backward(w, x, dy, c.b, c.l, ctx.copy())
         ctx.synchronize()
         var t2 = Int(perf_counter_ns())
@@ -138,15 +131,12 @@ def main() raises:
         var t3 = Int(perf_counter_ns())
         profile_report(prof, last, "m1.stack4.tape", True)
         if k > 0:
-            hand.append(t1 - t0)
             tape.append(t2 - t1)
             stk.append(t3 - t2)
         if last:
-            print("FIRST m1 hand.x", h.x[0], "tape.x", t.x[0], "stack4.x", s[0].x[0])
-    report("m1.hand", hand)
+            print("FIRST m1 tape.x", t.x[0], "stack4.x", s[0].x[0])
     report("m1.tape", tape)
     report("m1.stack4.tape", stk)
-    print("TIME m1.stack4.hand n/a (no hand stack path)")
 
     # ---------------------------------------------------------------- Mamba-2
     var f = m2_corpus_case(M2_CASE)
@@ -157,19 +147,13 @@ def main() raises:
     for _ in range(STACK_BLOCKS):  # driver-loop: over stack blocks
         stack2.append(w2.copy())
     print("CASE m2", f.name, "b", f.b, "l", f.l, "d_model", f.d_model, "blocks", STACK_BLOCKS)
-    var hand2 = List[Int]()
     var tape2 = List[Int]()
     var stk2 = List[Int]()
     for k in range(n + 1):  # driver-loop: over timed calls, call 0 the warm-up
         var last = k == n
         ctx.synchronize()
         profile_start(prof, last)
-        var t0 = Int(perf_counter_ns())
-        var h = mamba2_prefill_backward(w2, x2, dy2, f.b, f.l, f.dt_lo, f.dt_hi, ctx.copy())
-        ctx.synchronize()
         var t1 = Int(perf_counter_ns())
-        profile_report(prof, last, "m2.hand", False)
-        profile_start(prof, last)
         var t = mamba2_tape_backward(w2, x2, dy2, f.b, f.l, f.dt_lo, f.dt_hi, ctx.copy())
         ctx.synchronize()
         var t2 = Int(perf_counter_ns())
@@ -180,13 +164,10 @@ def main() raises:
         var t3 = Int(perf_counter_ns())
         profile_report(prof, last, "m2.stack4.tape", True)
         if k > 0:
-            hand2.append(t1 - t0)
             tape2.append(t2 - t1)
             stk2.append(t3 - t2)
         if last:
-            print("FIRST m2 hand.x", h.x[0], "tape.x", t.x[0], "stack4.x", s[0].x[0])
-    report("m2.hand", hand2)
+            print("FIRST m2 tape.x", t.x[0], "stack4.x", s[0].x[0])
     report("m2.tape", tape2)
     report("m2.stack4.tape", stk2)
-    print("TIME m2.stack4.hand n/a (no hand stack path)")
     print("MAMBA_TAPE_TIME_DONE n=" + String(n))

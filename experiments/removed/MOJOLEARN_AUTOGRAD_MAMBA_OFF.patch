@@ -1,0 +1,3392 @@
+diff --git a/autograd/rules_mamba.mojo b/autograd/rules_mamba.mojo
+index 6430750a8..82539fa6f 100644
+--- a/autograd/rules_mamba.mojo
++++ b/autograd/rules_mamba.mojo
+@@ -1,9 +1,8 @@
+ # SPDX-License-Identifier: Apache-2.0
+-# Mamba-1 / Mamba-2 block-stack backward on the tape: the GPU binding's only
+-# Mamba-1/2 backward. docs/plans/AUTOGRAD_API.md (c) 3. "Hand path" below names
+-# the launch walk these rules reproduce, launch for launch; the device copy of
+-# that walk is deleted (lane del-mamba, 2026-10-19; docs/TOMBSTONES.md) and the
+-# CPU column keeps it as generator input (mamba/host/mamba{1,2}_prefill_chain.mojo).
++# Mamba-1 / Mamba-2 block-stack backward on the tape (-D MOJOLEARN_AUTOGRAD_MAMBA,
++# default off; the binding's hand path, modeling_mamba_prefill_backward.mojo::
++# mamba1_prefill_backward and mamba2_prefill_backward.mojo::
++# mamba2_prefill_backward, is untouched). docs/plans/AUTOGRAD_API.md (c) 3.
+ #
+ # ============================================================ LAUNCH INVENTORY
+ # Hand path, Mamba-1 (one block, zero state; forward = mamba_block_forward):
+@@ -76,9 +75,7 @@
+ #     destination (the hand path's buffers start zeroed, but none of its
+ #     kernels reads one back).
+ # Expected result: the same bits as the hand path on every gradient
+-# (mamba/checks/mamba_tape_backward_check.mojo compared them word for word on
+-# Apple, NVIDIA and AMD; it now checks the stored digests of those runs and the
+-# Mamba-1 host oracle),
++# (mamba/checks/mamba_tape_backward_check.mojo compares them word for word),
+ # now including the subnormal cases the old spelling's ftz copies and -0.0
+ # operands could move. No new kernel and no new opcode.
+ #
+@@ -199,13 +196,13 @@ from mamba.impl.ops.mamba2_ssd_backward import (
+ )
+ from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
+ 
+-# The Mamba-1/2 block backward runs on the tape (promoted 2026-10-19 by Andrew's decision: the tape is 3-4% slower in
+-# one timed series per arm with the host copies in both clocks, mamba/checks/mamba_tape_backward_time.mojo n=20:
+-# NVIDIA L40S m1 1.942 -> 2.035 ms, m2 6.462 -> 6.554; AMD MI325X m1 5.131 -> 5.285, m2 17.620 -> 18.458; averages
+-# 1.04 / 1.03; accepted for one backward path instead of two). Every gradient word equals the hand path on Apple,
+-# NVIDIA and AMD (MAMBA_TAPE_BACKWARD_PASS).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (the hand Mamba-1/2 backward arm and its MOJOLEARN_AUTOGRAD_MAMBA opt-in spelling; superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
++# The Mamba-1/2 block backward runs on the tape by default (promoted 2026-10-19 by Andrew's decision: the tape is 3-4%
++# slower in one timed series per arm with the host copies in both clocks, mamba/checks/mamba_tape_backward_time.mojo n=20:
++# NVIDIA L40S m1 1.942 -> 2.035 ms, m2 6.462 -> 6.554; AMD MI325X m1 5.131 -> 5.285, m2 17.620 -> 18.458; averages 1.04 /
++# 1.03; accepted for one backward path instead of two). Every gradient word equals the hand path on Apple, NVIDIA and AMD
++# (MAMBA_TAPE_BACKWARD_PASS). MOJOLEARN_AUTOGRAD_MAMBA_OFF restores the hand chain for the A/B; the old opt-in spelling
++# is accepted too. Pass-6 (ag-pass6-host, idea K) removes the tape's per-block copies and waits; re-time after it lands.
++comptime AUTOGRAD_MAMBA = not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_MAMBA"]()
+ 
+ # Tags in a range of their own, clear of LayerNorm (1) and recurrent (16-18).
+ comptime M1_NORM = 48
+diff --git a/bindings/_mojolearn_mamba.mojo b/bindings/_mojolearn_mamba.mojo
+index 44667116b..7f4e71c02 100644
+--- a/bindings/_mojolearn_mamba.mojo
++++ b/bindings/_mojolearn_mamba.mojo
+@@ -218,14 +218,15 @@ from mamba.impl.modules.mamba3 import (
+ )
+ 
+ 
++from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+ from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
+ from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward, mamba3_prefill_backward_on
+ from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
+-# The Mamba-1 / Mamba-2 backward entries assemble the VJP on the tape
+-# (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
++from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
++# -D MOJOLEARN_AUTOGRAD_MAMBA (default off): the Mamba-1 / Mamba-2 backward
++# entries assemble the VJP on the tape (autograd/rules_mamba.mojo); off, the
++# hand-chained prefill backward above runs unchanged.
++from autograd.rules_mamba import AUTOGRAD_MAMBA, mamba1_tape_backward, mamba2_tape_backward
+ from mamba.impl.modeling.modeling_mamba_prefill_backward import Mamba1PrefillGradients
+ from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
+ from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
+@@ -488,12 +489,17 @@ def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+     w.d_skip = _read_f32(a[9], di)
+     w.w_out = _read_f32(a[10], dm * di)
+ 
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward arm) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-    var gradients: Mamba1PrefillGradients = mamba1_tape_backward(
+-        w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
+-        neural_ctx[_NEURAL_CTX](),
+-    )
++    var gradients: Mamba1PrefillGradients
++    comptime if AUTOGRAD_MAMBA:
++        gradients = mamba1_tape_backward(
++            w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
++            neural_ctx[_NEURAL_CTX](),
++        )
++    else:
++        gradients = mamba1_prefill_backward(
++            w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
++            neural_ctx[_NEURAL_CTX](),
++        )
+     _write_f32(a[12], gradients.x)
+     _write_f32(a[13], gradients.norm_weight)
+     _write_f32(a[14], gradients.in_proj_weight)
+@@ -2992,12 +2998,17 @@ def _mamba2_backward_run(a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32,
+     w.d_skip = _read_f32(a[7], nh)
+     w.gnorm_w = _read_f32(a[8], di)
+     w.w_out = _read_f32(a[9], dm * di)
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward arm) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-    var gradients: Mamba2PrefillGradients = mamba2_tape_backward(
+-        w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
+-        neural_ctx[_NEURAL_CTX](),
+-    )
++    var gradients: Mamba2PrefillGradients
++    comptime if AUTOGRAD_MAMBA:
++        gradients = mamba2_tape_backward(
++            w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
++            neural_ctx[_NEURAL_CTX](),
++        )
++    else:
++        gradients = mamba2_prefill_backward(
++            w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
++            neural_ctx[_NEURAL_CTX](),
++        )
+     _write_f32(a[11], gradients.x)
+     _write_f32(a[12], gradients.block_norm_weight)
+     _write_f32(a[13], gradients.in_proj_weight)
+diff --git a/bindings/_mojolearn_mamba_host.mojo b/bindings/_mojolearn_mamba_host.mojo
+index 3fafe40b4..c7e0d99f6 100644
+--- a/bindings/_mojolearn_mamba_host.mojo
++++ b/bindings/_mojolearn_mamba_host.mojo
+@@ -19,10 +19,10 @@ CPU-only install through `_backend._HOST_MODULES`:
+   `mamba3_forward`, `mamba3_forward_fresh`, `mamba3_decode_step`
+         `mamba/checks/mamba3_oracle.mojo::mamba3_block_oracle`.
+   `mamba1_backward`, `mamba2_backward`, `mamba3_backward`
+-        the zero-state prefill VJPs over the device's own kernels
+-        (`mamba/host/mamba1_prefill_chain.mojo`,
+-        `mamba/host/mamba2_prefill_chain.mojo`: the launch walks the
+-        device's tape rules run; `mamba/impl/modules/mamba3_prefill_backward.mojo`), forward stages
++        the device's own zero-state prefill VJPs
++        (`mamba/impl/modeling/modeling_mamba_prefill_backward.mojo`,
++        `mamba/impl/modules/mamba2_prefill_backward.mojo`,
++        `mamba/impl/modules/mamba3_prefill_backward.mojo`), forward stages
+         included, as `tools/mamba_host_gen.py` writes them out for the host
+         under `mamba/host/gen/`: every kernel a serial loop over its launch
+         grid, every buffer a host allocation and the device GEMM
+@@ -68,9 +68,9 @@ from mamba.checks.mamba3_fixture import (
+     Mamba3Weights,
+ )
+ from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
+-from mamba.host.gen.mamba2_prefill_chain import mamba2_prefill_backward
++from mamba.host.gen.mamba2_prefill_backward import mamba2_prefill_backward
+ from mamba.host.gen.mamba3_prefill_backward import mamba3_prefill_backward
+-from mamba.host.gen.mamba1_prefill_chain import mamba1_prefill_backward
++from mamba.host.gen.modeling_mamba_prefill_backward import mamba1_prefill_backward
+ # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
+ from mamba.host.device_shim import DeviceContext as M1HostContext
+diff --git a/experiments/performance_ideas/I08/backward_check.mojo b/experiments/performance_ideas/I08/backward_check.mojo
+index c147e8c3e..d30ce4aed 100644
+--- a/experiments/performance_ideas/I08/backward_check.mojo
++++ b/experiments/performance_ideas/I08/backward_check.mojo
+@@ -8,9 +8,7 @@ fixture alone does not establish host/four-column identity or speed.
+ from std.memory import bitcast
+ from max.gpu.host import DeviceContext
+ from mamba.checks.mamba2_fixture import m2_case_weights,m2_case_x,m2_corpus_case
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-from autograd.rules_mamba import mamba2_tape_backward
++from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+ 
+ def compare(name: String,a: List[Float32],b: List[Float32]) raises:
+     if len(a)!=len(b):
+@@ -32,8 +30,8 @@ def main() raises:
+         var cotangent=List[Float32]()
+         for i in range(len(x)):
+             cotangent.append(Float32((i*37+11)%31-15)*Float32(0.0625))
+-        var a=mamba2_tape_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
+-        var b=mamba2_tape_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
++        var a=mamba2_prefill_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
++        var b=mamba2_prefill_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
+         print("I08 BACKWARD_CASE",case_k,f.b,f.l,weights.dims.d_model)
+         compare("x",a.x,b.x)
+         compare("block_norm_weight",a.block_norm_weight,b.block_norm_weight)
+diff --git a/experiments/performance_ideas/I08/time.mojo b/experiments/performance_ideas/I08/time.mojo
+index a17ad0ffb..50439bec0 100644
+--- a/experiments/performance_ideas/I08/time.mojo
++++ b/experiments/performance_ideas/I08/time.mojo
+@@ -4,9 +4,7 @@ from max.gpu.host import DeviceContext
+ from std.time import perf_counter_ns
+ from gemm.checks.gemm_step_arms import gemm_step_env_int
+ from mamba.checks.mamba2_fixture import m2_case_weights,m2_corpus_case,m2_case_seed,corpus_tensor,M2_TID_X
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-from autograd.rules_mamba import mamba2_tape_backward
++from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+ 
+ def main() raises:
+     var ctx=DeviceContext()
+@@ -18,6 +16,6 @@ def main() raises:
+     for i in range(len(x)):cotangent.append(Float32((i*37+11)%31-15)*Float32(.0625))
+     for phase in range(2):
+         var start=perf_counter_ns()
+-        var result=mamba2_tape_backward(weights,x,cotangent,f.b,l,f.dt_lo,f.dt_hi,ctx.copy())
++        var result=mamba2_prefill_backward(weights,x,cotangent,f.b,l,f.dt_lo,f.dt_hi,ctx.copy())
+         ctx.synchronize()
+         print("MEASURE id=I08 phase="+String(phase)+" length="+String(l)+" features="+String(weights.dims.d_model)+" elapsed_ns="+String(perf_counter_ns()-start))
+diff --git a/mamba/checks/mamba_backward_device_tail_dump.mojo b/mamba/checks/mamba_backward_device_tail_dump.mojo
+index f5c08a5c4..be07a9908 100644
+--- a/mamba/checks/mamba_backward_device_tail_dump.mojo
++++ b/mamba/checks/mamba_backward_device_tail_dump.mojo
+@@ -5,10 +5,7 @@ from std.memory import bitcast
+ from std.os import getenv
+ 
+ from mamba.checks.mamba_fixture import MambaDims, corpus_case, corpus_case_weights, corpus_case_x
+-from max.gpu.host import DeviceContext
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-from autograd.rules_mamba import mamba1_tape_backward
++from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
+ 
+ 
+ def _objective_cotangent(n: Int) -> List[Float32]:
+@@ -50,9 +47,9 @@ def main() raises:
+     if output == "":
+         raise Error("set MOJOLEARN_MAMBA_GRAD_DUMP to an existing directory")
+ 
+-    var gradients = mamba1_tape_backward(
++    var gradients = mamba1_prefill_backward(
+         weights, corpus_case_x(case_k), _objective_cotangent(m * dims.d_model),
+-        fixture.b, fixture.l, DeviceContext(),
++        fixture.b, fixture.l,
+     )
+ 
+     _write_f32(
+diff --git a/mamba/checks/mamba_backward_host_oracle_check.mojo b/mamba/checks/mamba_backward_host_oracle_check.mojo
+index e45a225c6..cc1ff7bd6 100644
+--- a/mamba/checks/mamba_backward_host_oracle_check.mojo
++++ b/mamba/checks/mamba_backward_host_oracle_check.mojo
+@@ -2,8 +2,7 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """HOST CHECK: the Mamba-1 host backward oracle
+ (`mamba/checks/mamba_backward_oracle.mojo`) against the device prefill VJP
+-(`mamba/host/mamba1_prefill_chain.mojo`, the walk the tape's rules
+-launch on the device), stage by
++(`mamba/impl/modeling/modeling_mamba_prefill_backward.mojo`), stage by
+ stage, on all 16 corpus cases, with the signed-dyadic objective
+ `mamba_check.mojo::objective_cotangent` spells.
+ 
+@@ -57,7 +56,7 @@ from mamba.host.gen.selective_scan_backward import (
+     mamba_bwd_da_log_into, mamba_bwd_dbc_into, selective_scan_bwd_scan_into,
+     selective_scan_checkpoint_fn,
+ )
+-from mamba.host.gen.mamba1_prefill_chain import mamba1_prefill_backward
++from mamba.host.gen.modeling_mamba_prefill_backward import mamba1_prefill_backward
+ from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
+ from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
+ 
+diff --git a/mamba/checks/mamba_tape_backward_check.mojo b/mamba/checks/mamba_tape_backward_check.mojo
+index 02cf8195c..ff29a6243 100644
+--- a/mamba/checks/mamba_tape_backward_check.mojo
++++ b/mamba/checks/mamba_tape_backward_check.mojo
+@@ -1,35 +1,22 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""Tape-assembled Mamba-1 / Mamba-2 backward against stored digests and the
+-Mamba-1 host oracle.
++"""Tape-assembled Mamba-1 / Mamba-2 backward against the hand path, word for word.
+ 
+-For each fixture case, runs the tape assembly (autograd/rules_mamba.mojo) and
+-prints one digest per gradient (FNV-1a over the float32 words), then requires
+-every digest to equal the stored one in mamba_tape_backward_digests.tsv: the
+-digests of the word-for-word tape-vs-hand runs, which agreed on Apple, NVIDIA
+-and AMD. A two-block stack of each family is run and checked the same way.
+-
+-Mamba-1 is also compared word for word with the host backward oracle
+-(mamba/checks/mamba_backward_oracle.mojo) on the oracle check's signed-dyadic
+-cotangent (mamba_backward_host_oracle_check.mojo spells it), for the eleven
+-public gradients. Mamba-2 has no host backward oracle; its digests are the
+-check. The lane that deleted the hand chain (del-mamba, 2026-10-19) recorded
+-the digests; docs/TOMBSTONES.md has the runs.
++For each fixture case, runs the hand-chained prefill backward and the tape
++assembly (autograd/rules_mamba.mojo) on the same weights, input and
++cotangent, and requires every gradient word to be equal. Prints one digest
++per gradient (FNV-1a over the words) so columns can be compared across
++vendors. A two-block stack of each family is also run through the tape and
++its digests printed (no hand path exists for a stack).
+ 
+     mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_tape_backward_check.mojo
+-
+-MOJOLEARN_MAMBA_TAPE_DIGESTS overrides the digest file's path (default
+-mamba/checks/mamba_tape_backward_digests.tsv, relative to the repository root).
+ """
+ from std.memory import bitcast
+-from std.os import getenv
+ from max.gpu.host import DeviceContext
+ 
+-from mamba.checks.mamba_fixture import MambaDims, MambaWeights, corpus_case, corpus_case_weights, corpus_case_x
++from mamba.checks.mamba_fixture import MambaWeights, corpus_case, corpus_case_weights, corpus_case_x
+ from mamba.checks.mamba2_fixture import Mamba2Weights, m2_case_weights, m2_case_x, m2_corpus_case
+-from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
+-from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
++from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
++from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+ from autograd.rules_mamba import (
+     mamba1_tape_backward,
+     mamba1_tape_backward_stack,
+@@ -37,8 +24,6 @@ from autograd.rules_mamba import (
+     mamba2_tape_backward_stack,
+ )
+ 
+-comptime DIGESTS_DEFAULT = "mamba/checks/mamba_tape_backward_digests.tsv"
+-
+ 
+ def digest(values: List[Float32]) -> UInt64:
+     var hash = UInt64(1469598103934665603)
+@@ -47,58 +32,18 @@ def digest(values: List[Float32]) -> UInt64:
+     return hash
+ 
+ 
+-def load_stored() raises -> Dict[String, String]:
+-    """`tag name` -> `words digest` from the digest file (`#` lines are notes)."""
+-    var path = String(getenv("MOJOLEARN_MAMBA_TAPE_DIGESTS"))
+-    if path == "":
+-        path = String(DIGESTS_DEFAULT)
+-    var text: String
+-    with open(path, "r") as fh:
+-        text = fh.read()
+-    var out = Dict[String, String]()
+-    var lines = text.split("\n")
+-    for li in range(len(lines)):
+-        var line = String(lines[li])
+-        if line == "" or line.startswith("#"):
+-            continue
+-        var cols = line.split("\t")
+-        if len(cols) != 4:
+-            raise Error(path + ": bad line " + line)
+-        out[String(cols[0]) + " " + String(cols[1])] = String(cols[2]) + " " + String(cols[3])
+-    if len(out) == 0:
+-        raise Error(path + ": no digests")
+-    return out^
+-
+-
+-def check(tag: String, name: String, tape: List[Float32], stored: Dict[String, String]) raises -> Int:
+-    """1 when the tape's digest (or word count) differs from the stored row, else 0;
+-    a missing row raises."""
+-    var key = tag + " " + name
+-    if key not in stored:
+-        raise Error("mamba tape backward: no stored digest for " + key)
+-    var row = stored[key].copy()
+-    var parts = row.split(" ")
+-    var want_len = String(parts[0])
+-    var want = String(parts[1])
+-    var got = String(digest(tape))
+-    var same = got == want and (want_len == "-" or want_len == String(len(tape)))
+-    print("MAMBA_TAPE", tag, name, len(tape), "tape", got, "stored", want,
+-          "SAME" if same else "DIFFER stored_words=" + want_len)
+-    return 0 if same else 1
+-
+-
+-def compare_oracle(tag: String, name: String, oracle: List[Float32], tape: List[Float32]) raises -> Int:
+-    """Number of words that differ between the host oracle and the tape."""
+-    if len(oracle) != len(tape):
+-        raise Error(tag + " " + name + ": length oracle " + String(len(oracle)) + " vs tape " + String(len(tape)))
++def compare(tag: String, name: String, hand: List[Float32], tape: List[Float32]) raises -> Int:
++    """Number of differing words (a length mismatch raises)."""
++    if len(hand) != len(tape):
++        raise Error(tag + " " + name + ": length " + String(len(hand)) + " vs " + String(len(tape)))
+     var diff = 0
+     var first = -1
+-    for i in range(len(oracle)):
+-        if bitcast[DType.uint32](oracle[i]) != bitcast[DType.uint32](tape[i]):
++    for i in range(len(hand)):
++        if bitcast[DType.uint32](hand[i]) != bitcast[DType.uint32](tape[i]):
+             diff += 1
+             if first < 0:
+                 first = i
+-    print("MAMBA_TAPE_ORACLE", tag, name, len(tape), "oracle", digest(oracle), "tape", digest(tape),
++    print("MAMBA_TAPE", tag, name, len(hand), "hand", digest(hand), "tape", digest(tape),
+           "SAME" if diff == 0 else "DIFFER words=" + String(diff) + " first=" + String(first))
+     return diff
+ 
+@@ -110,99 +55,63 @@ def cotangent(n: Int) -> List[Float32]:
+     return c^
+ 
+ 
+-def oracle_cotangent(n: Int) -> List[Float32]:
+-    """mamba_backward_host_oracle_check.mojo::cot: the same signed sixteenths
+-    with the zero numerator replaced by 1."""
+-    var c = List[Float32]()
+-    for i in range(n):
+-        var numer = (i * 37 + 11) % 31 - 15
+-        if numer == 0:
+-            numer = 1
+-        c.append(Float32(numer) / Float32(16.0))
+-    return c^
+-
+-
+ def main() raises:
+-    var stored = load_stored()
+     var ctx = DeviceContext()
+     var bad = 0
+-    var oracle_bad = 0
+     for case_k in [1, 2]:
+         var c = corpus_case(case_k)
+         var w = corpus_case_weights(case_k)
+         var x = corpus_case_x(case_k)
+         var dy = cotangent(len(x))
+         var tag = "m1.case" + String(case_k)
++        var h = mamba1_prefill_backward(w, x, dy, c.b, c.l, ctx.copy())
+         var t = mamba1_tape_backward(w, x, dy, c.b, c.l, ctx.copy())
+-        bad += check(tag, "x", t.x, stored)
+-        bad += check(tag, "norm_weight", t.norm_weight, stored)
+-        bad += check(tag, "in_proj_weight", t.in_proj_weight, stored)
+-        bad += check(tag, "conv1d_weight", t.conv1d_weight, stored)
+-        bad += check(tag, "conv1d_bias", t.conv1d_bias, stored)
+-        bad += check(tag, "x_proj_weight", t.x_proj_weight, stored)
+-        bad += check(tag, "dt_proj_weight", t.dt_proj_weight, stored)
+-        bad += check(tag, "dt_proj_bias", t.dt_proj_bias, stored)
+-        bad += check(tag, "A_log", t.A_log, stored)
+-        bad += check(tag, "D", t.D, stored)
+-        bad += check(tag, "out_proj_weight", t.out_proj_weight, stored)
+-        bad += check(tag, "stage_dB", t.stage_dB, stored)
+-        bad += check(tag, "stage_dC", t.stage_dC, stored)
++        bad += compare(tag, "x", h.x, t.x)
++        bad += compare(tag, "norm_weight", h.norm_weight, t.norm_weight)
++        bad += compare(tag, "in_proj_weight", h.in_proj_weight, t.in_proj_weight)
++        bad += compare(tag, "conv1d_weight", h.conv1d_weight, t.conv1d_weight)
++        bad += compare(tag, "conv1d_bias", h.conv1d_bias, t.conv1d_bias)
++        bad += compare(tag, "x_proj_weight", h.x_proj_weight, t.x_proj_weight)
++        bad += compare(tag, "dt_proj_weight", h.dt_proj_weight, t.dt_proj_weight)
++        bad += compare(tag, "dt_proj_bias", h.dt_proj_bias, t.dt_proj_bias)
++        bad += compare(tag, "A_log", h.A_log, t.A_log)
++        bad += compare(tag, "D", h.D, t.D)
++        bad += compare(tag, "out_proj_weight", h.out_proj_weight, t.out_proj_weight)
++        bad += compare(tag, "stage_dB", h.stage_dB, t.stage_dB)
++        bad += compare(tag, "stage_dC", h.stage_dC, t.stage_dC)
+         # two blocks, the second with the case's weights reused
+         var stack = List[MambaWeights]()
+         stack.append(w.copy())
+         stack.append(w.copy())
+         var s = mamba1_tape_backward_stack(stack, x, dy, c.b, c.l, ctx.copy())
+-        for k in range(len(s)):  # driver-loop: over stack blocks
+-            var stag = tag + ".stack.block" + String(k)
+-            bad += check(stag, "x", s[k].x, stored)
+-            bad += check(stag, "in_proj_weight", s[k].in_proj_weight, stored)
+-            bad += check(stag, "A_log", s[k].A_log, stored)
+-        # the host oracle, on its own cotangent, word for word
+-        var dims = MambaDims.of(c.d_model)
+-        var oy = oracle_cotangent(len(x))
+-        var s_in = MambaState(c.b, dims)
+-        var s_fw = MambaState(c.b, dims)
+-        var st = mamba_block_oracle(w, x, c.b, c.l, s_fw)
+-        var o = mamba_block_backward_oracle(w, x, oy, st, s_in, c.b, c.l)
+-        var to = mamba1_tape_backward(w, x, oy, c.b, c.l, ctx.copy())
+-        oracle_bad += compare_oracle(tag, "x", o.dx, to.x)
+-        oracle_bad += compare_oracle(tag, "norm_weight", o.dw_norm, to.norm_weight)
+-        oracle_bad += compare_oracle(tag, "in_proj_weight", o.dw_in, to.in_proj_weight)
+-        oracle_bad += compare_oracle(tag, "conv1d_weight", o.dcw, to.conv1d_weight)
+-        oracle_bad += compare_oracle(tag, "conv1d_bias", o.dcb, to.conv1d_bias)
+-        oracle_bad += compare_oracle(tag, "x_proj_weight", o.dw_x, to.x_proj_weight)
+-        oracle_bad += compare_oracle(tag, "dt_proj_weight", o.dw_dt, to.dt_proj_weight)
+-        oracle_bad += compare_oracle(tag, "dt_proj_bias", o.db_dt, to.dt_proj_bias)
+-        oracle_bad += compare_oracle(tag, "A_log", o.da_log, to.A_log)
+-        oracle_bad += compare_oracle(tag, "D", o.dd_skip, to.D)
+-        oracle_bad += compare_oracle(tag, "out_proj_weight", o.dw_out, to.out_proj_weight)
++        for k in range(len(s)):
++            print("MAMBA_TAPE_STACK m1.case" + String(case_k), "block", k, "x", digest(s[k].x),
++                  "in_proj_weight", digest(s[k].in_proj_weight), "A_log", digest(s[k].A_log))
+     for case_k in [1, 4]:
+         var f = m2_corpus_case(case_k)
+         var w = m2_case_weights(case_k)
+         var x = m2_case_x(case_k)
+         var dy = cotangent(len(x))
+         var tag = "m2.case" + String(case_k)
++        var h = mamba2_prefill_backward(w, x, dy, f.b, f.l, f.dt_lo, f.dt_hi, ctx.copy())
+         var t = mamba2_tape_backward(w, x, dy, f.b, f.l, f.dt_lo, f.dt_hi, ctx.copy())
+-        bad += check(tag, "x", t.x, stored)
+-        bad += check(tag, "block_norm_weight", t.block_norm_weight, stored)
+-        bad += check(tag, "in_proj_weight", t.in_proj_weight, stored)
+-        bad += check(tag, "conv1d_weight", t.conv1d_weight, stored)
+-        bad += check(tag, "conv1d_bias", t.conv1d_bias, stored)
+-        bad += check(tag, "dt_bias", t.dt_bias, stored)
+-        bad += check(tag, "A_log", t.A_log, stored)
+-        bad += check(tag, "D", t.D, stored)
+-        bad += check(tag, "norm_weight", t.norm_weight, stored)
+-        bad += check(tag, "out_proj_weight", t.out_proj_weight, stored)
++        bad += compare(tag, "x", h.x, t.x)
++        bad += compare(tag, "block_norm_weight", h.block_norm_weight, t.block_norm_weight)
++        bad += compare(tag, "in_proj_weight", h.in_proj_weight, t.in_proj_weight)
++        bad += compare(tag, "conv1d_weight", h.conv1d_weight, t.conv1d_weight)
++        bad += compare(tag, "conv1d_bias", h.conv1d_bias, t.conv1d_bias)
++        bad += compare(tag, "dt_bias", h.dt_bias, t.dt_bias)
++        bad += compare(tag, "A_log", h.A_log, t.A_log)
++        bad += compare(tag, "D", h.D, t.D)
++        bad += compare(tag, "norm_weight", h.norm_weight, t.norm_weight)
++        bad += compare(tag, "out_proj_weight", h.out_proj_weight, t.out_proj_weight)
+         var stack = List[Mamba2Weights]()
+         stack.append(w.copy())
+         stack.append(w.copy())
+         var s = mamba2_tape_backward_stack(stack, x, dy, f.b, f.l, f.dt_lo, f.dt_hi, ctx.copy())
+-        for k in range(len(s)):  # driver-loop: over stack blocks
+-            var stag = tag + ".stack.block" + String(k)
+-            bad += check(stag, "x", s[k].x, stored)
+-            bad += check(stag, "in_proj_weight", s[k].in_proj_weight, stored)
+-            bad += check(stag, "A_log", s[k].A_log, stored)
+-    if bad != 0 or oracle_bad != 0:
+-        raise Error("mamba tape backward: " + String(bad) + " digests differ from the stored record, "
+-                    + String(oracle_bad) + " Mamba-1 words differ from the host oracle")
+-    print("MAMBA_TAPE_BACKWARD_PASS every digest equals the stored record; Mamba-1 equals the host oracle word for word")
++        for k in range(len(s)):
++            print("MAMBA_TAPE_STACK m2.case" + String(case_k), "block", k, "x", digest(s[k].x),
++                  "in_proj_weight", digest(s[k].in_proj_weight), "A_log", digest(s[k].A_log))
++    if bad != 0:
++        raise Error("mamba tape backward: " + String(bad) + " gradient words differ from the hand path")
++    print("MAMBA_TAPE_BACKWARD_PASS every gradient word equals the hand path")
+diff --git a/mamba/checks/mamba_tape_backward_time.mojo b/mamba/checks/mamba_tape_backward_time.mojo
+index 5fdd380d4..d46bb034b 100644
+--- a/mamba/checks/mamba_tape_backward_time.mojo
++++ b/mamba/checks/mamba_tape_backward_time.mojo
+@@ -1,24 +1,25 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""Times the tape-assembled Mamba-1 / Mamba-2 prefill backward
+-(autograd/rules_mamba.mojo), one build, one run.
++"""Times the hand-chained Mamba-1 / Mamba-2 prefill backward against the tape
++assembly (autograd/rules_mamba.mojo), one build, one run per arm.
+ 
+ For the largest fixture case of each family (Mamba-1 comp_b2_l257_d8,
+ Mamba-2 m2_statepass_b2_l770_d64), runs one warm-up call and then N timed
+-calls of the one-block tape backward and N of a 4-block tape stack. Prints
++calls of the hand backward and N of the tape backward, and N of a 4-block
++tape stack (no hand path exists for a stack). Prints
+ 
++    TIME m1.hand median_ms=<x> n=<N>
+     TIME m1.tape median_ms=<x> n=<N>
+     TIME m1.stack4.tape median_ms=<x> n=<N>
+     (the same for m2)
+ 
+-N comes from MOJOLEARN_MAMBA_TAPE_TIME (default 10). The arms take host
+-lists and return host lists, so each timed call includes the uploads and
+-downloads; the device is synchronized before each clock reading. With
+-MOJOLEARN_AG_PROFILE=1 each arm also prints `LAUNCHES <arm> <n>` for its
+-last timed call: the launches that go through DeviceExec. The tape's custom
+-rules launch the hand kernels on the context, so the count covers the tape's
+-own DeviceExec launches only. The hand-chained arm this file timed against is
+-deleted (lane del-mamba, 2026-10-19); its last numbers are in
+-autograd/rules_mamba.mojo and docs/TOMBSTONES.md.
++N comes from MOJOLEARN_MAMBA_TAPE_TIME (default 10). Both arms take host
++lists and return host lists, so each timed call includes the same uploads
++and downloads in both arms; the device is synchronized before each clock
++reading. With MOJOLEARN_AG_PROFILE=1 each arm also prints
++`LAUNCHES <arm> <n>` for its last timed call: the launches that go through
++DeviceExec. The hand path enqueues on the context directly, so it prints
++n/a; the tape's custom rules launch the hand kernels on the context too, so
++its count covers the tape's own DeviceExec launches only.
+ 
+ The gradients are not compared here (mamba_tape_backward_check.mojo does
+ that); the first word of each arm's x gradient is printed so a run that
+@@ -34,8 +35,8 @@ from max.gpu.host import DeviceContext
+ 
+ from mamba.checks.mamba_fixture import MambaWeights, corpus_case, corpus_case_weights, corpus_case_x
+ from mamba.checks.mamba2_fixture import Mamba2Weights, m2_case_weights, m2_case_x, m2_corpus_case
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
++from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
++from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+ from autograd.rules_mamba import (
+     mamba1_tape_backward,
+     mamba1_tape_backward_stack,
+@@ -114,13 +115,19 @@ def main() raises:
+     for _ in range(STACK_BLOCKS):  # driver-loop: over stack blocks
+         stack.append(w.copy())
+     print("CASE m1", c.name, "b", c.b, "l", c.l, "d_model", c.d_model, "blocks", STACK_BLOCKS)
++    var hand = List[Int]()
+     var tape = List[Int]()
+     var stk = List[Int]()
+     for k in range(n + 1):  # driver-loop: over timed calls, call 0 the warm-up
+         var last = k == n
+         ctx.synchronize()
+         profile_start(prof, last)
++        var t0 = Int(perf_counter_ns())
++        var h = mamba1_prefill_backward(w, x, dy, c.b, c.l, ctx.copy())
++        ctx.synchronize()
+         var t1 = Int(perf_counter_ns())
++        profile_report(prof, last, "m1.hand", False)
++        profile_start(prof, last)
+         var t = mamba1_tape_backward(w, x, dy, c.b, c.l, ctx.copy())
+         ctx.synchronize()
+         var t2 = Int(perf_counter_ns())
+@@ -131,12 +138,15 @@ def main() raises:
+         var t3 = Int(perf_counter_ns())
+         profile_report(prof, last, "m1.stack4.tape", True)
+         if k > 0:
++            hand.append(t1 - t0)
+             tape.append(t2 - t1)
+             stk.append(t3 - t2)
+         if last:
+-            print("FIRST m1 tape.x", t.x[0], "stack4.x", s[0].x[0])
++            print("FIRST m1 hand.x", h.x[0], "tape.x", t.x[0], "stack4.x", s[0].x[0])
++    report("m1.hand", hand)
+     report("m1.tape", tape)
+     report("m1.stack4.tape", stk)
++    print("TIME m1.stack4.hand n/a (no hand stack path)")
+ 
+     # ---------------------------------------------------------------- Mamba-2
+     var f = m2_corpus_case(M2_CASE)
+@@ -147,13 +157,19 @@ def main() raises:
+     for _ in range(STACK_BLOCKS):  # driver-loop: over stack blocks
+         stack2.append(w2.copy())
+     print("CASE m2", f.name, "b", f.b, "l", f.l, "d_model", f.d_model, "blocks", STACK_BLOCKS)
++    var hand2 = List[Int]()
+     var tape2 = List[Int]()
+     var stk2 = List[Int]()
+     for k in range(n + 1):  # driver-loop: over timed calls, call 0 the warm-up
+         var last = k == n
+         ctx.synchronize()
+         profile_start(prof, last)
++        var t0 = Int(perf_counter_ns())
++        var h = mamba2_prefill_backward(w2, x2, dy2, f.b, f.l, f.dt_lo, f.dt_hi, ctx.copy())
++        ctx.synchronize()
+         var t1 = Int(perf_counter_ns())
++        profile_report(prof, last, "m2.hand", False)
++        profile_start(prof, last)
+         var t = mamba2_tape_backward(w2, x2, dy2, f.b, f.l, f.dt_lo, f.dt_hi, ctx.copy())
+         ctx.synchronize()
+         var t2 = Int(perf_counter_ns())
+@@ -164,10 +180,13 @@ def main() raises:
+         var t3 = Int(perf_counter_ns())
+         profile_report(prof, last, "m2.stack4.tape", True)
+         if k > 0:
++            hand2.append(t1 - t0)
+             tape2.append(t2 - t1)
+             stk2.append(t3 - t2)
+         if last:
+-            print("FIRST m2 tape.x", t.x[0], "stack4.x", s[0].x[0])
++            print("FIRST m2 hand.x", h.x[0], "tape.x", t.x[0], "stack4.x", s[0].x[0])
++    report("m2.hand", hand2)
+     report("m2.tape", tape2)
+     report("m2.stack4.tape", stk2)
++    print("TIME m2.stack4.hand n/a (no hand stack path)")
+     print("MAMBA_TAPE_TIME_DONE n=" + String(n))
+diff --git a/mamba/host/gen/mamba1_prefill_chain.mojo b/mamba/host/gen/mamba1_prefill_chain.mojo
+deleted file mode 100644
+index bef5c49d1..000000000
+--- a/mamba/host/gen/mamba1_prefill_chain.mojo
++++ /dev/null
+@@ -1,399 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# GENERATED by tools/mamba_host_gen.py from mamba/host/mamba1_prefill_chain.mojo; do not edit.
+-# 0 kernels, 1 launches restated as host loops over the launch grid, split over host tasks.
+-"""The CPU column's Mamba-1 zero-state prefill VJP: the hand-chained launch
+-walk (B1-B17), kept ONLY as the input `tools/mamba_host_gen.py` restates for
+-the host (`mamba/host/gen/mamba1_prefill_chain.mojo`, served by
+-`bindings/_mojolearn_mamba_host.mojo`). The device never runs it: the GPU
+-binding assembles the same VJP on the tape (autograd/rules_mamba.mojo), whose
+-rules launch these same kernels in this same order. No device module imports
+-this file (lane del-mamba, 2026-10-19: the device copy of this walk is
+-tombstoned in mamba/impl/modeling/modeling_mamba_prefill_backward.mojo).
+-"""
+-from mamba.host.device_shim import host_launch, launch_count
+-from std.memory import bitcast
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+-from mamba.host.device_shim import DeviceContext
+-
+-from mamba.host.gen.identity_trace import IdentityTrace
+-from mamba.host.gen.mamba3_refusal import mamba_refuse_grad_output
+-from mamba.host.gen.mamba_backward_checks import (
+-    PROJ_OUT,
+-    PROJ_DT,
+-    PROJ_IN,
+-    PROJ_X,
+-    RED_CONV_BIAS,
+-    RED_CONV_W_TAP0,
+-    RED_CONV_W_TAP1,
+-    RED_CONV_W_TAP2,
+-    RED_CONV_W_TAP3,
+-    RED_D,
+-    RED_DT_BIAS,
+-    RED_NORM_W,
+-    mamba_backward_proj_a_into,
+-    mamba_backward_proj_b_into,
+-    mamba_backward_reduce_into,
+-    mamba_reduction_tap,
+-    mamba_backward_workspace_max_floats,
+-)
+-from mamba.checks.mamba_fixture import (
+-    D_CONV,
+-    D_STATE,
+-    MambaDims,
+-    MambaWeights,
+-)
+-from mamba.host.gen.modeling_mamba import (
+-    MambaDeviceStages,
+-    MambaDeviceState,
+-    MambaDeviceWeights,
+-    mamba_block_forward,
+-    mamba_download,
+-    mamba_upload,
+-    mamba_zeros,
+-)
+-from mamba.host.gen.modeling_mamba_backward import (
+-    mamba_bwd_concat_xp_into,
+-    mamba_bwd_concat_p_into,
+-    mamba_bwd_conv_tap_product_into,
+-    mamba_bwd_ddtp_into,
+-    mamba_bwd_dhin_into,
+-    mamba_bwd_du_join_into,
+-    mamba_bwd_gate_into,
+-    mamba_bwd_norm_into,
+-)
+-from mamba.host.gen.selective_scan_backward import (
+-    bwd_da_partial_floats,
+-    bwd_dh_floats,
+-    bwd_h_checkpoint_floats,
+-    mamba_bwd_da_into,
+-    mamba_bwd_da_log_into,
+-    mamba_bwd_dbc_into,
+-    selective_scan_bwd_scan_into,
+-    selective_scan_checkpoint_fn,
+-)
+-
+-from mamba.host.gen.modeling_mamba_prefill_backward import (
+-    Mamba1PrefillGradients,
+-    m1_conv_w_interleave_kernel,
+-)
+-
+-
+-def mamba1_prefill_backward(
+-    weights: MambaWeights,
+-    input: List[Float32],
+-    grad_output: List[Float32],
+-    b: Int,
+-    l: Int,
+-    var ctx_in: Optional[DeviceContext] = None,
+-) raises -> Mamba1PrefillGradients:
+-    if b <= 0 or l <= 0:
+-        raise Error("mamba1 backward: B and L must be positive")
+-    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
+-        raise Error("mamba1 backward: input and grad_output lengths must equal B*L*d_model")
+-    var dims = weights.dims.copy()
+-    var m = b * l
+-    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
+-    # context (core/neural_context.mojo); a fresh context per call meant a
+-    # new Metal queue and a pipeline compile of every kernel on every call.
+-    # Same kernels, same launches, same order: no bit moves.
+-    var ctx: DeviceContext
+-    if ctx_in:
+-        ctx = ctx_in.take()
+-    else:
+-        ctx = DeviceContext()
+-    var dweights = MambaDeviceWeights(ctx, weights)
+-    # The forward mutates its recurrent state. Backward T2 needs the state
+-    # entering that call, so retain a distinct zero-state allocation.
+-    var state_in = MambaDeviceState(ctx, b, dims)
+-    var state = MambaDeviceState(ctx, b, dims)
+-    var stages = MambaDeviceStages(ctx, b, l, dims)
+-    var x = mamba_upload(ctx, input)
+-    var trace = IdentityTrace.disabled()
+-    mamba_block_forward(
+-        ctx, stages, state, dweights, x, b, l, trace,
+-        String("m1.backward.tail"),
+-    )
+-
+-    var dres = mamba_upload(ctx, grad_output)
+-    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
+-    # (same predicate by bits, same first flat index and message), not as a
+-    # host walk over the List.
+-    mamba_refuse_grad_output(ctx, String("mamba1"), dres, grad_output)
+-    var workspace = mamba_zeros(
+-        ctx, mamba_backward_workspace_max_floats(dims, m)
+-    )
+-    var dg = mamba_zeros(ctx, m * dims.d_inner)
+-    var dw_out = mamba_zeros(ctx, dims.d_model * dims.d_inner)
+-    mamba_backward_proj_a_into(
+-        ctx, dg, dres, dweights.w_out, workspace, PROJ_OUT, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_out, dres, stages.gate_out, workspace, PROJ_OUT, dims, m
+-    )
+-
+-    var dsk = mamba_zeros(ctx, m * dims.d_inner)
+-    var dz = mamba_zeros(ctx, m * dims.d_inner)
+-    var du_d = mamba_zeros(ctx, m * dims.d_inner)
+-    var product_d = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_gate_into(
+-        ctx, dsk, dz, du_d, product_d, dg, stages.skip_out, stages.silu_out,
+-        stages.in_proj, dweights.d_skip, m, dims.d_inner,
+-    )
+-
+-    # T2, T1, B17/B18 and T3: reconstruct every forward state, walk the
+-    # recurrence backward, then contract the channel-shared B/C gradients.
+-    var h_ckpt = mamba_zeros(
+-        ctx, bwd_h_checkpoint_floats(b, l, dims.d_inner)
+-    )
+-    selective_scan_checkpoint_fn(
+-        ctx, h_ckpt, state_in.h, stages.silu_out, stages.softplus_out,
+-        stages.a_out, stages.b_mat, b, l, dims.d_inner,
+-    )
+-    var dh = mamba_zeros(
+-        ctx, bwd_dh_floats(b, l, dims.d_inner)
+-    )
+-    var du_s = mamba_zeros(ctx, m * dims.d_inner)
+-    var ddelta = mamba_zeros(ctx, m * dims.d_inner)
+-    var scan_w = mamba_zeros(ctx, m * dims.d_inner)
+-    selective_scan_bwd_scan_into(
+-        ctx, dh, du_s, ddelta, scan_w, dsk, stages.c_mat, stages.b_mat,
+-        stages.softplus_out, stages.a_out, stages.silu_out, h_ckpt,
+-        b, l, dims.d_inner,
+-    )
+-    var dcm = mamba_zeros(ctx, m * D_STATE)
+-    var dbm = mamba_zeros(ctx, m * D_STATE)
+-    mamba_bwd_dbc_into(
+-        ctx, dcm, dbm, dsk, h_ckpt, scan_w, dh,
+-        b, l, dims.d_inner,
+-    )
+-
+-    # T4/T5 and B21: batch-private dA partials, pinned batch fold, then the
+-    # derivative through A = -exp(A_log). This produces the third complete
+-    # external parameter gradient owned by this composed segment.
+-    var da = mamba_zeros(ctx, dims.d_inner * D_STATE)
+-    var da_partial = mamba_zeros(
+-        ctx, bwd_da_partial_floats(b, dims.d_inner)
+-    )
+-    mamba_bwd_da_into(
+-        ctx, da, da_partial, dh, stages.softplus_out, stages.a_out,
+-        stages.silu_out, stages.b_mat, h_ckpt,
+-        b, l, dims.d_inner,
+-    )
+-    var da_log = mamba_zeros(ctx, dims.d_inner * D_STATE)
+-    mamba_bwd_da_log_into(ctx, da_log, da, stages.a_out, dims.d_inner)
+-
+-    # B22-B29: softplus derivative, dt projection, inverse x_proj split,
+-    # x-projection gradients, and the three-way join at the scan input.
+-    var ddtp = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_ddtp_into(
+-        ctx, ddtp, ddelta, stages.dt_proj, dweights.b_dt, m, dims.d_inner
+-    )
+-    var ddtl = mamba_zeros(ctx, m * dims.dt_rank)
+-    var dw_dt = mamba_zeros(ctx, dims.d_inner * dims.dt_rank)
+-    mamba_backward_proj_a_into(
+-        ctx, ddtl, ddtp, dweights.w_dt, workspace, PROJ_DT, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_dt, ddtp, stages.dt_low, workspace, PROJ_DT, dims, m
+-    )
+-    var db_dt = mamba_zeros(ctx, dims.d_inner)
+-    # cpu3-seq: the reduction's ones vector filled on the device (no host
+-    # List of m ones uploaded); mamba_zeros' guard layout, body set to 1.
+-    var ones = mamba_zeros(ctx, m)
+-    var ones_body = ones.create_sub_buffer[DType.float32](0, m)
+-    ones_body.enqueue_fill(Float32(1.0))
+-    _ = ones_body^
+-    mamba_backward_reduce_into(
+-        ctx, db_dt, ddtp, ones, workspace, RED_DT_BIAS, dims, m
+-    )
+-    var dxp = mamba_zeros(ctx, m * dims.x_proj_rows())
+-    mamba_bwd_concat_xp_into(ctx, dxp, ddtl, dbm, dcm, m, dims)
+-    var du_x = mamba_zeros(ctx, m * dims.d_inner)
+-    var dw_x = mamba_zeros(ctx, dims.x_proj_rows() * dims.d_inner)
+-    mamba_backward_proj_a_into(
+-        ctx, du_x, dxp, dweights.w_x, workspace, PROJ_X, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_x, dxp, stages.silu_out, workspace, PROJ_X, dims, m
+-    )
+-    var du = mamba_zeros(ctx, m * dims.d_inner)
+-    var dconv = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_du_join_into(
+-        ctx, du, dconv, du_d, du_s, du_x, stages.conv_out, m, dims.d_inner
+-    )
+-
+-    # B31-B33: causal-convolution input gradient plus bias and four weight
+-    # tap reductions. Each tap's arithmetic stays on device. The final four
+-    # contiguous columns are interleaved on the host after synchronization;
+-    # that operation is a pure layout copy and introduces no numeric seam.
+-    var dhin = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_dhin_into(
+-        ctx, dhin, dconv, dweights.conv_w,
+-        b, l, dims.d_inner,
+-    )
+-    var dconv_bias = mamba_zeros(ctx, dims.d_inner)
+-    mamba_backward_reduce_into(
+-        ctx, dconv_bias, dconv, ones, workspace,
+-        RED_CONV_BIAS, dims, m,
+-    )
+-    var tap_product0 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_product1 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_product2 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_product3 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_grad0 = mamba_zeros(ctx, dims.d_inner)
+-    var tap_grad1 = mamba_zeros(ctx, dims.d_inner)
+-    var tap_grad2 = mamba_zeros(ctx, dims.d_inner)
+-    var tap_grad3 = mamba_zeros(ctx, dims.d_inner)
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product0, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 0,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad0, tap_product0, ones, workspace,
+-        RED_CONV_W_TAP0, dims, m,
+-    )
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product1, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 1,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad1, tap_product1, ones, workspace,
+-        RED_CONV_W_TAP1, dims, m,
+-    )
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product2, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 2,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad2, tap_product2, ones, workspace,
+-        RED_CONV_W_TAP2, dims, m,
+-    )
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product3, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 3,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad3, tap_product3, ones, workspace,
+-        RED_CONV_W_TAP3, dims, m,
+-    )
+-
+-    # B34-B42: join the two in-projection halves, route both projection
+-    # derivatives, then run the fused RMSNorm/residual backward and its
+-    # deterministic token reduction. `dx` is the full block input gradient.
+-    var dp = mamba_zeros(ctx, m * 2 * dims.d_inner)
+-    mamba_bwd_concat_p_into(ctx, dp, dhin, dz, m, dims.d_inner)
+-    var dnrm = mamba_zeros(ctx, m * dims.d_model)
+-    var dw_in = mamba_zeros(ctx, 2 * dims.d_inner * dims.d_model)
+-    mamba_backward_proj_a_into(
+-        ctx, dnrm, dp, dweights.w_in, workspace, PROJ_IN, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_in, dp, stages.norm_out, workspace, PROJ_IN, dims, m
+-    )
+-    var dx_full = mamba_zeros(ctx, m * dims.d_model)
+-    var drstd = mamba_zeros(ctx, m)
+-    var norm_product = mamba_zeros(ctx, m * dims.d_model)
+-    mamba_bwd_norm_into(
+-        ctx, dx_full, drstd, norm_product, dres, dnrm, x,
+-        stages.norm_out, dweights.norm_w, stages.norm_sumsq,
+-        m, dims.d_model,
+-    )
+-    var dw_norm = mamba_zeros(ctx, dims.d_model)
+-    mamba_backward_reduce_into(
+-        ctx, dw_norm, norm_product, ones, workspace, RED_NORM_W, dims, m
+-    )
+-
+-    var dd_skip = mamba_zeros(ctx, dims.d_inner)
+-    mamba_backward_reduce_into(
+-        ctx, dd_skip, product_d, ones, workspace, RED_D, dims, m
+-    )
+-    ctx.synchronize()
+-
+-    # cpu3-seq: the four tap gradients interleaved into the [d_inner,
+-    # D_CONV] layout on the device, then ONE download (was four downloads
+-    # and a host interleave loop). Same values in the same cells.
+-    var dconv_w_dev = mamba_zeros(ctx, dims.d_inner * D_CONV)
+-    var _l1_a0 = dconv_w_dev.unsafe_ptr()
+-    var _l1_a1 = tap_grad0.unsafe_ptr()
+-    var _l1_a2 = tap_grad1.unsafe_ptr()
+-    var _l1_a3 = tap_grad2.unsafe_ptr()
+-    var _l1_a4 = tap_grad3.unsafe_ptr()
+-    var _l1_a5 = Int32(mamba_reduction_tap(RED_CONV_W_TAP0))
+-    var _l1_a6 = Int32(mamba_reduction_tap(RED_CONV_W_TAP1))
+-    var _l1_a7 = Int32(mamba_reduction_tap(RED_CONV_W_TAP2))
+-    var _l1_a8 = Int32(mamba_reduction_tap(RED_CONV_W_TAP3))
+-    var _l1_a9 = Int32(dims.d_inner)
+-    def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9}:
+-        m1_conv_w_interleave_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9)
+-    host_launch(_launch_1, launch_count(((dims.d_inner + 127) // 128, 1, 1), (128, 1, 1)))
+-    var dconv_weight = mamba_download(ctx, dconv_w_dev, dims.d_inner * D_CONV)
+-
+-    var result = Mamba1PrefillGradients()
+-    result.out_proj_weight = mamba_download(ctx, dw_out, dims.d_model * dims.d_inner)
+-    result.D = mamba_download(ctx, dd_skip, dims.d_inner)
+-    result.A_log = mamba_download(ctx, da_log, dims.d_inner * D_STATE)
+-    result.dt_proj_weight = mamba_download(ctx, dw_dt, dims.d_inner * dims.dt_rank)
+-    result.dt_proj_bias = mamba_download(ctx, db_dt, dims.d_inner)
+-    result.x_proj_weight = mamba_download(ctx, dw_x, dims.x_proj_rows() * dims.d_inner)
+-    result.conv1d_weight = dconv_weight.copy()
+-    result.conv1d_bias = mamba_download(ctx, dconv_bias, dims.d_inner)
+-    result.in_proj_weight = mamba_download(ctx, dw_in, 2 * dims.d_inner * dims.d_model)
+-    result.norm_weight = mamba_download(ctx, dw_norm, dims.d_model)
+-    result.x = mamba_download(ctx, dx_full, m * dims.d_model)
+-    result.stage_dB = mamba_download(ctx, dbm, m * D_STATE)
+-    result.stage_dC = mamba_download(ctx, dcm, m * D_STATE)
+-    _ = dconv_weight^
+-    _ = dconv_w_dev^
+-    _ = dw_norm^
+-    _ = norm_product^
+-    _ = drstd^
+-    _ = dx_full^
+-    _ = dw_in^
+-    _ = dnrm^
+-    _ = dp^
+-    _ = tap_grad3^
+-    _ = tap_grad2^
+-    _ = tap_grad1^
+-    _ = tap_grad0^
+-    _ = tap_product3^
+-    _ = tap_product2^
+-    _ = tap_product1^
+-    _ = tap_product0^
+-    _ = dconv_bias^
+-    _ = dhin^
+-    _ = dconv^
+-    _ = du^
+-    _ = dw_x^
+-    _ = du_x^
+-    _ = dxp^
+-    _ = db_dt^
+-    _ = dw_dt^
+-    _ = ddtl^
+-    _ = ddtp^
+-    _ = da_log^
+-    _ = da_partial^
+-    _ = da^
+-    _ = dbm^
+-    _ = dcm^
+-    _ = scan_w^
+-    _ = ddelta^
+-    _ = du_s^
+-    _ = dh^
+-    _ = h_ckpt^
+-    _ = dd_skip^
+-    _ = ones^
+-    _ = product_d^
+-    _ = du_d^
+-    _ = dz^
+-    _ = dsk^
+-    _ = dw_out^
+-    _ = dg^
+-    _ = workspace^
+-    _ = dres^
+-    _ = stages^
+-    _ = state^
+-    _ = state_in^
+-    _ = dweights^
+-    _ = x^
+-    _ = ctx^
+-    return result^
+diff --git a/mamba/host/gen/mamba2_prefill_backward.mojo b/mamba/host/gen/mamba2_prefill_backward.mojo
+index ca1f5ac60..9886e4cf9 100644
+--- a/mamba/host/gen/mamba2_prefill_backward.mojo
++++ b/mamba/host/gen/mamba2_prefill_backward.mojo
+@@ -1,13 +1,61 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # GENERATED by tools/mamba_host_gen.py from mamba/impl/modules/mamba2_prefill_backward.mojo; do not edit.
+ # 0 kernels, 0 launches restated as host loops over the launch grid, split over host tasks.
+-"""The Mamba-2 zero-state prefill VJP's result type. The device VJP is
+-assembled on the tape (autograd/rules_mamba.mojo::mamba2_tape_backward); the
+-CPU column's hand walk is mamba/host/mamba2_prefill_chain.mojo.
++"""Synchronous Mamba-2 zero-state IDENTICAL prefill VJP.
++
++Launch order extracted from checks/mamba2_backward_tail_dump.mojo.
++The original diagnostic driver remains an independent byte-comparison gate.
++Python/native API qualification is required separately from historical dumps.
++No incoming cache or final-state cotangent is accepted.
+ """
+-# the weights these gradients mirror, field for field (also the host
+-# generator's first top-level import, which it needs to place its own)
+ from mamba.host.device_shim import host_launch, launch_count
++from std.memory import bitcast
++
++from mamba.host.device_shim import DeviceContext
++
++from mamba.host.gen.identity_trace import IdentityTrace
++from mamba.checks.mamba2_fixture import (
++    M2_D_STATE,
++    M2_HEADDIM,
++)
++from mamba.host.gen.mamba3_refusal import mamba_refuse_grad_output
++from mamba.host.gen.mamba2 import (
++    Mamba2DeviceStages,
++    Mamba2DeviceWeights,
++    allocate_inference_cache,
++    mamba2_block_forward,
++)
++from mamba.host.gen.mamba2_backward import (
++    Mamba2BackwardTail,
++    mamba2_backward_d_skip_into,
++    mamba2_backward_gnorm_into,
++    mamba2_backward_silu_gate_into,
++    mamba2_backward_tail_into,
++    mamba2_backward_input_projection_into,
++    mamba2_backward_block_norm_into,
++)
++from mamba.host.gen.ssd_minimal import m2_q_eff
++from mamba.host.gen.mamba2_ssd_backward import (
++    Mamba2SSDBackwardState,
++    Mamba2SSDDiscretizeBackward,
++    Mamba2ConvBackward,
++    Mamba2SSDScaleReduction,
++    mamba2_reduce_scale_product_into,
++    mamba2_reverse_cumsum_and_da_into,
++    mamba2_ydiag_xd_and_partial_dt_into,
++    mamba2_reverse_chunk_state_into,
++    mamba2_cstate_ddecay_into,
++    mamba2_postconv_merge_into,
++    mamba2_conv_backward_prefill_into,
++    mamba2_s18_direct_dpass_into,
++)
++from mamba.host.gen.modeling_mamba import (
++    mamba_download,
++    mamba_upload,
++    mamba_zeros,
++)
++
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from mamba.checks.mamba2_fixture import Mamba2Weights
+ 
+ 
+@@ -36,6 +84,194 @@ struct Mamba2PrefillGradients(Movable):
+         self.out_proj_weight = List[Float32]()
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by e378999c7; code recoverable at e378999c7^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-# (the CPU column keeps the same walk as generator input: mamba/host/mamba2_prefill_chain.mojo)
++def mamba2_prefill_backward(
++    weights: Mamba2Weights,
++    input: List[Float32],
++    grad_output: List[Float32],
++    b: Int,
++    l: Int,
++    dt_lo: Float32,
++    dt_hi: Float32,
++    var ctx_in: Optional[DeviceContext] = None,
++) raises -> Mamba2PrefillGradients:
++    if b <= 0 or l <= 0:
++        raise Error("mamba2 backward: B and L must be positive")
++    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
++        raise Error("mamba2 backward: input and grad_output lengths must equal B*L*d_model")
++    var dims = weights.dims.copy()
++    var m = b * l
++    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
++    # context (core/neural_context.mojo); a fresh context per call meant a
++    # new Metal queue and a pipeline compile of every kernel on every call.
++    # Same kernels, same launches, same order: no bit moves.
++    var ctx: DeviceContext
++    if ctx_in:
++        ctx = ctx_in.take()
++    else:
++        ctx = DeviceContext()
++    var dweights = Mamba2DeviceWeights(ctx, weights)
++    var state = allocate_inference_cache(ctx, b, dims)
++    var stages = Mamba2DeviceStages(ctx, b, l, 0, dims)
++    var x = mamba_upload(ctx, input)
++    var trace = IdentityTrace.disabled()
++    mamba2_block_forward(
++        ctx,
++        stages,
++        state,
++        dweights,
++        x,
++        b,
++        l,
++        dt_lo,
++        dt_hi,
++        trace,
++        String("m2.backward.tail"),
++    )
++
++    var d_residual = mamba_upload(
++        ctx, grad_output
++    )
++    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
++    # (same predicate by bits, same first flat index and message), not as a
++    # host walk over the List.
++    mamba_refuse_grad_output(ctx, String("mamba2"), d_residual, grad_output)
++    var tail = Mamba2BackwardTail(ctx, dims, m)
++    mamba2_backward_tail_into(
++        ctx,
++        tail,
++        d_residual,
++        stages.gnorm_out,
++        dweights.w_out,
++        dims,
++        m,
++    )
++    mamba2_backward_gnorm_into(
++        ctx,
++        tail,
++        stages.gnorm_gate,
++        stages.gnorm_sumsq,
++        dweights.gnorm_w,
++        dims,
++        m,
++    )
++    mamba2_backward_silu_gate_into(
++        ctx, tail, stages.skip_out, stages.in_proj, dims, m
++    )
++    mamba2_backward_d_skip_into(
++        ctx, tail, stages.silu_out, dweights.d_skip, dims, m
++    )
++    var ssd_backward = Mamba2SSDBackwardState(
++        ctx, b, stages.nc, dims.nheads
++    )
++    mamba2_s18_direct_dpass_into(
++        ctx,
++        ssd_backward,
++        tail.d_scan,
++        stages.xbc_work,
++        stages.pass_states,
++        stages.dacs,
++        b,
++        stages.t_work,
++        dims.nheads,
++        dims.d_inner,
++        dims.conv_dim(),
++        stages.nc,
++        m2_q_eff(),
++    )
++    # The scalar objective depends only on residual.out, not h_last, so the
++    # final-state cotangent is explicitly zero at this partial boundary.
++    var d_final = mamba_zeros(
++        ctx, b * dims.nheads * M2_HEADDIM * M2_D_STATE
++    )
++    mamba2_reverse_chunk_state_into(
++        ctx,
++        ssd_backward,
++        d_final,
++        stages.pass_states,
++        stages.dacs,
++        b,
++        dims.nheads,
++        stages.nc,
++        m2_q_eff(),
++    )
++    mamba2_cstate_ddecay_into(
++        ctx, ssd_backward, stages.xd_work, stages.xbc_work, b,
++        stages.t_work, dims.nheads, dims.d_inner, dims.conv_dim(),
++        stages.nc, m2_q_eff(),
++    )
++    var scale_reduction = Mamba2SSDScaleReduction(
++        ctx, b, stages.nc, dims.nheads, m2_q_eff()
++    )
++    mamba2_reduce_scale_product_into(
++        ctx,
++        scale_reduction,
++        ssd_backward,
++        stages.dacs,
++        stages.decay,
++        b,
++        stages.nc,
++        dims.nheads,
++        m2_q_eff(),
++    )
++    var discretize_backward = Mamba2SSDDiscretizeBackward(
++        ctx, b, stages.t_work, dims.nheads
++    )
++    mamba2_reverse_cumsum_and_da_into(
++        ctx, discretize_backward, scale_reduction.d_dacs_total,
++        stages.dt_work, stages.a_out, b, stages.t_work,
++        dims.nheads, stages.nc, m2_q_eff(),
++    )
++    mamba2_ydiag_xd_and_partial_dt_into(
++        ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
++        stages.xd_work,
++        stages.xbc_work, stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
++        ssd_backward.d_cstate, stages.decay,
++        b, stages.t_work, dims.nheads, dims.d_inner,
++        dims.conv_dim(), stages.nc, m2_q_eff(), dt_lo, dt_hi,
++    )
++    mamba2_postconv_merge_into(
++        ctx, discretize_backward, ssd_backward, tail.d_x_from_d,
++        b, stages.t_work, dims.nheads,
++    )
++    var conv_backward = Mamba2ConvBackward(ctx, b, l, dims.conv_dim())
++    mamba2_conv_backward_prefill_into(
++        ctx, conv_backward, discretize_backward, stages.conv_out,
++        stages.in_proj, dweights.conv_w, b, l, dims.d_inner,
++        dims.conv_dim(), dims.d_in_proj(), stages.q0,
++    )
++    mamba2_backward_input_projection_into(
++        ctx, tail, conv_backward.d_in_xbc, discretize_backward.d_dtraw,
++        stages.norm_out, dweights.w_in, dims, m,
++    )
++    mamba2_backward_block_norm_into(
++        ctx, tail, d_residual, x, stages.norm_sumsq,
++        dweights.norm_w, dims, m,
++    )
++    ctx.synchronize()
++
++    var result = Mamba2PrefillGradients()
++    result.x = mamba_download(ctx, tail.d_block_x, m*dims.d_model)
++    result.block_norm_weight = mamba_download(ctx, tail.d_block_w, dims.d_model)
++    result.in_proj_weight = mamba_download(ctx, tail.d_w_in, dims.d_in_proj()*dims.d_model)
++    result.conv1d_weight = mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4)
++    result.conv1d_bias = mamba_download(ctx, conv_backward.d_b, dims.conv_dim())
++    result.dt_bias = mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads)
++    result.A_log = mamba_download(ctx, discretize_backward.d_a_log, dims.nheads)
++    result.D = mamba_download(ctx, tail.d_d, dims.nheads)
++    result.norm_weight = mamba_download(ctx, tail.d_gnorm_w, dims.d_inner)
++    result.out_proj_weight = mamba_download(ctx, tail.d_w_out, dims.d_model*dims.d_inner)
++
++    # Explicit ownership extends all GPU buffers through synchronization.
++    _ = conv_backward^
++    _ = discretize_backward^
++    _ = scale_reduction^
++    _ = d_final^
++    _ = ssd_backward^
++    _ = tail^
++    _ = d_residual^
++    _ = x^
++    _ = stages^
++    _ = state^
++    _ = dweights^
++    _ = ctx^
++    return result^
+diff --git a/mamba/host/gen/mamba2_prefill_chain.mojo b/mamba/host/gen/mamba2_prefill_chain.mojo
+deleted file mode 100644
+index 20f2b5556..000000000
+--- a/mamba/host/gen/mamba2_prefill_chain.mojo
++++ /dev/null
+@@ -1,256 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# GENERATED by tools/mamba_host_gen.py from mamba/host/mamba2_prefill_chain.mojo; do not edit.
+-# 0 kernels, 0 launches restated as host loops over the launch grid, split over host tasks.
+-"""The CPU column's Mamba-2 zero-state IDENTICAL prefill VJP: the hand-chained
+-launch walk (C1-C8), kept ONLY as the input `tools/mamba_host_gen.py`
+-restates for the host (`mamba/host/gen/mamba2_prefill_chain.mojo`, served by
+-`bindings/_mojolearn_mamba_host.mojo`). The device never runs it: the GPU
+-binding assembles the same VJP on the tape (autograd/rules_mamba.mojo), whose
+-rules launch these same kernels in this same order. No device module imports
+-this file (lane del-mamba, 2026-10-19: the device copy of this walk is
+-tombstoned in mamba/impl/modules/mamba2_prefill_backward.mojo).
+-No incoming cache or final-state cotangent is accepted.
+-"""
+-from mamba.host.device_shim import host_launch, launch_count
+-from std.memory import bitcast
+-
+-from mamba.host.device_shim import DeviceContext
+-
+-from mamba.host.gen.identity_trace import IdentityTrace
+-from mamba.checks.mamba2_fixture import (
+-    M2_D_STATE,
+-    M2_HEADDIM,
+-)
+-from mamba.host.gen.mamba3_refusal import mamba_refuse_grad_output
+-from mamba.host.gen.mamba2 import (
+-    Mamba2DeviceStages,
+-    Mamba2DeviceWeights,
+-    allocate_inference_cache,
+-    mamba2_block_forward,
+-)
+-from mamba.host.gen.mamba2_backward import (
+-    Mamba2BackwardTail,
+-    mamba2_backward_d_skip_into,
+-    mamba2_backward_gnorm_into,
+-    mamba2_backward_silu_gate_into,
+-    mamba2_backward_tail_into,
+-    mamba2_backward_input_projection_into,
+-    mamba2_backward_block_norm_into,
+-)
+-from mamba.host.gen.ssd_minimal import m2_q_eff
+-from mamba.host.gen.mamba2_ssd_backward import (
+-    Mamba2SSDBackwardState,
+-    Mamba2SSDDiscretizeBackward,
+-    Mamba2ConvBackward,
+-    Mamba2SSDScaleReduction,
+-    mamba2_reduce_scale_product_into,
+-    mamba2_reverse_cumsum_and_da_into,
+-    mamba2_ydiag_xd_and_partial_dt_into,
+-    mamba2_reverse_chunk_state_into,
+-    mamba2_cstate_ddecay_into,
+-    mamba2_postconv_merge_into,
+-    mamba2_conv_backward_prefill_into,
+-    mamba2_s18_direct_dpass_into,
+-)
+-from mamba.host.gen.modeling_mamba import (
+-    mamba_download,
+-    mamba_upload,
+-    mamba_zeros,
+-)
+-
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+-from mamba.checks.mamba2_fixture import Mamba2Weights
+-from mamba.host.gen.mamba2_prefill_backward import Mamba2PrefillGradients
+-
+-
+-def mamba2_prefill_backward(
+-    weights: Mamba2Weights,
+-    input: List[Float32],
+-    grad_output: List[Float32],
+-    b: Int,
+-    l: Int,
+-    dt_lo: Float32,
+-    dt_hi: Float32,
+-    var ctx_in: Optional[DeviceContext] = None,
+-) raises -> Mamba2PrefillGradients:
+-    if b <= 0 or l <= 0:
+-        raise Error("mamba2 backward: B and L must be positive")
+-    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
+-        raise Error("mamba2 backward: input and grad_output lengths must equal B*L*d_model")
+-    var dims = weights.dims.copy()
+-    var m = b * l
+-    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
+-    # context (core/neural_context.mojo); a fresh context per call meant a
+-    # new Metal queue and a pipeline compile of every kernel on every call.
+-    # Same kernels, same launches, same order: no bit moves.
+-    var ctx: DeviceContext
+-    if ctx_in:
+-        ctx = ctx_in.take()
+-    else:
+-        ctx = DeviceContext()
+-    var dweights = Mamba2DeviceWeights(ctx, weights)
+-    var state = allocate_inference_cache(ctx, b, dims)
+-    var stages = Mamba2DeviceStages(ctx, b, l, 0, dims)
+-    var x = mamba_upload(ctx, input)
+-    var trace = IdentityTrace.disabled()
+-    mamba2_block_forward(
+-        ctx,
+-        stages,
+-        state,
+-        dweights,
+-        x,
+-        b,
+-        l,
+-        dt_lo,
+-        dt_hi,
+-        trace,
+-        String("m2.backward.tail"),
+-    )
+-
+-    var d_residual = mamba_upload(
+-        ctx, grad_output
+-    )
+-    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
+-    # (same predicate by bits, same first flat index and message), not as a
+-    # host walk over the List.
+-    mamba_refuse_grad_output(ctx, String("mamba2"), d_residual, grad_output)
+-    var tail = Mamba2BackwardTail(ctx, dims, m)
+-    mamba2_backward_tail_into(
+-        ctx,
+-        tail,
+-        d_residual,
+-        stages.gnorm_out,
+-        dweights.w_out,
+-        dims,
+-        m,
+-    )
+-    mamba2_backward_gnorm_into(
+-        ctx,
+-        tail,
+-        stages.gnorm_gate,
+-        stages.gnorm_sumsq,
+-        dweights.gnorm_w,
+-        dims,
+-        m,
+-    )
+-    mamba2_backward_silu_gate_into(
+-        ctx, tail, stages.skip_out, stages.in_proj, dims, m
+-    )
+-    mamba2_backward_d_skip_into(
+-        ctx, tail, stages.silu_out, dweights.d_skip, dims, m
+-    )
+-    var ssd_backward = Mamba2SSDBackwardState(
+-        ctx, b, stages.nc, dims.nheads
+-    )
+-    mamba2_s18_direct_dpass_into(
+-        ctx,
+-        ssd_backward,
+-        tail.d_scan,
+-        stages.xbc_work,
+-        stages.pass_states,
+-        stages.dacs,
+-        b,
+-        stages.t_work,
+-        dims.nheads,
+-        dims.d_inner,
+-        dims.conv_dim(),
+-        stages.nc,
+-        m2_q_eff(),
+-    )
+-    # The scalar objective depends only on residual.out, not h_last, so the
+-    # final-state cotangent is explicitly zero at this partial boundary.
+-    var d_final = mamba_zeros(
+-        ctx, b * dims.nheads * M2_HEADDIM * M2_D_STATE
+-    )
+-    mamba2_reverse_chunk_state_into(
+-        ctx,
+-        ssd_backward,
+-        d_final,
+-        stages.pass_states,
+-        stages.dacs,
+-        b,
+-        dims.nheads,
+-        stages.nc,
+-        m2_q_eff(),
+-    )
+-    mamba2_cstate_ddecay_into(
+-        ctx, ssd_backward, stages.xd_work, stages.xbc_work, b,
+-        stages.t_work, dims.nheads, dims.d_inner, dims.conv_dim(),
+-        stages.nc, m2_q_eff(),
+-    )
+-    var scale_reduction = Mamba2SSDScaleReduction(
+-        ctx, b, stages.nc, dims.nheads, m2_q_eff()
+-    )
+-    mamba2_reduce_scale_product_into(
+-        ctx,
+-        scale_reduction,
+-        ssd_backward,
+-        stages.dacs,
+-        stages.decay,
+-        b,
+-        stages.nc,
+-        dims.nheads,
+-        m2_q_eff(),
+-    )
+-    var discretize_backward = Mamba2SSDDiscretizeBackward(
+-        ctx, b, stages.t_work, dims.nheads
+-    )
+-    mamba2_reverse_cumsum_and_da_into(
+-        ctx, discretize_backward, scale_reduction.d_dacs_total,
+-        stages.dt_work, stages.a_out, b, stages.t_work,
+-        dims.nheads, stages.nc, m2_q_eff(),
+-    )
+-    mamba2_ydiag_xd_and_partial_dt_into(
+-        ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
+-        stages.xd_work,
+-        stages.xbc_work, stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
+-        ssd_backward.d_cstate, stages.decay,
+-        b, stages.t_work, dims.nheads, dims.d_inner,
+-        dims.conv_dim(), stages.nc, m2_q_eff(), dt_lo, dt_hi,
+-    )
+-    mamba2_postconv_merge_into(
+-        ctx, discretize_backward, ssd_backward, tail.d_x_from_d,
+-        b, stages.t_work, dims.nheads,
+-    )
+-    var conv_backward = Mamba2ConvBackward(ctx, b, l, dims.conv_dim())
+-    mamba2_conv_backward_prefill_into(
+-        ctx, conv_backward, discretize_backward, stages.conv_out,
+-        stages.in_proj, dweights.conv_w, b, l, dims.d_inner,
+-        dims.conv_dim(), dims.d_in_proj(), stages.q0,
+-    )
+-    mamba2_backward_input_projection_into(
+-        ctx, tail, conv_backward.d_in_xbc, discretize_backward.d_dtraw,
+-        stages.norm_out, dweights.w_in, dims, m,
+-    )
+-    mamba2_backward_block_norm_into(
+-        ctx, tail, d_residual, x, stages.norm_sumsq,
+-        dweights.norm_w, dims, m,
+-    )
+-    ctx.synchronize()
+-
+-    var result = Mamba2PrefillGradients()
+-    result.x = mamba_download(ctx, tail.d_block_x, m*dims.d_model)
+-    result.block_norm_weight = mamba_download(ctx, tail.d_block_w, dims.d_model)
+-    result.in_proj_weight = mamba_download(ctx, tail.d_w_in, dims.d_in_proj()*dims.d_model)
+-    result.conv1d_weight = mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4)
+-    result.conv1d_bias = mamba_download(ctx, conv_backward.d_b, dims.conv_dim())
+-    result.dt_bias = mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads)
+-    result.A_log = mamba_download(ctx, discretize_backward.d_a_log, dims.nheads)
+-    result.D = mamba_download(ctx, tail.d_d, dims.nheads)
+-    result.norm_weight = mamba_download(ctx, tail.d_gnorm_w, dims.d_inner)
+-    result.out_proj_weight = mamba_download(ctx, tail.d_w_out, dims.d_model*dims.d_inner)
+-
+-    # Explicit ownership extends all GPU buffers through synchronization.
+-    _ = conv_backward^
+-    _ = discretize_backward^
+-    _ = scale_reduction^
+-    _ = d_final^
+-    _ = ssd_backward^
+-    _ = tail^
+-    _ = d_residual^
+-    _ = x^
+-    _ = stages^
+-    _ = state^
+-    _ = dweights^
+-    _ = ctx^
+-    return result^
+diff --git a/mamba/host/gen/modeling_mamba_prefill_backward.mojo b/mamba/host/gen/modeling_mamba_prefill_backward.mojo
+index bd3a702de..ba213f6c1 100644
+--- a/mamba/host/gen/modeling_mamba_prefill_backward.mojo
++++ b/mamba/host/gen/modeling_mamba_prefill_backward.mojo
+@@ -1,13 +1,73 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # GENERATED by tools/mamba_host_gen.py from mamba/impl/modeling/modeling_mamba_prefill_backward.mojo; do not edit.
+-# 1 kernels, 0 launches restated as host loops over the launch grid, split over host tasks.
+-"""The Mamba-1 zero-state prefill VJP's result type and its conv1d weight
+-layout kernel. The device VJP is assembled on the tape
+-(autograd/rules_mamba.mojo::mamba1_tape_backward), which launches this file's
+-kernel; the CPU column's hand walk is mamba/host/mamba1_prefill_chain.mojo.
++# 1 kernels, 1 launches restated as host loops over the launch grid, split over host tasks.
++"""Shared synchronous Mamba-1 zero-state prefill VJP.
++
++Extracted from checks/mamba_backward_device_tail_dump.mojo (2026-09-06).
++The certified launch/reduction order and post-sync convolution layout copy
++are retained unchanged. The driver and Python binding use this same pass.
+ """
+ from mamba.host.device_shim import host_launch, launch_count
+-from mamba.checks.mamba_fixture import D_CONV
++from std.memory import bitcast
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from mamba.host.device_shim import DeviceContext
++
++from mamba.host.gen.identity_trace import IdentityTrace
++from mamba.host.gen.mamba3_refusal import mamba_refuse_grad_output
++from mamba.host.gen.mamba_backward_checks import (
++    PROJ_OUT,
++    PROJ_DT,
++    PROJ_IN,
++    PROJ_X,
++    RED_CONV_BIAS,
++    RED_CONV_W_TAP0,
++    RED_CONV_W_TAP1,
++    RED_CONV_W_TAP2,
++    RED_CONV_W_TAP3,
++    RED_D,
++    RED_DT_BIAS,
++    RED_NORM_W,
++    mamba_backward_proj_a_into,
++    mamba_backward_proj_b_into,
++    mamba_backward_reduce_into,
++    mamba_reduction_tap,
++    mamba_backward_workspace_max_floats,
++)
++from mamba.checks.mamba_fixture import (
++    D_CONV,
++    D_STATE,
++    MambaDims,
++    MambaWeights,
++)
++from mamba.host.gen.modeling_mamba import (
++    MambaDeviceStages,
++    MambaDeviceState,
++    MambaDeviceWeights,
++    mamba_block_forward,
++    mamba_download,
++    mamba_upload,
++    mamba_zeros,
++)
++from mamba.host.gen.modeling_mamba_backward import (
++    mamba_bwd_concat_xp_into,
++    mamba_bwd_concat_p_into,
++    mamba_bwd_conv_tap_product_into,
++    mamba_bwd_ddtp_into,
++    mamba_bwd_dhin_into,
++    mamba_bwd_du_join_into,
++    mamba_bwd_gate_into,
++    mamba_bwd_norm_into,
++)
++from mamba.host.gen.selective_scan_backward import (
++    bwd_da_partial_floats,
++    bwd_dh_floats,
++    bwd_h_checkpoint_floats,
++    mamba_bwd_da_into,
++    mamba_bwd_da_log_into,
++    mamba_bwd_dbc_into,
++    selective_scan_bwd_scan_into,
++    selective_scan_checkpoint_fn,
++)
+ 
+ 
+ struct Mamba1PrefillGradients(Movable):
+@@ -70,6 +130,322 @@ def m1_conv_w_interleave_kernel(gid_: Int,
+     out_ptr.unsafe_store(base + Int(p3), t3_ptr.unsafe_load(d))
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward glue, superseded by the tape) deleted 2026-10-19 by e378999c7; code recoverable at e378999c7^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-# (the CPU column keeps the same walk as generator input: mamba/host/mamba1_prefill_chain.mojo)
++def mamba1_prefill_backward(
++    weights: MambaWeights,
++    input: List[Float32],
++    grad_output: List[Float32],
++    b: Int,
++    l: Int,
++    var ctx_in: Optional[DeviceContext] = None,
++) raises -> Mamba1PrefillGradients:
++    if b <= 0 or l <= 0:
++        raise Error("mamba1 backward: B and L must be positive")
++    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
++        raise Error("mamba1 backward: input and grad_output lengths must equal B*L*d_model")
++    var dims = weights.dims.copy()
++    var m = b * l
++    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
++    # context (core/neural_context.mojo); a fresh context per call meant a
++    # new Metal queue and a pipeline compile of every kernel on every call.
++    # Same kernels, same launches, same order: no bit moves.
++    var ctx: DeviceContext
++    if ctx_in:
++        ctx = ctx_in.take()
++    else:
++        ctx = DeviceContext()
++    var dweights = MambaDeviceWeights(ctx, weights)
++    # The forward mutates its recurrent state. Backward T2 needs the state
++    # entering that call, so retain a distinct zero-state allocation.
++    var state_in = MambaDeviceState(ctx, b, dims)
++    var state = MambaDeviceState(ctx, b, dims)
++    var stages = MambaDeviceStages(ctx, b, l, dims)
++    var x = mamba_upload(ctx, input)
++    var trace = IdentityTrace.disabled()
++    mamba_block_forward(
++        ctx, stages, state, dweights, x, b, l, trace,
++        String("m1.backward.tail"),
++    )
++
++    var dres = mamba_upload(ctx, grad_output)
++    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
++    # (same predicate by bits, same first flat index and message), not as a
++    # host walk over the List.
++    mamba_refuse_grad_output(ctx, String("mamba1"), dres, grad_output)
++    var workspace = mamba_zeros(
++        ctx, mamba_backward_workspace_max_floats(dims, m)
++    )
++    var dg = mamba_zeros(ctx, m * dims.d_inner)
++    var dw_out = mamba_zeros(ctx, dims.d_model * dims.d_inner)
++    mamba_backward_proj_a_into(
++        ctx, dg, dres, dweights.w_out, workspace, PROJ_OUT, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_out, dres, stages.gate_out, workspace, PROJ_OUT, dims, m
++    )
++
++    var dsk = mamba_zeros(ctx, m * dims.d_inner)
++    var dz = mamba_zeros(ctx, m * dims.d_inner)
++    var du_d = mamba_zeros(ctx, m * dims.d_inner)
++    var product_d = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_gate_into(
++        ctx, dsk, dz, du_d, product_d, dg, stages.skip_out, stages.silu_out,
++        stages.in_proj, dweights.d_skip, m, dims.d_inner,
++    )
++
++    # T2, T1, B17/B18 and T3: reconstruct every forward state, walk the
++    # recurrence backward, then contract the channel-shared B/C gradients.
++    var h_ckpt = mamba_zeros(
++        ctx, bwd_h_checkpoint_floats(b, l, dims.d_inner)
++    )
++    selective_scan_checkpoint_fn(
++        ctx, h_ckpt, state_in.h, stages.silu_out, stages.softplus_out,
++        stages.a_out, stages.b_mat, b, l, dims.d_inner,
++    )
++    var dh = mamba_zeros(
++        ctx, bwd_dh_floats(b, l, dims.d_inner)
++    )
++    var du_s = mamba_zeros(ctx, m * dims.d_inner)
++    var ddelta = mamba_zeros(ctx, m * dims.d_inner)
++    var scan_w = mamba_zeros(ctx, m * dims.d_inner)
++    selective_scan_bwd_scan_into(
++        ctx, dh, du_s, ddelta, scan_w, dsk, stages.c_mat, stages.b_mat,
++        stages.softplus_out, stages.a_out, stages.silu_out, h_ckpt,
++        b, l, dims.d_inner,
++    )
++    var dcm = mamba_zeros(ctx, m * D_STATE)
++    var dbm = mamba_zeros(ctx, m * D_STATE)
++    mamba_bwd_dbc_into(
++        ctx, dcm, dbm, dsk, h_ckpt, scan_w, dh,
++        b, l, dims.d_inner,
++    )
++
++    # T4/T5 and B21: batch-private dA partials, pinned batch fold, then the
++    # derivative through A = -exp(A_log). This produces the third complete
++    # external parameter gradient owned by this composed segment.
++    var da = mamba_zeros(ctx, dims.d_inner * D_STATE)
++    var da_partial = mamba_zeros(
++        ctx, bwd_da_partial_floats(b, dims.d_inner)
++    )
++    mamba_bwd_da_into(
++        ctx, da, da_partial, dh, stages.softplus_out, stages.a_out,
++        stages.silu_out, stages.b_mat, h_ckpt,
++        b, l, dims.d_inner,
++    )
++    var da_log = mamba_zeros(ctx, dims.d_inner * D_STATE)
++    mamba_bwd_da_log_into(ctx, da_log, da, stages.a_out, dims.d_inner)
++
++    # B22-B29: softplus derivative, dt projection, inverse x_proj split,
++    # x-projection gradients, and the three-way join at the scan input.
++    var ddtp = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_ddtp_into(
++        ctx, ddtp, ddelta, stages.dt_proj, dweights.b_dt, m, dims.d_inner
++    )
++    var ddtl = mamba_zeros(ctx, m * dims.dt_rank)
++    var dw_dt = mamba_zeros(ctx, dims.d_inner * dims.dt_rank)
++    mamba_backward_proj_a_into(
++        ctx, ddtl, ddtp, dweights.w_dt, workspace, PROJ_DT, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_dt, ddtp, stages.dt_low, workspace, PROJ_DT, dims, m
++    )
++    var db_dt = mamba_zeros(ctx, dims.d_inner)
++    # cpu3-seq: the reduction's ones vector filled on the device (no host
++    # List of m ones uploaded); mamba_zeros' guard layout, body set to 1.
++    var ones = mamba_zeros(ctx, m)
++    var ones_body = ones.create_sub_buffer[DType.float32](0, m)
++    ones_body.enqueue_fill(Float32(1.0))
++    _ = ones_body^
++    mamba_backward_reduce_into(
++        ctx, db_dt, ddtp, ones, workspace, RED_DT_BIAS, dims, m
++    )
++    var dxp = mamba_zeros(ctx, m * dims.x_proj_rows())
++    mamba_bwd_concat_xp_into(ctx, dxp, ddtl, dbm, dcm, m, dims)
++    var du_x = mamba_zeros(ctx, m * dims.d_inner)
++    var dw_x = mamba_zeros(ctx, dims.x_proj_rows() * dims.d_inner)
++    mamba_backward_proj_a_into(
++        ctx, du_x, dxp, dweights.w_x, workspace, PROJ_X, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_x, dxp, stages.silu_out, workspace, PROJ_X, dims, m
++    )
++    var du = mamba_zeros(ctx, m * dims.d_inner)
++    var dconv = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_du_join_into(
++        ctx, du, dconv, du_d, du_s, du_x, stages.conv_out, m, dims.d_inner
++    )
++
++    # B31-B33: causal-convolution input gradient plus bias and four weight
++    # tap reductions. Each tap's arithmetic stays on device. The final four
++    # contiguous columns are interleaved on the host after synchronization;
++    # that operation is a pure layout copy and introduces no numeric seam.
++    var dhin = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_dhin_into(
++        ctx, dhin, dconv, dweights.conv_w,
++        b, l, dims.d_inner,
++    )
++    var dconv_bias = mamba_zeros(ctx, dims.d_inner)
++    mamba_backward_reduce_into(
++        ctx, dconv_bias, dconv, ones, workspace,
++        RED_CONV_BIAS, dims, m,
++    )
++    var tap_product0 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_product1 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_product2 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_product3 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_grad0 = mamba_zeros(ctx, dims.d_inner)
++    var tap_grad1 = mamba_zeros(ctx, dims.d_inner)
++    var tap_grad2 = mamba_zeros(ctx, dims.d_inner)
++    var tap_grad3 = mamba_zeros(ctx, dims.d_inner)
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product0, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 0,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad0, tap_product0, ones, workspace,
++        RED_CONV_W_TAP0, dims, m,
++    )
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product1, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 1,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad1, tap_product1, ones, workspace,
++        RED_CONV_W_TAP1, dims, m,
++    )
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product2, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 2,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad2, tap_product2, ones, workspace,
++        RED_CONV_W_TAP2, dims, m,
++    )
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product3, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 3,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad3, tap_product3, ones, workspace,
++        RED_CONV_W_TAP3, dims, m,
++    )
++
++    # B34-B42: join the two in-projection halves, route both projection
++    # derivatives, then run the fused RMSNorm/residual backward and its
++    # deterministic token reduction. `dx` is the full block input gradient.
++    var dp = mamba_zeros(ctx, m * 2 * dims.d_inner)
++    mamba_bwd_concat_p_into(ctx, dp, dhin, dz, m, dims.d_inner)
++    var dnrm = mamba_zeros(ctx, m * dims.d_model)
++    var dw_in = mamba_zeros(ctx, 2 * dims.d_inner * dims.d_model)
++    mamba_backward_proj_a_into(
++        ctx, dnrm, dp, dweights.w_in, workspace, PROJ_IN, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_in, dp, stages.norm_out, workspace, PROJ_IN, dims, m
++    )
++    var dx_full = mamba_zeros(ctx, m * dims.d_model)
++    var drstd = mamba_zeros(ctx, m)
++    var norm_product = mamba_zeros(ctx, m * dims.d_model)
++    mamba_bwd_norm_into(
++        ctx, dx_full, drstd, norm_product, dres, dnrm, x,
++        stages.norm_out, dweights.norm_w, stages.norm_sumsq,
++        m, dims.d_model,
++    )
++    var dw_norm = mamba_zeros(ctx, dims.d_model)
++    mamba_backward_reduce_into(
++        ctx, dw_norm, norm_product, ones, workspace, RED_NORM_W, dims, m
++    )
++
++    var dd_skip = mamba_zeros(ctx, dims.d_inner)
++    mamba_backward_reduce_into(
++        ctx, dd_skip, product_d, ones, workspace, RED_D, dims, m
++    )
++    ctx.synchronize()
++
++    # cpu3-seq: the four tap gradients interleaved into the [d_inner,
++    # D_CONV] layout on the device, then ONE download (was four downloads
++    # and a host interleave loop). Same values in the same cells.
++    var dconv_w_dev = mamba_zeros(ctx, dims.d_inner * D_CONV)
++    var _l1_a0 = dconv_w_dev.unsafe_ptr()
++    var _l1_a1 = tap_grad0.unsafe_ptr()
++    var _l1_a2 = tap_grad1.unsafe_ptr()
++    var _l1_a3 = tap_grad2.unsafe_ptr()
++    var _l1_a4 = tap_grad3.unsafe_ptr()
++    var _l1_a5 = Int32(mamba_reduction_tap(RED_CONV_W_TAP0))
++    var _l1_a6 = Int32(mamba_reduction_tap(RED_CONV_W_TAP1))
++    var _l1_a7 = Int32(mamba_reduction_tap(RED_CONV_W_TAP2))
++    var _l1_a8 = Int32(mamba_reduction_tap(RED_CONV_W_TAP3))
++    var _l1_a9 = Int32(dims.d_inner)
++    def _launch_1(gid_: Int) {imm _l1_a0, imm _l1_a1, imm _l1_a2, imm _l1_a3, imm _l1_a4, imm _l1_a5, imm _l1_a6, imm _l1_a7, imm _l1_a8, imm _l1_a9}:
++        m1_conv_w_interleave_kernel(gid_, _l1_a0, _l1_a1, _l1_a2, _l1_a3, _l1_a4, _l1_a5, _l1_a6, _l1_a7, _l1_a8, _l1_a9)
++    host_launch(_launch_1, launch_count(((dims.d_inner + 127) // 128, 1, 1), (128, 1, 1)))
++    var dconv_weight = mamba_download(ctx, dconv_w_dev, dims.d_inner * D_CONV)
++
++    var result = Mamba1PrefillGradients()
++    result.out_proj_weight = mamba_download(ctx, dw_out, dims.d_model * dims.d_inner)
++    result.D = mamba_download(ctx, dd_skip, dims.d_inner)
++    result.A_log = mamba_download(ctx, da_log, dims.d_inner * D_STATE)
++    result.dt_proj_weight = mamba_download(ctx, dw_dt, dims.d_inner * dims.dt_rank)
++    result.dt_proj_bias = mamba_download(ctx, db_dt, dims.d_inner)
++    result.x_proj_weight = mamba_download(ctx, dw_x, dims.x_proj_rows() * dims.d_inner)
++    result.conv1d_weight = dconv_weight.copy()
++    result.conv1d_bias = mamba_download(ctx, dconv_bias, dims.d_inner)
++    result.in_proj_weight = mamba_download(ctx, dw_in, 2 * dims.d_inner * dims.d_model)
++    result.norm_weight = mamba_download(ctx, dw_norm, dims.d_model)
++    result.x = mamba_download(ctx, dx_full, m * dims.d_model)
++    result.stage_dB = mamba_download(ctx, dbm, m * D_STATE)
++    result.stage_dC = mamba_download(ctx, dcm, m * D_STATE)
++    _ = dconv_weight^
++    _ = dconv_w_dev^
++    _ = dw_norm^
++    _ = norm_product^
++    _ = drstd^
++    _ = dx_full^
++    _ = dw_in^
++    _ = dnrm^
++    _ = dp^
++    _ = tap_grad3^
++    _ = tap_grad2^
++    _ = tap_grad1^
++    _ = tap_grad0^
++    _ = tap_product3^
++    _ = tap_product2^
++    _ = tap_product1^
++    _ = tap_product0^
++    _ = dconv_bias^
++    _ = dhin^
++    _ = dconv^
++    _ = du^
++    _ = dw_x^
++    _ = du_x^
++    _ = dxp^
++    _ = db_dt^
++    _ = dw_dt^
++    _ = ddtl^
++    _ = ddtp^
++    _ = da_log^
++    _ = da_partial^
++    _ = da^
++    _ = dbm^
++    _ = dcm^
++    _ = scan_w^
++    _ = ddelta^
++    _ = du_s^
++    _ = dh^
++    _ = h_ckpt^
++    _ = dd_skip^
++    _ = ones^
++    _ = product_d^
++    _ = du_d^
++    _ = dz^
++    _ = dsk^
++    _ = dw_out^
++    _ = dg^
++    _ = workspace^
++    _ = dres^
++    _ = stages^
++    _ = state^
++    _ = state_in^
++    _ = dweights^
++    _ = x^
++    _ = ctx^
++    return result^
+diff --git a/mamba/host/mamba1_prefill_chain.mojo b/mamba/host/mamba1_prefill_chain.mojo
+deleted file mode 100644
+index dea1dd735..000000000
+--- a/mamba/host/mamba1_prefill_chain.mojo
++++ /dev/null
+@@ -1,405 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-"""The CPU column's Mamba-1 zero-state prefill VJP: the hand-chained launch
+-walk (B1-B17), kept ONLY as the input `tools/mamba_host_gen.py` restates for
+-the host (`mamba/host/gen/mamba1_prefill_chain.mojo`, served by
+-`bindings/_mojolearn_mamba_host.mojo`). The device never runs it: the GPU
+-binding assembles the same VJP on the tape (autograd/rules_mamba.mojo), whose
+-rules launch these same kernels in this same order. No device module imports
+-this file (lane del-mamba, 2026-10-19: the device copy of this walk is
+-tombstoned in mamba/impl/modeling/modeling_mamba_prefill_backward.mojo).
+-"""
+-from std.memory import bitcast
+-from std.gpu import block_dim, block_idx, thread_idx
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+-from max.gpu.host import DeviceContext
+-from core.neural_context import process_ctx
+-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+-
+-#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+-#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+-comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
+-
+-
+-from core.identity_trace import IdentityTrace
+-from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
+-from mamba.checks.mamba_backward import (
+-    PROJ_OUT,
+-    PROJ_DT,
+-    PROJ_IN,
+-    PROJ_X,
+-    RED_CONV_BIAS,
+-    RED_CONV_W_TAP0,
+-    RED_CONV_W_TAP1,
+-    RED_CONV_W_TAP2,
+-    RED_CONV_W_TAP3,
+-    RED_D,
+-    RED_DT_BIAS,
+-    RED_NORM_W,
+-    mamba_backward_proj_a_into,
+-    mamba_backward_proj_b_into,
+-    mamba_backward_reduce_into,
+-    mamba_reduction_tap,
+-    mamba_backward_workspace_max_floats,
+-)
+-from mamba.checks.mamba_fixture import (
+-    D_CONV,
+-    D_STATE,
+-    MambaDims,
+-    MambaWeights,
+-)
+-from mamba.impl.modeling.modeling_mamba import (
+-    MambaDeviceStages,
+-    MambaDeviceState,
+-    MambaDeviceWeights,
+-    mamba_block_forward,
+-    mamba_download,
+-    mamba_upload,
+-    mamba_zeros,
+-)
+-from mamba.impl.modeling.modeling_mamba_backward import (
+-    mamba_bwd_concat_xp_into,
+-    mamba_bwd_concat_p_into,
+-    mamba_bwd_conv_tap_product_into,
+-    mamba_bwd_ddtp_into,
+-    mamba_bwd_dhin_into,
+-    mamba_bwd_du_join_into,
+-    mamba_bwd_gate_into,
+-    mamba_bwd_norm_into,
+-)
+-from mamba.impl.ops.selective_scan_backward import (
+-    bwd_da_partial_floats,
+-    bwd_dh_floats,
+-    bwd_h_checkpoint_floats,
+-    mamba_bwd_da_into,
+-    mamba_bwd_da_log_into,
+-    mamba_bwd_dbc_into,
+-    selective_scan_bwd_scan_into,
+-    selective_scan_checkpoint_fn,
+-)
+-
+-from mamba.impl.modeling.modeling_mamba_prefill_backward import (
+-    Mamba1PrefillGradients,
+-    m1_conv_w_interleave_kernel,
+-)
+-
+-
+-def mamba1_prefill_backward(
+-    weights: MambaWeights,
+-    input: List[Float32],
+-    grad_output: List[Float32],
+-    b: Int,
+-    l: Int,
+-    var ctx_in: Optional[DeviceContext] = None,
+-) raises -> Mamba1PrefillGradients:
+-    if b <= 0 or l <= 0:
+-        raise Error("mamba1 backward: B and L must be positive")
+-    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
+-        raise Error("mamba1 backward: input and grad_output lengths must equal B*L*d_model")
+-    var dims = weights.dims.copy()
+-    var m = b * l
+-    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
+-    # context (core/neural_context.mojo); a fresh context per call meant a
+-    # new Metal queue and a pipeline compile of every kernel on every call.
+-    # Direct callers also reuse that context when none is supplied.
+-    var ctx: DeviceContext
+-    if ctx_in:
+-        ctx = ctx_in.take()
+-    else:
+-        ctx = process_ctx[_DEVCTX_SLOT]()
+-    var dweights = MambaDeviceWeights(ctx, weights)
+-    # The forward mutates its recurrent state. Backward T2 needs the state
+-    # entering that call, so retain a distinct zero-state allocation.
+-    var state_in = MambaDeviceState(ctx, b, dims)
+-    var state = MambaDeviceState(ctx, b, dims)
+-    var stages = MambaDeviceStages(ctx, b, l, dims)
+-    var x = mamba_upload(ctx, input)
+-    var trace = IdentityTrace.disabled()
+-    mamba_block_forward(
+-        ctx, stages, state, dweights, x, b, l, trace,
+-        String("m1.backward.tail"),
+-    )
+-
+-    var dres = mamba_upload(ctx, grad_output)
+-    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
+-    # (same predicate by bits, same first flat index and message), not as a
+-    # host walk over the List.
+-    mamba_refuse_grad_output(ctx, String("mamba1"), dres, grad_output)
+-    var workspace = mamba_zeros(
+-        ctx, mamba_backward_workspace_max_floats(dims, m)
+-    )
+-    var dg = mamba_zeros(ctx, m * dims.d_inner)
+-    var dw_out = mamba_zeros(ctx, dims.d_model * dims.d_inner)
+-    mamba_backward_proj_a_into(
+-        ctx, dg, dres, dweights.w_out, workspace, PROJ_OUT, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_out, dres, stages.gate_out, workspace, PROJ_OUT, dims, m
+-    )
+-
+-    var dsk = mamba_zeros(ctx, m * dims.d_inner)
+-    var dz = mamba_zeros(ctx, m * dims.d_inner)
+-    var du_d = mamba_zeros(ctx, m * dims.d_inner)
+-    var product_d = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_gate_into(
+-        ctx, dsk, dz, du_d, product_d, dg, stages.skip_out, stages.silu_out,
+-        stages.in_proj, dweights.d_skip, m, dims.d_inner,
+-    )
+-
+-    # T2, T1, B17/B18 and T3: reconstruct every forward state, walk the
+-    # recurrence backward, then contract the channel-shared B/C gradients.
+-    var h_ckpt = mamba_zeros(
+-        ctx, bwd_h_checkpoint_floats(b, l, dims.d_inner)
+-    )
+-    selective_scan_checkpoint_fn(
+-        ctx, h_ckpt, state_in.h, stages.silu_out, stages.softplus_out,
+-        stages.a_out, stages.b_mat, b, l, dims.d_inner,
+-    )
+-    var dh = mamba_zeros(
+-        ctx, bwd_dh_floats(b, l, dims.d_inner)
+-    )
+-    var du_s = mamba_zeros(ctx, m * dims.d_inner)
+-    var ddelta = mamba_zeros(ctx, m * dims.d_inner)
+-    var scan_w = mamba_zeros(ctx, m * dims.d_inner)
+-    selective_scan_bwd_scan_into(
+-        ctx, dh, du_s, ddelta, scan_w, dsk, stages.c_mat, stages.b_mat,
+-        stages.softplus_out, stages.a_out, stages.silu_out, h_ckpt,
+-        b, l, dims.d_inner,
+-    )
+-    var dcm = mamba_zeros(ctx, m * D_STATE)
+-    var dbm = mamba_zeros(ctx, m * D_STATE)
+-    mamba_bwd_dbc_into(
+-        ctx, dcm, dbm, dsk, h_ckpt, scan_w, dh,
+-        b, l, dims.d_inner,
+-    )
+-
+-    # T4/T5 and B21: batch-private dA partials, pinned batch fold, then the
+-    # derivative through A = -exp(A_log). This produces the third complete
+-    # external parameter gradient owned by this composed segment.
+-    var da = mamba_zeros(ctx, dims.d_inner * D_STATE)
+-    var da_partial = mamba_zeros(
+-        ctx, bwd_da_partial_floats(b, dims.d_inner)
+-    )
+-    mamba_bwd_da_into(
+-        ctx, da, da_partial, dh, stages.softplus_out, stages.a_out,
+-        stages.silu_out, stages.b_mat, h_ckpt,
+-        b, l, dims.d_inner,
+-    )
+-    var da_log = mamba_zeros(ctx, dims.d_inner * D_STATE)
+-    mamba_bwd_da_log_into(ctx, da_log, da, stages.a_out, dims.d_inner)
+-
+-    # B22-B29: softplus derivative, dt projection, inverse x_proj split,
+-    # x-projection gradients, and the three-way join at the scan input.
+-    var ddtp = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_ddtp_into(
+-        ctx, ddtp, ddelta, stages.dt_proj, dweights.b_dt, m, dims.d_inner
+-    )
+-    var ddtl = mamba_zeros(ctx, m * dims.dt_rank)
+-    var dw_dt = mamba_zeros(ctx, dims.d_inner * dims.dt_rank)
+-    mamba_backward_proj_a_into(
+-        ctx, ddtl, ddtp, dweights.w_dt, workspace, PROJ_DT, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_dt, ddtp, stages.dt_low, workspace, PROJ_DT, dims, m
+-    )
+-    var db_dt = mamba_zeros(ctx, dims.d_inner)
+-    # cpu3-seq: the reduction's ones vector filled on the device (no host
+-    # List of m ones uploaded); mamba_zeros' guard layout, body set to 1.
+-    var ones = mamba_zeros(ctx, m)
+-    var ones_body = ones.create_sub_buffer[DType.float32](0, m)
+-    ones_body.enqueue_fill(Float32(1.0))
+-    _ = ones_body^
+-    mamba_backward_reduce_into(
+-        ctx, db_dt, ddtp, ones, workspace, RED_DT_BIAS, dims, m
+-    )
+-    var dxp = mamba_zeros(ctx, m * dims.x_proj_rows())
+-    mamba_bwd_concat_xp_into(ctx, dxp, ddtl, dbm, dcm, m, dims)
+-    var du_x = mamba_zeros(ctx, m * dims.d_inner)
+-    var dw_x = mamba_zeros(ctx, dims.x_proj_rows() * dims.d_inner)
+-    mamba_backward_proj_a_into(
+-        ctx, du_x, dxp, dweights.w_x, workspace, PROJ_X, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_x, dxp, stages.silu_out, workspace, PROJ_X, dims, m
+-    )
+-    var du = mamba_zeros(ctx, m * dims.d_inner)
+-    var dconv = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_du_join_into(
+-        ctx, du, dconv, du_d, du_s, du_x, stages.conv_out, m, dims.d_inner
+-    )
+-
+-    # B31-B33: causal-convolution input gradient plus bias and four weight
+-    # tap reductions. Each tap's arithmetic stays on device. The final four
+-    # contiguous columns are interleaved on the host after synchronization;
+-    # that operation is a pure layout copy and introduces no numeric seam.
+-    var dhin = mamba_zeros(ctx, m * dims.d_inner)
+-    mamba_bwd_dhin_into(
+-        ctx, dhin, dconv, dweights.conv_w,
+-        b, l, dims.d_inner,
+-    )
+-    var dconv_bias = mamba_zeros(ctx, dims.d_inner)
+-    mamba_backward_reduce_into(
+-        ctx, dconv_bias, dconv, ones, workspace,
+-        RED_CONV_BIAS, dims, m,
+-    )
+-    var tap_product0 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_product1 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_product2 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_product3 = mamba_zeros(ctx, m * dims.d_inner)
+-    var tap_grad0 = mamba_zeros(ctx, dims.d_inner)
+-    var tap_grad1 = mamba_zeros(ctx, dims.d_inner)
+-    var tap_grad2 = mamba_zeros(ctx, dims.d_inner)
+-    var tap_grad3 = mamba_zeros(ctx, dims.d_inner)
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product0, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 0,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad0, tap_product0, ones, workspace,
+-        RED_CONV_W_TAP0, dims, m,
+-    )
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product1, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 1,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad1, tap_product1, ones, workspace,
+-        RED_CONV_W_TAP1, dims, m,
+-    )
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product2, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 2,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad2, tap_product2, ones, workspace,
+-        RED_CONV_W_TAP2, dims, m,
+-    )
+-    mamba_bwd_conv_tap_product_into(
+-        ctx, tap_product3, dconv, stages.in_proj, state_in.conv_win,
+-        b, l, dims.d_inner, 3,
+-    )
+-    mamba_backward_reduce_into(
+-        ctx, tap_grad3, tap_product3, ones, workspace,
+-        RED_CONV_W_TAP3, dims, m,
+-    )
+-
+-    # B34-B42: join the two in-projection halves, route both projection
+-    # derivatives, then run the fused RMSNorm/residual backward and its
+-    # deterministic token reduction. `dx` is the full block input gradient.
+-    var dp = mamba_zeros(ctx, m * 2 * dims.d_inner)
+-    mamba_bwd_concat_p_into(ctx, dp, dhin, dz, m, dims.d_inner)
+-    var dnrm = mamba_zeros(ctx, m * dims.d_model)
+-    var dw_in = mamba_zeros(ctx, 2 * dims.d_inner * dims.d_model)
+-    mamba_backward_proj_a_into(
+-        ctx, dnrm, dp, dweights.w_in, workspace, PROJ_IN, dims, m
+-    )
+-    mamba_backward_proj_b_into(
+-        ctx, dw_in, dp, stages.norm_out, workspace, PROJ_IN, dims, m
+-    )
+-    var dx_full = mamba_zeros(ctx, m * dims.d_model)
+-    var drstd = mamba_zeros(ctx, m)
+-    var norm_product = mamba_zeros(ctx, m * dims.d_model)
+-    mamba_bwd_norm_into(
+-        ctx, dx_full, drstd, norm_product, dres, dnrm, x,
+-        stages.norm_out, dweights.norm_w, stages.norm_sumsq,
+-        m, dims.d_model,
+-    )
+-    var dw_norm = mamba_zeros(ctx, dims.d_model)
+-    mamba_backward_reduce_into(
+-        ctx, dw_norm, norm_product, ones, workspace, RED_NORM_W, dims, m
+-    )
+-
+-    var dd_skip = mamba_zeros(ctx, dims.d_inner)
+-    mamba_backward_reduce_into(
+-        ctx, dd_skip, product_d, ones, workspace, RED_D, dims, m
+-    )
+-    ctx.synchronize()
+-
+-    # cpu3-seq: the four tap gradients interleaved into the [d_inner,
+-    # D_CONV] layout on the device, then ONE download (was four downloads
+-    # and a host interleave loop). Same values in the same cells.
+-    var dconv_w_dev = mamba_zeros(ctx, dims.d_inner * D_CONV)
+-    ctx.enqueue_function[m1_conv_w_interleave_kernel](
+-        dconv_w_dev.unsafe_ptr(),
+-        tap_grad0.unsafe_ptr(),
+-        tap_grad1.unsafe_ptr(),
+-        tap_grad2.unsafe_ptr(),
+-        tap_grad3.unsafe_ptr(),
+-        Int32(mamba_reduction_tap(RED_CONV_W_TAP0)),
+-        Int32(mamba_reduction_tap(RED_CONV_W_TAP1)),
+-        Int32(mamba_reduction_tap(RED_CONV_W_TAP2)),
+-        Int32(mamba_reduction_tap(RED_CONV_W_TAP3)),
+-        Int32(dims.d_inner),
+-        grid_dim=((dims.d_inner + 127) // 128, 1, 1),
+-        block_dim=(128, 1, 1),
+-    )
+-    var dconv_weight = mamba_download(ctx, dconv_w_dev, dims.d_inner * D_CONV)
+-
+-    var result = Mamba1PrefillGradients()
+-    result.out_proj_weight = mamba_download(ctx, dw_out, dims.d_model * dims.d_inner)
+-    result.D = mamba_download(ctx, dd_skip, dims.d_inner)
+-    result.A_log = mamba_download(ctx, da_log, dims.d_inner * D_STATE)
+-    result.dt_proj_weight = mamba_download(ctx, dw_dt, dims.d_inner * dims.dt_rank)
+-    result.dt_proj_bias = mamba_download(ctx, db_dt, dims.d_inner)
+-    result.x_proj_weight = mamba_download(ctx, dw_x, dims.x_proj_rows() * dims.d_inner)
+-    result.conv1d_weight = dconv_weight.copy()
+-    result.conv1d_bias = mamba_download(ctx, dconv_bias, dims.d_inner)
+-    result.in_proj_weight = mamba_download(ctx, dw_in, 2 * dims.d_inner * dims.d_model)
+-    result.norm_weight = mamba_download(ctx, dw_norm, dims.d_model)
+-    result.x = mamba_download(ctx, dx_full, m * dims.d_model)
+-    result.stage_dB = mamba_download(ctx, dbm, m * D_STATE)
+-    result.stage_dC = mamba_download(ctx, dcm, m * D_STATE)
+-    _ = dconv_weight^
+-    _ = dconv_w_dev^
+-    _ = dw_norm^
+-    _ = norm_product^
+-    _ = drstd^
+-    _ = dx_full^
+-    _ = dw_in^
+-    _ = dnrm^
+-    _ = dp^
+-    _ = tap_grad3^
+-    _ = tap_grad2^
+-    _ = tap_grad1^
+-    _ = tap_grad0^
+-    _ = tap_product3^
+-    _ = tap_product2^
+-    _ = tap_product1^
+-    _ = tap_product0^
+-    _ = dconv_bias^
+-    _ = dhin^
+-    _ = dconv^
+-    _ = du^
+-    _ = dw_x^
+-    _ = du_x^
+-    _ = dxp^
+-    _ = db_dt^
+-    _ = dw_dt^
+-    _ = ddtl^
+-    _ = ddtp^
+-    _ = da_log^
+-    _ = da_partial^
+-    _ = da^
+-    _ = dbm^
+-    _ = dcm^
+-    _ = scan_w^
+-    _ = ddelta^
+-    _ = du_s^
+-    _ = dh^
+-    _ = h_ckpt^
+-    _ = dd_skip^
+-    _ = ones^
+-    _ = product_d^
+-    _ = du_d^
+-    _ = dz^
+-    _ = dsk^
+-    _ = dw_out^
+-    _ = dg^
+-    _ = workspace^
+-    _ = dres^
+-    _ = stages^
+-    _ = state^
+-    _ = state_in^
+-    _ = dweights^
+-    _ = x^
+-    _ = ctx^
+-    return result^
+diff --git a/mamba/host/mamba2_prefill_chain.mojo b/mamba/host/mamba2_prefill_chain.mojo
+deleted file mode 100644
+index c895ca42d..000000000
+--- a/mamba/host/mamba2_prefill_chain.mojo
++++ /dev/null
+@@ -1,260 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-"""The CPU column's Mamba-2 zero-state IDENTICAL prefill VJP: the hand-chained
+-launch walk (C1-C8), kept ONLY as the input `tools/mamba_host_gen.py`
+-restates for the host (`mamba/host/gen/mamba2_prefill_chain.mojo`, served by
+-`bindings/_mojolearn_mamba_host.mojo`). The device never runs it: the GPU
+-binding assembles the same VJP on the tape (autograd/rules_mamba.mojo), whose
+-rules launch these same kernels in this same order. No device module imports
+-this file (lane del-mamba, 2026-10-19: the device copy of this walk is
+-tombstoned in mamba/impl/modules/mamba2_prefill_backward.mojo).
+-No incoming cache or final-state cotangent is accepted.
+-"""
+-from std.memory import bitcast
+-
+-from max.gpu.host import DeviceContext
+-from core.neural_context import process_ctx
+-from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+-
+-#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+-#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+-comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
+-
+-
+-from core.identity_trace import IdentityTrace
+-from mamba.checks.mamba2_fixture import (
+-    M2_D_STATE,
+-    M2_HEADDIM,
+-)
+-from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
+-from mamba.impl.modules.mamba2 import (
+-    Mamba2DeviceStages,
+-    Mamba2DeviceWeights,
+-    allocate_inference_cache,
+-    mamba2_block_forward,
+-)
+-from mamba.impl.modules.mamba2_backward import (
+-    Mamba2BackwardTail,
+-    mamba2_backward_d_skip_into,
+-    mamba2_backward_gnorm_into,
+-    mamba2_backward_silu_gate_into,
+-    mamba2_backward_tail_into,
+-    mamba2_backward_input_projection_into,
+-    mamba2_backward_block_norm_into,
+-)
+-from mamba.impl.modules.ssd_minimal import m2_q_eff
+-from mamba.impl.ops.mamba2_ssd_backward import (
+-    Mamba2SSDBackwardState,
+-    Mamba2SSDDiscretizeBackward,
+-    Mamba2ConvBackward,
+-    Mamba2SSDScaleReduction,
+-    mamba2_reduce_scale_product_into,
+-    mamba2_reverse_cumsum_and_da_into,
+-    mamba2_ydiag_xd_and_partial_dt_into,
+-    mamba2_reverse_chunk_state_into,
+-    mamba2_cstate_ddecay_into,
+-    mamba2_postconv_merge_into,
+-    mamba2_conv_backward_prefill_into,
+-    mamba2_s18_direct_dpass_into,
+-)
+-from mamba.impl.modeling.modeling_mamba import (
+-    mamba_download,
+-    mamba_upload,
+-    mamba_zeros,
+-)
+-
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+-from mamba.checks.mamba2_fixture import Mamba2Weights
+-from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
+-
+-
+-def mamba2_prefill_backward(
+-    weights: Mamba2Weights,
+-    input: List[Float32],
+-    grad_output: List[Float32],
+-    b: Int,
+-    l: Int,
+-    dt_lo: Float32,
+-    dt_hi: Float32,
+-    var ctx_in: Optional[DeviceContext] = None,
+-) raises -> Mamba2PrefillGradients:
+-    if b <= 0 or l <= 0:
+-        raise Error("mamba2 backward: B and L must be positive")
+-    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
+-        raise Error("mamba2 backward: input and grad_output lengths must equal B*L*d_model")
+-    var dims = weights.dims.copy()
+-    var m = b * l
+-    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
+-    # context (core/neural_context.mojo); a fresh context per call meant a
+-    # new Metal queue and a pipeline compile of every kernel on every call.
+-    # Direct callers also reuse that context when none is supplied.
+-    var ctx: DeviceContext
+-    if ctx_in:
+-        ctx = ctx_in.take()
+-    else:
+-        ctx = process_ctx[_DEVCTX_SLOT]()
+-    var dweights = Mamba2DeviceWeights(ctx, weights)
+-    var state = allocate_inference_cache(ctx, b, dims)
+-    var stages = Mamba2DeviceStages(ctx, b, l, 0, dims)
+-    var x = mamba_upload(ctx, input)
+-    var trace = IdentityTrace.disabled()
+-    mamba2_block_forward(
+-        ctx,
+-        stages,
+-        state,
+-        dweights,
+-        x,
+-        b,
+-        l,
+-        dt_lo,
+-        dt_hi,
+-        trace,
+-        String("m2.backward.tail"),
+-    )
+-
+-    var d_residual = mamba_upload(
+-        ctx, grad_output
+-    )
+-    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
+-    # (same predicate by bits, same first flat index and message), not as a
+-    # host walk over the List.
+-    mamba_refuse_grad_output(ctx, String("mamba2"), d_residual, grad_output)
+-    var tail = Mamba2BackwardTail(ctx, dims, m)
+-    mamba2_backward_tail_into(
+-        ctx,
+-        tail,
+-        d_residual,
+-        stages.gnorm_out,
+-        dweights.w_out,
+-        dims,
+-        m,
+-    )
+-    mamba2_backward_gnorm_into(
+-        ctx,
+-        tail,
+-        stages.gnorm_gate,
+-        stages.gnorm_sumsq,
+-        dweights.gnorm_w,
+-        dims,
+-        m,
+-    )
+-    mamba2_backward_silu_gate_into(
+-        ctx, tail, stages.skip_out, stages.in_proj, dims, m
+-    )
+-    mamba2_backward_d_skip_into(
+-        ctx, tail, stages.silu_out, dweights.d_skip, dims, m
+-    )
+-    var ssd_backward = Mamba2SSDBackwardState(
+-        ctx, b, stages.nc, dims.nheads
+-    )
+-    mamba2_s18_direct_dpass_into(
+-        ctx,
+-        ssd_backward,
+-        tail.d_scan,
+-        stages.xbc_work,
+-        stages.pass_states,
+-        stages.dacs,
+-        b,
+-        stages.t_work,
+-        dims.nheads,
+-        dims.d_inner,
+-        dims.conv_dim(),
+-        stages.nc,
+-        m2_q_eff(),
+-    )
+-    # The scalar objective depends only on residual.out, not h_last, so the
+-    # final-state cotangent is explicitly zero at this partial boundary.
+-    var d_final = mamba_zeros(
+-        ctx, b * dims.nheads * M2_HEADDIM * M2_D_STATE
+-    )
+-    mamba2_reverse_chunk_state_into(
+-        ctx,
+-        ssd_backward,
+-        d_final,
+-        stages.pass_states,
+-        stages.dacs,
+-        b,
+-        dims.nheads,
+-        stages.nc,
+-        m2_q_eff(),
+-    )
+-    mamba2_cstate_ddecay_into(
+-        ctx, ssd_backward, stages.xd_work, stages.xbc_work, b,
+-        stages.t_work, dims.nheads, dims.d_inner, dims.conv_dim(),
+-        stages.nc, m2_q_eff(),
+-    )
+-    var scale_reduction = Mamba2SSDScaleReduction(
+-        ctx, b, stages.nc, dims.nheads, m2_q_eff()
+-    )
+-    mamba2_reduce_scale_product_into(
+-        ctx,
+-        scale_reduction,
+-        ssd_backward,
+-        stages.dacs,
+-        stages.decay,
+-        b,
+-        stages.nc,
+-        dims.nheads,
+-        m2_q_eff(),
+-    )
+-    var discretize_backward = Mamba2SSDDiscretizeBackward(
+-        ctx, b, stages.t_work, dims.nheads
+-    )
+-    mamba2_reverse_cumsum_and_da_into(
+-        ctx, discretize_backward, scale_reduction.d_dacs_total,
+-        stages.dt_work, stages.a_out, b, stages.t_work,
+-        dims.nheads, stages.nc, m2_q_eff(),
+-    )
+-    mamba2_ydiag_xd_and_partial_dt_into(
+-        ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
+-        stages.xd_work,
+-        stages.xbc_work, stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
+-        ssd_backward.d_cstate, stages.decay,
+-        b, stages.t_work, dims.nheads, dims.d_inner,
+-        dims.conv_dim(), stages.nc, m2_q_eff(), dt_lo, dt_hi,
+-    )
+-    mamba2_postconv_merge_into(
+-        ctx, discretize_backward, ssd_backward, tail.d_x_from_d,
+-        b, stages.t_work, dims.nheads,
+-    )
+-    var conv_backward = Mamba2ConvBackward(ctx, b, l, dims.conv_dim())
+-    mamba2_conv_backward_prefill_into(
+-        ctx, conv_backward, discretize_backward, stages.conv_out,
+-        stages.in_proj, dweights.conv_w, b, l, dims.d_inner,
+-        dims.conv_dim(), dims.d_in_proj(), stages.q0,
+-    )
+-    mamba2_backward_input_projection_into(
+-        ctx, tail, conv_backward.d_in_xbc, discretize_backward.d_dtraw,
+-        stages.norm_out, dweights.w_in, dims, m,
+-    )
+-    mamba2_backward_block_norm_into(
+-        ctx, tail, d_residual, x, stages.norm_sumsq,
+-        dweights.norm_w, dims, m,
+-    )
+-    ctx.synchronize()
+-
+-    var result = Mamba2PrefillGradients()
+-    result.x = mamba_download(ctx, tail.d_block_x, m*dims.d_model)
+-    result.block_norm_weight = mamba_download(ctx, tail.d_block_w, dims.d_model)
+-    result.in_proj_weight = mamba_download(ctx, tail.d_w_in, dims.d_in_proj()*dims.d_model)
+-    result.conv1d_weight = mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4)
+-    result.conv1d_bias = mamba_download(ctx, conv_backward.d_b, dims.conv_dim())
+-    result.dt_bias = mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads)
+-    result.A_log = mamba_download(ctx, discretize_backward.d_a_log, dims.nheads)
+-    result.D = mamba_download(ctx, tail.d_d, dims.nheads)
+-    result.norm_weight = mamba_download(ctx, tail.d_gnorm_w, dims.d_inner)
+-    result.out_proj_weight = mamba_download(ctx, tail.d_w_out, dims.d_model*dims.d_inner)
+-
+-    # Explicit ownership extends all GPU buffers through synchronization.
+-    _ = conv_backward^
+-    _ = discretize_backward^
+-    _ = scale_reduction^
+-    _ = d_final^
+-    _ = ssd_backward^
+-    _ = tail^
+-    _ = d_residual^
+-    _ = x^
+-    _ = stages^
+-    _ = state^
+-    _ = dweights^
+-    _ = ctx^
+-    return result^
+diff --git a/mamba/impl/modeling/modeling_mamba_prefill_backward.mojo b/mamba/impl/modeling/modeling_mamba_prefill_backward.mojo
+index 4200e3246..5ee212796 100644
+--- a/mamba/impl/modeling/modeling_mamba_prefill_backward.mojo
++++ b/mamba/impl/modeling/modeling_mamba_prefill_backward.mojo
+@@ -1,11 +1,78 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""The Mamba-1 zero-state prefill VJP's result type and its conv1d weight
+-layout kernel. The device VJP is assembled on the tape
+-(autograd/rules_mamba.mojo::mamba1_tape_backward), which launches this file's
+-kernel; the CPU column's hand walk is mamba/host/mamba1_prefill_chain.mojo.
++"""Shared synchronous Mamba-1 zero-state prefill VJP.
++
++Extracted from checks/mamba_backward_device_tail_dump.mojo (2026-09-06).
++The certified launch/reduction order and post-sync convolution layout copy
++are retained unchanged. The driver and Python binding use this same pass.
+ """
++from std.memory import bitcast
+ from std.gpu import block_dim, block_idx, thread_idx
+-from mamba.checks.mamba_fixture import D_CONV
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from max.gpu.host import DeviceContext
++from core.neural_context import process_ctx
++from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
++
++#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
++#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
++comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
++
++
++from core.identity_trace import IdentityTrace
++from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
++from mamba.checks.mamba_backward import (
++    PROJ_OUT,
++    PROJ_DT,
++    PROJ_IN,
++    PROJ_X,
++    RED_CONV_BIAS,
++    RED_CONV_W_TAP0,
++    RED_CONV_W_TAP1,
++    RED_CONV_W_TAP2,
++    RED_CONV_W_TAP3,
++    RED_D,
++    RED_DT_BIAS,
++    RED_NORM_W,
++    mamba_backward_proj_a_into,
++    mamba_backward_proj_b_into,
++    mamba_backward_reduce_into,
++    mamba_reduction_tap,
++    mamba_backward_workspace_max_floats,
++)
++from mamba.checks.mamba_fixture import (
++    D_CONV,
++    D_STATE,
++    MambaDims,
++    MambaWeights,
++)
++from mamba.impl.modeling.modeling_mamba import (
++    MambaDeviceStages,
++    MambaDeviceState,
++    MambaDeviceWeights,
++    mamba_block_forward,
++    mamba_download,
++    mamba_upload,
++    mamba_zeros,
++)
++from mamba.impl.modeling.modeling_mamba_backward import (
++    mamba_bwd_concat_xp_into,
++    mamba_bwd_concat_p_into,
++    mamba_bwd_conv_tap_product_into,
++    mamba_bwd_ddtp_into,
++    mamba_bwd_dhin_into,
++    mamba_bwd_du_join_into,
++    mamba_bwd_gate_into,
++    mamba_bwd_norm_into,
++)
++from mamba.impl.ops.selective_scan_backward import (
++    bwd_da_partial_floats,
++    bwd_dh_floats,
++    bwd_h_checkpoint_floats,
++    mamba_bwd_da_into,
++    mamba_bwd_da_log_into,
++    mamba_bwd_dbc_into,
++    selective_scan_bwd_scan_into,
++    selective_scan_checkpoint_fn,
++)
+ 
+ 
+ struct Mamba1PrefillGradients(Movable):
+@@ -68,6 +135,323 @@ def m1_conv_w_interleave_kernel(
+     out_ptr.unsafe_store(base + Int(p3), t3_ptr.unsafe_load(d))
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward glue, superseded by the tape) deleted 2026-10-19 by e378999c7; code recoverable at e378999c7^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-# (the CPU column keeps the same walk as generator input: mamba/host/mamba1_prefill_chain.mojo)
++def mamba1_prefill_backward(
++    weights: MambaWeights,
++    input: List[Float32],
++    grad_output: List[Float32],
++    b: Int,
++    l: Int,
++    var ctx_in: Optional[DeviceContext] = None,
++) raises -> Mamba1PrefillGradients:
++    if b <= 0 or l <= 0:
++        raise Error("mamba1 backward: B and L must be positive")
++    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
++        raise Error("mamba1 backward: input and grad_output lengths must equal B*L*d_model")
++    var dims = weights.dims.copy()
++    var m = b * l
++    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
++    # context (core/neural_context.mojo); a fresh context per call meant a
++    # new Metal queue and a pipeline compile of every kernel on every call.
++    # Direct callers also reuse that context when none is supplied.
++    var ctx: DeviceContext
++    if ctx_in:
++        ctx = ctx_in.take()
++    else:
++        ctx = process_ctx[_DEVCTX_SLOT]()
++    var dweights = MambaDeviceWeights(ctx, weights)
++    # The forward mutates its recurrent state. Backward T2 needs the state
++    # entering that call, so retain a distinct zero-state allocation.
++    var state_in = MambaDeviceState(ctx, b, dims)
++    var state = MambaDeviceState(ctx, b, dims)
++    var stages = MambaDeviceStages(ctx, b, l, dims)
++    var x = mamba_upload(ctx, input)
++    var trace = IdentityTrace.disabled()
++    mamba_block_forward(
++        ctx, stages, state, dweights, x, b, l, trace,
++        String("m1.backward.tail"),
++    )
++
++    var dres = mamba_upload(ctx, grad_output)
++    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
++    # (same predicate by bits, same first flat index and message), not as a
++    # host walk over the List.
++    mamba_refuse_grad_output(ctx, String("mamba1"), dres, grad_output)
++    var workspace = mamba_zeros(
++        ctx, mamba_backward_workspace_max_floats(dims, m)
++    )
++    var dg = mamba_zeros(ctx, m * dims.d_inner)
++    var dw_out = mamba_zeros(ctx, dims.d_model * dims.d_inner)
++    mamba_backward_proj_a_into(
++        ctx, dg, dres, dweights.w_out, workspace, PROJ_OUT, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_out, dres, stages.gate_out, workspace, PROJ_OUT, dims, m
++    )
++
++    var dsk = mamba_zeros(ctx, m * dims.d_inner)
++    var dz = mamba_zeros(ctx, m * dims.d_inner)
++    var du_d = mamba_zeros(ctx, m * dims.d_inner)
++    var product_d = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_gate_into(
++        ctx, dsk, dz, du_d, product_d, dg, stages.skip_out, stages.silu_out,
++        stages.in_proj, dweights.d_skip, m, dims.d_inner,
++    )
++
++    # T2, T1, B17/B18 and T3: reconstruct every forward state, walk the
++    # recurrence backward, then contract the channel-shared B/C gradients.
++    var h_ckpt = mamba_zeros(
++        ctx, bwd_h_checkpoint_floats(b, l, dims.d_inner)
++    )
++    selective_scan_checkpoint_fn(
++        ctx, h_ckpt, state_in.h, stages.silu_out, stages.softplus_out,
++        stages.a_out, stages.b_mat, b, l, dims.d_inner,
++    )
++    var dh = mamba_zeros(
++        ctx, bwd_dh_floats(b, l, dims.d_inner)
++    )
++    var du_s = mamba_zeros(ctx, m * dims.d_inner)
++    var ddelta = mamba_zeros(ctx, m * dims.d_inner)
++    var scan_w = mamba_zeros(ctx, m * dims.d_inner)
++    selective_scan_bwd_scan_into(
++        ctx, dh, du_s, ddelta, scan_w, dsk, stages.c_mat, stages.b_mat,
++        stages.softplus_out, stages.a_out, stages.silu_out, h_ckpt,
++        b, l, dims.d_inner,
++    )
++    var dcm = mamba_zeros(ctx, m * D_STATE)
++    var dbm = mamba_zeros(ctx, m * D_STATE)
++    mamba_bwd_dbc_into(
++        ctx, dcm, dbm, dsk, h_ckpt, scan_w, dh,
++        b, l, dims.d_inner,
++    )
++
++    # T4/T5 and B21: batch-private dA partials, pinned batch fold, then the
++    # derivative through A = -exp(A_log). This produces the third complete
++    # external parameter gradient owned by this composed segment.
++    var da = mamba_zeros(ctx, dims.d_inner * D_STATE)
++    var da_partial = mamba_zeros(
++        ctx, bwd_da_partial_floats(b, dims.d_inner)
++    )
++    mamba_bwd_da_into(
++        ctx, da, da_partial, dh, stages.softplus_out, stages.a_out,
++        stages.silu_out, stages.b_mat, h_ckpt,
++        b, l, dims.d_inner,
++    )
++    var da_log = mamba_zeros(ctx, dims.d_inner * D_STATE)
++    mamba_bwd_da_log_into(ctx, da_log, da, stages.a_out, dims.d_inner)
++
++    # B22-B29: softplus derivative, dt projection, inverse x_proj split,
++    # x-projection gradients, and the three-way join at the scan input.
++    var ddtp = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_ddtp_into(
++        ctx, ddtp, ddelta, stages.dt_proj, dweights.b_dt, m, dims.d_inner
++    )
++    var ddtl = mamba_zeros(ctx, m * dims.dt_rank)
++    var dw_dt = mamba_zeros(ctx, dims.d_inner * dims.dt_rank)
++    mamba_backward_proj_a_into(
++        ctx, ddtl, ddtp, dweights.w_dt, workspace, PROJ_DT, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_dt, ddtp, stages.dt_low, workspace, PROJ_DT, dims, m
++    )
++    var db_dt = mamba_zeros(ctx, dims.d_inner)
++    # cpu3-seq: the reduction's ones vector filled on the device (no host
++    # List of m ones uploaded); mamba_zeros' guard layout, body set to 1.
++    var ones = mamba_zeros(ctx, m)
++    var ones_body = ones.create_sub_buffer[DType.float32](0, m)
++    ones_body.enqueue_fill(Float32(1.0))
++    _ = ones_body^
++    mamba_backward_reduce_into(
++        ctx, db_dt, ddtp, ones, workspace, RED_DT_BIAS, dims, m
++    )
++    var dxp = mamba_zeros(ctx, m * dims.x_proj_rows())
++    mamba_bwd_concat_xp_into(ctx, dxp, ddtl, dbm, dcm, m, dims)
++    var du_x = mamba_zeros(ctx, m * dims.d_inner)
++    var dw_x = mamba_zeros(ctx, dims.x_proj_rows() * dims.d_inner)
++    mamba_backward_proj_a_into(
++        ctx, du_x, dxp, dweights.w_x, workspace, PROJ_X, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_x, dxp, stages.silu_out, workspace, PROJ_X, dims, m
++    )
++    var du = mamba_zeros(ctx, m * dims.d_inner)
++    var dconv = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_du_join_into(
++        ctx, du, dconv, du_d, du_s, du_x, stages.conv_out, m, dims.d_inner
++    )
++
++    # B31-B33: causal-convolution input gradient plus bias and four weight
++    # tap reductions. Each tap's arithmetic stays on device. The final four
++    # contiguous columns are interleaved on the host after synchronization;
++    # that operation is a pure layout copy and introduces no numeric seam.
++    var dhin = mamba_zeros(ctx, m * dims.d_inner)
++    mamba_bwd_dhin_into(
++        ctx, dhin, dconv, dweights.conv_w,
++        b, l, dims.d_inner,
++    )
++    var dconv_bias = mamba_zeros(ctx, dims.d_inner)
++    mamba_backward_reduce_into(
++        ctx, dconv_bias, dconv, ones, workspace,
++        RED_CONV_BIAS, dims, m,
++    )
++    var tap_product0 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_product1 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_product2 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_product3 = mamba_zeros(ctx, m * dims.d_inner)
++    var tap_grad0 = mamba_zeros(ctx, dims.d_inner)
++    var tap_grad1 = mamba_zeros(ctx, dims.d_inner)
++    var tap_grad2 = mamba_zeros(ctx, dims.d_inner)
++    var tap_grad3 = mamba_zeros(ctx, dims.d_inner)
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product0, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 0,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad0, tap_product0, ones, workspace,
++        RED_CONV_W_TAP0, dims, m,
++    )
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product1, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 1,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad1, tap_product1, ones, workspace,
++        RED_CONV_W_TAP1, dims, m,
++    )
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product2, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 2,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad2, tap_product2, ones, workspace,
++        RED_CONV_W_TAP2, dims, m,
++    )
++    mamba_bwd_conv_tap_product_into(
++        ctx, tap_product3, dconv, stages.in_proj, state_in.conv_win,
++        b, l, dims.d_inner, 3,
++    )
++    mamba_backward_reduce_into(
++        ctx, tap_grad3, tap_product3, ones, workspace,
++        RED_CONV_W_TAP3, dims, m,
++    )
++
++    # B34-B42: join the two in-projection halves, route both projection
++    # derivatives, then run the fused RMSNorm/residual backward and its
++    # deterministic token reduction. `dx` is the full block input gradient.
++    var dp = mamba_zeros(ctx, m * 2 * dims.d_inner)
++    mamba_bwd_concat_p_into(ctx, dp, dhin, dz, m, dims.d_inner)
++    var dnrm = mamba_zeros(ctx, m * dims.d_model)
++    var dw_in = mamba_zeros(ctx, 2 * dims.d_inner * dims.d_model)
++    mamba_backward_proj_a_into(
++        ctx, dnrm, dp, dweights.w_in, workspace, PROJ_IN, dims, m
++    )
++    mamba_backward_proj_b_into(
++        ctx, dw_in, dp, stages.norm_out, workspace, PROJ_IN, dims, m
++    )
++    var dx_full = mamba_zeros(ctx, m * dims.d_model)
++    var drstd = mamba_zeros(ctx, m)
++    var norm_product = mamba_zeros(ctx, m * dims.d_model)
++    mamba_bwd_norm_into(
++        ctx, dx_full, drstd, norm_product, dres, dnrm, x,
++        stages.norm_out, dweights.norm_w, stages.norm_sumsq,
++        m, dims.d_model,
++    )
++    var dw_norm = mamba_zeros(ctx, dims.d_model)
++    mamba_backward_reduce_into(
++        ctx, dw_norm, norm_product, ones, workspace, RED_NORM_W, dims, m
++    )
++
++    var dd_skip = mamba_zeros(ctx, dims.d_inner)
++    mamba_backward_reduce_into(
++        ctx, dd_skip, product_d, ones, workspace, RED_D, dims, m
++    )
++    ctx.synchronize()
++
++    # cpu3-seq: the four tap gradients interleaved into the [d_inner,
++    # D_CONV] layout on the device, then ONE download (was four downloads
++    # and a host interleave loop). Same values in the same cells.
++    var dconv_w_dev = mamba_zeros(ctx, dims.d_inner * D_CONV)
++    ctx.enqueue_function[m1_conv_w_interleave_kernel](
++        dconv_w_dev.unsafe_ptr(),
++        tap_grad0.unsafe_ptr(),
++        tap_grad1.unsafe_ptr(),
++        tap_grad2.unsafe_ptr(),
++        tap_grad3.unsafe_ptr(),
++        Int32(mamba_reduction_tap(RED_CONV_W_TAP0)),
++        Int32(mamba_reduction_tap(RED_CONV_W_TAP1)),
++        Int32(mamba_reduction_tap(RED_CONV_W_TAP2)),
++        Int32(mamba_reduction_tap(RED_CONV_W_TAP3)),
++        Int32(dims.d_inner),
++        grid_dim=((dims.d_inner + 127) // 128, 1, 1),
++        block_dim=(128, 1, 1),
++    )
++    var dconv_weight = mamba_download(ctx, dconv_w_dev, dims.d_inner * D_CONV)
++
++    var result = Mamba1PrefillGradients()
++    result.out_proj_weight = mamba_download(ctx, dw_out, dims.d_model * dims.d_inner)
++    result.D = mamba_download(ctx, dd_skip, dims.d_inner)
++    result.A_log = mamba_download(ctx, da_log, dims.d_inner * D_STATE)
++    result.dt_proj_weight = mamba_download(ctx, dw_dt, dims.d_inner * dims.dt_rank)
++    result.dt_proj_bias = mamba_download(ctx, db_dt, dims.d_inner)
++    result.x_proj_weight = mamba_download(ctx, dw_x, dims.x_proj_rows() * dims.d_inner)
++    result.conv1d_weight = dconv_weight.copy()
++    result.conv1d_bias = mamba_download(ctx, dconv_bias, dims.d_inner)
++    result.in_proj_weight = mamba_download(ctx, dw_in, 2 * dims.d_inner * dims.d_model)
++    result.norm_weight = mamba_download(ctx, dw_norm, dims.d_model)
++    result.x = mamba_download(ctx, dx_full, m * dims.d_model)
++    result.stage_dB = mamba_download(ctx, dbm, m * D_STATE)
++    result.stage_dC = mamba_download(ctx, dcm, m * D_STATE)
++    _ = dconv_weight^
++    _ = dconv_w_dev^
++    _ = dw_norm^
++    _ = norm_product^
++    _ = drstd^
++    _ = dx_full^
++    _ = dw_in^
++    _ = dnrm^
++    _ = dp^
++    _ = tap_grad3^
++    _ = tap_grad2^
++    _ = tap_grad1^
++    _ = tap_grad0^
++    _ = tap_product3^
++    _ = tap_product2^
++    _ = tap_product1^
++    _ = tap_product0^
++    _ = dconv_bias^
++    _ = dhin^
++    _ = dconv^
++    _ = du^
++    _ = dw_x^
++    _ = du_x^
++    _ = dxp^
++    _ = db_dt^
++    _ = dw_dt^
++    _ = ddtl^
++    _ = ddtp^
++    _ = da_log^
++    _ = da_partial^
++    _ = da^
++    _ = dbm^
++    _ = dcm^
++    _ = scan_w^
++    _ = ddelta^
++    _ = du_s^
++    _ = dh^
++    _ = h_ckpt^
++    _ = dd_skip^
++    _ = ones^
++    _ = product_d^
++    _ = du_d^
++    _ = dz^
++    _ = dsk^
++    _ = dw_out^
++    _ = dg^
++    _ = workspace^
++    _ = dres^
++    _ = stages^
++    _ = state^
++    _ = state_in^
++    _ = dweights^
++    _ = x^
++    _ = ctx^
++    return result^
+diff --git a/mamba/impl/modules/mamba2_prefill_backward.mojo b/mamba/impl/modules/mamba2_prefill_backward.mojo
+index 919cb0036..929b7fe5c 100644
+--- a/mamba/impl/modules/mamba2_prefill_backward.mojo
++++ b/mamba/impl/modules/mamba2_prefill_backward.mojo
+@@ -1,10 +1,65 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""The Mamba-2 zero-state prefill VJP's result type. The device VJP is
+-assembled on the tape (autograd/rules_mamba.mojo::mamba2_tape_backward); the
+-CPU column's hand walk is mamba/host/mamba2_prefill_chain.mojo.
++"""Synchronous Mamba-2 zero-state IDENTICAL prefill VJP.
++
++Launch order extracted from checks/mamba2_backward_tail_dump.mojo.
++The original diagnostic driver remains an independent byte-comparison gate.
++Python/native API qualification is required separately from historical dumps.
++No incoming cache or final-state cotangent is accepted.
+ """
+-# the weights these gradients mirror, field for field (also the host
+-# generator's first top-level import, which it needs to place its own)
++from std.memory import bitcast
++
++from max.gpu.host import DeviceContext
++from core.neural_context import process_ctx
++from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
++
++#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
++#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
++comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
++
++
++from core.identity_trace import IdentityTrace
++from mamba.checks.mamba2_fixture import (
++    M2_D_STATE,
++    M2_HEADDIM,
++)
++from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
++from mamba.impl.modules.mamba2 import (
++    Mamba2DeviceStages,
++    Mamba2DeviceWeights,
++    allocate_inference_cache,
++    mamba2_block_forward,
++)
++from mamba.impl.modules.mamba2_backward import (
++    Mamba2BackwardTail,
++    mamba2_backward_d_skip_into,
++    mamba2_backward_gnorm_into,
++    mamba2_backward_silu_gate_into,
++    mamba2_backward_tail_into,
++    mamba2_backward_input_projection_into,
++    mamba2_backward_block_norm_into,
++)
++from mamba.impl.modules.ssd_minimal import m2_q_eff
++from mamba.impl.ops.mamba2_ssd_backward import (
++    Mamba2SSDBackwardState,
++    Mamba2SSDDiscretizeBackward,
++    Mamba2ConvBackward,
++    Mamba2SSDScaleReduction,
++    mamba2_reduce_scale_product_into,
++    mamba2_reverse_cumsum_and_da_into,
++    mamba2_ydiag_xd_and_partial_dt_into,
++    mamba2_reverse_chunk_state_into,
++    mamba2_cstate_ddecay_into,
++    mamba2_postconv_merge_into,
++    mamba2_conv_backward_prefill_into,
++    mamba2_s18_direct_dpass_into,
++)
++from mamba.impl.modeling.modeling_mamba import (
++    mamba_download,
++    mamba_upload,
++    mamba_zeros,
++)
++
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from mamba.checks.mamba2_fixture import Mamba2Weights
+ 
+ 
+@@ -33,6 +88,194 @@ struct Mamba2PrefillGradients(Movable):
+         self.out_proj_weight = List[Float32]()
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by e378999c7; code recoverable at e378999c7^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-# (the CPU column keeps the same walk as generator input: mamba/host/mamba2_prefill_chain.mojo)
++def mamba2_prefill_backward(
++    weights: Mamba2Weights,
++    input: List[Float32],
++    grad_output: List[Float32],
++    b: Int,
++    l: Int,
++    dt_lo: Float32,
++    dt_hi: Float32,
++    var ctx_in: Optional[DeviceContext] = None,
++) raises -> Mamba2PrefillGradients:
++    if b <= 0 or l <= 0:
++        raise Error("mamba2 backward: B and L must be positive")
++    if len(input) != b * l * weights.dims.d_model or len(grad_output) != len(input):
++        raise Error("mamba2 backward: input and grad_output lengths must equal B*L*d_model")
++    var dims = weights.dims.copy()
++    var m = b * l
++    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
++    # context (core/neural_context.mojo); a fresh context per call meant a
++    # new Metal queue and a pipeline compile of every kernel on every call.
++    # Direct callers also reuse that context when none is supplied.
++    var ctx: DeviceContext
++    if ctx_in:
++        ctx = ctx_in.take()
++    else:
++        ctx = process_ctx[_DEVCTX_SLOT]()
++    var dweights = Mamba2DeviceWeights(ctx, weights)
++    var state = allocate_inference_cache(ctx, b, dims)
++    var stages = Mamba2DeviceStages(ctx, b, l, 0, dims)
++    var x = mamba_upload(ctx, input)
++    var trace = IdentityTrace.disabled()
++    mamba2_block_forward(
++        ctx,
++        stages,
++        state,
++        dweights,
++        x,
++        b,
++        l,
++        dt_lo,
++        dt_hi,
++        trace,
++        String("m2.backward.tail"),
++    )
++
++    var d_residual = mamba_upload(
++        ctx, grad_output
++    )
++    # cpu3-seq: the grad_output finite refusal runs on the uploaded buffer
++    # (same predicate by bits, same first flat index and message), not as a
++    # host walk over the List.
++    mamba_refuse_grad_output(ctx, String("mamba2"), d_residual, grad_output)
++    var tail = Mamba2BackwardTail(ctx, dims, m)
++    mamba2_backward_tail_into(
++        ctx,
++        tail,
++        d_residual,
++        stages.gnorm_out,
++        dweights.w_out,
++        dims,
++        m,
++    )
++    mamba2_backward_gnorm_into(
++        ctx,
++        tail,
++        stages.gnorm_gate,
++        stages.gnorm_sumsq,
++        dweights.gnorm_w,
++        dims,
++        m,
++    )
++    mamba2_backward_silu_gate_into(
++        ctx, tail, stages.skip_out, stages.in_proj, dims, m
++    )
++    mamba2_backward_d_skip_into(
++        ctx, tail, stages.silu_out, dweights.d_skip, dims, m
++    )
++    var ssd_backward = Mamba2SSDBackwardState(
++        ctx, b, stages.nc, dims.nheads
++    )
++    mamba2_s18_direct_dpass_into(
++        ctx,
++        ssd_backward,
++        tail.d_scan,
++        stages.xbc_work,
++        stages.pass_states,
++        stages.dacs,
++        b,
++        stages.t_work,
++        dims.nheads,
++        dims.d_inner,
++        dims.conv_dim(),
++        stages.nc,
++        m2_q_eff(),
++    )
++    # The scalar objective depends only on residual.out, not h_last, so the
++    # final-state cotangent is explicitly zero at this partial boundary.
++    var d_final = mamba_zeros(
++        ctx, b * dims.nheads * M2_HEADDIM * M2_D_STATE
++    )
++    mamba2_reverse_chunk_state_into(
++        ctx,
++        ssd_backward,
++        d_final,
++        stages.pass_states,
++        stages.dacs,
++        b,
++        dims.nheads,
++        stages.nc,
++        m2_q_eff(),
++    )
++    mamba2_cstate_ddecay_into(
++        ctx, ssd_backward, stages.xd_work, stages.xbc_work, b,
++        stages.t_work, dims.nheads, dims.d_inner, dims.conv_dim(),
++        stages.nc, m2_q_eff(),
++    )
++    var scale_reduction = Mamba2SSDScaleReduction(
++        ctx, b, stages.nc, dims.nheads, m2_q_eff()
++    )
++    mamba2_reduce_scale_product_into(
++        ctx,
++        scale_reduction,
++        ssd_backward,
++        stages.dacs,
++        stages.decay,
++        b,
++        stages.nc,
++        dims.nheads,
++        m2_q_eff(),
++    )
++    var discretize_backward = Mamba2SSDDiscretizeBackward(
++        ctx, b, stages.t_work, dims.nheads
++    )
++    mamba2_reverse_cumsum_and_da_into(
++        ctx, discretize_backward, scale_reduction.d_dacs_total,
++        stages.dt_work, stages.a_out, b, stages.t_work,
++        dims.nheads, stages.nc, m2_q_eff(),
++    )
++    mamba2_ydiag_xd_and_partial_dt_into(
++        ctx, discretize_backward, tail.d_scan, stages.cb_g, stages.seg_l,
++        stages.xd_work,
++        stages.xbc_work, stages.dt_work, stages.a_out, stages.dtraw_work, dweights.dt_bias,
++        ssd_backward.d_cstate, stages.decay,
++        b, stages.t_work, dims.nheads, dims.d_inner,
++        dims.conv_dim(), stages.nc, m2_q_eff(), dt_lo, dt_hi,
++    )
++    mamba2_postconv_merge_into(
++        ctx, discretize_backward, ssd_backward, tail.d_x_from_d,
++        b, stages.t_work, dims.nheads,
++    )
++    var conv_backward = Mamba2ConvBackward(ctx, b, l, dims.conv_dim())
++    mamba2_conv_backward_prefill_into(
++        ctx, conv_backward, discretize_backward, stages.conv_out,
++        stages.in_proj, dweights.conv_w, b, l, dims.d_inner,
++        dims.conv_dim(), dims.d_in_proj(), stages.q0,
++    )
++    mamba2_backward_input_projection_into(
++        ctx, tail, conv_backward.d_in_xbc, discretize_backward.d_dtraw,
++        stages.norm_out, dweights.w_in, dims, m,
++    )
++    mamba2_backward_block_norm_into(
++        ctx, tail, d_residual, x, stages.norm_sumsq,
++        dweights.norm_w, dims, m,
++    )
++    ctx.synchronize()
++
++    var result = Mamba2PrefillGradients()
++    result.x = mamba_download(ctx, tail.d_block_x, m*dims.d_model)
++    result.block_norm_weight = mamba_download(ctx, tail.d_block_w, dims.d_model)
++    result.in_proj_weight = mamba_download(ctx, tail.d_w_in, dims.d_in_proj()*dims.d_model)
++    result.conv1d_weight = mamba_download(ctx, conv_backward.d_w, dims.conv_dim()*4)
++    result.conv1d_bias = mamba_download(ctx, conv_backward.d_b, dims.conv_dim())
++    result.dt_bias = mamba_download(ctx, discretize_backward.d_dt_bias, dims.nheads)
++    result.A_log = mamba_download(ctx, discretize_backward.d_a_log, dims.nheads)
++    result.D = mamba_download(ctx, tail.d_d, dims.nheads)
++    result.norm_weight = mamba_download(ctx, tail.d_gnorm_w, dims.d_inner)
++    result.out_proj_weight = mamba_download(ctx, tail.d_w_out, dims.d_model*dims.d_inner)
++
++    # Explicit ownership extends all GPU buffers through synchronization.
++    _ = conv_backward^
++    _ = discretize_backward^
++    _ = scale_reduction^
++    _ = d_final^
++    _ = ssd_backward^
++    _ = tail^
++    _ = d_residual^
++    _ = x^
++    _ = stages^
++    _ = state^
++    _ = dweights^
++    _ = ctx^
++    return result^
+diff --git a/python/mojolearn/host_surface.py b/python/mojolearn/host_surface.py
+index d1ab3fe99..75337a328 100644
+--- a/python/mojolearn/host_surface.py
++++ b/python/mojolearn/host_surface.py
+@@ -2810,8 +2810,6 @@ FAMILIES = (
+             "mamba/host/device_shim.mojo",
+             "mamba/host/gen/modeling_mamba_prefill_backward.mojo",
+             "mamba/host/gen/mamba2_prefill_backward.mojo",
+-            "mamba/host/gen/mamba1_prefill_chain.mojo",
+-            "mamba/host/gen/mamba2_prefill_chain.mojo",
+             "mamba/host/gen/mamba3_prefill_backward.mojo",
+             "gemm/host/gemm_oracle.mojo",
+             # the shim's GEMM: neural_gemm's profile door over the host rows,
+diff --git a/tools/mamba_host_gen.py b/tools/mamba_host_gen.py
+index a4d70cc0e..1b2a0d3b6 100644
+--- a/tools/mamba_host_gen.py
++++ b/tools/mamba_host_gen.py
+@@ -71,14 +71,10 @@ SOURCES = {
+     "mamba/impl/modules/mamba2_backward.mojo": "mamba2_backward",
+     "mamba/impl/ops/mamba2_ssd_backward.mojo": "mamba2_ssd_backward",
+     "mamba/impl/modules/mamba2_prefill_backward.mojo": "mamba2_prefill_backward",
+-    # lane del-mamba (2026-10-19): the device runs the Mamba-1/2 backward on the
+-    # tape; the hand walk lives on only as this column's input
+-    "mamba/host/mamba2_prefill_chain.mojo": "mamba2_prefill_chain",
+     "mamba/checks/mamba_backward.mojo": "mamba_backward_checks",
+     "mamba/impl/ops/selective_scan_backward.mojo": "selective_scan_backward",
+     "mamba/impl/modeling/modeling_mamba_backward.mojo": "modeling_mamba_backward",
+     "mamba/impl/modeling/modeling_mamba_prefill_backward.mojo": "modeling_mamba_prefill_backward",
+-    "mamba/host/mamba1_prefill_chain.mojo": "mamba1_prefill_chain",
+     "mamba/impl/modules/mamba3_refusal.mojo": "mamba3_refusal",
+     "mamba/impl/modules/mamba3_transfer.mojo": "mamba3_transfer",
+     "mamba/impl/ops/mamba3_siso.mojo": "mamba3_siso",
+@@ -187,8 +183,8 @@ SUBSTITUTIONS = (
+ # Explicit substitutions keep the already-qualified generated host sources byte
+ # identical and fail closed if the upstream lifecycle spelling changes again.
+ _CONTEXT_SOURCES = (
+-    "mamba/host/mamba2_prefill_chain.mojo",
+-    "mamba/host/mamba1_prefill_chain.mojo",
++    "mamba/impl/modules/mamba2_prefill_backward.mojo",
++    "mamba/impl/modeling/modeling_mamba_prefill_backward.mojo",
+     "mamba/impl/modules/mamba3_prefill_backward.mojo",
+ )
+ _CONTEXT_RULES = (

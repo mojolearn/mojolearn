@@ -457,6 +457,13 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_RNN_OFF"](), "removed 2026-10-19 (lane/del-recurrent, e88ae4e38): MOJOLEARN_AUTOGRAD_RNN_OFF (the hand-chained recurrent backward, HandStep) is gone; the tape step gave the same bits on Apple, NVIDIA and AMD (NV lstm 0.1424 -> 0.1418 s, AMD 0.1206 -> 0.1207 s, per-step chain, pass 5); recoverable at e88ae4e38^"
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_RNN"](), "removed 2026-10-19 (lane/del-recurrent, e88ae4e38): MOJOLEARN_AUTOGRAD_RNN (the old opt-in spelling of the recurrent tape step) is gone: the tape is rnn_fit's only backward; drop the define"
     # end lane del-recurrent
+    # ---- lane del-mamba (2026-10-19), removed: the hand Mamba-1/2 prefill backward glue; the tape is the only GPU backward
+    # (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md "Hand-path deletions (2026-10-19)").
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at e378999c7^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_OFF"](), "removed 2026-10-19 (lane/del-mamba, 47582a7fb): the hand Mamba-1/2 prefill backward arm is deleted; the tape (autograd/rules_mamba.mojo) is the only GPU backward, same bits on Apple, NVIDIA and AMD. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA"](), "removed 2026-10-19 (lane/del-mamba, 47582a7fb): MOJOLEARN_AUTOGRAD_MAMBA was the opt-in spelling of the tape backward, now the only path; drop the define"
+    # ---- end lane del-mamba
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

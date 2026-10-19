@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """HOST CHECK: the Mamba-1 host backward oracle
 (`mamba/checks/mamba_backward_oracle.mojo`) against the device prefill VJP
-(`mamba/impl/modeling/modeling_mamba_prefill_backward.mojo`), stage by
+(`mamba/host/mamba1_prefill_chain.mojo`, the walk the tape's rules
+launch on the device), stage by
 stage, on all 16 corpus cases, with the signed-dyadic objective
 `mamba_check.mojo::objective_cotangent` spells.
 
@@ -56,7 +57,7 @@ from mamba.host.gen.selective_scan_backward import (
     mamba_bwd_da_log_into, mamba_bwd_dbc_into, selective_scan_bwd_scan_into,
     selective_scan_checkpoint_fn,
 )
-from mamba.host.gen.modeling_mamba_prefill_backward import mamba1_prefill_backward
+from mamba.host.gen.mamba1_prefill_chain import mamba1_prefill_backward
 from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
 from mamba.checks.mamba_backward_oracle import mamba_block_backward_oracle
 

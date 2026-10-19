@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# Mamba-1 / Mamba-2 block-stack backward on the tape (-D MOJOLEARN_AUTOGRAD_MAMBA,
-# default off; the binding's hand path, modeling_mamba_prefill_backward.mojo::
-# mamba1_prefill_backward and mamba2_prefill_backward.mojo::
-# mamba2_prefill_backward, is untouched). docs/plans/AUTOGRAD_API.md (c) 3.
+# Mamba-1 / Mamba-2 block-stack backward on the tape: the GPU binding's only
+# Mamba-1/2 backward. docs/plans/AUTOGRAD_API.md (c) 3. "Hand path" below names
+# the launch walk these rules reproduce, launch for launch; the device copy of
+# that walk is deleted (lane del-mamba, 2026-10-19; docs/TOMBSTONES.md) and the
+# CPU column keeps it as generator input (mamba/host/mamba{1,2}_prefill_chain.mojo).
 #
 # ============================================================ LAUNCH INVENTORY
 # Hand path, Mamba-1 (one block, zero state; forward = mamba_block_forward):
@@ -75,7 +76,9 @@
 #     destination (the hand path's buffers start zeroed, but none of its
 #     kernels reads one back).
 # Expected result: the same bits as the hand path on every gradient
-# (mamba/checks/mamba_tape_backward_check.mojo compares them word for word),
+# (mamba/checks/mamba_tape_backward_check.mojo compared them word for word on
+# Apple, NVIDIA and AMD; it now checks the stored digests of those runs and the
+# Mamba-1 host oracle),
 # now including the subnormal cases the old spelling's ftz copies and -0.0
 # operands could move. No new kernel and no new opcode.
 #
@@ -196,13 +199,13 @@ from mamba.impl.ops.mamba2_ssd_backward import (
 )
 from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
 
-# The Mamba-1/2 block backward runs on the tape by default (promoted 2026-10-19 by Andrew's decision: the tape is 3-4%
-# slower in one timed series per arm with the host copies in both clocks, mamba/checks/mamba_tape_backward_time.mojo n=20:
-# NVIDIA L40S m1 1.942 -> 2.035 ms, m2 6.462 -> 6.554; AMD MI325X m1 5.131 -> 5.285, m2 17.620 -> 18.458; averages 1.04 /
-# 1.03; accepted for one backward path instead of two). Every gradient word equals the hand path on Apple, NVIDIA and AMD
-# (MAMBA_TAPE_BACKWARD_PASS). MOJOLEARN_AUTOGRAD_MAMBA_OFF restores the hand chain for the A/B; the old opt-in spelling
-# is accepted too. Pass-6 (ag-pass6-host, idea K) removes the tape's per-block copies and waits; re-time after it lands.
-comptime AUTOGRAD_MAMBA = not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_MAMBA"]()
+# The Mamba-1/2 block backward runs on the tape (promoted 2026-10-19 by Andrew's decision: the tape is 3-4% slower in
+# one timed series per arm with the host copies in both clocks, mamba/checks/mamba_tape_backward_time.mojo n=20:
+# NVIDIA L40S m1 1.942 -> 2.035 ms, m2 6.462 -> 6.554; AMD MI325X m1 5.131 -> 5.285, m2 17.620 -> 18.458; averages
+# 1.04 / 1.03; accepted for one backward path instead of two). Every gradient word equals the hand path on Apple,
+# NVIDIA and AMD (MAMBA_TAPE_BACKWARD_PASS).
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (the hand Mamba-1/2 backward arm and its MOJOLEARN_AUTOGRAD_MAMBA opt-in spelling; superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 
 # Tags in a range of their own, clear of LayerNorm (1) and recurrent (16-18).
 comptime M1_NORM = 48
