@@ -9,7 +9,9 @@
 # compared and the differences counted (reported, not required).
 # Shapes: the HIGGS MLP's five GEMMs a batch (every epilogue kind) and the
 # neighbours M in (1, 17, 300), N in (1, 2, 3, 16, 17, 64, 65), K in (1, 2,
-# 27, 28, 29, 255, 256, 257), each in a dense and a transposed layout.
+# 27, 28, 29, 255, 256, 257), each in a dense and a transposed layout, and
+# the staging boundaries M in (1, 17), N in (1, 16, 33), K in (15, 16, 17,
+# 63, 64, 65, 127, 128, 129) (lane ag-pass5-gemm).
 # Off NVIDIA/AMD identical (Apple, FAST) every route is the one-thread launch.
 from std.memory import bitcast
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI
@@ -292,6 +294,27 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
                 _run[OP_GEMM](dev, host, tally, M, N, K, False, 0, False)
                 _run[OP_GEMM](dev, host, tally, M, N, K, True, 0, False)
                 _run[OP_GEMM](dev, host, tally, M, N, K, False, 0, True)
+                _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
+                _run[OP_GEMM_EPI](dev, host, tally, M, N, K, True, (idx + 3) % N_KINDS, False)
+                idx += 1
+    # lane ag-pass5-gemm: the staging boundaries. gemm_dot stages 64 terms a
+    # round then guarded rounds of 16 (GEMM_STAGE_V2; 16 and a serial tail
+    # under MOJOLEARN_IDN_GEMM_STAGE_OFF), and the 16 x 16 tile's slabs are
+    # 128 terms (GT_K): K on both sides of 16, 64 and 128, on the cell
+    # (M = 1 or N = 1 bare products), tile16 (17 x 33) and thin routes, every
+    # route compared word for word as above
+    var bms: List[Int] = [1, 17]
+    var bns: List[Int] = [1, 16, 33]
+    var bks: List[Int] = [15, 16, 17, 63, 64, 65, 127, 128, 129]
+    for i in range(len(bms)):  # driver-loop: over the boundary shape grid
+        for j in range(len(bns)):
+            for l in range(len(bks)):
+                var M = bms[i]
+                var N = bns[j]
+                var K = bks[l]
+                routes_seen[seq_gemm_route(M, N, K, True)] += 1
+                _run[OP_GEMM](dev, host, tally, M, N, K, False, 0, False)
+                _run[OP_GEMM](dev, host, tally, M, N, K, True, 0, True)
                 _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
                 _run[OP_GEMM_EPI](dev, host, tally, M, N, K, True, (idx + 3) % N_KINDS, False)
                 idx += 1
