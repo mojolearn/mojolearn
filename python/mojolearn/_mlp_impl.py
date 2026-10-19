@@ -2,8 +2,9 @@
 """Bounded 8→16→3 FP32 training composition; host code only packs/validates.
 
 All forward, backward, loss and update arithmetic executes in the existing
-IDENTICAL GPU GEMM/training bindings. This is a small fixed architecture,
-not autograd, a general neural-network trainer, or a Llama checkpoint format.
+IDENTICAL GPU GEMM/training bindings; the fused step's backward runs on the
+native autograd tape. This is a small fixed architecture, not a general
+neural-network trainer or a Llama checkpoint format.
 Composed cross-vendor identity requires its own retained qualification.
 
 NUMPY-FREE (numpy-free-0.7, DEVIATIONS 2423-2427). Inputs are read through
