@@ -495,8 +495,10 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # race CatBoost only (the tree driver refuses XGBoost/LightGBM there by name on every device): -9 trees cells
     # smoke-fixes r13 (2026-10-14): 333, gbdt-lossguide races `ours-gain0` beside `ours` (+1 cell x 2 datasets);
     # 335, gbdt-depthwise races `ours-prebinned` beside `ours` (+1 cell x 2 datasets)
-    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 335
-    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 335 + sum(len(r["arms"]) for r in algos)) in text
+    # 2026-10-19 (lane ag-bench): 104 races, 365 cells with the five neural fit lanes, each on Apple
+    # ours-fast + 4 torch GPU settings + mlx-fp32 (+5 races, +30 cells)
+    assert len(before) == 104 and sum(len(r["arms"]) for r in before) == 365
+    assert "TOTAL races=%d cells=%d" % (104 + len(algos), 365 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -874,16 +876,18 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # LightGBM are refused there by name on every device): Apple 340 -> 331, NVIDIA 273 -> 264; AMD unchanged at 229.
 # smoke-fixes r13 (2026-10-14): gbdt-lossguide races `ours-gain0` beside `ours` (+2 cells per vendor), then
 # gbdt-depthwise `ours-prebinned` beside `ours` (+2 more): Apple 335, NVIDIA 268, AMD 233.
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 335, 128, 82),
-                                                      ("nvidia", 268, 88, 94),
-                                                      ("amd", 233, 84, 67)])
+# 2026-10-19 (lane ag-bench): + the five neural fit lanes: apple 5 x (ours-fast + 4 torch + mlx-fp32) = +30,
+# nvidia 5 x (ours + 6 torch) = +35, amd 5 x (ours + 4 torch) = +25; +5 races everywhere
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 365, 128, 112),
+                                                      ("nvidia", 303, 88, 129),
+                                                      ("amd", 258, 84, 92)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=99 cells=%d" % cells in text
+    assert "TOTAL races=104 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=18 cells=%d" % neural in text
+    assert "family neural     races=23 cells=%d" % neural in text
     assert "neural: ours IDENTICAL" in text
     assert ("ours-fast, the Apple tier" in text) == (vendor == "apple")
     # what is left off the plan is printed by name, never dropped silently
