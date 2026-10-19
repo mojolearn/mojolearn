@@ -29,6 +29,7 @@ from sequence.dispatch import apply
 from sequence.ets_team import IDN_ETS_TEAM, ets_team_replay, ets_team_replay_applies
 from sequence.exec_trait import Exec
 from sequence.launch_profile import launch_profile_level, launch_profile_record
+from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART
 from std.time import perf_counter_ns
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.ops import (
@@ -107,6 +108,11 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return max(a.i10, 1) if a.i11 == 0 else max(a.i9, 1)
     elif OP == OP_COLSUM or OP == OP_COLSUM_DIV:
         return max(a.i0, 1)
+    # the tape's blocked-fold partials: one block chain an element
+    elif OP == OP_AG_REDUCE_PART:
+        return max(a.i3, 1)
+    elif OP == OP_AGK_BIN_VJP_PART:
+        return max(a.i9, 1)
     elif OP == OP_LN_BWD_W:
         return max(a.i0, 1)
     elif OP == OP_AF_BLK_SUMSQ or OP == OP_MLP_L2PART or OP == OP_MLP_ROWPART:
@@ -259,7 +265,7 @@ struct HostExec(Exec):
         # The device's fused launches (Apple speed, 2026-09-28) run here as
         # the launches they fuse, so the GEMM keeps the host kernel: the
         # same cells in the same order either way.
-        comptime if OP == OP_GEMM_EPI:
+        comptime if OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI:
             self._gemm(a)
             self._launch[OP_GEMM_EPI_TAIL](a, n)
             return

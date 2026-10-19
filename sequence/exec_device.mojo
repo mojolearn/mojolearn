@@ -44,6 +44,8 @@ from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
+from sequence.gemm_tiled import seq_gemm_epi_tiled_kernel
+from autograd.ops import OP_AGK_GEMM_EPI
 from sequence.ops import OP_THETA
 from sequence.ops import OP_LN_BWD_X, OP_LN_FWD, OP_AF_RMEAN, OP_AF_ROW, OP_AF_COL
 from sequence.adafactor import AF_COL_CHUNK_FOLD
@@ -992,6 +994,21 @@ struct DeviceExec(Exec):
                     Int32(a.i0), Int32(a.i1), Int32(a.i2),
                     Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
                     Int32(a.i7), Int32(a.i8),
+                    grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
+                    block_dim=(GT_TPB, 1, 1),
+                )
+                return
+        # lane ag-pass2-kernels: the tape's GEMM with epilogue on the same
+        # tile as OP_GEMM (same chain, then op_gemm_epi's follower on the
+        # stored word): the same words as the one-thread op_gemm_epi. The
+        # hand MLP's OP_GEMM_EPI keeps its one-thread launch.
+        comptime if SEQ_GEMM_TILED and OP == OP_AGK_GEMM_EPI:
+            if seq_gemm_tiled_on(a.i0, a.i1) and a.i7 == 0 and a.i8 == a.i1:
+                self.ctx.enqueue_function[seq_gemm_epi_tiled_kernel](
+                    a.p0, a.p1, a.p2, a.p3,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2),
+                    Int32(a.i3), Int32(a.i4), Int32(a.i5), Int32(a.i6),
+                    Int32(a.i9), Int32(a.i10), a.f0, a.f1,
                     grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
                     block_dim=(GT_TPB, 1, 1),
                 )
