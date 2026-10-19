@@ -130,6 +130,7 @@ from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_
 from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
+from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
 
 
 @always_inline
@@ -140,8 +141,17 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_AG_FIRST or OP_CELL_FWD_SCAN > OP_AG_LAST) and (
         OP_CELL_BWD_SCAN < OP_AG_FIRST or OP_CELL_BWD_SCAN > OP_AG_LAST
     ), "autograd opcode collides with recurrent scan"
+    # The data-side autograd family (autograd/data_ops.mojo: dropout) is a
+    # second contiguous range, disjoint from the first and from the scans.
+    comptime assert OP_AGD_FIRST <= OP_AGD_LAST, "autograd data opcode range is empty"
+    comptime assert OP_AGD_FIRST > OP_AG_LAST or OP_AGD_LAST < OP_AG_FIRST, "autograd opcode ranges overlap"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGD_FIRST or OP_CELL_FWD_SCAN > OP_AGD_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGD_FIRST or OP_CELL_BWD_SCAN > OP_AGD_LAST
+    ), "autograd data opcode collides with recurrent scan"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
+    elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
+        apply_autograd_data[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
