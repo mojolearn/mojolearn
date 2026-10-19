@@ -55,11 +55,11 @@ from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
 #: same buffers, so the same bits). -D MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
 #: restores the hand chain below.
 from sequence.ops import FP
-from sequence.exec_device import DeviceExec
 from autograd.rules_small_mlp import (
     AUTOGRAD_SMALL_MLP,
     SmallMlpBuffer,
     SmallMlpKernels,
+    SmallMlpRecordExec,
     small_mlp_backward_autograd,
     small_mlp_buffer,
 )
@@ -558,13 +558,13 @@ def mlp_train_step_host[tape: Bool = AUTOGRAD_SMALL_MLP](
     if want_input_grad != 0:
         dx_n = rows * MLP_IN
     var dx_d = ctx.enqueue_create_buffer[DType.float32](dx_n)
-    # The tape's executor wraps this context; it drains the queue when it
-    # goes, so it is kept until after the step's closing wait (below).
-    var tape_ex: DeviceExec
     comptime if tape:
         # ---- Backward on the tape: the same seven launches (header of
         # autograd/rules_small_mlp.mojo), then the same two refusal scans.
-        tape_ex = DeviceExec(ctx)
+        # The tape records on an executor that refuses to launch or allocate
+        # (every node holds caller storage, the rules launch on ctx) and
+        # never waits, so it adds no drain to the step.
+        var tape_ex = SmallMlpRecordExec()
         small_mlp_backward_autograd(
             tape_ex, _MlpStepKernels(ctx, small_mlp_buffer(ws)),
             x_d, w1_v, b1_v, w2_v, b2_v, pre1, act, pre2, logits, dlogits,
@@ -708,6 +708,4 @@ def mlp_train_step_host[tape: Bool = AUTOGRAD_SMALL_MLP](
     _ = incoming^
     _ = dhidden^
     _ = dx_d^
-    comptime if tape:
-        _ = tape_ex^
     return rows * MLP_OUT
