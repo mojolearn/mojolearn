@@ -7,13 +7,14 @@ performance, and a local GPU pass is not cross-vendor identity evidence.
 """
 import argparse
 import json
-import math
 from pathlib import Path
 import shutil
 import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+# The 48 mlp_cases digests (case, epochs, digest), recorded on host, Metal, NVIDIA and AMD.
+MLP_DIGESTS = ROOT / 'autograd/checks/mlp_cases_digests.tsv'
 
 
 def main():
@@ -82,6 +83,27 @@ def main():
             raise RuntimeError('incomplete MLP case coverage')
         return values, epochs
 
+    def mlp_digests(path):
+        found = {}
+        for line in path.read_text().splitlines():
+            fields = line.split()
+            if len(fields) == 3 and fields[0] == 'DIGEST':
+                found[int(fields[1])] = fields[2]
+        return found
+
+    def stored_mlp_rows():
+        rows = [line.split('\t') for line in MLP_DIGESTS.read_text().splitlines()
+                if line and not line.startswith('#') and not line.startswith('case')]
+        if len(rows) != 48:
+            raise RuntimeError(f'{MLP_DIGESTS} holds {len(rows)} cases, expected 48')
+        return rows
+
+    def stored_mlp_digests():
+        return {int(case): digest for case, _, digest in stored_mlp_rows()}
+
+    def stored_mlp_epochs():
+        return {int(case): int(epochs) for case, epochs, _ in stored_mlp_rows()}
+
     try:
         backends = ['cpu', 'gpu'] if args.backend == 'both' else [args.backend]
         gradient_logs = {}
@@ -93,26 +115,25 @@ def main():
                     raise RuntimeError('incomplete gradient/lifecycle coverage')
                 gradient_logs[backend] = path
             if args.only in ('all', 'mlp'):
+                # The hand-assembled backward (MOJOLEARN_AUTOGRAD_MLP_OFF) was
+                # deleted 2026-10-19; the tape is compared with the stored
+                # digests it and the tape both produced on every column.
                 source = f'autograd/checks/mlp_{backend}.mojo'
-                baseline = native(f'{backend}-mlp-existing', source, ['MOJOLEARN_AUTOGRAD_MLP_OFF=1'])
                 candidate = native(f'{backend}-mlp-autograd', source)
-                a, ea = mlp_values(baseline)
-                b, eb = mlp_values(candidate)
-                if a.keys() != b.keys() or ea != eb:
-                    raise RuntimeError('MLP training coverage or stopping behavior differs')
-                failures = []
-                max_abs = 0.0
-                for key in a:
-                    delta = abs(a[key] - b[key])
-                    max_abs = max(max_abs, delta)
-                    if not math.isfinite(delta) or delta > 1e-5 + 1e-5 * abs(a[key]):
-                        failures.append({'key': key, 'existing': a[key], 'autograd': b[key]})
-                result = {'backend': backend, 'kind': 'MLP numerical regression', 'cases': len(ea),
-                          'values_compared': len(a), 'max_absolute_difference': max_abs, 'failures': failures}
+                _, epochs = mlp_values(candidate)
+                got = mlp_digests(candidate)
+                want = stored_mlp_digests()
+                failures = [{'case': case, 'stored': want.get(case), 'autograd': got.get(case)}
+                            for case in sorted(want.keys() | got.keys()) if want.get(case) != got.get(case)]
+                failures += [{'case': case, 'stored_epochs': want_epochs, 'autograd_epochs': epochs.get(case)}
+                             for case, want_epochs in sorted(stored_mlp_epochs().items()) if epochs.get(case) != want_epochs]
+                result = {'backend': backend, 'kind': 'MLP stored-digest regression', 'cases': len(epochs),
+                          'digests_compared': len(want), 'reference': str(MLP_DIGESTS.relative_to(ROOT)),
+                          'failures': failures}
                 report['comparisons'].append(result)
                 save()
                 if failures:
-                    raise RuntimeError(f'{backend} MLP regression failed ({len(failures)} values)')
+                    raise RuntimeError(f'{backend} MLP digests differ from the stored reference ({len(failures)})')
         infer_logs = {}
         for backend in backends:
             if args.only in ('all', 'infer'):
