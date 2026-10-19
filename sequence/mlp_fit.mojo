@@ -12,11 +12,7 @@ from sequence.mlp import (
     MLP_EPOCH_DEV,
     MLP_DEVICE_EPOCH_ORDER,
     MLP_L2_BLOCK,
-    MLP_LOSS3,
     MLP_ROW_BLOCK,
-    OP_MLP_LOSS_A,
-    OP_MLP_LOSS_C,
-    mlp_l2_blocks,
     SplitMix,
     fisher_yates,
     mlp_epoch_key,
@@ -55,7 +51,6 @@ from checks.numerics import ftz, identical_div, identical_mul, identical_pow64, 
 from std.sys.compile import is_defined
 from autograd.tape import Tape, Tensor
 from autograd.ops import ADD as AG_ADD
-from autograd.ops import ag_fold_block
 from autograd.ops import RELU as AG_RELU
 from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
@@ -95,13 +90,10 @@ comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
 # aee3b17ef66dc060 on the HIGGS recipe: tools/sequence_speed.py case_mlp,
 # HIGGS 1M x 28, (256,) b512 1 epoch adam, identical): act' is op_act_bwd's
 # body instead of op_ag_unary_vjp's and db is OP_COLSUM_DIV's chain instead
-# of the blocked fold. Expected digest: the hand path's (-D
-# MOJOLEARN_AUTOGRAD_MLP_OFF) in the same build on every column (host, Metal,
-# NVIDIA, AMD), since every launch is a hand-path body with the hand path's
-# fold order (the tiled GEMM is op_gemm's chain term for term). With
-# MOJOLEARN_AUTOGRAD_LOSS3_OFF that is 2c2662ecb00cceed; with MLP_LOSS3 (the
-# default, sequence/mlp.mojo) the loss curve's bits move in both arms
-# together, so both get one new digest. A/B owed: arm A
+# of the blocked fold. Expected digest: the hand path's (2c2662ecb00cceed,
+# -D MOJOLEARN_AUTOGRAD_MLP_OFF) on every column (host, Metal, NVIDIA, AMD),
+# since every launch is a hand-path body with the hand path's fold order
+# (the tiled GEMM is op_gemm's chain term for term). A/B owed: arm A
 # -D MOJOLEARN_AUTOGRAD_MLP_UNFUSED (the composed matmul + add + activation
 # tape graph below, untouched), arm B this default; -D MOJOLEARN_AUTOGRAD_MLP_OFF
 # keeps the hand path.
@@ -315,7 +307,7 @@ def mlp_backward_autograd[E: Exec](
         #   tape default before this pass (composed graph, below): 28 =
         #     gather 1, forward 6, loss 5, seed copy 1, backward 11, export 4.
         #   now: 11 = gather 1; forward 2 (gemm_epi EPI_BIAS_ACT a layer);
-        #     loss 3 (MLP_LOSS3); backward 4: layer 2 dW (N = 1, off
+        #     loss 3 (MLP_LOSS_TWO_RANGE); backward 4: layer 2 dW (N = 1, off
         #     the tile: one-thread gemm_epi + OP_COLSUM_DIV) 2, dH (gemm_epi
         #     EPI_ACT_BWD, tiled) 1, layer 1 dW + db (tiled, column-sum
         #     epilogue) 1, no dX; optimizer 1.
@@ -399,73 +391,6 @@ def _l2_blocked[E: Exec](mut ex: E, net: MLPNet, P: FP, l2: FP, parts: FP) raise
         poff += nb
 
 
-def _loss3[E: Exec](
-    mut ex: E, net: MLPNet, P: FP, pred: FP, yb: FP, delta: FP, rowloss: FP, l2parts: FP, rowparts: FP,
-    dloss: FP, bi: Int, B: Int, loss_kind: Int, alpha: Float32,
-) raises:
-    """MLP_LOSS3 (sequence/mlp.mojo): the batch's delta and reported loss
-    dloss[bi] in 3 launches (layers <= 4): OP_MLP_LOSS_A (row losses, then
-    the ||W_l||^2 block partials of ag_fold_block(count_l) weights),
-    OP_MLP_ROWPART (row-loss blocks of ag_fold_block(B) rows), OP_MLP_LOSS_C
-    (the layer folds and op_mlp_bloss)."""
-    var L = net.n_layers()
-    var O = net.sizes[L]
-    var a = Args()
-    a.p0 = pred
-    a.p1 = yb
-    a.p2 = delta
-    a.p3 = rowloss
-    a.p4 = P
-    a.p5 = l2parts
-    a.i0 = loss_kind
-    a.i1 = O
-    a.i2 = L
-    a.i3 = B
-    var c = Args()
-    c.p1 = l2parts
-    c.p2 = dloss
-    c.p3 = rowparts
-    c.i0 = bi
-    c.i1 = B
-    c.i2 = O
-    c.i3 = L
-    c.i4 = loss_kind
-    c.f0 = ftz(identical_mul(Float32(0.5), alpha))
-    var nb = 0
-    for i in range(L):  # driver-loop: over layers
-        var o_ = net.w_off(i)
-        var c_ = net.sizes[i] * net.sizes[i + 1]
-        var nb_i = mlp_l2_blocks(c_)
-        nb += nb_i
-        if i == 0:
-            a.i4 = o_
-            a.i5 = c_
-            c.i6 = nb_i
-        elif i == 1:
-            a.i6 = o_
-            a.i7 = c_
-            c.i7 = nb_i
-        elif i == 2:
-            a.i8 = o_
-            a.i9 = c_
-            c.i8 = nb_i
-        else:
-            a.i10 = o_
-            a.i11 = c_
-            c.i9 = nb_i
-    ex.launch[OP_MLP_LOSS_A](a, B + nb)
-    var rb = ag_fold_block(B)
-    var nrb = (B + rb - 1) // rb
-    var rp = Args()
-    rp.p0 = rowloss
-    rp.p1 = rowparts
-    rp.i0 = B
-    rp.i1 = rb
-    ex.launch[OP_MLP_ROWPART](rp, nrb)
-    c.i5 = nrb
-    ex.launch[OP_MLP_LOSS_C](c, 1)
-
-
 def mlp_fit[E: Exec](
     mut ex: E, net: MLPNet, X: FP, Y: FP, N: Int, Pio: FP, curve: FP,
     loss_kind: Int, solver: Int, lr_sched: Int, nesterov: Bool, batch: Int, max_iter: Int,
@@ -532,16 +457,8 @@ def mlp_fit[E: Exec](
     var l2_nb = 0
     for i in range(L):
         l2_nb += (net.sizes[i] * net.sizes[i + 1] + MLP_L2_BLOCK - 1) // MLP_L2_BLOCK
-    # MLP_LOSS3: sqrt-sized blocks (a batch of B <= bs rows has at most
-    # ag_fold_block(bs) row blocks: autograd/fold.mojo fold_partials_bound)
-    var loss3 = False
-    comptime if MLP_LOSS3 and not AUTOGRAD_LOSS:
-        loss3 = L <= 4
-    var l2_nb3 = 0
-    for i in range(L):  # driver-loop: over layers
-        l2_nb3 += mlp_l2_blocks(net.sizes[i] * net.sizes[i + 1])
-    var l2parts = ex.alloc(max(l2_nb, l2_nb3) if MLP_BLOCKED_FOLDS else 1)
-    var rowparts = ex.alloc(max((bs + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK, ag_fold_block(bs)) if MLP_BLOCKED_FOLDS else 1)
+    var l2parts = ex.alloc(l2_nb if MLP_BLOCKED_FOLDS else 1)
+    var rowparts = ex.alloc((bs + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK if MLP_BLOCKED_FOLDS else 1)
     # MOJOLEARN_AUTOGRAD_LOSS: the loss module's scratch and the batch's data sum
     var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
     var loss_sum = dummy_ptr()
@@ -599,78 +516,72 @@ def mlp_fit[E: Exec](
                 tape_logits = mlp_forward_autograd(tape, ex, net, P, Gr, acts, B, alpha)
             else:
                 mlp_forward(ex, net, P, acts, B)
-            if loss3:
-                _loss3(ex, net, P, acts[L], yb, deltas[L], rowloss, l2parts, rowparts, dloss, bi, B,
-                       loss_kind, alpha)
-            else:
-                # the 5-launch block (MOJOLEARN_AUTOGRAD_LOSS3_OFF, AUTOGRAD_LOSS,
-                # more than 4 layers, MLP_BLOCKED_FOLDS off)
-                var a = Args()
-                a.p0 = acts[L]
-                a.p1 = yb
-                a.p2 = deltas[L]
-                a.p3 = rowloss
-                a.i0 = loss_kind
-                a.i1 = O
-                ex.launch[OP_MLP_ROWLOSS](a, B)
-                comptime if MLP_BLOCKED_FOLDS:
-                    _l2_blocked(ex, net, P, l2, l2parts)
-                else:  # runtime L: a plain if inside the comptime else (box-run-2 compile fix)
-                    if L <= 4:
-                        # every layer's ||W||^2 in one launch, a thread each (apple2)
+            var a = Args()
+            a.p0 = acts[L]
+            a.p1 = yb
+            a.p2 = deltas[L]
+            a.p3 = rowloss
+            a.i0 = loss_kind
+            a.i1 = O
+            ex.launch[OP_MLP_ROWLOSS](a, B)
+            comptime if MLP_BLOCKED_FOLDS:
+                _l2_blocked(ex, net, P, l2, l2parts)
+            else:  # runtime L: a plain if inside the comptime else (box-run-2 compile fix)
+                if L <= 4:
+                    # every layer's ||W||^2 in one launch, a thread each (apple2)
+                    var q = Args()
+                    q.p0 = P
+                    q.p1 = l2
+                    q.i2 = L
+                    for i in range(L):
+                        var o_ = net.w_off(i)
+                        var c_ = net.sizes[i] * net.sizes[i + 1]
+                        if i == 0:
+                            q.i4 = o_
+                            q.i5 = c_
+                        elif i == 1:
+                            q.i6 = o_
+                            q.i7 = c_
+                        elif i == 2:
+                            q.i8 = o_
+                            q.i9 = c_
+                        else:
+                            q.i10 = o_
+                            q.i11 = c_
+                    ex.launch[OP_SUMSQ](q, L)
+                else:
+                    for i in range(L):
                         var q = Args()
-                        q.p0 = P
+                        q.p0 = P + net.w_off(i)
                         q.p1 = l2
-                        q.i2 = L
-                        for i in range(L):
-                            var o_ = net.w_off(i)
-                            var c_ = net.sizes[i] * net.sizes[i + 1]
-                            if i == 0:
-                                q.i4 = o_
-                                q.i5 = c_
-                            elif i == 1:
-                                q.i6 = o_
-                                q.i7 = c_
-                            elif i == 2:
-                                q.i8 = o_
-                                q.i9 = c_
-                            else:
-                                q.i10 = o_
-                                q.i11 = c_
-                        ex.launch[OP_SUMSQ](q, L)
-                    else:
-                        for i in range(L):
-                            var q = Args()
-                            q.p0 = P + net.w_off(i)
-                            q.p1 = l2
-                            q.i0 = i
-                            q.i1 = net.sizes[i] * net.sizes[i + 1]
-                            ex.launch[OP_SUMSQ](q, 1)
-                var bl = Args()
-                bl.p0 = rowloss
-                bl.p1 = l2
-                bl.p2 = dloss
-                bl.i0 = bi
-                bl.i1 = B
-                bl.i2 = O
-                bl.i3 = L
-                bl.i4 = loss_kind
-                bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
-                comptime if AUTOGRAD_LOSS:
-                    loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
-                    bl.p3 = loss_sum
-                    bl.i5 = 1
-                elif MLP_BLOCKED_FOLDS:
-                    var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
-                    var rp = Args()
-                    rp.p0 = rowloss
-                    rp.p1 = rowparts
-                    rp.i0 = B
-                    rp.i1 = MLP_ROW_BLOCK
-                    ex.launch[OP_MLP_ROWPART](rp, nrb)
-                    bl.p3 = rowparts
-                    bl.i5 = nrb
-                ex.launch[OP_MLP_BLOSS](bl, 1)
+                        q.i0 = i
+                        q.i1 = net.sizes[i] * net.sizes[i + 1]
+                        ex.launch[OP_SUMSQ](q, 1)
+            var bl = Args()
+            bl.p0 = rowloss
+            bl.p1 = l2
+            bl.p2 = dloss
+            bl.i0 = bi
+            bl.i1 = B
+            bl.i2 = O
+            bl.i3 = L
+            bl.i4 = loss_kind
+            bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
+            comptime if AUTOGRAD_LOSS:
+                loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
+                bl.p3 = loss_sum
+                bl.i5 = 1
+            elif MLP_BLOCKED_FOLDS:
+                var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
+                var rp = Args()
+                rp.p0 = rowloss
+                rp.p1 = rowparts
+                rp.i0 = B
+                rp.i1 = MLP_ROW_BLOCK
+                ex.launch[OP_MLP_ROWPART](rp, nrb)
+                bl.p3 = rowparts
+                bl.i5 = nrb
+            ex.launch[OP_MLP_BLOSS](bl, 1)
             comptime if AUTOGRAD_MLP:
                 mlp_backward_autograd(tape, ex, net, tape_logits, deltas[L], P, Gr, B, alpha)
             else:
