@@ -1,0 +1,22 @@
+{
+  "files": {
+    "mojolearn_nvidia_ptx-0.8.53-py3-none-manylinux_2_35_x86_64.whl": "3727c10bf1bb3062705312acf4cc2f0d849ba2d4586f64d577a5834cb0d93f2e"
+  },
+  "linux_qualification": null,
+  "manifest_sha256": "c02c938a119cb713045fa04d1a6b415e031e4674dcc0b86006ca785358a40b09",
+  "passed": true,
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "new_runtime_verification": false,
+    "source_commit": "fdf04b801ca818639e9f5cf1e68a46019ce0b338"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-artifact-verification.v1",
+  "scope": "File integrity, alpha metadata and recorded overlay provenance only; no package execution. A listed fresh Linux payload additionally requires its exact final-wheel three-architecture installed admission; overlay artifacts inherit no current numerical qualification",
+  "tags": {
+    "mojolearn_nvidia_ptx-0.8.53-py3-none-manylinux_2_35_x86_64.whl": [
+      "py3-none-manylinux_2_35_x86_64"
+    ]
+  },
+  "version": "0.8.53"
+}
