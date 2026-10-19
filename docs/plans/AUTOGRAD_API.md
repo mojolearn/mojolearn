@@ -44,8 +44,10 @@ Implementation record: `NATIVE_AUTOGRAD.md`.
 - Trainers on the tape, opt-in: MLP (`-D MOJOLEARN_AUTOGRAD_MLP`,
   `sequence/mlp_fit.mojo`), recurrent (`-D MOJOLEARN_AUTOGRAD_RNN`, the
   `RnnStep` seam in `sequence/recurrent.mojo::rnn_fit`), transformer
-  decoder layer (`-D MOJOLEARN_AUTOGRAD_TRANSFORMER`, the two saved-stage
-  backwards in `bindings/_mojolearn_transformer.mojo`), byte LM step
+  decoder layer (the two saved-stage backwards in
+  `bindings/_mojolearn_transformer.mojo`, tape only since 2026-10-19:
+  `MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF)` and its hand arm deleted, see
+  docs/TOMBSTONES.md), byte LM step
   (`-D MOJOLEARN_AUTOGRAD_LM`, `training/byte_lm.mojo::byte_gradient_device`).
 
 ### Fused nodes
@@ -552,6 +554,12 @@ one warm-up dropped, median reported.
 |---|---|---|---|---|
 | `MOJOLEARN_AUTOGRAD_TRANSFORMER` | one decoder layer, B8 L512 d_model 512, 8 heads, 2 KV heads, head_dim 64, intermediate 1376 (chosen by cost: GEMM-dominated, tiled attention; not a board row) | binding built without the define | binding built with it | `TIME <arm> session.forward`, `TIME <arm> session`, `TIME <arm> saved` median_ms, kernel-only clock (inputs and weights on the device first) |
 | `MOJOLEARN_AUTOGRAD_MAMBA` | largest fixture case: Mamba-1 comp_b2_l257_d8, Mamba-2 m2_statepass_b2_l770_d64, plus a 4-block tape stack | `mamba1/2_prefill_backward` | `mamba1/2_tape_backward` (same binary) | `TIME m1.hand`, `TIME m1.tape`, `TIME m1.stack4.tape`, the same for m2; host lists in and out, the same copies in both arms |
+
+Transformer: the hand arm was deleted 2026-10-19 (docs/TOMBSTONES.md,
+`MOJOLEARN_AUTOGRAD_TRANSFORMER`); the check now runs one build and compares
+its GRAD lines with tools/transformer_tape_arm_digests.json (`STORED all
+MATCH`). The recipe below is the A/B as it was run; restore the patch to
+rerun it.
 
 Transformer, per box (`COL=nvidia BK=cuda` on nv, `COL=amd BK=hip` on amd).
 The forward tape (`MOJOLEARN_IDN_ACT_RETAIN=3`) is on in both arms so the

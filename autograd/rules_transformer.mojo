@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Transformer decoder-layer backward on the tape (-D MOJOLEARN_AUTOGRAD_TRANSFORMER,
-# default off). docs/plans/AUTOGRAD_API.md section (c) item 2.
+# Transformer decoder-layer backward on the tape (the bindings' only backward since
+# 2026-10-19). docs/plans/AUTOGRAD_API.md section (c) item 2.
 #
 # ---------------------------------------------------------------- launch inventory
 # The hand path, transformer/checks/transformer_backward.mojo::
@@ -158,8 +158,11 @@ from transformer.checks.transformer_backward import (
 # median, kernel-only clock, B8 L512 d512 8 heads 2 kv, tools/transformer_tape_arm_check.py --time 20): NVIDIA L40S
 # session 5.231 -> 5.259 ms, saved 5.118 -> 5.153; AMD MI325X session 3.415 -> 3.484, saved 3.648 -> 3.710; average 1.01.
 # Same launches, same arguments, same bits on Apple, NVIDIA and AMD (20 GRAD lines equal, both paths).
-# MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF restores the hand walk for the A/B; the old opt-in spelling is accepted too.
-comptime AUTOGRAD_TRANSFORMER = not is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by {SHA}; code recoverable at {SHA}^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+# The bindings' session and saved-tape backwards call llama_decoder_layer_backward_autograd only; the hand walk
+# (transformer/checks/transformer_backward.mojo::llama_decoder_layer_backward_device) stays as the traced and
+# materialized reference this entry refuses, and for the trainers that call it directly.
 
 # Tags in a range of their own: LayerNorm 1 (autograd/layers.mojo),
 # recurrent 16-18 (autograd/rules_recurrent.mojo), transformer 32-47.

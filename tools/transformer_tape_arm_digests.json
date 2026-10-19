@@ -1,0 +1,40 @@
+{
+  "shape": [
+    2,
+    128,
+    64,
+    4,
+    2,
+    16,
+    128,
+    0
+  ],
+  "note": "Tape decoder-layer backward digests (tools/transformer_tape_arm_check.py), the same on Metal, NVIDIA and AMD. Recorded from the check's own run logs, mojolearn-evidence autograd-buildout-20261019: nvidia p6-01/nv/tf-tape.log, amd p6-01/amd/tf-tape.log, metal compile-21/tfarm-tape.log. The hand arm (deleted 2026-10-19) printed the same lines.",
+  "grads": {
+    "saved.y": "97addc8e06391e35",
+    "saved.d_x": "d87d66e638643566",
+    "saved.dw_norm1": "146b2b8f8b91a9e0",
+    "saved.dw_norm2": "88d43ee8d20a45af",
+    "saved.dw_q": "81903584d509b300",
+    "saved.dw_k": "5dc449c8b9173300",
+    "saved.dw_v": "f2ca3497b33eae8c",
+    "saved.dw_o": "099b1cee6c428f8a",
+    "saved.dw_gate": "f3d33d6b02336bfa",
+    "saved.dw_up": "b1e20c6cfade6530",
+    "saved.dw_down": "fce01e57b66f4484",
+    "session.d_x": "d87d66e638643566",
+    "session.dw_norm1": "146b2b8f8b91a9e0",
+    "session.dw_norm2": "88d43ee8d20a45af",
+    "session.dw_q": "81903584d509b300",
+    "session.dw_k": "5dc449c8b9173300",
+    "session.dw_v": "f2ca3497b33eae8c",
+    "session.dw_o": "099b1cee6c428f8a",
+    "session.dw_gate": "f3d33d6b02336bfa",
+    "session.dw_up": "b1e20c6cfade6530",
+    "session.dw_down": "fce01e57b66f4484"
+  },
+  "loss": {
+    "saved": "3fdda89c",
+    "session": "c1f70e8e"
+  }
+}

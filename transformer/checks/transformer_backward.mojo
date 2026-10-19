@@ -3336,6 +3336,14 @@ def llama_decoder_layer_backward(
     _ = d_in^
 
 
+# Lane del-transformer (2026-10-19): the transformer bindings' session and saved-tape backwards no longer reach this walk
+# (they call autograd/rules_transformer.mojo::llama_decoder_layer_backward_autograd only; MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF)
+# deleted, docs/TOMBSTONES.md). It stays because the tape refuses what it serves: traced calls (the identity cards of
+# transformer_backward_check.mojo, train_loop.mojo, metal_reuse_validation.mojo), materialized stages and non-default
+# block options; and it is still called directly by training/neural_attention_owner.mojo, byte_lm_layer_pool.mojo,
+# byte_lm_offload.mojo, the stateless transformer_backward binding entry, and byte_lm.mojo / samba_resident.mojo
+# (lanes del-lm / del-samba). The seven tape rules call its launchers (_route_a/_route_b, bwd_rms_norm_routed,
+# bwd_attention_dispatch, the bwd_* kernels), which stay regardless.
 def llama_decoder_layer_backward_device(
     ctx: DeviceContext,
     mut bst: LlamaBackwardStages,
