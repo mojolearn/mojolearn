@@ -123,10 +123,12 @@ from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_sigmoid, identical_tanh
 from sequence.ops import FP, Args, OP_GEMM, OP_GEMM_EPI, OP_GEMM_SPLITK, add, fma3, ld, st
 from autograd.ops import OP_AGK_GEMM_EPI
 from sequence.mlp import div, gemm_epi_value, act_bwd_value, EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD, ACT_IDENTITY, ACT_RELU
+from sequence.mlp import ACT_LOGISTIC, ACT_TANH
+from sequence.gemm_split import SK_MAX_S, gemm_split_block, gemm_split_lanes, gemm_split_on, gemm_split_partial
 
 comptime GT_V2 = not (
     is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -391,6 +393,67 @@ comptime GR_CELL = 0
 comptime GR_TILE = 1
 comptime GR_THIN_N = 2
 comptime GR_THIN_M = 3
+#: lane ag-pass6-gemm (PASS6_IDEAS idea A): the 64 x 64 block tile of 4 x 4
+#: register micro-tiles (seq_gemm_micro_kernel below)
+comptime GR_MICRO = 4
+
+# ---------------------------------------------------------------- pass 6 (lane ag-pass6-gemm, 2026-10-19)
+# IDEA A, GT_MICRO (default on, IDENTICAL, same bits): products with both
+# edges >= GT_MICRO_EDGE run seq_gemm_micro_kernel: a 64 x 64 block tile,
+# 32-term slabs, 256 threads, each thread 4 x 4 cells (rows tr + 16 i, columns
+# tc + 16 j: a warp's B reads are 16 consecutive words, its A reads two
+# broadcast words, its stores 16 consecutive columns). Per term a thread
+# reads 4 A words and 4 B words from threadgroup memory into registers and
+# does 16 fmas (0.5 reads a fma instead of the 16 x 16 tile's 2: that tile
+# runs at the threadgroup-memory rate, 3.6-4.0 TFLOP/s on both GPUs at every
+# size, opbench sq1024 594 / 589 us, sq4096 37.2 / 34.6 ms NV / AMD).
+# SAME BITS: each cell's chain is unchanged, acc = fma3(A(m, k), B(k, n),
+# acc), k ascending from (accumulate ? C : +0.0) over the same ld-flushed
+# slab words (slabs ascending, terms ascending in a slab); only which thread
+# holds a cell moves. The epilogue is _tile_epi per cell; the column sums
+# are the tile-row-0 threads' add chains over their 4 columns' staged words,
+# k ascending (OP_COLSUM_DIV's word). The rule is a cost boundary: a 64 x 64
+# tile on an edge under 64 is mostly dead cells, so those products keep the
+# 16 x 16 tile (the HIGGS MLP's Z1 K 28 and dW1 M 28 stay on it).
+# Slab page (64 x 33 + 32 x 65) x 4 B = 16.8 KB (< the 32 KB limit).
+# -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF (or MOJOLEARN_IDN_ALL_OFF): the 16 x 16
+# tile for every product with both edges >= 8 (arm A).
+comptime GT_MICRO = not (
+    is_defined["MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime GT_MICRO_EDGE = 64
+comptime GM_M = 64
+comptime GM_N = 64
+comptime GM_K = 32
+comptime GM_R = 4
+comptime GM_C = 4
+#: thread rows / columns of the micro-tile block (16 x 16 = GT_TPB)
+comptime GM_TR = GM_M // GM_R
+comptime GM_TC = GM_N // GM_C
+#: terms folded per unrolled step of the micro fold (the chain is the
+#: same, k ascending; only the loop is unrolled)
+comptime GM_UNROLL = 4
+# IDEA B's INTERIM ROUTE RULE + compile-time sigmoid / tanh epilogues
+# (GEMM_ROUTE_P6, default on, same bits on every route): the thin tile vs
+# one thread a cell is decided by the cell count, not by whether the launch
+# fuses an epilogue. Opbench Session.linear rows (thin / cell, NV and AMD,
+# averaged): 512x64->1 0.86, 512x256->1 0.75, 4096x256->1 0.71, 4096x4096->1
+# 0.87 (thin wins); 65536x64->1 1.80, 65536x256->1 1.51, 65536x4096->1 1.13
+# (cells win). Cost: the cell route is M N threads each staging its own
+# loads; under GT_THIN_CELLS threads (less than half a wave64 per SIMD on a
+# 304-CU part, two warps a scheduler on a 142-SM part) it cannot hide its
+# load rounds and the thin tile's 256-term staging wins; above, the cells
+# fill the device and the thin tile's 240 idle fold threads lose. The
+# bias + logistic and bias + tanh epilogues get their own comptime kinds
+# (GK_BIAS_LOGISTIC, GK_BIAS_TANH: act_value's branch alone, no runtime
+# activation switch; opbench NV bias_sigmoid 512x64->64 16.8 us vs
+# bias_tanh 9.2). -D MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF (or
+# MOJOLEARN_IDN_ALL_OFF): pass 5's rule (thin only for fused launches) and
+# kinds (sigmoid / tanh through GK_BIAS_ACT), arm A.
+comptime GEMM_ROUTE_P6 = not (
+    is_defined["MOJOLEARN_IDN_GEMM_ROUTE_P6_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime GT_THIN_CELLS = 1 << 15
 
 #: the epilogue kinds of seq_gemm_tile_kernel (comptime, so each kernel
 #: carries only its own epilogue's code): GK_PLAIN op_gemm (accumulate, row
@@ -404,6 +467,9 @@ comptime GK_BIAS_RELU = 2
 comptime GK_BIAS_ACT = 3
 comptime GK_L2GRAD = 4
 comptime GK_ACT_BWD = 5
+#: GEMM_ROUTE_P6: bias then logistic, bias then tanh (act_value's branches)
+comptime GK_BIAS_LOGISTIC = 6
+comptime GK_BIAS_TANH = 7
 
 
 @always_inline
@@ -416,7 +482,17 @@ def seq_gemm_route(M: Int, N: Int, K: Int, fused: Bool) -> Int:
     if K < GT_MIN_K:
         return GR_CELL
     if M >= GT_MIN_EDGE and N >= GT_MIN_EDGE:
+        comptime if GT_MICRO:
+            if M >= GT_MICRO_EDGE and N >= GT_MICRO_EDGE:
+                return GR_MICRO
         return GR_TILE
+    comptime if GEMM_ROUTE_P6:
+        # the interim rule (pass 6, above): the cell count decides
+        if M * N >= GT_THIN_CELLS:
+            return GR_CELL
+        if N <= M:
+            return GR_THIN_N
+        return GR_THIN_M
     # THIN EDGE (AMD MI325X phase 5, one run per arm, same bits on both
     # routes: the plain OP_GEMM 327 -> 375 ms for 9770 launches with the
     # thin tile on its N = 1 products, while the hand's OP_GEMM_EPI and the
@@ -452,6 +528,11 @@ def seq_gemm_epi_kind(epi: Int, act: Int) -> Int:
             return GK_BIAS
         if act == ACT_RELU:
             return GK_BIAS_RELU
+        comptime if GEMM_ROUTE_P6:
+            if act == ACT_LOGISTIC:
+                return GK_BIAS_LOGISTIC
+            if act == ACT_TANH:
+                return GK_BIAS_TANH
         return GK_BIAS_ACT
     if epi == EPI_L2GRAD:
         return GK_L2GRAD
@@ -466,6 +547,8 @@ def seq_gemm_tile_blocks(route: Int, M: Int, N: Int) -> Int:
         return ((M + GT_THIN - 1) // GT_THIN) * N
     if route == GR_THIN_M:
         return M * ((N + GT_THIN - 1) // GT_THIN)
+    if route == GR_MICRO:
+        return ((M + GM_M - 1) // GM_M) * ((N + GM_N - 1) // GM_N)
     return seq_gemm_tiled_blocks(M, N)
 
 
@@ -484,6 +567,12 @@ def _tile_epi[EK: Int](
         v = z if z > Float32(0.0) else Float32(0.0)
     elif EK == GK_BIAS_ACT:
         v = gemm_epi_value(acc, ci, n, EPI_BIAS_ACT, epi_arg, p3, f0, f1)
+    elif EK == GK_BIAS_LOGISTIC:
+        # act_value's ACT_LOGISTIC branch on gemm_epi_value's z
+        v = ftz(identical_sigmoid(add(acc, ld(p3, n))))
+    elif EK == GK_BIAS_TANH:
+        # act_value's ACT_TANH branch on gemm_epi_value's z
+        v = ftz(identical_tanh(add(acc, ld(p3, n))))
     elif EK == GK_L2GRAD:
         v = div(fma3(f0, ld(p3, ci), acc), f1)
     elif EK == GK_ACT_BWD:
@@ -670,6 +759,205 @@ def seq_gemm_tile_kernel[TM: Int, TN: Int, TK: Int, EK: Int](
             st(pc, ci, _tile_epi[EK](acc, ci, n, Int(epi_arg), p3, f0, f1))
     if cs_on:
         st(p4, n, div(cs, f1))
+
+
+def seq_gemm_micro_kernel[EK: Int](
+    pa: FP, pb: FP, pc: FP, p3: FP, p4: FP,
+    m_rows: Int32, n_cols: Int32, k_len: Int32,
+    sam: Int32, sak: Int32, sbk: Int32, sbn: Int32,
+    accumulate: Int32, ldc: Int32, epi_arg: Int32, colsum: Int32, f0: Float32, f1: Float32,
+):
+    """GT_MICRO (lane ag-pass6-gemm, PASS6_IDEAS idea A): one block of
+    GT_TPB threads per GM_M x GM_N tile of C, GM_K-term slabs staged as
+    seq_gemm_tile_kernel stages them (GT_V3's register batches: the same
+    index math, guards, words and slots), and thread (tr, tc) owns the
+    GM_R x GM_C cells (tr + GM_TR i, tc + GM_TC j). Cell (m, n): acc =
+    (accumulate ? C[m, n] : +0.0); acc = fma3(A(m, k), B(k, n), acc), k
+    ascending: seq_gemm_tile_kernel's chain term for term, so op_gemm's
+    word. The arguments, the epilogue kinds and the column sums are
+    seq_gemm_tile_kernel's (EK != GK_PLAIN: dense C, no accumulate)."""
+    comptime TM = GM_M
+    comptime TN = GM_N
+    comptime TK = GM_K
+    comptime AS = TK + 1
+    comptime BS = TN + 1
+    comptime NA = (TM * TK + GT_TPB - 1) // GT_TPB
+    comptime NB = (TK * TN + GT_TPB - 1) // GT_TPB
+    comptime NC = GM_R * GM_C
+    comptime assert GM_TR * GM_TC == GT_TPB, "seq_gemm_micro: one thread a micro-tile"
+    comptime assert (TM * AS + TK * BS) * 4 <= 32768, "seq_gemm_micro: the slab page must fit every column"
+    var M = Int(m_rows)
+    var N = Int(n_cols)
+    var K = Int(k_len)
+    var SAM = Int(sam)
+    var SAK = Int(sak)
+    var SBK = Int(sbk)
+    var SBN = Int(sbn)
+    var LDC = Int(ldc)
+    var a_rows_fast = SAM == 1 and SAK != 1
+    var b_terms_fast = SBK == 1 and SBN != 1
+    var ntn = (N + TN - 1) // TN
+    var b = Int(block_idx.x)
+    var tm = b // ntn
+    var tn = b - tm * ntn
+    var m0 = tm * TM
+    var n0 = tn * TN
+    var tid = Int(thread_idx.x)
+    var tr = tid // GM_TC
+    var tc = tid - tr * GM_TC
+    var acc = SIMD[DType.float32, NC](0.0)
+    comptime if EK == GK_PLAIN:
+        if accumulate != 0:
+            comptime for i in range(GM_R):
+                comptime for j in range(GM_C):
+                    var m = m0 + tr + i * GM_TR
+                    var n = n0 + tc + j * GM_TC
+                    if m < M and n < N:
+                        acc[i * GM_C + j] = ld(pc, m * LDC + n)
+    # the column sums: the tile-row-0 threads of tile row 0 (row 0 < M),
+    # GM_C columns each, so every column is summed by exactly one thread
+    var cs_on = colsum != 0 and tm == 0 and tr == 0
+    var cs = SIMD[DType.float32, GM_C](0.0)
+    var a_s = stack_allocation[TM * AS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var b_s = stack_allocation[TK * BS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var k0 = 0
+    while k0 < K:
+        var cnt = min(TK, K - k0)
+        # register-staged slabs (seq_gemm_tile_kernel's GT_V3 staging,
+        # TM = GM_M, TN = GM_N, TK = GM_K): every load before the first store
+        var av = InlineArray[Float32, NA](fill=Float32(0.0))
+        var aslot = InlineArray[Int32, NA](fill=Int32(-1))
+        comptime for j in range(NA):
+            var q = tid + j * GT_TPB
+            if q < TM * cnt:
+                var row: Int
+                var kk: Int
+                if a_rows_fast:
+                    kk = q // TM
+                    row = q - kk * TM
+                else:
+                    row = q // cnt
+                    kk = q - row * cnt
+                aslot[j] = Int32(row * AS + kk)
+                if m0 + row < M:
+                    av[j] = ld(pa, (m0 + row) * SAM + (k0 + kk) * SAK)
+        var bv = InlineArray[Float32, NB](fill=Float32(0.0))
+        var bslot = InlineArray[Int32, NB](fill=Int32(-1))
+        comptime for j in range(NB):
+            var q = tid + j * GT_TPB
+            if q < cnt * TN:
+                var kk: Int
+                var col: Int
+                if b_terms_fast:
+                    col = q // cnt
+                    kk = q - col * cnt
+                else:
+                    kk = q // TN
+                    col = q - kk * TN
+                bslot[j] = Int32(kk * BS + col)
+                if n0 + col < N:
+                    bv[j] = ld(pb, (k0 + kk) * SBK + (n0 + col) * SBN)
+        comptime for j in range(NA):
+            if aslot[j] >= 0:
+                a_s[Int(aslot[j])] = av[j]
+        comptime for j in range(NB):
+            if bslot[j] >= 0:
+                b_s[Int(bslot[j])] = bv[j]
+        barrier()
+        # the micro fold: per term, GM_R A words and GM_C B words into
+        # registers, then the GM_R GM_C fmas (each cell's chain, i ascending;
+        # dead cells fold zero words and are never stored)
+        var ks = 0
+        while ks < cnt:
+            comptime for u in range(GM_UNROLL):
+                if ks + u < cnt:
+                    var ra = SIMD[DType.float32, GM_R]()
+                    var rb = SIMD[DType.float32, GM_C]()
+                    comptime for r in range(GM_R):
+                        ra[r] = a_s[(tr + r * GM_TR) * AS + ks + u]
+                    comptime for c in range(GM_C):
+                        rb[c] = b_s[(ks + u) * BS + tc + c * GM_TC]
+                    comptime for r in range(GM_R):
+                        comptime for c in range(GM_C):
+                            acc[r * GM_C + c] = fma3(ra[r], rb[c], acc[r * GM_C + c])
+                    if cs_on:
+                        # op_colsum: acc = add(acc, ld(X, r * i2 + c)), r ascending
+                        comptime for c in range(GM_C):
+                            cs[c] = add(cs[c], rb[c])
+            ks += GM_UNROLL
+        barrier()
+        k0 += TK
+    comptime for i in range(GM_R):
+        comptime for j in range(GM_C):
+            var m = m0 + tr + i * GM_TR
+            var n = n0 + tc + j * GM_TC
+            if m < M and n < N:
+                var ci = m * LDC + n
+                comptime if EK == GK_PLAIN:
+                    st(pc, ci, acc[i * GM_C + j])
+                else:
+                    st(pc, ci, _tile_epi[EK](acc[i * GM_C + j], ci, n, Int(epi_arg), p3, f0, f1))
+    if cs_on:
+        comptime for j in range(GM_C):
+            var n = n0 + tc + j * GM_TC
+            if n < N:
+                st(p4, n, div(cs[j], f1))
+
+
+# ---------------------------------------------------------------- the split-K launch (lane ag-pass6-gemm, idea B)
+@always_inline
+def seq_gemm_split_blocks(M: Int, N: Int, K: Int) -> Int:
+    """Blocks of seq_gemm_split_kernel: GT_TPB / lanes cells a block."""
+    var cpb = GT_TPB // gemm_split_lanes((K + gemm_split_block(K) - 1) // gemm_split_block(K))
+    return (M * N + cpb - 1) // cpb
+
+
+def seq_gemm_split_kernel[EK: Int](
+    pa: FP, pb: FP, pc: FP, p3: FP,
+    m_rows: Int32, n_cols: Int32, k_len: Int32,
+    sam: Int32, sak: Int32, sbk: Int32, sbn: Int32,
+    accumulate: Int32, ldc: Int32, epi_arg: Int32, f0: Float32, f1: Float32,
+):
+    """OP_GK_SPLIT on every GPU column (sequence/gemm_split.mojo, BIT
+    VERSION): w = gemm_split_lanes(S) threads a cell, GT_TPB / w cells a
+    block. Thread j < S of a cell folds block j (gemm_split_partial, from
+    +0.0) into threadgroup memory; after the barrier the cell's thread 0
+    adds the S partials in ascending order onto (accumulate ? C : +0.0),
+    applies the epilogue kind EK (op_gemm_epi's follower, the same word as
+    gemm_epi_value) and stores once: op_gk_split's word on the host."""
+    comptime assert SK_MAX_S <= GT_TPB, "seq_gemm_split: a cell's partials must fit one block"
+    var M = Int(m_rows)
+    var N = Int(n_cols)
+    var K = Int(k_len)
+    var R = gemm_split_block(K)
+    var S = (K + R - 1) // R
+    var w = gemm_split_lanes(S)
+    var cpb = GT_TPB // w
+    var tid = Int(thread_idx.x)
+    var cl = tid // w
+    var j = tid - cl * w
+    var cell = Int(block_idx.x) * cpb + cl
+    var live = cell < M * N
+    var m = 0
+    var n = 0
+    if live:
+        m = cell // N
+        n = cell - m * N
+    var part = stack_allocation[GT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    if live and j < S:
+        part[tid] = gemm_split_partial(pa, Int(sam), Int(sak), pb, Int(sbk), Int(sbn), K, m, n, j, R)
+    barrier()
+    if live and j == 0:
+        var ci = m * Int(ldc) + n
+        var acc = Float32(0.0)
+        if accumulate != 0:
+            acc = ld(pc, ci)
+        for s in range(S):
+            acc = add(acc, part[tid + s])
+        comptime if EK == GK_PLAIN:
+            st(pc, ci, acc)
+        else:
+            st(pc, ci, _tile_epi[EK](acc, ci, n, Int(epi_arg), p3, f0, f1))
 
 
 # ---------------------------------------------------------------- the launch profile's route (lane ag-pass5-gemm)
