@@ -247,13 +247,13 @@ def _view(ctx: DeviceContext, p: FP, n: Int) raises -> DeviceBuffer[DType.float3
 # enqueued copy for the stack's own buffers) and drains once: Mamba-1's 11 +
 # 2 synchronous downloads a block and Mamba-2's 8 + 2 become one wait a
 # call. Bits: unchanged (the same kernels read the same words; the copies
-# are bit copies either way). -D MOJOLEARN_AUTOGRAD_MAMBA_HOST_OFF keeps the
+# are bit copies either way). -D MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF keeps the
 # per-block copy and the synchronous downloads (arm A).
-comptime AUTOGRAD_MAMBA_HOST = not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_HOST_OFF"]()
+comptime AUTOGRAD_MAMBA_EXPORT = not is_defined["MOJOLEARN_AUTOGRAD_MAMBA_EXPORT_OFF"]()
 
 
 def _act_after(ctx: DeviceContext, mut residual_out: DeviceBuffer[DType.float32], n: Int) raises -> DeviceBuffer[DType.float32]:
-    """Block k + 1's input under AUTOGRAD_MAMBA_HOST: a view of the first n
+    """Block k + 1's input under AUTOGRAD_MAMBA_EXPORT: a view of the first n
     words of block k's residual_out (the stage outlives the stack's acts)."""
     return residual_out.create_sub_buffer[DType.float32](0, n)
 
@@ -429,7 +429,7 @@ struct Mamba1TapeStack(Movable):
             self.state.append(MambaDeviceState(ctx, b, self.dims))
             self.stages.append(MambaDeviceStages(ctx, b, l, self.dims))
             self.scratch.append(Mamba1TapeScratch(ctx, b, l, self.dims))
-            comptime if AUTOGRAD_MAMBA_HOST:
+            comptime if AUTOGRAD_MAMBA_EXPORT:
                 self.acts.append(_act_after(ctx, self.stages[k].residual_out, m * dm))
             else:
                 self.acts.append(mamba_zeros(ctx, m * dm))
@@ -693,7 +693,7 @@ def mamba1_tape_backward_stack(
             S.ctx, S.stages[k], S.state[k], S.w[k], S.acts[k], b, l, trace,
             String("m1.backward.tail"),
         )
-        comptime if not AUTOGRAD_MAMBA_HOST:
+        comptime if not AUTOGRAD_MAMBA_EXPORT:
             _d2d(S.ctx, S.acts[k + 1], S.stages[k].residual_out, m * dm)
 
     var dres = mamba_upload(ctx, grad_output)
@@ -742,7 +742,7 @@ def mamba1_tape_backward_stack(
     tape.backward_with_rules(ex, x_t, seed, rules)
 
     var result = List[Mamba1PrefillGradients]()
-    comptime if AUTOGRAD_MAMBA_HOST:
+    comptime if AUTOGRAD_MAMBA_EXPORT:
         # idea K(2): every download queued, one drain
         for k in range(nb):  # driver-loop: over blocks
             var g = Mamba1PrefillGradients()
@@ -863,7 +863,7 @@ struct Mamba2TapeStack(Movable):
             self.w.append(Mamba2DeviceWeights(ctx, weights[k]))
             self.state.append(allocate_inference_cache(ctx, b, self.dims))
             self.stages.append(Mamba2DeviceStages(ctx, b, l, 0, self.dims))
-            comptime if AUTOGRAD_MAMBA_HOST:
+            comptime if AUTOGRAD_MAMBA_EXPORT:
                 self.acts.append(_act_after(ctx, self.stages[k].residual_out, m * dm))
             else:
                 self.acts.append(mamba_zeros(ctx, m * dm))
@@ -1079,7 +1079,7 @@ def mamba2_tape_backward_stack(
             S.ctx, S.stages[k], S.state[k], S.w[k], S.acts[k], b, l, dt_lo, dt_hi, trace,
             String("m2.backward.tail"),
         )
-        comptime if not AUTOGRAD_MAMBA_HOST:
+        comptime if not AUTOGRAD_MAMBA_EXPORT:
             _d2d(S.ctx, S.acts[k + 1], S.stages[k].residual_out, m * dm)
         # the hand path's SSD backward state, sized by this block's stages
         var nc = S.stages[k].nc
@@ -1145,7 +1145,7 @@ def mamba2_tape_backward_stack(
     # stack's own device buffers, which DeviceExec did not allocate (its
     # download refuses them): they are read with the hand path's download,
     # after the tape's queue drains. w_in and w_out keep tape storage.
-    comptime if AUTOGRAD_MAMBA_HOST:
+    comptime if AUTOGRAD_MAMBA_EXPORT:
         # idea K(2): the copies are queued behind the backward on the same
         # in-order queue (so they read the finished words), one drain
         for k in range(nb):  # driver-loop: over blocks
