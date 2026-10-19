@@ -349,7 +349,7 @@ def model_forward[E: Exec](
                     # depends on lane ag-data (Tape.dropout): one mask per
                     # (seed, step, layer), the same on every vendor
                     h = tape.dropout(ex, h, spec.farg[i], seed,
-                                     UInt64(step) * UInt64(spec.n_layers()) + UInt64(i))
+                                     step * spec.n_layers() + i)
                 else:
                     raise Error("model fit: Dropout is not available in this build")
         elif k == LAYER_RESIDUAL:
@@ -360,7 +360,7 @@ def model_forward[E: Exec](
 
 
 def model_loss[E: Exec](
-    mut tape: Tape, mut ex: E, cfg: FitConfig, out: Tensor, target: Tensor,
+    mut tape: Tape, mut ex: E, cfg: FitConfig, pred: Tensor, target: Tensor,
 ) raises -> Tensor:
     """The batch loss, a mean over the batch (mse, bce_with_logits and huber:
     over every element; cross_entropy: over rows). bce_with_logits and huber
@@ -368,22 +368,22 @@ def model_loss[E: Exec](
     blocked folds. (They move to autograd/losses.mojo when lane ag-loss
     lands.)"""
     if cfg.loss == LOSS_MSE:
-        return tape.mse_loss(ex, out, target)
+        return tape.mse_loss(ex, pred, target)
     if cfg.loss == LOSS_CROSS_ENTROPY:
-        return tape.cross_entropy(ex, out, target)
+        return tape.cross_entropy(ex, pred, target)
     if cfg.loss == LOSS_BCE_WITH_LOGITS:
         # max(x, 0) - x y + log(1 + exp(-|x|)); its gradient is sigmoid(x) - y
         # on either side of 0, and no exp overflows.
-        var pos = tape.relu(ex, out)
-        var neg = tape.relu(ex, tape.scale(ex, out, Float32(-1)))
+        var pos = tape.relu(ex, pred)
+        var neg = tape.relu(ex, tape.scale(ex, pred, Float32(-1)))
         var absx = tape.add(ex, pos, neg)
         var one = tape.scalar(ex, Float32(1))
         var soft = tape.log(ex, tape.add(ex, tape.exp(ex, tape.scale(ex, absx, Float32(-1))), one))
-        var per = tape.add(ex, tape.subtract(ex, pos, tape.multiply(ex, out, target)), soft)
+        var per = tape.add(ex, tape.subtract(ex, pos, tape.multiply(ex, pred, target)), soft)
         return tape.mean(ex, per)
     # huber(delta): q = min(|r|, delta), over = |r| - q;
     # 0.5 q^2 + delta over (quadratic inside delta, linear outside)
-    var r = tape.subtract(ex, out, target)
+    var r = tape.subtract(ex, pred, target)
     var a = tape.add(ex, tape.relu(ex, r), tape.relu(ex, tape.scale(ex, r, Float32(-1))))
     var delta = tape.scalar(ex, cfg.huber_delta)
     var over = tape.relu(ex, tape.subtract(ex, a, delta))

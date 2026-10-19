@@ -797,7 +797,6 @@ def rnn_fit[E: Exec, //, S: RnnStep = HandStep](
             opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
     comptime if AUTOGRAD_OPTIM:
         opt_state.release(ex)
-        opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
     comptime if AUTOGRAD_LOSS:
         release_loss_scratch(ex, loss_ws)
     ex.sync()
