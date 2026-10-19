@@ -87,6 +87,7 @@ comptime OPS_CROSS_ENTROPY = 28
 comptime OPS_DETACH = 29
 comptime OPS_FULL = 30
 comptime OPS_COPY = 31
+comptime OPS_EMBEDDING = 32
 
 # Metric codes of ops_metric.
 comptime OPS_METRIC_ACCURACY = 1
@@ -443,6 +444,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             fa.f0 = fs[0]
             self.ex.launch[OP_FILL](fa, f_rows * f_cols)
             return self._constant(f_dst, f_rows, f_cols, 0)
+        elif code == OPS_EMBEDDING:
+            # lane ag-embedding-op: table[ids] (Tape.embedding). ints: the
+            # host address of the caller's int32 ids, their count, and
+            # padding_idx (-1 none). The ids are copied (bits) into a session
+            # buffer that lives with the graph: it is returned at the next
+            # reset or close, like a freed upload.
+            _need("embedding", n, 1, 3, ni, 0, nf)
+            var e_n = ints[1]
+            if ints[0] == 0 or e_n < 1:
+                raise Error("ops: embedding needs at least one id")
+            var e_buf = self.ex.alloc(e_n)
+            self.retired.append(Int(e_buf))
+            self.ex.upload(e_buf, FP(unsafe_from_address=ints[0]), e_n)
+            var e_ids = self.tape.ids(self.ex, e_buf, e_n)
+            t = self.tape.embedding(self.ex, x[0], e_ids, ints[2])
         elif code == OPS_COPY:
             _need("copy", n, 1, 0, ni, 0, nf)
             var cx = self._slot(hs[0])

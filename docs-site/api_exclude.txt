@@ -64,3 +64,4 @@ Sequential	autograd model API: checks pending on Apple, NVIDIA and AMD
 ops	operation session (mojolearn.ops.Session): checks pending on CPU, Apple, NVIDIA and AMD
 ops.Session	operation session: checks pending on CPU, Apple, NVIDIA and AMD
 MoEBlock.backward	new tape backward; no NVIDIA+AMD reference records yet (sequence/checks/moe_backward_check.mojo)
+Session.embedding	operation session embedding: its tape checks (embedding_check tape case, autograd embedding_gpu/cpu) pending on CPU, Apple, NVIDIA and AMD

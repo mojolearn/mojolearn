@@ -34,6 +34,10 @@ from std.memory import memcmp
 from autograd.pass1_ops import OP_P1_SCE_VJP
 from autograd.composed_ops import OP_AGC_LINEAR_PAIR
 from sequence.gemm_tiled import GR_TILE, seq_gemm_route
+from autograd.embedding_ops import (
+    EMBEDDING, AG_EMB_PLAN_AUTO, AG_EMB_PLAN_SORT, embedding_refuse_shape, embedding_check_words,
+    embedding_refuse_ids, embedding_forward_into, embedding_plan, embedding_perm_words, embedding_backward_into,
+)
 from std.sys.compile import is_defined
 
 comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
@@ -92,6 +96,25 @@ struct Tensor(ImplicitlyCopyable, Movable):
     var _owner: Int
     var _generation: Int
     var _index: Int
+
+
+@fieldwise_init
+struct IdsHandle(ImplicitlyCopyable, Movable):
+    """Integer row ids recorded by a Tape (Tape.ids): a non-differentiable
+    input of Tape.embedding. Not a Tensor: value() and gradient() never
+    take it."""
+    var _owner: Int
+    var _generation: Int
+    var _index: Int
+
+
+@fieldwise_init
+struct _Ids(ImplicitlyCopyable, Movable):
+    # n int32 ids, their bit patterns in n executor words (caller storage)
+    var data: FP
+    var n: Int
+    # every id is known to lie in [0, checked) (0: not yet checked)
+    var checked: Int
 
 
 @fieldwise_init
@@ -341,6 +364,8 @@ struct Tape(Movable):
     var _word_factor: Float32
     var _word_armed: Bool
     var _word_node: Int
+    # lane ag-embedding-op: the ids of this graph (Tape.ids), cleared by reset
+    var _ids: List[_Ids]
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -359,6 +384,7 @@ struct Tape(Movable):
         self._word_factor = Float32(0)
         self._word_armed = False
         self._word_node = -1
+        self._ids = List[_Ids]()
 
     def no_grad(mut self):
         """Enter inference mode: later operations keep no graph or gradients.
@@ -443,6 +469,7 @@ struct Tape(Movable):
         self._snapshots.clear()
         self._word_armed = False
         self._word_node = -1
+        self._ids.clear()
 
     def arm_fold_word(mut self, dst: FP, factor: Float32):
         """AUTOGRAD_CURVE_WORD: the next AXIS_ALL sum or mean recorded on
@@ -768,6 +795,115 @@ struct Tape(Movable):
         var p = self._alloc(ex, 1)
         _fill(ex, p, 1, value)
         return self.variable(ex, p, 1, 1, requires_grad)
+
+    # ---- the embedding op (lane ag-embedding-op, TAPE_EVERYWHERE path 4) ----
+    # Tape.embedding gathers table rows by integer ids (an IdsHandle, the
+    # tape's one non-float input) and records an EMBEDDING node whose VJP is
+    # the embedding profile's run-sorted scatter-add into the table's
+    # gradient (autograd/embedding_ops.mojo states the words). The VJP
+    # writes the table's whole gradient itself: when that gradient already
+    # holds a value (an accumulate=True leaf that holds one, or another
+    # consumer's earlier contribution) the fold CONTINUES from it, as
+    # Embedding.backward(ids, dy, grad=carry) does, instead of adding a
+    # separately folded term; otherwise it starts from +0.0. So a tape
+    # backward reproduces Embedding.backward's bits with and without a
+    # carry, and microbatches in ascending position order reproduce the
+    # unsplit gradient.
+    def ids[E: Exec](mut self, mut ex: E, data: FP, n: Int) raises -> IdsHandle:
+        """Record n integer row ids held in executor storage for embedding().
+
+        `data` holds n int32 values, each as its bit pattern in one 4-byte
+        word of this executor. The ids take no gradient. Keep the storage
+        unchanged until backward finishes. The handle expires at reset().
+        """
+        if n < 1:
+            raise Error("ids: at least one id is needed")
+        self._refuse_overlap(data, n, False, "ids: data")
+        if not self._identity:
+            self._identity = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(alloc[Int](1)))
+        self._ids.append(_Ids(data, n, 0))
+        return IdsHandle(Int(self._identity.value()), self._generation, len(self._ids) - 1)
+
+    def _check_ids(self, h: IdsHandle) raises -> Int:
+        if not self._identity:
+            raise Error("ids belong to an empty tape")
+        if h._owner != Int(self._identity.value()) or h._generation != self._generation:
+            raise Error("ids belong to another tape or an expired graph")
+        if h._index < 0 or h._index >= len(self._ids):
+            raise Error("invalid ids handle")
+        return h._index
+
+    def ids_count(self, h: IdsHandle) raises -> Int:
+        """The number of ids behind handle h."""
+        return self._ids[self._check_ids(h)].n
+
+    def embedding[E: Exec](
+        mut self, mut ex: E, table: Tensor, ids: IdsHandle, padding_idx: Int = -1,
+        plan: Int = AG_EMB_PLAN_AUTO,
+    ) raises -> Tensor:
+        """Rows of `table` (vocab, width) picked by `ids`: an (n, width) tensor.
+
+        Row t is table[ids[t]]. An id outside [0, vocab) is refused before
+        any row is read. The table's gradient sums, for each row, the
+        output gradient of every position that picked it, in ascending
+        position order; row `padding_idx` (-1: none) gets a zero gradient.
+        `plan` 0 (scan), 1 (sort) or 2 (auto) chooses how the backward
+        groups positions by row; every plan gives the same bits.
+
+        Example::
+
+            var w = tape.variable(ex, table, vocab, width)
+            var x = tape.embedding(ex, w, tape.ids(ex, ids, n))
+            tape.backward(ex, tape.sum(ex, x))
+        """
+        return self._embedding_to(ex, table, ids, padding_idx, plan, dummy_ptr(), False)
+
+    def embedding_into[E: Exec](
+        mut self, mut ex: E, table: Tensor, ids: IdsHandle, output: FP, padding_idx: Int = -1,
+        plan: Int = AG_EMB_PLAN_AUTO,
+    ) raises -> Tensor:
+        """embedding() written to caller storage of n * width floats.
+
+        Keep `output` unchanged until backward finishes; it must not
+        overlap a recorded tensor.
+        """
+        return self._embedding_to(ex, table, ids, padding_idx, plan, output, True)
+
+    def _embedding_to[E: Exec](
+        mut self, mut ex: E, table: Tensor, ids: IdsHandle, padding_idx: Int, plan: Int,
+        into: FP, use_into: Bool,
+    ) raises -> Tensor:
+        var w_at = self._use(ex, table)
+        var w = self._nodes[w_at]
+        var k = self._check_ids(ids)
+        var rec = self._ids[k]
+        var vocab = w.rows
+        var width = w.cols
+        var n = rec.n
+        embedding_refuse_shape(n, vocab, width, padding_idx)
+        _ = embedding_plan(plan, vocab, n)
+        self._shape(n, width)
+        if rec.checked == 0 or vocab < rec.checked:
+            # every id against this table's rows, on the executor, before
+            # the gather reads any (one read-back; a handle checked against
+            # at most this many rows is not checked again)
+            var cw = embedding_check_words(n)
+            var scratch_a = self._alloc(ex, cw)
+            var scratch_b = self._alloc(ex, cw)
+            embedding_refuse_ids(ex, rec.data, n, vocab, scratch_a, scratch_b)
+            self._ids[k].checked = vocab
+        if use_into:
+            self._refuse_overlap(into, n * width, True, "embedding_into: output")
+        var output = into if use_into else self._alloc(ex, n * width)
+        embedding_forward_into(ex, w.value, rec.data, output, n, width)
+        var saved = Args()
+        saved.p0 = rec.data
+        saved.i0 = n
+        saved.i1 = vocab
+        saved.i2 = width
+        saved.i3 = padding_idx
+        saved.i4 = plan
+        return self._record(ex, output, n, width, EMBEDDING, [table], saved)
 
     def value(self, x: Tensor) raises -> FP:
         """Return the executor pointer for a tensor's values."""
@@ -2011,11 +2147,22 @@ struct Tape(Movable):
             var total = List[Bool](length=n.count, fill=False)
             # AUTOGRAD_GRAD_ALIAS: the operand borrowed n's gradient (no VJP launch)
             var borrowed = List[Bool](length=n.count, fill=False)
+            # EMBEDDING: the table's gradient already holds a value (the fold continues from it)
+            var emb_carry = False
             var contributions = List[FP]()
             for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]
                 var p = self._nodes[parent]
-                if p.requires_grad and n.op >= CUSTOM and rules.writes_total(n.op - CUSTOM, n.saved, edge):
+                if p.requires_grad and n.op == EMBEDDING:
+                    # the scatter-add writes the table's whole gradient in
+                    # place: from +0.0 for a first contribution, else
+                    # continuing from the held value (Tape.embedding)
+                    emb_carry = touched[parent]
+                    first[edge] = True
+                    total[edge] = True
+                    touched[parent] = True
+                    contributions.append(p.grad)
+                elif p.requires_grad and n.op >= CUSTOM and rules.writes_total(n.op - CUSTOM, n.saved, edge):
                     # the rule writes this input's whole gradient in place
                     first[edge] = True
                     total[edge] = True
@@ -2195,6 +2342,21 @@ struct Tape(Movable):
                         a.i1 = p.cols
                         a.f0 = n.saved.f0
                         ex.launch[OP_P1_SCE_VJP](a, p.rows)
+                    elif n.op == EMBEDDING:
+                        # the run-sorted scatter-add (autograd/embedding_ops.mojo);
+                        # its run scratch is this node's backward scratch
+                        var e_n = n.saved.i0
+                        var e_vocab = n.saved.i1
+                        var e_plan = embedding_plan(n.saved.i4, e_vocab, e_n)
+                        var e_begin = self._alloc(ex, e_vocab + 1)
+                        var e_perm = self._alloc(ex, embedding_perm_words(e_plan, e_n))
+                        var e_keys = dummy_ptr()
+                        if e_plan == AG_EMB_PLAN_SORT:
+                            e_keys = self._alloc(ex, embedding_perm_words(e_plan, e_n))
+                        embedding_backward_into(
+                            ex, n.saved.p0, n.grad, contribution, e_n, e_vocab, n.saved.i2, n.saved.i3,
+                            emb_carry, e_plan, e_begin, e_perm, e_keys,
+                        )
                     elif n.op == SOFTMAX or n.op == LOG_SOFTMAX:
                         var a = Args()
                         a.p0 = n.value
