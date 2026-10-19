@@ -222,6 +222,7 @@ collide with the recurrent scan codes. Every body is `@always_inline`.
 | 1004 | `OP_AG_TRANSPOSE` | elements | p0 | p1 |
 | 1005 | `OP_AG_REDUCE_PART` | blocks x outputs | p0 | p1 partials |
 | 1006 | `OP_AG_REDUCE_FOLD` | outputs | p0 partials | p1 |
+| 1700 | `OP_AGF_LEVEL` | groups x outputs | p0 partials | p0 (in place, one slot a group) |
 | 1007 | `OP_AG_REDUCE_VJP` | input elements | p0 upstream | p1 |
 | 1008 | `OP_AG_SOFTMAX_FWD` | rows | p0 x | p1 y |
 | 1009 | `OP_AG_SOFTMAX_VJP` | rows | p0 y, p1 upstream | p2 |
@@ -252,6 +253,19 @@ columns) and the row sum (axis 1). A broadcast operand's gradient (a
 at the output's shape into tape scratch, then that blocked row/column/total
 fold. An extent of at most 64 is one block. Partials come from the tape's
 storage (`_alloc`), reused after `reset()`.
+
+Fold v2 (lane ag-pass3-fold, the default; `-D MOJOLEARN_AUTOGRAD_FOLD_V2_OFF`
+restores the rule above). Leaf blocks are a fixed 64 terms, and the partials
+fold as a tree of fan-in 64: while an output has more than 64 partials,
+`OP_AGF_LEVEL` (1700) adds each run of 64 consecutive partials ascending
+from +0.0, in place, into the run's first slot; `OP_AG_REDUCE_FOLD` adds the
+last level ascending and applies the factor. A fold of at most 64 terms an
+output is one launch (the first launch applies the factor itself). Every
+chain issues its loads eight at a time ahead of its adds, which keep their
+order. Folds of at most 4096 terms are the rule above term for term (its
+R is 64 there), so they keep their bits; longer folds have new bits on
+every executor together. The launch geometry before and after, per axis,
+is written at the top of the fold section of `autograd/ops.mojo`.
 
 Bits: the total sum, the broadcast-operand gradients and folds over more
 than 64 terms change bits against `4cea8ebd9` (a single chain before); the

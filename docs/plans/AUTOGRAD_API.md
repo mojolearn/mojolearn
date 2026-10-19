@@ -173,7 +173,9 @@ Fold convention. Every sum is the tape's blocked fold
 (`autograd/fold.mojo::blocked_fold`, the launches `Tape` itself uses):
 blocks of `ag_fold_block(extent)` consecutive terms (the smallest power of
 two R >= 64 with R * R >= extent) added ascending from +0.0, then the block
-partials added ascending from +0.0 times the factor. The mean's factor is
+partials added ascending from +0.0 times the factor (fold v2, the default:
+fixed 64-term blocks and a fan-in-64 tree of the partials, the same order
+up to 4096 terms; docs/plans/NATIVE_AUTOGRAD.md, "Fold rule"). The mean's factor is
 `identical_div(1, count)`. Per-row terms (cross-entropy, log loss, argmax)
 are one thread per row over the classes in ascending order. The AUC sorts
 (score, label) with a bitonic network on the executor (padding to a power
