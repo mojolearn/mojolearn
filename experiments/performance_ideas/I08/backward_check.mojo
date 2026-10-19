@@ -8,7 +8,9 @@ fixture alone does not establish host/four-column identity or speed.
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from mamba.checks.mamba2_fixture import m2_case_weights,m2_case_x,m2_corpus_case
-from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+from autograd.rules_mamba import mamba2_tape_backward
 
 def compare(name: String,a: List[Float32],b: List[Float32]) raises:
     if len(a)!=len(b):
@@ -30,8 +32,8 @@ def main() raises:
         var cotangent=List[Float32]()
         for i in range(len(x)):
             cotangent.append(Float32((i*37+11)%31-15)*Float32(0.0625))
-        var a=mamba2_prefill_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
-        var b=mamba2_prefill_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
+        var a=mamba2_tape_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
+        var b=mamba2_tape_backward(weights,x,cotangent,f.b,f.l,f.dt_lo,f.dt_hi,ctx.copy())
         print("I08 BACKWARD_CASE",case_k,f.b,f.l,weights.dims.d_model)
         compare("x",a.x,b.x)
         compare("block_norm_weight",a.block_norm_weight,b.block_norm_weight)

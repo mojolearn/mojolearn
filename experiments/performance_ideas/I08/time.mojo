@@ -4,7 +4,9 @@ from max.gpu.host import DeviceContext
 from std.time import perf_counter_ns
 from gemm.checks.gemm_step_arms import gemm_step_env_int
 from mamba.checks.mamba2_fixture import m2_case_weights,m2_corpus_case,m2_case_seed,corpus_tensor,M2_TID_X
-from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+from autograd.rules_mamba import mamba2_tape_backward
 
 def main() raises:
     var ctx=DeviceContext()
@@ -16,6 +18,6 @@ def main() raises:
     for i in range(len(x)):cotangent.append(Float32((i*37+11)%31-15)*Float32(.0625))
     for phase in range(2):
         var start=perf_counter_ns()
-        var result=mamba2_prefill_backward(weights,x,cotangent,f.b,l,f.dt_lo,f.dt_hi,ctx.copy())
+        var result=mamba2_tape_backward(weights,x,cotangent,f.b,l,f.dt_lo,f.dt_hi,ctx.copy())
         ctx.synchronize()
         print("MEASURE id=I08 phase="+String(phase)+" length="+String(l)+" features="+String(weights.dims.d_model)+" elapsed_ns="+String(perf_counter_ns()-start))

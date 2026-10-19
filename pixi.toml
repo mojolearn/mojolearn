@@ -1337,7 +1337,7 @@ check-mamba-decode = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 check-mamba-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_check.mojo"
 check-mamba2-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba2_check.mojo"
 check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba3_check.mojo"
-# the tape-assembled Mamba-1/2 backward (autograd/rules_mamba.mojo) against the hand path, word for word
+# the tape-assembled Mamba-1/2 backward (autograd/rules_mamba.mojo) against the stored Apple/NVIDIA/AMD digests (mamba/checks/mamba_tape_backward_digests.tsv) and, for Mamba-1, the host oracle word for word
 check-mamba-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_tape_backward_check.mojo"
 # the byte LM tape backward (autograd/rules_lm.mojo) against the hand walk, one train step, every gradient and updated parameter word
 check-lm-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/lm_tape_backward_check.mojo"

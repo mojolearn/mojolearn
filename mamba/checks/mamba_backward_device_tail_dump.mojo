@@ -5,7 +5,10 @@ from std.memory import bitcast
 from std.os import getenv
 
 from mamba.checks.mamba_fixture import MambaDims, corpus_case, corpus_case_weights, corpus_case_x
-from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
+from max.gpu.host import DeviceContext
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward glue, superseded by the tape) deleted 2026-10-19 by DELSHA; code recoverable at DELSHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+from autograd.rules_mamba import mamba1_tape_backward
 
 
 def _objective_cotangent(n: Int) -> List[Float32]:
@@ -47,9 +50,9 @@ def main() raises:
     if output == "":
         raise Error("set MOJOLEARN_MAMBA_GRAD_DUMP to an existing directory")
 
-    var gradients = mamba1_prefill_backward(
+    var gradients = mamba1_tape_backward(
         weights, corpus_case_x(case_k), _objective_cotangent(m * dims.d_model),
-        fixture.b, fixture.l,
+        fixture.b, fixture.l, DeviceContext(),
     )
 
     _write_f32(
