@@ -450,11 +450,6 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_RF_FAST_QSAMPLE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): RF_FAST_QSAMPLE (split candidates from >= 65,536 sampled rows) was DROPPED-slower: M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise). Restore with experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
-    # ---- lane del-transformer (2026-10-19), removed: the hand decoder-layer backward arm of the transformer bindings.
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
-    comptime assert not (is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]() or is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]()), "removed 2026-10-19 (lane/del-transformer, dd4194a23): AUTOGRAD_TRANSFORMER(_OFF) selected the hand decoder-layer backward walk in the transformer session and saved-tape bindings; the tape was PROMOTED (same bits Apple = NVIDIA = AMD, 20 GRAD lines; session NV 5.231 -> 5.259 ms, AMD 3.415 -> 3.484, saved NV 5.118 -> 5.153, AMD 3.648 -> 3.710, average 1.01). The bindings call the tape only. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch."
-    # ---- end lane del-transformer
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

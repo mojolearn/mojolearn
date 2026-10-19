@@ -3218,3 +3218,6 @@ p6-01/nv,p6-01/amd}/tf-{hand,tape}.log, compile-21/tfarm-tape.log.
 Deleted by dd4194a23, recoverable at dd4194a23^. Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch`
 (bindings/_mojolearn_transformer.mojo, autograd/rules_transformer.mojo, tools/transformer_tape_arm_check.py). No
 grid_controls entry existed.
+The `removed` refusal is a `comptime assert` at the top of `llama_decoder_layer_backward_autograd` in
+autograd/rules_transformer.mojo, not in core/six_lane_experiment_guards.mojo: the pre-push rebuild fence refuses a change to
+that module (76 bindings import it) and asks for the area's own module.

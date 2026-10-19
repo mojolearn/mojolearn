@@ -686,6 +686,11 @@ def llama_decoder_layer_backward_autograd(
 
     A NaN or infinity in `d_out` raises an error; the layer's gradients in
     `bst` may already have been written when it does."""
+    # The removed refusal lives here, not in core/six_lane_experiment_guards.mojo (the rebuild fence keeps a
+    # transformer-only refusal out of the module 76 bindings import); every binding on the decoder-layer tape reaches it.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+    comptime assert not (is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]() or is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]()), "removed 2026-10-19 (lane/del-transformer, dd4194a23): AUTOGRAD_TRANSFORMER(_OFF) selected the hand decoder-layer backward walk in the transformer session and saved-tape bindings; the tape was PROMOTED (same bits Apple = NVIDIA = AMD, 20 GRAD lines; session NV 5.231 -> 5.259 ms, AMD 3.415 -> 3.484, saved NV 5.118 -> 5.153, AMD 3.648 -> 3.710, average 1.01). The bindings call the tape only. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch."
     if trace.enabled or materialize:
         raise Error("llama backward (autograd): traced or materialized calls take the hand path")
     if not w.opts.is_default():
