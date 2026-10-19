@@ -14,6 +14,7 @@ from sequence.exec_trait import Exec
 from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FitConfig, ModelSpec, model_fit, model_predict, parse_model
+from autograd.ops_api import ops_session, ops_session_close, ops_session_open
 
 # Training options ahead of the per-layer float table in model_fit's fp.
 comptime FIT_INTS = 14
@@ -93,3 +94,112 @@ def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonOb
     out.append(PythonObject(spec.n_params))
     out.append(PythonObject(spec.out_features()))
     return out
+
+
+# ---------------------------------------------------------------- operation sessions
+# (autograd/ops_api.mojo). E is the binding's executor, KIND its tag
+# (OPS_DEVICE or OPS_HOST): a session opened by one binding is refused by the
+# other. Every entry is one call: argument parsing here, all arithmetic in
+# the session's executor.
+
+
+def _handle_list(p: PythonObject) raises -> List[Int]:
+    var out = List[Int]()
+    for i in range(len(p)):  # driver-loop: over op inputs
+        out.append(ival(p, i))
+    return out^
+
+
+def ops_open_py[E: Exec & Movable, KIND: Int](var ex: E, record: PythonObject) raises -> PythonObject:
+    """A new session; record = 1 records a graph for backward. Returns its id."""
+    return PythonObject(ops_session_open[E, KIND](ex^, Int(py=record) != 0))
+
+
+def ops_close_py[E: Exec & Movable, KIND: Int](sid: PythonObject) raises -> PythonObject:
+    ops_session_close[E, KIND](Int(py=sid))
+    return PythonObject(0)
+
+
+def ops_upload_py[E: Exec & Movable, KIND: Int](
+    sid: PythonObject, addr: PythonObject, ip: PythonObject,
+) raises -> PythonObject:
+    """addr: the caller's C-contiguous float32 (rows, cols); ip = [rows, cols,
+    requires_grad]. Returns the new tensor's handle."""
+    if len(ip) != 3:
+        raise Error("ops_upload: requires [rows, cols, requires_grad]")
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(p[].upload(fptr(addr, "data"), ival(ip, 0), ival(ip, 1), ival(ip, 2) != 0))
+
+
+def ops_download_py[E: Exec & Movable, KIND: Int](
+    sid: PythonObject, h: PythonObject, addr: PythonObject,
+) raises -> PythonObject:
+    """The tensor's values into the caller's float32 array of its shape."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].download(Int(py=h), fptr(addr, "out"))
+    return PythonObject(0)
+
+
+def ops_op_py[E: Exec & Movable, KIND: Int](
+    sid: PythonObject, code: PythonObject, hs: PythonObject, ip: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    """Operation `code` (autograd/ops_api.mojo OPS_*) on the tensor handles
+    `hs` with integer arguments `ip` and float arguments `fp`; returns the
+    new tensor's handle."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(p[].op(Int(py=code), _handle_list(hs), _ints(ip), _floats(fp, 0)))
+
+
+def ops_scalar_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    """The one value of a (1, 1) tensor."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(Float64(p[].scalar(Int(py=h))))
+
+
+def ops_shape_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    """[rows, cols] of a tensor."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    var shape = p[].shape(Int(py=h))
+    var out = Python.list()
+    out.append(PythonObject(shape[0]))
+    out.append(PythonObject(shape[1]))
+    return out
+
+
+def ops_free_py[E: Exec & Movable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].free(Int(py=h))
+    return PythonObject(0)
+
+
+def ops_reset_py[E: Exec & Movable, KIND: Int](sid: PythonObject) raises -> PythonObject:
+    """Drop computed tensors and the graph; uploaded tensors stay."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].reset()
+    return PythonObject(0)
+
+
+def ops_metric_py[E: Exec & Movable, KIND: Int](
+    sid: PythonObject, kind: PythonObject, hs: PythonObject,
+) raises -> PythonObject:
+    """Metric `kind` (OPS_METRIC_*) of the handles [y_true, prediction]."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(Float64(p[].metric(Int(py=kind), _handle_list(hs))))
+
+
+def ops_backward_py[E: Exec & Movable, KIND: Int](
+    sid: PythonObject, h: PythonObject, accumulate: PythonObject,
+) raises -> PythonObject:
+    """Differentiate the (1, 1) tensor `h` of a recording session."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].backward(Int(py=h), Int(py=accumulate) != 0)
+    return PythonObject(0)
+
+
+def ops_grad_py[E: Exec & Movable, KIND: Int](
+    sid: PythonObject, h: PythonObject, addr: PythonObject,
+) raises -> PythonObject:
+    """The gradient of tensor `h` into the caller's float32 array of its shape."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].gradient_into(Int(py=h), fptr(addr, "grad"))
+    return PythonObject(0)
