@@ -968,6 +968,8 @@ comptime GR_PROF_COOP = 8
 comptime GR_PROF_V1_TILE = 9
 comptime GR_PROF_SPLITK_PART = 10
 comptime GR_PROF_SPLITK_FOLD = 11
+#: lane ag-pass6-gemm: the split-K order (seq_gemm_split_kernel, OP_GK_SPLIT)
+comptime GR_PROF_SPLIT = 12
 
 
 @always_inline
@@ -980,6 +982,10 @@ def seq_gemm_profile_route[OP: Int](a: Args, coop_on: Bool, coop_i11: Bool) -> I
     order, so the row names the kernel that ran."""
     comptime if OP == OP_GEMM_SPLITK:
         return GR_PROF_SPLITK_FOLD if a.i11 == 1 else GR_PROF_SPLITK_PART
+    comptime if OP == OP_GEMM or OP == OP_GEMM_EPI or OP == OP_AGK_GEMM_EPI:
+        # lane ag-pass6-gemm: _launch tests the split rule first, on every column
+        if gemm_split_on[OP](a):
+            return GR_PROF_SPLIT
     comptime if OP == OP_GEMM:
         if coop_on and ((a.i0 * a.i1 <= 1024 and a.i2 >= 32768) or (coop_i11 and a.i11 == 1)):
             return GR_PROF_COOP
