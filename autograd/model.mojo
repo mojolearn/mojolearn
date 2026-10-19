@@ -19,7 +19,7 @@ from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from sequence.recurrent import OptConfig, OptState, opt_step
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
 from autograd.tape import Tape, Tensor
-from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
+from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, AUTOGRAD_CURVE_WORD
 from autograd.layers import NeuralRules, layer_norm
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
@@ -592,11 +592,20 @@ def model_fit[E: Exec](
             var x = tape.variable(ex, xb, B, D, False)
             var target = tape.variable(ex, yb, B, TW, False)
             var out = model_forward(tape, ex, spec, P, Gr, x, True, cfg.seed, step)
+            comptime if AUTOGRAD_CURVE_WORD:
+                # lane ag-pass6-fold (PASS6 idea H(1)): the loss's own fold
+                # launch stores the batch's curve word mul(loss, B), the word
+                # tape.scale stores; cross-entropy's loss is not a fold
+                # output (a scale of one), so it keeps the two launches below
+                if cfg.loss != LOSS_CROSS_ENTROPY:
+                    tape.arm_fold_word(dloss + bi, Float32(B))
             var loss = model_loss(tape, ex, cfg, out, target)
+            var word_done = tape.disarm_fold_word(loss)
             tape.backward_scalar_with_rules(ex, loss, NeuralRules())
-            # the batch's loss times its rows, for the epoch's weighted mean
-            var weighted = tape.scale(ex, loss, Float32(B))
-            _copy(ex, dloss + bi, tape.value(weighted), 1)
+            if not word_done:
+                # the batch's loss times its rows, for the epoch's weighted mean
+                var weighted = tape.scale(ex, loss, Float32(B))
+                _copy(ex, dloss + bi, tape.value(weighted), 1)
             step += 1
             opt_step(ex, cfg.opt, st, step, lr, P, Gr, s1, s2, s3, np_)
         epoch_tape.reset()

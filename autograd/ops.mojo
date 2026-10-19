@@ -134,6 +134,28 @@ comptime AUTOGRAD_PASS2_FOLD = not is_defined["MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF
 # keeps the GEMM's shape of parallelism. -D MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.
 comptime AUTOGRAD_PASS3_DB = not is_defined["MOJOLEARN_AUTOGRAD_PASS3_DB_OFF"]()
 
+# Lane ag-pass6-fold (2026-10-19, PASS6_IDEAS ideas D(2), F(2), H(1)): tape-
+# side changes, identical (no word moves), each default on with an _OFF arm.
+#   AUTOGRAD_LOSS_REDUCED (D(2)): losses.mse / mae / huber /
+#     binary_cross_entropy_with_logits and loss_value_into fold the loss
+#     terms inside the leaf chain (one node, no terms buffer): forward 3 -> 2
+#     launches above 64 terms (1 at most 64), backward 2 -> 1. The terms are
+#     ftz(loss_term(ld p, ld y)), the word a stored term reads back as; the
+#     VJP's upstream factor mul(ld(g, 0), factor) is REDUCE_VJP's stored
+#     word, kept in a register. -D MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF.
+#   AUTOGRAD_TRANSPOSE_VIEW (F(2)): tape.transpose records the node without
+#     its copy; matmul reads the parent's buffer through GEMM strides (the
+#     same words in the same k order); any other reader materializes the
+#     copy once, when it first reads the value (Tape._use / materialize).
+#     -D MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF.
+#   AUTOGRAD_CURVE_WORD (H(1)): model_fit's per-batch curve word (the loss
+#     times the batch rows) is stored by the loss's own fold launch
+#     (mul(loss, B) on the loss's stored word, as tape.scale computes it)
+#     instead of a scale launch and a copy launch: 2 launches a batch fewer.
+#     -D MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF.
+comptime AUTOGRAD_TRANSPOSE_VIEW = not is_defined["MOJOLEARN_AUTOGRAD_TRANSPOSE_VIEW_OFF"]()
+comptime AUTOGRAD_CURVE_WORD = not is_defined["MOJOLEARN_AUTOGRAD_CURVE_WORD_OFF"]()
+
 # Node kinds recorded by the tape. Binary and unary kinds also travel as a
 # runtime integer (a.i1 / a.i0) inside their operation's body.
 comptime ADD = 1
@@ -160,6 +182,12 @@ comptime LOSS_CE = 26
 # Mean softmax cross-entropy over rows as one node (tape.softmax_cross_entropy):
 # its backward writes (softmax - onehot) / rows into the logits' gradient.
 comptime LOSS_SCE = 27
+# Lane ag-pass6-fold (PASS6 idea D(2)): per-element loss terms and their
+# mean / sum as ONE node (tape.loss_reduced, autograd/losses.mojo): the terms
+# are computed inside the fold's leaf chain (autograd/fold_ops.mojo
+# OP_AGS_LOSS_PART), never stored; the backward is one launch
+# (OP_AGS_LOSS_VJP). Same words as LOSS_ELEM followed by REDUCE.
+comptime LOSS_REDUCED = 28
 comptime MATMUL = 30
 # act(x @ W + b) as one node (tape.linear / linear_into): the forward and
 # backward launches of the hand-assembled MLP, no new element bodies.
@@ -241,6 +269,10 @@ comptime AXIS_COLS = 1
 # MOJOLEARN_AUTOGRAD_FOLD_V2_OFF restores v1 (the sqrt block rule, two
 # launches, one load a term) for the orchestrator's digest comparison.
 comptime AUTOGRAD_FOLD_V2 = not is_defined["MOJOLEARN_AUTOGRAD_FOLD_V2_OFF"]()
+# AUTOGRAD_LOSS_REDUCED (lane ag-pass6-fold, described with the tape flags
+# above) needs v2's leaf (ag_part_finish): a FOLD_V2_OFF build keeps
+# loss_terms + mean / sum.
+comptime AUTOGRAD_LOSS_REDUCED = AUTOGRAD_FOLD_V2 and not is_defined["MOJOLEARN_AUTOGRAD_LOSS_REDUCED_OFF"]()
 # v2's leaf block length and tree fan-in. A fixed 64 (v1's smallest block):
 # from size reasoning, not a shape: long enough that a leaf thread's chain
 # amortises its launch slot, short enough that 8-wide load groups cover a
@@ -355,19 +387,19 @@ def _y1_at(a: Args, t: Int) -> Float32:
 def op_ag_bin_fwd(t: Int, a: Args):
     """p0 x, p1 y (unbound when i10 = 1), p2 z. i1 kind, i2/i3 output
     shape, i4/i5 x shape, i6/i7 y shape. Thread t = output element t."""
-    var x = _x_at(a, t)
-    var y = _y_at(a, t)
-    var op = a.i1
-    var z: Float32
+    st(a.p2, t, _bin_value(a.i1, _x_at(a, t), _y_at(a, t)))
+
+
+@always_inline
+def _bin_value(op: Int, x: Float32, y: Float32) -> Float32:
+    """op_ag_bin_fwd's value of kind `op` (ADD .. DIVIDE)."""
     if op == ADD:
-        z = add(x, y)
-    elif op == SUBTRACT:
-        z = sub(x, y)
-    elif op == MULTIPLY:
-        z = mul(x, y)
-    else:
-        z = div(x, y)
-    st(a.p2, t, z)
+        return add(x, y)
+    if op == SUBTRACT:
+        return sub(x, y)
+    if op == MULTIPLY:
+        return mul(x, y)
+    return div(x, y)
 
 
 @always_inline
@@ -564,24 +596,34 @@ def op_ag_unary_vjp(t: Int, a: Args):
     EXP, SQRT only), p2 upstream, p3 destination. i0 kind, f0 scale."""
     var op = a.i0
     var g = ld(a.p2, t)
-    var r: Float32
+    var x = Float32(0)
+    var y = Float32(0)
+    # the forward input / output only where the kind reads it (the other
+    # slot may be unbound): a branch, never a pointer select
+    if unary_vjp_reads_input(op):
+        x = ld(a.p0, t)
+    if unary_vjp_reads_output(op):
+        y = ld(a.p1, t)
+    st(a.p3, t, _unary_vjp_value(op, g, x, y, a.f0))
+
+
+@always_inline
+def _unary_vjp_value(op: Int, g: Float32, x: Float32, y: Float32, scale: Float32) -> Float32:
+    """op_ag_unary_vjp's value: g the upstream word, x the forward input
+    (RELU, LOG), y the forward output (SIGMOID, TANH, EXP, SQRT)."""
     if op == RELU:
-        r = g if ld(a.p0, t) > 0 else Float32(0)
-    elif op == SIGMOID:
-        var y = ld(a.p1, t)
-        r = mul(mul(g, y), sub(Float32(1), y))
-    elif op == TANH:
-        var y = ld(a.p1, t)
-        r = mul(g, sub(Float32(1), mul(y, y)))
-    elif op == EXP:
-        r = mul(g, ld(a.p1, t))
-    elif op == LOG:
-        r = div(g, ld(a.p0, t))
-    elif op == SQRT:
-        r = div(g, mul(Float32(2), ld(a.p1, t)))
-    else:
-        r = mul(g, a.f0)
-    st(a.p3, t, r)
+        return g if x > 0 else Float32(0)
+    if op == SIGMOID:
+        return mul(mul(g, y), sub(Float32(1), y))
+    if op == TANH:
+        return mul(g, sub(Float32(1), mul(y, y)))
+    if op == EXP:
+        return mul(g, y)
+    if op == LOG:
+        return div(g, x)
+    if op == SQRT:
+        return div(g, mul(Float32(2), y))
+    return mul(g, scale)
 
 
 @always_inline
@@ -614,14 +656,45 @@ def _ag_reduce_part_v2(t: Int, a: Args):
         var r = t // nb
         var lo = (t % nb) * B
         s = _fold_chain(a.p0, r * cols + lo, 1, min(B, cols - lo))
+    ag_part_finish(t, a, s)
+
+
+@always_inline
+def ag_part_finish(t: Int, a: Args, s: Float32):
+    """The end of a leaf thread of OP_AG_REDUCE_PART (and of the loss leaf,
+    autograd/fold_ops.mojo OP_AGS_LOSS_PART, which shares these slots): i4 =
+    1 (one block an output) writes the finished output (+0.0 + s) * f0, or /
+    f0 when i5 = 1, to p2[t]; else the partial s to p1[t]. i7 = 1 (lane
+    ag-pass6-fold, AUTOGRAD_CURVE_WORD) also writes mul(output, f1) to p3[t]:
+    the word tape.scale(output, f1) stores, from the same stored word."""
     if a.i4 == 1:
         var v = add(Float32(0), s)
+        var out: Float32
         if a.i5 == 1:
-            st(a.p2, t, div(v, a.f0))
+            out = div(v, a.f0)
         else:
-            st(a.p2, t, mul(v, a.f0))
+            out = mul(v, a.f0)
+        st(a.p2, t, out)
+        if a.i7 == 1:
+            st(a.p3, t, mul(ftz(out), a.f1))
     else:
         st(a.p1, t, s)
+
+
+@always_inline
+def ag_leaf_span(t: Int, rows: Int, cols: Int, axis: Int, B: Int) -> Tuple[Int, Int]:
+    """(first index, term count) of leaf t of a fold over AXIS_ALL or
+    AXIS_COLS (v2's mapping in _ag_reduce_part_v2 / _agk_bin_vjp_part_v2):
+    the leaf's terms are contiguous (stride 1). Lane ag-pass6-fold: the
+    staged leaf kernel (autograd/fold_kernels.mojo) loads them through
+    threadgroup memory with this span."""
+    if axis == AXIS_ALL:
+        var lo = t * B
+        return (lo, min(B, rows * cols - lo))
+    var nb = max((cols + B - 1) // B, 1)
+    var r = t // nb
+    var lo = (t % nb) * B
+    return (r * cols + lo, min(B, cols - lo))
 
 
 @always_inline
@@ -689,10 +762,22 @@ def _ag_reduce_fold_v2(t: Int, a: Args):
     var base = _fold_part_index(a.i0, t, 0, cols, nb)
     var stride = S * cols if a.i0 == AXIS_ROWS else S
     var s = _fold_chain(a.p0, base, stride, P)
+    _fold_finish(t, a, s)
+
+
+@always_inline
+def _fold_finish(t: Int, a: Args, s: Float32):
+    """OP_AG_REDUCE_FOLD's store: p1[t] = s * f0, or s / f0 when i4 = 1;
+    i7 = 1 (AUTOGRAD_CURVE_WORD) also p3[t] = mul(p1[t], f1), the word
+    tape.scale stores from the stored output."""
+    var out: Float32
     if a.i4 == 1:
-        st(a.p1, t, div(s, a.f0))
+        out = div(s, a.f0)
     else:
-        st(a.p1, t, mul(s, a.f0))
+        out = mul(s, a.f0)
+    st(a.p1, t, out)
+    if a.i7 == 1:
+        st(a.p3, t, mul(ftz(out), a.f1))
 
 
 @always_inline
@@ -771,12 +856,9 @@ def _ag_reduce_fold_v1(t: Int, a: Args):
         var nb = (cols + B - 1) // B
         for k in range(nb):
             s = add(s, ld(a.p0, t * nb + k))
-    if a.i4 == 1:
-        # the fused linear node's bias gradient divided by its divisor, as
-        # op_colsum_div divides its column sum (AUTOGRAD_PASS2_FOLD)
-        st(a.p1, t, div(s, a.f0))
-    else:
-        st(a.p1, t, mul(s, a.f0))
+    # i4 = 1: the fused linear node's bias gradient divided by its divisor,
+    # as op_colsum_div divides its column sum (AUTOGRAD_PASS2_FOLD)
+    _fold_finish(t, a, s)
 
 
 @always_inline
@@ -846,6 +928,205 @@ def op_ag_softmax_vjp(t: Int, a: Args):
 def op_ag_accumulate(t: Int, a: Args):
     """p1[t] += p0[t]. p0 contribution, p1 gradient."""
     st(a.p1, t, add(ld(a.p1, t), ld(a.p0, t)))
+
+
+# ---------------------------------------------------------------------------
+# FOUR ELEMENTS A THREAD (lane ag-pass6-fold, 2026-10-19, PASS6_IDEAS idea E;
+# identical). The elementwise bodies above take one float a thread with
+# scalar loads and stores: the L40S streams them at 88-93% of its bandwidth,
+# the MI325X at 32-48% (opbench add same 65536x4096 4021 / 1132 us, 801 /
+# 2845 GB/s), because a one-word-a-lane stream saturates the MI300 family
+# near 2.8 TB/s and 16-byte accesses are what reach 4.5-5 TB/s. The bodies
+# below run the SAME per-element operations on the same words, four
+# consecutive elements a thread, with 16-byte loads of every operand read at
+# the output index and a 16-byte store: each lane of the vector is flushed
+# exactly as ld / st flush a word, and each output is the scalar body's
+# expression on those words, so every output word is the scalar body's.
+# Operands at another shape (a broadcast row, column or scalar) keep their
+# scalar loads. The device executor launches them (autograd/fold_kernels.mojo
+# ag_vec4_kernel) only where every bound buffer is 16-byte aligned and the
+# launch has at least 4 x TPB elements; the last n % 4 elements run the
+# scalar body. HostExec never calls them.
+# ---------------------------------------------------------------------------
+comptime AG_VEC = 4
+comptime F4 = SIMD[DType.float32, AG_VEC]
+
+
+@always_inline
+def ld4(p: FP, i: Int) -> F4:
+    """ld of the four words p[i .. i + 3] (i a multiple of 4, p 16-byte
+    aligned): one 16-byte load, each lane flushed as ld flushes."""
+    var v = p.unsafe_load[width=AG_VEC, alignment=16](i)
+    var out = F4(0)
+    comptime for k in range(AG_VEC):
+        out[k] = ftz(v[k])
+    return out
+
+
+@always_inline
+def st4(p: FP, i: Int, v: F4):
+    """st of four words at p[i .. i + 3]: each lane flushed as st flushes,
+    one 16-byte store."""
+    var w = F4(0)
+    comptime for k in range(AG_VEC):
+        w[k] = ftz(v[k])
+    p.unsafe_store[alignment=16](i, w)
+
+
+@always_inline
+def _x4(a: Args, t0: Int) -> F4:
+    """_x_at for outputs t0 .. t0 + 3."""
+    if a.i4 == a.i2 and a.i5 == a.i3:
+        return ld4(a.p0, t0)
+    var v = F4(0)
+    comptime for k in range(AG_VEC):
+        v[k] = _x_at(a, t0 + k)
+    return v
+
+
+@always_inline
+def _y4(a: Args, t0: Int) -> F4:
+    """_y_at for outputs t0 .. t0 + 3 (p0 when i10 = 1: a branch, never a
+    pointer select)."""
+    if a.i6 == a.i2 and a.i7 == a.i3:
+        if a.i10 == 1:
+            return ld4(a.p0, t0)
+        return ld4(a.p1, t0)
+    var v = F4(0)
+    comptime for k in range(AG_VEC):
+        v[k] = _y_at(a, t0 + k)
+    return v
+
+
+@always_inline
+def _y14(a: Args, t0: Int) -> F4:
+    """_y1_at for outputs t0 .. t0 + 3."""
+    if a.i6 == a.i2 and a.i7 == a.i3:
+        return ld4(a.p1, t0)
+    var v = F4(0)
+    comptime for k in range(AG_VEC):
+        v[k] = _y1_at(a, t0 + k)
+    return v
+
+
+@always_inline
+def op_ag_bin_fwd4(t0: Int, a: Args):
+    """op_ag_bin_fwd for outputs t0 .. t0 + 3."""
+    var x = _x4(a, t0)
+    var y = _y4(a, t0)
+    var z = F4(0)
+    comptime for k in range(AG_VEC):
+        z[k] = _bin_value(a.i1, x[k], y[k])
+    st4(a.p2, t0, z)
+
+
+@always_inline
+def op_ag_bin_vjp4(t0: Int, a: Args):
+    """op_ag_bin_vjp (_bin_vjp_at) for outputs t0 .. t0 + 3."""
+    var op = a.i1
+    var g = ld4(a.p3, t0)
+    var r = g
+    if op == SUBTRACT and a.i8 == 1:
+        comptime for k in range(AG_VEC):
+            r[k] = -g[k]
+    elif op == MULTIPLY:
+        var o: F4
+        if a.i8 == 0:
+            o = _y4(a, t0)
+        else:
+            o = _x4(a, t0)
+        comptime for k in range(AG_VEC):
+            r[k] = mul(g[k], o[k])
+    elif op == DIVIDE:
+        var y = _y14(a, t0)
+        if a.i8 == 0:
+            comptime for k in range(AG_VEC):
+                r[k] = div(g[k], y[k])
+        else:
+            var z = ld4(a.p2, t0)
+            comptime for k in range(AG_VEC):
+                r[k] = -div(mul(g[k], z[k]), y[k])
+    st4(a.p4, t0, r)
+
+
+@always_inline
+def op_ag_unary_fwd4(t0: Int, a: Args):
+    """op_ag_unary_fwd for elements t0 .. t0 + 3."""
+    var x = ld4(a.p0, t0)
+    var y = F4(0)
+    comptime for k in range(AG_VEC):
+        y[k] = _unary(a.i0, x[k], a.f0)
+    st4(a.p1, t0, y)
+
+
+@always_inline
+def op_ag_unary_vjp4(t0: Int, a: Args):
+    """op_ag_unary_vjp for elements t0 .. t0 + 3 (the forward input / output
+    loaded only where the kind reads it, as the scalar body)."""
+    var op = a.i0
+    var g = ld4(a.p2, t0)
+    var x = F4(0)
+    var y = F4(0)
+    if unary_vjp_reads_input(op):
+        x = ld4(a.p0, t0)
+    if unary_vjp_reads_output(op):
+        y = ld4(a.p1, t0)
+    var r = F4(0)
+    comptime for k in range(AG_VEC):
+        r[k] = _unary_vjp_value(op, g[k], x[k], y[k], a.f0)
+    st4(a.p3, t0, r)
+
+
+@always_inline
+def op_ag_reduce_vjp4(t0: Int, a: Args):
+    """op_ag_reduce_vjp for input elements t0 .. t0 + 3 (the upstream word
+    of each by the scalar body's index; one 16-byte store)."""
+    var r = F4(0)
+    comptime for k in range(AG_VEC):
+        var t = t0 + k
+        var i = 0
+        if a.i0 == AXIS_ROWS:
+            i = t % a.i2
+        elif a.i0 == AXIS_COLS:
+            i = t // a.i2
+        r[k] = mul(ld(a.p0, i), a.f0)
+    st4(a.p1, t0, r)
+
+
+@always_inline
+def op_ag_accumulate4(t0: Int, a: Args):
+    """op_ag_accumulate for elements t0 .. t0 + 3 (its own destination words
+    read, then written, by this thread only)."""
+    var d = ld4(a.p1, t0)
+    var c = ld4(a.p0, t0)
+    var r = F4(0)
+    comptime for k in range(AG_VEC):
+        r[k] = add(d[k], c[k])
+    st4(a.p1, t0, r)
+
+
+@always_inline
+def ag_vec4_op[OP: Int]() -> Bool:
+    """The OP_AG_* codes with a four-element body."""
+    return (OP == OP_AG_BIN_FWD or OP == OP_AG_BIN_VJP or OP == OP_AG_UNARY_FWD or OP == OP_AG_UNARY_VJP
+            or OP == OP_AG_REDUCE_VJP or OP == OP_AG_ACCUMULATE)
+
+
+@always_inline
+def apply_autograd_vec4[OP: Int](t0: Int, a: Args):
+    """Outputs t0 .. t0 + 3 of OP (ag_vec4_op[OP]()), the scalar body's words."""
+    comptime if OP == OP_AG_BIN_FWD:
+        op_ag_bin_fwd4(t0, a)
+    elif OP == OP_AG_BIN_VJP:
+        op_ag_bin_vjp4(t0, a)
+    elif OP == OP_AG_UNARY_FWD:
+        op_ag_unary_fwd4(t0, a)
+    elif OP == OP_AG_UNARY_VJP:
+        op_ag_unary_vjp4(t0, a)
+    elif OP == OP_AG_REDUCE_VJP:
+        op_ag_reduce_vjp4(t0, a)
+    elif OP == OP_AG_ACCUMULATE:
+        op_ag_accumulate4(t0, a)
 
 
 @always_inline

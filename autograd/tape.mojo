@@ -7,7 +7,8 @@ from sequence.mlp import (
     EPI_BIAS_ACT, EPI_L2GRAD, EPI_ACT_BWD,
 )
 from checks.numerics import identical_div
-from autograd.fold import blocked_fold, blocked_fold_finish, fold_block, fold_partials, fold_single_launch
+from autograd.fold import blocked_fold, blocked_fold_finish, fold_block, fold_partials, fold_single_launch, loss_fold
+from autograd.fold_ops import OP_AGS_LOSS_VJP
 from autograd.profile import ag_profile_report
 from sequence.launch_profile import (
     launch_profile_level, launch_profile_mark, PROFILE_FORWARD, PROFILE_BACKWARD, PROFILE_OTHER,
@@ -22,6 +23,7 @@ from autograd.ops import (
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
     OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD, AUTOGRAD_PASS3_DB,
+    LOSS_REDUCED, AUTOGRAD_LOSS_REDUCED, AUTOGRAD_TRANSPOSE_VIEW, AUTOGRAD_CURVE_WORD,
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
@@ -332,6 +334,13 @@ struct Tape(Movable):
     # MOJOLEARN_AG_PROFILE set at construction: mark launches with the node
     # kind that issued them (sequence/launch_profile.mojo).
     var _profile: Bool
+    # AUTOGRAD_CURVE_WORD (lane ag-pass6-fold): arm_fold_word's destination
+    # and factor, armed until the next AXIS_ALL reduction takes them;
+    # _word_node is the node whose fold wrote the word (-1: none yet).
+    var _word_dst: FP
+    var _word_factor: Float32
+    var _word_armed: Bool
+    var _word_node: Int
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -346,6 +355,10 @@ struct Tape(Movable):
         self._watched = List[Int]()
         self._snapshots = List[List[Float32]]()
         self._profile = launch_profile_level() > 0
+        self._word_dst = dummy_ptr()
+        self._word_factor = Float32(0)
+        self._word_armed = False
+        self._word_node = -1
 
     def no_grad(mut self):
         """Enter inference mode: later operations keep no graph or gradients.
@@ -428,6 +441,67 @@ struct Tape(Movable):
         self._stale.clear()
         self._watched.clear()
         self._snapshots.clear()
+        self._word_armed = False
+        self._word_node = -1
+
+    def arm_fold_word(mut self, dst: FP, factor: Float32):
+        """AUTOGRAD_CURVE_WORD: the next AXIS_ALL sum or mean recorded on
+        this tape also writes dst[0] = its output times `factor` (the word
+        scale(output, factor) stores), from its own fold launch. Disarmed
+        by that reduction, by disarm_fold_word or by reset."""
+        self._word_dst = dst
+        self._word_factor = factor
+        self._word_armed = True
+        self._word_node = -1
+
+    def disarm_fold_word(mut self, x: Tensor) raises -> Bool:
+        """Disarm arm_fold_word; True when x's own fold wrote the word (so
+        the caller's scale and copy are not needed)."""
+        var i = self._check(x)
+        self._word_armed = False
+        var wrote = self._word_node == i
+        self._word_node = -1
+        return wrote
+
+    # ---- AUTOGRAD_TRANSPOSE_VIEW (lane ag-pass6-fold, PASS6 idea F(2)) ----
+    # A transpose node records its value buffer without filling it
+    # (saved.i9 = 1, saved.p0 the parent's buffer, saved.i0 / i1 the
+    # parent's rows / cols). matmul reads the parent through GEMM strides
+    # (the same words in the same k order); every other reader of the value
+    # goes through _use or materialize, which launch the copy once. Values
+    # are immutable while a graph lives (operations are out of place, and
+    # a leaf must stay unchanged until backward finishes), so the copy made
+    # later is the copy made at record time. value() refuses a pending view
+    # (call materialize or value_of): no reader can see the unfilled buffer.
+    @always_inline
+    def _pending(self, i: Int) -> Bool:
+        comptime if AUTOGRAD_TRANSPOSE_VIEW:
+            return self._nodes[i].op == TRANSPOSE and self._nodes[i].saved.i9 == 1
+        else:
+            return False
+
+    def _materialize_at[E: Exec](mut self, mut ex: E, i: Int) raises:
+        if self._pending(i):
+            var n = self._nodes[i]
+            _transpose(ex, n.value, n.saved.p0, n.saved.i0, n.saved.i1)
+            self._nodes[i].saved.i9 = 0
+
+    def _use[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Int:
+        """_check, then materialize a pending transpose view (its value is
+        about to be read as a dense matrix)."""
+        var i = self._check(x)
+        self._materialize_at(ex, i)
+        return i
+
+    def materialize[E: Exec](mut self, mut ex: E, x: Tensor) raises:
+        """Make x's value buffer hold its values (a transpose recorded as a
+        view is copied once; anything else is unchanged)."""
+        _ = self._use(ex, x)
+
+    def value_of[E: Exec](mut self, mut ex: E, x: Tensor) raises -> FP:
+        """value(x) after materialize(ex, x)."""
+        var i = self._use(ex, x)
+        return self._nodes[i].value
 
     def _check(self, x: Tensor) raises -> Int:
         if not self._identity:
@@ -537,7 +611,7 @@ struct Tape(Movable):
         A debugging aid: it downloads the value. Watching x again replaces
         the copy.
         """
-        var i = self._check(x)
+        var i = self._use(ex, x)
         var copy = self.values(ex, x)
         for k in range(len(self._watched)):  # driver-loop: over watched tensors
             if self._watched[k] == i:
@@ -560,7 +634,7 @@ struct Tape(Movable):
             # ... record, then before backward:
             tape.assert_unchanged(ex, w)
         """
-        var i = self._check(x)
+        var i = self._use(ex, x)
         for k in range(len(self._watched)):  # driver-loop: over watched tensors
             if self._watched[k] != i:
                 continue
@@ -697,7 +771,10 @@ struct Tape(Movable):
 
     def value(self, x: Tensor) raises -> FP:
         """Return the executor pointer for a tensor's values."""
-        return self._nodes[self._check(x)].value
+        var i = self._check(x)
+        if self._pending(i):
+            raise Error("autograd: the tensor is a transpose view whose values are not copied yet: call materialize(ex, x) or value_of(ex, x)")
+        return self._nodes[i].value
 
     def gradient(self, x: Tensor) raises -> FP:
         """Return the executor pointer for a differentiable tensor's gradient."""
@@ -740,7 +817,12 @@ struct Tape(Movable):
 
     def values[E: Exec](self, mut ex: E, x: Tensor) raises -> List[Float32]:
         """Download a tensor into a row-major host list."""
-        var n = self._nodes[self._check(x)]
+        var vi = self._check(x)
+        var n = self._nodes[vi]
+        if self._pending(vi):
+            # a transpose view: fill its buffer (the flag stays; a later
+            # materialize copies the same words again)
+            _transpose(ex, n.value, n.saved.p0, n.saved.i0, n.saved.i1)
         var result = List[Float32](length=n.rows * n.cols, fill=0)
         ex.download(FP(unsafe_from_address=Int(result.unsafe_ptr())), n.value, len(result))
         return result^
@@ -770,8 +852,10 @@ struct Tape(Movable):
     def _binary_to[E: Exec](
         mut self, mut ex: E, x: Tensor, y: Tensor, op: Int, into: FP, use_into: Bool,
     ) raises -> Tensor:
-        var a = self._nodes[self._check(x)]
-        var b = self._nodes[self._check(y)]
+        var a_at = self._use(ex, x)
+        var a = self._nodes[a_at]
+        var b_at = self._use(ex, y)
+        var b = self._nodes[b_at]
         if (a.rows != b.rows and a.rows != 1 and b.rows != 1) or (a.cols != b.cols and a.cols != 1 and b.cols != 1):
             raise Error("incompatible tensor shapes for broadcasting")
         var rows = max(a.rows, b.rows)
@@ -832,7 +916,8 @@ struct Tape(Movable):
     def _unary_to[E: Exec](
         mut self, mut ex: E, x: Tensor, op: Int, scale: Float32, into: FP, use_into: Bool,
     ) raises -> Tensor:
-        var n = self._nodes[self._check(x)]
+        var n_at = self._use(ex, x)
+        var n = self._nodes[n_at]
         if use_into:
             self._refuse_overlap(into, n.rows * n.cols, True, "unary_into: output")
         var output = into if use_into else self._alloc(ex, n.rows * n.cols)
@@ -897,7 +982,8 @@ struct Tape(Movable):
             raise Error("dropout probability must be in [0, 1)")
         if counter < 0 or counter > 0xFFFFFFFF:
             raise Error("dropout counter must be in [0, 2^32)")
-        var n = self._nodes[self._check(x)]
+        var n_at = self._use(ex, x)
+        var n = self._nodes[n_at]
         var output = self._alloc(ex, n.rows * n.cols)
         # s = 1 / (1 - p) once here in float32; every element then takes one
         # rounded multiply by s (autograd/data_ops.mojo).
@@ -910,14 +996,35 @@ struct Tape(Movable):
 
     def matmul[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor) raises -> Tensor:
         """Multiply two matrices using the existing native GEMM executor."""
-        var a = self._nodes[self._check(x)]
-        var b = self._nodes[self._check(y)]
+        var xi = self._check(x)
+        var yi = self._check(y)
+        var a = self._nodes[xi]
+        var b = self._nodes[yi]
         if a.cols != b.rows:
             raise Error("matmul inner dimensions differ")
         self._shape(a.rows, b.cols)
         var output = self._alloc(ex, a.rows * b.cols)
-        _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
-        return self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
+        comptime if AUTOGRAD_TRANSPOSE_VIEW:
+            # each operand dense or a transpose view read through its strides
+            # (the GEMM folds the same words in the same k order either
+            # way); the backward reads the same buffers and strides (saved)
+            var l = self._operand(xi)
+            var r = self._operand(yi)
+            _gemm(ex, output, l[0], r[0], a.rows, b.cols, a.cols, l[1], l[2], r[1], r[2])
+            var saved = Args()
+            saved.p0 = l[0]
+            saved.p1 = r[0]
+            saved.i0 = l[3]
+            saved.i1 = r[3]
+            saved.i2 = l[1]
+            saved.i3 = l[2]
+            saved.i4 = r[1]
+            saved.i5 = r[2]
+            saved.i6 = 1
+            return self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved)
+        else:
+            _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
+            return self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
 
     def linear[E: Exec](
         mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
@@ -997,8 +1104,10 @@ struct Tape(Movable):
         #   dW launch (the tile's column-sum epilogue on NVIDIA/AMD; one
         #   OP_COLSUM_DIV after the GEMM elsewhere): backward 2 a layer on the
         #   tile (1 for the first layer), the hand path's db words.
-        var a = self._nodes[self._check(x)]
-        var w = self._nodes[self._check(weight)]
+        var a_at = self._use(ex, x)
+        var a = self._nodes[a_at]
+        var w_at = self._use(ex, weight)
+        var w = self._nodes[w_at]
         if a.cols != w.rows:
             raise Error("linear: input columns must equal weight rows")
         var act = _linear_act(activation)
@@ -1016,7 +1125,8 @@ struct Tape(Movable):
         var output = into if use_into else self._alloc(ex, rows * cols)
         if bias:
             var bt = bias.value()
-            var b = self._nodes[self._check(bt)]
+            var b_at = self._use(ex, bt)
+            var b = self._nodes[b_at]
             if b.rows != 1 or b.cols != cols:
                 raise Error("linear: bias must have shape (1, outputs)")
             parents.append(bt)
@@ -1047,37 +1157,76 @@ struct Tape(Movable):
         return self._record(ex, output, rows, cols, LINEAR, parents, saved)
 
     def transpose[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
-        var n = self._nodes[self._check(x)]
+        var n_at = self._use(ex, x)
+        var n = self._nodes[n_at]
         var output = self._alloc(ex, n.rows * n.cols)
-        _transpose(ex, output, n.value, n.rows, n.cols)
-        return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], Args())
+        comptime if AUTOGRAD_TRANSPOSE_VIEW:
+            # a view: the copy waits for its first dense reader (_use);
+            # matmul reads n's buffer through strides and never copies
+            var saved = Args()
+            saved.p0 = n.value
+            saved.i0 = n.rows
+            saved.i1 = n.cols
+            saved.i9 = 1
+            return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], saved)
+        else:
+            _transpose(ex, output, n.value, n.rows, n.cols)
+            return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], Args())
+
+    def _operand(self, i: Int) -> Tuple[FP, Int, Int, Int]:
+        """matmul's view of node i: (buffer, row stride, column stride,
+        1 when the node is a pending transpose view read through strides).
+        A dense node is (value, cols, 1, 0); a view of a rows x cols node
+        P is (P's value, 1, rows, 1): element (r, c) is P's (c, r) word."""
+        var n = self._nodes[i]
+        var one: Int = 1
+        var zero: Int = 0
+        if self._pending(i):
+            return (n.saved.p0, one, n.rows, one)
+        return (n.value, n.cols, one, zero)
 
     def reshape[E: Exec](mut self, mut ex: E, x: Tensor, rows: Int, cols: Int) raises -> Tensor:
         self._shape(rows, cols)
-        var n = self._nodes[self._check(x)]
+        var n_at = self._use(ex, x)
+        var n = self._nodes[n_at]
         if rows * cols != n.rows * n.cols:
             raise Error("reshape must preserve element count")
         return self._record(ex, n.value, rows, cols, RESHAPE, [x], Args())
 
     def detach[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         """Create a constant view of x that stops gradient propagation."""
-        var n = self._nodes[self._check(x)]
+        var n_at = self._use(ex, x)
+        var n = self._nodes[n_at]
         return self.variable(ex, n.value, n.rows, n.cols, False)
 
     def _reduce[E: Exec](mut self, mut ex: E, x: Tensor, axis: Int, mean: Bool) raises -> Tensor:
         if axis < -1 or axis > 1:
             raise Error("reduction axis must be -1 (all), 0, or 1")
-        var n = self._nodes[self._check(x)]
+        var n_at = self._use(ex, x)
+        var n = self._nodes[n_at]
         var rows = n.rows if axis == 1 else 1
         var cols = n.cols if axis == 0 else 1
         var count = n.rows * n.cols if axis == -1 else (n.rows if axis == 0 else n.cols)
         var output = self._alloc(ex, rows * cols)
         var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
-        self._fold(ex, output, n.value, n.rows, n.cols, axis, factor)
+        var word = False
+        comptime if AUTOGRAD_CURVE_WORD:
+            # arm_fold_word: this fold's launch also stores the curve word
+            word = self._word_armed and axis == AXIS_ALL
+        if word:
+            var partials = self._alloc(ex, fold_partials(n.rows, n.cols, axis))
+            blocked_fold(ex, output, n.value, n.rows, n.cols, axis, factor, partials,
+                         False, self._word_dst, self._word_factor, True)
+            self._word_armed = False
+        else:
+            self._fold(ex, output, n.value, n.rows, n.cols, axis, factor)
         var a = Args()
         a.i0 = axis
         a.f0 = factor
-        return self._record(ex, output, rows, cols, REDUCE, [x], a)
+        var out = self._record(ex, output, rows, cols, REDUCE, [x], a)
+        if word:
+            self._word_node = out._index
+        return out
 
     def _fold[E: Exec](
         mut self, mut ex: E, dst: FP, src: FP, rows: Int, cols: Int, axis: Int, factor: Float32,
@@ -1107,8 +1256,10 @@ struct Tape(Movable):
 
     def cross_entropy[E: Exec](mut self, mut ex: E, logits: Tensor, targets: Tensor) raises -> Tensor:
         """Mean cross-entropy with dense class weights, one row per example."""
-        var a = self._nodes[self._check(logits)]
-        var b = self._nodes[self._check(targets)]
+        var a_at = self._use(ex, logits)
+        var a = self._nodes[a_at]
+        var b_at = self._use(ex, targets)
+        var b = self._nodes[b_at]
         if a.rows != b.rows or a.cols != b.cols:
             raise Error("cross-entropy targets must have the logits' shape")
         var logp = self.log_softmax(ex, logits)
@@ -1128,8 +1279,10 @@ struct Tape(Movable):
             raise Error("loss_terms takes LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS")
         if kind == LS_HUBER and not (delta > 0):
             raise Error("Huber delta must be positive")
-        var a = self._nodes[self._check(prediction)]
-        var b = self._nodes[self._check(target)]
+        var a_at = self._use(ex, prediction)
+        var a = self._nodes[a_at]
+        var b_at = self._use(ex, target)
+        var b = self._nodes[b_at]
         if a.rows != b.rows or a.cols != b.cols:
             raise Error("loss target must have the prediction's shape")
         if Int(a.value) == Int(b.value):
@@ -1147,12 +1300,58 @@ struct Tape(Movable):
         saved.f0 = delta
         return self._record(ex, output, a.rows, a.cols, LOSS_ELEM, [prediction, target], saved)
 
+    def loss_reduced[E: Exec](
+        mut self, mut ex: E, prediction: Tensor, target: Tensor, kind: Int, delta: Float32 = 1,
+        mean: Bool = True,
+    ) raises -> Tensor:
+        """The mean (or, mean=False, the sum) of loss_terms(prediction,
+        target, kind, delta) as one (1, 1) node: the terms are folded in
+        the leaf chain and never stored (autograd/fold_ops.mojo; lane
+        ag-pass6-fold, AUTOGRAD_LOSS_REDUCED). Value and gradients equal
+        mean / sum of loss_terms bit for bit."""
+        if kind != LS_MSE and kind != LS_MAE and kind != LS_HUBER and kind != LS_BCE_LOGITS:
+            raise Error("loss_reduced takes LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS")
+        if kind == LS_HUBER and not (delta > 0):
+            raise Error("Huber delta must be positive")
+        var a_at = self._use(ex, prediction)
+        var a = self._nodes[a_at]
+        var b_at = self._use(ex, target)
+        var b = self._nodes[b_at]
+        if a.rows != b.rows or a.cols != b.cols:
+            raise Error("loss target must have the prediction's shape")
+        if Int(a.value) == Int(b.value):
+            raise Error("loss prediction and target must be distinct tensors")
+        var count = a.rows * a.cols
+        # Tape.mean's factor (and losses.reduction_factor's)
+        var factor = identical_div(Float32(1), Float32(count)) if mean else Float32(1)
+        var output = self._alloc(ex, 1)
+        var partials = self._alloc(ex, fold_partials(a.rows, a.cols, AXIS_ALL))
+        var word = False
+        comptime if AUTOGRAD_CURVE_WORD:
+            word = self._word_armed
+        if word:
+            loss_fold(ex, output, a.value, b.value, a.rows, a.cols, kind, delta, factor, partials,
+                      self._word_dst, self._word_factor, True)
+            self._word_armed = False
+        else:
+            loss_fold(ex, output, a.value, b.value, a.rows, a.cols, kind, delta, factor, partials)
+        var saved = Args()
+        saved.i0 = kind
+        saved.f0 = delta
+        saved.f1 = factor
+        var out = self._record(ex, output, 1, 1, LOSS_REDUCED, [prediction, target], saved)
+        if word:
+            self._word_node = out._index
+        return out
+
     def cross_entropy_rows[E: Exec](mut self, mut ex: E, logits: Tensor, codes: Tensor) raises -> Tensor:
         """Per-row softmax cross-entropy (rows, 1) of logits (rows, classes)
         against class codes (rows, 1) held as float values. The codes take
         no gradient; a code outside [0, classes) gives NaN."""
-        var a = self._nodes[self._check(logits)]
-        var b = self._nodes[self._check(codes)]
+        var a_at = self._use(ex, logits)
+        var a = self._nodes[a_at]
+        var b_at = self._use(ex, codes)
+        var b = self._nodes[b_at]
         if b.rows != a.rows or b.cols != 1:
             raise Error("cross-entropy codes must have shape (rows, 1)")
         if b.requires_grad:
@@ -1190,8 +1389,10 @@ struct Tape(Movable):
         # targets): forward 7, backward 5. This node: forward 3 (the same
         # row losses and the same fold; a mean in one launch would need a
         # serial or an unpinned reduction), backward 1 (OP_P1_SCE_VJP).
-        var a = self._nodes[self._check(logits)]
-        var b = self._nodes[self._check(codes)]
+        var a_at = self._use(ex, logits)
+        var a = self._nodes[a_at]
+        var b_at = self._use(ex, codes)
+        var b = self._nodes[b_at]
         if b.rows != a.rows or b.cols != 1:
             raise Error("cross-entropy codes must have shape (rows, 1)")
         if b.requires_grad:
@@ -1310,8 +1511,10 @@ struct Tape(Movable):
         """
         if op != ADD and op != SUBTRACT and op != MULTIPLY and op != DIVIDE:
             raise Error("binary_recorded takes ADD, SUBTRACT, MULTIPLY or DIVIDE")
-        var a = self._nodes[self._check(x)]
-        var b = self._nodes[self._check(y)]
+        var a_at = self._use(ex, x)
+        var a = self._nodes[a_at]
+        var b_at = self._use(ex, y)
+        var b = self._nodes[b_at]
         if (a.rows != b.rows and a.rows != 1 and b.rows != 1) or (a.cols != b.cols and a.cols != 1 and b.cols != 1):
             raise Error("incompatible tensor shapes for broadcasting")
         var rows = max(a.rows, b.rows)
@@ -1461,7 +1664,8 @@ struct Tape(Movable):
         mut self, mut ex: E, output: Tensor, seed: Tensor, rules: R, accumulate: Bool = False,
     ) raises:
         var n = self._nodes[self._check(output)]
-        var s = self._nodes[self._check(seed)]
+        var s_at = self._use(ex, seed)
+        var s = self._nodes[s_at]
         if n.op != LINEAR:
             raise Error("backward_from_preactivation takes an output of linear or linear_into")
         if n.rows != s.rows or n.cols != s.cols:
@@ -1662,7 +1866,8 @@ struct Tape(Movable):
         mut self, mut ex: E, output: Tensor, seed: Tensor, rules: R, accumulate: Bool = False,
     ) raises:
         var n = self._nodes[self._check(output)]
-        var s = self._nodes[self._check(seed)]
+        var s_at = self._use(ex, seed)
+        var s = self._nodes[s_at]
         if n.inferred:
             raise Error(_INFERRED_REFUSAL)
         if n.rows != s.rows or n.cols != s.cols:
@@ -1874,7 +2079,9 @@ struct Tape(Movable):
             # AUTOGRAD_PAIR: the edges a paired launch already wrote
             var paired = List[Bool](length=n.count, fill=False)
             comptime if AUTOGRAD_PAIR:
-                if n.op == LINEAR or n.op == MATMUL:
+                # a matmul that read a transpose view through strides keeps
+                # its two GEMMs (the paired launch reads dense operands)
+                if n.op == LINEAR or (n.op == MATMUL and n.saved.i0 == 0 and n.saved.i1 == 0):
                     self._pair_backward(ex, n, dz, contributions, first, consumers, paired)
             for edge in range(n.count):  # driver-loop: over node inputs
                 var parent = self._parents[n.start + edge]
@@ -1907,7 +2114,19 @@ struct Tape(Movable):
                     elif n.op == MATMUL:
                         var left = self._nodes[self._parents[n.start]]
                         var right = self._nodes[self._parents[n.start + 1]]
-                        if edge == 0:
+                        if n.saved.i6 == 1:
+                            # AUTOGRAD_TRANSPOSE_VIEW: the forward's buffers and
+                            # strides (saved by matmul); dense operands give the
+                            # arguments below exactly
+                            if edge == 0:
+                                # dX = G @ Y^T: Y^T(k, n) = Y(n, k)
+                                _gemm(ex, contribution, n.grad, n.saved.p1, left.rows, left.cols, right.cols,
+                                      right.cols, 1, n.saved.i5, n.saved.i4)
+                            else:
+                                # dY = X^T @ G: X^T(m, k) = X(k, m)
+                                _gemm(ex, contribution, n.saved.p0, n.grad, right.rows, right.cols, left.rows,
+                                      n.saved.i3, n.saved.i2, right.cols, 1)
+                        elif edge == 0:
                             _gemm(ex, contribution, n.grad, right.value, left.rows, left.cols, right.cols,
                                   right.cols, 1, 1, right.cols)
                         else:
@@ -1943,6 +2162,19 @@ struct Tape(Movable):
                         a.i8 = edge
                         a.f0 = n.saved.f0
                         ex.launch[OP_LS_ELEM_VJP](a, p.rows * p.cols)
+                    elif n.op == LOSS_REDUCED:
+                        # loss_reduced: REDUCE_VJP's word in a register, then
+                        # OP_LS_ELEM_VJP's body (autograd/fold_ops.mojo)
+                        var a = Args()
+                        a.p0 = self._nodes[self._parents[n.start]].value
+                        a.p1 = self._nodes[self._parents[n.start + 1]].value
+                        a.p2 = n.grad
+                        a.p3 = contribution
+                        a.i0 = n.saved.i0
+                        a.i8 = edge
+                        a.f0 = n.saved.f0
+                        a.f1 = n.saved.f1
+                        ex.launch[OP_AGS_LOSS_VJP](a, p.rows * p.cols)
                     elif n.op == LOSS_CE:
                         # only the logits (edge 0): the codes never require a gradient
                         var a = Args()

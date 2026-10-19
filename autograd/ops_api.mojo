@@ -229,7 +229,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
         var slot = self._slot(h)
-        var src = self.tape.value(self.tensors[slot])
+        var src_t = self.tensors[slot]
+        var src = self.tape.value_of(self.ex, src_t)
         var count = self.rows[slot] * self.cols[slot]
         self.ex.download(dst, src, count)
 
@@ -238,7 +239,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var slot = self._slot(h)
         if self.rows[slot] * self.cols[slot] != 1:
             raise Error("ops: scalar() takes a tensor of one value")
-        var src = self.tape.value(self.tensors[slot])
+        var src_t = self.tensors[slot]
+        var src = self.tape.value_of(self.ex, src_t)
         var out = List[Float32](length=1, fill=Float32(0))
         self.ex.download(FP(unsafe_from_address=Int(out.unsafe_ptr())), src, 1)
         return out[0]
@@ -401,8 +403,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: gather_rows start and count must lie within the indices")
             var g_cols = self.cols[gx]
             var g_dst = self.tape.reserve(self.ex, g_count * g_cols)
-            var g_src = self.tape.value(x[0])
-            var g_idx = self.tape.value(x[1])
+            var g_src = self.tape.value_of(self.ex, x[0])
+            var g_idx = self.tape.value_of(self.ex, x[1])
             gather_rows(self.ex, g_src, g_idx, g_start, g_count, g_cols, g_dst)
             return self._constant(g_dst, g_count, g_cols, 0)
         elif code == OPS_PERMUTATION:
@@ -449,7 +451,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var c_cols = self.cols[cx]
             var c_dst = self.tape.reserve(self.ex, c_count)
             var ca = Args()
-            ca.p0 = self.tape.value(x[0])
+            ca.p0 = self.tape.value_of(self.ex, x[0])
             ca.p1 = c_dst
             self.ex.launch[OP_COPY](ca, c_count)
             return self._constant(c_dst, c_rows, c_cols, 0)
@@ -489,8 +491,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var rows = self.rows[ys]
         if self.cols[ys] != 1 or self.rows[ps] != rows:
             raise Error("ops: y_true must be (n, 1) and the prediction must have n rows")
-        var yt = self.tape.value(self.tensors[ys])
-        var pv = self.tape.value(self.tensors[ps])
+        var yt_t = self.tensors[ys]
+        var yt = self.tape.value_of(self.ex, yt_t)
+        var pv_t = self.tensors[ps]
+        var pv = self.tape.value_of(self.ex, pv_t)
         var cols = self.cols[ps]
         if kind == OPS_METRIC_ACCURACY:
             if cols == 1:

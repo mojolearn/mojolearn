@@ -149,6 +149,7 @@ from autograd.pass1_ops import OP_P1_FIRST, OP_P1_LAST, apply_pass1
 from autograd.composed_ops import OP_AGC_FIRST, OP_AGC_LAST, apply_composed
 from autograd.ops import OP_AG_SOFTMAX_FWD, OP_AG_SOFTMAX_VJP
 from autograd.row_ops import OP_ROW_FIRST, OP_ROW_LAST, ROW_COOP, apply_rows, row_softmax_fwd, row_softmax_vjp
+from autograd.fold_ops import OP_AGS_FIRST, OP_AGS_LAST, apply_fold_ops
 
 
 @always_inline
@@ -289,6 +290,22 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_AGH_FIRST or OP_CELL_BWD_SCAN > OP_AGH_LAST
     ), "pass-6 host opcode collides with recurrent scan"
     comptime assert OP_AGH_FIRST > OP_ROW_LAST or OP_AGH_LAST < OP_ROW_FIRST, "pass-6 host opcodes overlap the rows family"
+    # The fold lane's loss-leaf family (autograd/fold_ops.mojo OP_AGS_*, 2300..;
+    # lane ag-pass6-fold), disjoint from every other autograd range and the scans.
+    comptime assert OP_AGS_FIRST <= OP_AGS_LAST, "loss-leaf opcode range is empty"
+    comptime assert OP_AGS_FIRST > OP_AG_LAST or OP_AGS_LAST < OP_AG_FIRST, "loss-leaf opcodes overlap the tape's"
+    comptime assert OP_AGS_FIRST > OP_AGD_LAST or OP_AGS_LAST < OP_AGD_FIRST, "loss-leaf opcodes overlap the data family"
+    comptime assert OP_AGS_FIRST > OP_AGO_LAST or OP_AGS_LAST < OP_AGO_FIRST, "loss-leaf opcodes overlap the optim family"
+    comptime assert OP_AGS_FIRST > OP_LS_LAST or OP_AGS_LAST < OP_LS_FIRST, "loss-leaf opcodes overlap the loss family"
+    comptime assert OP_AGS_FIRST > OP_AGM_LAST or OP_AGS_LAST < OP_AGM_FIRST, "loss-leaf opcodes overlap the model family"
+    comptime assert OP_AGS_FIRST > OP_AGK_LAST or OP_AGS_LAST < OP_AGK_FIRST, "loss-leaf opcodes overlap the kernel family"
+    comptime assert OP_AGS_FIRST > OP_P1_LAST or OP_AGS_LAST < OP_P1_FIRST, "loss-leaf opcodes overlap the fused family"
+    comptime assert OP_AGS_FIRST > OP_MLP_LB_LAST or OP_AGS_LAST < OP_MLP_LB_FIRST, "loss-leaf opcodes overlap the MLP loss block"
+    comptime assert OP_AGS_FIRST > OP_AGF_LAST or OP_AGS_LAST < OP_AGF_FIRST, "loss-leaf opcodes overlap the fold levels"
+    comptime assert OP_AGS_FIRST > OP_AGC_LAST or OP_AGS_LAST < OP_AGC_FIRST, "loss-leaf opcodes overlap the composed step"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGS_FIRST or OP_CELL_FWD_SCAN > OP_AGS_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGS_FIRST or OP_CELL_BWD_SCAN > OP_AGS_LAST
+    ), "loss-leaf opcode collides with recurrent scan"
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -323,6 +340,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_rows[OP](t, a)
     elif OP >= OP_AGH_FIRST and OP <= OP_AGH_LAST:
         apply_optim_fused[OP](t, a)
+    elif OP >= OP_AGS_FIRST and OP <= OP_AGS_LAST:
+        apply_fold_ops[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
