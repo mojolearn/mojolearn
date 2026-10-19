@@ -20,7 +20,7 @@ from sequence.recurrent import OptConfig, OptState, opt_step
 from checks.numerics import ftz, identical_div, identical_pow64, identical_sqrt
 from autograd.tape import Tape, Tensor
 from autograd.layers import NeuralRules, layer_norm
-from autograd.model_ops import OP_AGM_INIT_UNIFORM
+from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 
 # Lane ag-data adds `Tape.dropout`; lane ag-forward adds the tape's
 # inference mode. Until they land these stay off and the model trainer does
@@ -60,6 +60,8 @@ comptime OUT_RAW = 0
 comptime OUT_SOFTMAX = 1
 comptime OUT_SIGMOID = 2
 comptime OUT_PROBA2 = 3          # one output: sigmoid p, written as the (N, 2) [1 - p, p]
+comptime OUT_ARGMAX = 4          # the row argmax of the raw outputs, N float32 class codes
+comptime OUT_THRESHOLD = 5       # one output: sigmoid p > 0.5, N float32 class codes (0/1)
 
 # Row indices travel as float32 words (the shuffle and the gather), exact
 # below 2^24; the parameter counter of the initialisation is an Int32 slot.
@@ -534,14 +536,16 @@ def model_predict[E: Exec](
     """dst (N, out) = the model's output on X (N, n_inputs), optionally
     through a row softmax (OUT_SOFTMAX) or an elementwise sigmoid
     (OUT_SIGMOID); OUT_PROBA2 (one output) writes the (N, 2) [1 - p, p] of
-    the sigmoid p into dst instead. Dropout is the identity. Rows run in chunks of `chunk`
+    the sigmoid p into dst instead; OUT_ARGMAX (the first-max-wins row
+    argmax) and OUT_THRESHOLD (one output, sigmoid p > 0.5) write N float32
+    class codes. Dropout is the identity. Rows run in chunks of `chunk`
     so the tape's scratch stays bounded."""
     if N < 1 or N >= MODEL_MAX_ROWS or chunk < 1:
         raise Error("model predict: the number of samples must be between 1 and 2^24 - 1 and chunk >= 1")
-    if transform < OUT_RAW or transform > OUT_PROBA2:
+    if transform < OUT_RAW or transform > OUT_THRESHOLD:
         raise Error("model predict: unknown output transform " + String(transform))
-    if transform == OUT_PROBA2 and spec.out_features() != 1:
-        raise Error("model predict: two-column probabilities need a model with one output")
+    if (transform == OUT_PROBA2 or transform == OUT_THRESHOLD) and spec.out_features() != 1:
+        raise Error("model predict: binary probabilities and labels need a model with one output")
     var D = spec.n_inputs
     var O = spec.out_features()
     var bs = chunk if chunk < N else N
@@ -561,7 +565,7 @@ def model_predict[E: Exec](
         var out = model_forward(tape, ex, spec, P, P, x, False, UInt64(0), 0)
         if transform == OUT_SOFTMAX:
             out = tape.softmax(ex, out)
-        elif transform == OUT_SIGMOID or transform == OUT_PROBA2:
+        elif transform == OUT_SIGMOID or transform == OUT_PROBA2 or transform == OUT_THRESHOLD:
             out = tape.sigmoid(ex, out)
         _copy(ex, dout + b0 * O, tape.value(out), B * O)
         comptime if HAS_INFERENCE:
@@ -575,6 +579,19 @@ def model_predict[E: Exec](
         ex.launch[OP_PROBA2](q, N * 2)
         ex.sync()
         ex.download(dst, two, N * 2)
+    elif transform == OUT_ARGMAX or transform == OUT_THRESHOLD:
+        var codes = ex.alloc(N)
+        var q = Args()
+        q.p0 = dout
+        q.p1 = codes
+        q.i0 = O
+        q.f0 = Float32(0.5)
+        if transform == OUT_ARGMAX:
+            ex.launch[OP_AGM_ROW_ARGMAX](q, N)
+        else:
+            ex.launch[OP_AGM_THRESHOLD](q, N)
+        ex.sync()
+        ex.download(dst, codes, N)
     else:
         ex.sync()
         ex.download(dst, dout, N * O)

@@ -2,16 +2,18 @@
 # Element bodies of the model-description trainer (autograd/model.mojo),
 # shared by HostExec and DeviceExec through sequence/dispatch.mojo.
 #
-# Codes OP_AGM_FIRST..OP_AGM_LAST (1040..1040) are this family. They sit
+# Codes OP_AGM_FIRST..OP_AGM_LAST (1040..1042) are this family. They sit
 # above the autograd tape range (autograd/ops.mojo, 1000..1010) with room for
 # that family to grow; sequence/dispatch.mojo asserts the two ranges and the
 # recurrent scan codes do not collide.
-from sequence.ops import Args, FP, st, mul
+from sequence.ops import Args, FP, ld, st, mul
 from core.philox import philox4x32_10
 
 comptime OP_AGM_INIT_UNIFORM = 1040
+comptime OP_AGM_ROW_ARGMAX = 1041
+comptime OP_AGM_THRESHOLD = 1042
 comptime OP_AGM_FIRST = OP_AGM_INIT_UNIFORM
-comptime OP_AGM_LAST = OP_AGM_INIT_UNIFORM
+comptime OP_AGM_LAST = OP_AGM_THRESHOLD
 
 # Third counter word of every parameter-initialisation draw ("MODE"), so the
 # initialisation stream never shares a counter with another Philox user that
@@ -54,6 +56,38 @@ def op_agm_init_uniform(t: Int, a: Args):
 
 
 @always_inline
+def op_agm_row_argmax(t: Int, a: Args):
+    """p1[t] = the column of row t's largest score in p0 (rows of i0
+    columns) as a float32 code: first max wins (strict >, from column 0),
+    so ties keep the lowest column and a NaN never replaces. Thread t =
+    row t, O(cols) each."""
+    var cols = a.i0
+    var base = t * cols
+    var best = ld(a.p0, base)
+    var at = 0
+    for c in range(1, cols):
+        var v = ld(a.p0, base + c)
+        if v > best:
+            best = v
+            at = c
+    st(a.p1, t, Float32(at))
+
+
+@always_inline
+def op_agm_threshold(t: Int, a: Args):
+    """p1[t] = 1.0 when p0[t] > f0 else 0.0 (a NaN takes 0). Thread t =
+    element t."""
+    var v = Float32(0)
+    if ld(a.p0, t) > a.f0:
+        v = Float32(1)
+    st(a.p1, t, v)
+
+
+@always_inline
 def apply_model_ops[OP: Int](t: Int, a: Args):
     comptime if OP == OP_AGM_INIT_UNIFORM:
         op_agm_init_uniform(t, a)
+    elif OP == OP_AGM_ROW_ARGMAX:
+        op_agm_row_argmax(t, a)
+    elif OP == OP_AGM_THRESHOLD:
+        op_agm_threshold(t, a)
