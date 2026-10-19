@@ -997,11 +997,18 @@ struct DeviceExec(Exec, Movable):
         # lane ag-pass4-gemm: OP_GEMM, the tape's OP_AGK_GEMM_EPI and the hand
         # MLP's OP_GEMM_EPI take the shape-aware route (sequence/gemm_tiled.mojo
         # seq_gemm_route: one thread a cell for K < 4, the 16 x 16 tile when
-        # both edges are >= 8, else the thin tile along the long edge); every
+        # both edges are >= 8, else the thin tile along the long edge when the
+        # launch fuses an epilogue or column sums, one thread a cell if not); every
         # route is op_gemm's chain and op_gemm_epi's follower, the same words.
         comptime if SEQ_GEMM_TILED and not GEMM_DISPATCH_V1 and (
                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
-            self.gemm_launch_route[OP](a, n, seq_gemm_route(a.i0, a.i1, a.i2))
+            # fused work: an epilogue (not the plain kind) or the column sums
+            var fused = False
+            comptime if OP != OP_GEMM:
+                fused = seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN
+                comptime if OP == OP_AGK_GEMM_EPI:
+                    fused = fused or a.i11 != 0
+            self.gemm_launch_route[OP](a, n, seq_gemm_route(a.i0, a.i1, a.i2, fused))
             return
         # The pass-3 routes below are -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.
         # nr-small D1: op_gemm's chain with the A/B slabs staged in

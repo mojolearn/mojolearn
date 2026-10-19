@@ -32,10 +32,13 @@
 #                             | dead), 4 slabs; 0.1 blk a CU   | tm 0 blocks (16 thr, 512 adds) | strided by 28
 #
 # AFTER (default): seq_gemm_route below, the same rule for 1, 1401 and 60:
-#  K < GT_MIN_K (4) -> cell; else both edges >= 8 -> tile16; else thinN
-#  (N the short edge) or thinM; slab staging writes only the cnt live terms.
+#  K < GT_MIN_K (4) -> cell; else both edges >= 8 -> tile16; else, when the
+#  launch fuses an epilogue or column sums, thinN (N the short edge) or
+#  thinM, and cell for a bare product (OP_GEMM: AMD phase 5); slab staging
+#  writes only the cnt live terms.
 #  Z1  tile16 (2+2 slab slots a thread, was 8+8); 60 now tile16 too
 #  Z2  thinN 32 blk, 1 slab: 16 A words a thread in flight, one 256 fma chain
+#      (1401 and 60; OP_GEMM keeps cell for Z2 and dW2: no fused work)
 #  dW2 thinN 16 blk, 2 slabs, db folded in the tile (no nested launch)
 #  dH  cell 1024 blk, 1 term (no slab, no barrier); 1, 1401 and 60 alike
 #  dW1 tile16 (unchanged); 60 now tile16 too
@@ -383,14 +386,33 @@ comptime GK_ACT_BWD = 5
 
 
 @always_inline
-def seq_gemm_route(M: Int, N: Int, K: Int) -> Int:
-    """The kernel for an M x N x K product (GR_*), from the cost rule above."""
+def seq_gemm_route(M: Int, N: Int, K: Int, fused: Bool) -> Int:
+    """The kernel for an M x N x K product (GR_*), from the cost rule above.
+    `fused`: the launch carries work beyond the product (an epilogue, or the
+    column sums of B), see the thin-tile rule below."""
     comptime if GEMM_DISPATCH_V1:
         return GR_TILE if seq_gemm_tiled_on(M, N) else GR_CELL
     if K < GT_MIN_K:
         return GR_CELL
     if M >= GT_MIN_EDGE and N >= GT_MIN_EDGE:
         return GR_TILE
+    # THIN EDGE (AMD MI325X phase 5, one run per arm, same bits on both
+    # routes: the plain OP_GEMM 327 -> 375 ms for 9770 launches with the
+    # thin tile on its N = 1 products, while the hand's OP_GEMM_EPI and the
+    # tape's 1401 with the same thin tile went 0.972 -> 0.458 s and
+    # 0.737 -> 0.480 s). Cost: on a thin edge each output word has K terms
+    # and no reuse, so the 16 x 1 tile loads the same 2K words per output as
+    # one thread a cell, only staged; it buys fewer load rounds (K / 256
+    # instead of K / 16) at the price of two barriers a slab with 240 of
+    # 256 threads idle in the fold. For a bare product the one-thread cells
+    # (M N threads, GEMM_STAGE loads in flight each) hide those rounds
+    # themselves, so they are the cheaper route. The tile pays only when the
+    # launch also carries fused work: the column sums (off the tile, a
+    # second launch: one thread a column over all K rows) and the epilogue
+    # (the one-thread epilogue body is the runtime EPI x activation switch;
+    # the tile's is compiled for its kind alone).
+    if not fused:
+        return GR_CELL
     # the thin tile runs along the long edge
     if N <= M:
         return GR_THIN_N

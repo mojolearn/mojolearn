@@ -288,7 +288,7 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
                 var M = ms[i]
                 var N = ns[j]
                 var K = ks[l]
-                routes_seen[seq_gemm_route(M, N, K)] += 1
+                routes_seen[seq_gemm_route(M, N, K, True)] += 1
                 _run[OP_GEMM](dev, host, tally, M, N, K, False, 0, False)
                 _run[OP_GEMM](dev, host, tally, M, N, K, True, 0, False)
                 _run[OP_GEMM](dev, host, tally, M, N, K, False, 0, True)
