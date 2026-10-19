@@ -1,5 +1,71 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# ---------------------------------------------------------------- GEMM ROUTES BY SHAPE (lane ag-pass4-gemm, 2026-10-19)
+# Read from DeviceExec._launch (sequence/exec_device.mojo) and the kernels
+# below; NVIDIA and AMD run the same routes (SEQ_GEMM_TILED: identical, not
+# Apple). HIGGS MLP 28 -> 256 -> 1, batch 512: the five GEMMs a batch
+# (M x N, K; operand strides sam sak / sbk sbn), the same arguments on every
+# opcode (hand gemm_epi, tape linear_into, tape matmul VJPs). "cell" = one
+# thread a cell (seq_kernel, TPB 128, gemm_dot: GEMM_STAGE 16 loads in flight,
+# then ONE dependent load round trip per term of the K mod 16 tail);
+# "tile16" = 16 x 16 cells, 256 threads, GT_K 128 slabs; "thinN" = 16 x 1
+# cells, 256 threads loading, 256-term slabs; split-K and the coop cells are
+# never taken here (coop: M N <= 1024 and K >= 32768 only).
+#
+# BEFORE (V1, -D MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1): tile iff M >= 8 and N >= 8
+# (seq_gemm_tiled_on), the same rule for OP_GEMM (1) and OP_AGK_GEMM_EPI
+# (1401); OP_GEMM_EPI (60, hand) never tiled.
+#  shape                      | OP_GEMM 1 (composed tape)      | 1401 (fused tape)               | 60 (hand)
+#  Z1  512x256 K 28  28 1/256 1| tile16 512 blk, 1 slab, 2048+  | = OP_GEMM + bias/relu epilogue  | cell 1024 blk, 28-chain:
+#                             | 2048 slab slots/blk for 448+448| in registers                   | 1 staged round + 12 tail
+#                             | live (78% zero-filled)         |                                | round trips
+#  Z2  512x1   K 256 256 1/1 1| cell 4 blk (512 thr = 8 wave64)| cell + bias/logistic            | cell (same)
+#                             | 16 staged rounds; N = 1 < 8    |                                |
+#  dW2 256x1   K 512 1 256/1 1| cell 2 blk (4 wave64), 32 rounds| cell + L2GRAD, THEN a nested   | cell; its colsum is the hand
+#                             |                                | OP_COLSUM_DIV launch: 1 thread,| path's own launch
+#                             |                                | a 512-row serial chain         |
+#  dH  512x256 K 1   1 1/1 1  | tile16 512 blk, 1 slab of cnt 1| = OP_GEMM + act' epilogue       | cell 1024 blk, 1 term
+#                             | 4096 slab slots/blk for 32 live|                                |
+#                             | (127/128 zero-filled), 2 barr. |                                |
+#                             | for 1 fma                      |                                |
+#  dW1 28x256  K 512 1 28/256 1| tile16 2x16 = 32 blk (4/32 rows| = OP_GEMM + L2GRAD + colsum in  | cell 56 blk, 32 rounds, A
+#                             | dead), 4 slabs; 0.1 blk a CU   | tm 0 blocks (16 thr, 512 adds) | strided by 28
+#
+# AFTER (default): seq_gemm_route below, the same rule for 1, 1401 and 60:
+#  K < GT_MIN_K (4) -> cell; else both edges >= 8 -> tile16; else thinN
+#  (N the short edge) or thinM; slab staging writes only the cnt live terms.
+#  Z1  tile16 (2+2 slab slots a thread, was 8+8); 60 now tile16 too
+#  Z2  thinN 32 blk, 1 slab: 16 A words a thread in flight, one 256 fma chain
+#  dW2 thinN 16 blk, 2 slabs, db folded in the tile (no nested launch)
+#  dH  cell 1024 blk, 1 term (no slab, no barrier); 1, 1401 and 60 alike
+#  dW1 tile16 (unchanged); 60 now tile16 too
+# Every route folds acc = fma3(A(m, k), B(k, n), acc), k ascending from
+# (accumulate ? C : +0.0), then the same epilogue: the same words on every
+# route, so no bit moves on any opcode, column or the host.
+#
+# WHY 1401 COST 2.3x OP_GEMM ON MI325X (AMD phase 2/3, AG_PROFILE=2):
+#  (a) NOT a different tiling: 1 and 1401 take the same route on all five
+#      shapes (exec_device.mojo, the two `seq_gemm_tiled_on` tests).
+#  (b) 636 -> 744 ms (pass 3) is the nested OP_COLSUM_DIV after the
+#      off-tile dW2 (exec_device.mojo, `comptime if OP == OP_AGK_GEMM_EPI:`
+#      at the end of _launch): one thread, a 512-row chain, launched with
+#      self.launch so under AG_PROFILE=2 its two syncs and its kernel sit
+#      inside 1401's bracket: colsum_div 52 ms + 2 x 1954 syncs ~ 55 ms = 108.
+#  (c) the other ~320 ms is per-launch kernel time on the same geometry:
+#      the profile floor is ~14 us a launch (op_26 / op_28 / copy rows), so
+#      forward 1401 ~33 us of kernel a launch vs OP_GEMM ~10 us, backward
+#      ~63 vs ~22. The only code difference is the epilogue: a runtime
+#      switch over EPI x activation that reaches identical_sigmoid,
+#      identical_tanh and identical_div (checks/numerics.mojo, not
+#      @always_inline: device calls), so on AMDGPU every 1401 kernel carries
+#      a call ABI (callee-saved VGPR spills to scratch, conservative register
+#      allocation) whatever the layer's activation; NVIDIA absorbs calls.
+#      The new kernel takes the epilogue as a comptime kind (GK_*): the
+#      plain, bias, bias + ReLU and act' kernels contain no call (L2GRAD
+#      keeps identical_div; sigmoid / tanh keep theirs). Unverified
+#      until profiled: AG_PROFILE=2 rows ag_gemm_epi vs gemm, both vendors.
+#  (d) no per-thread Args record any more (pass 3 removed it), no host
+#      round trip; p3 reads are p3[n] (broadcast) or p3[ci] (coalesced).
 """`OP_GEMM` WITH SHARED-MEMORY STAGING (nr-small D1, 2026-10-04).
 
 `op_gemm` (sequence/ops.mojo) runs one thread per output cell, and each
