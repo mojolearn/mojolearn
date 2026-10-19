@@ -158,7 +158,7 @@ from transformer.checks.transformer_backward import (
 # median, kernel-only clock, B8 L512 d512 8 heads 2 kv, tools/transformer_tape_arm_check.py --time 20): NVIDIA L40S
 # session 5.231 -> 5.259 ms, saved 5.118 -> 5.153; AMD MI325X session 3.415 -> 3.484, saved 3.648 -> 3.710; average 1.01.
 # Same launches, same arguments, same bits on Apple, NVIDIA and AMD (20 GRAD lines equal, both paths).
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by {SHA}; code recoverable at {SHA}^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 # The bindings' session and saved-tape backwards call llama_decoder_layer_backward_autograd only; the hand walk
 # (transformer/checks/transformer_backward.mojo::llama_decoder_layer_backward_device) stays as the traced and

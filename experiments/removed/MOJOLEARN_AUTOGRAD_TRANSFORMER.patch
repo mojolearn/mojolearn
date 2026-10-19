@@ -1,0 +1,329 @@
+diff --git b/autograd/rules_transformer.mojo a/autograd/rules_transformer.mojo
+index 4e4c3ff83..e29ccebc1 100644
+--- b/autograd/rules_transformer.mojo
++++ a/autograd/rules_transformer.mojo
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+-# Transformer decoder-layer backward on the tape (the bindings' only backward since
+-# 2026-10-19). docs/plans/AUTOGRAD_API.md section (c) item 2.
++# Transformer decoder-layer backward on the tape (-D MOJOLEARN_AUTOGRAD_TRANSFORMER,
++# default off). docs/plans/AUTOGRAD_API.md section (c) item 2.
+ #
+ # ---------------------------------------------------------------- launch inventory
+ # The hand path, transformer/checks/transformer_backward.mojo::
+@@ -158,11 +158,8 @@ from transformer.checks.transformer_backward import (
+ # median, kernel-only clock, B8 L512 d512 8 heads 2 kv, tools/transformer_tape_arm_check.py --time 20): NVIDIA L40S
+ # session 5.231 -> 5.259 ms, saved 5.118 -> 5.153; AMD MI325X session 3.415 -> 3.484, saved 3.648 -> 3.710; average 1.01.
+ # Same launches, same arguments, same bits on Apple, NVIDIA and AMD (20 GRAD lines equal, both paths).
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+-# The bindings' session and saved-tape backwards call llama_decoder_layer_backward_autograd only; the hand walk
+-# (transformer/checks/transformer_backward.mojo::llama_decoder_layer_backward_device) stays as the traced and
+-# materialized reference this entry refuses, and for the trainers that call it directly.
++# MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF restores the hand walk for the A/B; the old opt-in spelling is accepted too.
++comptime AUTOGRAD_TRANSFORMER = not is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]()
+ 
+ # Tags in a range of their own: LayerNorm 1 (autograd/layers.mojo),
+ # recurrent 16-18 (autograd/rules_recurrent.mojo), transformer 32-47.
+diff --git b/bindings/_mojolearn_transformer.mojo a/bindings/_mojolearn_transformer.mojo
+index e9040e5f6..4f582a390 100644
+--- b/bindings/_mojolearn_transformer.mojo
++++ a/bindings/_mojolearn_transformer.mojo
+@@ -193,11 +193,11 @@ from transformer.checks.transformer_backward import (
+     BWD_ANY_SABOTAGE,
+     LlamaBackwardStages,
+     llama_decoder_layer_backward,
++    llama_decoder_layer_backward_device,
+ )
+-# The session and saved-tape backwards below run on the autograd tape.
+-# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+-# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+-from autograd.rules_transformer import llama_decoder_layer_backward_autograd
++# lane ag-transformer: -D MOJOLEARN_AUTOGRAD_TRANSFORMER (default off) runs
++# the two saved-stage backwards below through the autograd tape.
++from autograd.rules_transformer import AUTOGRAD_TRANSFORMER, llama_decoder_layer_backward_autograd
+ # lane ag-tm-timing: the launch profile the backward timing entries read.
+ from sequence.launch_profile import launch_profile_level, launch_profile_reset, launch_profile_snapshot
+ # lane/block-options (2026-09-17): the block options record and the two
+@@ -1196,12 +1196,14 @@ def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int])
+     ctx.synchronize()
+     var off = IdentityTrace.disabled()
+     # Reuse the real saved forward; no weight upload or forward recompute.
+-    # The stage order and fan-in sums are owned by the autograd tape
+-    # (autograd/rules_transformer.mojo).
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+-    llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
+-        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
++    # -D MOJOLEARN_AUTOGRAD_TRANSFORMER: the same launches with the stage order
++    # and fan-in sums owned by the autograd tape (autograd/rules_transformer.mojo).
++    comptime if AUTOGRAD_TRANSFORMER:
++        llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
++            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
++    else:
++        llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
++            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+     _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
+     _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
+     _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
+@@ -1361,12 +1363,16 @@ def _transformer_run_session_backward(
+     )
+     _btick(ton, tk, "surface.forward")
+     var offb = IdentityTrace.disabled()
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+-    llama_decoder_layer_backward_autograd(
+-        ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+-        b, l, 0, offb, String("pyb"),
+-    )
++    comptime if AUTOGRAD_TRANSFORMER:
++        llama_decoder_layer_backward_autograd(
++            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
++            b, l, 0, offb, String("pyb"),
++        )
++    else:
++        llama_decoder_layer_backward_device(
++            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
++            b, l, 0, offb, String("pyb"),
++        )
+     _btick(ton, tk, "surface.backward")
+     _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
+     _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
+@@ -1437,16 +1443,16 @@ def transformer_session_backward_binding(
+ 
+ # ===========================================================================
+ # BACKWARD TIMING ENTRIES (lane ag-tm-timing, 2026-10-19). Measurement only:
+-# tools/transformer_tape_arm_check.py --time N calls these to time the tape
+-# backward (the hand arm, -D MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF, is deleted). The
++# tools/transformer_tape_arm_check.py --time N calls these to time the hand
++# backward against -D MOJOLEARN_AUTOGRAD_TRANSFORMER, one build per arm. The
+ # inputs and weights are uploaded once before the first clock; each timed
+ # call brackets only the launches (device sync before and after), so the
+-# clock is kernel-only. Call 0 is the warm-up and
++# clock is kernel-only and the same in both arms. Call 0 is the warm-up and
+ # is returned like the rest; the caller drops it. Same kernels, same
+ # launches, same order as `_transformer_run_session_backward` and
+ # `_transformer_saved_backward`; no bits move.
+ #
+-# Return list: [autograd (always 1, tape), launches, t...]. `launches` is
++# Return list: [autograd (1 tape / 0 hand), launches, t...]. `launches` is
+ # the process-wide launch profile's total over the LAST timed call when
+ # MOJOLEARN_AG_PROFILE is set (-1 otherwise); it counts the launches that go
+ # through DeviceExec only (kernels enqueued on the context directly are not
+@@ -1491,9 +1497,7 @@ def _transformer_session_backward_time(
+     ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[10]))
+     ctx.synchronize()
+     var out = List[Int]()
+-    # Slot 0 is always 1 (tape): the hand arm is deleted; the slot keeps the
+-    # return shape tools/transformer_tape_arm_check.py reads.
+-    out.append(1)
++    out.append(Int(AUTOGRAD_TRANSFORMER))
+     out.append(-1)
+     var prof = launch_profile_level() > 0
+     for k in range(calls + 1):  # driver-loop: over timed calls
+@@ -1515,12 +1519,16 @@ def _transformer_session_backward_time(
+         ctx.synchronize()
+         var t1 = Int(perf_counter_ns())
+         var offb = IdentityTrace.disabled()
+-        # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+-        # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+-        llama_decoder_layer_backward_autograd(
+-            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+-            b, l, 0, offb, String("pyb"),
+-        )
++        comptime if AUTOGRAD_TRANSFORMER:
++            llama_decoder_layer_backward_autograd(
++                ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
++                b, l, 0, offb, String("pyb"),
++            )
++        else:
++            llama_decoder_layer_backward_device(
++                ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
++                b, l, 0, offb, String("pyb"),
++            )
+         ctx.synchronize()
+         var t2 = Int(perf_counter_ns())
+         out.append(t1 - t0)
+@@ -1603,10 +1611,12 @@ def _transformer_saved_backward_timed(mut tape: TransformerForwardTape, a: List[
+     ctx.synchronize()
+     var off = IdentityTrace.disabled()
+     var t0 = Int(perf_counter_ns())
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+-    llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
+-        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
++    comptime if AUTOGRAD_TRANSFORMER:
++        llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
++            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
++    else:
++        llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
++            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+     ctx.synchronize()
+     var ns = Int(perf_counter_ns()) - t0
+     _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
+@@ -1655,8 +1665,7 @@ def transformer_backward_tape_time_binding(addrs: PythonObject, params: PythonOb
+     if calls < 1:
+         raise Error("transformer backward tape time: the call count must be >= 1")
+     var out = Python.list()
+-    # Slot 0 is always 1 (tape); see _transformer_session_backward_time.
+-    out.append(PythonObject(1))
++    out.append(PythonObject(Int(AUTOGRAD_TRANSFORMER)))
+     var stamps = List[Int]()
+     var launches = -1
+     with GILReleased(Python()):
+diff --git b/tools/transformer_tape_arm_check.py a/tools/transformer_tape_arm_check.py
+index cbff17a6b..d095da486 100644
+--- b/tools/transformer_tape_arm_check.py
++++ a/tools/transformer_tape_arm_check.py
+@@ -1,12 +1,12 @@
+ #!/usr/bin/env python3
+ # SPDX-License-Identifier: Apache-2.0
+-"""Gradient digests of one decoder-layer backward (the autograd tape),
+-compared bit for bit against the stored digests in
+-tools/transformer_tape_arm_digests.json (the same on Metal, NVIDIA and AMD).
++"""Gradient digests of one decoder-layer backward, for comparing two builds
++bit for bit (lane ag-transformer: the hand path against
++-D MOJOLEARN_AUTOGRAD_TRANSFORMER).
+ 
+ Loads the given _mojolearn_transformer binding, builds one fixed problem
+-(seeded inputs, weights and incoming gradient) and runs the two backward
+-entries:
++(seeded inputs, weights and incoming gradient) and runs the two backwards
++the define switches:
+ 
+   saved    transformer_forward_tape + transformer_backward_tape
+            (_transformer_saved_backward); needs a build with the forward
+@@ -21,13 +21,6 @@ y, else of <x, d_x>. Digests are blake2b of the raw float32 bytes, 16 hex.
+ The binding does every computed number of the run; this script only makes
+ the fixed inputs and digests what comes back.
+ 
+-Every printed digest is then compared with the stored file (--expected):
+-one `STORED <key> MATCH|DIFFER` line per digest and a closing
+-`STORED all MATCH|DIFFER <equal>/<total>`; the exit status is 1 on any
+-DIFFER. A path the build skips is reported as SKIP, not compared.
+-(The hand arm, -D MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF, was deleted
+-2026-10-19; it printed the same digests.)
+-
+     python3 tools/transformer_tape_arm_check.py \
+         --binding python/mojolearn/identical/_mojolearn_transformer.so \
+         --backend metal --out tape-arm.json
+@@ -40,18 +33,18 @@ larger shape (TIME_SHAPE below), one warm-up call excluded:
+   TIME <arm> saved median_ms=<x> n=<N>             saved-tape backward
+   LAUNCHES <arm> <path> <n>                        with MOJOLEARN_AG_PROFILE=1
+ 
+-<arm> is tape, as the binding reports. The binding uploads the inputs
+-and weights before the first clock and syncs the device on both sides of
+-every clock (kernel-only); this script only takes the median of the
+-nanoseconds it returns. LAUNCHES counts the launches that go through
+-DeviceExec; kernels enqueued on the context directly are not counted.
++<arm> is tape or hand, as the binding reports. The binding uploads the
++inputs and weights before the first clock and syncs the device on both
++sides of every clock (kernel-only, the same in both arms); this script only
++takes the median of the nanoseconds it returns. LAUNCHES counts the
++launches that go through DeviceExec; kernels enqueued on the context
++directly are not counted, so the hand build reports them as n/a.
+ """
+ import argparse
+ import hashlib
+ import importlib.util
+ import json
+ import statistics
+-import sys
+ from pathlib import Path
+ 
+ import numpy as np
+@@ -64,7 +57,6 @@ B, L, DM, NH, NKV, HD, IT, WINDOW = 2, 128, 64, 4, 2, 16, 128, 0
+ # route, and intermediate ~2.7 * d_model is the usual SwiGLU ratio. One
+ # layer's stages fit well inside every box's memory.
+ TIME_SHAPE = (8, 512, 512, 8, 2, 64, 1376, 0)
+-STORED = Path(__file__).resolve().with_name('transformer_tape_arm_digests.json')
+ NAMES = ('d_x', 'dw_norm1', 'dw_norm2', 'dw_q', 'dw_k', 'dw_v', 'dw_o',
+          'dw_gate', 'dw_up', 'dw_down')
+ 
+@@ -95,8 +87,8 @@ def median_ms(ns):
+     return statistics.median(ns) / 1e6
+ 
+ 
+-def launches_text(n):
+-    return 'n/a' if n < 0 else str(n)
++def launches_text(arm, n):
++    return 'n/a' if n < 0 or arm == 'hand' else str(n)
+ 
+ 
+ def timing(mod, n, result):
+@@ -111,8 +103,7 @@ def timing(mod, n, result):
+         out = list(mod.transformer_session_backward_time(session, addrs, params + [n]))
+     finally:
+         mod.transformer_session_close(session)
+-    assert out[0] == 1, 'binding reports a non-tape backward'
+-    arm = 'tape'
++    arm = 'tape' if out[0] else 'hand'
+     fwd, bwd = out[2::2][1:], out[3::2][1:]
+     assert len(fwd) == n and len(bwd) == n, 'binding returned %d/%d calls' % (len(fwd), len(bwd))
+     timed['arm'] = arm
+@@ -122,7 +113,7 @@ def timing(mod, n, result):
+     print('TIME %s session.forward median_ms=%.3f n=%d' % (arm, timed['session.forward_ms'], n), flush=True)
+     print('TIME %s session median_ms=%.3f n=%d' % (arm, timed['session_ms'], n), flush=True)
+     if out[1] >= 0:
+-        print('LAUNCHES %s session %s' % (arm, launches_text(out[1])), flush=True)
++        print('LAUNCHES %s session %s' % (arm, launches_text(arm, out[1])), flush=True)
+     if mod.transformer_forward_tape_enabled():
+         y = np.full_like(x, np.nan)
+         sgrads = grads_like(x, w)
+@@ -134,7 +125,7 @@ def timing(mod, n, result):
+         timed['saved_ms'] = median_ms(bwd)
+         print('TIME %s saved median_ms=%.3f n=%d' % (arm, timed['saved_ms'], n), flush=True)
+         if out[1] >= 0:
+-            print('LAUNCHES %s saved %s' % (arm, launches_text(out[1])), flush=True)
++            print('LAUNCHES %s saved %s' % (arm, launches_text(arm, out[1])), flush=True)
+     else:
+         print('SKIP time saved forward tape disabled in this build', flush=True)
+ 
+@@ -153,34 +144,11 @@ def record(result, path, grads, loss):
+     print('LOSS %s %s' % (path, loss), flush=True)
+ 
+ 
+-def compare_stored(result, path):
+-    """Equal-string comparison of every digest this run printed with the
+-    stored file; returns True when all are equal."""
+-    stored = json.loads(path.read_text())
+-    if stored['shape'] != result['shape']:
+-        print('STORED shape %s differs from the stored %s DIFFER' % (result['shape'], stored['shape']), flush=True)
+-        return False
+-    got = [('GRAD', k, v, stored['grads'].get(k)) for k, v in result['grads'].items()] + \
+-          [('LOSS', k, v, stored['loss'].get(k)) for k, v in result['loss'].items()]
+-    equal = 0
+-    for kind, key, value, want in got:
+-        same = value == want
+-        equal += same
+-        print('STORED %s %s %s%s' % (kind, key, 'MATCH' if same else 'DIFFER',
+-                                     '' if same else ' got=%s stored=%s' % (value, want)), flush=True)
+-    ok = equal == len(got) and len(got) > 0
+-    print('STORED all %s %d/%d' % ('MATCH' if ok else 'DIFFER', equal, len(got)), flush=True)
+-    result['stored'] = dict(file=str(path), equal=equal, total=len(got), match=ok)
+-    return ok
+-
+-
+ def main():
+     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+     ap.add_argument('--binding', type=Path, required=True)
+     ap.add_argument('--backend', choices=('metal', 'cuda', 'hip'), required=True)
+     ap.add_argument('--out', type=Path, required=True)
+-    ap.add_argument('--expected', type=Path, default=STORED,
+-                    help='stored digests to compare with (default: %(default)s)')
+     ap.add_argument('--time', type=int, default=0, metavar='N',
+                     help='after the digests, time N backwards per path on TIME_SHAPE (0: off)')
+     args = ap.parse_args()
+@@ -227,12 +195,9 @@ def main():
+         same = all(result['grads']['saved.' + n] == result['grads']['session.' + n] for n in NAMES)
+         result['saved_equals_session'] = same
+         print('PATHS saved session %s' % ('MATCH' if same else 'DIFFER'), flush=True)
+-    ok = compare_stored(result, args.expected)
+     if args.time > 0:
+         timing(mod, args.time, result)
+     args.out.write_text(json.dumps(result, indent=2) + '\n')
+-    if not ok:
+-        sys.exit(1)
+ 
+ 
+ if __name__ == '__main__':

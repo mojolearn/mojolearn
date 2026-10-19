@@ -195,7 +195,7 @@ from transformer.checks.transformer_backward import (
     llama_decoder_layer_backward,
 )
 # The session and saved-tape backwards below run on the autograd tape.
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by {SHA}; code recoverable at {SHA}^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 # lane ag-tm-timing: the launch profile the backward timing entries read.
@@ -1198,7 +1198,7 @@ def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) 
     # Reuse the real saved forward; no weight upload or forward recompute.
     # The stage order and fan-in sums are owned by the autograd tape
     # (autograd/rules_transformer.mojo).
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by {SHA}; code recoverable at {SHA}^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
     llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
         ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
@@ -1361,7 +1361,7 @@ def _transformer_run_session_backward(
     )
     _btick(ton, tk, "surface.forward")
     var offb = IdentityTrace.disabled()
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by {SHA}; code recoverable at {SHA}^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
     llama_decoder_layer_backward_autograd(
         ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
@@ -1515,7 +1515,7 @@ def _transformer_session_backward_time(
         ctx.synchronize()
         var t1 = Int(perf_counter_ns())
         var offb = IdentityTrace.disabled()
-        # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by {SHA}; code recoverable at {SHA}^.
+        # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
         # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
         llama_decoder_layer_backward_autograd(
             ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
@@ -1603,7 +1603,7 @@ def _transformer_saved_backward_timed(mut tape: TransformerForwardTape, a: List[
     ctx.synchronize()
     var off = IdentityTrace.disabled()
     var t0 = Int(perf_counter_ns())
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by {SHA}; code recoverable at {SHA}^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
     llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
         ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))

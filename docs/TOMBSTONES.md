@@ -349,6 +349,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_TF_SESSION_LEAN`](#wave-2-w2-decide-lm-2026-10-11) | Neural | LOSER-slower | 2026-10-11 | [MOJOLEARN_IDN_TF_SESSION_LEAN.patch](../experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch) |
 | [`MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF`](#gbdt-oracle-multi-dimensional-host-walk) | Trees | removed (host arm retired) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
 | GPU oracle multi-dimensional host walk (no define) | Trees | removed (host loops on the GPU path) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
+| [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
 
 ## Restored
 
@@ -3181,3 +3182,39 @@ the parent of its deletion commit.
   `oracle_interface.mojo`; it also removes the host-interface kernels that commit added). Restoring it alone does not route a fit
   to the host walker: `_estimate_and_apply` refuses any walk no device walker takes.
 - Guard: `MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF` refused in `gbdt/methods/leaves_estimation/pointwise_oracle.mojo` (`_check_removed_defines`, forced by `make_bin_optimized_oracle`), not in core: a core line rebuilds every binding.
+
+## MOJOLEARN_AUTOGRAD_TRANSFORMER
+
+Hand-glue deletion (lane del-transformer, 2026-10-19). `MOJOLEARN_AUTOGRAD_TRANSFORMER` (the old opt-in) and
+`MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF` (after the promotion) chose, at four seams of `bindings/_mojolearn_transformer.mojo`
+(`_transformer_saved_backward`, `_transformer_run_session_backward`, `_transformer_session_backward_time`,
+`_transformer_saved_backward_timed`), between the hand decoder-layer backward walk
+(`transformer/checks/transformer_backward.mojo::llama_decoder_layer_backward_device`) and the autograd tape
+(`autograd/rules_transformer.mojo::llama_decoder_layer_backward_autograd`, seven custom rules calling the same launchers).
+The comptime switch lived in `autograd/rules_transformer.mojo`. The bindings now call the tape only; the timing entries'
+slot 0 is always 1. `tools/transformer_tape_arm_check.py` is one arm, compared with `tools/transformer_tape_arm_digests.json`.
+
+What stays: `llama_decoder_layer_backward_device` itself, because the tape refuses traced calls (identity cards),
+materialized stages and non-default block options, and because training/neural_attention_owner.mojo,
+byte_lm_layer_pool.mojo, byte_lm_offload.mojo, the stateless `transformer_backward` binding entry, byte_lm.mojo and
+samba_resident.mojo (lanes del-lm / del-samba) call it directly. Every launcher the rules call stays.
+
+Verdict PROMOTED: same launches, same arguments, same bits. One timed series per arm (20 calls, median, kernel-only clock,
+B8 L512 d512 8 heads 2 kv, `tools/transformer_tape_arm_check.py --time 20`):
+
+| run | box | session hand -> tape ms | saved hand -> tape ms |
+|---|---|---|---|
+| nv-04 (NV_PASS5) | NVIDIA L40S | 5.231 -> 5.259 (1.005) | 5.118 -> 5.153 (1.007) |
+| amd-08 (AMD_PASS5) | AMD MI325X | 3.415 -> 3.484 (1.020) | 3.648 -> 3.710 (1.017) |
+| p6-01 | NVIDIA L40S | 5.204 -> 5.243 (1.007) | 5.135 -> 5.114 (0.996) |
+| p6-01 | AMD MI325X | 3.389 -> 3.474 (1.025) | 3.645 -> 3.730 (1.023) |
+
+NV + AMD average 1.01 (final-01/TM_LM_TIMING_2026-10-19.md: flipped to the tape). Quality: no change (identical
+gradients). Digests: the 20 GRAD lines, FWD saved.y 97addc8e06391e35 and LOSS saved 3fdda89c / session c1f70e8e are equal
+hand = tape on NVIDIA and AMD (nv-04, amd-08, p6-01) and on Metal (compile-17, compile-18, compile-21); e.g. d_x
+d87d66e638643566, dw_down fce01e57b66f4484. Evidence: ~/mojolearn-evidence/autograd-buildout-20261019/{nv-04/box,amd-08/box,
+p6-01/nv,p6-01/amd}/tf-{hand,tape}.log, compile-21/tfarm-tape.log.
+
+Deleted by dd4194a23, recoverable at dd4194a23^. Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch`
+(bindings/_mojolearn_transformer.mojo, autograd/rules_transformer.mojo, tools/transformer_tape_arm_check.py). No
+grid_controls entry existed.
