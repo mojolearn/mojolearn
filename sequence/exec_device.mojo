@@ -470,6 +470,33 @@ struct DeviceExec(Exec):
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
 
+    def __init__(out self, ctx: DeviceContext) raises:
+        """An executor on a caller's context, so its launches queue in stream
+        order with the caller's own kernels (lane ag-mamba: the Mamba
+        binding's tape backward records on the binding's process-lifetime
+        context, `core/neural_context.mojo`). It never takes buffers from the
+        shared pool: that pool's storage was created on the sequence
+        context, and a buffer of one context used on another's queue has no
+        ordering. Everything else is the default executor's."""
+        self.ctx = ctx.copy()
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.base = List[Int]()
+        self.size = List[Int]()
+        self.staged = List[HostBuffer[DType.float32]]()
+        self.pend_host = List[HostBuffer[DType.float32]]()
+        self.pend_dst = List[Int]()
+        self.pend_n = List[Int]()
+        self.pooled = False
+        self.pdev = List[Int]()
+        self.pstaged = List[Int]()
+        self.ppend_host = List[Int]()
+        self.pipe_dst = List[Int]()
+        self.pipe_src = List[Int]()
+        self.pipe_n = List[Int]()
+        self.moe_poff = List[Int]()
+        self.retired = List[DeviceBuffer[DType.float32]]()
+        self.retired_pdev = List[Int]()
+
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
 
