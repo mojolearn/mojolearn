@@ -16,7 +16,8 @@ adaptive division by 5. Shuffling is ours: a splitmix64 Fisher-Yates per
 epoch on the host (the reference's is numpy's RandomState, which is not
 restated).
 """
-from sequence.ops import FP, Args, add, fma3, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
+from sequence.ops import FP, Args, add, fma3, gemm_dot, ld, mul, op_bias, op_colsum, op_gemm, st, sub, sumsq_fold
+from autograd.ops import ag_fold_block
 from checks.numerics import ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_tanh
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.adafactor import AF_NORM_BLOCK, af_fold_parts
@@ -55,6 +56,33 @@ comptime MLP_DEVICE_EPOCH_ORDER = MLP_EPOCH_DEV and is_defined[
 ]()
 comptime MLP_L2_BLOCK = AF_NORM_BLOCK
 comptime MLP_ROW_BLOCK = 256
+#: BIT VERSION (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea
+#: 3 and the AMD phase-2 profile, amd-02/AMD_PHASE2_2026-10-19.md: the loss
+#: block was ~30% of the profiled tape step, OP_MLP_L2PART 0.1 ms a launch for
+#: 3 threads each folding a 4096-weight chain, OP_MLP_ROWPART 2 threads of
+#: 256-row chains). Under MLP_BLOCKED_FOLDS with at most 4 layers the
+#: batch's reported loss is 3 launches instead of 5, every chain short:
+#:   OP_MLP_LOSS_A: the row losses (op_mlp_rowloss, a thread a row) and the
+#:     ||W_l||^2 block partials as a second thread range of the same launch,
+#:     blocks of R = ag_fold_block(count_l) weights (sqrt-sized: 128 for
+#:     7168 weights, 64 for 256), each one ascending fma chain from zero;
+#:   OP_MLP_ROWPART: the row-loss block sums, blocks of ag_fold_block(B)
+#:     rows (64 for 512) added ascending from zero;
+#:   OP_MLP_LOSS_C: op_mlp_bloss with each layer's partials folded ascending
+#:     in place of op_mlp_l2fold's launch (layer order, then the layer sums
+#:     added ascending as before).
+#: New fold block sizes, so new reported-loss bits (loss_curve_, and n_iter
+#: through the stopping rule) on every column and the host together; the
+#: gradients, hence the parameters of an epoch, are untouched. A layer of at
+#: most 64 weights or a batch of at most 64 rows is one block (the old chain).
+#: Shared by the hand path and the tape (the loss block is the trainer's).
+#: -D MOJOLEARN_AUTOGRAD_LOSS3_OFF restores the 5-launch block (4096 / 256).
+comptime MLP_LOSS3 = MLP_BLOCKED_FOLDS and not is_defined["MOJOLEARN_AUTOGRAD_LOSS3_OFF"]()
+#: the lane's opcode range (registered in sequence/dispatch.mojo)
+comptime OP_MLP_LOSS_A = 1500
+comptime OP_MLP_LOSS_C = 1501
+comptime OP_MLP3_FIRST = OP_MLP_LOSS_A
+comptime OP_MLP3_LAST = OP_MLP_LOSS_C
 
 comptime ACT_IDENTITY = 0
 comptime ACT_LOGISTIC = 1
@@ -237,6 +265,82 @@ def op_gemm_epi_tail(t: Int, a: Args):
     gemm_epi_tail(t, a)
 
 
+# ------------------------------------------------------------------ the tape's in-register epilogue
+# Lane ag-pass3-impl (AMD phase-2 profile: the pass-2 tiled OP_AGK_GEMM_EPI
+# cost 2x the plain tiled OP_GEMM per launch on MI325X, 636 vs 316 ms for the
+# same five GEMMs a batch). The follower ran AFTER the store: st(C), then an
+# Args record and op_bias / op_act / op_l2grad / op_act_bwd re-loading the
+# word from C and storing it again (a second pass over the output and two
+# Args records a thread). Here the follower's arithmetic is applied to the
+# accumulator in registers and the cell is stored once. SAME BITS: the
+# reloaded word was ld(st(acc)) = ftz(ftz(acc)) = acc (fma3 already flushes),
+# and every other operand and operation is the follower's, in its order.
+# The bodies below are op_act's and op_act_bwd's verbatim (the hand path's
+# own ops are left as they are).
+@always_inline
+def act_value(z_in: Float32, k: Int) -> Float32:
+    """op_act's body on a value: act(z), activation code k (not softmax)."""
+    var z = z_in
+    if k == ACT_LOGISTIC:
+        z = ftz(identical_sigmoid(z))
+    elif k == ACT_TANH:
+        z = ftz(identical_tanh(z))
+    elif k == ACT_RELU:
+        z = z if z > Float32(0.0) else Float32(0.0)
+    return z
+
+
+@always_inline
+def act_bwd_value(d_in: Float32, z: Float32, k: Int) -> Float32:
+    """op_act_bwd's body on values: delta times act'(z), z the activation."""
+    var d = d_in
+    if k == ACT_LOGISTIC:
+        d = mul(mul(d, z), sub(Float32(1.0), z))
+    elif k == ACT_TANH:
+        d = mul(d, sub(Float32(1.0), mul(z, z)))
+    elif k == ACT_RELU:
+        if z == Float32(0.0):
+            d = Float32(0.0)
+    return d
+
+
+@always_inline
+def gemm_epi_value(
+    acc: Float32, ci: Int, n: Int, epi: Int, epi_arg: Int, p3: FP, f0: Float32, f1: Float32,
+) -> Float32:
+    """gemm_epi_tail's result for dense cell ci (column n) computed from the
+    GEMM's accumulator: EPI_BIAS_ACT act(acc + p3[n]) (epi_arg the activation,
+    0 none); EPI_L2GRAD (acc + f0 p3[ci]) / f1; EPI_ACT_BWD acc act'(p3[ci]);
+    otherwise acc."""
+    if epi == EPI_BIAS_ACT:
+        var z = add(acc, ld(p3, n))
+        if epi_arg != 0:
+            z = act_value(z, epi_arg)
+        return z
+    if epi == EPI_L2GRAD:
+        return div(fma3(f0, ld(p3, ci), acc), f1)
+    if epi == EPI_ACT_BWD:
+        return act_bwd_value(acc, ld(p3, ci), epi_arg)
+    return acc
+
+
+@always_inline
+def op_agk_gemm_epi(t: Int, a: Args):
+    """OP_AGK_GEMM_EPI's one-thread body (the launch where the tile is off:
+    an edge under GT_MIN_EDGE, Apple): op_gemm's chain for cell t, then
+    gemm_epi_value, one store. The same word as op_gemm_epi. Dense C
+    (i8 = i1), no accumulate (i7 = 0), as the tape launches it."""
+    var n_cols = a.i1
+    var m = t // n_cols
+    var n = t - m * n_cols
+    var ci = m * a.i8 + n
+    var acc = Float32(0.0)
+    if a.i7 != 0:
+        acc = ld(a.p2, ci)
+    acc = gemm_dot(a.p0, m * a.i3, a.i4, a.p1, n * a.i6, a.i5, a.i2, acc)
+    st(a.p2, ci, gemm_epi_value(acc, ci, n, a.i9, a.i10, a.p3, a.f0, a.f1))
+
+
 def op_colsum_div(t: Int, a: Args):
     """`op_colsum` then `op_divs` of the same element by f0: one launch."""
     op_colsum(t, a)
@@ -340,6 +444,68 @@ def op_mlp_rowpart(t: Int, a: Args):
     for k in range(lo, hi):
         s = add(s, ld(a.p0, k))
     st(a.p1, t, s)
+
+
+# ------------------------------------------------------------------ pass-3 loss block (MLP_LOSS3)
+@always_inline
+def mlp_l2_blocks(count: Int) -> Int:
+    """MLP_LOSS3: the number of ||W||^2 blocks of a layer of `count` weights
+    (blocks of ag_fold_block(count))."""
+    var r = ag_fold_block(count)
+    return (count + r - 1) // r
+
+
+@always_inline
+def op_mlp_loss_a(t: Int, a: Args):
+    """MLP_LOSS3, launch 1 of the loss block, i3 + (weight blocks) threads.
+    t < i3 (the batch rows): op_mlp_rowloss's row t (p0 prediction, p1
+    target, p2 delta, p3 row loss, i0 loss, i1 O). t >= i3: weight block
+    t - i3 of the i2 = L <= 4 layers (op_sumsq's (offset, count) pairs in
+    i4..i11) concatenated in layer order; layer l's blocks are
+    ag_fold_block(count_l) weights: p5[t - i3] = the block's p4[off + lo + k]^2
+    folded k ascending from zero (sumsq_fold)."""
+    if t < a.i3:
+        op_mlp_rowloss(t, a)
+        return
+    var rest = t - a.i3
+    for l in range(a.i2):
+        var oc = _layer_oc(a, l)
+        var r = ag_fold_block(oc[1])
+        var nb = (oc[1] + r - 1) // r
+        if rest < nb:
+            var lo = rest * r
+            st(a.p5, t - a.i3, sumsq_fold(a.p4, oc[0] + lo, min(r, oc[1] - lo), 1))
+            return
+        rest -= nb
+
+
+@always_inline
+def op_mlp_loss_c(t: Int, a: Args):
+    """MLP_LOSS3, launch 3, one thread: op_mlp_bloss (p0 row losses unused,
+    p2[i0] the batch loss, i1 B, i2 O, i3 L, i4 loss, f0 = 0.5 alpha, p3 the
+    i5 row-block sums) with ||W_l||^2 = layer l's i(6 + l) block partials of
+    p1 (layers concatenated) added ascending from zero, then the layer sums
+    added ascending, as op_mlp_l2fold then op_mlp_bloss add them."""
+    var B = a.i1
+    var s = af_fold_parts(a.p3, a.i5)
+    var data: Float32
+    if a.i4 == LOSS_SQUARED:
+        data = div(div(s, Float32(B * a.i2)), Float32(2.0))
+    else:
+        data = div(s, Float32(B))
+    var q = Float32(0.0)
+    var start = 0
+    for l in range(a.i3):
+        var nb = a.i6
+        if l == 1:
+            nb = a.i7
+        elif l == 2:
+            nb = a.i8
+        elif l == 3:
+            nb = a.i9
+        q = add(q, af_fold_parts(a.p1 + start, nb))
+        start += nb
+    st(a.p2, a.i0, add(data, div(mul(a.f0, q), Float32(B))))
 
 
 # ------------------------------------------------------------------ nr-small device epoch (D13)

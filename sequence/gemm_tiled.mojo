@@ -54,8 +54,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from sequence.ops import FP, Args, add, fma3, ld, st
-from sequence.mlp import div, gemm_epi_tail
+from sequence.ops import FP, add, fma3, ld, st
+from sequence.mlp import div, gemm_epi_value
 
 comptime GT_V2 = not (
     is_defined["MOJOLEARN_IDN_SEQ_GEMM_TILED_V2_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -182,8 +182,8 @@ def seq_gemm_epi_tiled_kernel(
 ):
     """OP_GEMM_EPI on the tile (lane ag-pass2-kernels, the tape's
     OP_AGK_GEMM_EPI): seq_gemm_tiled_kernel's chain into a dense C (row
-    stride N, no accumulate), then on the word this thread just stored
-    op_gemm_epi's follower verbatim (sequence/mlp.mojo gemm_epi_tail: i9 =
+    stride N, no accumulate), with op_gemm_epi's follower applied to the
+    accumulator before the one store (sequence/mlp.mojo gemm_epi_value: i9 =
     epi, i10 = epi_arg, f0, f1, p3), indexed by the cell's dense index as
     op_gemm_epi indexes it by its thread. The same words as op_gemm_epi.
     colsum != 0 (i11, lane ag-pass3-impl): also p4[n] = div(sum_k B(k, n), f1),
@@ -263,17 +263,10 @@ def seq_gemm_epi_tiled_kernel(
         barrier()
         k0 += GT_K
     if live:
-        st(pc, ci, acc)
-        var e = Args()
-        e.p2 = pc
-        e.p3 = p3
-        e.i1 = N
-        e.i8 = N
-        e.i9 = Int(epi)
-        e.i10 = Int(epi_arg)
-        e.f0 = f0
-        e.f1 = f1
-        gemm_epi_tail(ci, e)
+        # the follower applied to the accumulator, one store (lane
+        # ag-pass3-impl; it used to store, build an Args record and reload
+        # the word through gemm_epi_tail: the same words, a second pass)
+        st(pc, ci, gemm_epi_value(acc, ci, n, Int(epi), Int(epi_arg), p3, f0, f1))
     if cs_on:
         # op_divs on op_colsum's stored word: div(ld(st(cs)), f0) = div(cs, f1)
         # (cs is already flushed by add)

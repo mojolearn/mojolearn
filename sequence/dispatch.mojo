@@ -118,6 +118,7 @@ from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, o
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
+from sequence.mlp import OP_MLP3_FIRST, OP_MLP3_LAST, OP_MLP_LOSS_A, OP_MLP_LOSS_C, op_agk_gemm_epi, op_mlp_loss_a, op_mlp_loss_c
 from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
@@ -201,7 +202,24 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert OP_P1_LAST < OP_LS_FIRST or OP_P1_FIRST > OP_LS_LAST, "fused opcodes overlap the loss family"
     comptime assert OP_P1_LAST < OP_AGM_FIRST or OP_P1_FIRST > OP_AGM_LAST, "fused opcodes overlap the model family"
     comptime assert OP_P1_LAST < OP_AGK_FIRST or OP_P1_FIRST > OP_AGK_LAST, "fused opcodes overlap the kernel family"
-    comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
+    # The pass-3 MLP loss block (lane ag-pass3-impl, sequence/mlp.mojo
+    # OP_MLP_LOSS_*, 1500..), disjoint from every autograd range and the scans.
+    comptime assert OP_MLP3_FIRST <= OP_MLP3_LAST, "pass-3 MLP opcode range is empty"
+    comptime assert OP_MLP3_FIRST > OP_AG_LAST or OP_MLP3_LAST < OP_AG_FIRST, "pass-3 MLP opcodes overlap the tape's"
+    comptime assert OP_MLP3_FIRST > OP_AGD_LAST or OP_MLP3_LAST < OP_AGD_FIRST, "pass-3 MLP opcodes overlap the data family"
+    comptime assert OP_MLP3_FIRST > OP_AGO_LAST or OP_MLP3_LAST < OP_AGO_FIRST, "pass-3 MLP opcodes overlap the optim family"
+    comptime assert OP_MLP3_FIRST > OP_LS_LAST or OP_MLP3_LAST < OP_LS_FIRST, "pass-3 MLP opcodes overlap the loss family"
+    comptime assert OP_MLP3_FIRST > OP_AGM_LAST or OP_MLP3_LAST < OP_AGM_FIRST, "pass-3 MLP opcodes overlap the model family"
+    comptime assert OP_MLP3_FIRST > OP_AGK_LAST or OP_MLP3_LAST < OP_AGK_FIRST, "pass-3 MLP opcodes overlap the kernel family"
+    comptime assert OP_MLP3_FIRST > OP_P1_LAST or OP_MLP3_LAST < OP_P1_FIRST, "pass-3 MLP opcodes overlap the fused family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_MLP3_FIRST or OP_CELL_FWD_SCAN > OP_MLP3_LAST) and (
+        OP_CELL_BWD_SCAN < OP_MLP3_FIRST or OP_CELL_BWD_SCAN > OP_MLP3_LAST
+    ), "pass-3 MLP opcode collides with recurrent scan"
+    comptime if OP == OP_MLP_LOSS_A:
+        op_mlp_loss_a(t, a)
+    elif OP == OP_MLP_LOSS_C:
+        op_mlp_loss_c(t, a)
+    elif OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
         apply_autograd_data[OP](t, a)
@@ -212,9 +230,10 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP >= OP_AGM_FIRST and OP <= OP_AGM_LAST:
         apply_model_ops[OP](t, a)
     elif OP == OP_AGK_GEMM_EPI:
-        # the tape's GEMM with epilogue: op_gemm_epi's body (DeviceExec tiles
-        # it where OP_GEMM is tiled; sequence/gemm_tiled.mojo)
-        op_gemm_epi(t, a)
+        # the tape's GEMM with epilogue: op_gemm_epi's words with the follower
+        # applied before the one store (lane ag-pass3-impl; DeviceExec tiles
+        # it where OP_GEMM is tiled, sequence/gemm_tiled.mojo)
+        op_agk_gemm_epi(t, a)
     elif OP >= OP_AGK_FIRST and OP <= OP_AGK_LAST:
         apply_autograd_kernels[OP](t, a)
     elif OP >= OP_P1_FIRST and OP <= OP_P1_LAST:
