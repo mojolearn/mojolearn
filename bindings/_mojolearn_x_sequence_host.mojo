@@ -18,6 +18,7 @@ from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
+from autograd.pyapi import model_fit_py, model_n_params_py, model_predict_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 
 
@@ -86,6 +87,20 @@ def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) rai
 def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return mlp_predict_py(ex, addrs, ip)
+
+
+def model_fit_binding(addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return model_fit_py(ex, addrs, prog, ip, fp)
+
+
+def model_predict_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return model_predict_py(ex, addrs, prog, ptab, ip)
+
+
+def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
+    return model_n_params_py(prog, ptab)
 
 
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -179,6 +194,10 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
+        # the model-description trainer (autograd/model.mojo)
+        m.def_function[model_fit_binding]("model_fit")
+        m.def_function[model_predict_binding]("model_predict")
+        m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         m.def_function[layer_norm_binding]("layer_norm")

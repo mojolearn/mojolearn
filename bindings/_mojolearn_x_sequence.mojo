@@ -16,6 +16,7 @@ from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
+from autograd.pyapi import model_fit_py, model_n_params_py, model_predict_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.opt_resident import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
 from sequence.seq_tensor import (
@@ -166,6 +167,20 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
+def model_fit_binding(addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return model_fit_py(ex, addrs, prog, ip, fp)
+
+
+def model_predict_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return model_predict_py(ex, addrs, prog, ptab, ip)
+
+
+def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
+    return model_n_params_py(prog, ptab)
+
+
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return adafactor_step_py(ex, addrs, ip, fp)
@@ -292,6 +307,10 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[var_forecast_binding]("var_forecast")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
+        # the model-description trainer (autograd/model.mojo)
+        m.def_function[model_fit_binding]("model_fit")
+        m.def_function[model_predict_binding]("model_predict")
+        m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         # the resident optimizer state (sequence/opt_resident.mojo)
