@@ -60,6 +60,8 @@ from sequence.ops import (
     OP_AF_BLK_SUMSQ,
     OP_MLP_L2PART,
     OP_MLP_ROWPART,
+    OP_MLP_LB_PART,
+    OP_MLP_LB_EPOCH_PART,
     OP_LAMB_RATIO,
     OP_LAMB_BLK,
     OP_LAMB_SEGFOLD,
@@ -117,6 +119,12 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return max(a.i0, 1)
     elif OP == OP_AF_BLK_SUMSQ or OP == OP_MLP_L2PART or OP == OP_MLP_ROWPART:
         return max(a.i1, 1)
+    # MLP_LOSSBLOCK: seed elements, row blocks and weight blocks share a
+    # launch; a block thread is a chain of up to ~sqrt(extent) terms
+    elif OP == OP_MLP_LB_PART:
+        return 64
+    elif OP == OP_MLP_LB_EPOCH_PART:
+        return max(a.i4, 1)
     elif OP == OP_LAMB_BLK:
         return max(a.i2, 1) * (2 if a.i1 != 0 else 1)
     elif OP == OP_LAMB_SEGFOLD or OP == OP_LAMB_CLIP or OP == OP_LAMB_TRUST:
