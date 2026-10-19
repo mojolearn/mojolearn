@@ -139,7 +139,7 @@ def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
     # the recurrent fit used to count its launches and print nothing)
     var profile = ag_profile_fit_begin()
     # the backward runs on the tape (AutogradRnnStep)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by SHA_TBD; code recoverable at SHA_TBD^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
     rnn_fit[AutogradRnnStep](ex, net, task, fptr(x_addr, "X"), fptr(y_addr, "y"), N, T, epochs, bs, shuffle, seed,
                              fptr(p_addr, "params"), fptr(losses_addr, "losses"), fptr(lrs_addr, "lrs"), cfg, fval(fp, 5))

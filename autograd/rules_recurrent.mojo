@@ -60,7 +60,7 @@ from sequence.recurrent import (
 # 1M rows, 16-step sequences, hidden 64, b512, 1 epoch, identical: NVIDIA L40S lstm 0.1419 -> 0.1397 s, gru 0.1256 ->
 # 0.1129, rnn 0.0689 -> 0.0645; AMD MI325X lstm 0.1234 -> 0.1236, gru 0.1053 -> 0.1054, rnn 0.0709 -> 0.0718. Bits equal
 # to the hand step on Apple, NVIDIA and AMD (same launches, same arguments).
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
 # MOJOLEARN_AUTOGRAD_RNN_OFF (the hand step) and the old opt-in spelling MOJOLEARN_AUTOGRAD_RNN are refused in
 # core/six_lane_experiment_guards.mojo.

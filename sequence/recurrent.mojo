@@ -371,7 +371,7 @@ struct Work(Movable):
             self.hall.append(ex.alloc((T + 1) * B * H))
             self.call.append(ex.alloc((T + 1) * B * H))
         var tb = T * B if train else 1
-        # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by SHA_TBD; code recoverable at SHA_TBD^.
+        # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
         # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
         # w.dgx, w.dhout0 and w.dhout1 were the hand backward's dGX and dH_out buffers; the tape owns those gradients.
         self.dgh = ex.alloc(tb * GH)
@@ -469,7 +469,7 @@ def head[E: Exec](mut ex: E, net: Net, P: FP, hT: FP, B: Int, yhat: FP) raises:
     bias_rows(ex, yhat, P + net.head() + O * H, yhat, B, O)
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
 # The hand-chained backward (`backward`: head dW/db, the zeroed h_T delta, per layer the cell or scan
 # backward, dW/db of both projections and the input-projection delta) is gone: rnn_fit's backward is the tape's
@@ -597,7 +597,7 @@ trait RnnStep(Defaultable & Movable & Deinitable):
         ...
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by SHA_TBD; code recoverable at SHA_TBD^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
 # HandStep (the hand-assembled step over forward, head and backward) is gone: AutogradRnnStep is the only step.
 

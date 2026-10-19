@@ -216,7 +216,7 @@ def _bptt[E: Exec](mut ex: E, net: Net, P: List[Float32], x: List[Float32], dy: 
     head and its tape backward (autograd/rules_recurrent.mojo, recorded as
     rnn_forward_autograd records it, keeping layer 0's gx node so its
     gradient can be read back)."""
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by SHA_TBD; code recoverable at SHA_TBD^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch
     # This seam used to read the hand backward (recurrent.backward, w.dgx); it now reads the tape's, which is
     # rnn_fit's only backward, against the same oracle.

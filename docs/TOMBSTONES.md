@@ -31,6 +31,7 @@ in the tables after the sections.
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
+| [`MOJOLEARN_AUTOGRAD_RNN_OFF`](#mojolearn_autograd_rnn_off) | Neural | removed (hand glue, tape is the only path) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_RNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch) |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
 | [`MOJOLEARN_ET_DEVICE_BATCH_65536`](#mojolearn_et_device_batch_65536) | Trees | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ET_DEVICE_BATCH_65536.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch) |
@@ -2391,6 +2392,20 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 
 
 ## Neural
+
+### MOJOLEARN_AUTOGRAD_RNN_OFF
+
+- What it was: the recurrent trainer's hand-written backward glue, `sequence/recurrent.mojo::backward` (head dW / db, the zeroed h_T delta, per layer the cell or scan backward, dW / db of both projections and the input-projection delta) and its step `HandStep` behind the `RnnStep` seam of `rnn_fit`; `-D MOJOLEARN_AUTOGRAD_RNN_OFF` selected it (the old opt-in spelling `-D MOJOLEARN_AUTOGRAD_RNN` selected the tape). The tape step (`autograd/rules_recurrent.mojo`, `AutogradRnnStep` + `RecurrentRules`) runs the same launches with the same arguments and is now `rnn_fit`'s only backward. The kernels stay: `OP_CELL_FWD_H` / `OP_CELL_BWD_H`, the scan `OP_CELL_FWD_SCAN` / `OP_CELL_BWD_SCAN`, `wgrad_blocked`, the forward and `head` (rnn_predict). `Work` lost the hand-only `dgx`, `dhout0`, `dhout1` buffers.
+- Verdict: removed (superseded by the tape, same bits). Deleted 2026-10-19 by `e88ae4e38` on `lane/del-recurrent` (base main `66e0842f8`).
+- Recoverable at `e88ae4e38^`. Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch` (the reverse of the deletion, code files only; it also restores the define-free seams check 5504 reading the hand backward).
+- Files the patch restores: `sequence/recurrent.mojo`, `autograd/rules_recurrent.mojo`, `sequence/pyapi.mojo`, `sequence/checks/seams_check.mojo`.
+- Numbers, one run per arm, HIGGS 1M rows, 16-step sequences, hidden 64, b512, 1 epoch adam, identical (fit seconds):
+  - promotion (rules_recurrent comment): NVIDIA L40S hand -> tape lstm 0.1419 -> 0.1397, gru 0.1256 -> 0.1129, rnn 0.0689 -> 0.0645; AMD MI325X lstm 0.1234 -> 0.1236, gru 0.1053 -> 0.1054, rnn 0.0709 -> 0.0718.
+  - pass 5 (`nv-04/NV_PASS5`, `amd-08/AMD_PASS5`, integration `d85d180f7`), per-step chain hand -> tape: NV lstm 0.1424 -> 0.1418, gru 0.1160 -> 0.1158, rnn 0.0676 -> 0.0671; AMD lstm 0.1206 -> 0.1207, gru 0.1021 -> 0.1022, rnn 0.0672 -> 0.0688; scan hand -> tape: NV lstm 0.1249 -> 0.1245, gru 0.1007 -> 0.1008, rnn 0.0564 -> 0.0563; AMD lstm 0.1388 -> 0.1399, gru 0.1138 -> 0.1143, rnn 0.0591 -> 0.0608. Bits equal in all four builds on both vendors.
+  - digests: pass 5 hand == tape `2750066708f1fba2` / `8762faa28d968fcd` / `c81d55d6d95169f4` (lstm / gru / rnn); after the pass-6 split-K bit version (`p6-01`, integration `fda883af2`) the tape default gives `4e66c1cbd7407de4` / `9c78fa0c45f3086c` / `2e01911ac0fd527a` on NVIDIA and AMD, now stored in `sequence/checks/rnn_fit_digests.json` (`tools/sequence_speed.py --algos lstm,gru,rnn --expect sequence/checks/rnn_fit_digests.json`).
+- Checks: `sequence/checks/seams_check.mojo` seam 5504 now reads the tape's dW_ih and gx gradient against the fold-order oracle `o_bptt_dw` (sequence/checks/oracle.mojo) (its sabotage patch `seam_5504_bptt_fold.patch` targets the RNN_LINEAR rule); `sequence/checks/rnn_scan_check.mojo` (scan vs chain kernels) is unchanged.
+- Guard refusal (core/six_lane_experiment_guards.mojo, block "Lane del-recurrent"): `MOJOLEARN_AUTOGRAD_RNN_OFF` and `MOJOLEARN_AUTOGRAD_RNN`. No grid_controls entry existed.
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_RNN_OFF`, **removed**.
 
 ### MOJOLEARN_AFN_OPT_FUSE_SCAN
 
