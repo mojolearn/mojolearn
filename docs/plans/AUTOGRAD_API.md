@@ -23,6 +23,8 @@ that decides each migration. Implementation record: `NATIVE_AUTOGRAD.md`.
 - Adapters: `autograd/layers.mojo` (`layer_norm`, `NeuralRules`) and
   `autograd/rules_recurrent.mojo` (`rnn_linear`, `rnn_layer`,
   `rnn_last_step`, `RecurrentRules`, `AutogradRnnStep`).
+  `autograd/rules_mamba.mojo` (`Mamba1Rules`, `Mamba2Rules`, the
+  `mamba*_tape_backward[_stack]` assemblies).
 - Trainers on the tape, opt-in: MLP (`-D MOJOLEARN_AUTOGRAD_MLP`,
   `sequence/mlp_fit.mojo`), recurrent (`-D MOJOLEARN_AUTOGRAD_RNN`, the
   `RnnStep` seam in `sequence/recurrent.mojo::rnn_fit`).
@@ -31,7 +33,7 @@ Constraints that carry into any public surface:
 
 - Every op is a parallel launch with a fixed fold order; identity across
   Apple, NVIDIA and AMD comes from the ops, not from the tape.
-- Tags of custom rules are per family (LayerNorm 1, recurrent 16-18). A
+- Tags of custom rules are per family (LayerNorm 1, recurrent 16-18, Mamba 48-63). A
   composite `NeuralRules` that dispatches every family is the target once
   the module graph allows it without an import cycle: today
   `autograd.rules_recurrent` imports `sequence.recurrent`, which imports no
@@ -74,6 +76,22 @@ kernels. What stays hand-written becomes a custom rule.
    (`mamba/impl/ops/selective_scan_backward.mojo`,
    `mamba/impl/ops/mamba2_ssd_backward.mojo`), the conv tap kernels and the
    `mamba_bwd_*_into` gate/norm kernels, each as one rule.
+   Code-complete under `MOJOLEARN_AUTOGRAD_MAMBA` (lane ag-mamba, not yet
+   compiled or run): `autograd/rules_mamba.mojo` records each block over the
+   forward's own stage buffers as custom nodes (Mamba-1: norm, in_proj,
+   conv, x_proj, dt, scan, gate, out_proj, tags 48-55; Mamba-2: norm,
+   in_proj, SSD, gated norm, out_proj, tags 56-60), the residual as a tape
+   add, blocks chained through it (`mamba1_tape_backward_stack`,
+   `mamba2_tape_backward_stack`), one `backward_with_rules`. The tape runs
+   on `DeviceExec(ctx)` over the binding's own context. Every rule launches
+   the hand kernels with their arguments; the tape owns the three joins the
+   hand path fused (residual into the norm, du's D/scan/x_proj join, the
+   dP / dXP / in_proj packs), in the hand order, with -0.0 standing in for
+   the terms another node supplies. Expected: same bits as the hand path;
+   the only possible differences are IDENTICAL-mode subnormals that the
+   tape flushes and a hand copy did not (header of the module).
+   Check: `pixi run check-mamba-tape-backward`. Mamba-3 stays hand-chained
+   (it shares neither kernel set).
 4. Language-model trainers last: they compose 2 and 3 plus embedding and
    loss; nothing new stays hand-written.
 
