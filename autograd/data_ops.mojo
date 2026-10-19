@@ -16,6 +16,7 @@
 # no mask buffer lives across forward and backward, and nothing has to be
 # kept in sync between them.
 from sequence.ops import Args, ld, st, mul
+from autograd.ops import AG_VEC, F4, ld4, st4
 from core.philox_neural import neural_unit_at
 
 # Codes OP_AGD_FIRST..OP_AGD_LAST are this family. They sit apart from the
@@ -76,6 +77,33 @@ def op_ag_dropout_vjp(t: Int, a: Args):
     if _keep(t, a):
         g = mul(ld(a.p0, t), a.f1)
     st(a.p1, t, g)
+
+
+@always_inline
+def _dropout4(t0: Int, a: Args):
+    """op_ag_dropout_fwd / op_ag_dropout_vjp for elements t0 .. t0 + 3 (the
+    same coin per element, the same multiply on the same flushed word; one
+    16-byte load and store, lane ag-pass6-fold idea E). p0 the source, p1
+    the destination in both bodies."""
+    var x = ld4(a.p0, t0)
+    var y = F4(0)
+    comptime for k in range(AG_VEC):
+        if _keep(t0 + k, a):
+            y[k] = mul(x[k], a.f1)
+    st4(a.p1, t0, y)
+
+
+@always_inline
+def ag_data_vec4_op[OP: Int]() -> Bool:
+    """The OP_AGD_* codes with a four-element body."""
+    return OP == OP_AG_DROPOUT_FWD or OP == OP_AG_DROPOUT_VJP
+
+
+@always_inline
+def apply_autograd_data_vec4[OP: Int](t0: Int, a: Args):
+    """Elements t0 .. t0 + 3 of OP (ag_data_vec4_op[OP]())."""
+    comptime if OP == OP_AG_DROPOUT_FWD or OP == OP_AG_DROPOUT_VJP:
+        _dropout4(t0, a)
 
 
 @always_inline
