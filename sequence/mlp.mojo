@@ -364,7 +364,9 @@ def gemm_epi_value(
 @always_inline
 def op_agk_gemm_epi(t: Int, a: Args):
     """OP_AGK_GEMM_EPI's one-thread body (the launch where the tile is off:
-    an edge under GT_MIN_EDGE, Apple): op_gemm's chain for cell t, then
+    K under GT_MIN_K, a non-dense C, Apple, FAST; under
+    MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1 also an edge under GT_MIN_EDGE;
+    sequence/gemm_tiled.mojo seq_gemm_route): op_gemm's chain for cell t, then
     gemm_epi_value, one store. The same word as op_gemm_epi. Dense C
     (i8 = i1), no accumulate (i7 = 0), as the tape launches it."""
     var n_cols = a.i1
