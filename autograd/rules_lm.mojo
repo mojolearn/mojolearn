@@ -87,6 +87,7 @@ from sequence.exec_trait import Exec
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
 from core.device_scan import device_first_nonfinite
+from autograd.refuse_scan import DeferredNonfiniteScan
 from gemm.contract import OP_NT
 from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.neural_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
@@ -114,6 +115,18 @@ from autograd.rules_transformer import (
 
 comptime AUTOGRAD_LM = is_defined["MOJOLEARN_AUTOGRAD_LM"]()
 
+# Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: each
+# layer's refusal scan of its d_out (_refuse_nonfinite) queues its verdict
+# on the device (autograd/refuse_scan.mojo DeferredNonfiniteScan) at the
+# same queue position, reading the same words, and the step reads every
+# verdict at its one closing wait: n_layers drains a step become one. The
+# first refused layer in backward order raises the same error as before
+# (checked before any other error the backward raised, so a NaN still
+# reports as the refusal); the step's gradients are written by then.
+# Accepted steps: no kernel or order moves, the same bits.
+# -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF keeps one wait per layer (arm A).
+comptime LM_REFUSE_DEFER = not is_defined["MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF"]()
+
 # Tags 64-71 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63).
 comptime LM_EMBEDDING = 64
 comptime LM_HEAD = 65
@@ -125,6 +138,8 @@ comptime _I32Ref = MutPointer[DeviceBuffer[DType.int32], MutUntrackedOrigin]
 comptime _BstRef = MutPointer[LlamaBackwardStages, MutUntrackedOrigin]
 comptime _FwdRef = MutPointer[LlamaDeviceStages, MutUntrackedOrigin]
 comptime _RunsRef = MutPointer[List[OwnedEmbeddingRuns], MutUntrackedOrigin]
+comptime _ScansRef = MutPointer[List[DeferredNonfiniteScan], MutUntrackedOrigin]
+comptime _LayersRef = MutPointer[List[Int], MutUntrackedOrigin]
 
 
 @always_inline
@@ -198,6 +213,10 @@ struct LmRules(BackwardRules):
     var emb_run_begin: _I32Ref
     var emb_perm: _I32Ref
     var emb_runs: _RunsRef
+    # idea J: the deferred refusal scans and their layers, in backward
+    # order (the trainer owns both lists; null when LM_REFUSE_DEFER is off)
+    var scans: _ScansRef
+    var scan_layers: _LayersRef
 
     def __init__(
         out self, ctx: DeviceContext, var bsts: List[_BstRef], var fwds: List[_FwdRef], var eps: List[Float32],
@@ -207,7 +226,7 @@ struct LmRules(BackwardRules):
         logits: _F32Ref, ce_dlogits: _F32Ref, ce_weights: _F32Ref, ce_expo: _F32Ref, ce_denom: _F32Ref,
         ce_logp: _F32Ref, ce_max: _F32Ref, head_ws: _F32Ref, head_bwd_ws: _F32Ref,
         targets: _I32Ref, ids: _I32Ref, emb_counts: _I32Ref, emb_run_begin: _I32Ref, emb_perm: _I32Ref,
-        emb_runs: _RunsRef,
+        emb_runs: _RunsRef, scans: _ScansRef, scan_layers: _LayersRef,
     ):
         self.ctx = ctx.copy()
         self.bsts = bsts^
@@ -245,6 +264,8 @@ struct LmRules(BackwardRules):
         self.emb_run_begin = emb_run_begin
         self.emb_perm = emb_perm
         self.emb_runs = emb_runs
+        self.scans = scans
+        self.scan_layers = scan_layers
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         # Never: every kernel overwrites every element of the destination it
@@ -298,6 +319,11 @@ struct LmRules(BackwardRules):
         # llama_decoder_layer_backward_device's first device read: the
         # incoming gradient is refused by bits before any of its stages.
         var d = _view(self.ctx, upstream, n)
+        comptime if LM_REFUSE_DEFER:
+            # the verdict is read at the step's closing wait (byte_backward_autograd)
+            self.scans[].append(DeferredNonfiniteScan(self.ctx, d, n))
+            self.scan_layers[].append(layer)
+            return
         var bad = device_first_nonfinite(self.ctx, d, n)
         if bad >= 0:
             raise Error(
@@ -433,7 +459,10 @@ def byte_backward_autograd(
     Writes exactly what the hand walk writes: d_h, dw_lm (and ce_dlogits),
     every layer's `bsts[k]` gradients (d_x and the nine weight gradients)
     and dw_emb, with the same kernels on the same buffers. The caller packs
-    them into its flat gradient as before."""
+    them into its flat gradient as before.
+
+    A NaN or infinity in a layer's incoming gradient raises an error; the
+    step's gradients may already have been written when it does."""
     var n_layers = len(fwds)
     if n_layers < 1 or len(bsts) != n_layers or len(ws) != n_layers:
         raise Error("byte LM backward (autograd): one forward stage, backward stage and weight set per layer")
@@ -478,6 +507,8 @@ def byte_backward_autograd(
         loss = tape.custom_into(ex, [lg], _fp(ce_loss), one, 1, 1, LM_CE, Args())
     var seed = tape.variable(ex, one, 1, 1, False)
 
+    var scans = List[DeferredNonfiniteScan]()
+    var scan_layers = List[Int]()
     var bst_refs = List[_BstRef]()
     var fwd_refs = List[_FwdRef]()
     var eps = List[Float32]()
@@ -493,8 +524,36 @@ def byte_backward_autograd(
         _f32(ce_logp), _f32(ce_max), _f32(head_ws), _f32(head_bwd_ws),
         _i32(targets), _i32(ids), _i32(emb_counts), _i32(emb_run_begin), _i32(emb_perm),
         _RunsRef(unsafe_from_address=Int(MutPointer(to=emb_runs))),
+        _ScansRef(unsafe_from_address=Int(MutPointer(to=scans))),
+        _LayersRef(unsafe_from_address=Int(MutPointer(to=scan_layers))),
     )
-    tape.backward_with_rules(ex, loss, seed, rules)
-    tape.release(ex)
-    # Drain the queue before the stages and views go back to the caller.
-    ex.sync()
+    comptime if LM_REFUSE_DEFER:
+        # idea J: a NaN reaching a later rule may make it raise first; the
+        # refusal is the error the hand path gives, so it is checked first.
+        var raised = False
+        var msg = String()
+        try:
+            tape.backward_with_rules(ex, loss, seed, rules)
+        except e:
+            raised = True
+            msg = String(e)
+        if not raised:
+            tape.release(ex)
+        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
+            scans[i].enqueue_readback(ctx)
+        # Drain the queue before the stages and views go back to the caller.
+        ex.sync()
+        for i in range(len(scans)):  # driver-loop: over decoder layers (one scan each)
+            var bad = scans[i].result_after_sync()
+            if bad >= 0:
+                raise Error(
+                    String("llama backward: NaN or infinity in d_residual2 of block ") + String(scan_layers[i])
+                    + " at flat index " + String(bad) + " REFUSED"
+                )
+        if raised:
+            raise Error(msg)
+    else:
+        tape.backward_with_rules(ex, loss, seed, rules)
+        tape.release(ex)
+        # Drain the queue before the stages and views go back to the caller.
+        ex.sync()
