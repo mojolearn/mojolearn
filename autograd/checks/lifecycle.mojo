@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-from autograd import Tape, Tensor
+from autograd import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
-from sequence.ops import Args, FP
+from sequence.ops import Args, FP, OP_COPY
 from autograd.ops import ADD, TANH
 from autograd.checks.support import check_values
 
@@ -107,6 +107,33 @@ def _upload[E: Exec](mut ex: E, dst: FP, mut values: List[Float32]) raises:
     ex.upload(dst, FP(unsafe_from_address=Int(values.unsafe_ptr())), len(values))
 
 
+@fieldwise_init
+struct _PassRules(BackwardRules):
+    """Tag 7: an identity op, its upstream copied to its input's gradient.
+    Tag 8: a pass-through recorded with custom_into_shared (its gradient
+    is its input's), so it writes nothing."""
+    def supports(self, tag: Int) -> Bool:
+        return tag == 7 or tag == 8
+
+    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
+
+    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        return False
+
+    def apply[E: Exec](
+        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
+        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
+    ) raises:
+        if tag == 7:
+            var a = Args()
+            a.p0 = upstream
+            a.p1 = gradients[0]
+            ex.launch[OP_COPY](a, rows[0] * cols[0])
+        elif Int(gradients[0]) != Int(upstream):
+            raise Error("pass-through: the shared gradient is not one buffer")
+
+
 def run_alias_checks[E: Exec](mut ex: E) raises:
     """Aliasing and mutation refusals (docs/plans/NATIVE_AUTOGRAD.md,
     "Aliasing and mutation"): overlapping caller storage, a seed over
@@ -191,6 +218,21 @@ def run_alias_checks[E: Exec](mut ex: E) raises:
     except:
         refusals += 1
 
+    # A declared shared gradient (custom_into_shared) is accepted, with the
+    # seed in that one range; a partial overlap of it stays refused (13).
+    tape.reset()
+    var src = tape.tensor(ex, [Float32(5), Float32(7)], 1, 2, True)
+    _upload(ex, free_b, seed_values)
+    var ident = tape.custom_into(ex, [src], free_a, free_b, 1, 2, 7, Args())
+    var through = tape.custom_into_shared(ex, [ident], free_c, ident, 1, 2, 8, Args())
+    var shared_seed = tape.variable(ex, free_b, 1, 2, False)
+    tape.backward_with_rules(ex, through, shared_seed, _PassRules())
+    check_values("shared_gradient", tape.gradients(ex, src), [Float32(1), Float32(-2)])
+    try:
+        var bad = tape.custom_into(ex, [src], free_d, free_b + 1, 1, 2, 7, Args())
+    except:
+        refusals += 1
+
     # mark_mutated: an output recorded before the mark refuses (10); one
     # recorded after it differentiates.
     tape.reset()
@@ -228,12 +270,12 @@ def run_alias_checks[E: Exec](mut ex: E) raises:
     except:
         refusals += 1
     tape.reset()
-    if refusals != 12:
-        print("FAIL alias refusals", refusals, "of 12")
+    if refusals != 13:
+        print("FAIL alias refusals", refusals, "of 13")
         raise Error("autograd did not refuse every aliasing or mutation violation")
     tape.release(ex)
     ex.free(free_a)
     ex.free(free_b)
     ex.free(free_c)
     ex.free(free_d)
-    print("PASS alias refusals=12 seed_in_place=2")
+    print("PASS alias refusals=13 seed_in_place=2 shared=1")

@@ -135,11 +135,20 @@ recorded nodes, host side, over graph structure only):
   recorded value or gradient; refused before anything is launched.
 - `custom_into` and `binary_recorded`: the output and the gradient
   destination may not overlap a recorded value or gradient, nor each other.
+- `custom_into_shared(inputs, output, shares, ...)`: the one declared alias.
+  The node's gradient storage is exactly the gradient range of `shares`, one
+  of its inputs whose gradient is caller storage (a pass-through edge: the
+  op's VJP into `shares` is the identity, as a residual add's is into its
+  branch). The node joins `shares`' alias group (`alias_of`); a range equal
+  to a group member's gradient is accepted for that entry only, and every
+  other overlap, a partial one included, stays refused. The transformer and
+  Mamba residual nodes use it.
 - `backward_with_rules`, `backward_from`, `backward_from_preactivation`:
   the seed may not overlap a recorded gradient, except the seed-in-place
   case, where it is exactly the root's gradient range (custom_into's
-  `grad_destination` passed as the seed); an in-place seed cannot also
-  accumulate into a leaf root.
+  `grad_destination` passed as the seed), which every member of the root's
+  alias group shares; an in-place seed cannot also accumulate into a leaf
+  root.
 
 Inference mode (`no_grad`) keeps no gradients and skips these checks. The
 plain operations, `variable` and `custom` take no caller output range (a

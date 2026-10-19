@@ -582,7 +582,7 @@ def llama_decoder_layer_backward_autograd(
     var q_rope = tape.custom_into(ex, [q], _fp(fwd.q_rope), _fp(bst.d_q_rope), m, qw, TF_ROPE, s_rope_q)
     var attn = tape.custom_into(ex, [q_rope, k_rope, v], _fp(fwd.ctxv), _fp(bst.d_attn_ctx), m, qw, TF_ATTENTION, Args())
     var o = tape.custom_into(ex, [attn, g_o], _fp(fwd.o_proj), _fp(bst.d_residual1), m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN))
-    var residual1 = tape.custom_into(ex, [x, o], _fp(fwd.residual1), _fp(bst.d_residual1), m, dm, TF_RESIDUAL, Args())
+    var residual1 = tape.custom_into_shared(ex, [x, o], _fp(fwd.residual1), o, m, dm, TF_RESIDUAL, Args())
     var s_norm2 = Args()
     s_norm2.p0 = _fp(fwd.norm2_sumsq)
     s_norm2.p1 = _fp(bst.norm2_dot)
@@ -596,7 +596,7 @@ def llama_decoder_layer_backward_autograd(
     s_swiglu.p0 = _fp(fwd.silu_out)
     var gated = tape.custom_into(ex, [gate, up], _fp(fwd.gated), _fp(bst.d_mlp_gated), m, it, TF_SWIGLU, s_swiglu)
     var down = tape.custom_into(ex, [gated, g_down], _fp(fwd.down_proj), din, m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN))
-    var residual2 = tape.custom_into(ex, [residual1, down], _fp(fwd.residual2), din, m, dm, TF_RESIDUAL, Args())
+    var residual2 = tape.custom_into_shared(ex, [residual1, down], _fp(fwd.residual2), down, m, dm, TF_RESIDUAL, Args())
 
     # ---- one backward from d(residual2)
     var seed = tape.variable(ex, _fp(d_out), m, dm, False)

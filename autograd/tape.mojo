@@ -73,6 +73,10 @@ struct _Node(ImplicitlyCopyable, Movable):
     # The gradient buffer is caller storage (variable_into, custom_into,
     # binary_recorded with caller_grad): never re-pointed by a backward.
     var caller_grad: Bool
+    # -1, or the first node of the alias group whose one gradient buffer
+    # this node shares (custom_into_shared: a pass-through edge, the node's
+    # gradient IS that input's gradient). Every member holds the same range.
+    var alias_of: Int
 
 
 trait BackwardRules:
@@ -378,7 +382,13 @@ struct Tape(Movable):
             raise Error("invalid tensor handle")
         return x._index
 
-    def _refuse_overlap(self, p: FP, n: Int, values: Bool, what: String) raises:
+    def _alias_root(self, i: Int) -> Int:
+        """The alias group of node i: its first member (i itself when it
+        shares no gradient)."""
+        var a = self._nodes[i].alias_of
+        return i if a < 0 else a
+
+    def _refuse_overlap(self, p: FP, n: Int, values: Bool, what: String, shared: Int = -1) raises:
         """Refuse caller storage [p, p + n) that overlaps a recorded
         tensor's gradient storage, or (values=True) its value storage.
 
@@ -386,7 +396,9 @@ struct Tape(Movable):
         and backward, storage the tape has seen is read-only except through
         tape operations. A host scan over the recorded nodes (graph
         structure, never data); inference mode records no gradients and
-        skips it."""
+        skips it. `shared` >= 0 names an alias group (custom_into_shared):
+        a member's gradient that is exactly [p, p + n) is the declared
+        sharing and accepted; any other overlap is refused."""
         if not self._recording:
             return
         var a = Int(p)
@@ -394,7 +406,8 @@ struct Tape(Movable):
             var node = self._nodes[i]
             var count = node.rows * node.cols
             if node.requires_grad and _ranges_overlap(a, n, Int(node.grad), count):
-                raise Error(what + " overlaps the gradient storage of a recorded tensor")
+                if not (shared >= 0 and self._alias_root(i) == shared and Int(node.grad) == a and count == n):
+                    raise Error(what + " overlaps the gradient storage of a recorded tensor")
             if values and _ranges_overlap(a, n, Int(node.value), count):
                 raise Error(what + " overlaps the value storage of a recorded tensor")
 
@@ -415,6 +428,11 @@ struct Tape(Movable):
             if i == root and Int(node.grad) == a:
                 if accumulate and node.op == LEAF:
                     raise Error("a seed held in the root's own gradient cannot accumulate into it")
+                continue
+            # a member of the root's alias group holds the root's gradient
+            # range itself (custom_into_shared): the same seed in place
+            if (Int(node.grad) == a and node.rows * node.cols == count
+                    and self._alias_root(i) == self._alias_root(root)):
                 continue
             raise Error("backward seed overlaps the gradient storage of a recorded tensor")
 
@@ -544,7 +562,7 @@ struct Tape(Movable):
                 self._stale.append(self._stale_of(parents))
             var at = len(self._nodes)
             self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
-                                     saved, False, True, False, False))
+                                     saved, False, True, False, False, -1))
             return Tensor(Int(self._identity.value()), self._generation, at)
         var requires = leaf_grad
         var start = len(self._parents)
@@ -567,7 +585,7 @@ struct Tape(Movable):
             self._stale.append(self._stale_of(parents))
         var index = len(self._nodes)
         self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False,
-                                 requires and caller_grad))
+                                 requires and caller_grad, -1))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
@@ -1167,6 +1185,48 @@ struct Tape(Movable):
         self._nodes[result._index].op = CUSTOM + tag
         return result
 
+    def custom_into_shared[E: Exec](
+        mut self, mut ex: E, inputs: List[Tensor], output: FP, shares: Tensor,
+        rows: Int, cols: Int, tag: Int, saved: Args,
+    ) raises -> Tensor:
+        """Like custom_into(), with the operation's gradient held in the
+        gradient storage of `shares`, one of its inputs.
+
+        Use it for an operation whose vector-Jacobian product into `shares`
+        is the identity, as a residual add's is into its branch: the two
+        gradients are then one buffer and the backward copies nothing.
+        `shares` must have this output's element count and hold its
+        gradient in caller storage (custom_into, custom_into_shared or
+        variable_into). Its rule must leave that destination as it is.
+        Every other overlap is refused as in custom_into.
+        """
+        if tag < 0 or tag > (1 << 30):
+            raise Error("custom operation tag is out of range")
+        self._shape(rows, cols)
+        var si = self._check(shares)
+        var found = False
+        for t in inputs:  # driver-loop: over node inputs
+            if t._index == si:
+                found = True
+        if not found:
+            raise Error("custom_into_shared: shares must be one of the inputs")
+        var s = self._nodes[si]
+        if self._recording and (not s.requires_grad or not s.caller_grad):
+            raise Error("custom_into_shared: shares must hold its gradient in caller storage")
+        if s.rows * s.cols != rows * cols:
+            raise Error("custom_into_shared: shares must have the output's element count")
+        var group = self._alias_root(si)
+        self._refuse_overlap(output, rows * cols, True, "custom_into_shared: output")
+        self._refuse_overlap(s.grad, rows * cols, True, "custom_into_shared: shared gradient", group)
+        if _ranges_overlap(Int(output), rows * cols, Int(s.grad), rows * cols):
+            raise Error("custom_into_shared: the shared gradient overlaps output")
+        var args = saved
+        var result = self._record(ex, output, rows, cols, CUSTOM, inputs, args, False, s.grad, True)
+        self._nodes[result._index].op = CUSTOM + tag
+        if self._recording:
+            self._nodes[result._index].alias_of = group
+        return result
+
     def binary_recorded[E: Exec](
         mut self, mut ex: E, x: Tensor, y: Tensor, op: Int, output: FP,
         grad_destination: FP = dummy_ptr(), caller_grad: Bool = False,
@@ -1708,7 +1768,9 @@ struct Tape(Movable):
                         a.i0 = n.op
                         a.f0 = n.saved.f0
                         ex.launch[OP_AG_UNARY_VJP](a, p.rows * p.cols)
-                if last_node[parent] >= 0 and (first[edge] or not (
+                # a writes_total edge owns the input's whole gradient: it may
+                # follow other consumers' (in the same decreasing order)
+                if last_node[parent] >= 0 and ((first[edge] and not total[edge]) or not (
                     i < last_node[parent] or (i == last_node[parent] and edge > last_edge[parent])
                 )):
                     raise Error("autograd: gradient contributions applied out of the canonical order")
