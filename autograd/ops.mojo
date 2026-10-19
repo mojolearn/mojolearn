@@ -87,6 +87,25 @@ comptime OP_AGK_GEMM_EPI = 1401
 comptime OP_AGK_FIRST = OP_AGK_BIN_VJP_PART
 comptime OP_AGK_LAST = OP_AGK_GEMM_EPI
 
+
+# Lane ag-pass3-impl (PASS3_IDEAS idea 2): OP_AGK_GEMM_EPI with i11 = 1 also
+# writes p4[n] = (sum over k ascending of B(k, n)) / f1, B dense (i5 = N,
+# i6 = 1): the fused linear node's bias gradient from its dW launch. The
+# tiled kernel folds it from the staged B slab (sequence/gemm_tiled.mojo);
+# where the GEMM runs elsewhere (the one-thread launch, Apple, the host) the
+# executor follows it with this OP_COLSUM_DIV launch. Both are op_colsum
+# then op_divs, the hand MLP's words.
+@always_inline
+def agk_colsum_args(a: Args) -> Args:
+    """OP_COLSUM_DIV's arguments for OP_AGK_GEMM_EPI's column sums."""
+    var c = Args()
+    c.p0 = a.p1
+    c.p1 = a.p4
+    c.i0 = a.i2
+    c.i2 = a.i5
+    c.f0 = a.f1
+    return c
+
 # BIT VERSION (lane ag-pass2-kernels, default on): the fused linear node's
 # bias gradient (tape.linear / linear_into, edge 2) is the tape's blocked
 # fold over the batch rows (two launches, chains of ag_fold_block(rows))
@@ -97,6 +116,22 @@ comptime OP_AGK_LAST = OP_AGK_GEMM_EPI
 # old bits; longer batches get new bits on every column and the host
 # together. -D MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF restores the column sum.
 comptime AUTOGRAD_PASS2_FOLD = not is_defined["MOJOLEARN_AUTOGRAD_PASS2_FOLD_OFF"]()
+
+# BIT VERSION (lane ag-pass3-impl, 2026-10-19, default on; PASS3_IDEAS idea
+# 2): a fused linear node with a bias, a divisor and both a weight and a bias
+# gradient takes db from its dW launch (OP_AGK_GEMM_EPI i11 = 1: the column
+# sums of dz folded from the tile's staged slab on NVIDIA/AMD, the hand
+# path's OP_COLSUM_DIV launch after the GEMM on Apple, the host and the
+# one-thread GEMM). db is then OP_COLSUM_DIV's word on every column: the
+# hand MLP's bits, i.e. AUTOGRAD_PASS2_FOLD's change is undone for these
+# nodes while its launch saving stays (2 db launches a layer -> 0 on the
+# tile, 1 off it). Bits move against pass 2 only for batches of more than
+# ag_fold_block(rows) = 64 rows (pass 2's blocked fold -> the column sum);
+# every column and the host together. Other linear nodes keep pass 2's db.
+# The column sum is one chain over the batch rows a column, run by a thread
+# that also folds its own K = rows GEMM chain in the same tile, so the tile
+# keeps the GEMM's shape of parallelism. -D MOJOLEARN_AUTOGRAD_PASS3_DB_OFF.
+comptime AUTOGRAD_PASS3_DB = not is_defined["MOJOLEARN_AUTOGRAD_PASS3_DB_OFF"]()
 
 # Node kinds recorded by the tape. Binary and unary kinds also travel as a
 # runtime integer (a.i1 / a.i0) inside their operation's body.

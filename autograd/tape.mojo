@@ -21,7 +21,7 @@ from autograd.ops import (
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, LINEAR, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
     ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE, LOSS_SCE,
-    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD,
+    OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, AUTOGRAD_PASS2_FOLD, AUTOGRAD_PASS3_DB,
 )
 from autograd.loss_ops import (
     OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
@@ -162,17 +162,25 @@ def _transpose[E: Exec](mut ex: E, dst: FP, src: FP, src_rows: Int, src_cols: In
 def _gemm_epi[E: Exec](
     mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int,
     sam: Int, sak: Int, sbk: Int, sbn: Int, epi: Int, p3: FP, i10: Int, f0: Float32, f1: Float32,
+    colsum_dst: FP = dummy_ptr(), colsum: Bool = False,
 ) raises:
     """A GEMM and its elementwise follower in one launch, with the argument
     layout of the MLP trainer's gemm_epi (sequence/mlp_fit.mojo). It
     launches OP_AGK_GEMM_EPI, op_gemm_epi's body, which DeviceExec runs on
     the tiled GEMM where OP_GEMM is tiled (lane ag-pass2-kernels): the hand
-    path's words, the tiled kernel's loads."""
+    path's words, the tiled kernel's loads. `colsum` (lane ag-pass3-impl,
+    B dense) also writes colsum_dst[n] = column n of B summed / f1, the
+    hand path's OP_COLSUM_DIV word (autograd/ops.mojo agk_colsum_args)."""
     var a = Args()
     a.p0 = A
     a.p1 = Bm
     a.p2 = C
     a.p3 = p3
+    if colsum:
+        if sbn != 1 or sbk != N:
+            raise Error("autograd: the GEMM epilogue's column sums need a dense B")
+        a.p4 = colsum_dst
+        a.i11 = 1
     a.i0 = M
     a.i1 = N
     a.i2 = K
@@ -928,6 +936,11 @@ struct Tape(Movable):
         #   backward_from_preactivation the root needs no seed copy either.
         #   So the MLP runs exactly the hand path's launches with the hand
         #   path's arguments.
+        # Lane ag-pass3-impl (AUTOGRAD_PASS3_DB, default on): with a bias, a
+        #   divisor and both parameter gradients wanted, db comes out of the
+        #   dW launch (the tile's column-sum epilogue on NVIDIA/AMD; one
+        #   OP_COLSUM_DIV after the GEMM elsewhere): backward 2 a layer on the
+        #   tile (1 for the first layer), the hand path's db words.
         var a = self._nodes[self._check(x)]
         var w = self._nodes[self._check(weight)]
         if a.cols != w.rows:
@@ -1423,10 +1436,14 @@ struct Tape(Movable):
 
     def _linear_vjp[E: Exec](
         mut self, mut ex: E, n: _Node, edge: Int, dst: FP, first: Bool, dz: FP, consumers: List[Int],
+        db_dst: FP, fuse_db: Bool,
     ) raises:
         """Edge `edge` of linear node n into `dst` (the parent's gradient
         for a first contribution, else scratch), from dz = dL/dZ. The calls
-        and arguments are the hand MLP backward's (sequence/mlp_fit.mojo)."""
+        and arguments are the hand MLP backward's (sequence/mlp_fit.mojo).
+        fuse_db (AUTOGRAD_PASS3_DB): edge 1's launch also writes the bias
+        gradient into db_dst (edge 2's destination), and edge 2 launches
+        nothing."""
         var xi = self._parents[n.start]
         var x = self._nodes[xi]
         var w = self._nodes[self._parents[n.start + 1]]
@@ -1437,11 +1454,14 @@ struct Tape(Movable):
         if edge == 1:
             # dW = x^T dz (+ l2 W) / divisor
             if divisor > 0:
+                # (fuse_db: + db = colsum(dz) / divisor from the same launch)
                 _gemm_epi(ex, x.value, dz, dst, fi, fo, rows, 1, fi, fo, 1,
-                          EPI_L2GRAD, w.value, 0, n.saved.f0, divisor)
+                          EPI_L2GRAD, w.value, 0, n.saved.f0, divisor, db_dst, fuse_db)
             else:
                 _gemm(ex, dst, x.value, dz, fi, fo, rows, 1, fi, fo, 1)
         elif edge == 2:
+            if fuse_db:
+                return  # written by edge 1's launch
             # db = column sum of dz over the rows (/ divisor)
             var blocked = False
             comptime if AUTOGRAD_PASS2_FOLD:
@@ -1689,7 +1709,15 @@ struct Tape(Movable):
                     pass  # the accumulate below adds n.grad itself
                 elif n.op < CUSTOM:
                     if n.op == LINEAR:
-                        self._linear_vjp(ex, n, edge, contribution, first[edge], dz, consumers)
+                        # AUTOGRAD_PASS3_DB: with a bias, a divisor and both
+                        # parameter gradients wanted, db rides in dW's launch
+                        var fuse_db = False
+                        comptime if AUTOGRAD_PASS3_DB:
+                            fuse_db = (n.count == 3 and n.saved.i1 == 1 and n.saved.f1 > 0
+                                       and self._nodes[self._parents[n.start + 1]].requires_grad
+                                       and self._nodes[self._parents[n.start + 2]].requires_grad)
+                        var db_dst = contributions[2] if fuse_db else dummy_ptr()
+                        self._linear_vjp(ex, n, edge, contribution, first[edge], dz, consumers, db_dst, fuse_db)
                     elif n.op == MATMUL:
                         var left = self._nodes[self._parents[n.start]]
                         var right = self._nodes[self._parents[n.start + 1]]
