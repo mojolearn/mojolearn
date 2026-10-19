@@ -213,15 +213,18 @@ struct OpsSession[E: Exec & Movable](Movable):
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
         var slot = self._slot(h)
-        self.ex.download(dst, self.tape.value(self.tensors[slot]), self.rows[slot] * self.cols[slot])
+        var src = self.tape.value(self.tensors[slot])
+        var count = self.rows[slot] * self.cols[slot]
+        self.ex.download(dst, src, count)
 
     def scalar(mut self, h: Int) raises -> Float32:
         """The one value of a (1, 1) tensor, read back to the caller."""
         var slot = self._slot(h)
         if self.rows[slot] * self.cols[slot] != 1:
             raise Error("ops: scalar() takes a tensor of one value")
+        var src = self.tape.value(self.tensors[slot])
         var out = List[Float32](length=1, fill=Float32(0))
-        self.ex.download(FP(unsafe_from_address=Int(out.unsafe_ptr())), self.tape.value(self.tensors[slot]), 1)
+        self.ex.download(FP(unsafe_from_address=Int(out.unsafe_ptr())), src, 1)
         return out[0]
 
     def free(mut self, h: Int) raises:
@@ -237,11 +240,15 @@ struct OpsSession[E: Exec & Movable](Movable):
             if self.owned[slot] == 0:
                 self._retire(slot)
             else:
-                self.tensors[slot] = self.tape.variable(
-                    self.ex, FP(unsafe_from_address=self.owned[slot]), self.rows[slot], self.cols[slot],
-                    self.wants_grad[slot] and self.tape.is_recording())
+                var buf = FP(unsafe_from_address=self.owned[slot])
+                var r = self.rows[slot]
+                var c = self.cols[slot]
+                var grad = self.wants_grad[slot] and self.tape.is_recording()
+                var leaf = self.tape.variable(self.ex, buf, r, c, grad)
+                self.tensors[slot] = leaf
         for i in range(len(self.retired)):  # driver-loop: over freed uploads
-            self.ex.free(FP(unsafe_from_address=self.retired[i]))
+            var old = FP(unsafe_from_address=self.retired[i])
+            self.ex.free(old)
         self.retired.clear()
 
     def close(mut self) raises:
@@ -249,10 +256,12 @@ struct OpsSession[E: Exec & Movable](Movable):
         self.tape.release(self.ex)
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if self.live[slot] and self.owned[slot] != 0:
-                self.ex.free(FP(unsafe_from_address=self.owned[slot]))
+                var buf = FP(unsafe_from_address=self.owned[slot])
+                self.ex.free(buf)
             self.live[slot] = False
         for i in range(len(self.retired)):  # driver-loop: over freed uploads
-            self.ex.free(FP(unsafe_from_address=self.retired[i]))
+            var old = FP(unsafe_from_address=self.retired[i])
+            self.ex.free(old)
         self.retired.clear()
         self.ex.sync()
 
@@ -261,13 +270,15 @@ struct OpsSession[E: Exec & Movable](Movable):
         """Differentiate the (1, 1) tensor `h` (a recording session)."""
         if not self.tape.is_recording():
             raise Error("ops: backward needs a recording session (Session(record=True))")
-        self.tape.backward_scalar_with_rules(self.ex, self.tensor(h), NeuralRules(), accumulate)
+        var t = self.tensor(h)
+        self.tape.backward_scalar_with_rules(self.ex, t, NeuralRules(), accumulate)
 
     def gradient_into(mut self, h: Int, dst: FP) raises:
         """The gradient of tensor `h` from the last backward into the caller's memory."""
         var slot = self._slot(h)
         var g = self.tape.gradient(self.tensors[slot])
-        self.ex.download(dst, g, self.rows[slot] * self.cols[slot])
+        var count = self.rows[slot] * self.cols[slot]
+        self.ex.download(dst, g, count)
 
     # ------------------------------------------------------------ operations
     def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int) raises -> Int:
@@ -374,7 +385,9 @@ struct OpsSession[E: Exec & Movable](Movable):
                 raise Error("ops: gather_rows start and count must lie within the indices")
             var g_cols = self.cols[gx]
             var g_dst = self.tape.reserve(self.ex, g_count * g_cols)
-            gather_rows(self.ex, self.tape.value(x[0]), self.tape.value(x[1]), g_start, g_count, g_cols, g_dst)
+            var g_src = self.tape.value(x[0])
+            var g_idx = self.tape.value(x[1])
+            gather_rows(self.ex, g_src, g_idx, g_start, g_count, g_cols, g_dst)
             return self._constant(g_dst, g_count, g_cols, 0)
         elif code == OPS_PERMUTATION:
             _need("permutation", n, 0, 4, ni, 0, nf)
@@ -416,12 +429,14 @@ struct OpsSession[E: Exec & Movable](Movable):
             _need("copy", n, 1, 0, ni, 0, nf)
             var cx = self._slot(hs[0])
             var c_count = self.rows[cx] * self.cols[cx]
+            var c_rows = self.rows[cx]
+            var c_cols = self.cols[cx]
             var c_dst = self.tape.reserve(self.ex, c_count)
             var ca = Args()
             ca.p0 = self.tape.value(x[0])
             ca.p1 = c_dst
             self.ex.launch[OP_COPY](ca, c_count)
-            return self._constant(c_dst, self.rows[cx], self.cols[cx], 0)
+            return self._constant(c_dst, c_rows, c_cols, 0)
         else:
             raise Error("ops: unknown operation code " + String(code))
         return self._add(t, 0, False, 0)
