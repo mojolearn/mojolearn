@@ -11,7 +11,7 @@
 # tie-aware pair count for the AUC), with the sums in the tape's fold order.
 #
 # Class codes and binary labels are float values in executor buffers.
-from autograd.fold import blocked_fold, fold_partials
+from autograd.fold import blocked_fold, fold_partials, fold_partials_bound
 from autograd.ops import AXIS_ALL, ag_fold_block
 from autograd.loss_ops import (
     OP_LS_METRIC_TERM, OP_LS_PACK, OP_LS_BITONIC, OP_LS_SCAN_PART, OP_LS_SCAN_OFFS,
@@ -19,7 +19,8 @@ from autograd.loss_ops import (
     MT_SQUARED, MT_ABSOLUTE, MT_CENTERED, FIN_SQRT, FIN_R2, FIN_AUC,
 )
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args
+from sequence.ops import FP, Args, dummy_ptr
+from autograd.row_ops import AUC_BLOCK_SORT, OP_ROW_BITONIC_BLOCK, ROW_SORT_BLOCK
 from checks.numerics import identical_div
 
 # Counts and indices travel as float values: exact below 2^24.
@@ -53,6 +54,109 @@ def _terms_fold[E: Exec](
     blocked_fold(ex, dst, terms, n, 1, AXIS_ALL, factor, partials)
     ex.free(terms)
     ex.free(partials)
+
+
+struct MetricScratch(Movable):
+    """Reusable executor storage for the metrics' terms and fold partials,
+    so a caller that scores every step allocates once. Grows on demand;
+    `release` returns the storage to the executor that `reserve`d it."""
+
+    var terms: FP
+    var terms_n: Int
+    var partials: FP
+    var partials_n: Int
+
+    def __init__(out self):
+        self.terms = dummy_ptr()
+        self.terms_n = 0
+        self.partials = dummy_ptr()
+        self.partials_n = 0
+
+    def reserve[E: Exec](mut self, mut ex: E, n: Int) raises:
+        """Storage for a metric over n rows."""
+        if n > self.terms_n:
+            if self.terms_n > 0:
+                ex.free(self.terms)
+            self.terms = ex.alloc(n)
+            self.terms_n = n
+        var need = fold_partials_bound(n)
+        if need > self.partials_n:
+            if self.partials_n > 0:
+                ex.free(self.partials)
+            self.partials = ex.alloc(need)
+            self.partials_n = need
+
+    def release[E: Exec](mut self, mut ex: E) raises:
+        if self.terms_n > 0:
+            ex.free(self.terms)
+        if self.partials_n > 0:
+            ex.free(self.partials)
+        self.terms = dummy_ptr()
+        self.partials = dummy_ptr()
+        self.terms_n = 0
+        self.partials_n = 0
+
+
+def _mean_of_terms_into[E: Exec](
+    mut ex: E, kind: Int, p0: FP, p1: FP, n: Int, cols: Int, dst: FP, mut scratch: MetricScratch,
+) raises:
+    """dst[0] = the mean of the n metric terms of `kind`: the launches and
+    the fold of `_mean_of_terms`, so the same bits, with no download and no
+    allocation once `scratch` holds n rows."""
+    _check_rows(n)
+    scratch.reserve(ex, n)
+    var a = Args()
+    a.p0 = p0
+    a.p1 = p1
+    a.p2 = scratch.terms
+    a.i0 = kind
+    a.i1 = cols
+    ex.launch[OP_LS_METRIC_TERM](a, n)
+    blocked_fold(ex, dst, scratch.terms, n, 1, AXIS_ALL, identical_div(Float32(1), Float32(n)), scratch.partials)
+
+
+def accuracy_into[E: Exec](
+    mut ex: E, y_true: FP, y_pred: FP, n: Int, dst: FP, mut scratch: MetricScratch,
+) raises:
+    """`accuracy` written into the executor word dst[0], left on the device."""
+    _mean_of_terms_into(ex, MT_EQUAL, y_true, y_pred, n, 1, dst, scratch)
+
+
+def accuracy_from_scores_into[E: Exec](
+    mut ex: E, y_true: FP, scores: FP, n: Int, classes: Int, dst: FP, mut scratch: MetricScratch,
+) raises:
+    """`accuracy_from_scores` written into the executor word dst[0]."""
+    if classes < 1:
+        raise Error("accuracy needs at least one class column")
+    _mean_of_terms_into(ex, MT_ARGMAX_EQUAL, y_true, scores, n, classes, dst, scratch)
+
+
+def log_loss_into[E: Exec](
+    mut ex: E, y_true: FP, probability: FP, n: Int, classes: Int, dst: FP, mut scratch: MetricScratch,
+) raises:
+    """`log_loss` written into the executor word dst[0]."""
+    if classes < 1:
+        raise Error("log_loss needs at least one probability column")
+    _mean_of_terms_into(ex, MT_LOG_LOSS, y_true, probability, n, classes, dst, scratch)
+
+
+def _sort_blocks[E: Exec](mut ex: E, keys: FP, labels: FP, k_first: Int, k_last: Int, block: Int, blocks: Int) raises:
+    var s = Args()
+    s.p0 = keys
+    s.p1 = labels
+    s.i0 = k_first
+    s.i1 = k_last
+    s.i2 = block
+    ex.launch[OP_ROW_BITONIC_BLOCK](s, blocks)
+
+
+def _bitonic_stage[E: Exec](mut ex: E, keys: FP, labels: FP, padded: Int, k: Int, j: Int) raises:
+    var s = Args()
+    s.p0 = keys
+    s.p1 = labels
+    s.i0 = k
+    s.i1 = j
+    ex.launch[OP_LS_BITONIC](s, padded // 2)
 
 
 def _mean_of_terms[E: Exec](mut ex: E, kind: Int, p0: FP, p1: FP, n: Int, cols: Int) raises -> Float32:
@@ -163,18 +267,30 @@ def roc_auc[E: Exec](mut ex: E, y_true: FP, scores: FP, n: Int) raises -> Float3
     a.p3 = labels
     a.i0 = n
     ex.launch[OP_LS_PACK](a, padded)
-    var k = 2
-    while k <= padded:  # driver-loop: over sort network merge sizes
-        var j = k // 2
-        while j > 0:  # driver-loop: over sort network stages
-            var s = Args()
-            s.p0 = keys
-            s.p1 = labels
-            s.i0 = k
-            s.i1 = j
-            ex.launch[OP_LS_BITONIC](s, padded // 2)
-            j //= 2
-        k *= 2
+    comptime if AUC_BLOCK_SORT:
+        # the stages with a partner distance below the block run inside
+        # blocks of `block` elements (autograd/row_ops.mojo idea I): one
+        # launch for every merge size up to the block, then per larger merge
+        # size its cross-block stages and one block launch; the same network
+        var block = min(padded, ROW_SORT_BLOCK)
+        var nblocks = padded // block
+        _sort_blocks(ex, keys, labels, 2, block, block, nblocks)
+        var k = 2 * block
+        while k <= padded:  # driver-loop: over sort network merge sizes
+            var j = k // 2
+            while j >= block:  # driver-loop: over the network's cross-block stages
+                _bitonic_stage(ex, keys, labels, padded, k, j)
+                j //= 2
+            _sort_blocks(ex, keys, labels, k, k, block, nblocks)
+            k *= 2
+    else:
+        var k = 2
+        while k <= padded:  # driver-loop: over sort network merge sizes
+            var j = k // 2
+            while j > 0:  # driver-loop: over sort network stages
+                _bitonic_stage(ex, keys, labels, padded, k, j)
+                j //= 2
+            k *= 2
     # exclusive positive counts in blocks of the fold's length rule
     var block = ag_fold_block(n)
     var blocks = (n + block - 1) // block
