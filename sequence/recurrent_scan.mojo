@@ -28,6 +28,7 @@ The host executor runs the scan ops as the per-step launches they replace
 """
 from std.gpu import block_idx, thread_idx
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import team_barrier
@@ -85,7 +86,22 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 # the race digests (lstm 27500667, gru 8762faa2, rnn c81d55d6) must hold; the
 # orchestrator's nv and amd ID checks decide it.
 # Launches a layer step: forward T + 2 -> 1, backward T + 2 -> 1.
-comptime SEQ_RNN_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+# APPLE (orchestrator compile-18, 2026-10-19): sequence/checks/rnn_scan_check
+# PASSES on the AMD MI325X (12/12) and FAILS every case on Metal (M4): each
+# scan output buffer is still the check's 7.0 poison, including the h_0 / dh
+# zero stores that come before the first barrier, while the per-step chain on
+# the same device equals the host word for word. On Metal the scan kernel
+# stores nothing at all and no error is raised. The kernels now take seq_kernel's
+# argument form (the integers packed two to an Int64, the element count last;
+# see cell_fwd_scan_kernel); whether that is enough is unproven. Until the check
+# passes on Metal, an Apple build routes every recurrent layer to the per-step
+# chain, which gives the same bits (Apple's digests must still equal NVIDIA and
+# AMD's, and the chain's do). -D MOJOLEARN_SEQ_RNN_SCAN_APPLE puts Apple on
+# the scan for that check and its A/B. has_apple_gpu_accelerator is a
+# property of the build host: an Apple build's host column takes the chain too,
+# with the same bits.
+comptime SEQ_RNN_SCAN_ON_THIS_TARGET = not has_apple_gpu_accelerator() or is_defined["MOJOLEARN_SEQ_RNN_SCAN_APPLE"]()
+comptime SEQ_RNN_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and SEQ_RNN_SCAN_ON_THIS_TARGET and not (
     is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
 comptime SEQ_LSTM_SCAN_IDN = SEQ_RNN_SCAN_IDN
@@ -216,10 +232,20 @@ def op_cell_bwd_scan(row: Int, a: Args):
 
 # ------------------------------------------------------------------ device kernels
 @always_inline
+def _w_lo(w: Int64) -> Int:
+    return Int(Int32(w & 0xFFFFFFFF))
+
+
+@always_inline
+def _w_hi(w: Int64) -> Int:
+    return Int(Int32((w >> 32) & 0xFFFFFFFF))
+
+
+@always_inline
 def _scan_args(
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
-    cell: Int32, B: Int32, H: Int32, T: Int32, i4: Int32,
+    i01: Int64, i23: Int64, i45: Int64,
 ) -> Args:
     #: THE BROKEN-BUNDLE FIX (lane apple-fast-s-seq, 2026-10-05). This built
     #: `Args()` and then overwrote its slots, and was not inlined. `Args()`
@@ -234,8 +260,11 @@ def _scan_args(
     #: builds its Args with the fieldwise constructor in the kernel body
     #: (sequence/exec_device.mojo seq_kernel); this now does the same, inlined,
     #: with no integer-made pointer.
+    #: Since lane ag-pass5-recurrent the integers arrive packed as
+    #: seq_kernel's (exec_device.mojo _pack_ii: i0 | i1 << 32, ...): the
+    #: argument form every working Metal sequence kernel uses.
     return Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
-                Int(cell), Int(B), Int(H), Int(T), Int(i4), 0, 0, 0, 0, 0, 0, 0,
+                _w_lo(i01), _w_hi(i01), _w_lo(i23), _w_hi(i23), _w_lo(i45), _w_hi(i45), 0, 0, 0, 0, 0, 0,
                 Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0),
                 Float32(0.0), Float32(0.0), Float32(0.0), Float32(0.0))
 
@@ -243,17 +272,17 @@ def _scan_args(
 def cell_fwd_scan_kernel(
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
-    cell: Int32, B: Int32, H: Int32, T: Int32, i4: Int32,
+    i01: Int64, i23: Int64, i45: Int64, n: Int64,
 ):
     """One block per batch row, lane u its unit: every step of the forward
     recurrence (`op_cell_fwd_h`), a device-memory barrier between steps.
     The early exit is block-uniform (block_idx only)."""
     var row = Int(block_idx.x)
-    if row >= Int(B):
+    if row >= Int(n):
         return
-    var a = _scan_args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, cell, B, H, T, i4)
+    var a = _scan_args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, i01, i23, i45)
     var u = Int(thread_idx.x)
-    var Hn = Int(H)
+    var Hn = a.i2
     var t = row * Hn + u
     if u < Hn:
         st(a.p3, t, Float32(0.0))
@@ -274,16 +303,16 @@ def cell_fwd_scan_kernel(
 def cell_bwd_scan_kernel(
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
-    cell: Int32, B: Int32, H: Int32, T: Int32, i4: Int32,
+    i01: Int64, i23: Int64, i45: Int64, n: Int64,
 ):
     """One block per batch row: every step of the backward recurrence
     (`op_cell_bwd_h`, s from T - 1 down), a device-memory barrier between."""
     var row = Int(block_idx.x)
-    if row >= Int(B):
+    if row >= Int(n):
         return
-    var a = _scan_args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, cell, B, H, T, i4)
+    var a = _scan_args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, i01, i23, i45)
     var u = Int(thread_idx.x)
-    var Hn = Int(H)
+    var Hn = a.i2
     var t = row * Hn + u
     if u < Hn:
         st(a.p5, t, Float32(0.0))

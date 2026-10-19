@@ -785,18 +785,19 @@ struct DeviceExec(Exec, Movable):
             )
             return
         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
-        # recurrence of a layer, one block per batch row (n = B rows)
+        # recurrence of a layer, one block per batch row (n = B rows); the
+        # integers packed as seq_kernel's (lane ag-pass5-recurrent)
         comptime if OP == OP_CELL_FWD_SCAN:
             self.ctx.enqueue_function[cell_fwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
-                Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), Int64(n),
                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
             )
             return
         comptime if OP == OP_CELL_BWD_SCAN:
             self.ctx.enqueue_function[cell_bwd_scan_kernel](
                 a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
-                Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), Int64(n),
                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
             )
             return
