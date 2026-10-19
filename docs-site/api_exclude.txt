@@ -57,3 +57,6 @@ _mojolearn_linalg.fast_from_bf16	experimental Apple BF16 candidate; installed-re
 _mojolearn_linalg.fast_matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.public_fast_to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.public_fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
+Sequential	autograd model API: checks pending on Apple, NVIDIA and AMD
+ops	operation session (mojolearn.ops.Session): checks pending on CPU, Apple, NVIDIA and AMD
+ops.Session	operation session: checks pending on CPU, Apple, NVIDIA and AMD

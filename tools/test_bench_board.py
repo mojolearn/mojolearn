@@ -155,6 +155,8 @@ STUB_NEURAL = textwrap.dedent(r'''
         sys.exit(3)
     n = int(a.rounds)
     data = "bytes" if a.lane.split("-")[0] in ("lm", "samba") else "gaussian"
+    if a.lane.endswith("-fit") or a.lane == "tape-user-model":
+        data = "higgs"                    # the fit lanes (bench_board_neural.FIT_LANES)
     arms, qual = {}, {}
     for i, arm in enumerate(a.arms.split(",")):
         ours = arm in ("ours", "ours-cpu")
@@ -344,7 +346,9 @@ def test_plan_apple_carries_fast_and_identical_arms():
                           + len([l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"]) + more + tasks + algos)
     for r in races:
         if r["family"] == "neural":
-            assert r["our_arms"] == {"ours": "identical", "ours-fast": "fast"}, r["id"]
+            want = ({"ours-fast": "fast"} if r["lane"] in bb.NEURAL.FIT_LANES
+                    else {"ours": "identical", "ours-fast": "fast"})
+            assert r["our_arms"] == want, r["id"]
             continue
         modes = sorted(set(r["our_arms"].values()))
         assert modes == ["fast", "identical"], r["id"]
@@ -491,8 +495,10 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # race CatBoost only (the tree driver refuses XGBoost/LightGBM there by name on every device): -9 trees cells
     # smoke-fixes r13 (2026-10-14): 333, gbdt-lossguide races `ours-gain0` beside `ours` (+1 cell x 2 datasets);
     # 335, gbdt-depthwise races `ours-prebinned` beside `ours` (+1 cell x 2 datasets)
-    assert len(before) == 99 and sum(len(r["arms"]) for r in before) == 335
-    assert "TOTAL races=%d cells=%d" % (99 + len(algos), 335 + sum(len(r["arms"]) for r in algos)) in text
+    # 2026-10-19 (lane ag-bench): 104 races, 365 cells with the five neural fit lanes, each on Apple
+    # ours-fast + 4 torch GPU settings + mlx-fp32 (+5 races, +30 cells)
+    assert len(before) == 104 and sum(len(r["arms"]) for r in before) == 365
+    assert "TOTAL races=%d cells=%d" % (104 + len(algos), 365 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -504,11 +510,13 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # six GPU inference lanes *-decode and mlp-predict joined Oct 7 2026), each `ours` plus
     # its torch GPU arms: 64 cells identical only, 82 with the Apple FAST arm `ours-fast`
     # (see test_plan_neural_fast_on_apple_only)
+    # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
+    # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
     neural = bb.plan_races("apple", ["identical"], ["neural"])
     assert len(neural) == 18 and sum(len(r["arms"]) for r in neural) == 64
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    assert len(both) == 18 and sum(len(r["arms"]) for r in both) == 82
-    assert "family neural     races=18 cells=82" in text
+    assert len(both) == 23 and sum(len(r["arms"]) for r in both) == 112
+    assert "family neural     races=23 cells=112" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -750,7 +758,13 @@ NEURAL_IDS = [
     "neural/mamba3-decode/gaussian/shape=full",
     "neural/samba-decode/bytes/shape=full",
     "neural/mlp-predict/gaussian/shape=full",
-    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full"]
+    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full",
+    # the whole-fit lanes of the tape-trained models (2026-10-19, lane ag-bench)
+    "neural/mlp-fit/higgs/shape=full", "neural/lstm-fit/higgs/shape=full",
+    "neural/gru-fit/higgs/shape=full", "neural/rnn-fit/higgs/shape=full",
+    "neural/tape-user-model/higgs/shape=full"]
+#: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch
+FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i}
 #: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
 #: minus DECODE_TORCH_TWIN); transformer-decode's twin is a per-token loop, never compiled
 NO_TWIN_DECODE = ("mamba1-decode", "mamba2-decode", "mamba3-decode", "samba-decode")
@@ -772,6 +786,12 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # the Apple FAST neural tier (Oct 3 2026): `ours-fast` beside `ours` on Apple only
     ours = ["ours", "ours-fast"] if vendor == "apple" else ["ours"]
     for r in races:
+        fit = r["id"] in FIT_IDS
+        if fit and vendor == "apple":
+            assert r["our_arms"] == {"ours-fast": "fast"} and r["modes"] == ["fast"], r["id"]
+            assert r["opponents"] == GPU_ARMS[vendor] + ["mlx-fp32"], r["id"]
+            assert r["arms"] == ["ours-fast"] + GPU_ARMS[vendor] + ["mlx-fp32"]
+            continue
         assert r["our_arms"] == ({"ours": "identical", "ours-fast": "fast"} if vendor == "apple"
                                  else {"ours": "identical"})
         assert r["modes"] == (["fast", "identical"] if vendor == "apple" else ["identical"])
@@ -808,8 +828,10 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # +6 inference lanes (Oct 7 2026): apple 64 -> 82, amd 52 -> 64, nvidia 73 -> 88
     # FAIRNESS FIX (2026-10-13 audit): + the mamba-ssm arms on the three Mamba forward lanes
     # (NVIDIA fp32 and tf32: +6; AMD fp32: +3)
-    assert cells == {"apple": 82, "amd": 67, "nvidia": 94}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 18, "cells": cells}}
+    # + the 5 fit lanes (2026-10-19): apple ours-fast + 4 torch + mlx (+30), amd ours + 4 torch (+25),
+    # nvidia ours + 6 torch (+35)
+    assert cells == {"apple": 112, "amd": 92, "nvidia": 129}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 23, "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
@@ -854,16 +876,18 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # LightGBM are refused there by name on every device): Apple 340 -> 331, NVIDIA 273 -> 264; AMD unchanged at 229.
 # smoke-fixes r13 (2026-10-14): gbdt-lossguide races `ours-gain0` beside `ours` (+2 cells per vendor), then
 # gbdt-depthwise `ours-prebinned` beside `ours` (+2 more): Apple 335, NVIDIA 268, AMD 233.
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 335, 128, 82),
-                                                      ("nvidia", 268, 88, 94),
-                                                      ("amd", 233, 84, 67)])
+# 2026-10-19 (lane ag-bench): + the five neural fit lanes: apple 5 x (ours-fast + 4 torch + mlx-fp32) = +30,
+# nvidia 5 x (ours + 6 torch) = +35, amd 5 x (ours + 4 torch) = +25; +5 races everywhere
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 365, 128, 112),
+                                                      ("nvidia", 303, 88, 129),
+                                                      ("amd", 258, 84, 92)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=99 cells=%d" % cells in text
+    assert "TOTAL races=104 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=18 cells=%d" % neural in text
+    assert "family neural     races=23 cells=%d" % neural in text
     assert "neural: ours IDENTICAL" in text
     assert ("ours-fast, the Apple tier" in text) == (vendor == "apple")
     # what is left off the plan is printed by name, never dropped silently

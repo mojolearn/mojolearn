@@ -2,13 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Release gate: the FULL measurement-board smoke on one box (test tooling).
 
-    python3 tools/gate_smoke_box.py <nvidia|amd> <version> <out-root> [setup|smoke|all]
+    python3 tools/gate_smoke_box.py <nvidia|amd> <version> <out-root> [setup|smoke|autograd|all]
 
 setup: the bench venv from the published wheels (mojolearn==<version> and the
 vendor plugin, verified against PyPI) plus every pinned opponent, exactly as
 tools/bench_board.setup_python builds it for a measurement run.
 smoke: tools/gpu_gap_campaign.py --smoke over the vendor's WHOLE plan (no
 --manifest, no --smoke-suspects: every line, not a subset), --smoke-verify-data.
+autograd (2026-10-19, lane ag-bench): tools/autograd_smoke.py's entries on this vendor, 5 s "does it
+start" each: the gradient suite and the MLP identity check from the check binaries the orchestrator built
+into <out-root>/autograd-bin (`tools/autograd_smoke.py build-commands`), and the tiny fit test through the
+installed wheel. A missing binary reads `not built`, never a pass.
 Nothing here times, measures, rents or deletes anything.
 """
 
@@ -93,3 +97,15 @@ if step in ("smoke", "all"):
     mark(phase="smoke", status="done", smoke_rc=rc, smoke_report=str(report), counts=dict(counts),
          smoke_finished=time.time())
     print("GATE_SMOKE vendor=%s rc=%s %s" % (vendor, rc, " ".join("%s=%d" % kv for kv in sorted(counts.items()))))
+
+if step in ("autograd", "all"):
+    amd_env()
+    import autograd_smoke as AS  # noqa: E402
+    report = root / "autograd-smoke.json"
+    mark(phase="autograd", status="running", autograd_started=time.time())
+    arc = AS.run(vendor, str(root / "autograd-bin"), state["python"], str(report))
+    doc = json.loads(report.read_text()) if report.exists() else {}
+    mark(phase="autograd", status="done", autograd_rc=arc, autograd_report=str(report),
+         autograd_counts=doc.get("counts"), autograd_finished=time.time())
+    print("GATE_SMOKE_AUTOGRAD vendor=%s rc=%s %s" % (vendor, arc, " ".join(
+        "%s=%d" % kv for kv in sorted((doc.get("counts") or {}).items()))))

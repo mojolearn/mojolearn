@@ -516,6 +516,9 @@ NEURAL_PINS = ["einops==0.8.1",
                # mamba_ssm), on every vendor. Results raced before this change were wrong for
                # these lanes; apply extra scrutiny.
                "transformers==5.17.0"]
+#: 2026-10-19 (lane ag-bench): the fit lanes' MLX opponent (bench_board_neural.MlxFitArm), Apple only.
+#: The orchestrator may raise the pin; the arm refuses by name on an mlx whose Adam has no bias_correction.
+NEURAL_APPLE_PINS = ["mlx==0.26.1"]
 
 # FAIRNESS FIX (2026-10-13 audit): THE REAL MAMBA OPPONENT (tools/bench_board_neural.py
 # MAMBA_SSM_VENDOR_ARMS), from lane/mamba-opp facde18cc: mamba_ssm's fused kernels, pinned to the
@@ -883,6 +886,10 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 # one race per lane: its own data, not taxi/Istella; IDENTICAL
                 # everywhere, plus the FAST arm (`ours-fast`) on Apple
                 ours = our_arms(fam, modes, lane)
+                if vendor == "apple" and lane in NEURAL.FIT_LANES:
+                    # 2026-10-19 (lane ag-bench): identical is never timed on Apple; the fit lanes
+                    # race ours-fast there (bench_board_neural refuses ours by name as well)
+                    ours.pop("ours", None)
                 if not ours:
                     continue
                 opp = gpu_opponents_first(NEURAL_OPPONENTS[vendor][lane])
@@ -1410,7 +1417,7 @@ def pinned_package_names():
     torch): their installed versions are part of an NVIDIA resume key."""
     names = {"torch"}
     reqs = [r for _, rs in opponent_pins().values() for r in rs]
-    reqs += [r for rs in MORE_PINS.values() for r in rs] + list(NEURAL_PINS)
+    reqs += [r for rs in MORE_PINS.values() for r in rs] + list(NEURAL_PINS) + list(NEURAL_APPLE_PINS)
     # FAIRNESS FIX (2026-10-13 audit): the mamba-ssm opponent's pins and builds are part of the
     # resume key. Results raced before this change were wrong for this lane; apply extra scrutiny.
     reqs += [r for rs in MAMBA_SSM_PINS.values() for r in rs]
@@ -1661,6 +1668,11 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: neural opponent install rc %d for %s (the transformers torch arms "
                   "will refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
+        if vendor == "apple":
+            rc = run_logged(cmd + NEURAL_APPLE_PINS, None, log, 3600)
+            if rc != 0:
+                print("bench_board: neural Apple opponent install rc %d for %s (the mlx-fp32 arms will "
+                      "refuse by name)" % (rc, " ".join(NEURAL_APPLE_PINS)), flush=True)
         # FAIRNESS FIX (2026-10-13 audit): the mamba-ssm arms: two source builds (MAMBA_SSM_BUILD's
         # comment), CUDA on NVIDIA, ROCm/HIP on AMD (unverified at runtime). Results raced before
         # this change were wrong for this lane; apply extra scrutiny.

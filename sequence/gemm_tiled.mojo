@@ -29,7 +29,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from sequence.ops import FP, fma3, ld, st
+from sequence.ops import FP, Args, fma3, ld, st
+from sequence.mlp import gemm_epi_tail
 
 comptime GT_M = 16
 comptime GT_N = 16
@@ -121,3 +122,76 @@ def seq_gemm_tiled_kernel(
         k0 += GT_K
     if live:
         st(pc, ci, acc)
+
+
+def seq_gemm_epi_tiled_kernel(
+    pa: FP, pb: FP, pc: FP, p3: FP,
+    m_rows: Int32, n_cols: Int32, k_len: Int32,
+    sam: Int32, sak: Int32, sbk: Int32, sbn: Int32,
+    epi: Int32, epi_arg: Int32, f0: Float32, f1: Float32,
+):
+    """OP_GEMM_EPI on the tile (lane ag-pass2-kernels, the tape's
+    OP_AGK_GEMM_EPI): seq_gemm_tiled_kernel's chain into a dense C (row
+    stride N, no accumulate), then on the word this thread just stored
+    op_gemm_epi's follower verbatim (sequence/mlp.mojo gemm_epi_tail: i9 =
+    epi, i10 = epi_arg, f0, f1, p3), indexed by the cell's dense index as
+    op_gemm_epi indexes it by its thread. The same words as op_gemm_epi."""
+    comptime assert GT_PAGE_BYTES <= 32768, "seq_gemm_tiled: the slab page must fit every column"
+    var M = Int(m_rows)
+    var N = Int(n_cols)
+    var K = Int(k_len)
+    var ntn = (N + GT_N - 1) // GT_N
+    var b = Int(block_idx.x)
+    var tm = b // ntn
+    var tn = b - tm * ntn
+    var m0 = tm * GT_M
+    var n0 = tn * GT_N
+    var tid = Int(thread_idx.x)
+    var r = tid // GT_N
+    var c = tid - r * GT_N
+    var m = m0 + r
+    var n = n0 + c
+    var live = m < M and n < N
+    var ci = m * N + n
+    var acc = Float32(0.0)
+    var a_s = stack_allocation[GT_M * GT_K, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var b_s = stack_allocation[GT_K * GT_N, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var k0 = 0
+    while k0 < K:
+        var cnt = min(GT_K, K - k0)
+        var q = tid
+        while q < GT_M * GT_K:
+            var row = q // GT_K
+            var kk = q - row * GT_K
+            var v = Float32(0.0)
+            if kk < cnt and m0 + row < M:
+                v = ld(pa, (m0 + row) * Int(sam) + (k0 + kk) * Int(sak))
+            a_s[q] = v
+            q += GT_TPB
+        q = tid
+        while q < GT_K * GT_N:
+            var kk = q // GT_N
+            var col = q - kk * GT_N
+            var v = Float32(0.0)
+            if kk < cnt and n0 + col < N:
+                v = ld(pb, (k0 + kk) * Int(sbk) + (n0 + col) * Int(sbn))
+            b_s[q] = v
+            q += GT_TPB
+        barrier()
+        if live:
+            for i in range(cnt):
+                acc = fma3(a_s[r * GT_K + i], b_s[i * GT_N + c], acc)
+        barrier()
+        k0 += GT_K
+    if live:
+        st(pc, ci, acc)
+        var e = Args()
+        e.p2 = pc
+        e.p3 = p3
+        e.i1 = N
+        e.i8 = N
+        e.i9 = Int(epi)
+        e.i10 = Int(epi_arg)
+        e.f0 = f0
+        e.f1 = f1
+        gemm_epi_tail(ci, e)
