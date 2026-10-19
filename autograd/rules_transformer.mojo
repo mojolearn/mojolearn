@@ -110,12 +110,13 @@ from sequence.exec_trait import Exec
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
 from core.identity_trace import IdentityTrace
-from core.device_scan import DeferredNonfiniteScan, device_first_nonfinite
+from core.device_scan import device_first_nonfinite
+from autograd.refuse_scan import DeferredNonfiniteScan
 from core.step_phase import step_count_launch
 from gemm.contract import OP_NT
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: the
 # refusal scan of d(residual2) writes its verdict to a device word and the
-# call reads it at its own closing wait (core/device_scan.mojo
+# call reads it at its own closing wait (autograd/refuse_scan.mojo
 # DeferredNonfiniteScan), so a layer call drains the queue once instead of
 # twice (the scan's own wait and the pipeline bubble behind it go: NV ~7 us
 # + bubble, AMD ~18 us + bubble of ~3.4 ms). The verdict is the same index
