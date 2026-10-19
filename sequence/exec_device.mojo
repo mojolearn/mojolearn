@@ -44,6 +44,7 @@ from sequence.ops import OP_GEMM_SPLITK
 from std.time import perf_counter_ns
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST
 from sequence.dispatch import apply
+from autograd.fold_kernels import ag_pass6_op, ag_pass6_launch
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from sequence.gemm_tiled import GT_TPB, SEQ_GEMM_TILED, seq_gemm_tiled_blocks, seq_gemm_tiled_kernel, seq_gemm_tiled_on
@@ -801,6 +802,12 @@ struct DeviceExec(Exec, Movable):
                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
             )
             return
+        # lane ag-pass6-fold (autograd/fold_kernels.mojo): the staged fold
+        # leaves, four elements a thread, the transpose tile; the scalar
+        # bodies' words. False: the route rule keeps seq_kernel below.
+        comptime if ag_pass6_op[OP]():
+            if ag_pass6_launch[OP](self.ctx, a, n):
+                return
         # The MoE products as tiled kernels with the items' chains (lane
         # neural-pass29, sequence/moe_tiled.mojo) when the entry grouped the
         # pairs by expert (a.i4 = the block count); MOJOLEARN_SEQ_MOE_TILED=0
