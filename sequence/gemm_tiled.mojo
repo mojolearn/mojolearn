@@ -414,7 +414,8 @@ comptime GR_MICRO = 4
 # are the tile-row-0 threads' add chains over their 4 columns' staged words,
 # k ascending (OP_COLSUM_DIV's word). The rule is a cost boundary: a 64 x 64
 # tile on an edge under 64 is mostly dead cells, so those products keep the
-# 16 x 16 tile (the HIGGS MLP's Z1 K 28 and dW1 M 28 stay on it).
+# 16 x 16 tile (the HIGGS MLP's dW1, M 28, stays on it; its Z1, 512 x 256
+# over K 28, moves to the micro-tile with the same words).
 # Slab page (64 x 33 + 32 x 65) x 4 B = 16.8 KB (< the 32 KB limit).
 # -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF (or MOJOLEARN_IDN_ALL_OFF): the 16 x 16
 # tile for every product with both edges >= 8 (arm A).
