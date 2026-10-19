@@ -156,6 +156,7 @@ def _run[OP: Int](
         dev.upload(dC, _hp(hc0), M * ldc)
         var zero = List[Float32](length=N, fill=0)
         dev.upload(d4, _hp(zero), N)
+        _ = zero^  # keep the host list alive past the upload
         a.p0 = dA
         a.p1 = dB
         a.p2 = dC
@@ -244,6 +245,12 @@ def _run[OP: Int](
     host.free(hC)
     host.free(hp3)
     host.free(hp4)
+    # Mojo frees a local at its last named use, and _hp only reads the
+    # address: without these the host uploads above read freed lists.
+    _ = ha^
+    _ = hb^
+    _ = hc0^
+    _ = h3^
     tally.mix(first)
     tally.mix(first_cs)
     tally.cases += 1
