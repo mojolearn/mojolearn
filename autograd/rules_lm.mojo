@@ -112,7 +112,12 @@ from autograd.rules_transformer import (
     llama_decoder_layer_record,
 )
 
-comptime AUTOGRAD_LM = is_defined["MOJOLEARN_AUTOGRAD_LM"]()
+# The language-model backward runs on the tape by default (promoted 2026-10-19). One run per arm, tools/bench_board_neural.py
+# lm-train-step, ours, full shape: NVIDIA L40S 34.611 -> 35.351 ms (1.02), AMD MI325X 42.939 -> 42.953 ms (1.00); average 1.01;
+# same loss_first_step 9.0155868. Every gradient and updated parameter equals the hand walk word for word on Metal, NVIDIA
+# and AMD (training/checks/lm_tape_backward_check.mojo, 44/44). MOJOLEARN_AUTOGRAD_LM_OFF restores the hand walk for the
+# A/B; the old opt-in spelling is accepted too.
+comptime AUTOGRAD_LM = not is_defined["MOJOLEARN_AUTOGRAD_LM_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_LM"]()
 
 # Tags 64-71 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63).
 comptime LM_EMBEDDING = 64
