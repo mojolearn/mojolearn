@@ -131,6 +131,7 @@ from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
 from autograd.ops import OP_AGK_FIRST, OP_AGK_LAST, OP_AGK_GEMM_EPI, apply_autograd_kernels
+from autograd.ops import OP_AGF_FIRST, OP_AGF_LAST, apply_autograd_fold
 from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
 from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
 from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
@@ -201,6 +202,19 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert OP_P1_LAST < OP_LS_FIRST or OP_P1_FIRST > OP_LS_LAST, "fused opcodes overlap the loss family"
     comptime assert OP_P1_LAST < OP_AGM_FIRST or OP_P1_FIRST > OP_AGM_LAST, "fused opcodes overlap the model family"
     comptime assert OP_P1_LAST < OP_AGK_FIRST or OP_P1_FIRST > OP_AGK_LAST, "fused opcodes overlap the kernel family"
+    # The fold tree's level family (autograd/ops.mojo OP_AGF_*, 1700..; lane
+    # ag-pass3-fold), disjoint from every other autograd range and the scans.
+    comptime assert OP_AGF_FIRST <= OP_AGF_LAST, "fold level opcode range is empty"
+    comptime assert OP_AGF_FIRST > OP_AG_LAST or OP_AGF_LAST < OP_AG_FIRST, "fold level opcodes overlap the tape's"
+    comptime assert OP_AGF_FIRST > OP_AGD_LAST or OP_AGF_LAST < OP_AGD_FIRST, "fold level opcodes overlap the data family"
+    comptime assert OP_AGF_FIRST > OP_AGO_LAST or OP_AGF_LAST < OP_AGO_FIRST, "fold level opcodes overlap the optim family"
+    comptime assert OP_AGF_FIRST > OP_LS_LAST or OP_AGF_LAST < OP_LS_FIRST, "fold level opcodes overlap the loss family"
+    comptime assert OP_AGF_FIRST > OP_AGM_LAST or OP_AGF_LAST < OP_AGM_FIRST, "fold level opcodes overlap the model family"
+    comptime assert OP_AGF_FIRST > OP_AGK_LAST or OP_AGF_LAST < OP_AGK_FIRST, "fold level opcodes overlap the kernel family"
+    comptime assert OP_AGF_FIRST > OP_P1_LAST or OP_AGF_LAST < OP_P1_FIRST, "fold level opcodes overlap the fused family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGF_FIRST or OP_CELL_FWD_SCAN > OP_AGF_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGF_FIRST or OP_CELL_BWD_SCAN > OP_AGF_LAST
+    ), "fold level opcode collides with recurrent scan"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
     elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
@@ -219,6 +233,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_autograd_kernels[OP](t, a)
     elif OP >= OP_P1_FIRST and OP <= OP_P1_LAST:
         apply_pass1[OP](t, a)
+    elif OP >= OP_AGF_FIRST and OP <= OP_AGF_LAST:
+        apply_autograd_fold[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
