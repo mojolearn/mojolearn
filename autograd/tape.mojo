@@ -22,8 +22,16 @@ from autograd.loss_ops import (
     LS_BCE_LOGITS,
 )
 from autograd.data_ops import OP_AG_DROPOUT_FWD, OP_AG_DROPOUT_VJP, DROPOUT, dropout_args
+from std.memory import memcmp
 
 comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
+comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it was used: record the graph again"
+
+
+def _ranges_overlap(a: Int, a_count: Int, b: Int, b_count: Int) -> Bool:
+    """Whether the float32 ranges [a, a + a_count) and [b, b + b_count)
+    (byte addresses, element counts) share a byte."""
+    return a < b + b_count * 4 and b < a + a_count * 4
 
 
 @fieldwise_init
@@ -220,6 +228,13 @@ struct Tape(Movable):
     var _identity: Optional[MutPointer[Int, MutUntrackedOrigin]]
     var _generation: Int
     var _recording: Bool
+    # mark_mutated: one flag per node once any tensor of this generation is
+    # marked (empty until then), True for a node that read a mutated
+    # tensor's old value directly or through its inputs.
+    var _stale: List[Bool]
+    # watch / assert_unchanged: node indices and their host value copies.
+    var _watched: List[Int]
+    var _snapshots: List[List[Float32]]
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -230,6 +245,9 @@ struct Tape(Movable):
         self._identity = None
         self._generation = 0
         self._recording = True
+        self._stale = List[Bool]()
+        self._watched = List[Int]()
+        self._snapshots = List[List[Float32]]()
 
     def no_grad(mut self):
         """Enter inference mode: later operations keep no graph or gradients.
@@ -273,6 +291,9 @@ struct Tape(Movable):
         self._parents.clear()
         self._generation += 1
         self._cursor = 0
+        self._stale.clear()
+        self._watched.clear()
+        self._snapshots.clear()
 
     def _check(self, x: Tensor) raises -> Int:
         if not self._identity:
@@ -282,6 +303,118 @@ struct Tape(Movable):
         if x._index < 0 or x._index >= len(self._nodes):
             raise Error("invalid tensor handle")
         return x._index
+
+    def _refuse_overlap(self, p: FP, n: Int, values: Bool, what: String) raises:
+        """Refuse caller storage [p, p + n) that overlaps a recorded
+        tensor's gradient storage, or (values=True) its value storage.
+
+        The ALIASING RULE (docs/plans/NATIVE_AUTOGRAD.md): between record
+        and backward, storage the tape has seen is read-only except through
+        tape operations. A host scan over the recorded nodes (graph
+        structure, never data); inference mode records no gradients and
+        skips it."""
+        if not self._recording:
+            return
+        var a = Int(p)
+        for i in range(len(self._nodes)):  # driver-loop: over graph nodes
+            var node = self._nodes[i]
+            var count = node.rows * node.cols
+            if node.requires_grad and _ranges_overlap(a, n, Int(node.grad), count):
+                raise Error(what + " overlaps the gradient storage of a recorded tensor")
+            if values and _ranges_overlap(a, n, Int(node.value), count):
+                raise Error(what + " overlaps the value storage of a recorded tensor")
+
+    def _refuse_seed_overlap(self, root: Int, seed: FP, accumulate: Bool) raises:
+        """A backward seed may not overlap any recorded gradient, except
+        the seed-in-place case: exactly the root's own gradient range
+        (custom_into's grad_destination passed as the seed). An in-place
+        seed cannot accumulate into a leaf root (it would add the buffer to
+        itself)."""
+        var a = Int(seed)
+        var count = self._nodes[root].rows * self._nodes[root].cols
+        for i in range(len(self._nodes)):  # driver-loop: over graph nodes
+            var node = self._nodes[i]
+            if not node.requires_grad:
+                continue
+            if not _ranges_overlap(a, count, Int(node.grad), node.rows * node.cols):
+                continue
+            if i == root and Int(node.grad) == a:
+                if accumulate and node.op == LEAF:
+                    raise Error("a seed held in the root's own gradient cannot accumulate into it")
+                continue
+            raise Error("backward seed overlaps the gradient storage of a recorded tensor")
+
+    def _refuse_stale(self, root: Int) raises:
+        if len(self._stale) > 0 and self._stale[root]:
+            raise Error(_STALE_REFUSAL)
+
+    def _stale_of(self, parents: List[Tensor]) -> Bool:
+        """A new node is stale when an input is (its parents are checked)."""
+        if len(self._stale) == 0:
+            return False
+        for p in parents:  # driver-loop: over node inputs
+            if self._stale[p._index]:
+                return True
+        return False
+
+    def mark_mutated(mut self, x: Tensor) raises:
+        """Declare that x's storage was changed outside the tape.
+
+        Every tensor recorded before this call that depends on x through
+        x's consumers becomes stale, and a backward from a stale output
+        raises. Tensors recorded afterwards read x's new value and stay
+        valid. reset() clears the marks.
+        """
+        var i = self._check(x)
+        while len(self._stale) < len(self._nodes):  # driver-loop: over graph nodes
+            self._stale.append(False)
+        for j in range(i + 1, len(self._nodes)):  # driver-loop: over graph nodes, creation order
+            var n = self._nodes[j]
+            for edge in range(n.count):  # driver-loop: over node inputs
+                var p = self._parents[n.start + edge]
+                if p == i or self._stale[p]:
+                    self._stale[j] = True
+
+    def watch[E: Exec](mut self, mut ex: E, x: Tensor) raises:
+        """Keep a host copy of x's value for a later assert_unchanged.
+
+        A debugging aid: it downloads the value. Watching x again replaces
+        the copy.
+        """
+        var i = self._check(x)
+        var copy = self.values(ex, x)
+        for k in range(len(self._watched)):  # driver-loop: over watched tensors
+            if self._watched[k] == i:
+                self._snapshots[k] = copy^
+                return
+        self._watched.append(i)
+        self._snapshots.append(copy^)
+
+    def assert_unchanged[E: Exec](mut self, mut ex: E, x: Tensor) raises:
+        """Raise if x's value differs, bit for bit, from its watch() copy.
+
+        On a difference x is marked mutated (see mark_mutated) before the
+        error is raised, so a later backward through its old consumers
+        refuses. A debugging aid: it downloads the value.
+
+        Example::
+
+            var w = tape.variable(ex, weights, rows, cols)
+            tape.watch(ex, w)
+            # ... record, then before backward:
+            tape.assert_unchanged(ex, w)
+        """
+        var i = self._check(x)
+        for k in range(len(self._watched)):  # driver-loop: over watched tensors
+            if self._watched[k] != i:
+                continue
+            var before = self._snapshots[k].copy()
+            var now = self.values(ex, x)
+            if len(now) != len(before) or memcmp(now.unsafe_ptr(), before.unsafe_ptr(), len(now)) != 0:
+                self.mark_mutated(x)
+                raise Error("tensor storage changed between record and backward")
+            return
+        raise Error("assert_unchanged needs an earlier watch() of this tensor")
 
     def _alloc[E: Exec](mut self, mut ex: E, n: Int) raises -> FP:
         var slot = self._cursor
@@ -330,6 +463,8 @@ struct Tape(Movable):
         if not self._recording:
             for p in parents:  # driver-loop: over node inputs
                 _ = self._check(p)
+            if len(self._stale) > 0:
+                self._stale.append(self._stale_of(parents))
             var at = len(self._nodes)
             self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
                                      saved, False, True, False))
@@ -351,6 +486,8 @@ struct Tape(Movable):
                 ready = True
             else:
                 grad = self._alloc(ex, rows * cols)
+        if len(self._stale) > 0:
+            self._stale.append(self._stale_of(parents))
         var index = len(self._nodes)
         self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False))
         return Tensor(Int(self._identity.value()), self._generation, index)
@@ -371,6 +508,12 @@ struct Tape(Movable):
         what it holds). Keep `data` unchanged until backward finishes, and
         do not let `grad_destination` overlap any tensor of the graph.
         """
+        self._shape(rows, cols)
+        var count = rows * cols
+        self._refuse_overlap(grad_destination, count, True, "variable_into: grad_destination")
+        self._refuse_overlap(data, count, False, "variable_into: data")
+        if _ranges_overlap(Int(data), count, Int(grad_destination), count):
+            raise Error("variable_into: grad_destination overlaps data")
         return self._record(ex, data, rows, cols, LEAF, List[Tensor](), Args(), True,
                             grad_destination, True)
 
@@ -474,6 +617,8 @@ struct Tape(Movable):
         var rows = max(a.rows, b.rows)
         var cols = max(a.cols, b.cols)
         self._shape(rows, cols)
+        if use_into:
+            self._refuse_overlap(into, rows * cols, True, "binary_into: output")
         var output = into if use_into else self._alloc(ex, rows * cols)
         # Every other slot keeps the Args() placeholder; the body touches
         # p0, p1 and p2 only. x * x binds its one buffer once (i10 = 1).
@@ -528,6 +673,8 @@ struct Tape(Movable):
         mut self, mut ex: E, x: Tensor, op: Int, scale: Float32, into: FP, use_into: Bool,
     ) raises -> Tensor:
         var n = self._nodes[self._check(x)]
+        if use_into:
+            self._refuse_overlap(into, n.rows * n.cols, True, "unary_into: output")
         var output = into if use_into else self._alloc(ex, n.rows * n.cols)
         var a = Args()
         a.p0 = n.value
@@ -699,6 +846,8 @@ struct Tape(Movable):
         var parents = List[Tensor]()
         parents.append(x)
         parents.append(weight)
+        if use_into:
+            self._refuse_overlap(into, rows * cols, True, "linear_into: output")
         var output = into if use_into else self._alloc(ex, rows * cols)
         if bias:
             var bt = bias.value()
@@ -885,6 +1034,11 @@ struct Tape(Movable):
         """
         if tag < 0 or tag > (1 << 30):
             raise Error("custom operation tag is out of range")
+        self._shape(rows, cols)
+        self._refuse_overlap(output, rows * cols, True, "custom_into: output")
+        self._refuse_overlap(grad_destination, rows * cols, True, "custom_into: grad_destination")
+        if _ranges_overlap(Int(output), rows * cols, Int(grad_destination), rows * cols):
+            raise Error("custom_into: grad_destination overlaps output")
         var args = saved
         var result = self._record(ex, output, rows, cols, CUSTOM, inputs, args, False, grad_destination, True)
         self._nodes[result._index].op = CUSTOM + tag
@@ -910,6 +1064,12 @@ struct Tape(Movable):
             raise Error("incompatible tensor shapes for broadcasting")
         var rows = max(a.rows, b.rows)
         var cols = max(a.cols, b.cols)
+        self._shape(rows, cols)
+        self._refuse_overlap(output, rows * cols, True, "binary_recorded: output")
+        if caller_grad:
+            self._refuse_overlap(grad_destination, rows * cols, True, "binary_recorded: grad_destination")
+            if _ranges_overlap(Int(output), rows * cols, Int(grad_destination), rows * cols):
+                raise Error("binary_recorded: grad_destination overlaps output")
         return self._record(ex, output, rows, cols, op, [x, y], Args(), False,
                             grad_destination, caller_grad)
 
@@ -969,6 +1129,7 @@ struct Tape(Movable):
             raise Error(_INFERRED_REFUSAL)
         if n.rows * n.cols != 1:
             raise Error("non-scalar backward requires an explicit seed tensor")
+        self._refuse_stale(output._index)
         var cursor = self._cursor
         var seed = self._alloc(ex, 1)
         _fill(ex, seed, 1, 1)
@@ -1008,6 +1169,9 @@ struct Tape(Movable):
             raise Error("backward_from_preactivation takes an output of linear or linear_into")
         if n.rows != s.rows or n.cols != s.cols:
             raise Error("backward seed shape must equal output shape")
+        self._refuse_stale(output._index)
+        if n.requires_grad:
+            self._refuse_seed_overlap(output._index, s.value, accumulate)
         var cursor = self._cursor
         try:
             self._backward(ex, output, s.value, rules, accumulate, True)
@@ -1098,6 +1262,9 @@ struct Tape(Movable):
             raise Error(_INFERRED_REFUSAL)
         if n.rows != s.rows or n.cols != s.cols:
             raise Error("backward seed shape must equal output shape")
+        self._refuse_stale(output._index)
+        if n.requires_grad:
+            self._refuse_seed_overlap(output._index, s.value, accumulate)
         var cursor = self._cursor
         try:
             self._backward(ex, output, s.value, rules, accumulate)
@@ -1170,6 +1337,13 @@ struct Tape(Movable):
         elif Int(self._nodes[root].grad) != Int(seed):
             _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         touched[root] = True
+        # ACCUMULATION ORDER (docs/plans/NATIVE_AUTOGRAD.md, "Accumulation
+        # order"): contributions to a gradient are applied in decreasing
+        # consumer index, the inputs of one consumer in increasing edge
+        # order; the first is written, later ones added. last_node/last_edge
+        # hold each gradient's previous contribution; a violation refuses.
+        var last_node = List[Int](length=len(self._nodes), fill=-1)
+        var last_edge = List[Int](length=len(self._nodes), fill=-1)
         var scratch_start = self._cursor
         for reverse in range(root + 1):  # driver-loop: over graph nodes, reverse creation order
             var i = root - reverse
@@ -1303,6 +1477,12 @@ struct Tape(Movable):
                         a.i0 = n.op
                         a.f0 = n.saved.f0
                         ex.launch[OP_AG_UNARY_VJP](a, p.rows * p.cols)
+                if last_node[parent] >= 0 and (first[edge] or not (
+                    i < last_node[parent] or (i == last_node[parent] and edge > last_edge[parent])
+                )):
+                    raise Error("autograd: gradient contributions applied out of the canonical order")
+                last_node[parent] = i
+                last_edge[parent] = edge
                 if not first[edge]:
                     _accumulate(ex, p.grad, contribution, p.rows * p.cols)
         self._cursor = scratch_start
