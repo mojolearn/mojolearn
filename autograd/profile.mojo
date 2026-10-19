@@ -12,7 +12,7 @@ from sequence.launch_profile import (
 from autograd.ops import (
     OP_AG_BIN_FWD, OP_AG_BIN_VJP, OP_AG_UNARY_FWD, OP_AG_UNARY_VJP, OP_AG_TRANSPOSE,
     OP_AG_REDUCE_PART, OP_AG_REDUCE_FOLD, OP_AG_REDUCE_VJP, OP_AG_SOFTMAX_FWD,
-    OP_AG_SOFTMAX_VJP, OP_AG_ACCUMULATE, OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI,
+    OP_AG_SOFTMAX_VJP, OP_AG_ACCUMULATE, OP_AGK_BIN_VJP_PART, OP_AGK_GEMM_EPI, OP_AGF_LEVEL,
     LEAF, ADD, SUBTRACT, MULTIPLY, DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE,
     TRANSPOSE, RESHAPE, REDUCE, SOFTMAX, LOG_SOFTMAX, LOSS_ELEM, LOSS_CE, MATMUL, LINEAR, CUSTOM,
 )
@@ -50,6 +50,8 @@ def ag_op_name(op: Int) -> String:
         return "ag_bin_vjp_part"
     if op == OP_AGK_GEMM_EPI:
         return "ag_gemm_epi"
+    if op == OP_AGF_LEVEL:
+        return "ag_fold_level"
     if op == OP_AG_DROPOUT_FWD:
         return "ag_dropout_fwd"
     if op == OP_AG_DROPOUT_VJP:

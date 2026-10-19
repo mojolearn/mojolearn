@@ -47,8 +47,9 @@
 # the tape binds every other slot to the Args() placeholder, as every other
 # sequence operation does, and never binds one buffer to two slots of a
 # launch. No body reads back a slot it writes, except OP_AG_ACCUMULATE's
-# element-wise read-modify-write of its own destination word and
-# OP_AG_SOFTMAX_FWD's read-back of its own row's exponentials.
+# element-wise read-modify-write of its own destination word,
+# OP_AG_SOFTMAX_FWD's read-back of its own row's exponentials and
+# OP_AGF_LEVEL's in-place fold of its own group of partials.
 from sequence.ops import Args, FP, ld, st, add, sub, mul
 from checks.numerics import (
     ftz, identical_div, identical_exp, identical_log, identical_sigmoid, identical_sqrt,
@@ -170,6 +171,91 @@ comptime LEAF = 0
 comptime AXIS_ALL = -1
 comptime AXIS_ROWS = 0
 comptime AXIS_COLS = 1
+
+# ---------------------------------------------------------------------------
+# THE BLOCKED FOLD (OP_AG_REDUCE_PART / OP_AG_REDUCE_FOLD, OP_AGK_BIN_VJP_PART,
+# OP_AGF_LEVEL; launched by autograd/fold.mojo). DeviceExec runs every body
+# below on the generic element kernel (TPB = 128 threads a block, one thread
+# an element t), on Metal, NVIDIA and AMD alike; HostExec runs the same
+# bodies in an ascending loop, so every column takes one path.
+#
+# GEOMETRY BEFORE (v1, -D MOJOLEARN_AUTOGRAD_FOLD_V2_OFF; lane ag-pass3-fold
+# read it from the code 2026-10-19). Block length R = ag_fold_block(n): the
+# smallest power of two >= 64 with R * R >= n, n the folded extent.
+#   AXIS_ROWS (rows x cols, one output a column): PART ceil(rows / R) * cols
+#     threads, t -> (block t // cols, column t % cols): neighbouring threads
+#     read neighbouring columns (coalesced), the chain walks the column at
+#     stride cols, R terms. FOLD: cols threads, a chain of ceil(rows / R)
+#     partials (coalesced across threads).
+#   AXIS_COLS (one output a row): PART rows * ceil(cols / R) threads, t ->
+#     (row t // nb, block t % nb): each chain is R contiguous words, so
+#     neighbouring threads are R words apart (not coalesced). FOLD: rows
+#     threads, nb contiguous partials each.
+#   AXIS_ALL: PART ceil(n / R) threads, R contiguous words each; FOLD one
+#     thread, ceil(n / R) partials.
+#   Every chain is load, add, load, add: one dependent load latency a term.
+#   The shapes the tape folds (PART threads x chain; FOLD threads x chain):
+#     512 x 256 rows (MLP hidden bias): 2048 x 64; 256 x 8.
+#     512 x 1 rows (MLP output bias):   8 x 64;    1 x 8.
+#     4096 x 4096 rows:                 262144 x 64; 4096 x 64.
+#     100000 x 1 rows, 1 x 100000 cols: R = 512: 196 x 512; 1 x 196.
+#     4096 x 4096 all:                  R = 4096: 4096 x 4096; 1 x 4096.
+#   The AMD MI325X profile (MLP 28-256-1, B = 512) put REDUCE_PART at
+#   ~24 us a launch against ~14 us for an elementwise body over 65k words:
+#   the excess is the 64-term dependent load chain, not the word count.
+#
+# GEOMETRY AFTER (v2, the default). Three changes, all fixed-order:
+#   (1) Leaf blocks of a fixed AG_FOLD_LEAF = 64 terms (PART, BIN_VJP_PART),
+#       then a tree of fan-in 64: while an output has more than 64 partials,
+#       OP_AGF_LEVEL folds each run of 64 consecutive partials (ascending
+#       from +0.0) in place into the run's first slot; the last level is
+#       OP_AG_REDUCE_FOLD's one ascending chain. The order is a function of
+#       the extent alone: blocks in index order, each folded serially in
+#       index order, groups of 64 partials in group order. For n <= 4096
+#       (one level) it is v1's order term for term (v1's R is 64 there), so
+#       those folds keep their bits; above 4096 terms the bits are new, on
+#       every column together (HostExec runs the same bodies). Chains never
+#       exceed 64 terms, and the partial threads are n / 64 per output.
+#   (2) Each chain issues its loads eight at a time ahead of the adds
+#       (_fold_chain, _vjp_chain): the adds are the same adds in the same
+#       order, so the same bits, but eight loads are in flight per thread
+#       instead of one: a 64-term chain waits 8 load latencies, not 64.
+#   (3) A fold of at most 64 terms an output is one launch: PART adds the
+#       chain and applies the factor (the FOLD's +0.0 + s, then * or /
+#       factor), so the same bits in one launch instead of two.
+#   Thread mapping and coalescing per axis are v1's: AXIS_ROWS keeps
+#   consecutive threads on consecutive columns (coalesced loads, the chain
+#   at stride cols); AXIS_COLS and AXIS_ALL keep contiguous blocks and accept
+#   the 64-word stride between neighbouring threads, because folding each
+#   block serially in index order is what makes the order fixed (a strided
+#   per-thread walk would interleave blocks and change the order).
+#   The same shapes after (PART; LEVEL...; FOLD as threads x chain):
+#     512 x 256 rows:   2048 x 64; 256 x 8                    (same bits)
+#     512 x 1 rows:     8 x 64; 1 x 8                         (same bits)
+#     4096 x 4096 rows: 262144 x 64; 4096 x 64                (same bits)
+#     100000 x 1 rows / 1 x 100000 cols: 1563 x 64; 25 x 64; 1 x 25 (new)
+#     4096 x 4096 all:  262144 x 64; 4096 x 64; 64 x 64; 1 x 64     (new)
+#     any extent <= 64: one launch, outputs x extent        (same bits)
+# ---------------------------------------------------------------------------
+# A/B define (lane ag-pass3-fold, default on = v2): -D
+# MOJOLEARN_AUTOGRAD_FOLD_V2_OFF restores v1 (the sqrt block rule, two
+# launches, one load a term) for the orchestrator's digest comparison.
+comptime AUTOGRAD_FOLD_V2 = not is_defined["MOJOLEARN_AUTOGRAD_FOLD_V2_OFF"]()
+# v2's leaf block length and tree fan-in. A fixed 64 (v1's smallest block):
+# from size reasoning, not a shape: long enough that a leaf thread's chain
+# amortises its launch slot, short enough that 8-wide load groups cover a
+# chain in 8 latencies, and a fold of n terms needs ceil(log64 n) launches
+# (2 up to 4096 terms, 3 up to 262144, 4 up to 16.7M).
+comptime AG_FOLD_LEAF = 64
+# Loads issued ahead of the adds in a fold chain (v2).
+comptime AG_FOLD_LOADS = 8
+
+# Lane ag-pass3-fold (2026-10-19): the fold tree's level body, a range of
+# its own (1700..), registered in sequence/dispatch.mojo.
+#   OP_AGF_LEVEL: one level of v2's fold tree, in place over the partials.
+comptime OP_AGF_LEVEL = 1700
+comptime OP_AGF_FIRST = OP_AGF_LEVEL
+comptime OP_AGF_LAST = OP_AGF_LEVEL
 
 
 @always_inline
@@ -318,7 +404,122 @@ def op_ag_bin_vjp(t: Int, a: Args):
 
 
 @always_inline
+def _fold_chain(p: FP, base: Int, stride: Int, count: Int) -> Float32:
+    """p[base + k * stride] for k = 0 .. count - 1 added ascending from +0.0
+    (v2 fold chain). The same adds in the same order as one load an add;
+    each group of AG_FOLD_LOADS = 8 loads is issued before its adds so the
+    loads are in flight together. count <= 0 gives +0.0."""
+    var s = Float32(0)
+    var k = 0
+    while k + AG_FOLD_LOADS <= count:
+        var i = base + k * stride
+        var v0 = ld(p, i)
+        var v1 = ld(p, i + stride)
+        var v2 = ld(p, i + 2 * stride)
+        var v3 = ld(p, i + 3 * stride)
+        var v4 = ld(p, i + 4 * stride)
+        var v5 = ld(p, i + 5 * stride)
+        var v6 = ld(p, i + 6 * stride)
+        var v7 = ld(p, i + 7 * stride)
+        s = add(s, v0)
+        s = add(s, v1)
+        s = add(s, v2)
+        s = add(s, v3)
+        s = add(s, v4)
+        s = add(s, v5)
+        s = add(s, v6)
+        s = add(s, v7)
+        k += AG_FOLD_LOADS
+    while k < count:
+        s = add(s, ld(p, base + k * stride))
+        k += 1
+    return s
+
+
+@always_inline
+def _vjp_chain(a: Args, base: Int, stride: Int, count: Int) -> Float32:
+    """_fold_chain over the binary VJP terms ftz(_bin_vjp_at(i)) at
+    i = base + k * stride: each group of eight terms is computed (its loads
+    issued) before its adds, which keep the ascending order."""
+    var s = Float32(0)
+    var k = 0
+    while k + AG_FOLD_LOADS <= count:
+        var i = base + k * stride
+        var v0 = ftz(_bin_vjp_at(i, a))
+        var v1 = ftz(_bin_vjp_at(i + stride, a))
+        var v2 = ftz(_bin_vjp_at(i + 2 * stride, a))
+        var v3 = ftz(_bin_vjp_at(i + 3 * stride, a))
+        var v4 = ftz(_bin_vjp_at(i + 4 * stride, a))
+        var v5 = ftz(_bin_vjp_at(i + 5 * stride, a))
+        var v6 = ftz(_bin_vjp_at(i + 6 * stride, a))
+        var v7 = ftz(_bin_vjp_at(i + 7 * stride, a))
+        s = add(s, v0)
+        s = add(s, v1)
+        s = add(s, v2)
+        s = add(s, v3)
+        s = add(s, v4)
+        s = add(s, v5)
+        s = add(s, v6)
+        s = add(s, v7)
+        k += AG_FOLD_LOADS
+    while k < count:
+        s = add(s, ftz(_bin_vjp_at(base + k * stride, a)))
+        k += 1
+    return s
+
+
+@always_inline
+def _fold_part_index(axis: Int, o: Int, b: Int, cols: Int, nb: Int) -> Int:
+    """Where leaf partial b of output o sits (op_ag_reduce_part's layout):
+    AXIS_ROWS block-major b * cols + o, AXIS_COLS row-major o * nb + b,
+    AXIS_ALL b. nb = leaf blocks per output."""
+    if axis == AXIS_ROWS:
+        return b * cols + o
+    if axis == AXIS_COLS:
+        return o * nb + b
+    return b
+
+
+@always_inline
+def _agk_bin_vjp_part_v2(t: Int, a: Args):
+    """v2 of op_agk_bin_vjp_part: the same thread mapping and partial layout,
+    chains through _vjp_chain. i11 = 1 (one block an output, at most i9
+    terms): the finished output, +0.0 + the chain (OP_AG_REDUCE_FOLD's one
+    partial at factor 1), is written to p5[t] instead of a partial."""
+    var rows = a.i2
+    var cols = a.i3
+    var B = a.i9
+    var s: Float32
+    if a.i0 == AXIS_ALL:
+        var lo = t * B
+        s = _vjp_chain(a, lo, 1, min(B, rows * cols - lo))
+    elif a.i0 == AXIS_ROWS:
+        var c = t % cols
+        var lo = (t // cols) * B
+        s = _vjp_chain(a, lo * cols + c, cols, min(B, rows - lo))
+    else:
+        var nb = max((cols + B - 1) // B, 1)
+        var r = t // nb
+        var lo = (t % nb) * B
+        s = _vjp_chain(a, r * cols + lo, 1, min(B, cols - lo))
+    if a.i11 == 1:
+        st(a.p5, t, add(Float32(0), s))
+    else:
+        st(a.p4, t, s)
+
+
+@always_inline
 def op_agk_bin_vjp_part(t: Int, a: Args):
+    """Partial sums of the blocked fold of a broadcast operand's binary VJP
+    (see _agk_bin_vjp_part_v1; v2 by default, AUTOGRAD_FOLD_V2)."""
+    comptime if AUTOGRAD_FOLD_V2:
+        _agk_bin_vjp_part_v2(t, a)
+    else:
+        _agk_bin_vjp_part_v1(t, a)
+
+
+@always_inline
+def _agk_bin_vjp_part_v1(t: Int, a: Args):
     """Partial sums of the blocked fold of a broadcast operand's binary VJP:
     op_ag_reduce_part over the matrix op_ag_bin_vjp would write, with each
     term computed in place (ftz, as the stored word reads back) instead of
@@ -391,7 +592,50 @@ def op_ag_transpose(t: Int, a: Args):
 
 
 @always_inline
+def _ag_reduce_part_v2(t: Int, a: Args):
+    """v2 of op_ag_reduce_part: the same slots, thread mapping and partial
+    layout, chains through _fold_chain (i3 B = AG_FOLD_LEAF). i4 = 1 (one
+    block an output): the finished output, (+0.0 + the chain) * f0, or / f0
+    when i5 = 1, is written to p2[t] (OP_AG_REDUCE_FOLD's one-partial chain
+    and factor, so its bits in one launch)."""
+    var rows = a.i1
+    var cols = a.i2
+    var B = a.i3
+    var s: Float32
+    if a.i0 == AXIS_ALL:
+        var lo = t * B
+        s = _fold_chain(a.p0, lo, 1, min(B, rows * cols - lo))
+    elif a.i0 == AXIS_ROWS:
+        var c = t % cols
+        var lo = (t // cols) * B
+        s = _fold_chain(a.p0, lo * cols + c, cols, min(B, rows - lo))
+    else:
+        var nb = max((cols + B - 1) // B, 1)
+        var r = t // nb
+        var lo = (t % nb) * B
+        s = _fold_chain(a.p0, r * cols + lo, 1, min(B, cols - lo))
+    if a.i4 == 1:
+        var v = add(Float32(0), s)
+        if a.i5 == 1:
+            st(a.p2, t, div(v, a.f0))
+        else:
+            st(a.p2, t, mul(v, a.f0))
+    else:
+        st(a.p1, t, s)
+
+
+@always_inline
 def op_ag_reduce_part(t: Int, a: Args):
+    """The blocked fold's first launch (v2 by default, AUTOGRAD_FOLD_V2;
+    _ag_reduce_part_v1 under MOJOLEARN_AUTOGRAD_FOLD_V2_OFF)."""
+    comptime if AUTOGRAD_FOLD_V2:
+        _ag_reduce_part_v2(t, a)
+    else:
+        _ag_reduce_part_v1(t, a)
+
+
+@always_inline
+def _ag_reduce_part_v1(t: Int, a: Args):
     """Partial sums of a blocked fold. p0 source (i1 rows x i2 cols), p1
     partials, i0 axis, i3 block length B (ag_fold_block of the folded
     extent). Each partial is its block's terms added ascending from +0.0.
@@ -426,7 +670,87 @@ def op_ag_reduce_part(t: Int, a: Args):
 
 
 @always_inline
+def _ag_reduce_fold_v2(t: Int, a: Args):
+    """v2 of op_ag_reduce_fold, the last level of the fold tree: p1[t] = (the
+    i6 live partials of output t, p0, at stride i5 in partial index, added
+    ascending from +0.0) * f0, or / f0 when i4 = 1. i0 axis, i1 rows, i2
+    cols, i3 leaf block length (AG_FOLD_LEAF). i5 = 0 (a launch that did not
+    run OP_AGF_LEVEL): stride 1 over every leaf partial, v1's chain."""
+    var rows = a.i1
+    var cols = a.i2
+    var B = a.i3
+    var extent = rows * cols if a.i0 == AXIS_ALL else (rows if a.i0 == AXIS_ROWS else cols)
+    var nb = (extent + B - 1) // B
+    var S = a.i5
+    var P = a.i6
+    if S == 0:
+        S = 1
+        P = nb
+    var base = _fold_part_index(a.i0, t, 0, cols, nb)
+    var stride = S * cols if a.i0 == AXIS_ROWS else S
+    var s = _fold_chain(a.p0, base, stride, P)
+    if a.i4 == 1:
+        st(a.p1, t, div(s, a.f0))
+    else:
+        st(a.p1, t, mul(s, a.f0))
+
+
+@always_inline
+def op_agf_level(t: Int, a: Args):
+    """One level of v2's fold tree, in place. p0 partials (op_ag_reduce_part's
+    layout; read and written: thread t reads only its own group and writes
+    only the group's first slot, so no two threads touch one word). i0 axis,
+    i1 rows, i2 cols, i3 L (AG_FOLD_LEAF, the leaf length and the fan-in),
+    i5 S (stride of the live partials in partial index: L ** level), i6 P
+    (live partials an output). Thread t = (group j, output o), G = ceil(P /
+    L) groups: AXIS_ROWS j = t // cols, o = t % cols (neighbouring threads on
+    neighbouring columns); AXIS_COLS o = t // G, j = t % G; AXIS_ALL j = t.
+    Group j's live partials j * L .. min(j * L + L, P) - 1 are added
+    ascending from +0.0 into live partial j * L."""
+    var rows = a.i1
+    var cols = a.i2
+    var L = a.i3
+    var S = a.i5
+    var P = a.i6
+    var extent = rows * cols if a.i0 == AXIS_ALL else (rows if a.i0 == AXIS_ROWS else cols)
+    var nb = (extent + L - 1) // L
+    var groups = (P + L - 1) // L
+    var o: Int
+    var j: Int
+    if a.i0 == AXIS_ROWS:
+        j = t // cols
+        o = t % cols
+    elif a.i0 == AXIS_COLS:
+        o = t // groups
+        j = t % groups
+    else:
+        o = 0
+        j = t
+    var lo = j * L
+    var base = _fold_part_index(a.i0, o, lo * S, cols, nb)
+    var stride = S * cols if a.i0 == AXIS_ROWS else S
+    st(a.p0, base, _fold_chain(a.p0, base, stride, min(L, P - lo)))
+
+
+@always_inline
+def apply_autograd_fold[OP: Int](t: Int, a: Args):
+    """The OP_AGF_FIRST..OP_AGF_LAST family (sequence/dispatch.mojo)."""
+    comptime if OP == OP_AGF_LEVEL:
+        op_agf_level(t, a)
+
+
+@always_inline
 def op_ag_reduce_fold(t: Int, a: Args):
+    """The blocked fold's last launch (v2 by default, AUTOGRAD_FOLD_V2;
+    _ag_reduce_fold_v1 under MOJOLEARN_AUTOGRAD_FOLD_V2_OFF)."""
+    comptime if AUTOGRAD_FOLD_V2:
+        _ag_reduce_fold_v2(t, a)
+    else:
+        _ag_reduce_fold_v1(t, a)
+
+
+@always_inline
+def _ag_reduce_fold_v1(t: Int, a: Args):
     """Second launch of the blocked fold: p1[t] = (the partials of output t,
     p0, added ascending from +0.0) * f0, or / f0 when i4 = 1. i0 axis, i1
     rows, i2 cols, i3 B as in op_ag_reduce_part. AXIS_ALL: one output; AXIS_ROWS: thread t =
