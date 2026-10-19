@@ -842,15 +842,15 @@ def _backward_tape(
     var m = b * l
     var dm = s.dm
     var v = s.vocab
-    var n = s.n_layers()
+    var n_layers = s.n_layers()
     _bind_attention_grad_views(s)
     _ensure_m3_dx(s, m)
     var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
     # ---- every activation gradient's storage: gin[i] = d loss / d acts[i]
-    # (the gradient the consumer of acts[i] writes); gin[n] = dh, the final
+    # (the gradient the consumer of acts[i] writes); gin[n_layers] = dh, the final
     # norm's dx as in the hand path
     var gin = List[FP]()
-    for i in range(n):  # driver-loop: over stack layers
+    for i in range(n_layers):  # driver-loop: over stack layers
         var j = s.slot[i]
         if s.kinds[i] == SAMBA_LAYER_MAMBA3:
             gin.append(_fpb(s.m3_dx[j]))
@@ -870,7 +870,7 @@ def _backward_tape(
     var tape = Tape()
     var g_emb = tape.variable_into(ex, _fpb(ew), _fpb(demb), v, dm)
     var h = tape.custom_into(ex, [g_emb], _fpb(s.acts[0]), gin[0], m, dm, SAMBA_EMBEDDING, Args())
-    for i in range(n):  # driver-loop: over stack layers
+    for i in range(n_layers):  # driver-loop: over stack layers
         var j = s.slot[i]
         if s.kinds[i] == SAMBA_LAYER_MAMBA3:
             # [x, the nine weights] -> the block's own residual_out; the
