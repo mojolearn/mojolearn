@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""APPLE FAST RECURRENT SCAN (lane apple-fast-gap-lstm, 2026-10-03; default OFF).
+"""RECURRENT SCAN (lane apple-fast-gap-lstm, 2026-10-03; the IDENTICAL default
+since lane ag-pass5-recurrent, 2026-10-19: see SEQ_RNN_SCAN_IDN below).
 
 The board's lstm rows (M3 FAST 1,880 ms against torch MPS 695 ms) train
 564 optimizer steps (72,192 windows, batch 256, 2 epochs), and every step
@@ -52,7 +53,8 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 #: scan under IDENTICAL on every GPU, for the owed NV/AMD/Apple ID check
 #: (the chain order is the T-launch path's; `team_barrier` orders device
 #: memory on CUDA/HIP/Metal by the repo's lowering notes, unproven by a
-#: run). -D MOJOLEARN_IDN_SEQ_LSTM_SCAN turns it on.
+#: run). -D MOJOLEARN_IDN_SEQ_LSTM_SCAN turned it on (superseded: the scan
+#: is the IDENTICAL default, -D MOJOLEARN_SEQ_RNN_SCAN_OFF is arm A).
 # NI49 (2026-10-06) source-only disposition: NOT REPAIRED / NOT QUALIFIED.
 # The failed 8bb42b7de Args change is not evidence that the remaining issue is
 # numerical. No demonstrated source cause was established; preserve both
@@ -60,7 +62,33 @@ from sequence.ops import FP, Args, gates_of, ld, op_cell_bwd_h, op_cell_fwd_h, s
 # backward per-step device/host state digests and full training quality remain
 # required before timing or promoting this candidate. The owner forbids those
 # runs in this worktree; none were attempted. A faster broken arm is a loser.
-comptime SEQ_LSTM_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_IDN_SEQ_LSTM_SCAN"]() and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+# Lane ag-pass5-recurrent (2026-10-19, PASS5 idea 3): the scan is the
+# IDENTICAL default for every recurrent cell (rnn, lstm, gru), in the hand
+# trainer (sequence/recurrent.mojo forward / backward, HandStep) and the tape
+# trainer (autograd/rules_recurrent.mojo rnn_layer / _layer_bwd,
+# AutogradRnnStep) alike, so the two steps stay equal.
+# -D MOJOLEARN_SEQ_RNN_SCAN_OFF (or MOJOLEARN_IDN_ALL_OFF) is arm A, the
+# per-step chain (T launches of OP_CELL_FWD_H / OP_CELL_BWD_H plus 4 fills a
+# layer). The older opt-in -D MOJOLEARN_IDN_SEQ_LSTM_SCAN is now a no-op.
+# BITS: the same as the per-step chain, by construction. Each lane runs the
+# per-step launch's element body (op_cell_fwd_h / op_cell_bwd_h) on the same
+# Args the host built for that step (fwd_step / bwd_step reproduce the
+# pointers, with the dh / dhn swap as a comptime parity, never a pointer
+# select), on the same words: the gate folds are gemm_dot's k-ascending fma
+# chains, the cell arithmetic is the same identical_* chain. A step's
+# cross-lane reads (h_prev over all H units of the row forward, dGH_{s+1}
+# over all G H columns of the row backward) are the row's own block's
+# stores of the previous step, ordered by team_barrier (bar.sync on NVIDIA,
+# s_barrier between workgroup fences on AMD, threadgroup_barrier(mem_device)
+# on Metal; x_linear/team.mojo). The zero fills of h_0 / c_0 and dh / dc are
+# stores of +0.0 to the same words. No fold order moves, so no column moves:
+# the race digests (lstm 27500667, gru 8762faa2, rnn c81d55d6) must hold; the
+# orchestrator's nv and amd ID checks decide it.
+# Launches a layer step: forward T + 2 -> 1, backward T + 2 -> 1.
+comptime SEQ_RNN_SCAN_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
+    is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+)
+comptime SEQ_LSTM_SCAN_IDN = SEQ_RNN_SCAN_IDN
 # NI49's row-serial arm (MOJOLEARN_IDN_SEQ_ROW_SERIAL_SCAN: one GPU thread
 # per batch row, serial over units and timesteps) was deleted by L11
 # (2026-10-07): a per-row serial executor breaks the IDENTICAL GPU rule
@@ -124,10 +152,14 @@ def fwd_step(a: Args, s: Int) -> Args:
 
 
 @always_inline
-def bwd_step(a: Args, j: Int) -> Args:
+def bwd_step[odd: Bool](a: Args, j: Int) -> Args:
     """`OP_CELL_BWD_H`'s arguments of iteration j (step s = T - 1 - j) from
     the scan's base arguments (s = 0 pointers; p5 / p10 the two dh buffers,
-    p5 the recurrent dh of j = 0; i3 T, i4 B G H)."""
+    p5 the recurrent dh of j = 0; i3 T, i4 B G H). `odd` is j's parity, a
+    compile-time choice: the host chain swaps dh and dhn after every step, so
+    an odd j reads p10 as its dh. A runtime parity would make the two slots
+    a pointer select inside the kernel body, which Metal compiles to a
+    pointer whose loads read zeros (autograd/ops.mojo _ld_right)."""
     var B = a.i1
     var H = a.i2
     var T = a.i3
@@ -142,7 +174,7 @@ def bwd_step(a: Args, j: Int) -> Args:
     r.p6 = a.p6 + s * B * H
     r.p8 = a.p8 + s * B * GH
     r.p9 = a.p9 + s * B * GH
-    if j % 2 == 1:
+    comptime if odd:
         r.p5 = a.p10
         r.p10 = a.p5
     r.i3 = 1 if s < T - 1 else 0
@@ -170,10 +202,16 @@ def op_cell_bwd_scan(row: Int, a: Args):
     for u in range(H):
         st(a.p5, row * H + u, Float32(0.0))
         st(a.p7, row * H + u, Float32(0.0))
-    for j in range(a.i3):
-        var sa = bwd_step(a, j)
+    var j = 0
+    while j < a.i3:
+        var se = bwd_step[False](a, j)
         for u in range(H):
-            op_cell_bwd_h(row * H + u, sa)
+            op_cell_bwd_h(row * H + u, se)
+        if j + 1 < a.i3:
+            var so = bwd_step[True](a, j + 1)
+            for u in range(H):
+                op_cell_bwd_h(row * H + u, so)
+        j += 2
 
 
 # ------------------------------------------------------------------ device kernels
@@ -256,8 +294,18 @@ def cell_bwd_scan_kernel(
     # on lane/owed-deletions-D2: the threadgroup-staged arm; code recoverable at b639a2bd2.
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_LSTM_SCAN_SMEM.patch
     team_barrier()
-    for j in range(a.i3):
-        var sa = bwd_step(a, j)
+    # Steps in pairs (even j, then odd j): each pair's dh / dhn slots are
+    # fixed at compile time (bwd_step's parity), so no pointer is selected.
+    # The bound tests are block-uniform (a.i3 is a kernel argument).
+    var j = 0
+    while j < a.i3:
+        var se = bwd_step[False](a, j)
         if u < Hn:
-            op_cell_bwd_h(t, sa)
+            op_cell_bwd_h(t, se)
         team_barrier()
+        if j + 1 < a.i3:
+            var so = bwd_step[True](a, j + 1)
+            if u < Hn:
+                op_cell_bwd_h(t, so)
+            team_barrier()
+        j += 2
