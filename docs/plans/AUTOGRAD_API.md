@@ -20,18 +20,26 @@ that decides each migration. Implementation record: `NATIVE_AUTOGRAD.md`.
 - `BackwardRules` trait + `tape.custom(inputs, output, rows, cols, tag,
   saved)`: an already-executed native op with a VJP. The tape hands the rule
   one zeroed destination per input and owns ordering and accumulation.
+  `custom_into` lands the op's gradient in caller storage; `binary_recorded`
+  records an add/subtract/multiply/divide whose value a caller kernel
+  already computed (no launch, the tape's own VJP).
 - Adapters: `autograd/layers.mojo` (`layer_norm`, `NeuralRules`) and
   `autograd/rules_recurrent.mojo` (`rnn_linear`, `rnn_layer`,
   `rnn_last_step`, `RecurrentRules`, `AutogradRnnStep`).
+  `autograd/rules_transformer.mojo` (`TransformerRules`, tags 32-37, and
+  `llama_decoder_layer_backward_autograd`).
 - Trainers on the tape, opt-in: MLP (`-D MOJOLEARN_AUTOGRAD_MLP`,
   `sequence/mlp_fit.mojo`), recurrent (`-D MOJOLEARN_AUTOGRAD_RNN`, the
-  `RnnStep` seam in `sequence/recurrent.mojo::rnn_fit`).
+  `RnnStep` seam in `sequence/recurrent.mojo::rnn_fit`), transformer
+  decoder layer (`-D MOJOLEARN_AUTOGRAD_TRANSFORMER`, the two saved-stage
+  backwards in `bindings/_mojolearn_transformer.mojo`).
 
 Constraints that carry into any public surface:
 
 - Every op is a parallel launch with a fixed fold order; identity across
   Apple, NVIDIA and AMD comes from the ops, not from the tape.
-- Tags of custom rules are per family (LayerNorm 1, recurrent 16-18). A
+- Tags of custom rules are per family (LayerNorm 1, recurrent 16-18,
+  transformer 32-47). A
   composite `NeuralRules` that dispatches every family is the target once
   the module graph allows it without an import cycle: today
   `autograd.rules_recurrent` imports `sequence.recurrent`, which imports no
@@ -57,16 +65,32 @@ kernels. What stays hand-written becomes a custom rule.
    `OP_CELL_FWD_SCAN`/`OP_CELL_BWD_SCAN`, `wgrad_blocked`. The rules reuse
    every hand launch with its arguments, so the expected result is the same
    bits as the hand path.
-2. Transformer (`transformer/checks/transformer_backward.mojo::
-   llama_decoder_layer_backward_device` and its caller
-   `bindings/_mojolearn_transformer.mojo::_transformer_saved_backward`, which
-   walks `TransformerForwardTape`): migrate the decoder-stack glue (residual
-   adds, norm -> attention -> MLP chain, embedding and LM head). Stay: fused
-   attention forward/backward (`transformer/impl/llama/fused_attention.mojo`
-   `fused_bwd_*`), RMSNorm row kernels, RoPE, SwiGLU fused kernels, each as
-   one rule. Prerequisite: the tape records over a `DeviceExec` that shares
-   the transformer's `DeviceContext`, and `TransformerForwardTape`'s saved
-   activations become rule `saved` buffers.
+2. Transformer decoder layer (`transformer/checks/transformer_backward.mojo::
+   llama_decoder_layer_backward_device`, called by
+   `bindings/_mojolearn_transformer.mojo::_transformer_saved_backward` and
+   `_transformer_run_session_backward`): written under
+   `MOJOLEARN_AUTOGRAD_TRANSFORMER` (lane ag-transformer, compile and A/B
+   owed). `llama_decoder_layer_backward_autograd` takes the hand entry's
+   arguments, records the saved forward on a `Tape` over `DeviceExec(ctx)`
+   (the transformer's own context and queue) and runs one
+   `backward_with_rules`. Moved to the tape: the stage order, the residual
+   fan-outs (two `binary_recorded` adds over `fwd.residual1/2`, no forward
+   relaunch) and every fan-in sum (gate + up, the norm2 residual, q + k + v,
+   the norm1 residual), with gradients landing in the same
+   `LlamaBackwardStages` fields (`custom_into`, `variable_into`). Stay, one
+   rule each (`autograd/rules_transformer.mojo`, tags 32-37): RMSNorm
+   (`bwd_rms_norm_routed`, residual unfused), each projection (`_route_a` /
+   `_route_b`), RoPE (`bwd_rope_kernel`), attention (`bwd_attention_dispatch`,
+   the fused/eager decision moved out of the hand path verbatim, then
+   `bwd_kv_slice2_kernel`), SwiGLU (the fused or split S4-6 kernels). The
+   q/k/v projections are recorded v, k, q so the reverse traversal sums
+   `(q + k) + v`, the hand path's pinned order; `OP_AG_ACCUMULATE` is
+   `bwd_add2_kernel`'s arithmetic, so the expected result is the hand
+   path's bits. The tape adds a seed copy, four ADD VJP copies and 25 zero
+   fills of custom destinations per layer. Traced or materialized calls and
+   non-default block options are refused (they keep the hand path). The
+   embedding gather and LM head are not in this backward; they move with
+   item 4.
 3. Mamba (`mamba/impl/modeling/modeling_mamba_prefill_backward.mojo::
    mamba1_prefill_backward`, `mamba/impl/modules/mamba2_backward.mojo`):
    migrate the block assembly (norm, in/out projections, residual, block
