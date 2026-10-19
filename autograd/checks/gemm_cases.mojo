@@ -432,9 +432,12 @@ def run_gemm_cases(mut dev: DeviceExec, mut host: HostExec) raises:
                 _run[OP_AGK_GEMM_EPI](dev, host, tally, M, N, K, False, idx % N_KINDS, False)
                 _run[OP_GEMM_EPI](dev, host, tally, M, N, K, True, (idx + 3) % N_KINDS, False)
                 idx += 1
-    var sms: List[Int] = [1, 3, 17, 300, 1, 127, 128, 181]
-    var sns: List[Int] = [1, 5, 33, 1, 300, 128, 128, 181]
-    var sks: List[Int] = [65537, 4097, 16385, 1000, 777, 2048, 129, 300]
+    # (the wide family: 128 x 128 is 4 tiles of 64 x 64, 181 x 181 is 9, 129 x
+    # 448 is 3 x 7 = 21; the 16 x 16 family: 120 x 136 has an edge under 64;
+    # the thin family: 300 x 1, 1 x 300)
+    var sms: List[Int] = [1, 3, 17, 300, 1, 127, 128, 181, 129, 120]
+    var sns: List[Int] = [1, 5, 33, 1, 300, 128, 128, 181, 448, 136]
+    var sks: List[Int] = [65537, 4097, 16385, 1000, 777, 2048, 129, 300, 96, 200]
     for i in range(len(sms)):  # driver-loop: over the split-K shapes
         var M = sms[i]
         var N = sns[i]

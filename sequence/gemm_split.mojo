@@ -63,17 +63,26 @@ comptime SK_MAX_S = 256
 #: the reuse edge: an output edge under 8 gives a tile no operand reuse
 #: (GT_MIN_EDGE's reasoning), so splitting K loses nothing to the tiles
 comptime SK_REUSE_EDGE = 8
-#: cell bounds (occupancy, not a data shape). One chain a cell keeps M N
-#: threads busy; under 2^15 threads (less than half a wave64 per SIMD on a
-#: 304-CU part, two warps a scheduler on a 142-SM part) the device cannot
-#: hide a chain's load rounds, so a thin product (no reuse) below that is
-#: split. A product with both edges >= 8 has a tile with operand reuse; it
-#: is split only below 2^14 cells (64 tiles of 16 x 16: under half a
-#: 256-thread block per multiprocessor on either GPU), where the tile's
-#: reuse cannot pay for the idle device. Above, the split's 2 K loads a cell
-#: without reuse cost more than it gains.
+#: occupancy bounds, one per tile family (cost, not a data shape). The
+#: split costs 2 K loads a cell with no operand reuse; it pays where the
+#: product's own route leaves the device idle:
+#:  - a thin product (an edge under SK_REUSE_EDGE: one thread a cell or the
+#:    thin tile, no reuse to lose) below 2^15 cells: under 2^15 threads (less
+#:    than half a wave64 per SIMD on a 304-CU part, two warps a scheduler on
+#:    a 142-SM part) a chain's load rounds cannot be hidden;
+#:  - an edge under SK_WIDE_EDGE (the 16 x 16 tile family) below 2^14 cells:
+#:    64 tiles, under half a 256-thread block per multiprocessor on either
+#:    GPU, so the tile's reuse cannot pay for the idle device;
+#:  - both edges >= SK_WIDE_EDGE (the 64 x 64 tile family) below
+#:    SK_WIDE_BLOCKS 64 x 64 tiles: under 8 busy multiprocessors of 142 /
+#:    304, each folding the whole K. The family is the shape's, never the
+#:    -D MOJOLEARN_IDN_SEQ_GEMM_MICRO_OFF arm's, so that define moves no bit.
+#: Above every bound the tiles' reuse costs less than the split's loads
+#: (an estimate the A/B decides: MOJOLEARN_IDN_GEMM_SPLITK_OFF).
 comptime SK_THIN_CELLS = 1 << 15
 comptime SK_TILE_CELLS = 1 << 14
+comptime SK_WIDE_EDGE = 64
+comptime SK_WIDE_BLOCKS = 8
 
 
 @always_inline
@@ -114,7 +123,10 @@ def gemm_split_shape(M: Int, N: Int, K: Int) -> Bool:
     var cells = M * N
     if M < SK_REUSE_EDGE or N < SK_REUSE_EDGE:
         return cells < SK_THIN_CELLS
-    return cells < SK_TILE_CELLS
+    if M < SK_WIDE_EDGE or N < SK_WIDE_EDGE:
+        return cells < SK_TILE_CELLS
+    var tiles = ((M + SK_WIDE_EDGE - 1) // SK_WIDE_EDGE) * ((N + SK_WIDE_EDGE - 1) // SK_WIDE_EDGE)
+    return tiles < SK_WIDE_BLOCKS
 
 
 @always_inline
