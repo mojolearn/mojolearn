@@ -203,14 +203,20 @@ Checks: `autograd/checks/loss_cpu.mojo` and `loss_gpu.mojo`
 (`run_loss_checks`): float64 oracles for every loss value and gradient,
 bit equality of `loss_value_into` and the tape, and the metrics on small
 arrays with ties.
-## (b) Python model API: the model description (implemented)
+## (b) Python model API: the model description (shipped, in progress)
 
 `mojolearn.Sequential` (`python/mojolearn/_x_sequence_model.py`) records
 layers and options; one Mojo call runs the whole fit
 (`autograd/pyapi.mojo` `model_fit_py` -> `autograd/model.mojo`
 `model_fit`) or prediction (`model_predict`). Python never computes on data
-and never generates weights. Listed in `docs-site/api_exclude.txt` until its
-checks pass on Apple, NVIDIA and AMD.
+and never generates weights. Public: its `MODEL_DIGEST` lines match on
+Metal, NVIDIA and AMD (mse b656f077939878e4, cross_entropy
+5879007eb3b03d12; records in ~/mojolearn-evidence/autograd-buildout-20261019/),
+so it left `docs-site/api_exclude.txt` (lane ag-public-api, 2026-10-19). User
+guide: `docs-site/user_guide/autograd.md`; API page: the `autograd` family of
+`docs-site/tools/gen_api.py`; the guide's and docstrings' examples run in
+`python/mojolearn/tests/test_autograd_public.py` (`PUBLIC_DIGEST` lines,
+smoke entry `autograd-public`).
 
 Description, shared by every entry (validated by `parse_model`, which raises
 naming the first bad layer):
@@ -291,7 +297,7 @@ Checks: `python/mojolearn/tests/test_autograd_model.py` (loss falls, shapes,
 same digest for the same seed across two fits, refusals). Cross-vendor
 identity: its `MODEL_DIGEST` lines must be equal on Apple, NVIDIA and AMD.
 
-## (b2) Operation session: the ops for composition (implemented, lane ag-ops-api)
+## (b2) Operation session: the ops for composition (shipped, in progress; lane ag-ops-api)
 
 `mojolearn.ops.Session` (`python/mojolearn/ops.py`) exposes the tape's
 forward operations one call each, so a developer can build an inference or
@@ -300,9 +306,17 @@ transforms, dynamic ensembles / mixture-of-experts routing, statistics plus
 learned representations) from mojolearn's operations and get the same bits
 on Apple, NVIDIA and AMD, without autograd. `Session(record=True)` is the
 same composition recorded: `backward(loss)` and `grad(h)` make it
-trainable. Listed in `docs-site/api_exclude.txt` until
-`test_ops_session.py` passes on CPU, Metal, NVIDIA and AMD with equal
-`OPS_DIGEST` lines.
+trainable. Public since its `OPS_DIGEST` lines matched on Metal, NVIDIA and
+AMD (lane ag-public-api, 2026-10-19).
+
+Still excluded from the public docs (`docs-site/api_exclude.txt`):
+
+- Checks not green on all three vendors: none.
+- `Sequential.dropout`: refused by name unless the build defines
+  `MOJOLEARN_AUTOGRAD_HAS_DROPOUT`, which no shipped binding does. The
+  session's `dropout` op is public.
+- `Session.profile_reset` / `Session.profile_report`: the development launch
+  profile (`MOJOLEARN_AG_PROFILE`), not user API.
 
 Mojo: `autograd/ops_api.mojo` `OpsSession[E: Exec & Movable]` owns one
 executor, one `Tape` (inference mode unless recording) and the live tensors
@@ -320,7 +334,7 @@ the graph; uploads stay as fresh leaves), `ops_metric(sid, kind, [y_true,
 prediction])`, `ops_backward(sid, loss, accumulate)`, `ops_grad(sid, h,
 addr)`. One Mojo call per op; all arithmetic in Mojo; no new kernels.
 
-### Ops
+### Ops (shipped, in progress)
 
 Identity: "yes" = the op's kernels are in the autograd check suites whose
 digests match on CPU, Metal, NVIDIA and AMD (`autograd/checks/*_cpu.mojo` /
