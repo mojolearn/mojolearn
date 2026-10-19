@@ -70,6 +70,9 @@ from embedding.checks.embedding_fast_apple import (
     fast_embedding_backward_into,
     fast_embedding_forward_into,
 )
+from sequence.ops import FP
+from sequence.exec_device import DeviceExec
+from autograd.embedding_ops import AG_EMB_PLAN_SORT, embedding_backward_into, embedding_perm_words
 from embedding.checks.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,
@@ -465,6 +468,53 @@ def _forward_run(
     _ = ctx^
 
 
+# Lane ag-embedding-op (2026-10-19, TAPE_EVERYWHERE path 4), default on:
+# THE IDENTICAL DEVICE BACKWARD IS THE EMBEDDING TAPE OP'S VJP. With at least
+# one position, `embedding_backward` and `embedding_backward_dev` run
+# autograd/embedding_ops.mojo embedding_backward_into on this binding's
+# buffers (the body Tape.embedding's backward runs, through a DeviceExec on
+# this context) in place of identical_embedding_backward[_prerefused]_into.
+# Bits: identical by construction (the profile's seeded ascending fold and
+# +0.0 padding row, word for word; the same resolved plan, and both plans
+# give the same runs); the gate is embedding_check's tape clause, digests
+# equal to the hand kernels'. The ids are the host list the binding already
+# refused. Launches (scan): runs 2 + fold 1, the hand scan's counts, prefix
+# and perm 3 + seed 1 + fold 1 (+ padding row 1). FAST on Apple (the atomic
+# backward) is unchanged. -D MOJOLEARN_AUTOGRAD_EMBEDDING_OFF keeps the
+# hand kernels (arm A).
+comptime AUTOGRAD_EMBEDDING = not is_defined["MOJOLEARN_AUTOGRAD_EMBEDDING_OFF"]()
+
+
+def _tape_backward(
+    ctx: DeviceContext,
+    mut dw: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut ids: DeviceBuffer[DType.int32],
+    n_positions: Int,
+    cfg: EmbConfig,
+    plan: Int,
+) raises:
+    """dW of the tape op's VJP (AUTOGRAD_EMBEDDING): from dW's bits when
+    cfg.accumulate, else from +0.0; `plan` resolved (PLAN_SCAN or
+    PLAN_SORT); n_positions >= 1. Waits for the queue before returning; the
+    caller keeps the three buffers alive until then."""
+    var ex = DeviceExec(ctx)
+    var begin = ex.alloc(cfg.vocab + 1)
+    var words = embedding_perm_words(plan, n_positions)
+    var perm = ex.alloc(words)
+    var keys = perm
+    if plan == AG_EMB_PLAN_SORT:
+        keys = ex.alloc(words)
+    embedding_backward_into(
+        ex,
+        FP(unsafe_from_address=Int(ids.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dy.unsafe_ptr())),
+        FP(unsafe_from_address=Int(dw.unsafe_ptr())),
+        n_positions, cfg.vocab, cfg.width, cfg.padding_idx, cfg.accumulate, plan, begin, perm, keys,
+    )
+    ex.sync()
+
+
 def _backward_run(
     dyp: MutPointer[Float32, MutUntrackedOrigin],
     ids: List[Int32],
@@ -545,9 +595,15 @@ def _backward_run(
         var r_counts = _pool_i32(ctx, cfg.vocab)
         var r_begin = _pool_i32(ctx, cfg.vocab + 1)
         var r_perm = _pool_i32(ctx, n_positions)
-        identical_embedding_backward_prerefused_into(
-            ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
-        )
+        var tape_route = False
+        comptime if AUTOGRAD_EMBEDDING:
+            tape_route = n_positions > 0
+        if tape_route:
+            _tape_backward(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
+        else:
+            identical_embedding_backward_prerefused_into(
+                ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
+            )
         _download_out(ctx, r_dw, dwp, cells)
         _give_f32(r_dw^, cells)
         _give_f32(r_dy^, ty)
@@ -573,9 +629,15 @@ def _backward_run(
     var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
     var perm = _upload_i32(ctx, _zeros_i32(n_positions))
-    identical_embedding_backward_into(
-        ctx, d_dw, d_dy, d_ids, counts, run_begin, perm, n_positions, cfg, plan
-    )
+    var tape_route = False
+    comptime if AUTOGRAD_EMBEDDING:
+        tape_route = n_positions > 0
+    if tape_route:
+        _tape_backward(ctx, d_dw, d_dy, d_ids, n_positions, cfg, plan)
+    else:
+        identical_embedding_backward_into(
+            ctx, d_dw, d_dy, d_ids, counts, run_begin, perm, n_positions, cfg, plan
+        )
     ctx.synchronize()
     _download_out(ctx, d_dw, dwp, cells)
     _ = d_dw^
@@ -938,9 +1000,15 @@ def _backward_dev_run(
         var r_counts = _pool_i32(ctx, cfg.vocab)
         var r_begin = _pool_i32(ctx, cfg.vocab + 1)
         var r_perm = _pool_i32(ctx, n_positions)
-        identical_embedding_backward_prerefused_into(
-            ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
-        )
+        var tape_route = False
+        comptime if AUTOGRAD_EMBEDDING:
+            tape_route = n_positions > 0
+        if tape_route:
+            _tape_backward(ctx, r_dw, r_dy, r_ids, n_positions, cfg, plan)
+        else:
+            identical_embedding_backward_prerefused_into(
+                ctx, r_dw, r_dy, r_ids, r_counts, r_begin, r_perm, n_positions, cfg, plan, unique_rows=True
+            )
         ctx.synchronize()
         _give_i32(r_counts^, cfg.vocab)
         _give_i32(r_begin^, cfg.vocab + 1)
