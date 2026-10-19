@@ -1,0 +1,10 @@
+{
+ "schema": "mojolearn-autograd-smoke-digests/1",
+ "mode": "identical",
+ "test": "tests/test_autograd_smoke.py",
+ "how": "null = not recorded yet; the orchestrator copies the first green run's MOJOLEARN_AUTOGRAD_SMOKE_OUT values here, after which Apple, NVIDIA and AMD must all give them",
+ "digests": {
+  "mlp": null,
+  "lstm": null
+ }
+}

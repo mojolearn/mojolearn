@@ -302,6 +302,10 @@ def main():
     ap.add_argument("--algos", default=",".join(ALL))
     ap.add_argument("--out", default="")
     ap.add_argument("--compare", nargs=2)
+    ap.add_argument("--profile", nargs="?", const="1", default="", choices=["1", "2"],
+                    help="mlp case: MOJOLEARN_AG_PROFILE for the measured fit (1 launch counts, 2 also "
+                         "host-clock times between syncs: a relative profile, its fit_s is not a timing); "
+                         "the binding prints the AG_PROFILE table")
     args = ap.parse_args()
     if args.compare:
         return compare(*args.compare)
@@ -313,6 +317,9 @@ def main():
                              "timed (Andrew, Oct 2 2026)")
         print("sequence_speed: host column: digests only, no *_s fields (our CPU is never timed, "
               "Andrew, Oct 2 2026)", flush=True)
+        if args.profile == "2":
+            raise SystemExit("sequence_speed: --profile 2 refused on the host column: our CPU is never "
+                             "timed (Andrew, Oct 2 2026); --profile 1 counts launches only")
     X, y = load(args.data, args.rows)
     recs = []
     out = Path(os.path.expanduser(args.out)) if args.out else None
@@ -330,8 +337,22 @@ def main():
                 s = io.StringIO()
                 pstats.Stats(pr, stream=s).sort_stats("tottime").print_stats(18)
                 print("\n".join("PROF " + name + " " + l for l in s.getvalue().splitlines() if l.strip()), flush=True)
-            r = run_case(ml, X, y, name, True)
+            profiled = bool(args.profile) and name == "mlp"
+            if profiled:
+                # the counting and the table are Mojo's (the executor and the
+                # tape read the variable when they are built); this only sets it
+                os.environ["MOJOLEARN_AG_PROFILE"] = args.profile
+            try:
+                r = run_case(ml, X, y, name, True)
+            finally:
+                if profiled:
+                    os.environ.pop("MOJOLEARN_AG_PROFILE", None)
             rec.update({k: v for k, v in r.items() if not (host and k.endswith("_s"))})
+            if profiled:
+                rec["ag_profile"] = int(args.profile)
+                if args.profile == "2":
+                    # synced launches: not a speed measurement
+                    rec = {k: v for k, v in rec.items() if not k.endswith("_s")}
         except Exception as e:                       # recorded, never hidden
             rec["error"] = f"{type(e).__name__}: {e}"
         print(json.dumps(rec), flush=True)

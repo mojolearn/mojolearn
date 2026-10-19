@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', choices=('cpu', 'gpu', 'both'), default='cpu')
-    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'example'), default='all')
+    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example'), default='all')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--mojo', default='mojo')
     args = parser.parse_args()
@@ -113,6 +113,23 @@ def main():
                 save()
                 if failures:
                     raise RuntimeError(f'{backend} MLP regression failed ({len(failures)} values)')
+        infer_logs = {}
+        for backend in backends:
+            if args.only in ('all', 'infer'):
+                path = native(f'{backend}-infer', f'autograd/checks/infer_{backend}.mojo')
+                if 'PASS infer models=7 refusals=4' not in path.read_text():
+                    raise RuntimeError('incomplete inference-mode coverage')
+                infer_logs[backend] = path
+        if len(infer_logs) == 2:
+            def infer_digests(path):
+                return {line.split()[1]: line.split()[-1] for line in path.read_text().splitlines()
+                        if line.startswith('PASS ') and ' digest ' in line}
+            a, b = infer_digests(infer_logs['cpu']), infer_digests(infer_logs['gpu'])
+            mismatches = [k for k in a.keys() | b.keys() if a.get(k) != b.get(k)]
+            report['comparisons'].append({'kind': 'local CPU/GPU inference bit comparison',
+                                          'results': len(a), 'mismatches': mismatches})
+            if mismatches:
+                raise RuntimeError(f'local CPU/GPU inference bits differ: {mismatches}')
         if len(gradient_logs) == 2:
             def digests(path):
                 return {line.split()[1]: line.split()[-1] for line in path.read_text().splitlines()

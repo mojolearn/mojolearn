@@ -195,6 +195,9 @@ from transformer.checks.transformer_backward import (
     llama_decoder_layer_backward,
     llama_decoder_layer_backward_device,
 )
+# lane ag-transformer: -D MOJOLEARN_AUTOGRAD_TRANSFORMER (default off) runs
+# the two saved-stage backwards below through the autograd tape.
+from autograd.rules_transformer import AUTOGRAD_TRANSFORMER, llama_decoder_layer_backward_autograd
 # lane/block-options (2026-09-17): the block options record and the two
 # tails. `transformer/block_options.mojo` is the order's authority; the
 # docstrings below repeat it word for word because a binding docstring is
@@ -1187,8 +1190,14 @@ def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) 
     ctx.synchronize()
     var off = IdentityTrace.disabled()
     # Reuse the real saved forward; no weight upload or forward recompute.
-    llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
-        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+    # -D MOJOLEARN_AUTOGRAD_TRANSFORMER: the same launches with the stage order
+    # and fan-in sums owned by the autograd tape (autograd/rules_transformer.mojo).
+    comptime if AUTOGRAD_TRANSFORMER:
+        llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
+            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
+    else:
+        llama_decoder_layer_backward_device(ctx, bw.bst, ws.stages, w,
+            ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
     _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
     _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
     _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
@@ -1344,10 +1353,16 @@ def _transformer_run_session_backward(
     )
     _btick(ton, tk, "surface.forward")
     var offb = IdentityTrace.disabled()
-    llama_decoder_layer_backward_device(
-        ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
-        b, l, 0, offb, String("pyb"),
-    )
+    comptime if AUTOGRAD_TRANSFORMER:
+        llama_decoder_layer_backward_autograd(
+            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+            b, l, 0, offb, String("pyb"),
+        )
+    else:
+        llama_decoder_layer_backward_device(
+            ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+            b, l, 0, offb, String("pyb"),
+        )
     _btick(ton, tk, "surface.backward")
     _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
     _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])

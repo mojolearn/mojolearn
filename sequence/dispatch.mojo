@@ -43,6 +43,12 @@ from sequence.ops import (
     OP_MLP_ROWPART,
     OP_MLP_PERM,
     OP_MLP_EPOCH_LOSS,
+    OP_MLP_LB_PART,
+    OP_MLP_LB_FOLD,
+    OP_MLP_LB_EPOCH_PART,
+    OP_MLP_LB_EPOCH_FOLD,
+    OP_MLP_LB_FIRST,
+    OP_MLP_LB_LAST,
     OP_SEQ_IOTA,
     OP_PROPHET_PREP,
     OP_L2GRAD,
@@ -118,6 +124,8 @@ from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, o
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
+from sequence.mlp import op_agk_gemm_epi
+from sequence.mlp import op_mlp_lb_epoch_fold, op_mlp_lb_epoch_part, op_mlp_lb_fold, op_mlp_lb_part
 from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
@@ -130,6 +138,13 @@ from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_
 from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 from autograd.ops import OP_AG_FIRST, OP_AG_LAST, apply_autograd
+from autograd.ops import OP_AGK_FIRST, OP_AGK_LAST, OP_AGK_GEMM_EPI, apply_autograd_kernels
+from autograd.ops import OP_AGF_FIRST, OP_AGF_LAST, apply_autograd_fold
+from autograd.data_ops import OP_AGD_FIRST, OP_AGD_LAST, apply_autograd_data
+from autograd.optim import OP_AGO_FIRST, OP_AGO_LAST, apply_optim
+from autograd.loss_ops import OP_LS_FIRST, OP_LS_LAST, apply_losses
+from autograd.model_ops import OP_AGM_FIRST, OP_AGM_LAST, apply_model_ops
+from autograd.pass1_ops import OP_P1_FIRST, OP_P1_LAST, apply_pass1
 
 
 @always_inline
@@ -140,8 +155,109 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_AG_FIRST or OP_CELL_FWD_SCAN > OP_AG_LAST) and (
         OP_CELL_BWD_SCAN < OP_AG_FIRST or OP_CELL_BWD_SCAN > OP_AG_LAST
     ), "autograd opcode collides with recurrent scan"
+    # The data-side autograd family (autograd/data_ops.mojo: dropout) is a
+    # second contiguous range, disjoint from the first and from the scans.
+    comptime assert OP_AGD_FIRST <= OP_AGD_LAST, "autograd data opcode range is empty"
+    comptime assert OP_AGD_FIRST > OP_AG_LAST or OP_AGD_LAST < OP_AG_FIRST, "autograd opcode ranges overlap"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGD_FIRST or OP_CELL_FWD_SCAN > OP_AGD_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGD_FIRST or OP_CELL_BWD_SCAN > OP_AGD_LAST
+    ), "autograd data opcode collides with recurrent scan"
+    # The autograd optimizer family (autograd/optim.mojo), a range of its own.
+    comptime assert OP_AGO_FIRST <= OP_AGO_LAST, "autograd optim opcode range is empty"
+    comptime assert OP_AGO_LAST < OP_AG_FIRST or OP_AGO_FIRST > OP_AG_LAST, "autograd optim opcodes overlap the tape's"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGO_FIRST or OP_CELL_FWD_SCAN > OP_AGO_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGO_FIRST or OP_CELL_BWD_SCAN > OP_AGO_LAST
+    ), "autograd optim opcode collides with recurrent scan"
+    comptime assert OP_AGO_LAST < OP_AGD_FIRST or OP_AGO_FIRST > OP_AGD_LAST, "autograd optim opcodes overlap the data family"
+    # The loss and metric family (autograd/loss_ops.mojo) is a second
+    # contiguous range, disjoint from the autograd ops and the scan codes.
+    comptime assert OP_LS_FIRST <= OP_LS_LAST, "loss opcode range is empty"
+    comptime assert OP_LS_FIRST > OP_AG_LAST or OP_LS_LAST < OP_AG_FIRST, "loss opcodes collide with autograd ops"
+    comptime assert (OP_CELL_FWD_SCAN < OP_LS_FIRST or OP_CELL_FWD_SCAN > OP_LS_LAST) and (
+        OP_CELL_BWD_SCAN < OP_LS_FIRST or OP_CELL_BWD_SCAN > OP_LS_LAST
+    ), "loss opcode collides with recurrent scan"
+    comptime assert OP_LS_LAST < OP_AGD_FIRST or OP_LS_FIRST > OP_AGD_LAST, "loss opcodes overlap the data family"
+    comptime assert OP_LS_LAST < OP_AGO_FIRST or OP_LS_FIRST > OP_AGO_LAST, "loss opcodes overlap the optim family"
+    # The model trainer's family (autograd/model_ops.mojo) is a second range
+    # that must not overlap the tape's or the scan codes.
+    comptime assert OP_AGM_FIRST <= OP_AGM_LAST, "model opcode range is empty"
+    comptime assert OP_AGM_FIRST > OP_AG_LAST or OP_AGM_LAST < OP_AG_FIRST, "model opcodes collide with autograd"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGM_FIRST or OP_CELL_FWD_SCAN > OP_AGM_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGM_FIRST or OP_CELL_BWD_SCAN > OP_AGM_LAST
+    ), "model opcode collides with recurrent scan"
+    comptime assert OP_AGM_LAST < OP_AGD_FIRST or OP_AGM_FIRST > OP_AGD_LAST, "model opcodes overlap the data family"
+    comptime assert OP_AGM_LAST < OP_AGO_FIRST or OP_AGM_FIRST > OP_AGO_LAST, "model opcodes overlap the optim family"
+    comptime assert OP_AGM_LAST < OP_LS_FIRST or OP_AGM_FIRST > OP_LS_LAST, "model opcodes overlap the loss family"
+    # The tape's kernel family (lane ag-pass2-kernels, autograd/ops.mojo
+    # OP_AGK_*, 1400..), disjoint from every other autograd range and the scans.
+    comptime assert OP_AGK_FIRST <= OP_AGK_LAST, "autograd kernel opcode range is empty"
+    comptime assert OP_AGK_FIRST > OP_AG_LAST or OP_AGK_LAST < OP_AG_FIRST, "autograd kernel opcodes overlap the tape's"
+    comptime assert OP_AGK_FIRST > OP_AGD_LAST or OP_AGK_LAST < OP_AGD_FIRST, "autograd kernel opcodes overlap the data family"
+    comptime assert OP_AGK_FIRST > OP_AGO_LAST or OP_AGK_LAST < OP_AGO_FIRST, "autograd kernel opcodes overlap the optim family"
+    comptime assert OP_AGK_FIRST > OP_LS_LAST or OP_AGK_LAST < OP_LS_FIRST, "autograd kernel opcodes overlap the loss family"
+    comptime assert OP_AGK_FIRST > OP_AGM_LAST or OP_AGK_LAST < OP_AGM_FIRST, "autograd kernel opcodes overlap the model family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGK_FIRST or OP_CELL_FWD_SCAN > OP_AGK_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGK_FIRST or OP_CELL_BWD_SCAN > OP_AGK_LAST
+    ), "autograd kernel opcode collides with recurrent scan"
+    # The tape's fused nodes (autograd/pass1_ops.mojo), a range of their own.
+    comptime assert OP_P1_FIRST <= OP_P1_LAST, "autograd fused opcode range is empty"
+    comptime assert OP_P1_FIRST > OP_AG_LAST or OP_P1_LAST < OP_AG_FIRST, "fused opcodes collide with autograd"
+    comptime assert (OP_CELL_FWD_SCAN < OP_P1_FIRST or OP_CELL_FWD_SCAN > OP_P1_LAST) and (
+        OP_CELL_BWD_SCAN < OP_P1_FIRST or OP_CELL_BWD_SCAN > OP_P1_LAST
+    ), "fused opcode collides with recurrent scan"
+    comptime assert OP_P1_LAST < OP_AGD_FIRST or OP_P1_FIRST > OP_AGD_LAST, "fused opcodes overlap the data family"
+    comptime assert OP_P1_LAST < OP_AGO_FIRST or OP_P1_FIRST > OP_AGO_LAST, "fused opcodes overlap the optim family"
+    comptime assert OP_P1_LAST < OP_LS_FIRST or OP_P1_FIRST > OP_LS_LAST, "fused opcodes overlap the loss family"
+    comptime assert OP_P1_LAST < OP_AGM_FIRST or OP_P1_FIRST > OP_AGM_LAST, "fused opcodes overlap the model family"
+    comptime assert OP_P1_LAST < OP_AGK_FIRST or OP_P1_FIRST > OP_AGK_LAST, "fused opcodes overlap the kernel family"
+    # The MLP loss block (sequence/mlp.mojo MLP_LOSSBLOCK, lane
+    # ag-pass3-lossblock, 1600..), disjoint from every autograd range and the scans.
+    comptime assert OP_MLP_LB_FIRST <= OP_MLP_LB_LAST, "MLP loss-block opcode range is empty"
+    comptime assert OP_MLP_LB_FIRST > OP_AG_LAST or OP_MLP_LB_LAST < OP_AG_FIRST, "MLP loss-block opcodes overlap the tape's"
+    comptime assert OP_MLP_LB_FIRST > OP_AGD_LAST or OP_MLP_LB_LAST < OP_AGD_FIRST, "MLP loss-block opcodes overlap the data family"
+    comptime assert OP_MLP_LB_FIRST > OP_AGO_LAST or OP_MLP_LB_LAST < OP_AGO_FIRST, "MLP loss-block opcodes overlap the optim family"
+    comptime assert OP_MLP_LB_FIRST > OP_LS_LAST or OP_MLP_LB_LAST < OP_LS_FIRST, "MLP loss-block opcodes overlap the loss family"
+    comptime assert OP_MLP_LB_FIRST > OP_AGM_LAST or OP_MLP_LB_LAST < OP_AGM_FIRST, "MLP loss-block opcodes overlap the model family"
+    comptime assert OP_MLP_LB_FIRST > OP_AGK_LAST or OP_MLP_LB_LAST < OP_AGK_FIRST, "MLP loss-block opcodes overlap the kernel family"
+    comptime assert OP_MLP_LB_FIRST > OP_P1_LAST or OP_MLP_LB_LAST < OP_P1_FIRST, "MLP loss-block opcodes overlap the fused family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_MLP_LB_FIRST or OP_CELL_FWD_SCAN > OP_MLP_LB_LAST) and (
+        OP_CELL_BWD_SCAN < OP_MLP_LB_FIRST or OP_CELL_BWD_SCAN > OP_MLP_LB_LAST
+    ), "MLP loss-block opcode collides with recurrent scan"
+    # The fold tree's level family (autograd/ops.mojo OP_AGF_*, 1700..; lane
+    # ag-pass3-fold), disjoint from every other autograd range and the scans.
+    comptime assert OP_AGF_FIRST <= OP_AGF_LAST, "fold level opcode range is empty"
+    comptime assert OP_AGF_FIRST > OP_AG_LAST or OP_AGF_LAST < OP_AG_FIRST, "fold level opcodes overlap the tape's"
+    comptime assert OP_AGF_FIRST > OP_AGD_LAST or OP_AGF_LAST < OP_AGD_FIRST, "fold level opcodes overlap the data family"
+    comptime assert OP_AGF_FIRST > OP_AGO_LAST or OP_AGF_LAST < OP_AGO_FIRST, "fold level opcodes overlap the optim family"
+    comptime assert OP_AGF_FIRST > OP_LS_LAST or OP_AGF_LAST < OP_LS_FIRST, "fold level opcodes overlap the loss family"
+    comptime assert OP_AGF_FIRST > OP_AGM_LAST or OP_AGF_LAST < OP_AGM_FIRST, "fold level opcodes overlap the model family"
+    comptime assert OP_AGF_FIRST > OP_AGK_LAST or OP_AGF_LAST < OP_AGK_FIRST, "fold level opcodes overlap the kernel family"
+    comptime assert OP_AGF_FIRST > OP_P1_LAST or OP_AGF_LAST < OP_P1_FIRST, "fold level opcodes overlap the fused family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_AGF_FIRST or OP_CELL_FWD_SCAN > OP_AGF_LAST) and (
+        OP_CELL_BWD_SCAN < OP_AGF_FIRST or OP_CELL_BWD_SCAN > OP_AGF_LAST
+    ), "fold level opcode collides with recurrent scan"
+    comptime assert OP_AGF_FIRST > OP_MLP_LB_LAST or OP_AGF_LAST < OP_MLP_LB_FIRST, "fold level opcodes overlap the MLP loss block"
     comptime if OP >= OP_AG_FIRST and OP <= OP_AG_LAST:
         apply_autograd[OP](t, a)
+    elif OP >= OP_AGD_FIRST and OP <= OP_AGD_LAST:
+        apply_autograd_data[OP](t, a)
+    elif OP >= OP_AGO_FIRST and OP <= OP_AGO_LAST:
+        apply_optim[OP](t, a)
+    elif OP >= OP_LS_FIRST and OP <= OP_LS_LAST:
+        apply_losses[OP](t, a)
+    elif OP >= OP_AGM_FIRST and OP <= OP_AGM_LAST:
+        apply_model_ops[OP](t, a)
+    elif OP == OP_AGK_GEMM_EPI:
+        # the tape's GEMM with epilogue: op_gemm_epi's words with the follower
+        # applied before the one store (lane ag-pass3-impl; DeviceExec tiles
+        # it where OP_GEMM is tiled, sequence/gemm_tiled.mojo)
+        op_agk_gemm_epi(t, a)
+    elif OP >= OP_AGK_FIRST and OP <= OP_AGK_LAST:
+        apply_autograd_kernels[OP](t, a)
+    elif OP >= OP_P1_FIRST and OP <= OP_P1_LAST:
+        apply_pass1[OP](t, a)
+    elif OP >= OP_AGF_FIRST and OP <= OP_AGF_LAST:
+        apply_autograd_fold[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
@@ -224,6 +340,14 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_perm(t, a)
     elif OP == OP_MLP_EPOCH_LOSS:
         op_mlp_epoch_loss(t, a)
+    elif OP == OP_MLP_LB_PART:
+        op_mlp_lb_part(t, a)
+    elif OP == OP_MLP_LB_FOLD:
+        op_mlp_lb_fold(t, a)
+    elif OP == OP_MLP_LB_EPOCH_PART:
+        op_mlp_lb_epoch_part(t, a)
+    elif OP == OP_MLP_LB_EPOCH_FOLD:
+        op_mlp_lb_epoch_fold(t, a)
     elif OP == OP_SEQ_IOTA:
         op_seq_iota(t, a)
     elif OP == OP_PROPHET_PREP:
