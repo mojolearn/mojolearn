@@ -467,6 +467,21 @@ comptime BWD_GATED_SILU_SPLIT_TRIAL = is_defined[
 comptime BWD_GATED_SILU_FUSED_TRIAL = is_defined[
     "MOJOLEARN_BWD_GATED_SILU_FUSED_TRIAL"
 ]()
+#: lane ag-transformer: the predicate `llama_decoder_layer_backward_device`
+#: computes inline for `fuse_gated_silu` (stages 4-6), spelled once more for
+#: the autograd SwiGLU rule (`autograd/rules_transformer.mojo`). Keep the two
+#: equal.
+comptime BWD_FUSE_GATED_SILU = (
+    (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
+    and (
+        TARGET_COLUMN == COLUMN_APPLE
+        or TARGET_COLUMN == COLUMN_NVIDIA
+        or TARGET_COLUMN == COLUMN_AMD
+        or BWD_GATED_SILU_FUSED_TRIAL
+    )
+    and not BWD_ANY_SABOTAGE
+    and not BWD_GATED_SILU_SPLIT_TRIAL
+)
 
 
 def llama_backward_sabotage_name() -> String:
