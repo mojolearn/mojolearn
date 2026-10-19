@@ -38,6 +38,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_AUTOGRAD_RNN_OFF`](#mojolearn_autograd_rnn_off) | Neural | removed (hand glue, tape is the only path) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_RNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_SAMBA_OFF`](#mojolearn_autograd_samba_off) | Neural | DELETED (hand path; tape only) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF`](#mojolearn_autograd_small_mlp_off) | Neural | removed (hand glue superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch) |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
 | [`MOJOLEARN_ET_DEVICE_BATCH_65536`](#mojolearn_et_device_batch_65536) | Trees | DROPPED-slower | 2026-10-03 | [MOJOLEARN_ET_DEVICE_BATCH_65536.patch](../experiments/removed/MOJOLEARN_ET_DEVICE_BATCH_65536.patch) |
@@ -435,6 +436,33 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - What it tried: fold the 1/B of the MLP parameter gradients into the tape's backward seed (one in-place divide of the B x O seed), then one L2GRAD per weight with alpha/B and n = 1 and no bias divide; L - 1 launches fewer a batch.
 - A/B (HIGGS 1M x 28, (256,) b512 1 epoch adam, identical, one run per arm, arm A = the tape default): NVIDIA L40S 0.388 -> 0.387 s (1.00x), AMD MI325X 0.602 -> 0.599 s (0.99x); digest aee3b17ef66dc060 on both arms and both vendors (B = 512 is a power of two, so the scaling rounds identically). Quality unchanged by construction. Runs: `~/mojolearn-evidence/native-autograd-20261018/orch-nv-01/armD.log`, `orch-amd-01/armD.log`.
 - EXPERIMENTS.md (Autograd (2026-10-18)): `MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`, **DROPPED-noise**.
+
+### MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
+
+- What it was: the hand-chained backward of the public small MLP's one-call train step (`training/mlp_ops.mojo`
+  `mlp_train_step_host`, the `else` arm of its `tape` parameter): `_gradient`'s six calls launched by hand (dW2 OP_TN wgrad, db2
+  row sum, incoming OP_NN, relu', dW1 OP_TN wgrad, db1 row sum, dx OP_NN), selected by `-D MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF`; the
+  opt-in spelling `MOJOLEARN_AUTOGRAD_SMALL_MLP` and the `AUTOGRAD_SMALL_MLP` switch in `autograd/rules_small_mlp.mojo` go with it.
+  The tape backward (`small_mlp_backward_autograd`, rules SM_LINEAR / SM_BIAS_ACT) calls the same `_gemm` / `_launch_mlp` kernels
+  on the same buffers; those kernels and the Apple FAST `MLP_FUSED_STEP` path stay.
+- Verdict: removed, not an A/B loser: hand glue superseded by the tape (Andrew 2026-10-19: every trainer's backward runs on the
+  tape by default with word-for-word checks passed). Same bits by construction and by check: `training/checks/mlp_tape_step_check.mojo`
+  (rows 1 / 37 / 256, with and without dx, two AdamW steps) printed 162/162 tensors SAME, hand digest == tape digest, on Metal
+  (`autograd-buildout-20261019/compile-24`, `compile-25` mlp-step-run.log), NVIDIA L40S and AMD MI325X (`final-02/{nv,amd}/mlpstep-run.log`),
+  with the same digests on all four (e.g. rows=1 t=1 loss 13303793352294555115, rows=256 dx=1 t=2 flags_after 3554543661169652019).
+  No NV/AMD timing ratios: the small MLP step was not in the one-run-per-arm timing rounds (final-01 TM_LM_TIMING, nv-04 NV_PASS5,
+  amd-08 AMD_PASS5 and p6-01 time the Sequential/MLPClassifier HIGGS MLP, a different trainer); the tape arm records on an executor
+  that never launches, allocates or waits, so it adds no drain. Quality unchanged (same bits).
+- The check now compares the tape against those stored digests (`training/checks/mlp_tape_step_digests.tsv`, 162 records); it has
+  no float64 oracle.
+- Deleted 2026-10-19 by `3cd0063d7` on lane/del-smallmlp; recoverable at `3cd0063d7^`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch` (the deletion reversed, code files only:
+  `training/mlp_ops.mojo`, `autograd/rules_small_mlp.mojo`, `training/checks/mlp_tape_step_check.mojo`, restoring the in-process
+  hand-vs-tape check; it also removes the refusals below).
+- Guard: `MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF` and `MOJOLEARN_AUTOGRAD_SMALL_MLP` refused in `autograd/rules_small_mlp.mojo`
+  (`_check_removed_defines`, forced by `mlp_train_step_host`), not in core: the pre-push rebuild fence refuses a core line (76
+  bindings rebuild). No `grid_controls` entry existed.
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF`, **removed**.
 
 ### MOJOLEARN_ET_DEVICE_BATCH_65536
 

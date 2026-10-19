@@ -1341,7 +1341,7 @@ check-mamba3-block = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/check
 check-mamba-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamba/checks/mamba_tape_backward_check.mojo"
 # the byte LM tape backward (autograd/rules_lm.mojo) against the hand walk, one train step, every gradient and updated parameter word
 check-lm-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/lm_tape_backward_check.mojo"
-# the small MLP train step tape backward (autograd/rules_small_mlp.mojo) against the hand chain, two AdamW steps, every output and state word
+# the small MLP train step tape backward (autograd/rules_small_mlp.mojo) against the stored digests (training/checks/mlp_tape_step_digests.tsv), two AdamW steps, every output and state word
 check-mlp-tape-step = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/mlp_tape_step_check.mojo"
 # the Samba resident train step on one tape (autograd/rules_samba.mojo, Mamba-3 as one M3_BLOCK rule) against the hand walk, every gradient and updated parameter word
 check-samba-tape-step = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/samba_tape_step_check.mojo"

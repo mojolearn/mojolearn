@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# The small MLP train step's backward on the tape (-D MOJOLEARN_AUTOGRAD_SMALL_MLP,
-# default on; MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF restores the hand chain).
+# The small MLP train step's backward on the tape (the step's only backward).
 # TAPE_EVERYWHERE_PLAN.md path 8, lane ag-smallmlp-tape.
 #
 # ---------------------------------------------------------------- launch inventory
@@ -66,12 +65,24 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
 from gemm.contract import OP_NN, OP_TN
 
-# Default on (Andrew 2026-10-19: the word-for-word check is the gate;
-# training/checks/mlp_tape_step_check.mojo). MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF
-# restores the hand chain for the A/B; the opt-in spelling is accepted too.
-comptime AUTOGRAD_SMALL_MLP = (
-    not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"]() or is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"]()
-)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+# (the AUTOGRAD_SMALL_MLP switch and its opt-in spelling MOJOLEARN_AUTOGRAD_SMALL_MLP;
+# training/checks/mlp_tape_step_check.mojo compares the tape against stored digests).
+
+
+def _check_removed_defines() -> Bool:
+    """Refusals for the retired small MLP hand-chain defines. They live here, next to the code they named, not in
+    core/six_lane_experiment_guards.mojo: a line there marks every binding that imports core as changed (the
+    rebuild fence refuses it)."""
+    # lane del-smallmlp (2026-10-19): the tape backward is the step's only backward (same bits, 162/162 tensors on
+    # Metal, NVIDIA and AMD; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP_OFF restored the small MLP train step's hand backward chain; the tape backward is the only one (same bits, 162/162 tensors on Metal, NVIDIA and AMD). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP was the opt-in spelling of the small MLP tape backward, now the only path; drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
+    return True
+
+
+comptime SMALL_MLP_REMOVED_DEFINES_OK = _check_removed_defines()
 
 # Tags 120-121 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
 # LM 64-71, Mamba-3 72-86, CNN 96-111, MoE 112-115).
