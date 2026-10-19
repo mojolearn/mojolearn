@@ -194,24 +194,21 @@ class Session:
     def tensor(self, x, requires_grad=False):
         """Copy an array to the device; returns its handle.
 
-        ``x`` is a scalar, a 1-D array (one column) or a 2-D array, cast to
-        float32. ``requires_grad=True`` (recording sessions only) makes it a
+        ``x`` is a scalar, a 1-D array (one column) or a 2-D array of bool,
+        integers, float32 or float64 in C or Fortran order, used as float32.
+        ``requires_grad=True`` (recording sessions only) makes it a
         trainable input whose gradient :meth:`grad` returns after
         :meth:`backward`.
         """
-        from ._buffer import as_f32_c
-        a = np.asarray(as_f32_c(x, ndim=None, name="x")[0])
-        if a.ndim == 0:
-            a = a.reshape(1, 1)
-        elif a.ndim == 1:
-            a = a.reshape(-1, 1)
-        elif a.ndim != 2:
+        from ._cast_in import as_input, describe
+        a = as_input(x)
+        if a.ndim > 2:
             raise ValueError("x must be a scalar, a 1-D or a 2-D array")
         if a.size == 0:
             raise ValueError("x must not be empty")
-        a = np.ascontiguousarray(a)
-        return int(self._b.ops_upload(self._sid(), a.ctypes.data,
-                                      [a.shape[0], a.shape[1], 1 if requires_grad else 0]))
+        # `a` as it is (Mojo casts it to float32 on the executor); it stays
+        # referenced until the binding has copied it
+        return int(self._b.ops_upload(self._sid(), describe(a, "x"), [1 if requires_grad else 0]))
 
     def shape(self, h):
         """The ``(rows, cols)`` of tensor ``h``."""
