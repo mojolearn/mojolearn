@@ -39,11 +39,14 @@ Implementation record: `NATIVE_AUTOGRAD.md`.
   `llama_decoder_layer_backward_autograd`).
   `autograd/rules_mamba.mojo` (`Mamba1Rules`, `Mamba2Rules`, the
   `mamba*_tape_backward[_stack]` assemblies).
+  `autograd/rules_lm.mojo` (`LmRules`, tags 64-67, and
+  `byte_backward_autograd`).
 - Trainers on the tape, opt-in: MLP (`-D MOJOLEARN_AUTOGRAD_MLP`,
   `sequence/mlp_fit.mojo`), recurrent (`-D MOJOLEARN_AUTOGRAD_RNN`, the
   `RnnStep` seam in `sequence/recurrent.mojo::rnn_fit`), transformer
   decoder layer (`-D MOJOLEARN_AUTOGRAD_TRANSFORMER`, the two saved-stage
-  backwards in `bindings/_mojolearn_transformer.mojo`).
+  backwards in `bindings/_mojolearn_transformer.mojo`), byte LM step
+  (`-D MOJOLEARN_AUTOGRAD_LM`, `training/byte_lm.mojo::byte_gradient_device`).
 
 ### Fused nodes
 
@@ -88,7 +91,7 @@ Constraints that carry into any public surface:
 - Every op is a parallel launch with a fixed fold order; identity across
   Apple, NVIDIA and AMD comes from the ops, not from the tape.
 - Tags of custom rules are per family (LayerNorm 1, recurrent 16-18,
-  transformer 32-47, Mamba 48-63). A
+  transformer 32-47, Mamba 48-63, language model 64-71). A
   composite `NeuralRules` that dispatches every family is the target once
   the module graph allows it without an import cycle: today
   `autograd.rules_recurrent` imports `sequence.recurrent`, which imports no
@@ -463,8 +466,47 @@ kernels. What stays hand-written becomes a custom rule.
    tape flushes and a hand copy did not (header of the module).
    Check: `pixi run check-mamba-tape-backward`. Mamba-3 stays hand-chained
    (it shares neither kernel set).
-4. Language-model trainers last: they compose 2 and 3 plus embedding and
-   loss; nothing new stays hand-written.
+4. Language-model trainers (`training/byte_lm.mojo::byte_gradient_device`,
+   reached by `byte_train_step` and the resident step): written under
+   `MOJOLEARN_AUTOGRAD_LM` (lane ag-lm-migrate, compile and A/B owed).
+   `autograd/rules_lm.mojo::byte_backward_autograd` records the forward
+   that already ran on one `Tape` over `DeviceExec(ctx)`: the embedding
+   gather, every decoder layer through
+   `rules_transformer.mojo::llama_decoder_layer_record` (the per-layer
+   recording split out of item 2's entry, which now calls it), the LM head
+   and the mean cross-entropy, then one `backward_with_rules`. Moved to the
+   tape: the stage order, the layer chaining (layer k's output gradient is
+   the storage the hand walk hands it as `d_out`: `bst[k+1].d_x`, the top
+   layer's `d_h`) and the head/embedding assembly. Stay, one rule each
+   (`LmRules`, tags 64-67, launched with the hand walk's arguments on the
+   trainer's buffers): the embedding scatter-add
+   (`identical_embedding_backward[_prerefused]_into` or the NN50 owned
+   runs), the head GEMM pair (`identical_gemm_backward_a_into[ROLE_HEAD]`
+   then `_b_into`; not `tape.linear_into`, whose `OP_GEMM_EPI` is another
+   kernel), the CE backward (`identical_ce_backward_into`; not
+   `Tape.softmax_cross_entropy`, whose `OP_LS_CE_FWD` fold is another
+   spelling), the chunked v2 head+loss backward, and per layer the seven
+   transformer rules (dispatched by the layer index in Args `i11`). The
+   loss's gradient storage is `ce_ones[0]` (1.0), so the unit seed is used
+   in place. Accumulation order: outside a layer every tensor has one
+   consumer (the embedding output feeds layer 0, each layer output the
+   next layer or the head, the logits the loss; embedding and head are not
+   tied), so each gradient is one contribution written in place; the
+   layer-input join `d_x = norm1_dx + d_residual1` and the in-layer fan-ins
+   are the transformer rules' hand kernels. The tape adds in no order of
+   its own and launches nothing (no fill, copy or accumulate): expected,
+   the hand walk's bits. Differences: no S0-1 copy per layer without
+   `IDN_BWD_ENTRY_ALIAS`, no per-layer host wait, one wait at the end. A
+   layer with non-default block options keeps the hand walk. The Samba
+   stack (`training/samba_resident.mojo::_backward_blocks`) routes each
+   default attention block through item 2's entry under the same define;
+   its Mamba-3 blocks stay hand-chained, so its whole-stack tape (Mamba-3
+   rule, final norm, head, loss, embedding) is owed. The host twin
+   (`training/byte_lm_host_backward.mojo`, oracles on the CPU) is owed: the
+   rules launch device kernels only. Check:
+   `pixi run check-lm-tape-backward` (one train step, 2 layers, d 64,
+   vocab 256, B 2, L 32, v1 and chunked v2 heads, every gradient and
+   updated parameter word against the hand walk).
 
 Each migration keeps the trainer's loss scaling, shuffle, batching,
 stopping and optimizer unchanged; only the backward assembly is swapped
@@ -483,6 +525,7 @@ one run per arm, same frozen commit.
 | `MOJOLEARN_AUTOGRAD_RNN` | rnn/lstm/gru clf + reg rows, L = 1 and 2 | ID check: arm B digest equals arm A (same launches) on nv and amd, and nv = amd | NV + AMD full-size race; the tape adds fills/copies per node | unchanged by construction; recorded |
 | `MOJOLEARN_AUTOGRAD_TRANSFORMER` | transformer LM rows | nv = amd = Apple digest; arm A equality expected only where launches are reused verbatim | NV + AMD | loss / perplexity no material drop |
 | `MOJOLEARN_AUTOGRAD_MAMBA` | Mamba-1/2 LM rows | as transformer | NV + AMD | as transformer |
+| `MOJOLEARN_AUTOGRAD_LM` | `lm-train-step` (byte LM), Samba train step | ID check: arm B digest equals arm A (same launches, same buffers) on nv and amd, and nv = amd | NV + AMD, one train step per arm (`tools/bench_board_neural.py lm-train-step`) | unchanged by construction |
 
 Verdict: IDENTICAL switches by the average NV/AMD ratio against the noise
 floor; a winner becomes the default with an `_OFF` define, a loser is
