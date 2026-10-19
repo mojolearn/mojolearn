@@ -1,5 +1,5 @@
 diff --git a/sequence/mlp_fit.mojo b/sequence/mlp_fit.mojo
-index 0d9b7c0c8..d8c628e5b 100644
+index eb39641bd..d8c628e5b 100644
 --- a/sequence/mlp_fit.mojo
 +++ b/sequence/mlp_fit.mojo
 @@ -80,11 +80,8 @@ from sequence.ops import dummy_ptr
@@ -49,7 +49,18 @@ index 0d9b7c0c8..d8c628e5b 100644
          #     backward 5, optimizer 1); the tape now issues one launch fewer
          #     (db rides in the tiled dW1 launch).
          # Per layer: backward 1 on the tile (dW with db) + 1 (dX with the
-@@ -696,12 +694,12 @@ def mlp_fit[E: Exec](
+@@ -660,10 +658,6 @@ def mlp_fit[E: Exec](
+     dense (N, O) target; 1, `Y` holds N int32 class codes and the (N, O)
+     one-hot target is built on the executor (`OP_ONE_HOT`); 2 (O = 1), the
+     codes themselves as the float target. Not in host NumPy either way."""
+-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
+-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
+-    # The removed refusal lives here, not in core/six_lane_experiment_guards.mojo: a core line rebuilds 76 bindings (rebuild fence).
+-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MLP_OFF"](), "removed 2026-10-19 (lane/del-mlp, 6784245b2): AUTOGRAD_MLP_OFF (the hand-assembled MLP backward) was superseded by the tape: same 48 check digests on host, Metal, NVIDIA and AMD; HIGGS 1M (256,) b512 hand -> fused tape NV 0.476 -> 0.526 s, AMD 0.408 -> 0.366 s, digest 8f410a4ae2d620af on both arms; recoverable at 6784245b2^"
+     var L = net.n_layers()
+     var D = net.sizes[0]
+     var O = net.sizes[L]
+@@ -700,12 +694,12 @@ def mlp_fit[E: Exec](
      comptime if AUTOGRAD_OPTIM:
          opt_state = OptimizerState(ex, opt_cfg, np_)
      var acts = List[FP]()
@@ -64,7 +75,7 @@ index 0d9b7c0c8..d8c628e5b 100644
      var yb = ex.alloc(bs * O)
      # Lane ag-pass5-composed (PASS5_IDEAS idea 6), AUTOGRAD_GATHER_EPOCH: when
      # the permuted copy of X and y fits (autograd/data.mojo
-@@ -797,9 +795,10 @@ def mlp_fit[E: Exec](
+@@ -801,9 +795,10 @@ def mlp_fit[E: Exec](
                  gx.i2 = off
                  gx.i3 = O
                  ex.launch[OP_GATHER_ROWS](gx, B * (D + O))
@@ -78,7 +89,7 @@ index 0d9b7c0c8..d8c628e5b 100644
              comptime if MLP_LOSSBLOCK:
                  # lane ag-pass3-lossblock: seed, row-loss and L2 sums and the
                  # batch loss in 2 launches (was 5; sequence/mlp.mojo's
-@@ -809,14 +808,14 @@ def mlp_fit[E: Exec](
+@@ -813,14 +808,14 @@ def mlp_fit[E: Exec](
                  comptime if AUTOGRAD_LOSS:
                      loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
                  mlp_loss_block(
@@ -95,7 +106,7 @@ index 0d9b7c0c8..d8c628e5b 100644
                  a.p3 = rowloss
                  a.i0 = loss_kind
                  a.i1 = O
-@@ -879,9 +878,27 @@ def mlp_fit[E: Exec](
+@@ -883,9 +878,27 @@ def mlp_fit[E: Exec](
                      bl.p3 = rowparts
                      bl.i5 = nrb
                  ex.launch[OP_MLP_BLOSS](bl, 1)
@@ -126,7 +137,7 @@ index 0d9b7c0c8..d8c628e5b 100644
              comptime if AUTOGRAD_OPTIM:
                  # one OP_OPT launch through autograd/optim.mojo (same words)
                  t_upd += 1
-@@ -962,8 +979,9 @@ def mlp_fit[E: Exec](
+@@ -966,8 +979,9 @@ def mlp_fit[E: Exec](
                  no_imp = 0
              else:
                  break
