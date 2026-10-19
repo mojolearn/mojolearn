@@ -49,6 +49,11 @@ comptime RESHAPE = 21
 comptime REDUCE = 22
 comptime SOFTMAX = 23
 comptime LOG_SOFTMAX = 24
+# Loss nodes (autograd/losses.mojo): per-element terms of two same-shape
+# inputs, and per-row softmax cross-entropy of logits against class codes.
+# Their bodies are the loss family in autograd/loss_ops.mojo.
+comptime LOSS_ELEM = 25
+comptime LOSS_CE = 26
 comptime MATMUL = 30
 comptime CUSTOM = 40
 comptime LEAF = 0

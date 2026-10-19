@@ -10,7 +10,11 @@ from autograd.ops import (
     LEAF, ADD, SUBTRACT, MULTIPLY,
     DIVIDE, RELU, SIGMOID, TANH, EXP, LOG, SQRT, SCALE, TRANSPOSE, RESHAPE,
     REDUCE, SOFTMAX, LOG_SOFTMAX, MATMUL, CUSTOM, AXIS_ALL, AXIS_ROWS, AXIS_COLS,
-    ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output,
+    ag_fold_block, unary_vjp_reads_input, unary_vjp_reads_output, LOSS_ELEM, LOSS_CE,
+)
+from autograd.loss_ops import (
+    OP_LS_ELEM_FWD, OP_LS_ELEM_VJP, OP_LS_CE_FWD, OP_LS_CE_VJP, LS_MSE, LS_MAE, LS_HUBER,
+    LS_BCE_LOGITS,
 )
 
 
@@ -511,6 +515,57 @@ struct Tape(Movable):
         var loss = self.mean(ex, rows)
         return self.scale(ex, loss, -1)
 
+    def loss_terms[E: Exec](
+        mut self, mut ex: E, prediction: Tensor, target: Tensor, kind: Int, delta: Float32 = 1,
+    ) raises -> Tensor:
+        """Per-element loss terms of two same-shape tensors, differentiable in
+        both. kind is LS_MSE, LS_MAE, LS_HUBER (threshold `delta`) or
+        LS_BCE_LOGITS (prediction holds logits) from autograd.loss_ops.
+        autograd/losses.mojo reduces the terms with mean or sum."""
+        if kind != LS_MSE and kind != LS_MAE and kind != LS_HUBER and kind != LS_BCE_LOGITS:
+            raise Error("loss_terms takes LS_MSE, LS_MAE, LS_HUBER or LS_BCE_LOGITS")
+        if kind == LS_HUBER and not (delta > 0):
+            raise Error("Huber delta must be positive")
+        var a = self._nodes[self._check(prediction)]
+        var b = self._nodes[self._check(target)]
+        if a.rows != b.rows or a.cols != b.cols:
+            raise Error("loss target must have the prediction's shape")
+        if Int(a.value) == Int(b.value):
+            raise Error("loss prediction and target must be distinct tensors")
+        var output = self._alloc(ex, a.rows * a.cols)
+        var args = Args()
+        args.p0 = a.value
+        args.p1 = b.value
+        args.p2 = output
+        args.i0 = kind
+        args.f0 = delta
+        ex.launch[OP_LS_ELEM_FWD](args, a.rows * a.cols)
+        var saved = Args()
+        saved.i0 = kind
+        saved.f0 = delta
+        return self._record(ex, output, a.rows, a.cols, LOSS_ELEM, [prediction, target], saved)
+
+    def cross_entropy_rows[E: Exec](mut self, mut ex: E, logits: Tensor, codes: Tensor) raises -> Tensor:
+        """Per-row softmax cross-entropy (rows, 1) of logits (rows, classes)
+        against class codes (rows, 1) held as float values. The codes take
+        no gradient; a code outside [0, classes) gives NaN."""
+        var a = self._nodes[self._check(logits)]
+        var b = self._nodes[self._check(codes)]
+        if b.rows != a.rows or b.cols != 1:
+            raise Error("cross-entropy codes must have shape (rows, 1)")
+        if b.requires_grad:
+            raise Error("cross-entropy codes cannot require a gradient")
+        if Int(a.value) == Int(b.value):
+            raise Error("cross-entropy logits and codes must be distinct tensors")
+        var output = self._alloc(ex, a.rows)
+        var args = Args()
+        args.p0 = a.value
+        args.p1 = b.value
+        args.p2 = output
+        args.i1 = a.cols
+        ex.launch[OP_LS_CE_FWD](args, a.rows)
+        return self._record(ex, output, a.rows, 1, LOSS_CE, [logits, codes], Args())
+
     def custom[E: Exec](
         mut self, mut ex: E, inputs: List[Tensor], output: FP,
         rows: Int, cols: Int, tag: Int, saved: Args,
@@ -741,6 +796,25 @@ struct Tape(Movable):
                         a.i2 = p.cols
                         a.f0 = n.saved.f0
                         ex.launch[OP_AG_REDUCE_VJP](a, p.rows * p.cols)
+                    elif n.op == LOSS_ELEM:
+                        var a = Args()
+                        a.p0 = self._nodes[self._parents[n.start]].value
+                        a.p1 = self._nodes[self._parents[n.start + 1]].value
+                        a.p2 = n.grad
+                        a.p3 = contribution
+                        a.i0 = n.saved.i0
+                        a.i8 = edge
+                        a.f0 = n.saved.f0
+                        ex.launch[OP_LS_ELEM_VJP](a, p.rows * p.cols)
+                    elif n.op == LOSS_CE:
+                        # only the logits (edge 0): the codes never require a gradient
+                        var a = Args()
+                        a.p0 = p.value
+                        a.p1 = self._nodes[self._parents[n.start + 1]].value
+                        a.p2 = n.grad
+                        a.p3 = contribution
+                        a.i1 = p.cols
+                        ex.launch[OP_LS_CE_VJP](a, p.rows)
                     elif n.op == SOFTMAX or n.op == LOG_SOFTMAX:
                         var a = Args()
                         a.p0 = n.value
