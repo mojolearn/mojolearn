@@ -69,7 +69,15 @@ _OP = {
     "reshape_n": 33, "permute": 34, "sum_n": 35, "mean_n": 36, "max": 37, "matmul_n": 38,
     "concat": 39, "narrow": 40, "take": 41, "softmax_n": 42, "log_softmax_n": 43,
     "conv2d": 44, "max_pool2d": 45, "avg_pool2d": 46,
+    "erf": 48, "gelu": 49, "softplus": 50, "silu": 51, "leaky_relu": 52, "elu": 53,
+    "hard_sigmoid": 54, "hard_swish": 55, "clip": 56, "abs": 57, "floor": 58, "ceil": 59,
+    "round": 60, "sin": 61, "cos": 62, "sign": 63, "reciprocal": 64, "pow": 65,
+    "minimum": 66, "maximum": 67, "where": 68, "compare": 69, "logical": 70,
+    "expand": 71, "argmax": 72, "pad": 73,
 }
+# autograd/ops_api.mojo OPS_COMPARE and OPS_LOGICAL kinds
+_COMPARE = {"eq": 0, "gt": 1, "lt": 2, "ge": 3, "le": 4, "ne": 5}
+_GELU = {"none": 0, "tanh": 1}
 # the largest tensor rank (autograd/rankn.mojo RN_MAX_RANK)
 _MAX_RANK = 8
 _METRIC = {"accuracy": 1, "log_loss": 2, "roc_auc": 3}
@@ -546,6 +554,176 @@ class Session:
         tensor, windows ``stride`` apart (by default ``kernel_size``)."""
         k = _int(kernel_size, "kernel_size", 1)
         return self._op("avg_pool2d", (x,), [k, k if stride is None else _int(stride, "stride", 1)])
+
+    # ------------------------------------------------------------ more elementwise math
+    def erf(self, x):
+        """The error function."""
+        return self._op("erf", (x,))
+
+    def gelu(self, x, approximate="none"):
+        """The Gaussian error linear unit ``x * Phi(x)``, with ``Phi`` the
+        standard normal distribution function; ``approximate='tanh'`` uses
+        the tanh approximation
+        ``0.5 * x * (1 + tanh(sqrt(2 / pi) * (x + 0.044715 * x**3)))``."""
+        if approximate not in _GELU:
+            raise ValueError("approximate must be 'none' or 'tanh'")
+        return self._op("gelu", (x,), [_GELU[approximate]])
+
+    def softplus(self, x):
+        """``log(1 + exp(x))``."""
+        return self._op("softplus", (x,))
+
+    def silu(self, x):
+        """``x * sigmoid(x)`` (also called swish)."""
+        return self._op("silu", (x,))
+
+    def leaky_relu(self, x, alpha=0.01):
+        """``x`` where ``x >= 0``, else ``alpha * x``."""
+        return self._op("leaky_relu", (x,), (), [float(alpha)])
+
+    def elu(self, x, alpha=1.0):
+        """``x`` where ``x >= 0``, else ``alpha * (exp(x) - 1)``."""
+        return self._op("elu", (x,), (), [float(alpha)])
+
+    def hard_sigmoid(self, x, alpha=0.2, beta=0.5):
+        """``alpha * x + beta`` clipped to ``[0, 1]``."""
+        return self._op("hard_sigmoid", (x,), (), [float(alpha), float(beta)])
+
+    def hard_swish(self, x):
+        """``x * hard_sigmoid(x, alpha=1/6, beta=0.5)``."""
+        return self._op("hard_swish", (x,))
+
+    def clip(self, x, min=None, max=None):
+        """``x`` limited to ``[min, max]``; a bound left as None does not
+        limit. A NaN stays NaN."""
+        low = float("-inf") if min is None else float(min)
+        high = float("inf") if max is None else float(max)
+        return self._op("clip", (x,), (), [low, high])
+
+    def abs(self, x):
+        """The absolute value."""
+        return self._op("abs", (x,))
+
+    def floor(self, x):
+        """The largest integer not above ``x``. No gradient flows through it."""
+        return self._op("floor", (x,))
+
+    def ceil(self, x):
+        """The smallest integer not below ``x``. No gradient flows through it."""
+        return self._op("ceil", (x,))
+
+    def round(self, x):
+        """``x`` rounded to the nearest integer, a half to the even one (as
+        ``numpy.round``). No gradient flows through it."""
+        return self._op("round", (x,))
+
+    def sin(self, x):
+        """The sine."""
+        return self._op("sin", (x,))
+
+    def cos(self, x):
+        """The cosine."""
+        return self._op("cos", (x,))
+
+    def sign(self, x):
+        """-1, 0 or 1 by the sign of ``x``. No gradient flows through it."""
+        return self._op("sign", (x,))
+
+    def reciprocal(self, x):
+        """``1 / x``."""
+        return self._op("reciprocal", (x,))
+
+    def pow(self, x, exponent):
+        """``x ** exponent``. ``exponent`` is a number or a tensor that
+        broadcasts with ``x`` as in :meth:`add`. A negative ``x`` takes an
+        integer exponent."""
+        if isinstance(exponent, (int, float, np.integer, np.floating)) and not isinstance(exponent, bool):
+            return self._op("pow", (x,), (), [float(exponent)])
+        return self._op("pow", (x, exponent))
+
+    def minimum(self, a, b):
+        """The smaller of ``a`` and ``b`` elementwise, with the broadcasting
+        of :meth:`add`. A NaN in either gives NaN; ``-0.0`` is below ``0.0``."""
+        return self._op("minimum", (a, b))
+
+    def maximum(self, a, b):
+        """The larger of ``a`` and ``b`` elementwise, with the broadcasting
+        of :meth:`add`. A NaN in either gives NaN; ``0.0`` is above ``-0.0``."""
+        return self._op("maximum", (a, b))
+
+    def where(self, condition, a, b):
+        """``a`` where ``condition`` is nonzero, else ``b``; the three
+        broadcast together as in NumPy. The gradient flows to ``a`` and
+        ``b``."""
+        return self._op("where", (condition, a, b))
+
+    def _compare(self, a, b, kind):
+        return self._op("compare", (a, b), [_COMPARE[kind]])
+
+    def equal(self, a, b):
+        """1.0 where ``a == b``, else 0.0, with the broadcasting of :meth:`add`."""
+        return self._compare(a, b, "eq")
+
+    def not_equal(self, a, b):
+        """1.0 where ``a != b``, else 0.0."""
+        return self._compare(a, b, "ne")
+
+    def greater(self, a, b):
+        """1.0 where ``a > b``, else 0.0."""
+        return self._compare(a, b, "gt")
+
+    def greater_equal(self, a, b):
+        """1.0 where ``a >= b``, else 0.0."""
+        return self._compare(a, b, "ge")
+
+    def less(self, a, b):
+        """1.0 where ``a < b``, else 0.0."""
+        return self._compare(a, b, "lt")
+
+    def less_equal(self, a, b):
+        """1.0 where ``a <= b``, else 0.0."""
+        return self._compare(a, b, "le")
+
+    def logical_not(self, x):
+        """1.0 where ``x`` is zero, else 0.0."""
+        return self._op("logical", (x,), [0])
+
+    def logical_and(self, a, b):
+        """1.0 where both ``a`` and ``b`` are nonzero, else 0.0."""
+        return self._op("logical", (a, b), [1])
+
+    def logical_or(self, a, b):
+        """1.0 where ``a`` or ``b`` is nonzero, else 0.0."""
+        return self._op("logical", (a, b), [2])
+
+    def expand(self, x, shape):
+        """``x`` broadcast to ``shape`` as NumPy broadcasts it (the result's
+        shape is the broadcast of the two). The gradient sums back over the
+        broadcast axes."""
+        return self._op("expand", (x,), _dims(shape, low=1))
+
+    def argmax(self, x, axis=-1, keepdims=False, int32=False):
+        """The position of the largest value along ``axis``. A NaN is larger
+        than any number and among equal values the first position wins.
+
+        The positions are float values by default, so later operations can
+        use them; ``int32=True`` stores them as int32 words instead, to read
+        with ``s.numpy(h).view(np.int32)``. ``keepdims=True`` keeps the axis
+        with length 1. No gradient flows through it.
+        """
+        return self._op("argmax", (x,), [_int(axis, "axis"), 1 if keepdims else 0, 1 if not int32 else 0])
+
+    def pad(self, x, pads, value=0.0):
+        """``x`` padded with ``value``.
+
+        ``pads`` lists two counts per axis, as ONNX ``Pad`` does: every
+        axis's count before its first element, then every axis's count after
+        its last one. A negative count removes elements instead.
+        """
+        counts = [_int(p, "pads") for p in pads]  # glue: two integer arguments per axis
+        if not counts or len(counts) > 2 * _MAX_RANK:
+            raise ValueError(f"pads must list two counts for each of 1 to {_MAX_RANK} axes")
+        return self._op("pad", (x,), counts, [float(value)])
 
     # ------------------------------------------------------------ layers
     def linear(self, x, weight, bias=None, activation=None):
