@@ -2,6 +2,7 @@
 """Standalone standard-library ownership probe; no mojolearn imports."""
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
+from std.os import abort
 
 
 def no_op(value: PythonObject) raises -> PythonObject:
