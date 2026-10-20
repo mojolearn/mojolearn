@@ -7,6 +7,8 @@ names over a `HostExec`, the same element bodies (`sequence/ops.mojo`)."""
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from std.python._cpython import PyObjectPtr
+from autograd.python_errors import graph_python_error
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -336,6 +338,50 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
 
 def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject) raises -> PythonObject:
     return ops_program_dynamic_py[DeviceExec, OPS_DEVICE](sid, pid, arrays)
+
+
+def ops_program_execute_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 7:
+            raise Error("TypeError: ops_program_execute expects 7 arguments")
+        var result = ops_program_execute_binding(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_inspect_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_program_inspect expects 3 arguments")
+        var result = ops_program_inspect_binding(args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_control_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 6:
+            raise Error("TypeError: ops_program_control expects 6 arguments")
+        var result = ops_program_control_binding(args[0], args[1], args[2], args[3], args[4], args[5])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_fit_native_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 5:
+            raise Error("TypeError: ops_program_fit_native expects 5 arguments")
+        var result = ops_program_fit_native_binding(args[0], args[1], args[2], args[3], args[4])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
 
 
 def ops_program_execute_binding(sid: PythonObject, pid: PythonObject, owner_sid: PythonObject, arrays: PythonObject,
@@ -749,9 +795,9 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_program_info_binding]("ops_program_info")
         m.def_function[ops_program_run_binding]("ops_program_run")
         m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
-        m.def_function[ops_program_execute_binding]("ops_program_execute")
-        m.def_function[ops_program_inspect_binding]("ops_program_inspect")
-        m.def_function[ops_program_control_binding]("ops_program_control")
+        m.def_py_c_function(ops_program_execute_c_binding, "ops_program_execute")
+        m.def_py_c_function(ops_program_inspect_c_binding, "ops_program_inspect")
+        m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")
         m.def_function[ops_program_fit_binding]("ops_program_fit")
         m.def_function[ops_distributed_open_binding]("ops_distributed_open")
         m.def_function[ops_distributed_load_binding]("ops_distributed_load")
@@ -761,7 +807,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_distributed_residency_binding]("ops_distributed_residency")
         m.def_function[ops_distributed_save_binding]("ops_distributed_save")
         m.def_function[ops_distributed_close_binding]("ops_distributed_close")
-        m.def_function[ops_program_fit_native_binding]("ops_program_fit_native")
+        m.def_py_c_function(ops_program_fit_native_c_binding, "ops_program_fit_native")
         m.def_function[ops_program_free_binding]("ops_program_free")
         m.def_function[ops_save_program_binding]("ops_save_program")
         m.def_function[ops_load_program_binding]("ops_load_program")
