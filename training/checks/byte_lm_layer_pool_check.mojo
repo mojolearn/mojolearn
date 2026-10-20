@@ -11,7 +11,7 @@ from training.byte_lm_parallel import _ordered_add_kernel
 from training.checks.optimizer_contract import OptimizerConfig, OPT_ADAMW
 from training.checks.train_loop import _upload, _zeros, _copy_into, download_f32
 from transformer.impl.llama.modeling_llama import llama_decoder_layer_forward
-from transformer.checks.transformer_backward import llama_decoder_layer_backward_device
+from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 
 def same(a: List[Float32], b: List[Float32], label: String) raises:
@@ -94,7 +94,7 @@ def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:
             else:
                 _copy_into(ctx,reference.buffers.d_h,reference.backward[i].d_x,0,0,m)
             ctx.synchronize()
-            llama_decoder_layer_backward_device(ctx,bw,st,reference.weights[i],
+            llama_decoder_layer_backward_autograd(ctx,bw,st,reference.weights[i],
                 reference.rope.cos,reference.rope.sin,reference.buffers.x,reference.buffers.d_h,
                 shape.batch,shape.length,0,trace,"reference")
             ctx.synchronize()

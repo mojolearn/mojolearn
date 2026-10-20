@@ -35,7 +35,7 @@ from training.byte_lm import byte_dims
 from training.byte_lm_layer_pool import ByteOwnedLayer
 from training.byte_lm_model_pool import ByteModelChunk
 from transformer.impl.llama.modeling_llama import LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward
-from transformer.checks.transformer_backward import llama_decoder_layer_backward_device
+from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 
 def _download_range(ctx: DeviceContext, mut target: List[Float32], first: Int,
@@ -110,7 +110,7 @@ def _replay_backward(ctx: DeviceContext, p: List[Float32], shape: ByteConfig,
     llama_decoder_layer_forward(ctx,layer.forward,cache,rope,layer.weights,layer.input,
         shape.batch,shape.length,0,trace,String("byte.block")+String(index)+".forward")
     ctx.synchronize()
-    llama_decoder_layer_backward_device(ctx,layer.backward,layer.forward,layer.weights,
+    llama_decoder_layer_backward_autograd(ctx,layer.backward,layer.forward,layer.weights,
         rope.cos,rope.sin,layer.input,layer.cotangent,shape.batch,shape.length,0,
         trace,String("byte.block")+String(index)+".backward")
     layer.pack(ctx)

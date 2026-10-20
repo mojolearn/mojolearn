@@ -372,8 +372,8 @@ from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
     llama_backward_sabotage_name,
-    llama_decoder_layer_backward,
 )
+from autograd.rules_transformer import llama_decoder_layer_backward
 
 
 # ===========================================================================

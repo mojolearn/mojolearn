@@ -192,12 +192,11 @@ from transformer.impl.llama.modeling_llama import (
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
-    llama_decoder_layer_backward,
 )
 # The session and saved-tape backwards below run on the autograd tape.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
-from autograd.rules_transformer import llama_decoder_layer_backward_autograd
+from autograd.rules_transformer import llama_decoder_layer_backward, llama_decoder_layer_backward_autograd
 # lane ag-tm-timing: the launch profile the backward timing entries read.
 from sequence.launch_profile import launch_profile_level, launch_profile_reset, launch_profile_snapshot
 # lane/block-options (2026-09-17): the block options record and the two

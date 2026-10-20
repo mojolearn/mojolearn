@@ -31,9 +31,8 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDeviceWeights, LlamaDeviceStages, LlamaDims, LlamaKVCache,
     LlamaRopeTable, llama_decoder_layer_forward,
 )
-from transformer.checks.transformer_backward import (
-    LlamaBackwardStages, llama_decoder_layer_backward_device,
-)
+from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 # NN31 (MOJOLEARN_IDN_ACT_RETAIN=2) is the IDENTICAL default since 2026-10-08
 # (lane grid-act-4, grid ge123e6f9: samba-train-step 0.890x, same bits); NN32
@@ -504,7 +503,7 @@ struct NeuralAttentionOwner(Movable):
                 var replay_trace = IdentityTrace.disabled()
                 self._run_forward(replay_trace, prefix + ".checkpoint_replay")
                 self.replayed_forwards += 1
-            llama_decoder_layer_backward_device(
+            llama_decoder_layer_backward_autograd(
                 self.context, self.backward, self.forward.value(), self.weights,
                 self.rope.cos, self.rope.sin, self.input, self.cotangent,
                 self.b, self.l, 0, trace, prefix,
@@ -662,7 +661,7 @@ struct BorrowedAttentionTape(Movable):
         if not self.stages:
             self.replay(ctx,w)
         var trace = IdentityTrace.disabled()
-        llama_decoder_layer_backward_device(ctx,bst,self.stages.value(),w,
+        llama_decoder_layer_backward_autograd(ctx,bst,self.stages.value(),w,
             self.rope.cos,self.rope.sin,self.input,dy,self.b,self.l,0,trace,String("tape.bwd"))
         ctx.synchronize()
         self.stages = None

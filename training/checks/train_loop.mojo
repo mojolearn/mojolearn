@@ -174,10 +174,8 @@ from transformer.impl.llama.modeling_llama import (
     LlamaRopeTable,
     llama_decoder_layer_forward,
 )
-from transformer.checks.transformer_backward import (
-    LlamaBackwardStages,
-    llama_decoder_layer_backward,
-)
+from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.rules_transformer import llama_decoder_layer_backward
 
 
 # ===========================================================================

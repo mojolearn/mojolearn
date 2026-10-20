@@ -22,9 +22,8 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDeviceWeights, LlamaDeviceStages, LlamaRopeTable, LlamaKVCache,
     llama_decoder_layer_forward,
 )
-from transformer.checks.transformer_backward import (
-    LlamaBackwardStages, llama_decoder_layer_backward_device,
-)
+from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 
 struct ByteOwnedLayer(Movable):
@@ -223,7 +222,7 @@ struct ByteLayerPool(Movable):
                 var layer = self.layers.pop(i)
                 var owner = layer.owner
                 self.contexts[owner].synchronize()
-                llama_decoder_layer_backward_device(self.contexts[owner], layer.backward,
+                llama_decoder_layer_backward_autograd(self.contexts[owner], layer.backward,
                     layer.forward, layer.weights, self.ropes[owner].cos, self.ropes[owner].sin,
                     layer.input, layer.cotangent, self.config.batch, self.config.length, 0,
                     trace, String("byte.block")+String(i)+".backward")
