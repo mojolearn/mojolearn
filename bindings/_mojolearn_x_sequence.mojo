@@ -9,6 +9,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
 from autograd.python_errors import graph_python_error
+from autograd.ops_frontend import ops_session_call_py
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -280,6 +281,17 @@ def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> Pyt
 
 def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject) raises -> PythonObject:
     return ops_program_dynamic_py[DeviceExec, OPS_DEVICE](sid, pid, arrays)
+
+
+def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_session_call expects three arguments")
+        var result = ops_session_call_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
 
 
 def ops_program_execute_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -737,6 +749,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_program_info_binding]("ops_program_info")
         m.def_function[ops_program_run_binding]("ops_program_run")
         m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
+        m.def_py_c_function(ops_session_call_c_binding, "ops_session_call")
         m.def_py_c_function(ops_program_execute_c_binding, "ops_program_execute")
         m.def_py_c_function(ops_program_inspect_c_binding, "ops_program_inspect")
         m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")

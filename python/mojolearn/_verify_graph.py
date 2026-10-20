@@ -19,9 +19,9 @@ EXPECTED_CASES = (
     "native_inputs", "dynamic_shapes_and_recovery", "lazy_conditional",
     "bounded_while", "shape_growing_while", "exact_duplicate_elimination",
     "training_after_optimization", "node_diagnostics_and_profile",
-    "saved_component_roundtrip",
+    "saved_component_roundtrip", "native_session_boundary",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3)))
 
 
 _AUDITS = []
@@ -253,6 +253,45 @@ def saved_component_roundtrip():
             assert out["iterations"] == 3 and out["stopped"] is True
             _equal(out["outputs"], np.array([[3]], np.float32))
             return [out["outputs"]]
+
+
+def native_session_boundary():
+    import numpy as np
+    from . import ops
+    a = np.arange(6, dtype=np.float32).reshape(2, 3)
+    with ops.Session() as s:
+        x = _invoke(s.tensor, a.tolist())
+        y = _invoke(s.scale, x, 2.0)
+        pieces = _invoke(s.split, y, [1, 2], axis=1)
+        joined = _invoke(s.concat, pieces, axis=1)
+        out = _invoke(s.numpy, joined)
+        _equal(out, a * np.float32(2))
+        assert _invoke(s.shape, joined) == (2, 3)
+        p = _invoke(s.capture, x, joined)
+        _equal(_invoke(p.run, a), out)
+        _refuses(lambda: _invoke(s.reshape, x, (True, 3)), "integer", TypeError)
+        _refuses(lambda: _invoke(s.ids, a), "integer", TypeError)
+        _refuses(lambda: _invoke(s.gelu, x, approximate="bad"), "approximate", ValueError)
+    with ops.Session(record=True) as s:
+        x = _invoke(s.tensor, [[2.0]], requires_grad=True)
+        loss = _invoke(s.mul, x, x)
+        _invoke(s.backward, loss, create_graph=True)
+        first = _invoke(s.grad, x)
+        _equal(first, np.array([[4]], np.float32))
+        gradient = _invoke(s.grad_tensor, x)
+        _invoke(s.backward, gradient)
+        second = _invoke(s.grad, x)
+        _equal(second, np.array([[2]], np.float32))
+        opt = _invoke(s.optimizer, "sgd", lr=0.25)
+        _invoke(s.step, opt, x)
+        _equal(_invoke(s.numpy, x), np.array([[1.5]], np.float32))
+        state = _invoke(s.optimizer_state, opt, x)
+        assert state["step"] == 1
+        _invoke(s.load_optimizer_state, opt, x, state)
+        _invoke(s.zero_grad)
+        _invoke(s.reset)
+        _invoke(s.free, x)
+    return [out, first, second]
 
 
 def _digest(a):

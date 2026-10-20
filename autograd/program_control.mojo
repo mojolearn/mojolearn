@@ -133,6 +133,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(buffers)):  # driver-loop: over input owners
             s[].ex.free(buffers[k])
         raise err
+    _ = inputs^  # retain scalar sequence owners until all input uploads finish
     var held = Tape()
     swap(held, s[].prog_tape)
     swap(held, s[].tape)
