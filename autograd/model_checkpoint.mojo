@@ -46,11 +46,13 @@ from autograd.model import (
     FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_LAYER_NORM, LAYER_LINEAR, ModelSpec,
     parse_model,
 )
-from autograd.pyapi import _floats, _ints, cast_in_of
+from autograd.pyapi import _floats, _ints, cast_in_of, program_info
+from autograd.program import program_from_words, program_words
 from autograd.ops_api import OpsSession, ops_session
 from core.cast_in import CAST_KIND_FLOAT, CastIn
 from training.checkpoint import (
-    CKPT_REFUSE_SHAPE, CKPT_SECTION_SEQUENTIAL, CKPT_SECTION_SESSION, Checkpoint, read_checkpoint_unchecked,
+    CKPT_REFUSE_SHAPE, CKPT_SECTION_PROGRAM, CKPT_SECTION_SEQUENTIAL, CKPT_SECTION_SESSION, Checkpoint,
+    read_checkpoint_unchecked,
     save_checkpoint,
 )
 
@@ -568,5 +570,82 @@ def ops_load_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     res.append(PythonObject(1 if has_opt else 0))
     for i in range(4):  # driver-loop: over the four counters
         res.append(PythonObject(Int(xi[c + i])))
+    _ = ck^
+    return res
+
+
+# ---------------------------------------------------------------- captured programs
+# A program checkpoint is CKPT_SECTION_PROGRAM (lane ag-program): tensors
+# `p<i>` in the layout, the program's parameters in the payload (the two
+# state arrays zeros), and in the extension the description words of
+# autograd/program.mojo program_words. A load uploads the parameters into
+# the session as new tensors and registers the program over them, so the
+# file runs on any install's session (the CPU-only install's host executor
+# included).
+def ops_save_program_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject, path: PythonObject,
+) raises -> PythonObject:
+    """Write program `pid` of session `sid` and its parameters' current
+    values to `path`. Returns the byte count."""
+    var file = String(py=path)
+    var p = ops_session[E, KIND](Int(py=sid))
+    var prog = p[].program(Int(py=pid))
+    var K = len(prog.params)
+    var ck = Checkpoint()
+    ck.section_kind = CKPT_SECTION_PROGRAM
+    var n = 0
+    ck.offsets.append(0)
+    for i in range(K):  # driver-loop: over program parameters
+        n += prog.param_shapes[i].count()
+        ck.offsets.append(n)
+        ck.names.append(String("p") + String(i))
+        ck.buf_initialized.append(False)
+    # a program without parameters still writes one (unused) word
+    var n_store = n if n > 0 else 1
+    ck.param = List[Float32](length=n_store, fill=Float32(0))
+    ck.m_state = List[Float32](length=n_store, fill=Float32(0))
+    ck.v_state = List[Float32](length=n_store, fill=Float32(0))
+    if K == 0:
+        ck.offsets.append(1)
+        ck.names.append(String("unused"))
+        ck.buf_initialized.append(False)
+    for i in range(K):  # driver-loop: over program parameters
+        p[].download(prog.params[i], FP(unsafe_from_address=Int(ck.param.unsafe_ptr())) + ck.offsets[i])
+    var words = program_words(prog)
+    ck.ext_ints = words[0].copy()
+    ck.ext_floats = words[1].copy()
+    ck.seed = 0
+    ck.t = 0
+    var h = save_checkpoint(file, ck)
+    return PythonObject(h.bytes)
+
+
+def ops_load_program_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, path: PythonObject,
+) raises -> PythonObject:
+    """Read a program checkpoint into session `sid`: its parameters become
+    new session tensors and the program runs over them. Returns
+    program_info (autograd/pyapi.mojo)."""
+    var file = String(py=path)
+    var ck = read_checkpoint_unchecked(file)
+    if ck.section_kind != CKPT_SECTION_PROGRAM:
+        raise Error("mojolearn: '" + file + "' is not a captured-program checkpoint")
+    var prog = program_from_words(ck.ext_ints, ck.ext_floats, "mojolearn: '" + file + "'")
+    var K = len(prog.params)
+    if (K > 0 and ck.j_count() != K) or (K == 0 and ck.j_count() != 1):
+        raise Error("mojolearn: '" + file + "' holds a damaged program record")
+    var p = ops_session[E, KIND](Int(py=sid))
+    if p[].recording():
+        raise Error("mojolearn: programs run in an inference session (Session(record=False))")
+    for i in range(K):  # driver-loop: over program parameters
+        var sh = prog.param_shapes[i]
+        var off = ck.offsets[i]
+        if ck.offsets[i + 1] - off != sh.count():
+            raise Error(String(CKPT_REFUSE_SHAPE) + ": '" + file + "' tensor p" + String(i)
+                        + " does not hold its recorded shape")
+        var c = CastIn(Int(ck.param.unsafe_ptr()) + 4 * off, CAST_KIND_FLOAT, 4, sh.rows(), sh.cols(), 4 * sh.cols(), 4)
+        prog.params[i] = p[].upload_nd(c, sh, False)
+    var pid = p[].add_program(prog^)
+    var res = program_info(pid, p[].program(pid))
     _ = ck^
     return res
