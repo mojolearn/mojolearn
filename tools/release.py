@@ -1577,6 +1577,16 @@ class Release:
         plan = self.plan()
         src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
+        # A MERGED macOS BUILD (MOJOLEARN_MERGED_BINDINGS, default 1) compiles
+        # each merged file whole: per-binding reuse cannot place one member's
+        # published bytes, and build_release_wheel.sh refuses a reuse plan in
+        # that layout, so every macOS binding is built.
+        merged = os.environ.get("MOJOLEARN_MERGED_BINDINGS", "1") != "0"
+        env["MOJOLEARN_MERGED_BINDINGS"] = "0" if not merged else "1"
+        if merged and reuse:
+            self.say(f"  merged macOS bindings: {len(reuse)} reusable per-binding file(s) are built instead "
+                     "(MOJOLEARN_MERGED_BINDINGS=0 reuses them in the per-binding layout)")
+            reuse = []
         if reuse:
             store = self.rel / "reuse" / "macos"
             if self.dry:
