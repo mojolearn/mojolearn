@@ -133,7 +133,7 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
         raise Error("generation: ids must be nonempty, with one token per row for step")
     var fmt = String(view.format)
     if fmt != "i" and fmt != "q" and fmt != "l" and fmt != "h" and fmt != "b" and fmt != "I" and fmt != "Q" and fmt != "L" and fmt != "H" and fmt != "B":
-        raise Error("generation: ids must be a native-endian integer buffer")
+        raise Error("TypeError: generation ids must be a native-endian integer buffer")
     # Pack strided buffer inputs with the CPython buffer implementation; all
     # validation and conversion below is a Mojo loop over native storage.
     var packed = g[].arrays(fmt)
@@ -144,7 +144,7 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
         var source = (i // l) + (i % l) * b if column_major else i
         var id = Int(py=packed[source])
         if id < 0 or id >= vocab:
-            raise Error("generation: id outside vocabulary at flat index " + String(i))
+            raise Error("generation: ids must be in [0, " + String(vocab) + "); invalid id at flat index " + String(i))
         dst[i] = Int32(id)
     return out
 

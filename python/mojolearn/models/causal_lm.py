@@ -178,11 +178,7 @@ class CausalLMState:
     and `positions`, how many tokens each row has consumed."""
 
     def __init__(self, batch_size, max_tokens, layers, *, owner=None):
-        self.batch_size = int(batch_size)
-        self.max_tokens = int(max_tokens)
-        self.layers = list(layers)
-        self.positions = 0
-        self._owner = owner
+        return _NATIVE.causal_state_init(self, (batch_size, max_tokens, layers, owner))
 
     def __repr__(self):
         return (f"CausalLMState(batch_size={self.batch_size}, max_tokens={self.max_tokens}, "
@@ -516,6 +512,7 @@ class GenerationStream:
 # metadata records; it never calls the package loaders or block constructors.
 def _connect_causal_native():
     import _thread
+    import hashlib  # Connection-time import; generation owns only the cached C SHA256 entry.
     from ..tokenizer import _binding as runtime_binding
     from .. import _training_impl as training
     from .._transformer_impl import TransformerBlock, TransformerState, _OPT_NAMES

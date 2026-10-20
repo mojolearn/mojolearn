@@ -447,8 +447,9 @@ def test_load_llama_checkpoint_shapes_names_and_greedy_generate_is_deterministic
             lm.generate(ids, 200)
         with pytest.raises(ValueError, match=r"\[0, 64\)"):
             lm.forward(Array.from_list([[64]], "<i4"))
-        with pytest.raises(NotImplementedError, match="greedy"):
+        with pytest.raises(ValueError, match="seed"):
             lm.generate(ids, 1, greedy=False)
+        assert lm.generate(ids, 1, greedy=False, seed=17).tobytes() == lm.generate(ids, 1, greedy=False, seed=17).tobytes()
 
 
 @pytest.mark.parametrize("stored_bf16", [False, True])

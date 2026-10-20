@@ -8,6 +8,8 @@ a compiled sibling extension through CPython's native function ABI changes no
 arithmetic and uses no interpreter callback; targets are checked at admission.
 """
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,
@@ -973,3 +975,58 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
     s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
     s[].pending_bytes = g[].bi.bytearray(checkpoint["pending_bytes"])
     return stream
+
+
+def causal_state_init_binding(state: PythonObject, values: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    state.batch_size = bi.int(values[0])
+    state.max_tokens = bi.int(values[1])
+    state.layers = bi.list(values[2])
+    state.positions = PythonObject(0)
+    state._owner = values[3]
+    state._usable = PythonObject(True)
+    return PythonObject(None)
+
+
+def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        var result = PythonObject(None)
+        comptime if operation == 0:
+            result = causal_lm_admit_binding(args[0], args[1], args[2], args[3])
+        elif operation == 1:
+            result = causal_lm_allocate_binding(args[0], args[1], args[2])
+        elif operation == 2:
+            result = causal_lm_reset_binding(args[0], args[1])
+        elif operation == 3:
+            result = causal_lm_forward_binding(args[0], args[1], args[2], args[3])
+        elif operation == 4:
+            result = causal_lm_stream_binding(args[0], args[1], args[2], args[3])
+        elif operation == 5:
+            result = causal_lm_read_binding(args[0], args[1])
+        elif operation == 6:
+            result = causal_lm_info_binding(args[0])
+        elif operation == 7:
+            result = causal_lm_generate_binding(args[0], args[1], args[2], args[3])
+        elif operation == 8:
+            result = causal_lm_text_stream_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 9:
+            result = causal_lm_generate_text_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 10:
+            result = causal_lm_resident_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 11:
+            result = causal_lm_snapshot_binding(args[0])
+        elif operation == 12:
+            result = causal_lm_resume_binding(args[0], args[1], args[2])
+        elif operation == 13:
+            result = causal_lm_parameters_binding(args[0])
+        elif operation == 14:
+            result = causal_lm_blocks_binding(args[0])
+        else:
+            result = causal_state_init_binding(args[0], args[1])
+        return result.steal_data()
+    except error:
+        var message = String(error)
+        if message.startswith("TypeError:"):
+            return raise_python_exception(error, ExceptionType.TypeError)
+        return raise_python_exception(error, ExceptionType.ValueError)
