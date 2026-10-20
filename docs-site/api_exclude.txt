@@ -80,3 +80,5 @@ Session.embedding	operation session embedding: its tape checks (embedding_check 
 Session.ids	ids tensors for captured embedding and take: PROGRAM_DIGEST and IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
 Program.input_kinds	ids inputs of captured programs: PROGRAM_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
 # <<< lane ag-program-embedding
+_catalog.catalog	model catalog: no verified entry yet (tools/model_catalog.py build from NVIDIA+AMD runs); remove once one lands
+_catalog.verify_catalog_entry	model catalog: no verified entry yet; remove once one lands

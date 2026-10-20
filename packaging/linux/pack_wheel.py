@@ -1114,6 +1114,7 @@ def main(argv=None, _gates=True):
     entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
     entries.update(python_package_entries())
     entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
+    entries["mojolearn/models/catalog.json"] = PKG / "models" / "catalog.json"  # mojolearn.models.catalog()
     seen_vendor_libs = set()
     for vendor, arch, files, libs, _, _, _ in sets:
         for rel, p in files.items():
