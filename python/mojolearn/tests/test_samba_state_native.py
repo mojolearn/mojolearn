@@ -94,6 +94,21 @@ def test_native_samba_publish_keeps_existing_parameter_aliases(monkeypatch):
     assert target.optimizer.lr_schedule.lr_at(10) == training.WarmupCosineLR(0.003, 3, 17).lr_at(10)
 
 
+def test_native_samba_state_roundtrips_exhausted_generator():
+    model = _stack()
+    model.generator.load_state_dict({"seed": 9, "counter": (1 << 32) - 1})
+    assert model.generator.next_stream() == (1 << 32) - 1
+    state = _call("snapshot", model, True)
+    assert state["rng"] == {"seed": 9, "counter": 1 << 32}
+    clone = _call("from_state", state)
+    assert _call("snapshot", clone, True)["rng"] == state["rng"]
+    before = clone.flat.tobytes()
+    with pytest.raises(RuntimeError, match="exhausted"):
+        clone.generator.next_stream()
+    assert clone.flat.tobytes() == before
+    assert clone.generator.state_dict() == state["rng"]
+
+
 @pytest.mark.parametrize("corruption", ["registry", "moment_shape", "flags", "rng"])
 def test_native_samba_state_validation_refuses_corruption_before_publish(corruption):
     target = _stack()
@@ -107,7 +122,7 @@ def test_native_samba_state_validation_refuses_corruption_before_publish(corrupt
     elif corruption == "flags":
         state["buf_initialized"] = np.zeros(len(target.names), dtype="i8")
     else:
-        state["rng"]["counter"] = 2 ** 32
+        state["rng"]["counter"] = 2 ** 32 + 1
     result = audit_native_call(bridge.RUNTIME.samba_native_call, "publish", (target, state), bridge.CONTEXT)
     assert isinstance(result.exception, ValueError), result.report()
     assert target.flat.tobytes() == before

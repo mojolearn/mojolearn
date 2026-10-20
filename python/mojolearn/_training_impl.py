@@ -103,6 +103,7 @@ from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from . import _portable_math as math
 from . import _numeric_profile
+from . import _native_samba_bridge
 from fractions import Fraction
 
 import array
@@ -2319,27 +2320,19 @@ class Generator(object):
     """
 
     def __init__(self, seed, numeric_mode=None):
-        seed = int(seed)
-        if seed < 0 or seed >= (1 << 64):
-            raise ValueError("mojolearn.Generator: seed must be in [0, 2^64)")
-        self.seed = seed
-        self.counter = 0
-        self.numeric_mode = numeric_mode
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_init", (self, seed, numeric_mode), None)
 
     def state_dict(self):
         """Return the generator state as ``{'seed': int, 'counter': int}``."""
-        return {"seed": int(self.seed), "counter": int(self.counter)}
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_snapshot", (self,), None)
 
     def load_state_dict(self, state):
         """Restore a state from `state_dict`.
 
-        The counter must fit in 32 bits unsigned, otherwise `ValueError`.
+        The next-stream counter may equal ``2**32`` to represent exhaustion;
+        larger or negative counters raise ``ValueError``.
         """
-        self.seed = int(state["seed"])
-        self.counter = int(state["counter"])
-        if self.counter < 0 or self.counter > 0xFFFFFFFF:
-            raise ValueError(
-                "mojolearn.Generator: counter must be a 32-bit unsigned")
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_restore", (self, state), None)
 
     def next_stream(self):
         """Consume and return the next stream id.
@@ -2347,15 +2340,10 @@ class Generator(object):
         Use it for operations that draw several slices of one stream, such as dropout over
         microbatches. Raises `RuntimeError` when the 32-bit counter is exhausted.
         """
-        return self._next_stream()
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), None)
 
     def _next_stream(self):
-        if self.counter > 0xFFFFFFFF:
-            raise RuntimeError(
-                "mojolearn.Generator: the stream counter is exhausted")
-        s = self.counter
-        self.counter += 1
-        return s
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), None)
 
     @staticmethod
     def _shape(shape):
