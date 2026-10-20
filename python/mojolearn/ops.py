@@ -583,17 +583,25 @@ class Session:
         return self._op("take", (x,), describe(a, "indices") + [_int(axis, "axis")])
 
     # ------------------------------------------------------------ convolution and pooling
-    def conv2d(self, x, weight, bias=None, stride=1, padding=0):
+    def conv2d(self, x, weight, bias=None, stride=1, padding=0, groups=1):
         """A 2-D convolution (cross-correlation) of ``x``.
 
-        ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C, kh, kw)``
-        and ``bias`` an optional tensor of ``out_channels`` values. The
-        input is padded with ``padding`` zeros on every side and the kernel
-        moves ``stride`` positions at a time; the result is
-        ``(N, out_channels, H_out, W_out)``.
+        ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C // groups,
+        kh, kw)`` and ``bias`` an optional tensor of ``out_channels`` values.
+        The input is padded with ``padding`` zeros on every side and the
+        kernel moves ``stride`` positions at a time; the result is
+        ``(N, out_channels, H_out, W_out)``. With ``groups`` greater than 1
+        the channels split into ``groups`` equal blocks and each block of
+        outputs sees only its block of inputs; ``groups=C`` is a depthwise
+        convolution.
+
+        Example::
+
+            y = s.conv2d(x, w, stride=1, padding=1, groups=4)
         """
         handles = (x, weight) if bias is None else (x, weight, bias)
-        return self._op("conv2d", handles, [_int(stride, "stride", 1), _int(padding, "padding", 0)])
+        return self._op("conv2d", handles, [_int(stride, "stride", 1), _int(padding, "padding", 0),
+                                            _int(groups, "groups", 1)])
 
     def max_pool2d(self, x, kernel_size, stride=None):
         """The largest value of each ``kernel_size`` window of an

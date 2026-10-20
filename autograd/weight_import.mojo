@@ -39,7 +39,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from core.cast_in import CAST_KIND_BFLOAT, CAST_KIND_FLOAT, CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast
-from autograd.model import LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_LINEAR, SPEC2_ARGS, ModelSpec
+from autograd.model import LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_LINEAR, SPEC2_ARGS, ModelSpec, conv_in_per_group
 
 #: the dtype code of a bfloat16 source (NumPy has no number for it)
 comptime WI_DTYPE_BF16 = 4096
@@ -239,7 +239,7 @@ def _expected(spec: ModelSpec, i: Int, slot: Int, layout: Int) -> List[Int]:
         out.append(oc)
         if slot == WI_SLOT_WEIGHT:
             var ks = spec.arg1[i]
-            out.append(spec.in_shape[i].d[0])
+            out.append(conv_in_per_group(spec, i))
             out.append(ks)
             out.append(ks)
     return out^
@@ -252,7 +252,7 @@ def _weight_count(spec: ModelSpec, i: Int) -> Int:
     if k == LAYER_LAYER_NORM:
         return spec.in_width[i]
     var ks = spec.arg1[i]
-    return spec.arg0[i] * spec.in_shape[i].d[0] * ks * ks
+    return spec.arg0[i] * conv_in_per_group(spec, i) * ks * ks
 
 
 def _same(a: List[Int], b: List[Int]) -> Bool:

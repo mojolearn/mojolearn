@@ -6,6 +6,12 @@ Each shared fixture of tests/_onnx_fixture.py (written without ``onnx`` or
 with an eager ``ops.Session`` composition of the same operations on the same
 weights; a second run gives the same words; ``save`` then
 ``Session.load_program`` gives them again; the BatchNorm prologue equals the
+eager fold; a ``Gemm`` ``transB`` weight equals the transposed weight.
+Grouped and depthwise Conv, ``auto_pad`` SAME_UPPER / SAME_LOWER, padded
+MaxPool and AveragePool (``count_include_pad`` 0 and 1) equal their eager
+compositions word for word and a float64 NumPy reference to rounding. The
+refusals (Resize, a dilated Conv, a data-dependent Reshape, Gather by an
+index input) come in one error naming every node, before anything is
 eager fold; a ``Gemm`` ``transB`` weight equals the transposed weight; the
 embedding fixture (a ``Gather`` by an int64 ids input) equals the eager
 ``embedding`` on an ids tensor and on the ids array. The refusals (Resize,
@@ -243,6 +249,122 @@ def test_mixed_ops_equal_eager(tmp_path):
     print(f"IMPORT_DIGEST mixed {_digest(m, p, a)}")
 
 
+# ------------------------------------------------- grouped conv and pads --
+# float64 NumPy references of the ONNX definitions (test oracles only)
+
+def _np_conv(x, w, b, stride, pads, groups):
+    """ONNX Conv (2-D): pads (top, left, bottom, right), zeros."""
+    x = np.pad(x.astype(np.float64), ((0, 0), (0, 0), (pads[0], pads[2]), (pads[1], pads[3])))
+    n, c, h, wd = x.shape
+    oc, cg, kh, kw = w.shape
+    oh, ow = (h - kh) // stride + 1, (wd - kw) // stride + 1
+    out = np.zeros((n, oc, oh, ow))
+    ocg = oc // groups
+    for o in range(oc):
+        g = o // ocg
+        xs = x[:, g * cg:(g + 1) * cg]
+        for i in range(oh):
+            for j in range(ow):
+                win = xs[:, :, i * stride:i * stride + kh, j * stride:j * stride + kw]
+                out[:, o, i, j] = np.tensordot(win, w[o].astype(np.float64), axes=3)
+        if b is not None:
+            out[:, o] += b[o]
+    return out
+
+
+def _np_pool(x, k, stride, pads, mode, include_pad=0):
+    """ONNX MaxPool / AveragePool (2-D, square kernel)."""
+    n, c, h, w = x.shape
+    oh = (h + pads[0] + pads[2] - k) // stride + 1
+    ow = (w + pads[1] + pads[3] - k) // stride + 1
+    out = np.zeros((n, c, oh, ow))
+    x = x.astype(np.float64)
+    for i in range(oh):
+        for j in range(ow):
+            h0, w0 = i * stride - pads[0], j * stride - pads[1]
+            hs, ws = max(h0, 0), max(w0, 0)
+            he, we = min(h0 + k, h), min(w0 + k, w)
+            win = x[:, :, hs:he, ws:we]
+            if mode == "max":
+                out[:, :, i, j] = win.max(axis=(2, 3))
+            else:
+                out[:, :, i, j] = win.sum(axis=(2, 3)) / (k * k if include_pad else (he - hs) * (we - ws))
+    return out
+
+
+def _grouped_conv(directory):
+    """x [batch, 4, 8, 9] -> Conv group=2, weight [6, 2, 3, 3], bias, strides 2, auto_pad
+    SAME_UPPER (pads (0, 1, 1, 1): the odd total of the height at the end) [batch, 6, 4, 5] ->
+    depthwise Conv group=6, weight [6, 1, 3, 3], pads 1, no bias [batch, 6, 4, 5]."""
+    inits = [fx.weight("gw", (6, 2, 3, 3), 61), fx.weight("gb", (6,), 62), fx.weight("dw", (6, 1, 3, 3), 63)]
+    nodes = [fx.node("Conv", ["x", "gw", "gb"], ["g"], name="conv_g2", kernel_shape=(3, 3), strides=(2, 2),
+                     auto_pad="SAME_UPPER", group=2),
+             fx.node("Conv", ["g", "dw"], ["y"], name="conv_dw", kernel_shape=(3, 3), pads=(1, 1, 1, 1), group=6)]
+    return fx._write(directory, "grouped_conv.onnx", nodes, [("x", "f32", ("batch", 4, 8, 9))],
+                     [("y", "f32", ("batch", 6, 4, 5))], inits, lambda b: {"y": (b, 6, 4, 5)})
+
+
+@needs_binding
+def test_grouped_conv_and_same_pads(tmp_path):
+    shape = (BATCH, 4, 8, 9)
+    f = _grouped_conv(str(tmp_path))
+    prog = importers.import_model(f.path, shapes={"x": shape})
+    x = _input(shape, 13)
+    y = prog.run(x)
+    assert y.shape == (BATCH, 6, 4, 5)
+    ops = _ops()
+    with ops.Session() as s:
+        h = s.pad(s.tensor(x), [0, 0, 0, 1, 0, 0, 1, 1])
+        h = s.conv2d(h, s.tensor(_init(f, "gw")), s.tensor(_row(_init(f, "gb"))), stride=2, padding=0, groups=2)
+        want = s.numpy(s.conv2d(h, s.tensor(_init(f, "dw")), None, stride=1, padding=1, groups=6))
+    _same(y, want, "grouped conv: the program against the eager composition")
+    ref = _np_conv(x, _init(f, "gw"), _init(f, "gb"), 2, (0, 1, 1, 1), 2)
+    ref = _np_conv(ref, _init(f, "dw"), None, 1, (1, 1, 1, 1), 6)
+    np.testing.assert_allclose(y, ref, rtol=1e-5, atol=1e-5)
+    print(f"IMPORT_DIGEST grouped_conv {_digest(y)}")
+
+
+def _padded_pools(directory):
+    """x [batch, 3, 7, 8] -> MaxPool 3 strides 2 pads 1 [batch, 3, 4, 4]; AveragePool 3 strides 2
+    auto_pad SAME_LOWER (pads (1, 1, 1, 0)), count_include_pad 0 [batch, 3, 4, 4]; AveragePool 3
+    strides 2 pads 1, count_include_pad 1 [batch, 3, 4, 4]."""
+    nodes = [fx.node("MaxPool", ["x"], ["m"], name="max_p1", kernel_shape=(3, 3), strides=(2, 2),
+                     pads=(1, 1, 1, 1)),
+             fx.node("AveragePool", ["x"], ["a0"], name="avg_same", kernel_shape=(3, 3), strides=(2, 2),
+                     auto_pad="SAME_LOWER"),
+             fx.node("AveragePool", ["x"], ["a1"], name="avg_incl", kernel_shape=(3, 3), strides=(2, 2),
+                     pads=(1, 1, 1, 1), count_include_pad=1)]
+    outs = [(o, "f32", ("batch", 3, 4, 4)) for o in ("m", "a0", "a1")]
+    return fx._write(directory, "padded_pools.onnx", nodes, [("x", "f32", ("batch", 3, 7, 8))], outs, [],
+                     lambda b: {o: (b, 3, 4, 4) for o in ("m", "a0", "a1")})
+
+
+@needs_binding
+def test_padded_pools(tmp_path):
+    shape = (BATCH, 3, 7, 8)
+    f = _padded_pools(str(tmp_path))
+    prog = importers.import_model(f.path, shapes={"x": shape})
+    x = _input(shape, 17)
+    m, a0, a1 = prog.run(x)
+    again = prog.run(x)
+    for got, want, what in zip((m, a0, a1), again, ("max", "avg same", "avg include pad")):
+        _same(got, want, f"{what}: a second run")
+    ops = _ops()
+    with ops.Session() as s:
+        h = s.tensor(x)
+        want_m = s.numpy(s.max_pool2d(s.pad(h, [0, 0, 1, 1, 0, 0, 1, 1], float("-inf")), 3, stride=2))
+        c = [0, 0, 1, 1, 0, 0, 1, 0]
+        total = s.conv2d(s.pad(h, c, 0.0), s.full((3, 1, 3, 3), 1.0), None, stride=2, padding=0, groups=3)
+        count = s.conv2d(s.pad(s.full((1, 1, 7, 8), 1.0), c, 0.0), s.full((1, 1, 3, 3), 1.0), None, stride=2)
+        want_a0 = s.numpy(s.div(total, count))
+        want_a1 = s.numpy(s.avg_pool2d(s.pad(h, [0, 0, 1, 1, 0, 0, 1, 1], 0.0), 3, stride=2))
+    _same(m, want_m, "MaxPool pads")
+    _same(a0, want_a0, "AveragePool SAME_LOWER count_include_pad=0")
+    _same(a1, want_a1, "AveragePool count_include_pad=1")
+    np.testing.assert_array_equal(m, _np_pool(x, 3, 2, (1, 1, 1, 1), "max").astype(np.float32))
+    np.testing.assert_allclose(a0, _np_pool(x, 3, 2, (1, 1, 1, 0), "avg", 0), rtol=1e-5, atol=1e-6)
+    np.testing.assert_allclose(a1, _np_pool(x, 3, 2, (1, 1, 1, 1), "avg", 1), rtol=1e-5, atol=1e-6)
+    print(f"IMPORT_DIGEST padded_pools {_digest(m, a0, a1)}")
 EMB_VOCAB, EMB_T, EMB_D = 11, 4, 6
 
 
@@ -292,7 +414,8 @@ def test_embedding_fixture_equals_eager(tmp_path):
 def _refused_model(directory):
     inits = [fx.weight("w", (4, 2, 3, 3), 51), fx.tensor("scales", "f32", (4,), (1.0, 1.0, 2.0, 2.0)),
              fx.weight("table", (10, 3), 52)]
-    nodes = [fx.node("Conv", ["x", "w"], ["c"], name="conv_g2", kernel_shape=(3, 3), group=2),
+    nodes = [fx.node("Conv", ["x", "w"], ["c"], name="conv_d2", kernel_shape=(3, 3), group=2, dilations=(2, 2),
+                     pads=(1, 1, 1, 1)),
              fx.node("Resize", ["c", "", "scales"], ["r"], name="up", mode="nearest"),
              fx.node("Floor", ["y"], ["yf"], name="floor"),
              fx.node("Cast", ["yf"], ["target"], name="cast", to=7),
@@ -317,10 +440,10 @@ def test_refusals_list_every_node_before_any_upload(tmp_path, monkeypatch):
     with pytest.raises(UnsupportedModel) as e:
         importers.import_model(path)
     names = [p[0] for p in e.value.problems]
-    for node in ("conv_g2", "up", "reshape_dd", "emb"):
+    for node in ("conv_d2", "up", "reshape_dd", "emb"):
         assert node in names, (node, str(e.value))
     msg = str(e.value)
-    assert "group=2" in msg and "no kernel" in msg and "indices" in msg
+    assert "dilations=(2, 2)" in msg and "no kernel" in msg and "indices" in msg
     assert isinstance(e.value, ValueError)
 
 

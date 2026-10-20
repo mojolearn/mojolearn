@@ -10,6 +10,13 @@
 #               = cols @ W^T (W read through strides, B(k, n) = W[n, k]: the
 #               tape's GEMM chain over the C KH KW terms in im2col order),
 #               OP_RNV_CONV_OUT (NCHW, + bias). 3 launches.
+#               groups > 1 (grouped and depthwise): the same im2col over all
+#               C channels (group g's taps are the contiguous columns
+#               [g Cg KH KW, (g + 1) Cg KH KW) of cols, Cg = C / groups), one
+#               OP_RN_BMM launch for every group's product (free axes rows,
+#               g, OC / groups; one fma chain over group g's Cg KH KW terms in
+#               im2col order from +0.0, op_gemm's chain), then the same
+#               OP_RNV_CONV_OUT. groups = 1 is the path above, unchanged.
 #   max_pool2d  OP_RNV_MAXPOOL_FWD (values and winners). 1 launch.
 #   avg_pool2d  OP_RNV_AVGPOOL_FWD. 1 launch.
 # The kernels are x_cnn's element functions on the same parameter words
@@ -29,7 +36,10 @@ from autograd.ops import AXIS_ROWS
 from autograd.rankn_conv_ops import (
     OP_RNV_IM2COL, OP_RNV_CONV_OUT, OP_RNV_MAXPOOL_FWD, OP_RNV_AVGPOOL_FWD,
 )
-from autograd.rules_conv2d import RN_CONV2D, RN_MAXPOOL2D, RN_AVGPOOL2D, rn_conv_gemm
+from autograd.rules_conv2d import (
+    RN_CONV2D, RN_MAXPOOL2D, RN_AVGPOOL2D, rn_conv_gemm, rn_conv_group_gemm, rn_conv_group_words,
+    RNG_FWD, RNG_DW, RNG_DCOLS,
+)
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, dummy_ptr
 from x_cnn.ops import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
@@ -60,18 +70,24 @@ def _words(block: List[Int32]) -> List[Int]:
 
 def rankn_conv2d[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
-    stride: Int = 1, padding: Int = 0,
+    stride: Int = 1, padding: Int = 0, groups: Int = 1,
 ) raises -> Tensor:
     """Two-dimensional convolution (cross-correlation) of a batch of images.
+
+    With groups > 1 the C input channels and the out_channels outputs are
+    split into groups equal blocks, and output block g sees input block g
+    only; groups = C is a depthwise convolution.
 
     Args:
         tape: The tape that records the operation.
         ex: The executor.
         x: The input, shape (N, C, H, W).
-        weight: The kernels, shape (out_channels, C, kh, kw).
+        weight: The kernels, shape (out_channels, C // groups, kh, kw).
         bias: Optional, out_channels values added to each output channel.
         stride: The step between windows, in both directions.
         padding: Zeros added on every side of each image.
+        groups: The number of channel groups; it divides C and
+            out_channels.
 
     Returns:
         The output, shape (N, out_channels, OH, OW) with
@@ -86,8 +102,15 @@ def rankn_conv2d[E: Exec](
     var OC = sw.d[0]
     var KH = sw.d[2]
     var KW = sw.d[3]
-    if sw.d[1] != C:
+    if groups < 1:
+        raise Error("conv2d: groups must be positive")
+    if groups == 1 and sw.d[1] != C:
         raise Error("conv2d: weight's second dimension must equal x's channels")
+    if groups > 1:
+        if C % groups != 0 or OC % groups != 0:
+            raise Error("conv2d: groups must divide the input channels and out_channels")
+        if sw.d[1] * groups != C:
+            raise Error("conv2d: weight's second dimension must equal x's channels // groups")
     if stride <= 0 or padding < 0:
         raise Error("conv2d: stride must be positive and padding non-negative")
     var has_bias = Bool(bias)
@@ -115,9 +138,14 @@ def rankn_conv2d[E: Exec](
     a.p1 = cols
     a.p11 = desc
     ex.launch[OP_RNV_IM2COL](a, rows * ckk)
-    # y2 [rows, OC] = cols @ W^T, W(oc, q) at oc ckk + q
     var y2 = tape.reserve(ex, rows * OC)
-    rn_conv_gemm(ex, y2, cols, wv, rows, OC, ckk, ckk, 1, 1, ckk)
+    if groups == 1:
+        # y2 [rows, OC] = cols @ W^T, W(oc, q) at oc ckk + q
+        rn_conv_gemm(ex, y2, cols, wv, rows, OC, ckk, ckk, 1, 1, ckk)
+    else:
+        # y2[r, g OCg + o] = sum over group g's taps of cols x W (one launch)
+        var fdesc = tape.descriptor(ex, rn_conv_group_words(RNG_FWD, rows, C, OC, KH * KW, groups))
+        rn_conv_group_gemm(ex, y2, cols, wv, fdesc, rows * OC)
     # NCHW output (+ bias)
     var out = tape.reserve(ex, N * OC * OH * OW)
     var o = Args()
@@ -138,6 +166,12 @@ def rankn_conv2d[E: Exec](
         saved.p4 = tape.reserve(ex, rows * ckk)
     if need_b:
         saved.p5 = tape.reserve(ex, fold_partials(rows, OC, AXIS_ROWS))
+    if groups > 1:
+        # the VJP's two grouped products, described once here (shape words)
+        if need_w:
+            saved.p6 = tape.descriptor(ex, rn_conv_group_words(RNG_DW, rows, C, OC, KH * KW, groups))
+        if need_x:
+            saved.p7 = tape.descriptor(ex, rn_conv_group_words(RNG_DCOLS, rows, C, OC, KH * KW, groups))
     saved.p11 = desc
     saved.i0 = 1 if has_bias else 0
     saved.i1 = rows
@@ -147,6 +181,7 @@ def rankn_conv2d[E: Exec](
     saved.i5 = 1 if need_x else 0
     saved.i6 = 1 if need_w else 0
     saved.i7 = 1 if need_b else 0
+    saved.i8 = groups
     var inputs: List[Tensor] = [x, weight]
     if has_bias:
         inputs.append(bias.value())

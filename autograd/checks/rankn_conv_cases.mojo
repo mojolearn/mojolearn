@@ -13,6 +13,13 @@
 #     the winner counts); forward against the oracle, dx by differences.
 #   chain: conv2d (stride 1, padding 1, x needs no gradient) -> relu ->
 #     max_pool2d 2x2 -> avg_pool2d 2x2 stride 1: digests only.
+#   grouped conv2d (the groups argument): x [2, 4, 9, 11], groups 2 with
+#     weight [6, 2, 3, 3] (stride 1, padding 1, bias), depthwise groups 4
+#     with weight [8, 1, 3, 3] (a channel multiplier of 2; stride 2,
+#     padding 1, bias) and depthwise weight [4, 1, 3, 3] (stride 1, no
+#     padding, no bias): forward, dx, dW and db against the same float64
+#     oracle and its finite differences. They print their own summary
+#     line, so the ungrouped cases' summary digest keeps its value.
 # Each case prints one `RANKN conv <case> digest <d>` line (the digest of
 # every word it compared: the value, then each gradient) so the CPU,
 # Metal, NVIDIA and AMD logs can be diffed, then one PASS line.
@@ -88,10 +95,15 @@ def _dot(a: List[Float64], b: List[Float64]) -> Float64:
 
 
 # ---------------------------------------------------------------- oracles
-# geometry g = [N, C, H, W, OC, KH, KW, S, P]
+# geometry g = [N, C, H, W, OC, KH, KW, S, P] and optionally groups G (1
+# when absent): output channel oc sees input channels [gi Cg, (gi + 1) Cg),
+# gi = oc // (OC / G), Cg = C / G; the weight is [OC, Cg, KH, KW]
 def _conv_ref(x: List[Float64], w: List[Float64], b: List[Float64], has_bias: Bool, g: List[Int]) -> List[Float64]:
     var N = g[0]; var C = g[1]; var H = g[2]; var W = g[3]
     var OC = g[4]; var KH = g[5]; var KW = g[6]; var S = g[7]; var P = g[8]
+    var G = g[9] if len(g) > 9 else 1
+    var Cg = C // G
+    var OCg = OC // G
     var OH = (H + 2 * P - KH) // S + 1
     var OW = (W + 2 * P - KW) // S + 1
     var out = List[Float64](length=N * OC * OH * OW, fill=Float64(0))
@@ -100,7 +112,9 @@ def _conv_ref(x: List[Float64], w: List[Float64], b: List[Float64], has_bias: Bo
             for oh in range(OH):  # small-loop(OH: check oracle)
                 for ow in range(OW):  # small-loop(OW: check oracle)
                     var acc = b[oc] if has_bias else Float64(0)
-                    for c in range(C):  # small-loop(C: check oracle)
+                    var c0 = (oc // OCg) * Cg
+                    for cl in range(Cg):  # small-loop(C / G: check oracle)
+                        var c = c0 + cl
                         for kh in range(KH):  # small-loop(KH: check oracle)
                             var h = oh * S - P + kh
                             if h < 0 or h >= H:
@@ -109,7 +123,7 @@ def _conv_ref(x: List[Float64], w: List[Float64], b: List[Float64], has_bias: Bo
                                 var ww = ow * S - P + kw
                                 if ww < 0 or ww >= W:
                                     continue
-                                acc += x[((n * C + c) * H + h) * W + ww] * w[((oc * C + c) * KH + kh) * KW + kw]
+                                acc += x[((n * C + c) * H + h) * W + ww] * w[((oc * Cg + cl) * KH + kh) * KW + kw]
                     out[((n * OC + oc) * OH + oh) * OW + ow] = acc
     return out^
 
@@ -224,6 +238,57 @@ def _conv_case[E: Exec](mut ex: E, mut tape: Tape, stride: Int, padding: Int, ha
     return digest
 
 
+def _group_case[E: Exec](
+    mut ex: E, mut tape: Tape, C: Int, OC: Int, groups: Int, stride: Int, padding: Int, has_bias: Bool,
+) raises -> UInt64:
+    """A grouped (or depthwise, groups = C) conv2d against the oracle."""
+    tape.reset()
+    comptime N = 2
+    comptime H = 9
+    comptime W = 11
+    comptime K = 3
+    var name = String("conv2d/g") + String(groups) + "oc" + String(OC) + "s" + String(stride) + "p" + String(padding)
+    if not has_bias:
+        name += "/nobias"
+    var Cg = C // groups
+    var xs = _data(N * C * H * W, 11)
+    var ws = _data(OC * Cg * K * K, 12)
+    var bs = _data(OC, 13)
+    var x = tape.tensor_nd(ex, xs, _sh([N, C, H, W]), True)
+    var w = tape.tensor_nd(ex, ws, _sh([OC, Cg, K, K]), True)
+    var bopt = Optional[Tensor]()
+    if has_bias:
+        bopt = Optional[Tensor](tape.tensor_nd(ex, bs, _sh([OC]), True))
+    var out = rankn_conv2d(tape, ex, x, w, bopt, stride, padding, groups)
+    var OH = (H + 2 * padding - K) // stride + 1
+    var OW = (W + 2 * padding - K) // stride + 1
+    _expect_shape(name, tape, out, [N, OC, OH, OW])
+    var gs = _data(N * OC * OH * OW, 14)
+    var seed = tape.tensor(ex, gs, tape.rows(out), tape.cols(out))
+    tape.backward_with_rules(ex, out, seed, Conv2dRules())
+    var geo: List[Int] = [N, C, H, W, OC, K, K, stride, padding, groups]
+    var x64 = _f64(xs)
+    var w64 = _f64(ws)
+    var b64 = _f64(bs)
+    var g64 = _f64(gs)
+    var digest = UInt64(1469598103934665603)
+    var v = tape.values(ex, out)
+    check_values(name + "/forward", v, _f32(_conv_ref(x64, w64, b64, has_bias, geo)))
+    _fold_digest(digest, v)
+    var dx = tape.gradients(ex, x)
+    check_values(name + "/dx", dx, _f32(_fd_conv(0, x64, w64, b64, has_bias, geo, g64)))
+    _fold_digest(digest, dx)
+    var dw = tape.gradients(ex, w)
+    check_values(name + "/dw", dw, _f32(_fd_conv(1, x64, w64, b64, has_bias, geo, g64)))
+    _fold_digest(digest, dw)
+    if has_bias:
+        var db = tape.gradients(ex, bopt.value())
+        check_values(name + "/db", db, _f32(_fd_conv(2, x64, w64, b64, has_bias, geo, g64)))
+        _fold_digest(digest, db)
+    print("RANKN conv", name, "digest", digest)
+    return digest
+
+
 def _pool_case[E: Exec](mut ex: E, mut tape: Tape, is_max: Bool, k: Int, stride: Int) raises -> UInt64:
     tape.reset()
     comptime N = 2
@@ -296,6 +361,15 @@ def run_rankn_conv_checks[E: Exec](mut ex: E) raises:
             cases += 1
     summary = (summary ^ _chain_case(ex, tape)) * UInt64(1099511628211)
     cases += 1
-    tape.release(ex)
     print("RANKN conv summary cases", cases, "digest", summary)
-    print("PASS rankn_conv", cases, "cases")
+    var gsum = UInt64(1469598103934665603)
+    var gcases = 0
+    gsum = (gsum ^ _group_case(ex, tape, 4, 6, 2, 1, 1, True)) * UInt64(1099511628211)
+    gcases += 1
+    gsum = (gsum ^ _group_case(ex, tape, 4, 8, 4, 2, 1, True)) * UInt64(1099511628211)
+    gcases += 1
+    gsum = (gsum ^ _group_case(ex, tape, 4, 4, 4, 1, 0, False)) * UInt64(1099511628211)
+    gcases += 1
+    tape.release(ex)
+    print("RANKN conv groups summary cases", gcases, "digest", gsum)
+    print("PASS rankn_conv", cases + gcases, "cases")

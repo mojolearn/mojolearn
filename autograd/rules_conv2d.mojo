@@ -14,7 +14,10 @@
 #               gradient), p5 the bias fold's partials (when b needs one),
 #               p11 the CP_* descriptor; i0 1 with a bias, i1 rows = N OH OW,
 #               i2 C KH KW, i3 OC, i4 x's element count, i5 / i6 / i7 x / w /
-#               b need a gradient.
+#               b need a gradient, i8 groups (1 for an ungrouped
+#               convolution); with groups > 1, p6 the dW product's OP_RN_BMM
+#               descriptor (when w needs a gradient) and p7 the dcols
+#               product's (when x needs one).
 #   RN_MAXPOOL2D p10 the winners (int32 patterns), p11 the PP_* descriptor;
 #               i4 x's element count, i5 x needs a gradient.
 #   RN_AVGPOOL2D p11 the PP_* descriptor; i4, i5 as the max pool.
@@ -27,6 +30,11 @@
 #     fold of grow over its rows (AXIS_ROWS, factor 1: the tape's column-sum
 #     order), dcols = grow @ W (OP_GEMM), dx = OP_RNV_COL2IM (each pixel's
 #     taps in (kh, kw) ascending order). Up to 5 launches plus the fold's.
+#     groups > 1: the same launches with the two OP_GEMMs replaced by one
+#     OP_RN_BMM each over every group (dW block g = grow's block g ^T @
+#     cols's block g, k = rows ascending; dcols block g = grow's block g @
+#     W block g, k = OC / groups ascending), each word one fma chain from
+#     +0.0 (op_gemm's chain over that group's terms).
 #   max_pool2d: OP_RNV_MAXPOOL_VJP (one thread an x word). 1 launch.
 #   avg_pool2d: OP_RNV_AVGPOOL_VJP. 1 launch.
 from autograd.tape import BackwardRules
@@ -36,6 +44,7 @@ from autograd.rankn_conv_ops import (
     OP_RNV_CONV_GROWS, OP_RNV_COL2IM, OP_RNV_MAXPOOL_VJP, OP_RNV_AVGPOOL_VJP,
 )
 from sequence.exec_trait import Exec
+from autograd.rankn_bmm_ops import OP_RN_BMM
 from sequence.ops import FP, Args, OP_GEMM
 
 comptime RN_CONV2D = 176
@@ -43,6 +52,11 @@ comptime RN_MAXPOOL2D = 177
 comptime RN_AVGPOOL2D = 178
 comptime RN_CONV_TAG_FIRST = 176
 comptime RN_CONV_TAG_LAST = 191
+
+# the three grouped products of a grouped convolution (rn_conv_group_words)
+comptime RNG_FWD = 0
+comptime RNG_DW = 1
+comptime RNG_DCOLS = 2
 
 
 def rn_conv_gemm[E: Exec](
@@ -65,6 +79,65 @@ def rn_conv_gemm[E: Exec](
     args.i6 = sbn
     args.i8 = n
     ex.launch[OP_GEMM](args, m * n)
+
+
+def rn_conv_group_words(which: Int, rows: Int, C: Int, OC: Int, KK: Int, groups: Int) raises -> List[Int]:
+    """The OP_RN_BMM descriptor (autograd/rankn_bmm_ops.mojo header: nf,
+    nc, K, sak, sbk, then extent, A stride, B stride per free axis) of one
+    of a grouped convolution's three products, over G = groups blocks of
+    Cg = C / G input channels and OCg = OC / G outputs; cols is
+    [rows, C KK] (group g's taps the columns g Cg KK ..), W [OC, Cg KK],
+    grow [rows, OC]. Shape words only.
+
+    RNG_FWD   y2[r, g, o]   = sum_q cols[r, g Cg KK + q] W[g OCg + o, q]
+    RNG_DW    dW[g, o, q]   = sum_r grow[r, g OCg + o] cols[r, g Cg KK + q]
+    RNG_DCOLS dcols[r, g, q] = sum_o grow[r, g OCg + o] W[g OCg + o, q]
+    """
+    if groups < 1 or C % groups != 0 or OC % groups != 0:
+        raise Error("conv2d: groups must divide the input channels and out_channels")
+    var G = groups
+    var ckk = C * KK
+    var cgkk = (C // G) * KK
+    var ocg = OC // G
+    var w = List[Int]()
+    w.append(3)
+    w.append(0)
+    if which == RNG_FWD:
+        # A = cols, B = W; K = Cg KK
+        w.append(cgkk); w.append(1); w.append(1)
+        w.append(rows); w.append(ckk); w.append(0)
+        w.append(G); w.append(cgkk); w.append(ocg * cgkk)
+        w.append(ocg); w.append(0); w.append(cgkk)
+    elif which == RNG_DW:
+        # A = grow, B = cols; K = rows
+        w.append(rows); w.append(OC); w.append(ckk)
+        w.append(G); w.append(ocg); w.append(cgkk)
+        w.append(ocg); w.append(1); w.append(0)
+        w.append(cgkk); w.append(0); w.append(1)
+    elif which == RNG_DCOLS:
+        # A = grow, B = W; K = OCg
+        w.append(ocg); w.append(1); w.append(cgkk)
+        w.append(rows); w.append(OC); w.append(0)
+        w.append(G); w.append(ocg); w.append(ocg * cgkk)
+        w.append(cgkk); w.append(0); w.append(1)
+    else:
+        raise Error("conv2d: unknown grouped product")
+    return w^
+
+
+def rn_conv_group_gemm[E: Exec](mut ex: E, dst: FP, a: FP, b: FP, desc: FP, count: Int) raises:
+    """dst (dense, count words) = the grouped product `desc` describes
+    (rn_conv_group_words), A from a, B from b: one OP_RN_BMM launch, one
+    thread a word."""
+    var args = Args()
+    args.p0 = a
+    args.p1 = b
+    args.p2 = dst
+    args.p11 = desc
+    args.i0 = 0
+    args.i1 = 0
+    args.i10 = 0
+    ex.launch[OP_RN_BMM](args, count)
 
 
 @fieldwise_init
@@ -115,19 +188,28 @@ def _conv2d_vjp[E: Exec](
     var ckk = saved.i2
     var oc = saved.i3
     var grow = saved.p2
+    var grouped = saved.i8 > 1
     var g = Args()
     g.p0 = upstream
     g.p1 = grow
     g.p11 = saved.p11
     ex.launch[OP_RNV_CONV_GROWS](g, rows * oc)
     if saved.i6 != 0:
-        # dW(oc, q) = sum over r of grow[r, oc] cols[r, q]
-        rn_conv_gemm(ex, gradients[1], grow, saved.p0, oc, ckk, rows, 1, oc, ckk, 1)
+        if grouped:
+            # dW[OC, Cg KK], group by group in one launch
+            rn_conv_group_gemm(ex, gradients[1], grow, saved.p0, saved.p6, oc * (ckk // saved.i8))
+        else:
+            # dW(oc, q) = sum over r of grow[r, oc] cols[r, q]
+            rn_conv_gemm(ex, gradients[1], grow, saved.p0, oc, ckk, rows, 1, oc, ckk, 1)
     if saved.i0 != 0 and saved.i7 != 0:
         blocked_fold(ex, gradients[2], grow, rows, oc, AXIS_ROWS, Float32(1), saved.p5)
     if saved.i5 != 0:
-        # dcols(r, q) = sum over oc of grow[r, oc] W[oc, q]
-        rn_conv_gemm(ex, saved.p4, grow, inputs[1], rows, ckk, oc, oc, 1, ckk, 1)
+        if grouped:
+            # dcols[rows, C KK], every group's block in one launch
+            rn_conv_group_gemm(ex, saved.p4, grow, inputs[1], saved.p7, rows * ckk)
+        else:
+            # dcols(r, q) = sum over oc of grow[r, oc] W[oc, q]
+            rn_conv_gemm(ex, saved.p4, grow, inputs[1], rows, ckk, oc, oc, 1, ckk, 1)
         var c = Args()
         c.p0 = saved.p4
         c.p1 = gradients[0]
