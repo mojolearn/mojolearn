@@ -2,9 +2,11 @@
 """Captured programs (Session.capture / Program.run): a program's outputs
 equal the eager session's word for word for the guide's compositions (the
 session quickstart, the mixture classifier's predict path, the Shapes
-section's image classifier and attention product), a second run gives the
-same words, a saved program loads into a new session and gives them again,
-and the refusals hold. Prints PROGRAM_DIGEST lines to diff across CPU,
+section's image classifier and attention product, and a small language
+model whose token ids are an ids input: embedding, layer norm, logits and
+the embedding of the greedy next token, plus a take by ids), a second run
+gives the same words, a saved program loads into a new session and gives
+them again, and the refusals hold. Prints PROGRAM_DIGEST lines to diff across CPU,
 Metal, NVIDIA and AMD."""
 import hashlib
 import pathlib
@@ -147,6 +149,80 @@ def test_program_shapes_attention():
     _check("shapes_attention", build, a, b)
 
 
+def _embedding_lm(s, arrays):
+    (ids,) = arrays
+    rng = np.random.default_rng(5)
+    table = s.tensor(rng.standard_normal((13, 6), dtype=np.float32))
+    w = s.tensor(rng.standard_normal((6, 13), dtype=np.float32))
+    tok = s.ids(ids)
+    h = s.layer_norm(s.embedding(table, tok), s.tensor(np.ones((1, 6), np.float32)),
+                     s.tensor(np.zeros((1, 6), np.float32)))
+    logits = s.linear(h, w)
+    nxt = s.embedding(table, s.argmax(logits, axis=1, keepdims=True, int32=True))
+    return [tok], [s.log_softmax(logits), nxt]
+
+
+def _take_by_ids(s, arrays):
+    (ids,) = arrays
+    rng = np.random.default_rng(6)
+    x = s.tensor(rng.standard_normal((2, 7, 3), dtype=np.float32))
+    k = s.ids(ids)
+    return [k], [s.take(x, k, axis=1)]
+
+
+def test_program_embedding_ids_input():
+    rng = np.random.default_rng(7)
+    a = [rng.integers(0, 13, size=(4, 5))]
+    b = [rng.integers(0, 13, size=(4, 5)).astype(np.int32)]
+    _check("embedding_lm", _embedding_lm, a, b)
+
+
+def test_program_take_ids_input():
+    rng = np.random.default_rng(8)
+    a = [rng.integers(0, 7, size=5)]
+    b = [rng.integers(0, 7, size=5).astype(np.uint8)]
+    _check("embedding_take", _take_by_ids, a, b)
+
+
+def test_program_ids_tensor_is_the_ids_array():
+    from mojolearn import ops
+    rng = np.random.default_rng(9)
+    T = rng.standard_normal((13, 6), dtype=np.float32)
+    X = rng.standard_normal((2, 7, 3), dtype=np.float32)
+    ids = rng.integers(0, 7, size=(3, 4))
+    with ops.Session() as s:
+        table, x = s.tensor(T), s.tensor(X)
+        e_arr, e_ten = s.numpy(s.embedding(table, ids)), s.numpy(s.embedding(table, s.ids(ids)))
+        t_arr, t_ten = s.numpy(s.take(x, ids, axis=1)), s.numpy(s.take(x, s.ids(ids), axis=1))
+        k = s.ids(ids)
+        assert np.array_equal(s.numpy(k).view(np.int32), ids.astype(np.int32))
+    assert np.array_equal(_words(e_ten), _words(e_arr))
+    assert np.array_equal(_words(t_ten), _words(t_arr))
+    _emit("embedding_ids_tensor", e_ten, t_ten)
+
+
+def test_program_embedding_save_and_load(tmp_path):
+    from mojolearn import ops
+    rng = np.random.default_rng(10)
+    ids = rng.integers(0, 13, size=(4, 5))
+    path = tmp_path / "lm.program"
+    with ops.Session() as s:
+        ins, outs = _embedding_lm(s, [ids])
+        eager = [s.numpy(o) for o in outs]
+        prog = s.capture(ins, outs)
+        assert prog.input_kinds == (1,)
+        prog.save(path)
+    with ops.Session() as s:
+        served = s.load_program(path)
+        assert served.input_kinds == (1,) and served.input_shapes == ((4, 5),)
+        got = served.run(ids)
+        with pytest.raises(TypeError, match="integer"):
+            served.run(ids.astype(np.float32))
+    for e, g in zip(eager, got):
+        assert np.array_equal(_words(g), _words(e))
+    _emit("saved_embedding_lm", *got)
+
+
 def test_program_save_and_load(tmp_path):
     from mojolearn import ops
     rng = np.random.default_rng(1)
@@ -199,6 +275,11 @@ def test_program_refusals():
         e = s.embedding(table, np.array([0, 3, 4], np.int64))
         with pytest.raises(Exception, match="embedding and take"):
             s.capture(table, e)
+        bad = s.ids(np.array([0, 5], np.int64))
+        with pytest.raises(Exception, match="range|outside|id"):
+            s.embedding(table, bad)
+        with pytest.raises(TypeError, match="integers"):
+            s.ids(np.zeros(3, np.float32))
         w = s.tensor(rng.standard_normal((3, 2), dtype=np.float32))
         prog = s.capture(x, s.matmul(x, w))
         with pytest.raises(ValueError, match="shape"):
