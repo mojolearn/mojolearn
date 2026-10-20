@@ -221,6 +221,8 @@ def process_pool_close(pool: PythonObject) raises:
         try:
             _process_reap(Int(py=worker["pid"]))
         except error:
+            # A failed reap remains owned and can be retried by close().
+            pool["workers"].append(worker)
             if failure == "":
                 failure = String(error)
     if failure != "":
@@ -277,8 +279,9 @@ def process_pool_start(pool: PythonObject) raises:
         transport_close(server)
         try:
             process_pool_close(pool)
-        except:
-            pass
+        except cleanup_error:
+            raise Error("RuntimeError: native process startup failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
+        pool["closed"] = False
         raise error
     transport_close(server)
 
@@ -304,7 +307,7 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
                     if Int(py=reply[0].get("sequence", -1)) != sequence + i:
                         raise Error("process: response sequence mismatch")
                     if String(reply[0].get("kind", "")) == "error":
-                        raise Error("native model worker failed: " + String(reply[1]))
+                        raise Error("RuntimeError: native model worker failed: " + String(reply[1]))
                     if String(reply[0].get("kind", "")) != "result":
                         raise Error("process: unexpected worker response")
                     result.append(reply[1])
@@ -319,8 +322,9 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
     except error:
         try:
             process_pool_close(pool)
-        except:
-            pass
+        except cleanup_error:
+            raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
+        pool["closed"] = False
         raise error
     return result
 
@@ -401,4 +405,6 @@ def process_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectP
     except error:
         if String(error).startswith("NotImplementedError:"):
             return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+        if String(error).startswith("RuntimeError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error, ExceptionType.ValueError)
