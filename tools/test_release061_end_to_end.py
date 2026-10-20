@@ -132,18 +132,35 @@ def split_fixture(wheel, version):
     ptx_bundle = None
     if plugins.PTX_PROFILE in parts:
         prefix = 'mojolearn/' + plugins.PTX_DIRECTORY + '/' + plugins.PTX_ARCH + '/'
-        listed = []
-        for member, data in sorted(parts[plugins.PTX_PROFILE].items()):
+        listed, index_rows = [], []
+        ptx_files = parts[plugins.PTX_PROFILE]
+        for member, data in sorted(ptx_files.items()):
             rel = member[len(prefix):]
-            if not member.startswith(prefix) or not rel.split('/')[-1].startswith('_mojolearn') or rel.startswith(('host/', '.libs/')):
+            if not member.startswith(prefix) or rel.startswith(('host/', '.libs/')):
                 continue
-            listed.append(dict(file=rel, numeric_mode=rel.split('/', 1)[0] if '/' in rel else 'fast',
-                               sha256=hashlib.sha256(data).hexdigest(),
-                               ptx_modules=[dict(target=plugins.PTX_ARCH, sha256='b' * 64)]))
-        manifest = json.dumps(dict(schema=plugins.PTX_MANIFEST_SCHEMA, code_format=plugins.PTX_CODE_FORMAT, vendor='cuda',
-                                   target=plugins.PTX_ARCH, min_compute_capability=[8, 0],
-                                   source_commit=payload.get('source_commit'), source_dirty=False, mojo_version='test',
-                                   errors=[], files=listed)).encode()
+            base = rel.rsplit('/', 1)[-1]
+            directory = rel[:-len(base)]
+            if base == plugins.MERGED_INDEX:
+                # the merged layout: the manifest hashes each directory's index (ptx_baseline.audit_tree)
+                index_rows.append(dict(file=rel, sha256=hashlib.sha256(data).hexdigest()))
+                continue
+            if not base.startswith('_mojolearn') or not base.endswith('.so'):
+                continue
+            row = dict(file=rel, numeric_mode=directory[:-1] if directory else 'fast',
+                       sha256=hashlib.sha256(data).hexdigest(),
+                       ptx_modules=[dict(target=plugins.PTX_ARCH, sha256='b' * 64)])
+            index = ptx_files.get(prefix + directory + plugins.MERGED_INDEX)
+            if index is not None:  # a merged file's row names the members its index lists
+                row['members'] = [m[:-len('.so')] if m.endswith('.so') else m
+                                  for m in json.loads(index)['files'][base]]
+            listed.append(row)
+        doc = dict(schema=plugins.PTX_MANIFEST_SCHEMA, code_format=plugins.PTX_CODE_FORMAT, vendor='cuda',
+                   target=plugins.PTX_ARCH, min_compute_capability=[8, 0],
+                   source_commit=payload.get('source_commit'), source_dirty=False, mojo_version='test',
+                   errors=[], files=listed)
+        if index_rows:
+            doc['indexes'] = index_rows
+        manifest = json.dumps(doc).encode()
         parts[plugins.PTX_PROFILE][prefix + plugins.BASELINE_MANIFEST] = manifest
         ptx_bundle = dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
     out = []
@@ -488,9 +505,9 @@ class MergedLayout(unittest.TestCase):
             with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 wheel, qualification = fixture(root, merged=True)
-                out = qualification / 'cuda/sm_90'
+                out = qualification / 'cuda/sm_89'
                 if defect.startswith('proof_'):
-                    path = qualification / 'build-proofs/cuda-sm_90.json'
+                    path = qualification / 'build-proofs/cuda-sm_89.json'
                     proof = json.loads(path.read_text())
                     if defect == 'proof_per_binding':
                         proof.pop('binding_layout')
