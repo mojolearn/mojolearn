@@ -155,7 +155,8 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "execution_profile_end":
         return execution_profile_object(s[].ex.execution_profile_end())
     if name == "save_control":
-        return control_save_py[E, KIND](sid, args[0], args[2], args[3], args[4], args[1])
+        var opt = 0 if _nil(args[5]) else _int(args[5], "optimizer", 1)
+        return control_save_py[E, KIND](sid, args[0], args[2], args[3], args[4], args[1], opt, uint64_input(args[6], "seed"))
     if name == "load_control":
         var bundle = control_load_py[E, KIND](sid, args[0])
         bundle["body"] = _program_object(session, bundle["body"])
@@ -288,13 +289,13 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             return PythonObject(None)
         if name == "learning_rate":
             return PythonObject(Float64(s[].learning_rate(opt)))
-        var kind = String(session._opt_kind[opt])
+        var kind = s[].opts[oi].cfg.kind
         var b = Python.import_module("builtins")
         if name == "optimizer_state":
             var st = s[].optimizer_state(opt, _int(args[1], "param", 1))
             var state = b.dict()
             state["step"] = st[0]
-            if kind != "sgd":
+            if kind != 0:
                 state["beta1_power"] = Float64(st[1])
                 state["beta2_power"] = Float64(st[2])
                 if st[4] != 0:
@@ -309,7 +310,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         var fp = List[Float32]()
         ip.append(_int(state["step"], "step", 0))
         fp = [Float32(1), Float32(1), Float32(1)]
-        if kind == "sgd":
+        if kind == 0:
             ip.append(_int(state["momentum_buffer"], "momentum_buffer", 1) if Bool(py=state.__contains__("momentum_buffer")) else 0)
             ip.append(0)
         else:

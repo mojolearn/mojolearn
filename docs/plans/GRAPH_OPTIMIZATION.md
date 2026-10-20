@@ -83,7 +83,26 @@ Both ordinary and conditional fit now assign public result attributes natively.
 The verifier adds independent scalar SGD, shared-state step counts, inactive
 AdamW state, zero-update branches, lazy invalid branches, scalar/finite predicate
 refusals, session identity and recovery checks. The full source verifier now has
-22 cases and 98 numerical digests; native compilation/execution is pending.
+23 cases and 109 numerical digests; native compilation/execution is pending.
 This is component composition for conditional minibatch training, not arbitrary
 nested graph regions, loop training, differentiated predicates or distributed
-control flow. Control checkpoint optimizer-state/resume coverage remains next.
+control flow.
+
+The optional v2 control checkpoint suffix now records the native session
+optimizer's configuration, schedule epoch, seed, individual parameter step
+counts, bias-correction scalars and both supported moment buffers. Parameter
+handles remain shared across restored components. Existing parameter-only v1
+files retain their original format and load behavior. A new optimizer handle is
+created on restore; malformed counters/scalars are rejected before allocation,
+and partial restores retire their native state. This covers the existing Session
+SGD, Adam and AdamW surface; no extra optimizer family is implied. The independent
+resume fixture compares uninterrupted three-epoch training against one epoch,
+save/load, and two more epochs, including shuffled batches, branch-specific
+dropout, changing learning rate, exact parameter/moment/scalar equality, complete
+epoch curves and subsequent inference. It also corrupts a step counter while
+repairing the outer hash and checks the semantic refusal and recovery.
+
+The parent will compile the combined conditional fit/checkpoint source once and
+run its affected native cases plus existing ordinary-fit regression coverage.
+These source changes do not resolve the confirmed std.python ownership leak,
+qualify untested physical vendors, or promote any optimization default.

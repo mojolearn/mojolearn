@@ -1452,9 +1452,10 @@ class Program:
         return self._session_native(self._s, "fit_if", (self, condition, otherwise, arrays, targets,
             (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
 
-    def save_control(self, path, *, condition, otherwise=None, max_iterations=None):
-        """Save a conditional or bounded loop with shared parameters in one file."""
-        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations))
+    def save_control(self, path, *, condition, otherwise=None, max_iterations=None,
+                     optimizer=None, seed=0):
+        """Save control components, shared parameters and optional optimizer state."""
+        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations, optimizer, seed))
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,
