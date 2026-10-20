@@ -6808,7 +6808,7 @@
         "experiments/performance_ideas/F08/caller.py",
         "experiments/performance_ideas/apple_fast/lm_task.py",
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "experiments/performance_ideas/F08/compile_audit.json"
       ],
       "candidate_defines": [

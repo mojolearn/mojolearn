@@ -19,7 +19,7 @@ from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
 # lane w2-lmgrad (2026-10-03): the block backward on the merged Apple FAST
 # GEMM; each False unless FAST, Apple, and its own -D MOJOLEARN_AFN_LM_* define
 # (or MOJOLEARN_AFN_LMGRAD_ALL). IDENTICAL compiles none of their arms.
-from training.byte_lm_afn_grad import (
+from autograd.kernels.transformer_afn import (
     AFN_LM_BWD_NORM1_RESID,
     AFN_LM_WGRAD_SPLIT,
     afn_lm_wgrad_split_into,

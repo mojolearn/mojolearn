@@ -1043,7 +1043,7 @@
         "M\ttools/performance_ideas.py",
         "M\ttraining/afn_optim.mojo",
         "M\ttraining/byte_lm_afn.mojo",
-        "M\ttraining/byte_lm_afn_grad.mojo",
+        "M\tautograd/kernels/transformer_afn.mojo",
         "M\ttraining/mlp_fast.mojo",
         "M\ttransformer/impl/llama/afn_apple_fast.mojo",
         "M\tx_cnn/afn_direct.mojo"

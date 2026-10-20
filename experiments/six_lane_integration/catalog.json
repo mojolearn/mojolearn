@@ -77354,7 +77354,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T04:wgrad_split",
@@ -77409,7 +77409,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "lane": "AF.N",
       "mode": "fast",
@@ -77588,7 +77588,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_BWD_EPILOGUE": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T05:gemm_epilogue_fan_in",
@@ -77664,7 +77664,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T05:norm1_residual",
@@ -77742,13 +77742,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_BWD_EPILOGUE": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_BWD_FUSE": [
               "training/byte_lm_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T05:three_backward_fusions",
@@ -77864,7 +77864,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "lane": "AF.N",
       "mode": "fast",
@@ -80535,10 +80535,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_MIN128": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T09:minimum_k128",
@@ -80607,10 +80607,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_CAP8": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T09:split_cap8",
@@ -80680,13 +80680,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_CAP8": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_MIN128": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T09:minimum_k128_cap8",
@@ -80781,7 +80781,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "lane": "AF.N",
       "mode": "fast",
@@ -90502,7 +90502,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],
@@ -90840,7 +90840,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],
@@ -90951,7 +90951,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],
