@@ -14,7 +14,6 @@ into description integers. It never reads a floating-point element.
 # integer shape constants, never tensor element values of floating type.
 from __future__ import annotations
 
-import math
 import os
 import struct
 from dataclasses import dataclass, field
@@ -33,6 +32,14 @@ ITEMSIZE = {"f32": 4, "f16": 2, "bf16": 2, "f64": 8, "i64": 8, "i32": 4, "bool":
 FLOAT_DTYPES = frozenset(("f32", "f16", "bf16", "f64"))
 INT_DTYPES = frozenset(("i64", "i32", "bool"))
 _STRUCT = {"i64": "q", "i32": "i", "bool": "B"}
+
+
+def _numel(dims):
+    """The element count of a shape."""
+    n = 1
+    for d in dims:  # cpu-route: model graph description on the host (one per axis)
+        n *= d
+    return n
 
 
 def onnx_dtype_name(code):
@@ -77,7 +84,7 @@ class TensorInfo:
 
     @property
     def numel(self):
-        return math.prod(self.shape)
+        return _numel(self.shape)
 
 
 @dataclass(frozen=True)
@@ -201,7 +208,7 @@ def _bcast_values(vals, shape, out_shape):
     st = [0 if pad[i] == 1 else st[i] for i in range(len(pad))]  # cpu-route: model graph description on the host (per axis)
     ost = _strides(out_shape)
     out = []
-    for flat in range(math.prod(out_shape)):  # cpu-route: model graph description on the host (folded shape integers)
+    for flat in range(_numel(out_shape)):  # cpu-route: model graph description on the host (folded shape integers)
         src = 0
         for i, s in enumerate(ost):  # cpu-route: model graph description on the host (per axis)
             src += ((flat // s) % out_shape[i]) * st[i]
@@ -367,13 +374,13 @@ def _r_reshape(c, n):
             target[i] = s[i]
         elif d < -1:
             raise _Refuse(f"target shape {tuple(target)} has a negative size")
-    total = math.prod(s)
+    total = _numel(s)
     if neg:
-        rest = math.prod(d for i, d in enumerate(target) if i != neg[0])  # cpu-route: model graph description on the host (one per axis)
+        rest = _numel(d for i, d in enumerate(target) if i != neg[0])  # cpu-route: model graph description on the host (one per axis)
         if rest == 0 or total % rest:
             raise _Refuse(f"cannot reshape {tuple(s)} to {tuple(target)}")
         target[neg[0]] = total // rest
-    if math.prod(target) != total:
+    if _numel(target) != total:
         raise _Refuse(f"cannot reshape {tuple(s)} to {tuple(target)}")
     return [_out(target, c.dtype(x), c.maybe_ints(x))]
 
@@ -384,7 +391,7 @@ def _r_flatten(c, n):
     ax = ax + len(s) if ax < 0 else ax
     if not 0 <= ax <= len(s):
         raise _Refuse(f"axis {n.attrs.get('axis', 1)} is out of range for rank {len(s)}")
-    return [_out((math.prod(s[:ax]), math.prod(s[ax:])), c.dtype(n.inputs[0]), c.maybe_ints(n.inputs[0]))]
+    return [_out((_numel(s[:ax]), _numel(s[ax:])), c.dtype(n.inputs[0]), c.maybe_ints(n.inputs[0]))]
 
 
 def _axes_of(c, n, what="axes"):
@@ -638,7 +645,7 @@ def _r_shape(c, n):
 
 
 def _r_size(c, n):
-    return [_out((), "i64", (math.prod(c.shape(n.inputs[0])),))]
+    return [_out((), "i64", (_numel(c.shape(n.inputs[0])),))]
 
 
 def _r_constant_of_shape(c, n):
@@ -649,7 +656,7 @@ def _r_constant_of_shape(c, n):
     dt = t.dtype if isinstance(t, TensorInfo) else "f32"
     folded = None
     if isinstance(t, TensorInfo) and dt in INT_DTYPES:
-        folded = int_values(t)[:1] * math.prod(shape)
+        folded = int_values(t)[:1] * _numel(shape)
     return [_out(shape, dt, folded)]
 
 
