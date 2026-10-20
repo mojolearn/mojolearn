@@ -1053,6 +1053,19 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                 gpu_plugins.validate_baseline_manifest(doc, digests)
             except ValueError as exc:
                 raise SystemExit(f"pack_wheel: invalid PTX set manifest: {exc}") from exc
+            # A merged PTX set's manifest binds its indexes too (top-level
+            # `indexes`, [{"file": "[identical/]_mojolearn_merged.json",
+            # "sha256": hex}], packaging/linux/ptx_baseline.py); per-binding has none.
+            tier_indexes = {rel: sha(p).hex() for rel, p in indexes.items() if not rel.startswith("host/")}
+            rows = doc.get("indexes")
+            if layout == "merged":
+                bound = ({r.get("file"): r.get("sha256") for r in rows if isinstance(r, dict)}
+                         if isinstance(rows, list) else None)
+                if bound != tier_indexes or len(rows) != len(tier_indexes):
+                    raise SystemExit("pack_wheel: invalid PTX set manifest: its indexes do not match the "
+                                     f"set's merged indexes {sorted(tier_indexes)}")
+            elif rows:
+                raise SystemExit("pack_wheel: invalid PTX set manifest: indexes on a per-binding set")
             files[f"{vendor}/{arch}/{gpu_plugins.BASELINE_MANIFEST}"] = baseline_path
         elif baseline_path.exists():
             raise SystemExit("pack_wheel: PTX manifest on a native architecture set")
