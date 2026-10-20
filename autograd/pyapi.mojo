@@ -17,6 +17,7 @@ from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FitConfig, ModelSpec, model_fit, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
+from autograd.rankn_api import rn_dims, rn_shape
 from autograd.profile import ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from core.cast_in import CastIn, cast_in_kind, label_kind_of
@@ -173,7 +174,7 @@ def _handle_list(p: PythonObject) raises -> List[Int]:
 
 def _arg_ints(p: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(p)):  # small-loop(p: an op's integer arguments, at most four): argument parsing, no data
+    for i in range(len(p)):  # small-loop(p: an op's integer arguments, a shape or axes list at most): argument parsing, no data
         out.append(ival(p, i))
     return out^
 
@@ -199,13 +200,23 @@ def ops_upload_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, desc: PythonObject, ip: PythonObject,
 ) raises -> PythonObject:
     """desc: the caller's (rows, cols) array as it is (`cast_in_of`; cast to
-    float32 on the executor); ip = [requires_grad]. Returns the new
-    tensor's handle."""
-    if len(ip) != 1:
-        raise Error("ops_upload: requires [requires_grad]")
+    float32 on the executor); ip = [requires_grad], or [requires_grad,
+    ndim, d0 .. d(ndim-1)] for a C-order array of another rank whose
+    row-major (rows, cols) matrix view `desc` describes (lane
+    ag-rankn-python). Returns the new tensor's handle."""
+    if len(ip) < 1:
+        raise Error("ops_upload: requires [requires_grad] or [requires_grad, ndim, dims...]")
     var src = cast_in_of(desc, "x")
     var p = ops_session[E, KIND](Int(py=sid))
-    return PythonObject(p[].upload(src, ival(ip, 0) != 0))
+    if len(ip) == 1:
+        return PythonObject(p[].upload(src, ival(ip, 0) != 0))
+    var nd = ival(ip, 1)
+    if nd < 0 or len(ip) != 2 + nd:
+        raise Error("ops_upload: the shape takes ndim and ndim dimensions")
+    var dims = List[Int](capacity=nd)
+    for k in range(nd):  # small-loop(ip: the tensor's dims, at most 8): argument parsing, no data
+        dims.append(ival(ip, 2 + k))
+    return PythonObject(p[].upload_nd(src, rn_shape(dims, "ops: tensor"), ival(ip, 0) != 0))
 
 
 def ops_download_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -244,12 +255,13 @@ def ops_scalar_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, 
 
 
 def ops_shape_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    """[rows, cols] of a tensor."""
+    """The dims of a tensor: [rows, cols] for a matrix, the full shape
+    for any other rank (lane ag-rankn-python)."""
     var p = ops_session[E, KIND](Int(py=sid))
-    var shape = p[].shape(Int(py=h))
+    var dims = rn_dims(p[].shape_nd(Int(py=h)))
     var out = Python.list()
-    out.append(PythonObject(shape[0]))
-    out.append(PythonObject(shape[1]))
+    for k in range(len(dims)):  # small-loop(dims: a tensor's rank, at most 8): result packing, no data
+        out.append(PythonObject(dims[k]))
     return out
 
 
