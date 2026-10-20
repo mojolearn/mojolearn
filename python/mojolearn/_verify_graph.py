@@ -135,7 +135,8 @@ def bounded_while():
         nonfinite = s.capture(x, x)
         _refuses(lambda: _invoke(body.while_loop, np.array([[np.nan]], np.float32), condition=nonfinite,
                                         max_iterations=3), "finite")
-        _refuses(lambda: _invoke(body.while_loop, a, condition=condition, max_iterations=-1), "nonnegative")
+        _refuses(lambda: _invoke(body.while_loop, a, condition=condition, max_iterations=-1), "must be >= 0")
+        _refuses(lambda: _invoke(body.while_loop, a, condition=condition, max_iterations=1.5), "integer")
         _equal(_invoke(body.while_loop, a, condition=condition, max_iterations=3)["outputs"], done["outputs"])
         return [done["outputs"], bound["outputs"], zero["outputs"], stopped["outputs"]]
 

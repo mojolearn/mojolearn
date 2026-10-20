@@ -10,7 +10,7 @@ from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_tools import program_cse
 from autograd.program_runtime import parameter_buffers, replay_values
-from autograd.program_pyapi import program_inputs, output_array, _dict, _result
+from autograd.program_pyapi import program_inputs, output_array, _dict, _result, _integer
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.rankn import ShapeN
 from autograd.tape import Tape
@@ -91,7 +91,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
     var condition = s[].program(Int(py=condition_id))
     var other = body.copy()
     var is_loop = Int(py=other_id) == 0
-    var maximum = Int(py=limit)
+    var maximum = _integer(limit, "max_iterations", 0)
     if not is_loop:
         other = s[].program(Int(py=other_id))
         _signature(body, other)

@@ -68,7 +68,7 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
         if depth != len(dims) or depth != leaf_depth:
             raise Error("ValueError: program input sequences must be rectangular")
         if integer:
-            if not Bool(py=b.isinstance(a, b.int)):
+            if Bool(py=b.isinstance(a, b.bool)) or not Bool(py=b.hasattr(a, "__index__")):
                 raise Error("TypeError: program ids must be integers")
             ids.append(Int64(py=a))
         else:
@@ -375,7 +375,9 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
             params.clear()
             params.append(_integer(parameters, "parameter", 1))
         else:
-            params = _input_handles(parameters)
+            params.clear()
+            for k in range(len(parameters)):  # driver-loop: over selected parameter handles
+                params.append(_integer(parameters[k], "parameter", 1))
     var owners = program_inputs(p, arrays, True)
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
