@@ -1431,15 +1431,25 @@ class Program:
 # later operation use cached native entries; no backend Python is called.
 def _connect_session_mode(mode):
     module = _backend.binding("_mojolearn_x_sequence", mode)
-    distributed = SimpleNamespace()
-    # Import-time ABI discovery, not product execution or a model walk.
-    for name in ("ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
-                 "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",
-                 "ops_distributed_save", "ops_distributed_close", "ops_partitioned_open",
-                 "ops_partitioned_load", "ops_partitioned_fit", "ops_partitioned_run",
-                 "ops_partitioned_state", "ops_partitioned_residency", "ops_partitioned_save",
-                 "ops_partitioned_close", "ops_partitioned_profile"):
-        setattr(distributed, name, getattr(module, name, None))
+    distributed = SimpleNamespace(
+        ops_distributed_open=getattr(module, "ops_distributed_open", None),
+        ops_distributed_load=getattr(module, "ops_distributed_load", None),
+        ops_distributed_fit=getattr(module, "ops_distributed_fit", None),
+        ops_distributed_run=getattr(module, "ops_distributed_run", None),
+        ops_distributed_state=getattr(module, "ops_distributed_state", None),
+        ops_distributed_residency=getattr(module, "ops_distributed_residency", None),
+        ops_distributed_save=getattr(module, "ops_distributed_save", None),
+        ops_distributed_close=getattr(module, "ops_distributed_close", None),
+        ops_partitioned_open=getattr(module, "ops_partitioned_open", None),
+        ops_partitioned_load=getattr(module, "ops_partitioned_load", None),
+        ops_partitioned_fit=getattr(module, "ops_partitioned_fit", None),
+        ops_partitioned_run=getattr(module, "ops_partitioned_run", None),
+        ops_partitioned_state=getattr(module, "ops_partitioned_state", None),
+        ops_partitioned_residency=getattr(module, "ops_partitioned_residency", None),
+        ops_partitioned_save=getattr(module, "ops_partitioned_save", None),
+        ops_partitioned_close=getattr(module, "ops_partitioned_close", None),
+        ops_partitioned_profile=getattr(module, "ops_partitioned_profile", None),
+    )
     result = SimpleNamespace(
         binding=module, initialize=module.ops_session_initialize,
         numeric_mode=module.x_sequence_numeric_mode, open=module.ops_open,
