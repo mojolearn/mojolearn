@@ -18,24 +18,43 @@ def packed(root):
     return out
 
 
-def resolve(wheels, destination):
+def resolve(wheels, destination, project='mojolearn'):
     return subprocess.run([
         sys.executable, '-m', 'pip', 'download', '--disable-pip-version-check',
         '--no-cache-dir', '--no-index', '--find-links', str(wheels),
         '--only-binary=:all:', '--platform', pw.SPLIT_PLAT,
-        '--dest', str(destination), f'mojolearn=={pw.read_version()}',
+        '--dest', str(destination), f'{project}=={pw.read_version()}',
     ], capture_output=True, text=True, timeout=60)
 
 
-def test_pip_resolves_ptx_from_the_single_core_requirement(tmp_path):
+#: 2026-10-20: what each Linux install resolves to. mojolearn (file-free)
+#: pulls the core and both vendors; a vendor pulls the core (NVIDIA also its
+#: PTX package); the core pulls no vendor.
+RESOLVES = {
+    'mojolearn': {'mojolearn', 'mojolearn_core', 'mojolearn_nvidia', 'mojolearn_amd', 'mojolearn_nvidia_ptx'},
+    'mojolearn-nvidia': {'mojolearn_core', 'mojolearn_nvidia', 'mojolearn_nvidia_ptx'},
+    'mojolearn-amd': {'mojolearn_core', 'mojolearn_amd'},
+    'mojolearn-core': {'mojolearn_core'},
+}
+
+
+@pytest.mark.parametrize('project', sorted(RESOLVES))
+def test_pip_resolves_each_install_from_its_requirements(tmp_path, project):
     wheels = packed(tmp_path)
     destination = tmp_path / 'resolved'
-    result = resolve(wheels, destination)
+    result = resolve(wheels, destination, project)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert {p.name.split('-')[0] for p in destination.glob('*.whl')} == {
-        'mojolearn', 'mojolearn_nvidia', 'mojolearn_amd', 'mojolearn_nvidia_ptx'}
+    assert {p.name.split('-')[0] for p in destination.glob('*.whl')} == RESOLVES[project]
     for p in destination.glob('*.whl'):
         assert hashlib.sha256(p.read_bytes()).digest() == hashlib.sha256((wheels / p.name).read_bytes()).digest()
+
+
+def test_pip_refuses_a_vendor_without_the_core(tmp_path):
+    wheels = packed(tmp_path)
+    next(wheels.glob('mojolearn_core-*.whl')).unlink()
+    result = resolve(wheels, tmp_path / 'resolved', 'mojolearn-amd')
+    assert result.returncode != 0
+    assert 'mojolearn-core' in result.stderr
 
 
 def test_pip_refuses_a_release_missing_the_ptx_dependency(tmp_path):
