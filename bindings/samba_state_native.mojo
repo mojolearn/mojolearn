@@ -361,6 +361,67 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
     return samba_publish(model, checked, context)
 
 
+def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var entries = samba_entries(context, state["numeric_mode"])
+    if Int(py=bi.int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))) > 1:
+        for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # driver-loop: over cooperative native capability metadata
+            if not Bool(py=bi.hasattr(entries, name)) or Int(py=_native_function(entries, name)()) != 1:
+                raise Error("RuntimeError: native Samba cooperative update is unavailable: " + name)
+    var result = samba_validate_state(state, context)
+    var registry = result["registry"]
+    if len(gradients) != len(registry):
+        raise Error("Samba: gradients must match the ordered parameter registry")
+    var step = Int(py=result["t"])
+    if step >= 2147483647:
+        raise Error("Samba: optimizer step exceeds signed 32-bit range")
+    var config = bi.dict(result["optimizer"])
+    if result["schedule"] is not None:
+        config["lr"] = samba_schedule_rate(result["schedule"], step + 1, context)
+    var max_norm = 0.0 if config["max_norm"] is None else Float64(py=config["max_norm"])
+    if config["max_norm"] is not None and not (max_norm > 0.0):
+        raise Error("Samba: max_norm must be positive or None")
+    var n = Int(py=result["parameters"].size)
+    var flat_gradient = generation_array([n])
+    var offsets = generation_array([len(registry) + 1], "i")
+    var gp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=flat_gradient._addr))
+    var op = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=offsets._addr))
+    for i in range(len(registry)):  # driver-loop: over registry-ordered gradient buffers
+        var item = registry[i]
+        var dims = List[Int]()
+        for axis in range(len(item["shape"])):  # driver-loop: over tensor shape metadata
+            dims.append(Int(py=item["shape"][axis]))
+        var value = _model_f32(gradients[i], "gradient", context["neural"])
+        _model_shape(value, dims, "gradient")
+        var offset = Int(py=item["offset"])
+        op[i] = Int32(offset)
+        var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
+        memcpy(dest=gp + offset, src=src, count=Int(py=item["size"]))
+        _ = value^
+    op[len(registry)] = Int32(n)
+    var plan = py_ints([len(registry), 2, step + 1, 0])
+    for key in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # driver-loop: over optimizer scalar launch metadata
+        plan.append(config[key])
+    plan.append(0.0)
+    plan.append(0.0)
+    plan.append(max_norm)
+    plan.append(0)
+    var info = generation_array([3])
+    var written = _native_function(entries, "optimizer_step")(
+        result["parameters"]._addr, flat_gradient._addr, result["exp_avg"]._addr,
+        result["exp_avg_sq"]._addr, offsets._addr, result["buf_initialized"]._addr,
+        info._addr, plan)
+    if Int(py=written) != n:
+        raise Error("RuntimeError: Samba optimizer returned an incomplete update")
+    result["optimizer"] = config
+    result["t"] = PythonObject(step + 1)
+    result["rng"] = bi.dict(result["rng"])
+    _ = flat_gradient^
+    _ = offsets^
+    _ = info^
+    return result
+
+
 def samba_state_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
@@ -376,6 +437,8 @@ def samba_state_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
             result = samba_from_state(values[0], context)
         elif operation == "publish":
             result = samba_publish(values[0], values[1], context)
+        elif operation == "apply":
+            result = samba_apply_gradients_from_state(values[0], values[1], context)
         else:
             raise Error("Samba: unknown native state operation")
         return result.steal_data()
@@ -383,6 +446,8 @@ def samba_state_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
         var message = String(error)
         if message.startswith("NotImplementedError:"):
             return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+        if message.startswith("RuntimeError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
             return raise_python_exception(error, ExceptionType.TypeError)
         return raise_python_exception(error, ExceptionType.ValueError)
