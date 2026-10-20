@@ -316,20 +316,26 @@ def _read_sequential(path: String) raises -> Tuple[Checkpoint, ModelSpec]:
 
 def model_checkpoint_info_py(path: PythonObject) raises -> PythonObject:
     """The description and options of a Sequential checkpoint, for Python to
-    rebuild the model object: [export (0/1), description words, ints, floats,
-    table], ints = [the 9 option words, n_features, n_outputs, y_1d, epochs
-    run, class count, class kind, class item size, n_params], floats =
-    [lr, f1, f2, eps, weight_decay, f7, tol, schedule gamma, huber delta]
-    (model_fit's fp head)."""
+    rebuild the model object: [export (0/1), layers, ints, floats], layers =
+    one [code, arg0, arg1, float] per layer, ints = [the 9 option words,
+    n_features, n_outputs, y_1d, epochs run, class count, class kind, class
+    item size, n_params], floats = [lr, f1, f2, eps, weight_decay, f7, tol,
+    schedule gamma, huber delta] (model_fit's fp head)."""
     var file = String(py=path)
     var both = _read_sequential(file)
     var r = _seq_record(both[0], file)
     var out = Python.list()
     out.append(PythonObject(1 if r.export else 0))
-    var words = Python.list()
-    for i in range(len(r.prog)):  # driver-loop: over description words
-        words.append(PythonObject(r.prog[i]))
-    out.append(words)
+    var spec = both[1].copy()
+    var layers = Python.list()
+    for i in range(spec.n_layers()):  # driver-loop: over layers
+        var rec = Python.list()
+        rec.append(PythonObject(spec.kinds[i]))
+        rec.append(PythonObject(spec.arg0[i]))
+        rec.append(PythonObject(spec.arg1[i]))
+        rec.append(PythonObject(Float64(spec.farg[i])))
+        layers.append(rec)
+    out.append(layers)
     var ints = Python.list()
     for i in range(len(r.opts)):  # driver-loop: over option words
         ints.append(PythonObject(r.opts[i]))
@@ -346,10 +352,6 @@ def model_checkpoint_info_py(path: PythonObject) raises -> PythonObject:
     floats.append(PythonObject(Float64(r.floats[6])))
     floats.append(PythonObject(Float64(r.floats[7])))
     out.append(floats)
-    var table = Python.list()
-    for i in range(len(r.table)):  # driver-loop: over layers
-        table.append(PythonObject(Float64(r.table[i])))
-    out.append(table)
     return out
 
 
