@@ -15,6 +15,7 @@ from autograd.distributed_checkpoint import (
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_runtime import replay_values
 from autograd.program_pyapi import array_input, output_array
+from autograd.program_arrays import initialize_program_arrays
 from autograd.rankn import ShapeN
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.optim import optimizer_slots, optimizer_config_packed
@@ -145,6 +146,7 @@ def distributed_open[E: Exec & Movable & Deinitable, KIND: Int](
 def distributed_load[E: Exec & Movable & Deinitable, KIND: Int](
     path: PythonObject, device_ids: List[Int], var executors: List[E],
 ) raises -> PythonObject:
+    initialize_program_arrays()
     var ck = read_checkpoint_unchecked(String(py=path))
     var p = distributed_graph(ck)
     var ip = List[Int]()
