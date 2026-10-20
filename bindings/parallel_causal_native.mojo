@@ -494,8 +494,11 @@ def parallel_causal_call(operation: String, args: PythonObject) raises -> Python
         var ids = args[1]
         var state = args[2]
         var x = _parallel_causal_rpc(owner, owner.layer_devices[0], "embedding", ids)
+        # The legacy parallel API used each block's dedicated decode entry
+        # after prefill. Preserve that route independently of ordinary CausalLM.
+        var method = PythonObject("step" if Bool(py=args[3]) else "forward")
         for i in range(len(owner._blocks)):  # driver-loop: over ordered persistent layer owners, with native activation transport
-            x = _parallel_causal_block_run(owner._blocks[i], PythonObject("forward"), x, state.layers[i])
+            x = _parallel_causal_block_run(owner._blocks[i], method, x, state.layers[i])
         var result = _parallel_causal_rpc(owner, owner.layer_devices[len(owner.layer_devices) - 1], "final", x)
         state.positions = Int(py=state.positions) + Int(py=ids.shape[1])
         return result
