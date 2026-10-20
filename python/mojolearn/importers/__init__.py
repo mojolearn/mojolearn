@@ -31,7 +31,9 @@ def supported_ops():
     # imports before the lowering module exists.
     try:
         from . import _lower
-    except ImportError:
+    except ModuleNotFoundError as e:
+        if e.name != f"{__name__}._lower":
+            raise
         return []
     return list(getattr(_lower, "SUPPORTED_OPS", ()))
 
