@@ -13,6 +13,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.math import isfinite
 from bindings.native_json import native_json_parse
+from bindings.native_idna import idna_initialize, idna_encode
 
 
 struct TransportBoundary(Defaultable, Movable):
@@ -79,6 +80,7 @@ def transport_initialize() raises:
     t[].reuse_address = Int(py=sockets.SO_REUSEADDR)
     t[].passive = Int(py=sockets.AI_PASSIVE)
     t[].nohang = Int(py=processes.WNOHANG)
+    idna_initialize()
 
 
 def transport_clock() raises -> Float64:
@@ -101,7 +103,7 @@ def transport_listen(host: String, port: Int, timeout: Float64) raises -> Python
     if port < 0 or port > 65535:
         raise Error("transport: port outside [0, 65535]")
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    var addresses = t[].getaddrinfo(PythonObject(None) if host == "" else PythonObject(host),
+    var addresses = t[].getaddrinfo(PythonObject(None) if host == "" else idna_encode(PythonObject(host)),
                                   port, 0, 1, 0, t[].passive)
     for i in range(len(addresses)):  # driver-loop: over resolved network endpoints
         var row = addresses[i]
@@ -109,7 +111,7 @@ def transport_listen(host: String, port: Int, timeout: Float64) raises -> Python
         try:
             socket.setsockopt(t[].sol_socket, t[].reuse_address, 1)
             socket.settimeout(timeout)
-            socket.bind(row[4])
+            socket.bind(_transport_endpoint(row[4]))
             socket.listen()
             return socket
         except:
@@ -137,19 +139,29 @@ def transport_connect(host: String, port: Int, timeout: Float64) raises -> Pytho
     if port < 1 or port > 65535:
         raise Error("transport: remote port outside [1, 65535]")
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    var addresses = t[].getaddrinfo(host, port, 0, 1)
+    var addresses = t[].getaddrinfo(idna_encode(PythonObject(host)), port, 0, 1)
     for i in range(len(addresses)):  # driver-loop: over resolved network endpoints
         var row = addresses[i]
         var socket = t[].socket(row[0], row[1], row[2])
         try:
             socket.settimeout(timeout)
-            socket.connect(row[4])
+            socket.connect(_transport_endpoint(row[4]))
             return socket
         except:
             socket.close()
             if i + 1 == len(addresses):
                 raise Error("transport: connection failed")
     raise Error("transport: no resolved remote endpoint")
+
+
+def _transport_endpoint(address: PythonObject) raises -> PythonObject:
+    # getaddrinfo returns numeric address text. Supplying bytes to the C
+    # socket address parser avoids invoking Python's IDNA codec again while
+    # preserving IPv4/IPv6 port, flowinfo and scope-id fields exactly.
+    var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
+    var fields = bi.list(address)
+    fields[0] = fields[0].encode("ascii")
+    return bi.tuple(fields)
 
 
 def transport_close(socket: PythonObject) raises:
@@ -294,6 +306,8 @@ def transport_call(operation: String, args: PythonObject) raises -> PythonObject
     """Single native operation entry for admission and installed protocol tests."""
     if operation == "initialize":
         transport_initialize()
+    elif operation == "idna":
+        return idna_encode(args[0])
     elif operation == "listen":
         return transport_listen(String(args[0]), Int(py=args[1]), Float64(py=args[2]))
     elif operation == "accept":
