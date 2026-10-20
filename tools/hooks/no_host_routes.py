@@ -68,7 +68,7 @@ BASELINE = "tools/hooks/host_routes_baseline.tsv"
 _PY_CPU_SIDE = frozenset("""
 __main__.py _backend.py host_surface.py _cpu_reference.py _conformance.py
 _verify.py _verify_all.py _verify_causal_lm.py _verify_distributed.py
-_verify_distributed_program.py
+_verify_distributed_program.py _verify_native_runtime.py
 _verify_par.py _verify_parallel_cv.py _verify_reference.py _verify_resources.py
 _verify_small.py _verify_worker.py _verification_catalog.py
 _verification_coverage.py _verification_ctr_models.py
