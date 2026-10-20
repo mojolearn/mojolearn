@@ -44,3 +44,31 @@ def __getattr__(name):
         from ._program import import_model
         return import_model
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# ---- lane ag-import-torch: the reader for a source, by its type ----------
+# `import_model` (importers/_program.py) reads its `source` through
+# `_read_source`, so a path and a torch.export program take one route.
+# torch is never imported here: a torch.export program can only exist once
+# the caller has imported torch, so the check looks in sys.modules.
+def _read_source(source):
+    """The import graph of ``source``: an ONNX file path or a
+    ``torch.export.ExportedProgram``."""
+    import os
+    import sys
+
+    if isinstance(source, (str, bytes, os.PathLike)):
+        from .onnx import read
+        return read(source)
+    texport = sys.modules.get("torch.export")
+    exported = getattr(texport, "ExportedProgram", None)
+    if exported is not None and isinstance(source, exported):
+        from .torch_export import read
+        return read(source)
+    torch = sys.modules.get("torch")
+    if torch is not None and isinstance(source, torch.nn.Module):
+        raise TypeError("import a torch module by exporting it first: "
+                        "mojolearn.import_model(torch.export.export(model.eval(), example_inputs))")
+    raise TypeError(f"source must be the path of an ONNX file or a torch.export.ExportedProgram, "
+                    f"got {type(source).__name__}")
+# ---- end lane ag-import-torch ---------------------------------------------
