@@ -1069,6 +1069,10 @@ class Session:
         return self._distributed_binding.ops_distributed_load(
             path, devices, _DistributedProgram, self._distributed_binding)
 
+    def load_control(self, path):
+        """Load control components and shared parameters from one checkpoint."""
+        return self._session_native(self, "load_control", (path,))
+
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
 
@@ -1471,6 +1475,10 @@ class Program:
         return self._s._distributed_binding.ops_distributed_open(
             self._s._id, self._id, devices, (logical_shards, optimizer, parameters, seed),
             _DistributedProgram, self._s._distributed_binding)
+
+    def save_control(self, path, *, condition, otherwise=None, max_iterations=None):
+        """Save a conditional or bounded loop with shared parameters in one file."""
+        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations))
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,

@@ -77,3 +77,5 @@ Program.vjp_if	native conditional differentiation; cross-vendor qualification pe
 Program.vjp_while	native loop differentiation; cross-vendor qualification pending
 Session.execution_profile_begin	native execution counters; installed-release qualification pending
 Session.execution_profile_end	native execution counters; installed-release qualification pending
+Program.save_control	control checkpoint; installed-release qualification pending
+Session.load_control	control checkpoint; installed-release qualification pending

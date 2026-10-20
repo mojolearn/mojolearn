@@ -167,7 +167,10 @@ comptime CKPT_SECTION_DISTRIBUTED_PROGRAM = 4
 # Captured graph, canonical parameters, sharded optimizer state and RNG/schedule counters.
 comptime CKPT_SECTION_PARTITIONED_PROGRAM = 5
 # Model/tensor/pipeline partitioned captured graph and complete optimizer state.
-comptime CKPT_SECTION_MAX = 5
+
+comptime CKPT_SECTION_CONTROL_PROGRAM = 6
+# Conditional/loop component graphs with a single shared parameter table.
+comptime CKPT_SECTION_MAX = 6
 comptime CKPT_EXT_HEAD_BYTES = 8
 
 
