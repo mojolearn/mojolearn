@@ -76,14 +76,15 @@ def _nonlinear(s, *, dropout=False):
     return s.capture([x], [s.matmul(h, w2)])
 
 
-def test_independent_sgd_gradient_and_replica_snapshot():
+@pytest.mark.parametrize("logical_shards", [1, 3])
+def test_independent_sgd_gradient_and_replica_snapshot(logical_shards):
     # Analytic MSE: w=0, X=1, y=2 => gradient=-4; lr=1/8 => w=1/2.
     x = np.ones((5, 1), np.float32)
     y = np.full((5, 1), 2, np.float32)
     with ops.Session(numeric_mode="identical") as s:
         p, w = _linear(s)
         o = s.optimizer("sgd", lr=0.125)
-        with p.distribute(_devices(), logical_shards=max(3, len(_devices())), optimizer=o) as d:
+        with p.distribute(_devices(), logical_shards=max(logical_shards, len(_devices())), optimizer=o) as d:
             losses = d.fit(x, targets=y, epochs=1, batch_size=5, shuffle=False)
             st = d.state()
             np.testing.assert_array_equal(st["parameters"][0], [[0.5]])
