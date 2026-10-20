@@ -405,7 +405,7 @@ class CausalLM:
         from ..tokenizer import _binding as _runtime_binding
         from .._transformer_impl import TransformerState
         from .._mamba_impl import Mamba1State, Mamba2State
-        self._runtime = _runtime_binding()
+        self._runtime = _runtime_binding()._module
         self._runtime.generation_initialize((
             Array, CausalLMState,
             {"transformer": TransformerState, "mamba1": Mamba1State, "mamba2": Mamba2State},

@@ -211,7 +211,7 @@ class Tokenizer:
             self._added_by_id[i] = content
         self.bos_ids = tuple(int(i) for i in bos_ids)  # glue: converts the bos id argument
         self.eos_ids = tuple(int(i) for i in eos_ids)  # glue: converts the eos id argument
-        self._m = _binding()
+        self._m = _binding()._module
 
     def _special_buffers(self):
         contents = [c.encode("utf-8") for c in self.added]  # cpu-route: encodes the added special tokens (text input)
