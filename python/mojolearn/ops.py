@@ -34,6 +34,8 @@ Example
 ...     p = s.softmax(s.matmul(x, w))
 ...     probs = s.numpy(p)
 """
+import os
+
 from ._optional_numpy import require_numpy
 np = require_numpy('mojolearn.ops')
 
@@ -475,3 +477,104 @@ class Session:
         out = np.empty(self.shape(h), dtype=np.float32)
         self._b.ops_grad(self._sid(), h, out.ctypes.data)
         return out
+
+    # ------------------------------------------------------------ checkpoints
+    def _optimizer_handles(self, optimizer, params):
+        # The optimizer's own state tensors per parameter (optimizer_state:
+        # live handles of its buffers): the momentum buffer, or Adam's first
+        # and second moments, and the (1, 1) step count. 0 where there is none.
+        ms, vs, ts = [], [], []
+        for h in params:  # glue: one state dict per parameter handle
+            st = self.optimizer_state(optimizer, h)
+            ms.append(int(st.get("m", st.get("momentum", 0))))
+            vs.append(int(st.get("v", 0)))
+            ts.append(int(st.get("step", 0)))
+        return ms, vs, ts
+
+    def save_state(self, path, params, optimizer=None, *, seed=0, epoch=0, step=0):
+        """Save parameters, optimizer state and training counters to ``path``.
+
+        Together with :meth:`load_state` this resumes a custom training
+        loop exactly: the parameters and the optimizer's buffers are saved
+        word for word, and ``seed``, ``epoch`` and ``step`` are the counters
+        your loop passes to :meth:`permutation` and :meth:`dropout`, so the
+        resumed loop draws the same row orders and dropout masks it would
+        have drawn without stopping. A file saved on one GPU vendor (or on
+        the CPU) resumes to the same values on another.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+        params : list of int
+            The parameter handles, in the order :meth:`load_state` returns
+            them.
+        optimizer : optimizer handle or None, default None
+            The optimizer from :meth:`optimizer` whose state is saved with
+            the parameters.
+        seed, epoch, step : int, default 0
+            Your loop's random seed and counters, returned by
+            :meth:`load_state`.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session(record=True) as s:  # doctest: +SKIP
+        ...     w = s.tensor(rng.standard_normal((4, 2), dtype=np.float32), requires_grad=True)
+        ...     opt = s.optimizer("adam", lr=1e-3)
+        ...     s.save_state("state.ckpt", [w], optimizer=opt, seed=0, epoch=3, step=120)
+        """
+        hs = [_int(h, "handle", 1) for h in params]  # glue: the parameter handles
+        if not hs:
+            raise ValueError("params must hold at least one tensor handle")
+        if optimizer is None:
+            ms = vs = ts = [0] * len(hs)  # glue: no optimizer state per parameter
+        else:
+            ms, vs, ts = self._optimizer_handles(optimizer, hs)
+        counters = _seed_words(seed) + [_int(epoch, "epoch", 0), _int(step, "step", 0)]
+        self._b.ops_save_state(self._sid(), os.fspath(path), hs, ms, vs, ts, counters)  # cpu-route: checkpoint file written on the host
+
+    def load_state(self, path, optimizer=None, requires_grad=True):
+        """Load a file written by :meth:`save_state`.
+
+        The parameters become new tensors of this session (trainable when
+        ``requires_grad`` and the session records). With ``optimizer``, the
+        saved optimizer state is written into that optimizer, so its next
+        :meth:`step` continues exactly; create it with the same settings as
+        the one that was saved.
+
+        Parameters
+        ----------
+        path : str or path-like
+            A file written by :meth:`save_state`.
+        optimizer : optimizer handle or None, default None
+            The optimizer that continues the training.
+        requires_grad : bool, default True
+            Make the loaded parameters trainable (recording sessions).
+
+        Returns
+        -------
+        dict
+            ``params`` (the new handles, in the saved order), ``seed``,
+            ``epoch`` and ``step``.
+
+        Examples
+        --------
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:  # doctest: +SKIP
+        ...     opt = s.optimizer("adam", lr=1e-3)
+        ...     state = s.load_state("state.ckpt", optimizer=opt)
+        ...     (w,) = state["params"]
+        """
+        path = os.fspath(path)
+        grad = 1 if (requires_grad and self.record) else 0
+        hs, has_opt, _, lo, hi, epoch, step = self._b.ops_load_state(self._sid(), path, grad)  # cpu-route: checkpoint file read on the host
+        hs = [int(h) for h in hs]  # glue: the new handles
+        if optimizer is not None:
+            if not int(has_opt):
+                raise ValueError("this file holds no optimizer state")
+            ms, vs, ts = self._optimizer_handles(optimizer, hs)
+            self._b.ops_load_optimizer_state(self._sid(), path, ms, vs, ts)  # cpu-route: checkpoint file read on the host
+        return dict(params=hs, seed=(int(hi) << 32) | int(lo), epoch=int(epoch), step=int(step))
