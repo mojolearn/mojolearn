@@ -153,7 +153,10 @@ from autograd.fold_ops import OP_AGS_FIRST, OP_AGS_LAST, apply_fold_ops
 from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_split
 from sequence.moe_backward import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
 from autograd.embedding_ops import OP_EMB_FIRST, OP_EMB_LAST, apply_embedding
+# lane ag-ho-fused (H2): the recorded loss VJPs' one-hot constant
+from autograd.higher_loss_ops import OP_HL_FIRST, OP_HL_LAST, apply_higher_loss
 from autograd.cast_ops import OP_CAST_FIRST, OP_CAST_LAST, apply_cast
+<<<<<<< HEAD
 # lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo OP_RNC_*, 4100..4109)
 from autograd.rankn_ops import OP_RNC_FIRST, OP_RNC_LAST, apply_rankn_core
 # >>> lane ag-rankn-fold: rank-N broadcasts, axis reductions, max (4200..4219)
@@ -165,6 +168,10 @@ from autograd.rankn_bmm_ops import OP_RNB_FIRST, OP_RNB_LAST, apply_rn_bmm
 from autograd.rankn_layout_ops import OP_RNL_FIRST, OP_RNL_LAST, apply_rankn_layout
 # ---- lane ag-rankn-conv (AUTOGRAD_RANKN.md 2.8): rank-4 conv2d and pools, 4500..4519
 from autograd.rankn_conv_ops import OP_RNV_FIRST, OP_RNV_LAST, apply_rankn_conv
+=======
+# lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the higher-order bodies
+from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST, apply_higher
+>>>>>>> origin/main
 
 
 @always_inline
@@ -361,6 +368,15 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_EMB_FIRST or OP_CELL_FWD_SCAN > OP_EMB_LAST) and (
         OP_CELL_BWD_SCAN < OP_EMB_FIRST or OP_CELL_BWD_SCAN > OP_EMB_LAST
     ), "embedding opcode collides with recurrent scan"
+    # The recorded loss VJPs' constants (autograd/higher_loss_ops.mojo
+    # OP_HL_*, 3610..3619; lane ag-ho-fused, H2 of AUTOGRAD_HIGHER_ORDER.md),
+    # above the cast range (itself above every other autograd range); the
+    # fence against H1's OP_HO_* range (3600..3609) is in apply_higher_loss.
+    comptime assert OP_HL_FIRST <= OP_HL_LAST, "recorded-loss opcode range is empty"
+    comptime assert OP_HL_FIRST > OP_CAST_LAST and OP_HL_FIRST > OP_EMB_LAST, "recorded-loss opcodes overlap a lower family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_HL_FIRST or OP_CELL_FWD_SCAN > OP_HL_LAST) and (
+        OP_CELL_BWD_SCAN < OP_HL_FIRST or OP_CELL_BWD_SCAN > OP_HL_LAST
+    ), "recorded-loss opcode collides with recurrent scan"
     # The input cast and label gather (autograd/cast_ops.mojo OP_CAST_*,
     # 3500..; lane ag-thin-glue), above every other autograd range.
     comptime assert OP_CAST_FIRST <= OP_CAST_LAST, "cast opcode range is empty"
@@ -369,6 +385,7 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_CAST_FIRST or OP_CELL_FWD_SCAN > OP_CAST_LAST) and (
         OP_CELL_BWD_SCAN < OP_CAST_FIRST or OP_CELL_BWD_SCAN > OP_CAST_LAST
     ), "cast opcode collides with recurrent scan"
+<<<<<<< HEAD
     # ---- lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo
     # OP_RNC_*, 4100..4109; docs/plans/AUTOGRAD_RANKN.md section 7), above the
     # cast family and the higher-order plan's 3600..3619.
@@ -415,6 +432,16 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNV_FIRST or OP_CELL_BWD_SCAN > OP_RNV_LAST
     ), "rank-N conv opcode collides with recurrent scan"
     # ---- end lane ag-rankn-conv
+=======
+    # lane ag-ho-core (H1): the higher-order bodies (autograd/higher_ops.mojo
+    # OP_HO_*, 3600..3609), above the cast family.
+    comptime assert OP_HO_FIRST <= OP_HO_LAST, "higher-order opcode range is empty"
+    comptime assert OP_HO_FIRST > OP_CAST_LAST and OP_HO_FIRST > OP_EMB_LAST and OP_HO_FIRST > OP_MOEB_LAST and OP_HO_FIRST > OP_AGH_LAST and OP_HO_FIRST > OP_AGS_LAST and OP_HO_FIRST > OP_ROW_LAST and OP_HO_FIRST > OP_GK_LAST and OP_HO_FIRST > OP_AGC_LAST, "higher-order opcodes overlap a lower family"
+    comptime assert OP_HO_FIRST > OP_AG_LAST and OP_HO_FIRST > OP_AGD_LAST and OP_HO_FIRST > OP_AGO_LAST and OP_HO_FIRST > OP_LS_LAST and OP_HO_FIRST > OP_AGM_LAST and OP_HO_FIRST > OP_AGK_LAST and OP_HO_FIRST > OP_P1_LAST and OP_HO_FIRST > OP_AGF_LAST and OP_HO_FIRST > OP_MLP_LB_LAST, "higher-order opcodes overlap an autograd family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_HO_FIRST or OP_CELL_FWD_SCAN > OP_HO_LAST) and (
+        OP_CELL_BWD_SCAN < OP_HO_FIRST or OP_CELL_BWD_SCAN > OP_HO_LAST
+    ), "higher-order opcode collides with recurrent scan"
+>>>>>>> origin/main
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -455,8 +482,11 @@ def apply[OP: Int](t: Int, a: Args):
         apply_moe_backward[OP](t, a)
     elif OP >= OP_EMB_FIRST and OP <= OP_EMB_LAST:
         apply_embedding[OP](t, a)
+    elif OP >= OP_HL_FIRST and OP <= OP_HL_LAST:
+        apply_higher_loss[OP](t, a)
     elif OP >= OP_CAST_FIRST and OP <= OP_CAST_LAST:
         apply_cast[OP](t, a)
+<<<<<<< HEAD
     elif OP >= OP_RNC_FIRST and OP <= OP_RNC_LAST:
         # lane ag-rankn-core: the rank-N view copy
         apply_rankn_core[OP](t, a)
@@ -473,6 +503,10 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP >= OP_RNV_FIRST and OP <= OP_RNV_LAST:
         # lane ag-rankn-conv: rank-4 conv2d and pools
         apply_rankn_conv[OP](t, a)
+=======
+    elif OP >= OP_HO_FIRST and OP <= OP_HO_LAST:
+        apply_higher[OP](t, a)
+>>>>>>> origin/main
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

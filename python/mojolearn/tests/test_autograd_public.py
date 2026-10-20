@@ -32,12 +32,12 @@ pytestmark = pytest.mark.skipif(not _has_entries(),
 
 
 def _blocks():
+    """The guide's python blocks by name: each fence is preceded by `<!-- block: name -->`."""
     if not GUIDE.is_file():
         pytest.skip(f"no guide at {GUIDE} (run from the repository tree)")
-    blocks = re.findall(r"```python\n(.*?)```", GUIDE.read_text(), flags=re.S)
-    # 0 Sequential quickstart; 1-2 session quickstart (2 continues 1); 3 session training loop (continues 1);
-    # 4 mixture classifier
-    assert len(blocks) == 5, f"expected 5 python blocks in {GUIDE.name}, found {len(blocks)}"
+    found = re.findall(r"<!-- block: ([a-z0-9-]+) -->\n```python\n(.*?)```", GUIDE.read_text(), flags=re.S)
+    blocks = dict(found)
+    assert len(found) == len(blocks) >= 9, f"named python blocks in {GUIDE.name}: {sorted(blocks)}"
     return blocks
 
 
@@ -61,13 +61,13 @@ def _emit(name, digest):
 
 def test_guide_sequential_quickstart():
     b = _blocks()
-    ns = _run(b[0])
+    ns = _run(b["seq-quickstart"])
     clf, proba, labels = ns["clf"], ns["proba"], ns["labels"]
     assert proba.shape == (200, 2) and labels.shape == (200,)
     assert np.isfinite(proba).all() and np.allclose(proba.sum(axis=1), 1.0, atol=1e-5)
     assert set(np.unique(labels)) <= set(clf.classes_.tolist())
     assert clf.loss_curve_[-1] < clf.loss_curve_[0]
-    ns2 = _run(b[0])
+    ns2 = _run(b["seq-quickstart"])
     assert _digest(clf.params_, proba) == _digest(ns2["clf"].params_, ns2["proba"])
     _emit("guide_sequential_params", _digest(clf.params_))
     _emit("guide_sequential_proba", _digest(proba))
@@ -75,7 +75,7 @@ def test_guide_sequential_quickstart():
 
 def test_guide_session_quickstart():
     b = _blocks()
-    ns = _run(b[1], b[2])
+    ns = _run(b["sess-setup"], b["sess-loss"])
     probs, total, grad_w = ns["probs"], ns["total"], ns["grad_w"]
     X, W, Y = ns["X"], ns["W"], ns["Y"]
     assert probs.shape == (64, 3) and np.isfinite(probs).all()
@@ -84,7 +84,7 @@ def test_guide_session_quickstart():
     assert grad_w.shape == (4, 3) and np.isfinite(grad_w).all()
     reference = (2.0 / Y.size) * X.T @ (X @ W - Y)
     assert np.allclose(grad_w, reference, rtol=1e-4, atol=1e-5)
-    ns2 = _run(b[1], b[2])
+    ns2 = _run(b["sess-setup"], b["sess-loss"])
     assert _digest(probs, [total], grad_w) == _digest(ns2["probs"], [ns2["total"]], ns2["grad_w"])
     _emit("guide_session_probs", _digest(probs))
     _emit("guide_session_total", _digest([total]))
@@ -93,18 +93,27 @@ def test_guide_session_quickstart():
 
 def test_guide_session_training_loop():
     blocks = _blocks()
-    ns = _run(blocks[1], blocks[2], blocks[3])
+    ns = _run(blocks["sess-setup"], blocks["sess-loss"], blocks["sess-train"])
     trained = ns["trained"]
     assert trained.shape == ns["W"].shape and np.isfinite(trained).all()
     assert not np.array_equal(trained, ns["W"])
-    ns2 = _run(blocks[1], blocks[2], blocks[3])
+    ns2 = _run(blocks["sess-setup"], blocks["sess-loss"], blocks["sess-train"])
     assert _digest(trained) == _digest(ns2["trained"])
     _emit("guide_session_trained", _digest(trained))
 
 
+def test_guide_export_and_load(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    blocks = _blocks()
+    ns = _run(blocks["seq-quickstart"], blocks["export"])
+    assert np.array_equal(ns["labels_served"], ns["clf"].predict(ns["X"]))
+    assert np.array_equal(ns["served"].predict_proba(ns["X"]), ns["clf"].predict_proba(ns["X"]))
+    _emit("guide_export_labels", _digest(ns["labels_served"].astype(np.float32)))
+
+
 def test_guide_mixture_classifier(capsys):
     b = _blocks()
-    ns = _run(b[4])
+    ns = _run(b["mixture"])
     proba, hard, params, accuracy = ns["proba"], ns["hard"], ns["params"], ns["accuracy"]
     assert proba.shape == (128, 2) and hard.shape == (128, 2)
     assert np.isfinite(proba).all() and np.isfinite(hard).all()
@@ -114,7 +123,7 @@ def test_guide_mixture_classifier(capsys):
     printed = capsys.readouterr().out
     assert hashlib.sha256(proba.tobytes()).hexdigest()[:16] in printed
     flat = [params[k] for k in sorted(params)]
-    ns2 = _run(b[4])
+    ns2 = _run(b["mixture"])
     capsys.readouterr()
     assert _digest(proba, hard, *flat) == _digest(ns2["proba"], ns2["hard"],
                                                   *[ns2["params"][k] for k in sorted(ns2["params"])])

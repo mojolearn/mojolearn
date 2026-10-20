@@ -39,6 +39,7 @@ from autograd.embedding_ops import (
     embedding_refuse_ids, embedding_forward_into, embedding_plan, embedding_perm_words, embedding_backward_into,
 )
 from std.sys.compile import is_defined
+<<<<<<< HEAD
 from std.memory import bitcast
 # lane ag-rankn-core: rank-N shapes and views (docs/plans/AUTOGRAD_RANKN.md)
 from autograd.rankn import (
@@ -46,6 +47,11 @@ from autograd.rankn import (
     rn_desc_view, rn_normalize_axis,
 )
 from autograd.rankn_ops import rn_copy_strided
+=======
+# lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the node kinds
+# the recorded backward adds, whose VJPs the first-order backward runs
+from autograd.higher_ops import EXPAND, CLAMP, OP_HO_CLAMP_VJP
+>>>>>>> origin/main
 
 comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
 comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it was used: record the graph again"
@@ -310,6 +316,14 @@ def _gemm[E: Exec](
     ex.launch[OP_GEMM](args, m * n)
 
 
+def _first_order_kind(op: Int) -> Bool:
+    """A node kind below CUSTOM that the first-order backward differentiates."""
+    return (op == LEAF or (op >= ADD and op <= DIVIDE) or (op >= RELU and op <= SCALE) or op == TRANSPOSE
+            or op == RESHAPE or op == REDUCE or op == SOFTMAX or op == LOG_SOFTMAX or op == LOSS_ELEM
+            or op == LOSS_CE or op == LOSS_SCE or op == LOSS_REDUCED or op == MATMUL or op == LINEAR
+            or op == DROPOUT or op == EMBEDDING or op == EXPAND or op == CLAMP)
+
+
 @always_inline
 def _passes_upstream(n: _Node, edge: Int, p: _Node) -> Bool:
     """True when binary node n's VJP into operand `edge` (node p) is n's
@@ -373,10 +387,21 @@ struct Tape(Movable):
     var _word_node: Int
     # lane ag-embedding-op: the ids of this graph (Tape.ids), cleared by reset
     var _ids: List[_Ids]
+<<<<<<< HEAD
     # lane ag-rankn-core: one rank-N shape per node, parallel to _nodes
     # (appended by _record, cleared by reset). The node's rows x cols is its
     # matrix view: rows = the product of the leading dims, cols = the last.
     var _shapes: List[ShapeN]
+=======
+    # lane ag-ho-core (higher-order gradients, autograd/higher.mojo): the
+    # node holding each node's gradient after the last recorded backward
+    # (backward_recorded; -1: none), empty until one runs, cleared by
+    # reset. grad_of reads it until the next recorded backward or reset.
+    var _grad_node: List[Int]
+    # The last backward was a recorded one: gradient() reads _grad_node.
+    # Cleared by reset and by every first-order backward.
+    var _recorded_live: Bool
+>>>>>>> origin/main
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -396,7 +421,12 @@ struct Tape(Movable):
         self._word_armed = False
         self._word_node = -1
         self._ids = List[_Ids]()
+<<<<<<< HEAD
         self._shapes = List[ShapeN]()
+=======
+        self._grad_node = List[Int]()
+        self._recorded_live = False
+>>>>>>> origin/main
 
     def no_grad(mut self):
         """Enter inference mode: later operations keep no graph or gradients.
@@ -482,7 +512,12 @@ struct Tape(Movable):
         self._word_armed = False
         self._word_node = -1
         self._ids.clear()
+<<<<<<< HEAD
         self._shapes.clear()
+=======
+        self._grad_node.clear()
+        self._recorded_live = False
+>>>>>>> origin/main
 
     def arm_fold_word(mut self, dst: FP, factor: Float32):
         """AUTOGRAD_CURVE_WORD: the next AXIS_ALL sum or mean recorded on
@@ -955,11 +990,18 @@ struct Tape(Movable):
 
     def gradient(self, x: Tensor) raises -> FP:
         """Return the executor pointer for a differentiable tensor's gradient."""
-        var n = self._nodes[self._check(x)]
+        var at = self._check(x)
+        var n = self._nodes[at]
         if n.inferred:
             raise Error(_INFERRED_REFUSAL)
         if not n.requires_grad:
             raise Error("tensor does not require a gradient")
+        if self._recorded_live:
+            # the last backward recorded its gradients (autograd/higher.mojo
+            # backward_recorded): each one is a node, its value the gradient
+            if at < len(self._grad_node) and self._grad_node[at] >= 0:
+                return self._nodes[self._grad_node[at]].value
+            raise Error("tensor has no gradient: run backward from an output that depends on it")
         if not n.grad_ready:
             raise Error("tensor has no gradient: run backward from an output that depends on it")
         if n.grad_preact:
@@ -977,6 +1019,8 @@ struct Tape(Movable):
         if self._nodes[i].inferred or not self._nodes[i].requires_grad:
             return
         self._nodes[i].grad_ready = False
+        if self._recorded_live and i < len(self._grad_node):
+            self._grad_node[i] = -1
 
     def preactivation_gradient(self, x: Tensor) raises -> FP:
         """Return the gradient with respect to a linear output's pre-activation.
@@ -988,6 +1032,8 @@ struct Tape(Movable):
         var n = self._nodes[self._check(x)]
         if n.op != LINEAR:
             raise Error("preactivation_gradient takes an output of linear or linear_into")
+        if self._recorded_live:
+            raise Error("preactivation_gradient is not kept by a backward with create_graph=True")
         if not n.requires_grad or not n.grad_ready:
             raise Error("tensor has no gradient: run backward from an output that depends on it")
         if not n.grad_preact and n.saved.i0 != ACT_IDENTITY:
@@ -997,6 +1043,68 @@ struct Tape(Movable):
     def requires_grad(self, x: Tensor) raises -> Bool:
         """Return whether a backward computes a gradient for this tensor."""
         return self._nodes[self._check(x)].requires_grad
+
+    def grad_of(self, x: Tensor) raises -> Tensor:
+        """The gradient of x from the last recorded backward, as a tensor.
+
+        After a backward that records its own computation
+        (autograd.higher.backward_recorded), each gradient is a tensor of
+        the graph: operations on it are recorded, and a later backward from
+        a scalar built on it gives second derivatives. The handle stays
+        valid until reset(); a later recorded backward makes new ones.
+        """
+        var at = self._check(x)
+        var n = self._nodes[at]
+        if n.inferred:
+            raise Error(_INFERRED_REFUSAL)
+        if not n.requires_grad:
+            raise Error("tensor does not require a gradient")
+        if len(self._grad_node) == 0:
+            raise Error("no recorded gradient: call backward with create_graph=True first")
+        if at >= len(self._grad_node) or self._grad_node[at] < 0:
+            raise Error("tensor has no gradient: run backward from an output that depends on it")
+        return self._handle(self._grad_node[at])
+
+    # ---- lane ag-ho-core: helpers for autograd/higher.mojo ----
+    def _handle(self, i: Int) raises -> Tensor:
+        """The handle of node i of the current graph."""
+        if not self._identity:
+            raise Error("tensor belongs to an empty tape")
+        return Tensor(Int(self._identity.value()), self._generation, i)
+
+    def _rollback(mut self, nodes: Int, parents: Int, cursor: Int):
+        """Drop the nodes recorded since len(_nodes) was `nodes` (a recorded
+        backward that refused part way): their storage slots return to the
+        cursor, nothing else of the graph changes."""
+        while len(self._nodes) > nodes:  # driver-loop: over graph nodes
+            _ = self._nodes.pop()
+        while len(self._parents) > parents:  # driver-loop: over graph edges
+            _ = self._parents.pop()
+        while len(self._stale) > nodes:  # driver-loop: over graph nodes
+            _ = self._stale.pop()
+        if self._word_node >= nodes:
+            self._word_node = -1
+        self._cursor = cursor
+
+    def _mark_active(self, root: Int, mut active: List[Bool], mut consumers: List[Int]):
+        """The ancestors of `root` that a backward differentiates (active)
+        and the number of differentiated edges into each node (consumers).
+        Shared by the first-order _backward and backward_recorded."""
+        active = List[Bool](length=len(self._nodes), fill=False)
+        consumers = List[Int](length=len(self._nodes), fill=0)
+        active[root] = True
+        # Creation order is topological. Mark only ancestors of this output;
+        # disconnected invalid-domain operations are never differentiated.
+        for reverse in range(root + 1):  # driver-loop: over graph nodes, reverse creation order
+            var i = root - reverse
+            if not active[i]:
+                continue
+            var n = self._nodes[i]
+            for edge in range(n.count):  # driver-loop: over node inputs
+                var p = self._parents[n.start + edge]
+                if self._nodes[p].requires_grad:
+                    active[p] = True
+                    consumers[p] += 1
 
     def rows(self, x: Tensor) raises -> Int:
         return self._nodes[self._check(x)].rows
@@ -2405,25 +2513,22 @@ struct Tape(Movable):
             raise Error(_INFERRED_REFUSAL)
         if not self._nodes[root].requires_grad:
             raise Error("output has no differentiable ancestors")
-        var active = List[Bool](length=len(self._nodes), fill=False)
+        var active = List[Bool]()
         # Edges from differentiated nodes into each node (a linear node's
         # dX epilogue may apply its input's act' only for a sole consumer).
-        var consumers = List[Int](length=len(self._nodes), fill=0)
-        active[root] = True
-        # Creation order is topological. Mark only ancestors of this output;
-        # disconnected invalid-domain operations are never differentiated.
-        for reverse in range(root + 1):
-            var i = root - reverse
+        var consumers = List[Int]()
+        self._mark_active(root, active, consumers)
+        # Refusals before any gradient is touched: an unregistered custom
+        # rule, or a node kind with no backward rule (lane ag-ho-core: an
+        # unknown kind used to fall through to the unary VJP's g * scale).
+        for i in range(root + 1):  # driver-loop: over graph nodes
             if not active[i]:
                 continue
-            var n = self._nodes[i]
-            if n.op >= CUSTOM and not rules.supports(n.op - CUSTOM):
+            var kind = self._nodes[i].op
+            if kind >= CUSTOM and not rules.supports(kind - CUSTOM):
                 raise Error("custom backward rule not registered")
-            for edge in range(n.count):
-                var p = self._parents[n.start + edge]
-                if self._nodes[p].requires_grad:
-                    active[p] = True
-                    consumers[p] += 1
+            if kind < CUSTOM and not _first_order_kind(kind):
+                raise Error("autograd: no backward rule for operation kind " + String(kind))
         # GRADIENT WRITE INVARIANT (lane ag-fusion). Gradients are never
         # zero-filled before use. touched[i] says node i's gradient already
         # holds a contribution. The FIRST contribution to a parent is written
@@ -2465,6 +2570,9 @@ struct Tape(Movable):
         #     there and its gradient is tape storage (it shares the buffer)
         #   accumulate=True leaf never written before: 0
         var touched = List[Bool](length=len(self._nodes), fill=False)
+        # a first-order backward: gradient() reads the gradient buffers again
+        # (grad_of keeps the last recorded backward's tensors)
+        self._recorded_live = False
         for i in range(len(self._nodes)):  # driver-loop: over graph nodes
             self._nodes[i].grad_preact = False
             comptime if AUTOGRAD_GRAD_ALIAS:
@@ -2737,6 +2845,19 @@ struct Tape(Movable):
                             ex, n.saved.p0, n.grad, contribution, e_n, e_vocab, n.saved.i2, n.saved.i3,
                             emb_carry, e_plan, e_begin, e_perm, e_keys,
                         )
+                    elif n.op == EXPAND:
+                        # lane ag-ho-core: the VJP of a broadcast copy is the
+                        # blocked fold over the same axis, times its factor
+                        # (a sum or mean's forward; autograd/higher_ops.mojo)
+                        self._fold(ex, contribution, n.grad, n.rows, n.cols, n.saved.i0, n.saved.f0)
+                    elif n.op == CLAMP:
+                        # lane ag-ho-core: g where |x| < bound, else +0.0
+                        var a = Args()
+                        a.p0 = p.value
+                        a.p2 = n.grad
+                        a.p3 = contribution
+                        a.f0 = n.saved.f0
+                        ex.launch[OP_HO_CLAMP_VJP](a, p.rows * p.cols)
                     elif n.op == SOFTMAX or n.op == LOG_SOFTMAX:
                         var a = Args()
                         a.p0 = n.value
@@ -2745,7 +2866,7 @@ struct Tape(Movable):
                         a.i0 = 1 if n.op == LOG_SOFTMAX else 0
                         a.i1 = p.cols
                         ex.launch[OP_AG_SOFTMAX_VJP](a, p.rows)
-                    else:
+                    elif n.op >= RELU and n.op <= SCALE:
                         var a = Args()
                         if unary_vjp_reads_input(n.op):
                             a.p0 = p.value
@@ -2756,6 +2877,9 @@ struct Tape(Movable):
                         a.i0 = n.op
                         a.f0 = n.saved.f0
                         ex.launch[OP_AG_UNARY_VJP](a, p.rows * p.cols)
+                    else:
+                        # refused before any launch above; kept as the fence
+                        raise Error("autograd: no backward rule for operation kind " + String(n.op))
                 # a writes_total edge owns the input's whole gradient: it may
                 # follow other consumers' (in the same decreasing order)
                 if last_node[parent] >= 0 and ((first[edge] and not total[edge]) or not (

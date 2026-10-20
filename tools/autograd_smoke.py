@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE AUTOGRAD SMOKE ENTRIES (2026-10-19, lane ag-bench): does the tape start on this vendor.
 
-Six "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
+Seven "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
 
   autograd-gradients     autograd/checks/gpu.mojo, the gradient suite on the vendor's GPU (every
                          case prints PASS and its digest; the digests equal the CPU column's).
@@ -23,6 +23,9 @@ Six "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing t
                          miniature: one Session(record=True) step (linear, relu, linear, softmax
                          cross-entropy, backward, the SGD update with the session's ops); finite
                          loss and gradients, a SMOKE_DIGEST line (the gradients).
+  autograd-higher        (2026-10-19, lane ag-ho-checks) autograd/checks/higher_gpu.mojo, the
+                         higher-order suite (create_graph, second and third backward) on the
+                         vendor's GPU; one HIGHER_DIGEST line per case.
 
 A check binary is built ONCE per vendor by the orchestrator (`build-commands` prints the lines; this
 tool never builds), then `run` starts each entry with a 5 s timer:
@@ -64,6 +67,9 @@ ENTRIES = (
      "what": "a tiny Sequential fit + predict_proba (the sequential-fit board lane) through the installed bindings"},
     {"name": "autograd-session-smoke", "probe": "session",
      "what": "one tiny ops.Session(record=True) step (the ops-session-step board lane) through the installed bindings"},
+    # 2026-10-19 (lane ag-ho-checks): higher-order gradients, docs/plans/AUTOGRAD_HIGHER_ORDER.md section 6
+    {"name": "autograd-higher", "source": "autograd/checks/higher_gpu.mojo",
+     "what": "the higher-order gradient suite (create_graph) on the vendor's GPU, HIGHER_DIGEST lines"},
 )
 
 

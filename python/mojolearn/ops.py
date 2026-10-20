@@ -27,6 +27,12 @@ To train, make an optimizer with :meth:`Session.optimizer` and call
 place on the device, with the optimizer's state kept there too, so a
 training loop reads nothing back unless you ask for it.
 
+``backward(loss, create_graph=True)`` records the gradient computation too,
+so each gradient is a tensor (:meth:`Session.grad_tensor`) that you can
+differentiate again: second derivatives, Hessian-vector products
+(:meth:`Session.hvp`), Jacobian-vector products (:meth:`Session.jvp`) and
+vector-Jacobian products (:meth:`Session.vjp`).
+
 Example
 -------
 >>> import numpy as np
@@ -38,6 +44,8 @@ Example
 ...     p = s.softmax(s.matmul(x, w))
 ...     probs = s.numpy(p)
 """
+import os
+
 from ._optional_numpy import require_numpy
 np = require_numpy('mojolearn.ops')
 
@@ -489,11 +497,43 @@ class Session:
         return self._metric("roc_auc", y_true, scores)
 
     # ------------------------------------------------------------ gradients
-    def backward(self, loss, accumulate=False):
+    def backward(self, loss, accumulate=False, create_graph=False):
         """Differentiate the ``(1, 1)`` tensor ``loss`` with respect to every
         input made with ``requires_grad=True`` (recording sessions only).
-        ``accumulate=True`` adds to the gradients of the previous backward."""
-        self._b.ops_backward(self._sid(), _int(loss, "loss", 1), 1 if accumulate else 0)
+
+        Parameters
+        ----------
+        loss : int
+            Handle of a ``(1, 1)`` tensor.
+        accumulate : bool, default False
+            Add to the gradients of the previous backward instead of
+            replacing them.
+        create_graph : bool, default False
+            Record the gradient computation itself, so each gradient is a
+            tensor (:meth:`grad_tensor`) you can keep computing with and
+            differentiate again with a second backward. Cannot be combined
+            with ``accumulate=True``: add the previous gradient tensor with
+            :meth:`add` instead.
+
+        Example
+        -------
+        The second derivative of ``x ** 3`` at ``x = 2`` is ``12``:
+
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.array([[2.0]], dtype=np.float32), requires_grad=True)
+        ...     y = s.mul(s.mul(x, x), x)
+        ...     s.backward(y, create_graph=True)
+        ...     s.backward(s.grad_tensor(x))
+        ...     d2 = s.grad(x)
+        """
+        loss = _int(loss, "loss", 1)
+        if create_graph:
+            if accumulate:
+                raise ValueError("accumulate=True cannot be combined with create_graph=True: "
+                                 "add the previous gradient tensor with add() instead")
+            self._b.ops_backward_graph(self._sid(), loss)
+            return
+        self._b.ops_backward(self._sid(), loss, 1 if accumulate else 0)
 
     def grad(self, h):
         """The gradient of tensor ``h`` from the last :meth:`backward`, as a
@@ -502,6 +542,222 @@ class Session:
         self._b.ops_grad(self._sid(), h, out.ctypes.data)
         return out
 
+    def grad_tensor(self, h):
+        """The gradient of tensor ``h`` from the last
+        ``backward(..., create_graph=True)``, as a tensor handle.
+
+        Unlike :meth:`grad`, which copies the values back as an array, the
+        handle stays on the device and is differentiable: use it in further
+        operations and call :meth:`backward` on a scalar built from it to
+        get second derivatives. Raises if the last backward did not record
+        its gradients.
+        """
+        return int(self._b.ops_grad_handle(self._sid(), _int(h, "handle", 1)))
+
+    def vjp(self, output, inputs, v, create_graph=False):
+        """The vector-Jacobian products of ``output`` for the seed ``v``.
+
+        Parameters
+        ----------
+        output : int
+            Handle of the tensor to differentiate, of any shape.
+        inputs : int or list of int
+            The tensors to differentiate with respect to; each must be made
+            with ``requires_grad=True`` or computed from one.
+        v : int
+            Handle of a tensor of ``output``'s shape.
+        create_graph : bool, default False
+            Return differentiable tensors that a later backward can
+            differentiate again.
+
+        Returns
+        -------
+        list of int
+            One handle per input, of that input's shape: ``J^T v``, where
+            ``J`` is the Jacobian of ``output`` with respect to the input.
+            Like :meth:`backward`, it replaces the gradients :meth:`grad`
+            returns.
+
+        Example
+        -------
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((3, 2), dtype=np.float32), requires_grad=True)
+        ...     y = s.tanh(x)
+        ...     (jt_v,) = s.vjp(y, [x], s.full((3, 2), 1.0))
+        ...     values = s.numpy(jt_v)
+        """
+        hs = self._handles(inputs)
+        res = self._b.ops_vjp(self._sid(), _int(output, "output", 1), hs, _int(v, "v", 1),
+                              1 if create_graph else 0)
+        return [int(h) for h in res]  # glue: one result handle per input
+
+    def jvp(self, output, inputs, u):
+        """The Jacobian-vector product of ``output`` along the directions ``u``.
+
+        Parameters
+        ----------
+        output : int
+            Handle of the tensor to differentiate, of any shape.
+        inputs : int or list of int
+            The tensors to differentiate with respect to; each must be made
+            with ``requires_grad=True`` or computed from one.
+        u : int or list of int
+            One direction per input, each of its input's shape.
+
+        Returns
+        -------
+        int
+            Handle of a tensor of ``output``'s shape: the sum over the
+            inputs of ``J u``, where ``J`` is the Jacobian of ``output`` with
+            respect to that input. It replaces the gradients :meth:`grad`
+            returns.
+
+        Example
+        -------
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(np.ones((3, 2), dtype=np.float32), requires_grad=True)
+        ...     y = s.tanh(x)
+        ...     j_u = s.numpy(s.jvp(y, [x], [s.full((3, 2), 1.0)]))
+        """
+        hs = self._handles(inputs)
+        us = self._handles(u)
+        if len(us) != len(hs):
+            raise ValueError("u must give one direction per input")
+        return int(self._b.ops_jvp(self._sid(), _int(output, "output", 1), hs, us))
+
+    def hvp(self, loss, params, v):
+        """The Hessian-vector products of a scalar ``loss`` along ``v``.
+
+        Parameters
+        ----------
+        loss : int
+            Handle of a ``(1, 1)`` tensor.
+        params : int or list of int
+            The tensors the Hessian is taken with respect to; each must be
+            made with ``requires_grad=True`` or computed from one.
+        v : int or list of int
+            One direction per parameter, each of its parameter's shape.
+
+        Returns
+        -------
+        list of int
+            One handle per parameter, of its shape: the parameter's block of
+            ``H v``, where ``H`` is the Hessian of ``loss`` with respect to
+            all of ``params`` together. Where the loss has no curvature the
+            result is zeros. It replaces the gradients :meth:`grad` returns.
+
+        Example
+        -------
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session(record=True) as s:
+        ...     x = s.tensor(rng.standard_normal((16, 3), dtype=np.float32))
+        ...     y = s.tensor(rng.standard_normal((16, 1), dtype=np.float32))
+        ...     w = s.tensor(np.zeros((3, 1), dtype=np.float32), requires_grad=True)
+        ...     loss = s.mse(s.linear(x, w, activation="tanh"), y)
+        ...     (hv,) = s.hvp(loss, [w], [s.full((3, 1), 1.0)])
+        ...     values = s.numpy(hv)
+        """
+        hs = self._handles(params)
+        vs = self._handles(v)
+        if len(vs) != len(hs):
+            raise ValueError("v must give one direction per parameter")
+        res = self._b.ops_hvp(self._sid(), _int(loss, "loss", 1), hs, vs)
+        return [int(h) for h in res]  # glue: one result handle per parameter
+
+    @staticmethod
+    def _handles(hs):
+        if isinstance(hs, (int, np.integer)) and not isinstance(hs, bool):
+            hs = [hs]
+        hs = [_int(h, "handle", 1) for h in hs]  # glue: the call's input handles
+        if not hs:
+            raise ValueError("give at least one tensor")
+        return hs
+
+    # ------------------------------------------------------------ checkpoints
+    def save_state(self, path, params, optimizer=None, *, seed=0, epoch=0, step=0):
+        """Save parameters, optimizer state and training counters to ``path``.
+
+        Together with :meth:`load_state` this resumes a custom training
+        loop exactly: the parameters and the optimizer's buffers are saved
+        word for word, and ``seed``, ``epoch`` and ``step`` are the counters
+        your loop passes to :meth:`permutation` and :meth:`dropout`, so the
+        resumed loop draws the same row orders and dropout masks it would
+        have drawn without stopping. A file saved on one GPU vendor (or on
+        the CPU) resumes to the same values on another.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+        params : list of int
+            The parameter handles, in the order :meth:`load_state` returns
+            them.
+        optimizer : optimizer handle or None, default None
+            The optimizer from :meth:`optimizer` whose state is saved with
+            the parameters.
+        seed, epoch, step : int, default 0
+            Your loop's random seed and counters, returned by
+            :meth:`load_state`.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session(record=True) as s:  # doctest: +SKIP
+        ...     w = s.tensor(rng.standard_normal((4, 2), dtype=np.float32), requires_grad=True)
+        ...     opt = s.optimizer("adam", lr=1e-3)
+        ...     s.save_state("state.ckpt", [w], optimizer=opt, seed=0, epoch=3, step=120)
+        """
+        hs = [_int(h, "handle", 1) for h in params]  # glue: the parameter handles
+        if not hs:
+            raise ValueError("params must hold at least one tensor handle")
+        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
+        counters = _seed_words(seed) + [_int(epoch, "epoch", 0), _int(step, "step", 0)]
+        # Mojo reads each parameter's optimizer state (step count,
+        # bias-correction products, buffers) and writes the file
+        self._b.ops_save_state(self._sid(), os.fspath(path), hs, opt, counters)  # cpu-route: checkpoint file written on the host
+
+    def load_state(self, path, optimizer=None, requires_grad=True):
+        """Load a file written by :meth:`save_state`.
+
+        The parameters become new tensors of this session (trainable when
+        ``requires_grad`` and the session records). With ``optimizer``, the
+        saved optimizer state is written into that optimizer, so its next
+        :meth:`step` continues exactly; create it with the same settings as
+        the one that was saved.
+
+        Parameters
+        ----------
+        path : str or path-like
+            A file written by :meth:`save_state`.
+        optimizer : optimizer handle or None, default None
+            The optimizer that continues the training.
+        requires_grad : bool, default True
+            Make the loaded parameters trainable (recording sessions).
+
+        Returns
+        -------
+        dict
+            ``params`` (the new handles, in the saved order), ``seed``,
+            ``epoch`` and ``step``.
+
+        Examples
+        --------
+        >>> from mojolearn import ops
+        >>> with ops.Session(record=True) as s:  # doctest: +SKIP
+        ...     opt = s.optimizer("adam", lr=1e-3)
+        ...     state = s.load_state("state.ckpt", optimizer=opt)
+        ...     (w,) = state["params"]
+        """
+        path = os.fspath(path)
+        grad = 1 if (requires_grad and self.record) else 0
+        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
+        # Mojo uploads the parameters and restores the optimizer state
+        # through the session's load_optimizer_state
+        hs, _, lo, hi, epoch, step = self._b.ops_load_state(self._sid(), path, grad, opt)  # cpu-route: checkpoint file read on the host
+        hs = [int(h) for h in hs]  # glue: the new handles
+        return dict(params=hs, seed=(int(hi) << 32) | int(lo), epoch=int(epoch), step=int(step))
     def zero_grad(self):
         """Clear the gradient of every tensor made with ``requires_grad=True``.
 
