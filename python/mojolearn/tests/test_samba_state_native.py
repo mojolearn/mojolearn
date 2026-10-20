@@ -38,6 +38,32 @@ def _stack(tied=True):
     return stack
 
 
+
+def _reference_state(model):
+    # Testing-only independent descriptor and public optimizer metadata recipe.
+    # It does not call either Samba snapshot implementation under test.
+    o = model.optimizer
+    binding = training._load(model.numeric_mode)
+    experiment = getattr(binding, "training_experiment_profile", lambda: "baseline")()
+    return {
+        "schema": "mojolearn.samba-stack-state.v1",
+        "profile": "mojolearn.samba-stack.fp32.v1",
+        "experiment_profile": experiment,
+        "numeric_mode": "identical" if binding.training_numeric_mode() == 1 else "fast",
+        "config": model.config.to_dict(),
+        "registry": [{"name": name, "shape": list(model.shapes[name]),
+                      "offset": model.offsets[i], "size": model.offsets[i+1] - model.offsets[i]}
+                     for i, name in enumerate(model.names)],
+        "parameters": model.flat.copy(), "exp_avg": o.exp_avg.copy(),
+        "exp_avg_sq": o.exp_avg_sq.copy(), "buf_initialized": o.buf_initialized.copy(),
+        "t": o.t,
+        "optimizer": {"kind": "adamw", "lr": o.lr, "beta1": o.betas[0], "beta2": o.betas[1],
+                      "eps": o.eps, "weight_decay": o.weight_decay, "max_norm": model.max_norm,
+                      "accumulation_steps": o.accumulation_steps},
+        "schedule": None if o.lr_schedule is None else o.lr_schedule.config(),
+        "rng": {"seed": model.generator.seed, "counter": model.generator.counter},
+    }
+
 def _assert_state_equal(actual, expected):
     assert set(actual) == set(expected)
     for name in actual:
@@ -51,7 +77,7 @@ def _assert_state_equal(actual, expected):
 @pytest.mark.parametrize("tied", [True, False])
 def test_native_samba_snapshot_and_reconstruction_preserve_complete_state(monkeypatch, tied):
     stack = _stack(tied)
-    expected = stack.state_dict()
+    expected = _reference_state(stack)
     with monkeypatch.context() as patch:
         _poison(patch)
         patch.setattr(SambaStack, "state_dict", lambda *a, **k: pytest.fail("Python snapshot"))
@@ -142,7 +168,7 @@ def test_native_samba_update_matches_existing_optimizer_and_schedule(monkeypatch
     gradients = [rng.normal(0, 0.02, stack.shapes[name]).astype("f4") for name in stack.names]
     reference_gradients = [value.copy() for value in gradients]
     stack.optimizer.step(reference_gradients, max_norm=stack.max_norm)
-    expected = stack.state_dict()
+    expected = _reference_state(stack)
     with monkeypatch.context() as patch:
         _poison(patch)
         patch.setattr(training.AdamW, "step", lambda *a, **k: pytest.fail("Python optimizer loop"))
@@ -153,3 +179,20 @@ def test_native_samba_update_matches_existing_optimizer_and_schedule(monkeypatch
         assert state[name].tobytes() == before[name]
     assert state["t"] == 7 and actual["t"] == 8
     assert state["rng"] == actual["rng"]
+
+
+def test_public_state_snapshot_restore_are_native_and_keep_aliases(monkeypatch):
+    model = _stack()
+    expected = _reference_state(model)
+    with monkeypatch.context() as patch:
+        _poison(patch)
+        actual = audit_native_call(model.state_dict).assert_native()
+    _assert_state_equal(actual, expected)
+    old_flat = model.flat
+    actual["parameters"] = np.asarray(actual["parameters"]).copy() + np.float32(0.015)
+    actual["rng"]["counter"] = 29
+    with monkeypatch.context() as patch:
+        _poison(patch)
+        assert audit_native_call(model.load_state_dict, actual).assert_native() is model
+    assert model.flat is old_flat
+    _assert_state_equal(_reference_state(model), actual)

@@ -4,10 +4,11 @@ RUNTIME = None
 CONTEXT = None
 
 
-def connect(config_cls, model_cls, training, neural):
+def connect(config_cls, model_cls, training, neural, state_cls):
     # ABI connection at package import only; no operation invokes this function.
     from types import BuiltinFunctionType, SimpleNamespace
     from . import _backend, _buffer
+    from ._mamba_impl import Mamba3State
     entries = {}
     mode = _backend.default_mode()
     binding = _backend.binding("_mojolearn_training", mode)
@@ -76,7 +77,8 @@ def connect(config_cls, model_cls, training, neural):
         "generator_sqrt": generator_sqrt, "generator_sqrt_type": generator_sqrt_type,
         "neural": neural.CONTEXT, "entries": SimpleNamespace(**entries),
         "mode": mode, "vendor": _backend.vendor(), "config_class": config_cls,
-        "model_class": model_cls, "optimizer_class": training.AdamW,
+        "model_class": model_cls, "state_class": state_cls, "mamba3_state_class": Mamba3State,
+        "optimizer_class": training.AdamW,
         "generator_class": training.Generator, "exact_schedule": exact_schedule,
         "schedule_classes": {"constant": training.ConstantLR,
                              "linear": training.WarmupLinearLR,

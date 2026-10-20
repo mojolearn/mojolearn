@@ -96,7 +96,7 @@ def test_native_explicit_weight_constructor_and_load_preserve_aliases(monkeypatc
         assert value.tobytes() == replacement[name].tobytes()
 
 
-def test_native_constructor_preserves_opaque_custom_schedule(monkeypatch):
+def test_native_constructor_refuses_python_schedule_without_invocation(monkeypatch):
     class CustomSchedule:
         def lr_at(self, step):
             raise AssertionError("constructor executed schedule")
@@ -108,9 +108,12 @@ def test_native_constructor_preserves_opaque_custom_schedule(monkeypatch):
     schedule = CustomSchedule()
     weights = {name: np.ones(shape, dtype="f4") for name, shape in config.registry()}
     model = SambaStack.__new__(SambaStack)
-    audit_native_call(model.__init__, config, weights=weights,
-                      lr_schedule=schedule).assert_native()
-    assert model.optimizer.lr_schedule is schedule
+    result = audit_native_call(model.__init__, config, weights=weights,
+                               lr_schedule=schedule)
+    assert isinstance(result.exception, NotImplementedError), result.report()
+    assert "Python schedule callbacks" in str(result.exception)
+    for name in ("python_frames", "wrapper_work", "forbidden_native_calls", "unobserved_existing_threads"):
+        assert not result.report()[name], result.report()
 
 
 @pytest.mark.parametrize("corruption", ["keys", "shape", "dtype", "finite"])

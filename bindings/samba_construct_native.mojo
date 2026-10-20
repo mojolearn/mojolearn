@@ -6,7 +6,7 @@ from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.generator_state_native import generator_init, generator_fields, generator_validate, generator_next
-from bindings.samba_state_native import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks
+from bindings.samba_state_native import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 
@@ -92,26 +92,6 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
     _ = unused^
 
 
-def _samba_schedule_admit(schedule: PythonObject) raises:
-    if schedule is None:
-        return
-    var bi = Python.import_module("builtins")
-    # Store caller-owned schedules without invoking their lr_at or config.
-    # Dynamic user protocols remain accepted and execute only on the existing
-    # legacy custom-schedule training surface, which is explicit runtime debt.
-    var present = False
-    try:
-        var fields = bi.object.__getattribute__(schedule, "__dict__")
-        present = Bool(py=fields.__contains__("lr_at"))
-    except:
-        pass
-    var classes = bi.type(schedule).__mro__
-    for i in range(len(classes)):  # driver-loop: over caller schedule protocol metadata
-        var fields = classes[i].__dict__
-        present = present or Bool(py=fields.__contains__("lr_at")) or Bool(py=fields.__contains__("__getattr__"))
-    if not present:
-        raise Error("TypeError: AdamW: lr_schedule must provide lr_at(t)")
-
 
 def samba_construct(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
@@ -128,7 +108,7 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     var accumulation = Int(py=bi.int(args[9]))
     if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
         raise Error("SambaStack: accumulation_steps must be a power of two >= 1")
-    _samba_schedule_admit(args[7])
+    _ = samba_schedule_snapshot(args[7], context)
     var registry = _samba_registry(config)
     var last = registry[len(registry) - 1]
     var n = Int(py=last["offset"]) + Int(py=last["size"])

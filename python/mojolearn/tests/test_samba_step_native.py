@@ -67,7 +67,7 @@ def test_native_standard_step_matches_independent_training_recipe(
         expected = _reference_step(expected_model, inputs, targets)
         with monkeypatch.context() as patch:
             _poison(patch)
-            patch.setattr(SambaStack, "_legacy_train_step", lambda *a: pytest.fail("legacy Python coordinator"))
+            patch.setattr(SambaStack, "_forward", lambda *a: pytest.fail("legacy Python coordinator"))
             patch.setattr(SambaStack, "loss_and_grads", lambda *a, **k: pytest.fail("Python gradient wrapper"))
             patch.setattr(training.AdamW, "step", lambda *a, **k: pytest.fail("Python optimizer step"))
             actual = _step(actual_model, inputs, targets)
@@ -99,7 +99,8 @@ def test_public_native_step_never_invokes_custom_schedule():
             pytest.fail("public native owner invoked a Python schedule")
 
     config = SambaConfig(13, 8, ["attention"], n_heads=2, intermediate=11, dropout=0.125)
-    model = SambaStack(config, generator=training.Generator(8), lr_schedule=CustomSchedule())
+    model = SambaStack(config, generator=training.Generator(8))
+    model.optimizer.lr_schedule = CustomSchedule()
     before = model.flat.tobytes(), model.generator.state_dict(), model.optimizer.t
     inputs = np.array([[1, 2, 3]], dtype="i4")
     result = audit_native_call(model.train_step, inputs, inputs)
