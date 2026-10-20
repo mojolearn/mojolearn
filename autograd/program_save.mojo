@@ -32,7 +32,9 @@ def _array_entry(a: PythonObject, name: String, with_dtype: Bool) raises -> Stri
         result += String(Int(py=a.shape[k]))
     result += "]"
     if with_dtype:
-        result += ",\"dtype\":" + _quote(String(a.dtype))
+        # ndarray dtype.__str__/name enter NumPy Python helpers. Saved
+        # verification inputs are native int32 ids or float32 values.
+        result += ",\"dtype\":" + _quote("int32" if String(a.dtype.kind) == "i" else "float32")
     var digest = verify_digest_py(a.__array_interface__["data"][0], a.nbytes)
     return result + ",\"digest\":" + _quote(String(digest)) + "}"
 

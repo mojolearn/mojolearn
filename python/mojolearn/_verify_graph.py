@@ -200,7 +200,7 @@ def training_after_optimization():
             p = s.capture(x, s.add(s.matmul(x, w), s.matmul(x, w)))
             _invoke(p.run, a, optimize=optimize_first)
             opt = s.optimizer("adam", lr=0.01)
-            _invoke(p.fit, a, targets=target, optimizer=opt, epochs=3, batch_size=2, shuffle=False)
+            _invoke(p.fit, a, targets=target, optimizer=opt, epochs=3, batch_size=2, shuffle=False, seed=2**63 + 9)
             state = s.optimizer_state(opt, w)
             assert state["step"] == 6
             states.append([s.numpy(w), np.asarray(p.loss_curve_, np.float32),
@@ -323,6 +323,9 @@ def native_checkpoint_boundary():
             s.step(opt, x)
             saved = s.numpy(x)
             _equal(saved, np.array([[1]], np.float32))
+            _refuses(lambda: _invoke(s.save_state, path, [x], seed=-1), "seed must be in", ValueError)
+            _refuses(lambda: _invoke(s.save_state, path, [x], seed=2**64), "seed must be in", ValueError)
+            _refuses(lambda: _invoke(s.save_state, path, [x], seed=True), "seed must be an integer", TypeError)
             _invoke(s.save_state, path, [x], optimizer=opt, seed=2**63 + 1, epoch=3, step=1)
             s.reset()
             s.backward(s.mul(x, x))

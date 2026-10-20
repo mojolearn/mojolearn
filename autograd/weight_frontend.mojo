@@ -141,7 +141,7 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
     elif Bool(py=b.hasattr(value, "dtype")) and Bool(py=b.hasattr(value, "strides")):
         if not Bool(py=value.dtype.isnative):
             raise Error("TypeError: a weight must use native byte order")
-        dtype = 4096 if String(value.dtype.name) == "bfloat16" else Int(py=value.dtype.num)
+        dtype = 4096 if String(value.dtype.type.__name__) == "bfloat16" else Int(py=value.dtype.num)
         size = Int(py=value.itemsize)
         addr = Int(py=value.__array_interface__["data"][0])
         dims = value.shape

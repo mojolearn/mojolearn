@@ -61,6 +61,20 @@ def is_integer_input(value: PythonObject) raises -> Bool:
         Bool(py=b.isinstance(value, b.int)) or Bool(py=b.isinstance(value, state[].integer_type)))
 
 
+def uint64_input(value: PythonObject, name: String) raises -> UInt64:
+    if not is_integer_input(value):
+        raise Error("TypeError: " + name + " must be an integer")
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    var b = state[].builtins
+    var number = b.int(value)
+    var high = number.__rshift__(32)
+    if Bool(py=number.__lt__(0)) or Bool(py=high.__gt__(4294967295)):
+        raise Error("ValueError: " + name + " must be in [0, 2**64)")
+    # Mojo's Python UInt64 conversion currently uses signed ssize_t.
+    # Each limb fits signed Int; combine them only after native conversion.
+    return (UInt64(Int(py=high)) << 32) | UInt64(Int(py=number.__and__(4294967295)))
+
+
 def mapped_byte_array(path: PythonObject) raises -> PythonObject:
     # mmap is a native CPython buffer owner. The ndarray C type keeps the
     # mapping alive, so no Python safetensors reader or ndarray helper runs.
