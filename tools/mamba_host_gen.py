@@ -86,6 +86,9 @@ SOURCES = {
     "mamba/checks/mamba3_backward.mojo": "mamba3_backward_checks",
     "mamba/impl/modules/mamba3_backward.mojo": "mamba3_backward",
     "mamba/impl/modules/mamba3_prefill_backward.mojo": "mamba3_prefill_backward",
+    # lane ag-mamba3-tape (2026-10-19): the device runs the Mamba-3 backward on
+    # the tape; the hand walk lives on only as this column's input
+    "mamba/host/mamba3_prefill_chain.mojo": "mamba3_prefill_chain",
 }
 
 #: import module -> replacement module (None drops the import line)
@@ -189,7 +192,7 @@ SUBSTITUTIONS = (
 _CONTEXT_SOURCES = (
     "mamba/host/mamba2_prefill_chain.mojo",
     "mamba/host/mamba1_prefill_chain.mojo",
-    "mamba/impl/modules/mamba3_prefill_backward.mojo",
+    "mamba/host/mamba3_prefill_chain.mojo",
 )
 _CONTEXT_RULES = (
     (r'from core\.neural_context import process_ctx\n'

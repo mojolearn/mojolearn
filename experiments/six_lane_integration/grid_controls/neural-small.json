@@ -160,7 +160,7 @@
    "binding": "_mojolearn_mamba",
    "bits_change": false,
    "status": "promoted:g50ebe26a5 (lane/grid-act-16, 2026-10-11)",
-   "note": "Mamba-3 backward S17 tail staging, mamba3_backward_s17_operands_into via mamba3_prefill_backward_on. One control, arms pipe (default) and off; the dbuf arm was deleted 2026-10-11 (lane/owed-decide, avg 1.33x). Needs the shared tail (no MAMBA3_S17_TAIL_NAIVE)."
+   "note": "Mamba-3 backward S17 tail staging, mamba3_backward_s17_operands_into via the Mamba-3 tape SSD rule (autograd/rules_mamba3.mojo). One control, arms pipe (default) and off; the dbuf arm was deleted 2026-10-11 (lane/owed-decide, avg 1.33x). Needs the shared tail (no MAMBA3_S17_TAIL_NAIVE)."
   },
   "attn_fwd_tq_rule": {
    "define": "MOJOLEARN_ATTN_FWD_TQ_RULE",
@@ -372,7 +372,7 @@
   },
   "neural:samba-train-step": {
    "binding": "_mojolearn_mamba + _mojolearn_transformer + _mojolearn_training",
-   "route": "python samba step -> training.samba_ops linear/head via neural_dispatch + mamba3 tape forward (angle kernel) and mamba3_prefill_backward_on -> mamba3_backward_s17_operands_into + transformer attention fwd/bwd",
+   "route": "python samba step -> training.samba_ops linear/head via neural_dispatch + mamba3 tape forward (angle kernel) and the Mamba-3 tape stage rules -> mamba3_backward_s17_operands_into + transformer attention fwd/bwd",
    "controls": [
     "attn_tile_order",
     "attn_fwd_tq_rule",

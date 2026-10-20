@@ -31,6 +31,8 @@ for the same stage, on the same operands, in the same order:
 `identical_embedding_forward_into`, `mamba3_block_forward` /
 `mamba3_prefill_backward_on`, `llama_decoder_layer_forward` /
 `llama_decoder_layer_backward_autograd`, `llama_rms_norm` / `bwd_rms_norm`,
+the Mamba-3 stage rules (autograd/rules_mamba3.mojo), `llama_decoder_layer_forward` /
+`llama_decoder_layer_backward_device`, `llama_rms_norm` / `bwd_rms_norm`,
 the `OP_NT` head GEMM and its two backward GEMMs at `ROLE_HEAD`,
 `identical_ce_loss_resident`, `identical_embedding_backward_into`, the
 clause 9.2 pair add of the tied gradient, `identical_optimizer_step` through
@@ -46,8 +48,9 @@ word back: the token-range refusal inside `identical_embedding_forward_into`
 each call (which stands in for arm B's per-weight scans and names a flat
 index instead of a tensor), the per-call x/state scans inside
 `mamba3_block_forward`, the logits non-finite refusal before the loss, and
-`identical_ce_loss_resident`'s own loss download. `mamba3_prefill_backward_on`
-and the optimizer entry also wait before they return (their own contracts).
+`identical_ce_loss_resident`'s own loss download. Each Mamba-3 block's
+backward waits once at its end (the walk's closing wait, before its scratch
+is freed), and the optimizer entry waits before it returns (its contract).
 None of those is a PCIe transfer of an activation or a gradient; every such
 transfer is gone.
 
@@ -86,7 +89,6 @@ from mamba.impl.modules.mamba3 import (
     Mamba3DeviceWeights,
     mamba3_block_forward,
 )
-from mamba.impl.modules.mamba3_prefill_backward import Mamba3DeviceGradients
 from training.checks.loss_contract import (
     CeConfig,
     IGNORE_INDEX_DEFAULT,
@@ -118,7 +120,7 @@ from autograd.rules_transformer import (
 )
 from autograd.tape import Tape, Tensor
 from autograd.refuse_scan import DeferredNonfiniteScan
-from autograd.rules_mamba3 import M3_BLOCK, M3KeepRef, M3StagesRef, M3WeightsRef
+from autograd.rules_mamba3 import M3BlockRef, M3StagesRef, M3WeightsRef, Mamba3TapeBlock, mamba3_block_record
 from autograd.rules_samba import (
     SAMBA_CE,
     SAMBA_EMBEDDING,
@@ -699,7 +701,7 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by 70ce81192; code recoverable at 70ce81192^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch
 # (_backward_blocks: the hand walk's per-block VJP loop and its 9 + 1 copies per block; the tape's
-# M3_BLOCK and transformer rules launch the same block backwards, autograd/rules_samba.mojo.)
+# Mamba-3 stage and transformer rules launch the same block backwards, autograd/rules_samba.mojo.)
 
 
 @always_inline
@@ -796,6 +798,13 @@ def _backward_tape(
         demb = s.pair.create_sub_buffer[DType.float32](0, v * dm)
         dwh = s.pair.create_sub_buffer[DType.float32](v * dm, v * dm)
 
+    # ---- each Mamba-3 layer's backward state (its four interior node
+    # gradients; the stage rules hold its scratch between the block's first
+    # and last rule), allocated before any pointer into the list is taken
+    var m3_blocks = List[Mamba3TapeBlock]()
+    for j in range(len(s.m3_w)):  # driver-loop: over Mamba-3 layers
+        m3_blocks.append(Mamba3TapeBlock(s.ctx, b, l, s.m3_w[j].dims))
+
     # ---- the forward as it ran, recorded (nothing is relaunched)
     var ex = DeviceExec(s.ctx)
     var tape = Tape()
@@ -804,20 +813,16 @@ def _backward_tape(
     for i in range(n_layers):  # driver-loop: over stack layers
         var j = s.slot[i]
         if s.kinds[i] == SAMBA_LAYER_MAMBA3:
-            # [x, the nine weights] -> the block's own residual_out; the
-            # weight gradients are the registry tensors themselves
+            # the block's stage nodes over x and the nine weights -> its own
+            # residual_out; the weight gradients are the registry tensors
+            # themselves
             var base = 1 + SAMBA_BLOCK_TENSORS * i
-            var ins = List[Tensor]()
-            ins.append(h)
+            var params = List[Tensor]()
             for k in range(SAMBA_BLOCK_TENSORS):  # driver-loop: over the block's nine weight tensors
                 var wv = s.view(base + k)
                 var gv = s.grad_view(base + k)
-                ins.append(tape.variable_into(ex, _fpb(wv), _fpb(gv), 1, s.tensor_size(base + k)))
-            var saved = Args()
-            saved.i11 = j
-            h = tape.custom_into(
-                ex, ins, _fpb(s.m3_stages[j].residual_out), gin[i + 1], m, dm, M3_BLOCK, saved
-            )
+                params.append(tape.variable_into(ex, _fpb(wv), _fpb(gv), 1, s.tensor_size(base + k)))
+            h = mamba3_block_record(tape, ex, h, params, s.m3_stages[j], m3_blocks[j], gin[i + 1], b, l, j)
         else:
             # the decoder layer's nodes; its output is its own residual2
             h = llama_decoder_layer_record(
@@ -837,7 +842,6 @@ def _backward_tape(
     # ---- the rule set's pointers (all into the session, which outlives it)
     var scans = List[DeferredNonfiniteScan]()
     var scan_layers = List[Int]()
-    var keep = List[Mamba3DeviceGradients]()
     var bst_refs = List[SambaBstRef]()
     var fwd_refs = List[SambaFwdRef]()
     var t_eps = List[Float32]()
@@ -847,9 +851,11 @@ def _backward_tape(
         t_eps.append(s.t_w[j].eps)
     var w3 = List[M3WeightsRef]()
     var st3 = List[M3StagesRef]()
+    var blk3 = List[M3BlockRef]()
     for j in range(len(s.m3_w)):  # driver-loop: over Mamba-3 layers
         w3.append(M3WeightsRef(unsafe_from_address=Int(MutPointer(to=s.m3_w[j]))))
         st3.append(M3StagesRef(unsafe_from_address=Int(MutPointer(to=s.m3_stages[j]))))
+        blk3.append(M3BlockRef(unsafe_from_address=Int(MutPointer(to=m3_blocks[j]))))
     var cos_tab = _fpb(s.ones)
     var sin_tab = _fpb(s.ones)
     if s.has_attn:
@@ -871,11 +877,10 @@ def _backward_tape(
     var r_counts = samba_i32_ref(s.counts)
     var r_run_begin = samba_i32_ref(s.run_begin)
     var r_perm = samba_i32_ref(s.perm)
-    var r_keep = M3KeepRef(unsafe_from_address=Int(MutPointer(to=keep)))
     var r_scans = SambaScansRef(unsafe_from_address=Int(MutPointer(to=scans)))
     var r_layers = SambaLayersRef(unsafe_from_address=Int(MutPointer(to=scan_layers)))
     var rules = SambaRules(
-        s.ctx, bst_refs^, fwd_refs^, t_eps^, cos_tab, sin_tab, w3^, st3^, r_keep, ton,
+        s.ctx, bst_refs^, fwd_refs^, t_eps^, cos_tab, sin_tab, w3^, st3^, blk3^, ton,
         b, l, dm, v, s.eps, one,
         r_dh, r_dhn, r_dlogits, r_ws_a, r_ws_b, r_dot, r_dh_tmp, r_dprod, r_rstd, r_dvcoef, r_ones, r_sumsq,
         r_ids, r_counts, r_run_begin, r_perm, r_scans, r_layers,
@@ -897,7 +902,7 @@ def _backward_tape(
             tape.release(ex)
         for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
             scans[i].enqueue_readback(s.ctx)
-        # Drain the queue before the keep list and the views go.
+        # Drain the queue before the Mamba-3 blocks and the views go.
         ex.sync()
         for i in range(len(scans)):  # driver-loop: over attention layers (one scan each)
             var bad = scans[i].result_after_sync()
@@ -912,17 +917,17 @@ def _backward_tape(
         try:
             tape.backward_with_rules(ex, loss, seed, rules)
         except e:
-            # the keep list's buffers may still be read by queued copies
+            # a Mamba-3 block's scratch may still be read by queued launches
             ex.sync()
             raise e
         tape.release(ex)
-        # Drain the queue before the keep list and the views go.
+        # Drain the queue before the Mamba-3 blocks and the views go.
         ex.sync()
     if s.tie:
         var gemb = s.grad_view(0)
         _pair_add_device(s.ctx, gemb, s.pair, v * dm)
         _ = gemb^
-    _ = keep^
+    _ = m3_blocks^
     _ = scans^
     _ = scan_layers^
     _ = demb^
