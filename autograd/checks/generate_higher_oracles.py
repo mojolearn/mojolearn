@@ -648,10 +648,6 @@ def emit_refusals(fused, lines):
     def refusal(what, setup, call, want):
         blocks.append((what, setup, call, want))
     graph = 'tape.reset()\nvar x = tape.tensor(ex, ' + X6 + ', 2, 3, True)\n'
-    refusal('layer_norm', graph + 'var lw = tape.tensor(ex, ' + R3 + ', 1, 3, True)\n'
-            'var lb = tape.tensor(ex, ' + R3 + ', 1, 3, True)\n'
-            'var root = tape.sum(ex, layer_norm(tape, ex, x, lw, lb))',
-            'backward_scalar_recorded(tape, ex, root)', 'create_graph cannot differentiate through')
     refusal('custom_tag', graph + 'var cn = tape.custom(ex, [x], tape.value(x), 2, 3, 123, Args())\n'
             'var root = tape.sum(ex, cn)',
             'backward_scalar_recorded(tape, ex, root)', 'create_graph cannot differentiate through')

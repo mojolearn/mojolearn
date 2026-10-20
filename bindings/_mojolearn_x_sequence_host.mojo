@@ -18,6 +18,7 @@ from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
+from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
@@ -192,6 +193,15 @@ def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: Python
 
 def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
     return ops_program_info_py[HostExec, OPS_HOST](sid, pid)
+
+
+def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject) raises -> PythonObject:
+    return ops_program_dynamic_py[HostExec, OPS_HOST](sid, pid, arrays)
+
+
+def ops_program_fit_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
+                            parameters: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    return ops_program_fit_py[HostExec, OPS_HOST](sid, pid, arrays, targets, parameters, ip, fp)
 
 
 def ops_program_run_binding(sid: PythonObject, pid: PythonObject, descs: PythonObject, addrs: PythonObject) raises -> PythonObject:
@@ -526,6 +536,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[ops_capture_binding]("ops_capture")
         m.def_function[ops_program_info_binding]("ops_program_info")
         m.def_function[ops_program_run_binding]("ops_program_run")
+        m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
+        m.def_function[ops_program_fit_binding]("ops_program_fit")
         m.def_function[ops_program_free_binding]("ops_program_free")
         m.def_function[ops_save_program_binding]("ops_save_program")
         m.def_function[ops_load_program_binding]("ops_load_program")

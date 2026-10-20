@@ -306,13 +306,38 @@ def test_refusals():
         wt = s.tensor(np.ones((1, 3), dtype=np.float32), requires_grad=True)
         bs = s.tensor(np.zeros((1, 3), dtype=np.float32), requires_grad=True)
         normed = s.sum(s.mul(s.layer_norm(x, wt, bs), x))
-        with pytest.raises(Exception) as info:
-            s.backward(normed, create_graph=True)
-        text = str(info.value)
-        assert "first-order gradient only" in text or "create_graph cannot differentiate through" in text, text
-        # the plain first-order backward still works on the same graph
+        s.backward(normed, create_graph=True)
+        assert np.isfinite(s.numpy(s.grad_tensor(x))).all()
         s.backward(normed)
         assert np.isfinite(s.grad(x)).all()
     with ops.Session() as s:
         with pytest.raises(Exception):
             s.backward(s.tensor(np.ones((1, 1), dtype=np.float32)), create_graph=True)
+
+
+def test_layer_norm_hessian_vector():
+    ops = _ops()
+    point = {
+        "x": _f64([[0.3, -0.8, 1.2], [0.7, 0.2, -0.4]]),
+        "w": _f64([[0.8, -0.3, 1.1]]),
+        "b": _f64([[0.1, 0.2, -0.1]]),
+    }
+    direction = {k: np.full_like(v, 0.2) for k, v in point.items()}
+    direction["x"] = _f64([[0.2, -0.4, 0.1], [0.3, -0.2, 0.5]])
+
+    def oracle(d):
+        center = d["x"] - d["x"].mean(axis=1, keepdims=True)
+        normalized = center / np.sqrt((center ** 2).mean(axis=1, keepdims=True) + 0.03)
+        return np.sum((normalized * d["w"] + d["b"]) ** 2)
+
+    expected = _hvp_oracle(oracle, point, direction)
+    with ops.Session(record=True) as s:
+        p = {k: s.tensor(v.astype(np.float32), requires_grad=True) for k, v in point.items()}
+        v = [s.tensor(direction[k].astype(np.float32)) for k in point]
+        out = s.layer_norm(p["x"], p["w"], p["b"], eps=0.03)
+        loss = s.sum(s.mul(out, out))
+        hv = s.hvp(loss, list(p.values()), v)
+        for k, h in zip(point, hv):
+            result = s.numpy(h)
+            _close(result, expected[k], "layer_norm Hessian " + k)
+            _emit("layer_norm_hvp_" + k, _digest(result))

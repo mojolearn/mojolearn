@@ -1207,7 +1207,7 @@ class Session:
         info = self._b.ops_capture(self._sid(), ins, outs)
         return Program(self, info)
 
-    def run(self, program, *arrays):
+    def run(self, program, *arrays, dynamic_shapes=False):
         """Run ``program`` on new input arrays: one call that uploads them,
         runs every captured operation on the device and returns the outputs.
 
@@ -1217,10 +1217,18 @@ class Session:
         outputs are the values the same operations give when called one by
         one, to the bit. Returns one float32 array for a program with one
         output, else a tuple of arrays.
+
+        With ``dynamic_shapes=True``, input dimensions may change while
+        their ranks stay fixed. The captured operations and parameter
+        shapes must accept the new dimensions. Output shapes are computed
+        natively. A captured reshape should use ``-1`` for an inferred
+        dimension when its element count can change.
         """
         from ._cast_in import as_input, describe, matrix_view
         if not isinstance(program, Program) or program._s is not self:
             raise ValueError("program must be a Program of this session")
+        if dynamic_shapes:
+            return self._b.ops_program_dynamic(self._sid(), program._id, arrays)
         if len(arrays) != len(program.input_shapes):
             raise ValueError(f"this program takes {len(program.input_shapes)} input arrays, got {len(arrays)}")
         keep, descs = [], []
@@ -1602,9 +1610,65 @@ class Program:
         kinds = info[4] if len(info) > 4 else [0] * len(self.input_shapes)
         self.input_kinds = tuple(int(k) for k in kinds)  # glue: one kind per program input
 
-    def run(self, *arrays):
+    def run(self, *arrays, dynamic_shapes=False):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
-        return self._s.run(self, *arrays)
+        return self._s.run(self, *arrays, dynamic_shapes=dynamic_shapes)
+
+    def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
+            epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
+        """Train this captured graph in one native call.
+
+        Parameters
+        ----------
+        arrays : ndarray
+            Input arrays in capture order, with equal sample counts on
+            their first axis. Batching preserves the remaining dimensions.
+        targets : ndarray or None
+            Targets for the chosen loss. Cross-entropy takes numeric class
+            codes. With ``loss="output"``, omit targets and capture a scalar
+            loss as the program's one output.
+        optimizer : int
+            Handle returned by the owning session's ``optimizer`` method.
+            Its state and schedule continue across calls.
+        parameters : sequence of int or None
+            Captured parameter handles to update. None trains every
+            captured parameter; specify a subset to keep constants frozen.
+        loss : {'mse', 'mae', 'huber', 'bce_with_logits', 'cross_entropy', 'output'}
+            Loss applied to the program's one output.
+        epochs, batch_size : int
+            Epoch count and maximum rows per batch.
+        shuffle : bool
+            Shuffle rows with the native seeded permutation each epoch.
+        seed : int
+            Seed of the row order; reuse it when continuing training.
+        huber_delta : float
+            Transition point for the Huber loss.
+
+        Returns
+        -------
+        Program
+            This model, with ``loss_curve_`` holding this call's epoch
+            losses. Parameters and optimizer state stay in the session.
+
+        Examples
+        --------
+        >>> opt = session.optimizer("adam", lr=0.01)
+        >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
+        """
+        kinds = {"output": 0, "mse": 1, "mae": 2, "huber": 3,
+                 "bce_with_logits": 4, "cross_entropy": 5}
+        if loss not in kinds:
+            raise ValueError(f"unknown loss {loss!r}")
+        if (loss == "output") != (targets is None):
+            raise ValueError("omit targets only when loss='output'")
+        lo, hi = _seed_words(seed)
+        params = self.params if parameters is None else self._s._handles(parameters)
+        ip = [_int(optimizer, "optimizer", 1), kinds[loss], _int(epochs, "epochs", 1),
+              _int(batch_size, "batch_size", 1), int(bool(shuffle)), lo, hi]
+        self.loss_curve_ = self._s._b.ops_program_fit(
+            self._s._sid(), self._id, arrays, targets, params, ip, [float(huber_delta)])
+        self.n_iter_ = int(epochs)
+        return self
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,

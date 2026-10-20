@@ -431,7 +431,8 @@ class Sequential:
         return self.input_shape
 
     # ------------------------------------------------------------ training
-    def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False):
+    def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
+            validation_data=None, restore_best_weights=False):
         """Train the model.
 
         Parameters
@@ -465,6 +466,17 @@ class Sequential:
             and the row order carry on, so ``fit(epochs=2)`` followed by
             ``fit(epochs=2, resume=True)`` gives the same parameters as
             ``fit(epochs=4)``. Pass the same training data.
+        validation_data : tuple of (X, y) or None, default None
+            Held-out data evaluated after each epoch with dropout disabled.
+            When provided, early stopping monitors its loss. Monitoring
+            starts afresh for each fit call.
+        restore_best_weights : bool, default False
+            With validation data, restore the best epoch's parameters,
+            optimizer and counters together. ``n_iter_`` is the retained
+            epoch; ``epochs_run_`` counts epochs executed in this call.
+            ``best_epoch_`` names the best absolute epoch and
+            ``validation_loss_curve_`` keeps every validation loss from
+            this call. Resuming continues from the retained epoch.
 
         Returns
         -------
@@ -476,6 +488,8 @@ class Sequential:
             raise ValueError("add at least one layer before fit")
         if self._options is None:
             raise ValueError("call compile before fit")
+        if restore_best_weights and validation_data is None:
+            raise ValueError("restore_best_weights requires validation_data")
         if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or not 0 <= seed < 2 ** 64:
             raise ValueError("seed must be an integer in [0, 2**64)")
         resume = bool(resume)
@@ -525,11 +539,32 @@ class Sequential:
               o["huber_delta"]] + table
         addrs = [xd, yd, params.ctypes.data, curve.ctypes.data, m.ctypes.data, v.ctypes.data,
                  state.ctypes.data, 0 if prev is None else prev.ctypes.data]
+        if validation_data is not None:
+            if not isinstance(validation_data, (tuple, list)) or len(validation_data) != 2:
+                raise ValueError("validation_data must be (X, y)")
+            vx, vm, vxd = _x_nd(validation_data[0], "validation X")
+            vy = as_input(validation_data[1])
+            if self._sample_of(vx) != sample or vm.shape[1] != d:
+                raise ValueError("validation inputs must have the training sample shape")
+            if vy.ndim not in (1, 2) or vy.shape[0] != vm.shape[0]:
+                raise ValueError("validation targets must match the validation rows")
+            if target != _TARGET_DENSE and vy.ndim != 1:
+                raise ValueError("validation classification targets must be a vector")
+            classes_desc = None if target == _TARGET_DENSE else describe(self.classes_, "classes")
+            val_curve = np.empty(int(epochs), dtype=np.float32)
+            val_info = np.empty(2, dtype=np.int64)
+            addrs += [vxd, describe(vy, "validation y"), classes_desc,
+                      val_curve.ctypes.data, val_info.ctypes.data]
+            ip.append(int(bool(restore_best_weights)))
         # X, Y and the state arrays stay referenced until the call returns
         # (the descriptors and addresses point into them)
         n_iter = int(b.model_fit(addrs, prog, ip, fp))
         self.params_ = params
         self.n_iter_ = n_iter
+        if validation_data is not None:
+            self.epochs_run_ = int(val_info[0])
+            self.best_epoch_ = int(val_info[1])
+            self.validation_loss_curve_ = val_curve[:self.epochs_run_].tolist()
         self.loss_curve_ = curve[:n_iter].tolist()
         self.n_features_in_ = d
         self._sample_shape = sample
