@@ -68,6 +68,7 @@ BASELINE = "tools/hooks/host_routes_baseline.tsv"
 _PY_CPU_SIDE = frozenset("""
 __main__.py _backend.py host_surface.py _cpu_reference.py _conformance.py
 _verify.py _verify_all.py _verify_causal_lm.py _verify_distributed.py
+_verify_distributed_program.py _verify_partitioned_program.py _verify_native_runtime.py
 _verify_par.py _verify_parallel_cv.py _verify_reference.py _verify_resources.py
 _verify_small.py _verify_worker.py _verification_catalog.py
 _verify_graph.py _verify_native_runtime.py _verify_generation.py
@@ -740,7 +741,10 @@ def _runtime_bound(expr):
     return True
 
 
-_DRIVE = re.compile(r"\bDeviceContext\s*\(|\.enqueue_\w+|\bctx\.synchronize\(")
+# A captured-program worker owns an Exec: DeviceExec in the GPU binding,
+# HostExec only in the CPU binding (which admits one physical worker). Its
+# explicit drain is the same native GPU-driver boundary as ctx.synchronize.
+_DRIVE = re.compile(r"\bDeviceContext\s*\(|\.enqueue_\w+|\bctx\.synchronize\(|\.session\.ex\.sync\(")
 
 
 def _driver_lines(lines):
