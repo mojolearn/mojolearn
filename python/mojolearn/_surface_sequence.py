@@ -48,9 +48,8 @@ FAMILIES = (
                       "sequence/moe.mojo", "autograd/model.mojo", "autograd/model_ops.mojo",
                       "autograd/pyapi.mojo", "autograd/ops_api.mojo", "autograd/losses.mojo",
                       "autograd/metrics.mojo", "autograd/data.mojo",
-                      "autograd/profile.mojo", "autograd/model_checkpoint.mojo",
+                      "autograd/profile.mojo", "autograd/optim.mojo", "autograd/model_checkpoint.mojo",
                       "training/checkpoint.mojo"),
-                      "autograd/profile.mojo", "autograd/optim.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
