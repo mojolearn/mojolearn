@@ -1692,6 +1692,19 @@ def test_shards_split_the_plan_round_robin_by_id():
             bb.shard_races(races, bad)
 
 
+@pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
+def test_cpu_lightgbm_tree_refusal_is_named_without_exempting_other_failures(vendor):
+    race = {"id": "trees/rf/taxi/rows=2000", "family": "trees",
+            "lane": "rf", "dataset": "taxi", "arms": ["ours", "lightgbm-cpu"]}
+    rec = {"status": "done", "params_check": "MATCHED",
+           "cells": [_smoke_cell("ours"), _smoke_cell("lightgbm-cpu", "REFUSED(ROW-SAMPLING)")]}
+    assert bb.smoke_verdict(race, rec, vendor) == []
+    assert bb.smoke_verdict(race, dict(rec, params_check="REFUSED"), vendor)
+    rec["cells"][1] = _smoke_cell("lightgbm-cpu", "UNKNOWN(not in log)")
+    assert bb.smoke_verdict(race, rec, vendor)
+    assert bb._planned_refusal(vendor, "algos/dart/taxi", "lightgbm-cpu") is None
+
+
 def _write_smoke(path, races, vendor="apple", files=None, fail=()):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({

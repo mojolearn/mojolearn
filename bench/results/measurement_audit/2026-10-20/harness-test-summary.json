@@ -1,0 +1,29 @@
+{
+  "source_commit": "3141d7bdc8936971655a7732c709a91e47925f20",
+  "exit_code": 0,
+  "suites": [
+    {
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "2",
+      "tests": "603",
+      "time": "82.812",
+      "timestamp": "2026-10-20T14:30:24.723719-04:00",
+      "hostname": "MacBook-Air-1-terrabyte.local"
+    }
+  ],
+  "failures": [],
+  "skipped": [
+    {
+      "test": "tools.test_smoke_staging.test_catboost_frame_once_per_staged_matrix",
+      "message": "could not import 'pandas': No module named 'pandas'",
+      "detail": "/Users/andrewhendel/mojolearn-evidence/measurement-check-audit-20261020-142704/checkout/tools/test_smoke_staging.py:384: could not import 'pandas': No module named 'pandas'"
+    },
+    {
+      "test": "tools.test_smoke_probe_light.test_torch_layer_arm_probe_record_equals_the_timed_record[gcn]",
+      "message": "could not import 'torch_geometric': No module named 'torch_geometric'",
+      "detail": "/Users/andrewhendel/mojolearn-evidence/measurement-check-audit-20261020-142704/checkout/tools/test_smoke_probe_light.py:203: could not import 'torch_geometric': No module named 'torch_geometric'"
+    }
+  ]
+}

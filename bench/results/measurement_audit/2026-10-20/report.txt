@@ -1,0 +1,37 @@
+CPU opponent inventory — 2026-10-20
+
+Read-only inventory against source 3141d7bdc8936971655a7732c709a91e47925f20.
+Apple fast on M3 Ultra; NVIDIA identical on L40S; AMD identical on MI325X.
+Counts are opponent × recipe × dataset cells, not unique libraries or repeated timing samples.
+Existing evidence for a recipe is counted once even if copied into multiple boards or archives.
+
+FIT / TRAINING
+apple: total 380; historical audit supports a reuse candidate 224; successful history needs review 128; no historical candidate 26; only failed/incomplete 2.
+nvidia: total 249; historical audit supports a reuse candidate 117; successful history needs review 94; no historical candidate 33; only failed/incomplete 5.
+amd: total 362; historical audit supports a reuse candidate 187; successful history needs review 141; no historical candidate 27; only failed/incomplete 7.
+
+All three: 991 fit cells; 891 have successful historical timings (528 with supporting historical audit and no identified lane-config drift; 363 requiring review). 100 have no successful retained timing: 86 absent, 14 failed/incomplete. 78 of the absent cells are serial time-series variants (26 per vendor), a different execution path from the old process-pool results.
+
+PREDICTION
+584 separate prediction/batch cells; 577 have historical timings, 7 have only failed/incomplete history. These are not 584 extra model fits. CPU opponents do not need a second timing solely because our mode changes.
+
+LIMITS
+A historical audit supports the old pairing. It does not automatically approve reuse against a new, unmeasured own arm. Current effective parameters, data identity/actual shape, clock, retained source/output evidence and machine/resource records still matter. Missing metadata stays unresolved; library dates or slow hosts alone do not force reruns.
+A review failure may require a new measurement; a current broken pairing may be repairable using its retained opponent. Therefore 100 is the currently identified gap, not a final rerun schedule.
+10 fit and 20 inference LightGBM CPU tree cells are explicitly refused by the driver and excluded from the runnable inventory. Algorithm-family DART LightGBM arms are retained.
+Inventory scans 3471 local board/store/archive files. No CPU or GPU opponent benchmarks were launched; no remote machines were changed.
+
+SMOKE
+Preflight constructs/probes arms and compares effective parameter settings, required library/version readbacks, implementation and GPU hardware evidence. It does not time CPU fits. STARTED is incomplete, not passed.
+Default gpu_gap_campaign smoke selects GPU-opponent recipes. CPU fallback recipes require cpu_fallback selection; Apple identical and fast are separate mode workers.
+Reduced execution smoke additionally checks completion, params MATCHED, expected cells, times and quality availability, with named unsupported/refused exceptions. It does not certify a full-dataset speedup or blanket historical timing reuse.
+The opponent store compares settings/data keys plus fresh readback/version/device before reuse. Default bench_board skips missing opponents; the campaign timing wrapper adds with-opponents when given a store or retime-opponents without one, so that wrapper is not reuse-only.
+
+ARTIFACTS
+cpu-reuse-coverage.json.gz: every expected cell and retained candidate path/reason.
+cpu-reuse-inventory.csv: compact filterable inventory.
+cpu-reuse-summary.json: structured counts, scan totals and errors (zero).
+Original inventory.log / inventory.exit remain in the local evidence directory recorded in manifest.json (exit 0).
+
+SMOKE REPAIR
+Added the missing expected refusal for CPU LightGBM tree arms in tools/bench_board.py, scoped to trees only. A built arm with mismatched parameters still fails. Tests: 96 passed in the isolated checkout; all 6 new parametrized regressions also passed in the main working tree. Both commands exited 0. The smoke correction and its tests accompany this audit snapshot; numerical/runtime source and measurements were not changed.

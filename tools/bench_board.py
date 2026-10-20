@@ -4211,6 +4211,13 @@ SMOKE_FILE_GLOBS = ("tools/bench_board*.py", "tools/speed_gbdt_arm.py", "tools/b
 #: race passes with such an arm only when its cell is a named REFUSED(...).
 #: (vendor glob, race key glob family/lane/dataset, arm glob, why)
 PLANNED_REFUSALS = [
+    # FAIRNESS FIX (2026-10-13 audit): the tree driver refuses CPU LightGBM
+    # for the same algorithm/settings reasons as CUDA, but the smoke table
+    # named only CUDA. CPU fallback smoke therefore reported a missing probe.
+    # This does not apply to the algos/dart arms, which have a real library path.
+    ("*", "trees/*", "lightgbm-cpu",
+     "the driver refuses every LightGBM tree arm by name (tools/speed_gbdt_arm.py lightgbm_arms "
+     "MIN-CHILD / ROW-SAMPLING / CATEGORICAL-ALGORITHM, lightgbm_rank_arms DIFFERENT-ALGORITHM)"),
     # smoke-fixes (2026-10-14; trees/gbdt-lossguide/taxi): the reason named the old refusal; since the
     # 2026-10-13 audit the driver refuses every LightGBM tree arm by name whatever the build.
     ("nvidia", "trees/*", "lightgbm-cuda",

@@ -1,0 +1,97 @@
+{
+  "schema": "mojolearn.measurement-audit-snapshot.v1",
+  "date": "2026-10-20",
+  "audited_source_commit": "3141d7bdc8936971655a7732c709a91e47925f20",
+  "original_evidence_directory": "/Users/andrewhendel/mojolearn-evidence/measurement-check-audit-20261020-142704",
+  "scope": "Read-only local evidence inventory plus unit/regression tests. No CPU opponent benchmark or GPU measurement was run. This is a source-pinned historical snapshot, not qualification of later main commits.",
+  "validation": {
+    "harness": {
+      "passed": 579,
+      "subtests_passed": 22,
+      "skipped": 2,
+      "exit_code": 0,
+      "skip_reasons": [
+        "pandas missing: catboost staging test",
+        "torch_geometric missing: GCN parameter-probe test"
+      ]
+    },
+    "smoke_fix": {
+      "passed": 96,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "working_tree_regressions": {
+      "passed": 6,
+      "skipped": 0,
+      "exit_code": 0
+    }
+  },
+  "pending": {
+    "cpu_fit_no_successful_retained_timing": 100,
+    "cpu_fit_historical_timing_needs_review": 363,
+    "cpu_fit_audited_reuse_candidates_subject_to_current_checks": 528,
+    "cpu_prediction_only_failed_or_incomplete_history": 7
+  },
+  "inventory_script_note": "One-off analysis script retained verbatim as evidence; its paths identify the original Mac audit workspace and inputs. It is not a supported benchmark runner.",
+  "coverage_uncompressed_sha256": "0c68b910a14ee6f215ba99693e6cc1b861d9390fa6e398df90735d63ffa79c7b",
+  "files": {
+    "cpu-reuse-coverage.json.gz": {
+      "bytes": 105333,
+      "sha256": "3428be140247c5bf15e07c63169e6cc49e6d0cf844d1295e9fb05702c254c0f6"
+    },
+    "cpu-reuse-inventory.csv": {
+      "bytes": 144243,
+      "sha256": "15769371584a5304fe3a6d93e2238d1a3f3b3332e8efb633d199ba0536461255"
+    },
+    "cpu-reuse-summary.json": {
+      "bytes": 1745,
+      "sha256": "a734d8a4f6e6b483f0d2695540f9a8ececf74b87ab2c07525ca45a19de9d2307"
+    },
+    "harness-test-manifest.json": {
+      "bytes": 3614,
+      "sha256": "445e408b36064b1997f8633a6ab7ea9071e13dff5968fb0a4cd13f0e10ae23c3"
+    },
+    "harness-test-summary.json": {
+      "bytes": 1179,
+      "sha256": "bfca39cce74021a292a5b6349877b0e8b56aee337427e0e863ce1113fcf8b2d0"
+    },
+    "harness-tests.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "harness-tests.log": {
+      "bytes": 1057,
+      "sha256": "82bec94247f1d3b3e7dbb469797ff17f9ac08eb039325411ccdea6e4558007e1"
+    },
+    "inventory-script-snapshot.py": {
+      "bytes": 11429,
+      "sha256": "c005afa0d02bd62ad665cb2646e287a4a9537d2afdbf2a29c84540e81e501b3a"
+    },
+    "report.txt": {
+      "bytes": 4024,
+      "sha256": "1fe48db4ff5c770cc96171f7307b7857a4f97f15d711bcda6e6d8274505a9629"
+    },
+    "smoke-fix-tests.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "smoke-fix-tests.log": {
+      "bytes": 180,
+      "sha256": "2050317b8c675b9075acb17d7e32b9dfebac540390dc50cda7855b2069f42dbd"
+    },
+    "working-tree-regressions.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "working-tree-regressions.log": {
+      "bytes": 98,
+      "sha256": "943dd783f8d80033ee226551f801c6e0de929c357e188cd418776fabcfde389e"
+    }
+  },
+  "fix_source_sha256": {
+    "tools/bench_board.py": "62d59c5ac458547eb124b5c3425c50c7d39bba59085edf0e0492133623532b29",
+    "tools/test_bench_board.py": "412b4f2c4e1bd3e007ecd9dc86fe9111301c42511dfb2a8ef46a2558faa16d30",
+    "tools/test_bench_board_preflight_smoke.py": "a8d645b592b5c00f18f6440d9abaa42d55504b9e95b488a6e37167e83ce11811"
+  },
+  "csv_normalization": "CSV CRLF line endings normalized to LF for repository whitespace checks; field values are unchanged."
+}

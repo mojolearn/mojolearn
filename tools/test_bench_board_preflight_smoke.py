@@ -96,3 +96,22 @@ def test_macos_manifest_is_core_only():
     assert P.distributions("nvidia", legacy=True) == ["mojolearn", "mojolearn-nvidia"]
     with pytest.raises(ValueError):
         P.distributions("intel")
+
+
+@pytest.mark.parametrize("vendor,mode", [("apple", "fast"), ("nvidia", "identical"), ("amd", "identical")])
+def test_cpu_tree_refusal_excludes_only_an_unbuilt_arm(monkeypatch, vendor, mode):
+    race = dict(family="trees", lane="rf", dataset="taxi", our_arms={"ours": mode})
+    probes = {"ours": _probe(), "sklearn-rf-cpu": _probe()}
+    monkeypatch.setattr(B, "params_probe", lambda ctx, r, arms: probes)
+    monkeypatch.setattr(B, "arm_device", lambda arm, vendor: "cpu")
+    arms = ["ours", "sklearn-rf-cpu", "lightgbm-cpu"]
+    rep = B.preflight_check(dict(vendor=vendor), race, arms)
+    assert rep["verdict"] == "MATCHED"
+    assert set(rep["excluded_arms"]) == {"lightgbm-cpu"}
+    # If a future driver constructs it, its parameters must still match.
+    probes["lightgbm-cpu"] = _probe()
+    probes["lightgbm-cpu"]["record"]["params"]["alpha"] = 2
+    rep = B.preflight_check(dict(vendor=vendor), race, arms)
+    assert rep["verdict"] == "REFUSED"
+    assert "lightgbm-cpu" not in rep.get("excluded_arms", {})
+    assert any("alpha" in p for p in rep["problems"])

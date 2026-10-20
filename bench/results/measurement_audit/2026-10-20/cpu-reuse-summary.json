@@ -1,0 +1,53 @@
+{
+  "scope": "Full current Apple fast (M3 Ultra), NVIDIA identical (L40S), AMD identical (MI325X). Fit and prediction batches counted separately. No new worker readbacks or races. A retained admitted candidate is not automatic approval against an unmeasured new own arm.",
+  "source_commit": "3141d7bdc8936971655a7732c709a91e47925f20",
+  "counts": {
+    "apple/fit": {
+      "retained_admitted_candidate": 224,
+      "successful_history_needs_review": 128,
+      "only_failed_or_incomplete_history": 2,
+      "no_retained_candidate_found": 26
+    },
+    "apple/infer": {
+      "successful_history_needs_review": 100,
+      "retained_admitted_candidate": 136,
+      "only_failed_or_incomplete_history": 2
+    },
+    "nvidia/fit": {
+      "retained_admitted_candidate": 117,
+      "only_failed_or_incomplete_history": 5,
+      "successful_history_needs_review": 94,
+      "no_retained_candidate_found": 33
+    },
+    "nvidia/infer": {
+      "retained_admitted_candidate": 78,
+      "successful_history_needs_review": 49,
+      "only_failed_or_incomplete_history": 3
+    },
+    "amd/fit": {
+      "successful_history_needs_review": 141,
+      "retained_admitted_candidate": 187,
+      "only_failed_or_incomplete_history": 7,
+      "no_retained_candidate_found": 27
+    },
+    "amd/infer": {
+      "successful_history_needs_review": 112,
+      "retained_admitted_candidate": 102,
+      "only_failed_or_incomplete_history": 2
+    }
+  },
+  "excluded_counts": {
+    "apple/fit": 6,
+    "apple/infer": 12,
+    "amd/fit": 4,
+    "amd/infer": 8
+  },
+  "scanned": {
+    "out_of_current_plan_cells": 3696,
+    "files_read": 3471,
+    "boards_unknown_or_other_hardware": 27,
+    "duplicate_cells": 3150,
+    "other_hardware_cells": 506
+  },
+  "errors": []
+}
