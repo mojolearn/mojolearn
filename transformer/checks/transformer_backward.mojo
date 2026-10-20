@@ -3312,6 +3312,32 @@ def bwd_rms_norm_routed[which: Int](
 # ===========================================================================
 
 
+def bwd_refuse_nonfinite_d_out(ctx: DeviceContext, mut d_out: DeviceBuffer[DType.float32]) raises:
+    """The layer backward's synchronous refusal of a non-finite incoming
+    gradient (DEVIATION 1423: refused BY BITS through the device scan, then
+    the one offending word read back to name NaN or infinity). Raises
+    before any launch of the backward; returns when `d_out` is finite.
+    The autograd decoder-layer entry calls it on traced and materialized
+    calls (and under -D MOJOLEARN_AUTOGRAD_REFUSE_DEFER_OFF)."""
+    var bad = device_first_nonfinite(ctx, d_out, len(d_out))
+    if bad >= 0:
+        var bad_view = d_out.create_sub_buffer[DType.float32](bad, 1)
+        var bad_value = _download(ctx, bad_view, 1)
+        var au = bitcast[DType.uint32](bad_value[0]) & UInt32(0x7FFFFFFF)
+        if au > UInt32(0x7F800000):
+            raise Error(
+                String("llama backward: NaN in d_residual2 at flat index ")
+                + String(bad)
+                + " REFUSED (row 39: NaN payloads are vendor-shaped; no"
+                + " stage may record one)"
+            )
+        raise Error(
+            String("llama backward: infinity in d_residual2 at flat index ")
+            + String(bad)
+            + " REFUSED (row 39)"
+        )
+
+
 def llama_decoder_layer_backward(
     ctx: DeviceContext,
     mut bst: LlamaBackwardStages,

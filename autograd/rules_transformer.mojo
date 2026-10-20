@@ -112,7 +112,7 @@ from sequence.ops import FP, Args
 from core.identity_trace import IdentityTrace
 from core.device_scan import device_first_nonfinite
 from autograd.refuse_scan import DeferredNonfiniteScan
-from core.step_phase import step_count_launch
+from core.step_phase import step_count_launch, step_count_sync
 from gemm.contract import OP_NT
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea J), default on: the
 # refusal scan of d(residual2) writes its verdict to a device word and the
@@ -141,14 +141,17 @@ from transformer.checks.transformer_backward import (
     IDN_BWD_ENTRY_ALIAS,
     _AFN_NORM1_RESID,
     LlamaBackwardStages,
+    _rec,
     _route_a,
     _route_b,
+    _upload,
     bwd_add2_kernel,
     bwd_add3_kernel,
     bwd_attention_dispatch,
     bwd_kv_slice2_kernel,
     bwd_mul2_kernel,
     bwd_mul2_silu_backward_kernel,
+    bwd_refuse_nonfinite_d_out,
     bwd_rms_norm_routed,
     bwd_rope_kernel,
     bwd_silu_backward_kernel,
@@ -184,6 +187,23 @@ comptime TF_DX_TMP0 = 1
 comptime TF_DX_TMP1 = 2
 comptime TF_DX_TMP0_ADD2 = 3
 comptime TF_DX_TMP2_ADD3 = 4
+
+# Args slot i9 (TF_CARD_SLOT) of a TF_LINEAR or TF_ROPE node: which identity
+# card entries the rule records after its launches on a traced call (the
+# hand walk's `_rec` calls, transformer_backward.mojo backward_stage_tag
+# order 0..36). The rule set records only when it holds a trace
+# (trace_addr != 0); the multi-layer drivers never pass one.
+comptime TF_CARD_SLOT = 9
+comptime TF_CARD_NONE = 0
+comptime TF_CARD_DOWN = 1    # 2 d_mlp_gated, 3 dw_down
+comptime TF_CARD_UP = 2      # none: the gate member records 7, 8, 9
+comptime TF_CARD_GATE = 3    # 7 dw_gate, 8 dw_up, 9 d_norm2_out
+comptime TF_CARD_O = 4       # 14 d_o_proj_out, 15 d_attn_ctx, 16 dw_o
+comptime TF_CARD_Q = 5       # 29 dw_q
+comptime TF_CARD_K = 6       # 30 dw_k
+comptime TF_CARD_V = 7       # 31 dw_v, 32 d_norm1_out
+comptime TF_CARD_ROPE_Q = 8  # 27 d_q_proj_out
+comptime TF_CARD_ROPE_K = 9  # 28 d_k_proj_out
 
 
 @always_inline
@@ -221,12 +241,21 @@ struct TransformerRules(BackwardRules):
     var b: Int
     var l: Int
     var pos0: Int
+    # A traced call (the identity cards): the address of the caller's
+    # IdentityTrace, 0 when untraced; the card tag prefix; and whether the
+    # attention backward materializes its eager stages (the hand walk's
+    # `materialize`). The multi-layer drivers leave all three at their
+    # defaults.
+    var trace_addr: Int
+    var prefix: String
+    var materialize: Bool
 
     def __init__(
         out self, ctx: DeviceContext,
         bst: MutPointer[LlamaBackwardStages, MutUntrackedOrigin],
         fwd: MutPointer[LlamaDeviceStages, MutUntrackedOrigin],
         cos_tab: FP, sin_tab: FP, eps: Float32, b: Int, l: Int, pos0: Int,
+        trace_addr: Int = 0, prefix: String = String(""), materialize: Bool = False,
     ):
         self.ctx = ctx.copy()
         self.bst = bst
@@ -237,6 +266,9 @@ struct TransformerRules(BackwardRules):
         self.b = b
         self.l = l
         self.pos0 = pos0
+        self.trace_addr = trace_addr
+        self.prefix = prefix
+        self.materialize = materialize
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         # Never: every kernel these rules launch overwrites every element of
@@ -276,9 +308,18 @@ struct TransformerRules(BackwardRules):
         elif tag == TF_SWIGLU:
             self._swiglu(saved, upstream, inputs, gradients, rows, cols)
         elif tag == TF_RESIDUAL:
-            self._residual(upstream, gradients, rows, cols)
+            self._residual(saved, upstream, gradients, rows, cols)
         else:
             raise Error("unknown transformer backward rule")
+
+    def _card(self, idx: Int, mut buf: DeviceBuffer[DType.float32], count: Int) raises:
+        # One identity-card record (the hand walk's `_rec`: tag by index,
+        # the used length, a draining read on self.ctx behind every launch
+        # queued so far). No-op unless the call is traced.
+        if self.trace_addr == 0:
+            return
+        var tp = MutPointer[IdentityTrace, MutUntrackedOrigin](unsafe_from_address=self.trace_addr)
+        _rec(self.ctx, tp[], self.prefix, idx, buf, count)
 
     def _add2(self, dst: FP, x: FP, y: FP, n: Int) raises:
         # bwd_add2_kernel, the hand path's two-term join, its geometry
@@ -321,6 +362,11 @@ struct TransformerRules(BackwardRules):
             )
             comptime if not BWD_FUSE_NORM2_RESIDUAL:
                 self._add2(gradients[0], _fp(bst.norm2_dx), saved.p2, m * dm)
+            # cards 10-13 (the add above writes none of 10-12)
+            self._card(10, bst.norm2_dot, m)
+            self._card(11, bst.dw_norm2, dm)
+            self._card(12, bst.norm2_dx, m * dm)
+            self._card(13, bst.d_residual1, m * dm)
         else:
             # S33-35, then S36 (or _AFN_NORM1_RESID's fused residual)
             comptime if _AFN_NORM1_RESID:
@@ -335,6 +381,11 @@ struct TransformerRules(BackwardRules):
                     bst.dvcoef, bst.ones, dy, x, weight, sumsq, own, own, False, m, dm, self.eps,
                 )
                 self._add2(gradients[0], _fp(bst.norm1_dx), saved.p2, m * dm)
+            # cards 33-36 (the add above writes none of 33-35)
+            self._card(33, bst.norm1_dot, m)
+            self._card(34, bst.dw_norm1, dm)
+            self._card(35, bst.norm1_dx, m * dm)
+            self._card(36, bst.d_x, m * dm)
 
     def _linear(
         self, saved: Args, upstream: FP, inputs: List[FP], gradients: List[FP],
@@ -378,8 +429,30 @@ struct TransformerRules(BackwardRules):
             )
         else:
             raise Error("transformer linear: unknown dX destination")
+        # cards, in the hand walk's order (TF_CARD_* above)
+        var card = saved.i9
+        if card == TF_CARD_DOWN:
+            self._card(2, bst.d_mlp_gated, m * k)
+            self._card(3, bst.dw_down, n * k)
+        elif card == TF_CARD_GATE:
+            self._card(7, bst.dw_gate, n * k)
+            self._card(8, bst.dw_up, n * k)
+            self._card(9, bst.d_norm2_out, m * k)
+        elif card == TF_CARD_O:
+            self._card(14, bst.d_o_proj_out, m * n)
+            self._card(15, bst.d_attn_ctx, m * k)
+            self._card(16, bst.dw_o, n * k)
+        elif card == TF_CARD_Q:
+            self._card(29, bst.dw_q, n * k)
+        elif card == TF_CARD_K:
+            self._card(30, bst.dw_k, n * k)
+        elif card == TF_CARD_V:
+            self._card(31, bst.dw_v, n * k)
+            self._card(32, bst.d_norm1_out, m * k)
 
-    def _residual(self, upstream: FP, gradients: List[FP], rows: List[Int], cols: List[Int]) raises:
+    def _residual(
+        self, saved: Args, upstream: FP, gradients: List[FP], rows: List[Int], cols: List[Int],
+    ) raises:
         # No launch: the branch's gradient storage is this node's (the
         # driver records both with the same custom_into storage) and x's
         # gradient is written whole by its norm (writes_total). A driver
@@ -390,6 +463,14 @@ struct TransformerRules(BackwardRules):
             var src = _view(self.ctx, upstream, n)
             var dst = _view(self.ctx, gradients[1], n)
             self.ctx.enqueue_copy(dst_buf=dst, src_buf=src)
+        if saved.i10 == 1:
+            # the layer's output: cards 0-1, d(residual2) as the backward
+            # reads it (in_d_residual2 after the seed copy; d_down_proj_out
+            # is a view of it)
+            ref bst = self.bst[]
+            var md = rows[1] * cols[1]
+            self._card(0, bst.in_d_residual2, md)
+            self._card(1, bst.d_down_proj_out, md)
 
     def _rope(self, saved: Args, upstream: FP, gradients: List[FP], rows: List[Int], cols: List[Int]) raises:
         # S27 / S28; saved.i0 heads, saved.i1 head_dim
@@ -413,6 +494,11 @@ struct TransformerRules(BackwardRules):
             grid_dim=(_blocks(m * width), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
+        ref bst = self.bst[]
+        if saved.i9 == TF_CARD_ROPE_Q:
+            self._card(27, bst.d_q_proj_out, m * width)
+        elif saved.i9 == TF_CARD_ROPE_K:
+            self._card(28, bst.d_k_proj_out, m * width)
 
     def _attention(self, upstream: FP, gradients: List[FP], rows: List[Int], cols: List[Int]) raises:
         # S17-26: the hand path's dispatch reads bst.d_attn_ctx and writes
@@ -437,11 +523,24 @@ struct TransformerRules(BackwardRules):
             var src = _view(self.ctx, upstream, m * qw)
             var dst = _view(self.ctx, _fp(bst.d_attn_ctx), m * qw)
             self.ctx.enqueue_copy(dst_buf=dst, src_buf=src)
-        var off = IdentityTrace.disabled()
-        bwd_attention_dispatch(
-            self.ctx, bst, fwd, self.b, self.l, s, self.pos0, key_lo, window, dims, scale,
-            False, off, String("autograd"),
-        )
+        # A traced call records cards 17-21 inside the dispatch (and runs
+        # what the hand walk ran with the trace on); `materialize` keeps the
+        # eager stages as the hand walk's argument did.
+        if self.trace_addr != 0:
+            var tp = MutPointer[IdentityTrace, MutUntrackedOrigin](unsafe_from_address=self.trace_addr)
+            bwd_attention_dispatch(
+                self.ctx, bst, fwd, self.b, self.l, s, self.pos0, key_lo, window, dims, scale,
+                self.materialize, tp[], self.prefix,
+            )
+        else:
+            var off = IdentityTrace.disabled()
+            bwd_attention_dispatch(
+                self.ctx, bst, fwd, self.b, self.l, s, self.pos0, key_lo, window, dims, scale,
+                self.materialize, off, String("autograd"),
+            )
+        self._card(22, bst.d_q_rope, m * qw)
+        self._card(23, bst.d_k_cache, self.b * nkv * s * hd)
+        self._card(24, bst.d_v_cache, self.b * nkv * s * hd)
         if Int(gradients[0]) != Int(bst.d_q_rope.unsafe_ptr()):
             var src_q = _view(self.ctx, _fp(bst.d_q_rope), m * qw)
             var dst_q = _view(self.ctx, gradients[0], m * qw)
@@ -463,6 +562,8 @@ struct TransformerRules(BackwardRules):
             grid_dim=(_blocks(m * kw), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
+        self._card(25, bst.d_k_rope, m * kw)
+        self._card(26, bst.d_v_proj_out, m * kw)
 
     def _swiglu(
         self, saved: Args, upstream: FP, inputs: List[FP], gradients: List[FP],
@@ -507,11 +608,16 @@ struct TransformerRules(BackwardRules):
                 grid_dim=(_blocks(n), 1, 1),
                 block_dim=(BWD_TPB, 1, 1),
             )
+        # cards 4-6 (gate's and up's gradients are the bst fields)
+        self._card(4, bst.d_silu_out, n)
+        self._card(5, bst.d_up_proj_out, n)
+        self._card(6, bst.d_gate_proj_out, n)
 
 
-def _dx_mode(mode: Int, layer: Int = 0) -> Args:
+def _dx_mode(mode: Int, layer: Int = 0, card: Int = TF_CARD_NONE) -> Args:
     var a = Args()
     a.i0 = mode
+    a.i9 = card
     a.i11 = layer
     return a^
 
@@ -592,19 +698,21 @@ def llama_decoder_layer_record(
     var norm1 = tape.custom_into(ex, [x, g_norm1], _fp(fwd.norm1_out), _fp(bst.d_norm1_out), m, dm, TF_RMS_NORM_INPUT, _at(s_norm1, layer))
     # v, k, q in the tape's reverse order q, k, v: dX into tmp0, tmp1, then
     # tmp2 and S32's add3 (q + k) + v into d(norm1.out)
-    var v = tape.custom_into(ex, [norm1, g_v], _fp(fwd.v_proj), _fp(bst.d_v_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP2_ADD3, layer))
-    var k = tape.custom_into(ex, [norm1, g_k], _fp(fwd.k_proj), _fp(bst.d_k_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP1, layer))
-    var q = tape.custom_into(ex, [norm1, g_q], _fp(fwd.q_proj), _fp(bst.d_q_proj_out), m, qw, TF_LINEAR, _dx_mode(TF_DX_TMP0, layer))
+    var v = tape.custom_into(ex, [norm1, g_v], _fp(fwd.v_proj), _fp(bst.d_v_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP2_ADD3, layer, TF_CARD_V))
+    var k = tape.custom_into(ex, [norm1, g_k], _fp(fwd.k_proj), _fp(bst.d_k_proj_out), m, kw, TF_LINEAR, _dx_mode(TF_DX_TMP1, layer, TF_CARD_K))
+    var q = tape.custom_into(ex, [norm1, g_q], _fp(fwd.q_proj), _fp(bst.d_q_proj_out), m, qw, TF_LINEAR, _dx_mode(TF_DX_TMP0, layer, TF_CARD_Q))
     var s_rope_k = Args()
     s_rope_k.i0 = nkv
     s_rope_k.i1 = hd
+    s_rope_k.i9 = TF_CARD_ROPE_K
     var k_rope = tape.custom_into(ex, [k], _fp(fwd.k_rope), _fp(bst.d_k_rope), m, kw, TF_ROPE, _at(s_rope_k, layer))
     var s_rope_q = Args()
     s_rope_q.i0 = nh
     s_rope_q.i1 = hd
+    s_rope_q.i9 = TF_CARD_ROPE_Q
     var q_rope = tape.custom_into(ex, [q], _fp(fwd.q_rope), _fp(bst.d_q_rope), m, qw, TF_ROPE, _at(s_rope_q, layer))
     var attn = tape.custom_into(ex, [q_rope, k_rope, v], _fp(fwd.ctxv), _fp(bst.d_attn_ctx), m, qw, TF_ATTENTION, _at(Args(), layer))
-    var o = tape.custom_into(ex, [attn, g_o], _fp(fwd.o_proj), _fp(bst.d_residual1), m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN, layer))
+    var o = tape.custom_into(ex, [attn, g_o], _fp(fwd.o_proj), _fp(bst.d_residual1), m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN, layer, TF_CARD_O))
     var residual1 = tape.custom_into_shared(ex, [x, o], _fp(fwd.residual1), o, m, dm, TF_RESIDUAL, _at(Args(), layer))
     var s_norm2 = Args()
     s_norm2.p0 = _fp(fwd.norm2_sumsq)
@@ -613,12 +721,12 @@ def llama_decoder_layer_record(
     var norm2 = tape.custom_into(ex, [residual1, g_norm2], _fp(fwd.norm2_out), _fp(bst.d_norm2_out), m, dm, TF_RMS_NORM_POST, _at(s_norm2, layer))
     # gate, up in the tape's reverse order up, gate: dX into tmp1, then tmp0
     # and S9's add2 into d(norm2.out)
-    var gate = tape.custom_into(ex, [norm2, g_gate], _fp(fwd.gate_proj), _fp(bst.d_gate_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP0_ADD2, layer))
-    var up = tape.custom_into(ex, [norm2, g_up], _fp(fwd.up_proj), _fp(bst.d_up_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP1, layer))
+    var gate = tape.custom_into(ex, [norm2, g_gate], _fp(fwd.gate_proj), _fp(bst.d_gate_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP0_ADD2, layer, TF_CARD_GATE))
+    var up = tape.custom_into(ex, [norm2, g_up], _fp(fwd.up_proj), _fp(bst.d_up_proj_out), m, it, TF_LINEAR, _dx_mode(TF_DX_TMP1, layer, TF_CARD_UP))
     var s_swiglu = Args()
     s_swiglu.p0 = _fp(fwd.silu_out)
     var gated = tape.custom_into(ex, [gate, up], _fp(fwd.gated), _fp(bst.d_mlp_gated), m, it, TF_SWIGLU, _at(s_swiglu, layer))
-    var down = tape.custom_into(ex, [gated, g_down], _fp(fwd.down_proj), din, m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN, layer))
+    var down = tape.custom_into(ex, [gated, g_down], _fp(fwd.down_proj), din, m, dm, TF_LINEAR, _dx_mode(TF_DX_PLAIN, layer, TF_CARD_DOWN))
     var s_out = Args()
     s_out.i10 = 1
     return tape.custom_into_shared(ex, [residual1, down], _fp(fwd.residual2), down, m, dm, TF_RESIDUAL, _at(s_out, layer))
@@ -637,6 +745,10 @@ def _layer_backward_tape(
     b: Int,
     l: Int,
     pos0: Int,
+    alias_in: Bool,
+    trace_addr: Int,
+    prefix: String,
+    materialize: Bool,
 ) raises:
     """The tape half of llama_decoder_layer_backward_autograd (the caller
     checked the arguments and owns the closing wait): record the layer,
@@ -646,9 +758,10 @@ def _layer_backward_tape(
     var tape = Tape()
     # ---- the block input, gradient into bst.d_x; then the layer
     # d(residual2): the seed's own storage under the hand path's entry alias
-    # (used in place), else in_d_residual2 (the tape's one bit copy, S0-1).
+    # (used in place; `alias_in`, never on a traced or materialized call),
+    # else in_d_residual2 (the tape's one bit copy, S0-1).
     var x = tape.variable_into(ex, _fp(x_dev), _fp(bst.d_x), m, dm)
-    var din = _fp(d_out) if IDN_BWD_ENTRY_ALIAS else _fp(bst.in_d_residual2)
+    var din = _fp(d_out) if alias_in else _fp(bst.in_d_residual2)
     var residual2 = llama_decoder_layer_record(tape, ex, x, bst, fwd, w, din, b, l, 0)
 
     # ---- one backward from d(residual2)
@@ -657,7 +770,7 @@ def _layer_backward_tape(
         ctx,
         MutPointer[LlamaBackwardStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=bst))),
         MutPointer[LlamaDeviceStages, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=fwd))),
-        _fp(cos_tab), _fp(sin_tab), w.eps, b, l, pos0,
+        _fp(cos_tab), _fp(sin_tab), w.eps, b, l, pos0, trace_addr, prefix, materialize,
     )
     tape.backward_with_rules(ex, residual2, seed, rules)
     tape.release(ex)
@@ -679,22 +792,35 @@ def llama_decoder_layer_backward_autograd(
     prefix: String,
     materialize: Bool = False,
 ) raises:
-    """`llama_decoder_layer_backward_device` with the stage order and the
-    fan-in sums owned by the autograd tape (same arguments, same outputs in
-    the same `bst` fields). Records no identity card: a traced or
-    materialized call is refused (use the hand path).
+    """The gradient of ONE `LlamaDecoderLayer.forward` call on the autograd
+    tape: the stage order and the fan-in sums are the tape's, every launch is
+    the transformer backward's own launcher, and the gradients land in the
+    `bst` fields (`d_x` and the nine weight gradients among them).
 
-    A NaN or infinity in `d_out` raises an error; the layer's gradients in
-    `bst` may already have been written when it does."""
+    `fwd` is the saved forward stages of this same call, `x_dev` the block
+    input `[B*L, d_model]` (the caller keeps it alive past its own wait),
+    `d_out` d(residual2) at `[B*L, d_model]`, and `pos0` the KV cache's used
+    count before the forward's append. A traced call records the identity
+    card entries 0-36 onto `trace` in card order (tags prefixed with
+    `prefix`); `materialize` keeps the attention's eager stages. Only the
+    default decoder block (RMSNorm, SwiGLU, full rotary at the default
+    base, no biases, no qk norm, no softcap) is served; other block options
+    raise an error.
+
+    A NaN or infinity in `d_out` raises an error. An untraced call scans
+    `d_out` while the layer runs, so its gradients in `bst` may already
+    have been written when it raises; a traced or materialized call scans
+    first and records nothing."""
     # The removed refusal lives here, not in core/six_lane_experiment_guards.mojo (the rebuild fence keeps a
     # transformer-only refusal out of the module 76 bindings import); every binding on the decoder-layer tape reaches it.
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
     comptime assert not (is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]() or is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]()), "removed 2026-10-19 (lane/del-transformer, dd4194a23): AUTOGRAD_TRANSFORMER(_OFF) selected the hand decoder-layer backward walk in the transformer session and saved-tape bindings; the tape was PROMOTED (same bits Apple = NVIDIA = AMD, 20 GRAD lines; session NV 5.231 -> 5.259 ms, AMD 3.415 -> 3.484, saved NV 5.118 -> 5.153, AMD 3.648 -> 3.710, average 1.01). The bindings call the tape only. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch."
-    if trace.enabled or materialize:
-        raise Error("llama backward (autograd): traced or materialized calls take the hand path")
     if not w.opts.is_default():
-        raise Error("llama backward (autograd): only the default Llama block is recorded")
+        raise Error(
+            "llama backward: only the default decoder block has a backward (RMSNorm at eps 1e-6, SwiGLU,"
+            + " full rotary at theta 10000, no biases, no qk norm, no softcap); this block's options are refused"
+        )
     var dims = fwd.dims.copy()
     dims.validate()
     var dm = dims.d_model
@@ -711,11 +837,19 @@ def llama_decoder_layer_backward_autograd(
         raise Error(String("llama backward: d_out has ") + String(len(d_out)) + " elements and [B, L, d_model] wants " + String(m * dm))
     if len(x_dev) < m * dm:
         raise Error(String("llama backward: x_dev holds ") + String(len(x_dev)) + " floats and the block input [B, L, d_model] wants " + String(m * dm))
-    comptime if AUTOGRAD_REFUSE_DEFER:
+    # A traced or materialized call keeps the entry copy (stages 0-1 hold the
+    # gradient as the card names them) and refuses a non-finite d_out before
+    # any card is recorded, as the hand walk did.
+    var traced = trace.enabled
+    var plain = not (traced or materialize)
+    var alias_in = IDN_BWD_ENTRY_ALIAS and plain
+    var trace_addr = Int(MutPointer(to=trace)) if traced else 0
+    if AUTOGRAD_REFUSE_DEFER and plain:
         # idea J: the verdict is queued now and read at the closing wait
         var scan = DeferredNonfiniteScan(ctx, d_out, len(d_out))
         var ex = DeviceExec(ctx)
-        _layer_backward_tape(ctx, ex, bst, fwd, w, cos_tab, sin_tab, x_dev, d_out, b, l, pos0)
+        _layer_backward_tape(ctx, ex, bst, fwd, w, cos_tab, sin_tab, x_dev, d_out, b, l, pos0,
+            alias_in, trace_addr, prefix, materialize)
         scan.enqueue_readback(ctx)
         # Drain the queue (and the tape storage freed) before the caller's
         # downloads; ex's destructor would drain it again.
@@ -724,9 +858,34 @@ def llama_decoder_layer_backward_autograd(
         if bad >= 0:
             raise Error(String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad) + " REFUSED")
     else:
-        var bad = device_first_nonfinite(ctx, d_out, len(d_out))
-        if bad >= 0:
-            raise Error(String("llama backward: NaN or infinity in d_residual2 at flat index ") + String(bad) + " REFUSED")
+        # the hand walk's synchronous refusal, word for word (NaN vs infinity)
+        bwd_refuse_nonfinite_d_out(ctx, d_out)
         var ex = DeviceExec(ctx)
-        _layer_backward_tape(ctx, ex, bst, fwd, w, cos_tab, sin_tab, x_dev, d_out, b, l, pos0)
+        _layer_backward_tape(ctx, ex, bst, fwd, w, cos_tab, sin_tab, x_dev, d_out, b, l, pos0,
+            alias_in, trace_addr, prefix, materialize)
         ex.sync()
+
+
+def llama_decoder_layer_backward(
+    ctx: DeviceContext,
+    mut bst: LlamaBackwardStages,
+    mut fwd: LlamaDeviceStages,
+    mut w: LlamaDeviceWeights,
+    mut cos_tab: DeviceBuffer[DType.float32],
+    mut sin_tab: DeviceBuffer[DType.float32],
+    mut x_dev: DeviceBuffer[DType.float32],
+    d_out: List[Float32],
+    b: Int, l: Int, pos0: Int,
+    mut trace: IdentityTrace, prefix: String,
+    materialize: Bool = False,
+) raises:
+    """`llama_decoder_layer_backward_autograd` with d(residual2) given as a
+    host list `[B*L*d_model]`: uploads it, runs the layer backward and waits."""
+    if len(d_out) != b * l * fwd.dims.d_model:
+        raise Error("llama backward: d_out does not match [B, L, d_model]")
+    var d_in = _upload(ctx, d_out)
+    llama_decoder_layer_backward_autograd(ctx, bst, fwd, w, cos_tab, sin_tab,
+        x_dev, d_in, b, l, pos0, trace, prefix, materialize)
+    step_count_sync()
+    ctx.synchronize()
+    _ = d_in^
