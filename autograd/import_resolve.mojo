@@ -692,6 +692,8 @@ def _r_concat(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
         shapes.append(c.shape(ins[i]))
     var r = len(shapes[0])
     var ax = _norm_axis(_ai(g, n, "axis", 0), r)
+    if ax >= r:
+        raise _fatal("Concat of scalars")
     for j in range(1, len(shapes)):  # cpu-route: model file parsing (the operands)
         var bad = len(shapes[j]) != r
         if not bad:
@@ -730,6 +732,8 @@ def _r_concat(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
 def _r_split(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
     var s = c.shape(_in(n, 0))
     var ax = _norm_axis(_ai(g, n, "axis", 0), len(s))
+    if ax >= len(s):
+        raise _fatal("Split of a scalar")
     var k = len(n.outputs)
     var sizes = List[Int]()
     if _has_in(n, 1):
@@ -814,6 +818,8 @@ def _r_slice(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
     var pick_ln = s[0] if len(s) > 0 else 0
     for i in range(len(starts)):  # cpu-route: model file parsing (one per sliced axis)
         var a = _norm_axis(axes[i], len(s))
+        if a >= len(s):
+            raise _fatal("Slice of a scalar")
         var ln = 0
         var b = _slice_range(starts[i], ends[i], steps[i], s[a], ln)
         out[a] = ln
@@ -826,7 +832,10 @@ def _r_slice(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
     if v.ok and len(s) == 1:
         folded.ok = True
         for i in range(pick_ln):  # cpu-route: model file parsing (folded shape integers)
-            folded.v.append(v.v[pick_b + i * pick_sp])
+            var at = pick_b + i * pick_sp
+            if at < 0 or at >= len(v.v):
+                raise _fatal("folded values do not cover their shape")
+            folded.v.append(v.v[at])
     var res = List[ROut]()
     res.append(_outf(out, c.dtype(x), folded))
     return res^
@@ -838,11 +847,11 @@ def _r_gather(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
     var s = c.shape(data)
     var si = c.shape(idx)
     var ax = _norm_axis(_ai(g, n, "axis", 0), len(s))
-    if ax >= len(s):
-        raise _fatal("Gather of a scalar")
     var out = _cat(_cat(_slice(s, 0, ax), si), _slice(s, ax + 1, len(s)))
     var iv = c.maybe_ints(g, idx)
     if iv.ok:
+        if ax >= len(s):
+            raise _fatal("Gather of a scalar")
         var bad = List[Int]()
         for i in range(len(iv.v)):  # cpu-route: model file parsing (folded shape integers)
             if not (-s[ax] <= iv.v[i] and iv.v[i] < s[ax]):
@@ -856,7 +865,10 @@ def _r_gather(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
         folded.ok = True
         for k in range(len(iv.v)):  # cpu-route: model file parsing (folded shape integers)
             var i = iv.v[k]
-            folded.v.append(dv.v[i + s[0] if i < 0 else i])
+            var at = i + s[0] if i < 0 else i
+            if at < 0 or at >= len(dv.v):
+                raise _fatal("folded values do not cover their shape")
+            folded.v.append(dv.v[at])
     var res = List[ROut]()
     res.append(_outf(out, c.dtype(data), folded))
     return res^
