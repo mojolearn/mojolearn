@@ -350,7 +350,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         if kind == "mamba1":
             var rank = (dm + 15) // 16
             fields["dt_rank"] = PythonObject(rank)
-            for shape in [[dm], [2 * di, dm], [di, 1, 4], [di], [rank + 32, di], [di, rank], [di], [di, 16], [di], [dm, di]]:  # driver-loop: over fixed Mamba1 tensor shapes
+            var mamba_shapes = List[List[Int]]([dm], [2 * di, dm], [di, 1, 4], [di], [rank + 32, di], [di, rank], [di], [di, 16], [di], [dm, di])
+            for shape in mamba_shapes:  # driver-loop: over fixed Mamba1 tensor shapes
                 shapes.append(py_ints(shape))
         else:
             if dm % 32 != 0:
@@ -367,7 +368,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             pair.append(bi.float(limit[0]))
             pair.append(bi.float(limit[1]))
             fields["dt_limit"] = bi.tuple(pair)
-            for shape in [[dm], [2 * di + 256 + nh, dm], [cd, 1, 4], [cd], [nh], [nh], [nh], [di], [dm, di]]:  # driver-loop: over fixed Mamba2 tensor shapes
+            var mamba_shapes = List[List[Int]]([dm], [2 * di + 256 + nh, dm], [cd, 1, 4], [cd], [nh], [nh], [nh], [di], [dm, di])
+            for shape in mamba_shapes:  # driver-loop: over fixed Mamba2 tensor shapes
                 shapes.append(py_ints(shape))
     for i in range(len(names)):  # driver-loop: over fixed block weight slots
         var name = names[i]
@@ -517,7 +519,7 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
                 var cols = Int(py=value.shape[1])
                 var sliced = generation_array([end - begin, cols])
                 if end > begin:
-                    memcpy(f32_ptr(Int(py=sliced._addr)), f32_ptr(Int(py=value._addr)) + begin * cols, (end - begin) * cols)
+                    memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=value._addr)) + begin * cols, count=(end - begin) * cols)
                 value = sliced
             weights[key] = _model_pack(value, String(format), bindings["linalg"], context) if packed else value
         layers.append(weights)
