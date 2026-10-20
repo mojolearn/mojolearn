@@ -57,6 +57,8 @@ def _copy_state[E: Exec & Movable & Deinitable](
         for k in range(len(outputs)):  # driver-loop: over loop-carried state tensors
             var slot = s._slot(outputs[k])
             var sh = s.shapes[slot]
+            if s.int_words[slot]:
+                raise Error("ValueError: while_loop state outputs must hold floating-point values")
             if sh.ndim != body.in_shapes[k].ndim:
                 raise Error("while_loop body must preserve each state tensor's rank")
             var t = s.tensors[slot]
@@ -105,13 +107,13 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("while_loop body must return one tensor per input")
         for k in range(body.n_in):  # driver-loop: over state input kinds
             if body.in_kinds[k] == PROGRAM_IN_IDS:
-                raise Error("while_loop state inputs must hold floating-point values")
+                raise Error("ValueError: while_loop state inputs must hold floating-point values")
         for k in range(len(body.outs)):  # driver-loop: over int32-word outputs cannot become float state
             var value_ref = body.outs[k]
             if value_ref >= body.n_in:
                 var node = value_ref - body.n_in
                 if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
-                    raise Error("while_loop state outputs must hold floating-point values")
+                    raise Error("ValueError: while_loop state outputs must hold floating-point values")
     if Bool(py=optimize):
         var body_plan = program_optimize(body)
         var condition_plan = program_optimize(condition)
@@ -178,7 +180,11 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
         swap(held, s[].prog_tape)
         for k in range(len(buffers)):  # driver-loop: over current state owners
             s[].ex.free(buffers[k])
-        raise Error("program control flow after " + String(iterations) + " iterations: " + String(err))
+        var message = String(err)
+        var context = "program control flow after " + String(iterations) + " iterations: "
+        if message.startswith("ValueError: "):
+            raise Error("ValueError: " + context + message[byte=11:])
+        raise Error(context + message)
     s[]._drop_temps(temps)
     swap(held, s[].tape)
     swap(held, s[].prog_tape)

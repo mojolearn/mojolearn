@@ -42,12 +42,13 @@ def replay_values[E: Exec & Movable & Deinitable](
 ) raises -> List[Int]:
     var vals = List[Int]()
     for j in range(len(inputs)):  # driver-loop: over program inputs
-        var h = s._leaf(inputs[j], shapes[j])
+        var h = s._leaf(inputs[j], shapes[j], p.in_kinds[j] == PROGRAM_IN_IDS)
         temps.append(h)
         vals.append(h)
     for j in range(len(params)):  # driver-loop: over program parameters
         var t = s.tape.variable_nd(s.ex, params[j], p.param_shapes[j], trainable[j])
         var h = s._add(t, 0, trainable[j], 0)
+        s.int_words[s._slot(h)] = s.int_words[s._slot(p.params[j])]
         temps.append(h)
         phs.append(h)
     for k in range(p.n_nodes()):  # driver-loop: over captured operations
