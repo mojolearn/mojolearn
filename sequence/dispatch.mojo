@@ -122,7 +122,17 @@ from sequence.ops import (
 )
 from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_chunk_sumsq, op_af_blk_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply, op_lamb_blk, op_lamb_segfold, op_lamb_clip, op_lamb_trust, op_lamb_apply_all
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
-from sequence.mlp import op_act, op_act_bwd, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
+from sequence.mlp import (
+    op_act,
+    op_act_bwd,
+    op_gemm_epi,
+    op_gemm_epi_tail,
+    op_l2grad,
+    op_mlp_bloss,
+    op_mlp_rowloss,
+    op_sumsq,
+)
+from autograd.kernels.mlp import op_divs
 from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
 from autograd.kernels.linear import op_agk_gemm_epi, op_colsum_div
 from sequence.mlp import op_mlp_lb_epoch_fold, op_mlp_lb_epoch_part, op_mlp_lb_fold, op_mlp_lb_part
@@ -133,7 +143,8 @@ from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
 from sequence.prophet import op_prophet_prep, op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_bwd_scan, op_cell_fwd_scan
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_fwd_scan
+from autograd.kernels.recurrent_scan import op_cell_bwd_scan
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas

@@ -295,11 +295,6 @@ def op_l2grad(t: Int, a: Args):
     st(a.p0, t, div(fma3(a.f0, ld(a.p1, t), ld(a.p0, t)), a.f1))
 
 
-def op_divs(t: Int, a: Args):
-    """p0[t] = p0[t] / f0."""
-    st(a.p0, t, div(ld(a.p0, t), a.f0))
-
-
 def op_gemm_epi(t: Int, a: Args):
     """ONE LAUNCH FOR A GEMM AND ITS ELEMENTWISE FOLLOWER (Apple speed,
     2026-09-28; each was a launch of its own): `op_gemm` for element t, then,

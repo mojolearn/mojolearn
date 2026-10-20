@@ -26,7 +26,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -215,7 +215,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -365,7 +365,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -518,7 +518,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -806,7 +806,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -958,7 +958,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -1121,7 +1121,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -1284,7 +1284,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -1432,7 +1432,7 @@
       "caller_paths": [
         "training/dev_tensors.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "ab": {
         "candidate": {
@@ -1816,7 +1816,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -2130,7 +2130,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "kernels": [
@@ -2252,7 +2252,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "kernels": [
@@ -2347,7 +2347,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "kernels": [
@@ -2437,7 +2437,7 @@
         "transformer/experiments/summary_model.mojo",
         "transformer/experiments/summary_model_host.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "transformer/experiments/profile.mojo",
@@ -2455,7 +2455,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -2627,7 +2627,7 @@
       },
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "caller_paths": [
         "python/mojolearn/_transformer_impl.py",
@@ -2638,7 +2638,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "kernels": [
@@ -2715,7 +2715,7 @@
       },
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "caller_paths": [
         "python/mojolearn/_transformer_impl.py",
@@ -2726,7 +2726,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "kernels": [
@@ -2802,7 +2802,7 @@
         "transformer/experiments/norm_profile.mojo",
         "transformer/experiments/attention_schedules.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "transformer/experiments/profile.mojo",
@@ -2821,7 +2821,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -3004,7 +3004,7 @@
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "caller_paths": [
         "python/mojolearn/_transformer_impl.py",
@@ -3015,7 +3015,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "kernels": [
@@ -3348,7 +3348,7 @@
         }
       },
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "caller_paths": [
         "python/mojolearn/_transformer_impl.py",
@@ -3359,7 +3359,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "kernels": [
@@ -3454,7 +3454,7 @@
         "training/neural_attention_owner.mojo",
         "transformer/host/attention_tape.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -3568,7 +3568,7 @@
         "training/neural_attention_owner.mojo",
         "transformer/host/attention_tape.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -3794,10 +3794,10 @@
       "implementation_paths": [
         "mamba/impl/ops/neural_scan_profile.mojo",
         "mamba/impl/ops/neural_mamba_scan.mojo",
-        "mamba/impl/ops/selective_scan_backward.mojo",
+        "autograd/kernels/mamba1_scan.mojo",
         "mamba/impl/modeling/modeling_mamba.mojo",
         "mamba/checks/mamba_oracle.mojo",
-        "mamba/checks/mamba_backward.mojo",
+        "autograd/kernels/mamba1_proj.mojo",
         "mamba/host/gen/neural_scan_profile.mojo",
         "mamba/host/gen/neural_mamba_scan.mojo",
         "mamba/host/gen/selective_scan_backward.mojo",
@@ -3814,7 +3814,7 @@
         "python/mojolearn/_mamba_impl.py",
         "bindings/_mojolearn_neural_host.mojo",
         "mamba/impl/modeling/modeling_mamba.mojo",
-        "mamba/checks/mamba_backward.mojo"
+        "autograd/kernels/mamba1_proj.mojo"
       ],
       "arithmetic_and_host_contract": "New fp32 profile: absolute32 adjacent prefix-affine trees, six slots per state chain, prefill/decode carry and canonical-tree VJP. Device, direct/generated host and alternate host inference share profile2 state ABI.",
       "full_workload_selection": {
@@ -4205,14 +4205,14 @@
         "MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"
       ],
       "implementation_paths": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "caller_paths": [
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba3_backward.mojo",
+        "autograd/kernels/mamba3_proj.mojo",
         "python/mojolearn/_samba_impl.py"
       ],
       "arithmetic_and_host_contract": "Inherited fixed64 suffix graph already exists. Candidate computes each descending exclusive suffix seed once for identical replay; generated host mirrors in-place seed transformation.",
@@ -4303,14 +4303,14 @@
       ],
       "implementation_paths": [
         "mamba/impl/ops/neural_gradient_profile.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo"
       ],
       "caller_paths": [
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba2_backward.mojo"
+        "autograd/kernels/mamba2_proj.mojo"
       ],
       "arithmetic_and_host_contract": "Existing fixed256-row partials now merge adjacent pairs with odd-tail carry. Device/generated host import shared pure helper for convW/b,A/A_log,dt_bias terminal gradients.",
       "full_workload_selection": {
@@ -5462,12 +5462,12 @@
       "id": "NN50",
       "implementation_status": "wired_draft",
       "implementation_paths": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
       "caller_paths": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
@@ -6808,7 +6808,7 @@
         "experiments/performance_ideas/F08/caller.py",
         "experiments/performance_ideas/apple_fast/lm_task.py",
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "experiments/performance_ideas/F08/compile_audit.json"
       ],
       "candidate_defines": [
@@ -7300,7 +7300,7 @@
         "experiments/performance_ideas/I08/check.mojo",
         "mamba/impl/modules/ssd_minimal.mojo",
         "experiments/performance_ideas/I08/backward_check.mojo",
-        "mamba/impl/modules/mamba2_prefill_backward.mojo",
+        "autograd/kernels/mamba2_prefill.mojo",
         "experiments/performance_ideas/I08/compile_matrix.json",
         "experiments/performance_ideas/I08/coverage.md",
         "experiments/performance_ideas/I08/native_arms.json",
@@ -8183,7 +8183,7 @@
         "MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF=1"
       ],
       "files": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "scope": "Inherited fixed64 default-on suffix; NN38 reuses seeds."
@@ -8192,7 +8192,7 @@
       "name": "State/CNN reference: existing_m2_gradient_leaves",
       "ids": [],
       "files": [
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo"
       ],
       "scope": "Existing fixed256 row leaves/serial final merge; NN39 changes final merge only."
@@ -8535,7 +8535,7 @@
       "title": "Direction-specific sticky refusal latch",
       "implementation_paths": [
         "transformer/impl/llama/fused_attention.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "baseline": {
         "compile_defines": [],
@@ -8867,7 +8867,7 @@
       "id": "BWD_GATED_SILU_FUSION",
       "title": "Existing backward gated SiLU fusion",
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "baseline": {
         "compile_defines": [
@@ -8890,7 +8890,7 @@
       "id": "BWD_RMS_DH_DOT_FUSION",
       "title": "Existing RMS backward dh and row-dot fusion",
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "baseline": {
         "compile_defines": [
@@ -8915,7 +8915,7 @@
       "id": "BWD_RMS_SHAPE_RULE_REMOVAL",
       "title": "Remove benchmark-dimension backward RMS dispatcher",
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/impl/llama/fused_attention.mojo"
       ],
       "baseline": {
@@ -8942,7 +8942,7 @@
       "id": "BWD_NORM2_RESIDUAL_FUSION",
       "title": "Post-attention RMS backward and residual gradient fusion",
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "baseline": {
         "compile_defines": [
@@ -9014,7 +9014,7 @@
       "implementation_paths": [
         "core/step_glue.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "checks/kernel_matrix.mojo"
       ],
       "baseline": {
@@ -9045,7 +9045,7 @@
       "id": "IDN_BWD_ENTRY_ALIAS",
       "title": "Read-only incoming-gradient view",
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "baseline": {
         "compile_defines": [

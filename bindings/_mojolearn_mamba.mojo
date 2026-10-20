@@ -218,21 +218,21 @@ from mamba.impl.modules.mamba3 import (
 )
 
 
-from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
+from autograd.kernels.mamba2_proj import ANY_BWD2_SABOTAGE
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the hand Mamba-3 prefill backward walk; superseded by the tape) deleted 2026-10-19 by bc0a9a24e; code recoverable at ba37327dc^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch
-from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
+from autograd.kernels.mamba3_proj import ANY_BWD3_SABOTAGE
 # The Mamba-1 / Mamba-2 backward entries assemble the VJP on the tape
 # (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
 from autograd.rules_mamba3 import mamba3_tape_backward, mamba3_tape_backward_on
-from mamba.impl.modeling.modeling_mamba_prefill_backward import Mamba1PrefillGradients
-from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
-from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
-from mamba.impl.modeling.modeling_mamba_backward import ANY_BWD_BLOCK_SABOTAGE
-from mamba.impl.ops.selective_scan_backward import ANY_BWD_SCAN_SABOTAGE
+from autograd.kernels.mamba1_prefill import Mamba1PrefillGradients
+from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
+from autograd.kernels.mamba1_proj import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
+from autograd.kernels.mamba1 import ANY_BWD_BLOCK_SABOTAGE
+from autograd.kernels.mamba1_scan import ANY_BWD_SCAN_SABOTAGE
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 

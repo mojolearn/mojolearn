@@ -63,7 +63,7 @@ THERE ARE NO SABOTAGE ARMS IN THIS FILE, ON PURPOSE
 `transformer_oracle.mojo` has none either. The oracle is the ANSWER; the
 device spelling is what gets sabotaged and the check file is what arms it.
 All twenty-two arms of plan section 6.3 live in
-`transformer/checks/transformer_backward.mojo`, except two which are the
+`autograd/kernels/transformer.mojo`, except two which are the
 GEMM lane's own (`SAB_BWD_UNTRANSPOSED`, `SAB_BWD_OPERAND_ORDER`) and reach
 this file through the routing functions it calls -- which is deliberate, and
 is DEVIATION 1425.

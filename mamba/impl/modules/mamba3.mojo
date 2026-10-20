@@ -76,7 +76,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mamba.impl.modules.mamba3_transfer import m3_upload as mamba_upload, m3_download as mamba_download
-from mamba.impl.modules.mamba3_refusal import m3_refuse_nonfinite_named
+from autograd.kernels.mamba_refusal import m3_refuse_nonfinite_named
 from core.identity_trace import IdentityTrace
 # Public Mamba forward keeps full-FP32 projection operands in every mode.
 # False bypasses NVIDIA TF32 vendor dispatch; IDENTICAL arithmetic is unchanged.

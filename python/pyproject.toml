@@ -224,6 +224,9 @@ mojolearn = [
     # exists in the git repository does not travel with the artifact.
     "CITATION.cff",
     "ALPHA_API.md",
+    # the verified pretrained-model catalog (mojolearn.models.catalog()):
+    # revisions, hashes and numbers only, written by tools/model_catalog.py
+    "models/catalog.json",
     "*.so", "identical/*.so", ".dylibs/*.dylib",
     # DEVIATION 2610: the host (CPU) bindings, loaded by path or through
     # _backend.load_host_module, never by the GPU vendor selector. Every

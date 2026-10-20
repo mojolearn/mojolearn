@@ -106,11 +106,11 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args, OP_COPY
 
 from core.identity_trace import IdentityTrace
-from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
 
 # ---- Mamba-1
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
-from mamba.checks.mamba_backward import (
+from autograd.kernels.mamba1_proj import (
     PROJ_OUT,
     PROJ_DT,
     PROJ_IN,
@@ -138,7 +138,7 @@ from mamba.impl.modeling.modeling_mamba import (
     mamba_upload,
     mamba_zeros,
 )
-from mamba.impl.modeling.modeling_mamba_backward import (
+from autograd.kernels.mamba1 import (
     mamba_bwd_concat_xp_into,
     mamba_bwd_concat_p_into,
     mamba_bwd_conv_tap_product_into,
@@ -148,7 +148,7 @@ from mamba.impl.modeling.modeling_mamba_backward import (
     mamba_bwd_gate_into,
     mamba_bwd_norm_into,
 )
-from mamba.impl.ops.selective_scan_backward import (
+from autograd.kernels.mamba1_scan import (
     bwd_da_partial_floats,
     bwd_dh_floats,
     bwd_h_checkpoint_floats,
@@ -158,14 +158,14 @@ from mamba.impl.ops.selective_scan_backward import (
     selective_scan_bwd_scan_into,
     selective_scan_checkpoint_fn,
 )
-from mamba.impl.modeling.modeling_mamba_prefill_backward import (
+from autograd.kernels.mamba1_prefill import (
     Mamba1PrefillGradients,
     m1_conv_w_interleave_kernel,
 )
 
 # ---- Mamba-2
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM, M2_D_CONV, Mamba2Dims, Mamba2Weights
-from mamba.checks.mamba2_backward import PROJ2_OUT, PROJ2_IN, mamba2_backward_proj_a_into, mamba2_backward_proj_b_into
+from autograd.kernels.mamba2_proj import PROJ2_OUT, PROJ2_IN, mamba2_backward_proj_a_into, mamba2_backward_proj_b_into
 from mamba.impl.modules.mamba2 import (
     Mamba2DeviceStages,
     Mamba2DeviceState,
@@ -173,7 +173,7 @@ from mamba.impl.modules.mamba2 import (
     allocate_inference_cache,
     mamba2_block_forward,
 )
-from mamba.impl.modules.mamba2_backward import (
+from autograd.kernels.mamba2 import (
     M2_BWD_TPB,
     Mamba2BackwardTail,
     mamba2_backward_d_skip_into,
@@ -183,7 +183,7 @@ from mamba.impl.modules.mamba2_backward import (
     mamba2_pack_inproj_grad_kernel,
 )
 from mamba.impl.modules.ssd_minimal import m2_q_eff
-from mamba.impl.ops.mamba2_ssd_backward import (
+from autograd.kernels.mamba2_ssd import (
     Mamba2SSDBackwardState,
     Mamba2SSDDiscretizeBackward,
     Mamba2ConvBackward,
@@ -197,7 +197,7 @@ from mamba.impl.ops.mamba2_ssd_backward import (
     mamba2_conv_backward_prefill_into,
     mamba2_s18_direct_dpass_into,
 )
-from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
+from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
 
 # The Mamba-1/2 block backward runs on the tape (promoted 2026-10-19 by Andrew's decision: the tape is 3-4% slower in
 # one timed series per arm with the host copies in both clocks, mamba/checks/mamba_tape_backward_time.mojo n=20:

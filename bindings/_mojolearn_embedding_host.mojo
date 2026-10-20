@@ -7,7 +7,7 @@ and embedding-sort lanes of tools/identity_break.py).
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The arithmetic is
 `embedding/host/embedding_host.mojo`, the device launch of
 `embedding/checks/embedding_identical.mojo` (and PLAN_SORT's
-`embedding/checks/embedding_sort.mojo`) restated on the host; that file's
+`autograd/kernels/embedding_sort.mojo`) restated on the host; that file's
 header names every kernel it restates. The refusals are the GPU binding's
 (`bindings/_mojolearn_embedding.mojo`), in its words and its order, through
 the same `embedding/checks/embedding_oracle.mojo` functions, so a bad call

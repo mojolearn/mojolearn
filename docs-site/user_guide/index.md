@@ -2,6 +2,7 @@
 
 ```{toctree}
 :maxdepth: 1
+:glob:
 
 quickstart
 choosing_an_estimator
@@ -19,6 +20,7 @@ devices
 saving_models
 neural_networks
 autograd
+verified_models*
 language_models
 cross_vendor_training
 ```

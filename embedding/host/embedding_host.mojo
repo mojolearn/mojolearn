@@ -13,7 +13,7 @@ and no GPU binding imports this file. The profile is
 restates, statement for statement, what the DEVICE entry the GPU binding
 calls launches (`embedding/checks/embedding_identical.mojo`,
 `identical_embedding_forward_into` and `_emb_backward_launch`, and
-`embedding/checks/embedding_sort.mojo` for PLAN_SORT), because the cells a
+`autograd/kernels/embedding_sort.mojo` for PLAN_SORT), because the cells a
 CPU column is diffed against are the device's bits and the device and the
 oracle are two spellings the contract says agree, not one spelling.
 
@@ -76,7 +76,7 @@ from embedding.checks.embedding_oracle import EmbConfig
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime EMBEDDING_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
-#: `embedding/checks/embedding_sort.mojo`'s plan codes and sentinel, restated
+#: `autograd/kernels/embedding_sort.mojo`'s plan codes and sentinel, restated
 #: by value because that file imports `std.gpu`; the host binding's
 #: `embedding_backward` refuses any other plan code in the GPU binding's words.
 comptime HOST_PLAN_SCAN = 0

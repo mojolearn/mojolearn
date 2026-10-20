@@ -272,20 +272,34 @@ def ops_upload_py[E: Exec & Movable & Deinitable, KIND: Int](
     float32 on the executor); ip = [requires_grad], or [requires_grad,
     ndim, d0 .. d(ndim-1)] for a C-order array of another rank whose
     row-major (rows, cols) matrix view `desc` describes (lane
-    ag-rankn-python). Returns the new tensor's handle."""
+    ag-rankn-python). Word 0 is a flag word: bit 0 requires_grad, bit 1
+    (lane ag-program-embedding) an ids tensor of int32 words
+    (OpsSession.upload_ids; the array must hold integers). Returns the new
+    tensor's handle."""
     if len(ip) < 1:
         raise Error("ops_upload: requires [requires_grad] or [requires_grad, ndim, dims...]")
     var src = cast_in_of(desc, "x")
     var p = ops_session[E, KIND](Int(py=sid))
+    var flags = ival(ip, 0)
+    var as_ids = (flags & 2) != 0
+    if as_ids and (flags & 1) != 0:
+        raise Error("ops: ids take no gradient")
     if len(ip) == 1:
-        return PythonObject(p[].upload(src, ival(ip, 0) != 0))
+        if as_ids:
+            var d2 = List[Int](capacity=2)
+            d2.append(src.rows)
+            d2.append(src.cols)
+            return PythonObject(p[].upload_ids(src, rn_shape(d2, "ops: ids")))
+        return PythonObject(p[].upload(src, (flags & 1) != 0))
     var nd = ival(ip, 1)
     if nd < 0 or len(ip) != 2 + nd:
         raise Error("ops_upload: the shape takes ndim and ndim dimensions")
     var dims = List[Int](capacity=nd)
     for k in range(nd):  # small-loop(nd: the tensor rank, at most 8): argument parsing, no data
         dims.append(ival(ip, 2 + k))
-    return PythonObject(p[].upload_nd(src, rn_shape(dims, "ops: tensor"), ival(ip, 0) != 0))
+    if as_ids:
+        return PythonObject(p[].upload_ids(src, rn_shape(dims, "ops: ids")))
+    return PythonObject(p[].upload_nd(src, rn_shape(dims, "ops: tensor"), (flags & 1) != 0))
 
 
 def ops_load_weights_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -574,7 +588,9 @@ def _dims_out(shapes: List[ShapeN]) raises -> PythonObject:
 
 
 def program_info(pid: Int, p: OpsProgram) raises -> PythonObject:
-    """[program id, input shapes, output shapes, parameter handles]."""
+    """[program id, input shapes, output shapes, parameter handles, input
+    kinds (autograd/program.mojo PROGRAM_IN_*: 0 float32 values, 1 int32
+    ids)]."""
     var res = Python.list()
     res.append(PythonObject(pid))
     res.append(_dims_out(p.in_shapes))
@@ -583,6 +599,10 @@ def program_info(pid: Int, p: OpsProgram) raises -> PythonObject:
     for j in range(len(p.params)):  # small-loop(params: a program's parameter handles): result packing, no data
         ph.append(PythonObject(p.params[j]))
     res.append(ph)
+    var kinds = Python.list()
+    for k in range(len(p.in_kinds)):  # small-loop(in_kinds: a program's inputs): result packing, no data
+        kinds.append(PythonObject(p.in_kinds[k]))
+    res.append(kinds)
     return res
 
 

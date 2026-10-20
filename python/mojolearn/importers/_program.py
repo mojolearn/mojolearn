@@ -62,7 +62,9 @@ class ImportedProgram(Program):
 
         Pass one array per input, in the order of :attr:`inputs`, or by
         input name as keywords. Each array must have that input's shape; any
-        bool, integer or float dtype is used as float32. Returns one array
+        bool, integer or float dtype is used as float32, except that an
+        integer input the model reads as indices (such as a language model's
+        token ids) takes an integer array of ids. Returns one array
         for a model with one output, else a tuple in the order of
         :attr:`outputs`.
         """

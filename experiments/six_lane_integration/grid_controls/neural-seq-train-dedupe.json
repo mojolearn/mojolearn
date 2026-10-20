@@ -15,8 +15,8 @@
    },
    "default": "on",
    "source": [
-    "mamba/impl/modules/mamba3_backward.mojo:1321",
-    "mamba/impl/modules/mamba3_backward.mojo:1397",
+    "autograd/kernels/mamba3.mojo:1321",
+    "autograd/kernels/mamba3.mojo:1397",
     "mamba/host/gen/mamba3_backward.mojo:1012",
     "core/six_lane_experiment_guards.mojo:195"
    ],
@@ -153,7 +153,7 @@
    "default": "0",
    "source": [
     "mamba/impl/ops/neural_gradient_profile.mojo:21",
-    "mamba/impl/ops/mamba2_ssd_backward.mojo:80"
+    "autograd/kernels/mamba2_ssd.mojo:80"
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": true,
@@ -895,7 +895,7 @@
    },
    "default": "off",
    "source": [
-    "embedding/owned_runs.mojo:24"
+    "autograd/kernels/embedding_runs.mojo:24"
    ],
    "binding": "_mojolearn_byte_lm",
    "bits_change": false,

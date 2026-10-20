@@ -1362,8 +1362,8 @@ check-device-scan-batch = "mojo run -j 1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . c
 check-transformer-weight-validation = "mojo run -j 1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . transformer/checks/weight_validation_check.mojo"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
-# (mamba/impl/ops/selective_scan_backward.mojo and
-# mamba/impl/modeling/modeling_mamba_backward.mojo).
+# (autograd/kernels/mamba1_scan.mojo and
+# autograd/kernels/mamba1.mojo).
 # **IT ASSERTS NOTHING ABOUT ANY GRADIENT**: no value is checked, no bits are
 # compared, no kernel is launched, and plan gates MB1-MB10 do not exist.
 #

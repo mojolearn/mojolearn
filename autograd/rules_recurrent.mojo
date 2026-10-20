@@ -43,18 +43,8 @@ from sequence.ops import (
     gates_of,
 )
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
-from sequence.recurrent import (
-    Net,
-    Work,
-    RnnStep,
-    SEQ_WGRAD_BLOCKED,
-    bias_rows,
-    colsum,
-    fill,
-    gemm,
-    wgrad_block,
-    wgrad_blocked,
-)
+from sequence.recurrent import Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, bias_rows, fill, gemm
+from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 
 # The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
 # 1M rows, 16-step sequences, hidden 64, b512, 1 epoch, identical: NVIDIA L40S lstm 0.1419 -> 0.1397 s, gru 0.1256 ->

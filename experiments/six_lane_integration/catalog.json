@@ -27235,7 +27235,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -27259,7 +27259,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -27532,7 +27532,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -27556,7 +27556,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -28284,7 +28284,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -28308,7 +28308,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -28878,7 +28878,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -28902,7 +28902,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -29911,7 +29911,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -29935,7 +29935,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -31021,7 +31021,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -31045,7 +31045,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -31306,7 +31306,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -31330,7 +31330,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -31581,7 +31581,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -31605,7 +31605,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -31870,7 +31870,7 @@
         "gemm/experiments/neural_profile.mojo",
         "gemm/experiments/neural_profile_device.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "lane": "I.N",
       "mode": "identical",
@@ -31880,7 +31880,7 @@
       "production_callers": [
         "training/dev_tensors.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "qualification": {
         "acceptance": "pending",
@@ -32657,7 +32657,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -32681,7 +32681,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -33168,7 +33168,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "lane": "I.N",
@@ -33185,7 +33185,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "qualification": {
@@ -33342,7 +33342,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "lane": "I.N",
@@ -33359,7 +33359,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "qualification": {
@@ -33519,7 +33519,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "lane": "I.N",
@@ -33536,7 +33536,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "qualification": {
@@ -33677,7 +33677,7 @@
         "transformer/experiments/summary_model.mojo",
         "transformer/experiments/summary_model_host.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "transformer/experiments/profile.mojo",
@@ -33704,7 +33704,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -34000,7 +34000,7 @@
       },
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "python/mojolearn/_transformer_impl.py",
         "bindings/_mojolearn_transformer.mojo",
         "bindings/_mojolearn_transformer_host.mojo",
@@ -34025,7 +34025,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "qualification": {
@@ -34159,7 +34159,7 @@
       },
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "python/mojolearn/_transformer_impl.py",
         "bindings/_mojolearn_transformer.mojo",
         "bindings/_mojolearn_transformer_host.mojo",
@@ -34184,7 +34184,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "qualification": {
@@ -34329,7 +34329,7 @@
         "transformer/experiments/norm_profile.mojo",
         "transformer/experiments/attention_schedules.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "transformer/experiments/profile.mojo",
@@ -34356,7 +34356,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -34648,7 +34648,7 @@
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "python/mojolearn/_transformer_impl.py",
         "bindings/_mojolearn_transformer.mojo",
         "bindings/_mojolearn_transformer_host.mojo",
@@ -34672,7 +34672,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "qualification": {
@@ -35254,7 +35254,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "python/mojolearn/_transformer_impl.py",
         "bindings/_mojolearn_transformer.mojo",
         "bindings/_mojolearn_transformer_host.mojo",
@@ -35279,7 +35279,7 @@
         "training/byte_lm_host.mojo",
         "training/samba_ops.mojo",
         "training/host/samba_ops_oracle.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "tools/bench_board_neural.py"
       ],
       "qualification": {
@@ -35431,7 +35431,7 @@
         "bindings/_mojolearn_transformer_host.mojo",
         "python/mojolearn/_transformer_impl.py",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -35448,7 +35448,7 @@
         "training/neural_attention_owner.mojo",
         "transformer/host/attention_tape.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -35601,7 +35601,7 @@
         "bindings/_mojolearn_transformer_host.mojo",
         "python/mojolearn/_transformer_impl.py",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -35618,7 +35618,7 @@
         "training/neural_attention_owner.mojo",
         "transformer/host/attention_tape.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "tools/bench_board_neural.py"
@@ -36149,10 +36149,10 @@
       "implementation_paths": [
         "mamba/impl/ops/neural_scan_profile.mojo",
         "mamba/impl/ops/neural_mamba_scan.mojo",
-        "mamba/impl/ops/selective_scan_backward.mojo",
+        "autograd/kernels/mamba1_scan.mojo",
         "mamba/impl/modeling/modeling_mamba.mojo",
         "mamba/checks/mamba_oracle.mojo",
-        "mamba/checks/mamba_backward.mojo",
+        "autograd/kernels/mamba1_proj.mojo",
         "mamba/host/gen/neural_scan_profile.mojo",
         "mamba/host/gen/neural_mamba_scan.mojo",
         "mamba/host/gen/selective_scan_backward.mojo",
@@ -36174,7 +36174,7 @@
         "python/mojolearn/_mamba_impl.py",
         "bindings/_mojolearn_neural_host.mojo",
         "mamba/impl/modeling/modeling_mamba.mojo",
-        "mamba/checks/mamba_backward.mojo"
+        "autograd/kernels/mamba1_proj.mojo"
       ],
       "qualification": {
         "acceptance": "pending",
@@ -37011,7 +37011,7 @@
           "define_sources": {
             "MOJOLEARN_NN38_CACHE_SUFFIX_SEEDS": [
               "mamba/host/gen/mamba3_backward.mojo",
-              "mamba/impl/modules/mamba3_backward.mojo"
+              "autograd/kernels/mamba3.mojo"
             ],
             "MOJOLEARN_NUMERIC_IDENTICAL": [
               "gemm/checks/gemm_int8_mma_tuned_check.mojo",
@@ -37158,12 +37158,12 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo",
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba3_backward.mojo",
+        "autograd/kernels/mamba3_proj.mojo",
         "python/mojolearn/_samba_impl.py"
       ],
       "lane": "I.N",
@@ -37175,7 +37175,7 @@
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba3_backward.mojo",
+        "autograd/kernels/mamba3_proj.mojo",
         "python/mojolearn/_samba_impl.py"
       ],
       "qualification": {
@@ -37411,12 +37411,12 @@
       },
       "implementation_paths": [
         "mamba/impl/ops/neural_gradient_profile.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo",
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba2_backward.mojo"
+        "autograd/kernels/mamba2_proj.mojo"
       ],
       "lane": "I.N",
       "mode": "identical",
@@ -37427,7 +37427,7 @@
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba2_backward.mojo"
+        "autograd/kernels/mamba2_proj.mojo"
       ],
       "qualification": {
         "acceptance": "pending",
@@ -39968,7 +39968,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_NN50_OWNED_RUNS": [
-              "embedding/owned_runs.mojo"
+              "autograd/kernels/embedding_runs.mojo"
             ]
           },
           "id": "I.N.NN50:default",
@@ -40009,7 +40009,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
@@ -40019,7 +40019,7 @@
       "original_id": "NN50",
       "prerequisites": [],
       "production_callers": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
@@ -41689,7 +41689,7 @@
               "training/checks/optimizer.mojo",
               "transformer/impl/llama/modeling_llama.mojo",
               "training/checks/step_glue_check.mojo",
-              "transformer/checks/transformer_backward.mojo",
+              "autograd/kernels/transformer.mojo",
               "checks/kernel_matrix.mojo",
               "core/step_glue.mojo",
               "bench/samba_rms_price_main.mojo",
@@ -50825,7 +50825,7 @@
         "transformer/impl/llama/attention_v2_model_device.mojo",
         "transformer/impl/llama/attention_v2_model_host.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -52281,7 +52281,7 @@
       "implementation_paths": [
         "training/neural_identical_experiments.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "lane": "I.N",
       "mode": "identical",
@@ -52898,7 +52898,7 @@
               "training/checks/optimizer.mojo",
               "transformer/impl/llama/modeling_llama.mojo",
               "training/checks/step_glue_check.mojo",
-              "transformer/checks/transformer_backward.mojo",
+              "autograd/kernels/transformer.mojo",
               "checks/kernel_matrix.mojo",
               "core/step_glue.mojo",
               "bench/samba_rms_price_main.mojo",
@@ -53469,7 +53469,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "embedding/checks/embedding_sort.mojo",
+        "autograd/kernels/embedding_sort.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
@@ -55124,7 +55124,7 @@
       "implementation_paths": [
         "mamba/impl/ops/identical_scan_window.mojo",
         "mamba/impl/ops/selective_scan_interface.mojo",
-        "mamba/impl/ops/selective_scan_backward.mojo",
+        "autograd/kernels/mamba1_scan.mojo",
         "mamba/host/gen/selective_scan_interface.mojo",
         "tools/mamba_host_gen.py",
         "mamba/host/gen/device_optimizations.mojo"
@@ -55473,7 +55473,7 @@
       "implementation_paths": [
         "mamba/impl/modules/afn_defines.mojo",
         "mamba/impl/modules/ssd_minimal.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/ssd_minimal.mojo"
       ],
       "lane": "I.N",
@@ -55616,7 +55616,7 @@
       "implementation_paths": [
         "mamba/impl/modules/ssd_minimal.mojo",
         "mamba/host/gen/ssd_minimal.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo"
+        "autograd/kernels/mamba2_ssd.mojo"
       ],
       "lane": "I.N",
       "mode": "identical",
@@ -55990,7 +55990,7 @@
           "define_sources": {
             "MOJOLEARN_IDN_M3_ANGLE_CARRY_CACHE": [
               "mamba/host/gen/mamba3_backward.mojo",
-              "mamba/impl/modules/mamba3_backward.mojo"
+              "autograd/kernels/mamba3.mojo"
             ]
           },
           "equivalence": {
@@ -56154,7 +56154,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "lane": "I.N",
@@ -56243,7 +56243,7 @@
           "define_sources": {
             "MOJOLEARN_IDN_M2_GRAD_LEAF128": [
               "mamba/host/gen/mamba2_ssd_backward.mojo",
-              "mamba/impl/ops/mamba2_ssd_backward.mojo"
+              "autograd/kernels/mamba2_ssd.mojo"
             ]
           },
           "id": "I.N.NI44:default",
@@ -56303,7 +56303,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo"
       ],
       "lane": "I.N",
@@ -77354,7 +77354,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T04:wgrad_split",
@@ -77409,7 +77409,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "lane": "AF.N",
       "mode": "fast",
@@ -77588,7 +77588,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_BWD_EPILOGUE": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T05:gemm_epilogue_fan_in",
@@ -77664,7 +77664,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T05:norm1_residual",
@@ -77742,13 +77742,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_BWD_EPILOGUE": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_BWD_FUSE": [
               "training/byte_lm_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T05:three_backward_fusions",
@@ -77864,7 +77864,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "lane": "AF.N",
       "mode": "fast",
@@ -80535,10 +80535,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_MIN128": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T09:minimum_k128",
@@ -80607,10 +80607,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_CAP8": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T09:split_cap8",
@@ -80680,13 +80680,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_AFN26_LM_WGRAD_CAP8": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_MIN128": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ],
             "MOJOLEARN_AFN26_LM_WGRAD_SPLIT": [
-              "training/byte_lm_afn_grad.mojo"
+              "autograd/kernels/transformer_afn.mojo"
             ]
           },
           "id": "AF.N.T09:minimum_k128_cap8",
@@ -80781,7 +80781,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "lane": "AF.N",
       "mode": "fast",
@@ -90502,7 +90502,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],
@@ -90840,7 +90840,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],
@@ -90951,7 +90951,7 @@
       },
       "implementation_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],

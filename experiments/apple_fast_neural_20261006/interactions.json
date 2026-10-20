@@ -141,7 +141,7 @@
       "title": "Whole LM fused training and resident parameter views",
       "source_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],
@@ -171,7 +171,7 @@
       "title": "Split weight gradients and optimizer interactions",
       "source_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],
@@ -218,7 +218,7 @@
       "title": "Fused resident multistep MLP with smaller row tile",
       "source_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo",
+        "autograd/kernels/transformer_afn.mojo",
         "training/afn_optim.mojo",
         "training/mlp_fast.mojo"
       ],

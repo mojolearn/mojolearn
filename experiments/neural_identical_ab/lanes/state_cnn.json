@@ -60,10 +60,10 @@
       "implementation_paths": [
         "mamba/impl/ops/neural_scan_profile.mojo",
         "mamba/impl/ops/neural_mamba_scan.mojo",
-        "mamba/impl/ops/selective_scan_backward.mojo",
+        "autograd/kernels/mamba1_scan.mojo",
         "mamba/impl/modeling/modeling_mamba.mojo",
         "mamba/checks/mamba_oracle.mojo",
-        "mamba/checks/mamba_backward.mojo",
+        "autograd/kernels/mamba1_proj.mojo",
         "mamba/host/gen/neural_scan_profile.mojo",
         "mamba/host/gen/neural_mamba_scan.mojo",
         "mamba/host/gen/selective_scan_backward.mojo",
@@ -199,7 +199,7 @@
       "id": "NN38",
       "implementation_status": "wired_draft",
       "implementation_paths": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "candidate_defines": [
@@ -227,7 +227,7 @@
       "implementation_status": "wired_draft",
       "implementation_paths": [
         "mamba/impl/ops/neural_gradient_profile.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo"
       ],
       "candidate_defines": [

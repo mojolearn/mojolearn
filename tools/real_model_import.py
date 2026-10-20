@@ -33,7 +33,17 @@ line per model:
 
     python3 tools/real_model_import.py run --out DIR [--models resnet18,squeezenet1_1] [--batch 1]
                                          [--cache DIR] [--seed 0] [--timeout 1800]
+                                         [--imagenet-val DIR]
     python3 tools/real_model_import.py list
+
+Accuracy (optional, --imagenet-val DIR): the ImageNet classifiers (the three torchvision models and
+resnet50-v1-12) are also scored on a stated public slice, the first 256 images of the ILSVRC2012
+validation set by file name (ILSVRC2012_val_00000001 .. 00000256), read from DIR in the ImageFolder
+layout (DIR/<wnid>/<file>.JPEG; the class index is the wnid's position in sorted order, the order the
+weights use). Only the metric value is recorded (accuracy.value, with the slice's file-list sha256): the
+images stay on the box and never enter the repository or the wheel. torchvision's own published top-1
+(the weights' meta) is recorded beside it as source.published_top1. tools/model_catalog.py builds
+python/mojolearn/models/catalog.json from these JSON files.
 
 Box needs: torch, torchvision, transformers (SmolLM2), onnxruntime (the ONNX reference), onnx (only to
 convert a model-zoo file below opset 13). Network for the first download of each weight file. Exit
@@ -58,15 +68,15 @@ ONNX_ZOO = "https://github.com/onnx/models/raw/main/validated/vision/classificat
 #: `sha256`: a pinned digest of the downloaded file (None: recorded on the first download, then checked
 #: against the cache's .sha256 file on every later run).
 MODELS = {
-    "resnet18": {"kind": "torchvision", "ctor": "resnet18", "weights": "ResNet18_Weights",
+    "resnet18": {"kind": "torchvision", "ctor": "resnet18", "weights": "ResNet18_Weights", "eval": "imagenet",
                  "input": (lambda b: (b, 3, 224, 224), "image")},
-    "squeezenet1_1": {"kind": "torchvision", "ctor": "squeezenet1_1", "weights": "SqueezeNet1_1_Weights",
+    "squeezenet1_1": {"kind": "torchvision", "ctor": "squeezenet1_1", "weights": "SqueezeNet1_1_Weights", "eval": "imagenet",
                       "input": (lambda b: (b, 3, 224, 224), "image")},
     "mobilenet_v3_small": {"kind": "torchvision", "ctor": "mobilenet_v3_small",
-                           "weights": "MobileNet_V3_Small_Weights",
+                           "weights": "MobileNet_V3_Small_Weights", "eval": "imagenet",
                            "input": (lambda b: (b, 3, 224, 224), "image")},
     "resnet50-v1-12": {"kind": "onnx", "url": ONNX_ZOO + "/resnet/model/resnet50-v1-12.onnx", "sha256": None,
-                       "input": (lambda b: (b, 3, 224, 224), "image")},
+                       "eval": "imagenet", "input": (lambda b: (b, 3, 224, 224), "image")},
     "mnist-12": {"kind": "onnx", "url": ONNX_ZOO + "/mnist/model/mnist-12.onnx", "sha256": None,
                  "input": (lambda b: (1, 1, 28, 28), "image")},  # the file fixes its batch at 1
     "smollm2-135m": {"kind": "hf-causal-lm", "repo": "HuggingFaceTB/SmolLM2-135M",
@@ -125,6 +135,11 @@ def source_torchvision(spec, batch, seed, info):
     weights = getattr(torchvision.models, spec["weights"]).DEFAULT
     info["weights"] = str(weights)
     info["weights_url"] = getattr(weights, "url", None)
+    try:  # torchvision's published number for these weights (its own full ImageNet-1K val run)
+        info["published_top1"] = float(weights.meta["_metrics"]["ImageNet-1K"]["acc@1"]) / 100.0
+        info["published_eval"] = "ImageNet-1K validation (50,000 images), as published with the torchvision weights"
+    except (AttributeError, KeyError, TypeError, ValueError):
+        pass
     model = getattr(torchvision.models, spec["ctor"])(weights=weights).eval()
     x = _example(spec, batch, seed)
     t0 = time.perf_counter()
@@ -382,6 +397,63 @@ def onnxruntime_arm(path, input_names, arrays, info):
     return refs
 
 
+# ---------------------------------------------------------------- accuracy ----
+
+IMAGENET_SLICE = 256
+IMAGENET_SLICE_NAME = ("ImageNet-1K (ILSVRC2012) validation, the first 256 images by file name "
+                       "(ILSVRC2012_val_00000001 .. 00000256)")
+
+
+def imagenet_slice(root, n=IMAGENET_SLICE):
+    """[(path, class index)] of the slice: every image of an ImageFolder-layout validation directory,
+    sorted by file name, the first n; the class index is the wnid directory's position in sorted order."""
+    root = Path(root)
+    wnids = sorted(d.name for d in root.iterdir() if d.is_dir())
+    if len(wnids) != 1000:
+        raise RuntimeError(f"{root}: {len(wnids)} class directories, an ImageNet-1K validation set has 1000")
+    cls = {w: i for i, w in enumerate(wnids)}
+    files = sorted((p for w in wnids for p in (root / w).iterdir() if p.is_file()), key=lambda p: p.name)
+    if len(files) < n:
+        raise RuntimeError(f"{root}: {len(files)} images, the slice needs {n}")
+    return [(p, cls[p.parent.name]) for p in files[:n]]
+
+
+def _imagenet_transform(spec):
+    """The weights' own preprocessing for a torchvision model; the standard ImageNet one (resize 256,
+    center crop 224, the ImageNet mean and std) for an ONNX model-zoo classifier."""
+    import torchvision
+    if spec["kind"] == "torchvision":
+        return getattr(torchvision.models, spec["weights"]).DEFAULT.transforms(), "the torchvision weights' transforms()"
+    from torchvision import transforms as T
+    return (T.Compose([T.Resize(256), T.CenterCrop(224), T.ToTensor(),
+                       T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]),
+            "resize 256, center crop 224, ImageNet mean/std normalization")
+
+
+def imagenet_accuracy(spec, prog, root):
+    """Top-1 of our program on the slice, at the program's batch (a partial last batch is padded with
+    copies of its first image and the padding is not scored). Returns the accuracy record."""
+    import numpy as np
+    from PIL import Image
+    rows = imagenet_slice(root)
+    tf, how = _imagenet_transform(spec)
+    batch = int(prog.inputs[0][1][0])
+    correct = 0
+    t0 = time.perf_counter()
+    for i in range(0, len(rows), batch):
+        chunk = rows[i:i + batch]
+        xs = [tf(Image.open(p).convert("RGB")).numpy().astype(np.float32) for p, _ in chunk]
+        xs += [xs[0]] * (batch - len(xs))
+        y = prog.run(np.stack(xs))
+        y = y[0] if isinstance(y, tuple) else y
+        pred = np.asarray(y).reshape(batch, -1).argmax(axis=1)[:len(chunk)]
+        correct += int(sum(int(p) == c for p, (_, c) in zip(pred, chunk)))
+    names = "\n".join(p.name for p, _ in rows)
+    return {"metric": "top1", "value": correct / len(rows), "n": len(rows), "slice": IMAGENET_SLICE_NAME,
+            "slice_files_sha256": hashlib.sha256(names.encode()).hexdigest(), "preprocess": how,
+            "eval_ms": (time.perf_counter() - t0) * 1e3}
+
+
 # ------------------------------------------------------------ one model ----
 
 def _refusal_kind(problems):
@@ -391,7 +463,7 @@ def _refusal_kind(problems):
     return "refused"
 
 
-def run_one(name, batch, seed, cache, out_dir):
+def run_one(name, batch, seed, cache, out_dir, imagenet_val=None):
     spec = MODELS[name]
     doc = {"schema": SCHEMA, "model": name, "kind": spec["kind"], "batch": batch, "seed": seed,
            "gate": False, "status": "failed",
@@ -405,6 +477,10 @@ def run_one(name, batch, seed, cache, out_dir):
         doc["vendor"] = mojolearn.vendor()
         doc["numeric_mode"] = mojolearn.numeric_mode()
         doc["mojolearn_version"] = getattr(mojolearn, "__version__", None)
+        try:
+            doc["gpu_arch"] = mojolearn.gpu_arch()
+        except Exception:  # noqa: BLE001  a CPU install has none
+            doc["gpu_arch"] = None
         src_info = {}
         doc["source"] = src_info
         if spec["kind"] == "torchvision":
@@ -414,6 +490,7 @@ def run_one(name, batch, seed, cache, out_dir):
         else:
             source, shapes, arrays, ref = source_onnx(spec, batch, seed, src_info, cache)
         doc["input_digest"] = _digest(*arrays)
+        doc["import_shapes"] = {k: list(v) for k, v in shapes.items()} if shapes else None
         doc["input_shapes"] = [list(a.shape) for a in arrays]
         from mojolearn.importers import UnsupportedModel
         t0 = time.perf_counter()
@@ -446,6 +523,11 @@ def run_one(name, batch, seed, cache, out_dir):
             refs = None
         if refs is not None:
             doc["compare"] = [_compare(o, r) for o, r in zip(y, refs)]
+        if imagenet_val and spec.get("eval") == "imagenet":
+            try:
+                doc["accuracy"] = imagenet_accuracy(spec, prog, imagenet_val)
+            except Exception as exc:  # noqa: BLE001  the digest row stands without its accuracy
+                doc["accuracy"] = {"error": repr(exc)[:400]}
         doc["status"] = "ok"
     except Exception as exc:  # noqa: BLE001  a failed row records why; the other models still run
         import traceback
@@ -482,7 +564,7 @@ def _write(doc, out):
 
 def cmd_one(a):
     Path(a.out).mkdir(parents=True, exist_ok=True)
-    doc, out = run_one(a.name, a.batch, a.seed, a.cache, a.out)
+    doc, out = run_one(a.name, a.batch, a.seed, a.cache, a.out, a.imagenet_val)
     _write(doc, out)
     print(line(doc), flush=True)
     for text in unsupported_lines(doc):
@@ -512,6 +594,8 @@ def cmd_run(a):
         log = out_dir / ("%s.log" % name)
         cmd = [sys.executable, str(Path(__file__).resolve()), "one", name, "--out", str(out_dir),
                "--batch", str(a.batch), "--seed", str(a.seed), "--cache", str(a.cache)]
+        if a.imagenet_val:
+            cmd += ["--imagenet-val", str(a.imagenet_val)]
         with open(log, "wb") as fh:
             try:
                 rc = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, timeout=a.timeout).returncode
@@ -553,6 +637,9 @@ def main(argv=None):
         p.add_argument("--batch", type=int, default=1)
         p.add_argument("--seed", type=int, default=0)
         p.add_argument("--cache", default=default_cache, help="where the ONNX files are downloaded once")
+        p.add_argument("--imagenet-val", default=None,
+                       help="an ImageNet-1K validation directory (ImageFolder layout) on this box: score the "
+                            "ImageNet classifiers on its first 256 images by file name")
     sub.add_parser("list", help="the models, one line each")
     a = ap.parse_args(argv)
     if a.cmd == "list":
