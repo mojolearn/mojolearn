@@ -33,6 +33,7 @@ from . import _portable_math as math
 from ._training_impl import _round_f32
 
 from . import _backend
+from . import _native_neural_bridge
 from . import _numeric_profile
 from . import _ragged
 from . import _training_impl as T
@@ -100,57 +101,19 @@ class SambaConfig(object):
     def __init__(self, vocab, d_model, layers, n_heads=None, n_kv_heads=None,
                  head_dim=None, intermediate=None, tie_embeddings=True,
                  norm_eps=1e-5, dropout=0.0):
-        self.vocab = int(vocab)
-        self.d_model = int(d_model)
-        self.layers = tuple(str(k) for k in layers)  # glue: layer kind config names
-        self.n_heads = None if n_heads is None else int(n_heads)
-        self.n_kv_heads = (None if n_kv_heads is None else int(n_kv_heads))
-        self.head_dim = None if head_dim is None else int(head_dim)
-        self.intermediate = None if intermediate is None else int(intermediate)
-        self.tie_embeddings = bool(tie_embeddings)
-        self.norm_eps = float(_round_f32(norm_eps))
-        self.dropout = float(_round_f32(dropout))
-        if self.vocab < 2 or self.d_model < 1 or not self.layers:
-            raise ValueError("mojolearn.SambaConfig: vocab >= 2, d_model >= 1 "
-                             "and at least one layer are required")
-        for k in self.layers:  # glue: validates layer kind names
-            if k not in _LAYER_KINDS:
-                raise ValueError("mojolearn.SambaConfig: layer kind %r; the "
-                                 "kinds are %r" % (k, _LAYER_KINDS))
-        if "mamba3" in self.layers and self.d_model % (_M3_HEADDIM // _M3_EXPAND):
-            raise ValueError("mojolearn.SambaConfig: a mamba3 layer needs "
-                             "d_model to be a multiple of 32 (Mamba3Block)")
-        if "attention" in self.layers:
-            if self.n_heads is None or self.intermediate is None:
-                raise ValueError("mojolearn.SambaConfig: an attention layer "
-                                 "needs n_heads and intermediate")
-            if self.head_dim is None:
-                self.head_dim = self.d_model // self.n_heads
-            if self.n_kv_heads is None:
-                self.n_kv_heads = self.n_heads
-            if self.n_heads * self.head_dim != self.d_model:
-                raise ValueError("mojolearn.SambaConfig: d_model must equal "
-                                 "n_heads * head_dim")
-        if not (0.0 <= self.dropout < 1.0):
-            raise ValueError("mojolearn.SambaConfig: dropout must be in [0, 1)")
-        if not (self.norm_eps >= 0.0):
-            raise ValueError("mojolearn.SambaConfig: norm_eps must be >= 0")
+        return _native_neural_bridge.RUNTIME.samba_config_call(
+            "initialize", (self, (vocab, d_model, layers, n_heads, n_kv_heads,
+                                   head_dim, intermediate, tie_embeddings,
+                                   norm_eps, dropout)))
 
     def to_dict(self):
         """The configuration as a plain dict (the inverse of `from_dict`)."""
-        return {"vocab": self.vocab, "d_model": self.d_model,
-                "layers": list(self.layers), "n_heads": self.n_heads,
-                "n_kv_heads": self.n_kv_heads, "head_dim": self.head_dim,
-                "intermediate": self.intermediate,
-                "tie_embeddings": self.tie_embeddings,
-                "norm_eps": self.norm_eps, "dropout": self.dropout}
+        return _native_neural_bridge.RUNTIME.samba_config_call("dict", (self,))
 
     @classmethod
     def from_dict(cls, d):
         """Build a configuration from a dict made by `to_dict`."""
-        return cls(d["vocab"], d["d_model"], d["layers"], d["n_heads"],
-                   d["n_kv_heads"], d["head_dim"], d["intermediate"],
-                   d["tie_embeddings"], d["norm_eps"], d["dropout"])
+        return _native_neural_bridge.RUNTIME.samba_config_call("from_dict", (cls, d))
 
     # -- the registry ---------------------------------------------------
     def block_shapes(self, kind):
@@ -166,31 +129,7 @@ class SambaConfig(object):
         list of (str, tuple)
             ``(name, shape)`` pairs in the block's weight order.
         """
-        dm = self.d_model
-        if kind == "mamba3":
-            di = _M3_EXPAND * dm
-            nh = di // _M3_HEADDIM
-            dip = 2 * di + 2 * _M3_NGROUPS * _M3_D_STATE + 3 * nh + _M3_NUM_ROPE_ANGLES
-            shapes = {
-                "block_norm.weight": (dm,), "in_proj.weight": (dip, dm),
-                "dt_bias": (nh,), "B_norm.weight": (_M3_D_STATE,),
-                "C_norm.weight": (_M3_D_STATE,), "B_bias": (nh, _M3_D_STATE),
-                "C_bias": (nh, _M3_D_STATE), "D": (nh,),
-                "out_proj.weight": (dm, di),
-            }
-            return [(n, shapes[n]) for n in Mamba3Block._W_NAMES]  # glue: weight names and shapes
-        qw = self.n_heads * self.head_dim
-        kw = self.n_kv_heads * self.head_dim
-        it = self.intermediate
-        shapes = {
-            "input_layernorm.weight": (dm,),
-            "post_attention_layernorm.weight": (dm,),
-            "q_proj.weight": (qw, dm), "k_proj.weight": (kw, dm),
-            "v_proj.weight": (kw, dm), "o_proj.weight": (dm, qw),
-            "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
-            "down_proj.weight": (dm, it),
-        }
-        return [(n, shapes[n]) for n in TransformerBlock._W_NAMES]  # glue: weight names and shapes
+        return _native_neural_bridge.RUNTIME.samba_config_call("block_shapes", (self, kind))
 
     def registry(self):
         """Names and shapes of every parameter tensor of the stack, in order.
@@ -203,14 +142,7 @@ class SambaConfig(object):
         -------
         list of (str, tuple)
         """
-        out = [("embed.weight", (self.vocab, self.d_model))]
-        for i, kind in enumerate(self.layers):  # glue: registry of named tensors
-            out.extend(("layers.%d.%s" % (i, n), s)
-                       for n, s in self.block_shapes(kind))  # glue: registry of named tensors
-        out.append(("norm_f.weight", (self.d_model,)))
-        if not self.tie_embeddings:
-            out.append(("lm_head.weight", (self.vocab, self.d_model)))
-        return out
+        return _native_neural_bridge.RUNTIME.samba_config_call("registry", (self,))
 
 
 def _init_tensor(gen, name, shape):
