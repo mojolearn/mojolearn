@@ -930,8 +930,10 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(neural_training_profile())
 
 
-@export
-def PyInit__mojolearn_neural_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_neural_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_neural_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_neural_host")
         module.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")

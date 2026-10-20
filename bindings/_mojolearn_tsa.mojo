@@ -340,8 +340,10 @@ def tsa_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-@export
-def PyInit__mojolearn_tsa() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tsa.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_tsa() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_tsa")
         m.def_function[tsa_vendor_binding]("tsa_vendor")

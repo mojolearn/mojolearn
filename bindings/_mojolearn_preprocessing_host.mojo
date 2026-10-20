@@ -252,8 +252,10 @@ def standard_transform_binding(
     return PythonObject(n * d)
 
 
-@export
-def PyInit__mojolearn_preprocessing_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_preprocessing_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_preprocessing_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing_host")
         m.def_function[preprocessing_host_numeric_mode_binding]("preprocessing_host_numeric_mode")

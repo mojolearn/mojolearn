@@ -245,8 +245,10 @@ def holtwinters_fit_binding(
 # them from; the forecast body is `oracle_forecast`'s, one spelling.
 
 
-@export
-def PyInit__mojolearn_tsa_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tsa_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_tsa_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_tsa_host")
         module.def_function[tsa_host_numeric_mode_binding]("tsa_host_numeric_mode")

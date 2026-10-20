@@ -253,8 +253,10 @@ def idn_fam2_binding() raises -> PythonObject:
     return PythonObject(1 if IDN_CLS_EPI else 0)
 
 
-@export
-def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_metrics.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_metrics() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_metrics")
         m.def_function[run_binding]("x_metrics_run")

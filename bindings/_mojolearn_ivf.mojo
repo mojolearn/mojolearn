@@ -562,8 +562,10 @@ def ivf_flat_extend_binding(
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_ivf.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_ivf() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_ivf")
         m.def_function[ivf_vendor_binding]("ivf_vendor")

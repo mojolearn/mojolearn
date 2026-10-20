@@ -248,8 +248,10 @@ def hdbscan_host_predict_sabotage_binding() raises -> PythonObject:
     return PythonObject(HDBH_PREDICT_SABOTAGE)
 
 
-@export
-def PyInit__mojolearn_hdbscan_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_hdbscan_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_hdbscan_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_hdbscan_host")
         module.def_function[hdbscan_host_numeric_mode_binding]("hdbscan_host_numeric_mode")

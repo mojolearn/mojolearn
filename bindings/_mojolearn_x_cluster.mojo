@@ -137,8 +137,10 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-@export
-def PyInit__mojolearn_x_cluster() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_cluster.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_cluster() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_cluster")
         m.def_function[call_binding]("x_cluster_call")

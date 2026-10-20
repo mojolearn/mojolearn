@@ -89,6 +89,6 @@ esac
 # the value has to be substituted here rather than appended.
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $byte_lm_mode_define -I . -I bindings \
-    bindings/_mojolearn_byte_lm.mojo -o "$byte_lm_tmpdir/_mojolearn_byte_lm.so"
+    bindings/entry/entry__mojolearn_byte_lm.mojo -o "$byte_lm_tmpdir/_mojolearn_byte_lm.so"
 ln "$byte_lm_tmpdir/_mojolearn_byte_lm.so" "$byte_lm_destination"
 echo "built $byte_lm_destination; numeric_mode=${MOJOLEARN_NUMERIC_MODE:-identical}; attention_memory_profile=${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence"

@@ -1552,8 +1552,10 @@ def scoped_gemm_metadata_binding(index: PythonObject) raises -> PythonObject:
     return PythonObject(scoped_last(Int(py=index)))
 
 
-@export
-def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_estimators() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
         m.def_function[pca_compensated_cov_count_py]("pca_compensated_cov_count")

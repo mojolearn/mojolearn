@@ -373,8 +373,10 @@ def byte_lm_host_arithmetic_suffix_binding() raises -> PythonObject:
     return PythonObject(byte_lm_arithmetic_suffix())
 
 
-@export
-def PyInit__mojolearn_byte_lm_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_byte_lm_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_byte_lm_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_byte_lm_host")
         module.def_function[byte_lm_host_arithmetic_suffix_binding]("byte_lm_host_arithmetic_suffix")

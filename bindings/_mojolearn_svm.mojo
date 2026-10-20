@@ -728,8 +728,10 @@ def svc_dual_gemv_binding(
     return svc_dual_gemv_device_binding(_sg_family_ctx(), dual_addr, sv_addr, dims, out_addr)
 
 
-@export
-def PyInit__mojolearn_svm() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_svm.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_svm() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_svm")
         m.def_function[svm_parallel_available]("svm_parallel_available")

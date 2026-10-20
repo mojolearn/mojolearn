@@ -161,8 +161,10 @@ def gmm_fit_binding(
     return PythonObject(n_iter)
 
 
-@export
-def PyInit__mojolearn_mixture_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mixture_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_mixture_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_mixture_host")
         module.def_function[mixture_host_numeric_mode_binding]("mixture_host_numeric_mode")

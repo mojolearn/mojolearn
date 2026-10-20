@@ -1442,8 +1442,10 @@ def unique_inverse_binding(
     return PythonObject(k)
 
 
-@export
-def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_core_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_core_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_core_host")
         module.def_function[core_host_numeric_mode_binding]("core_host_numeric_mode")

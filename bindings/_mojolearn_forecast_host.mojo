@@ -110,8 +110,10 @@ def arima_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-@export
-def PyInit__mojolearn_forecast_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_forecast_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_forecast_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_forecast_host")
         module.def_function[forecast_host_numeric_mode_binding]("forecast_host_numeric_mode")

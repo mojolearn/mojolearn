@@ -67,8 +67,10 @@ def hdbscan_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-@export
-def PyInit__mojolearn_hdbscan_infer_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_hdbscan_infer_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_hdbscan_infer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_hdbscan_infer_host")
         module.def_function[hdbscan_infer_host_numeric_mode_binding]("hdbscan_infer_host_numeric_mode")

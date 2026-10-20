@@ -1209,8 +1209,10 @@ def resident_release_binding(handle: PythonObject) raises -> PythonObject:
     return forest_release_host_binding[True](handle)
 
 
-@export
-def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_rf_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_rf_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_rf_host")
         module.def_function[rf_host_numeric_mode_binding]("rf_host_numeric_mode")

@@ -887,8 +887,10 @@ def ordered_doc_count_binding() raises -> PythonObject:
     return PythonObject(ordered_doc_count())
 
 
-@export
-def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gbdt.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_gbdt() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gbdt")
         m.def_function[ordered_doc_count_binding]("gbdt_ordered_doc_count")

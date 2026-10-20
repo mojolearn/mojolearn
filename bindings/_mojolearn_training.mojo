@@ -1807,8 +1807,10 @@ def neural_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(neural_training_profile())
 
 
-@export
-def PyInit__mojolearn_training() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_training.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_training() -> PythonObject:
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
     # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those

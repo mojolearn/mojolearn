@@ -184,7 +184,7 @@ pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLE
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn_solver.mojo \
+    bindings/entry/entry__mojolearn_solver.mojo \
     -o "$out"
 
 # `_gpu_shared_mem` is a prefix the compiler puts on the blob symbol; it is

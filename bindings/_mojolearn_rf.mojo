@@ -1852,8 +1852,10 @@ def rf_regressor_fit_shard_binding(x_addr: PythonObject, y_addr: PythonObject,
     return _rf_regressor_fit(x_addr, y_addr, params, criterion, Int(py=tree_start))
 
 
-@export
-def PyInit__mojolearn_rf() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_rf.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_rf() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")

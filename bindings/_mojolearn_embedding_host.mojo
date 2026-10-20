@@ -149,8 +149,10 @@ def embedding_backward_binding(
     return PythonObject(vocab * width)
 
 
-@export
-def PyInit__mojolearn_embedding_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_embedding_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_embedding_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_embedding_host")
         m.def_function[embedding_host_numeric_mode_binding]("embedding_host_numeric_mode")

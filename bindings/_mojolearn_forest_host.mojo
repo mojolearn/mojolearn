@@ -551,8 +551,10 @@ def forest_host_gbdt_sigmoid_pair_binding(
     return PythonObject(count)
 
 
-@export
-def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_forest_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_forest_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_forest_host")
         module.def_function[forest_host_numeric_mode_binding]("forest_host_numeric_mode")

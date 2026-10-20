@@ -162,7 +162,7 @@ pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLE
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE $MEMORY_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn_transformer.mojo \
+    bindings/entry/entry__mojolearn_transformer.mojo \
     -o "$out"
 
 air_blobs() {

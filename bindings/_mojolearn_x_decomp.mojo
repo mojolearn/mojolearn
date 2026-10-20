@@ -98,8 +98,10 @@ from x_decomp.s_linalg_fast import (
 )
 
 
-@export
-def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_decomp.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_decomp() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         # F02 audit belongs to the independent LU route as well as MCD.

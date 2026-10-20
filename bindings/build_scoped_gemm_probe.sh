@@ -46,7 +46,7 @@ out=$tmpdir/_mojolearn_scoped_gemm_probe.so
 # Intentionally split compiler option lists, consistent with existing builders.
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-1}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
-    bindings/_mojolearn_scoped_gemm_probe.mojo -o "$out"
+    bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo -o "$out"
 # Compile only, including on Darwin: manager runs quality on M3 only.
 mkdir -p "$outdir"
 mv "$out" "$outdir/_mojolearn_scoped_gemm_probe.so"

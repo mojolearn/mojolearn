@@ -1326,8 +1326,10 @@ def x_neighbors_vendor_binding() raises -> PythonObject:
     return PythonObject(String("cpu"))
 
 
-@export
-def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_neighbors_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_neighbors_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors_host")
         m.def_function[x_neighbors_host_numeric_mode_binding]("x_neighbors_host_numeric_mode")

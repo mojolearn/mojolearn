@@ -41,7 +41,7 @@ for arm in base class; do
         run "build-$arm-$kind" pixi run mojo build -j 2 --emit shared-lib \
             --target-accelerator "$MOJOLEARN_GPU_ARCHS" --target-cpu x86-64-v3 \
             -D "$COLUMN" -D MOJOLEARN_NUMERIC_IDENTICAL=1 $EXTRA -I . -I bindings \
-            bindings/_mojolearn_byte_lm.mojo -o "$OUT/build/_mojolearn_byte_lm.so"
+            bindings/entry/entry__mojolearn_byte_lm.mojo -o "$OUT/build/_mojolearn_byte_lm.so"
         cp "$OUT/build/_mojolearn_byte_lm.so" "$OUT/bin/$arm-$kind.so"
         python3 tools/gemm_class_sections.py "$OUT/build/_mojolearn_byte_lm.so" > "$OUT/sections-$arm-$kind.json"
     done

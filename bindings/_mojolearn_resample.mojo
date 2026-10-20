@@ -568,8 +568,10 @@ def monte_carlo_integrate_binding(
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_resample() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_resample.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_resample() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_resample")
         m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")

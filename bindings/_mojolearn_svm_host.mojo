@@ -830,8 +830,10 @@ def iforest_run_binding(
 
 
 
-@export
-def PyInit__mojolearn_svm_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_svm_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_svm_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_svm_host")
         module.def_function[svm_host_numeric_mode_binding]("svm_host_numeric_mode")

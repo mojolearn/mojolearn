@@ -141,7 +141,7 @@ pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLE
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn_hdbscan.mojo \
+    bindings/entry/entry__mojolearn_hdbscan.mojo \
     -o "$out"
 
 air_blobs() {

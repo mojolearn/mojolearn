@@ -1,0 +1,171 @@
+{
+ "_doc": [
+  "Merged bindings: one native file per installed directory set, exporting every member's PyInit.",
+  "Each member keeps its module name; python/mojolearn/_merged.py loads it from the merged file",
+  "through the directory's _mojolearn_merged.json index when its own .so is absent.",
+  "dirs.<dir>.groups: merged file stem -> members. Adding a binding is one line in its group.",
+  "dirs.<dir>.optional: member -> platforms where it joins the group when MOJOLEARN_PACKAGE_BYTE_LM=1.",
+  "darwin_metal1: members whose per-binding script passes --target-accelerator metal:1 on macOS;",
+  "on macOS they compile into <stem>_m1 so every member keeps its own compile flags.",
+  "tools/merged_bindings.py reads this file; bindings/build_merged.sh builds it."
+ ],
+ "index_file": "_mojolearn_merged.json",
+ "dirs": {
+  "fast": {
+   "path": "",
+   "groups": {
+    "_mojolearn_native": [
+     "_mojolearn_gbdt",
+     "_mojolearn_rf",
+     "_mojolearn_trees",
+     "_mojolearn",
+     "_mojolearn_estimators",
+     "_mojolearn_svm",
+     "_mojolearn_solver",
+     "_mojolearn_metrics",
+     "_mojolearn_preprocessing",
+     "_mojolearn_tsa",
+     "_mojolearn_linalg",
+     "_mojolearn_arima",
+     "_mojolearn_gp",
+     "_mojolearn_kernel_methods",
+     "_mojolearn_mixture",
+     "_mojolearn_hdbscan",
+     "_mojolearn_resample",
+     "_mojolearn_ivf",
+     "_mojolearn_training",
+     "_mojolearn_mamba",
+     "_mojolearn_transformer",
+     "_mojolearn_embedding",
+     "_mojolearn_x_linear",
+     "_mojolearn_x_cluster",
+     "_mojolearn_x_neighbors",
+     "_mojolearn_x_decomp",
+     "_mojolearn_x_prep",
+     "_mojolearn_x_sequence",
+     "_mojolearn_x_trees",
+     "_mojolearn_x_cnn",
+     "_mojolearn_x_ann",
+     "_mojolearn_x_metrics"
+    ]
+   },
+   "optional": {
+    "_mojolearn_byte_lm": [
+     "darwin"
+    ]
+   }
+  },
+  "identical": {
+   "path": "identical",
+   "groups": {
+    "_mojolearn_native": [
+     "_mojolearn_gbdt",
+     "_mojolearn_rf",
+     "_mojolearn_trees",
+     "_mojolearn",
+     "_mojolearn_estimators",
+     "_mojolearn_svm",
+     "_mojolearn_solver",
+     "_mojolearn_metrics",
+     "_mojolearn_preprocessing",
+     "_mojolearn_tsa",
+     "_mojolearn_linalg",
+     "_mojolearn_arima",
+     "_mojolearn_gp",
+     "_mojolearn_kernel_methods",
+     "_mojolearn_mixture",
+     "_mojolearn_hdbscan",
+     "_mojolearn_resample",
+     "_mojolearn_ivf",
+     "_mojolearn_training",
+     "_mojolearn_mamba",
+     "_mojolearn_transformer",
+     "_mojolearn_embedding",
+     "_mojolearn_x_linear",
+     "_mojolearn_x_cluster",
+     "_mojolearn_x_neighbors",
+     "_mojolearn_x_decomp",
+     "_mojolearn_x_prep",
+     "_mojolearn_x_sequence",
+     "_mojolearn_x_trees",
+     "_mojolearn_x_cnn",
+     "_mojolearn_x_ann",
+     "_mojolearn_x_metrics"
+    ]
+   },
+   "optional": {
+    "_mojolearn_byte_lm": [
+     "darwin",
+     "linux"
+    ]
+   }
+  },
+  "host": {
+   "path": "host",
+   "groups": {
+    "_mojolearn_native_host": [
+     "_mojolearn_byte_lm_host",
+     "_mojolearn_forest_host",
+     "_mojolearn_tokenizer_host",
+     "_mojolearn_neural_host",
+     "_mojolearn_core_host",
+     "_mojolearn_linalg_host",
+     "_mojolearn_estimators_host",
+     "_mojolearn_metrics_host",
+     "_mojolearn_preprocessing_host",
+     "_mojolearn_tsa_host",
+     "_mojolearn_solver_host",
+     "_mojolearn_svm_host",
+     "_mojolearn_trees_host",
+     "_mojolearn_rf_host",
+     "_mojolearn_gp_host",
+     "_mojolearn_kernel_methods_host",
+     "_mojolearn_mixture_host",
+     "_mojolearn_mixture_infer_host",
+     "_mojolearn_hdbscan_host",
+     "_mojolearn_gp_infer_host",
+     "_mojolearn_hdbscan_infer_host",
+     "_mojolearn_gbdt_host",
+     "_mojolearn_training_host",
+     "_mojolearn_resample_host",
+     "_mojolearn_mamba_host",
+     "_mojolearn_arima_host",
+     "_mojolearn_embedding_host",
+     "_mojolearn_embedding_infer_host",
+     "_mojolearn_ivf_host",
+     "_mojolearn_ivf_search_host",
+     "_mojolearn_forecast_host",
+     "_mojolearn_transformer_host",
+     "_mojolearn_x_linear_host",
+     "_mojolearn_x_cluster_host",
+     "_mojolearn_x_neighbors_host",
+     "_mojolearn_x_decomp_host",
+     "_mojolearn_x_prep_host",
+     "_mojolearn_x_sequence_host",
+     "_mojolearn_x_trees_host",
+     "_mojolearn_x_cnn_host",
+     "_mojolearn_x_ann_host",
+     "_mojolearn_x_metrics_host"
+    ]
+   },
+   "optional": {}
+  }
+ },
+ "darwin_metal1": [
+  "_mojolearn_estimators",
+  "_mojolearn_metrics",
+  "_mojolearn_tsa",
+  "_mojolearn_preprocessing",
+  "_mojolearn_x_linear",
+  "_mojolearn_x_cluster",
+  "_mojolearn_x_neighbors",
+  "_mojolearn_x_decomp",
+  "_mojolearn_x_prep",
+  "_mojolearn_x_sequence",
+  "_mojolearn_x_trees",
+  "_mojolearn_x_cnn",
+  "_mojolearn_x_ann",
+  "_mojolearn_x_metrics"
+ ],
+ "darwin_metal1_suffix": "_m1"
+}

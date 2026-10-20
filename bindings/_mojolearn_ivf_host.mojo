@@ -149,8 +149,10 @@ def ivf_flat_build_binding(
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_ivf_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_ivf_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_ivf_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_ivf_host")
         m.def_function[ivf_host_numeric_mode_binding]("ivf_host_numeric_mode")

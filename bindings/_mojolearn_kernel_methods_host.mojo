@@ -423,8 +423,10 @@ def rbf_sampler_transform_binding(
 
 
 
-@export
-def PyInit__mojolearn_kernel_methods_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_kernel_methods_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_kernel_methods_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_kernel_methods_host")
         module.def_function[kernel_methods_host_numeric_mode_binding]("kernel_methods_host_numeric_mode")
