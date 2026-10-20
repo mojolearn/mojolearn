@@ -516,9 +516,9 @@ def _connect_causal_native():
     from ..tokenizer import _binding as runtime_binding
     from .. import _training_impl as training
     from .._transformer_impl import TransformerBlock, TransformerState, _OPT_NAMES
-    from .._mamba_impl import Mamba1Block, Mamba2Block, Mamba1State, Mamba2State
+    from .._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block, Mamba1State, Mamba2State
     from ..neural_inference import (TransformerBlockInference, Mamba1BlockInference,
-                                    Mamba2BlockInference, _causal_native_connections)
+                                    Mamba2BlockInference, Mamba3BlockInference, _causal_native_connections)
     from .config import _NATIVE_CONTEXT as config_context
     from .safetensors import _NATIVE_CONTEXT as checkpoint_context
     from .._native_neural_bridge import connect_training
@@ -534,6 +534,7 @@ def _connect_causal_native():
             entries = {}
             targets = (("transformer", "_mojolearn_transformer"),
                        ("mamba1", "_mojolearn_mamba"), ("mamba2", "_mojolearn_mamba"),
+                       ("mamba3", "_mojolearn_mamba"),
                        ("primitives", "_mojolearn_training"), ("linalg", "_mojolearn_linalg"))
             for name, target in targets:  # glue: connects compiled sibling modules at package import
                 try:
@@ -558,8 +559,9 @@ def _connect_causal_native():
         "primitive_classes": {"cpu": _CpuPrimitives, "gpu": _GpuPrimitives},
         "block_classes": {
             "cpu": {"transformer": TransformerBlockInference, "mamba1": Mamba1BlockInference,
-                    "mamba2": Mamba2BlockInference},
-            "gpu": {"transformer": TransformerBlock, "mamba1": Mamba1Block, "mamba2": Mamba2Block}},
+                    "mamba2": Mamba2BlockInference, "mamba3": Mamba3BlockInference},
+            "gpu": {"transformer": TransformerBlock, "mamba1": Mamba1Block,
+                    "mamba2": Mamba2Block, "mamba3": Mamba3Block}},
         "generation_classes": (Array, CausalLMState,
                                {"transformer": TransformerState, "mamba1": Mamba1State,
                                 "mamba2": Mamba2State}, GenerationStream),
