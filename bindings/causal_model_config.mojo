@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.native_json import native_json_read, native_path, native_path_exists
 
 
@@ -372,12 +373,13 @@ def model_config_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             return raise_python_exception(error, ExceptionType("PyExc_KeyError"))
         comptime if operation == 6 or operation == 2:
             try:
-                var cls = args[1]["unsupported_class"] if operation == 6 else args[4]
-                var ptr = cls.steal_data()
                 ref cpy = Python().cpython()
-                cpy.PyErr_SetString(ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
-                cpy.Py_DecRef(ptr)
-                return PyObjectPtr()
+                var cls = PyObjectPtr()
+                comptime if operation == 6:
+                    cls = causal_borrowed_item(cpy.PyTuple_GetItem(args_ptr, 1), "unsupported_class")
+                else:
+                    cls = cpy.PyTuple_GetItem(args_ptr, 4)
+                return causal_set_exception(error, cls)
             except nested:
                 return raise_python_exception(nested)
         else:

@@ -7,6 +7,7 @@ profile, layout, shape admission, packing and layer construction live here.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
 from std.memory import memcpy, bitcast
 from std.os import getenv
@@ -459,13 +460,16 @@ def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: 
         positions = bi.int(positions)
     model.max_positions = positions
     model._embed = _model_f32(weights["embed"], String(plan.embed_name), context)
-    _model_shape(model._embed, [vocab, dm], String(plan.embed_name))
+    if not Bool(py=model._embed.shape == bi.tuple(py_ints([vocab, dm]))):
+        raise Error("UnsupportedModel: model_type " + String(plan.model_type) + ": vocab_size=" + String(vocab) + " and hidden_size=" + String(dm) + " but " + String(plan.embed_name) + " has shape " + String(bi.str(model._embed.shape)))
     model._norm = PythonObject(None)
     if plan.norm_name is not None:
         model._norm = _model_f32(weights["norm"], String(plan.norm_name), context)
-        _model_shape(model._norm, [dm], String(plan.norm_name))
+        if not Bool(py=model._norm.shape == bi.tuple(py_ints([dm]))):
+            raise Error("UnsupportedModel: tensor " + String(plan.norm_name) + " has shape " + String(bi.str(model._norm.shape)) + ", want hidden_size=" + String(dm))
     model._head = model._embed if plan.head_name is None else _model_f32(weights["head"], String(plan.head_name), context)
-    _model_shape(model._head, [vocab, dm], "head")
+    if not Bool(py=model._head.shape == bi.tuple(py_ints([vocab, dm]))):
+        raise Error("UnsupportedModel: tensor " + String(plan.head_name) + " has shape " + String(bi.str(model._head.shape)) + ", want vocab_size=" + String(vocab) + " and hidden_size=" + String(dm))
     for value in [model._embed, model._norm, model._head]:  # driver-loop: over the three top-level tensors
         if value is not None:
             var ptr = f32_ptr(Int(py=value._addr))
@@ -554,13 +558,16 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
 
 def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
+    var format = String(options[0])
+    if format != "float32" and format != "bfloat16" and format != "int8":
+        raise Error("CausalLM: unsupported weight_format " + format)
+    var route = _model_route(options[2], context)
     var path = native_path(path_value)
     if not native_path_exists(path, True):
         raise Error("FileNotFoundError: CausalLM.load requires a checkpoint directory")
     var config = config_load_binding(context["config_context"]["config_class"], path)
     var plan = model_plan_for_binding(config, context["config_context"])
     _ = _model_profile(options[3], String(plan.kind), context)
-    var route = _model_route(options[2], context)
     var ck = context["checkpoint_context"]
     var checkpoint = checkpoint_open_binding(ck["checkpoint_class"], path, ck)
     var weights = PythonObject(None)
@@ -596,13 +603,11 @@ def causal_model_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
         if message.startswith("UnsupportedModel:"):
             try:
-                var context = args[4] if operation == 0 else args[3]
-                var cls = context["config_context"]["unsupported_class"]
-                var ptr = cls.steal_data()
                 ref cpy = Python().cpython()
-                cpy.PyErr_SetString(ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
-                cpy.Py_DecRef(ptr)
-                return PyObjectPtr()
+                var context = cpy.PyTuple_GetItem(args_ptr, 4 if operation == 0 else 3)
+                var config = causal_borrowed_item(context, "config_context")
+                var cls = causal_borrowed_item(config, "unsupported_class")
+                return causal_set_exception(error, cls)
             except nested:
                 return raise_python_exception(nested)
         return raise_python_exception(error, ExceptionType.ValueError)
