@@ -86,6 +86,8 @@ from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
+from bindings.native_transport import transport_call, transport_initialize
+from bindings.cross_vendor_native import cross_vendor_c
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1801,6 +1803,9 @@ def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
 def build__mojolearn_tokenizer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_host")
+        transport_initialize()
+        module.def_function[transport_call]("native_transport_call")
+        module.def_py_c_function(cross_vendor_c, "cross_vendor_call")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")
         module.def_function[tokenizer_host_vendor_binding]("tokenizer_host_vendor")
         module.def_function[tokenizer_host_column_binding]("tokenizer_host_column")
