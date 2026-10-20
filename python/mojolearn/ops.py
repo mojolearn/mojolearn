@@ -264,7 +264,7 @@ class Session:
         trainable input whose gradient :meth:`grad` returns after
         :meth:`backward`.
         """
-        from ._cast_in import as_input, describe
+        from ._cast_in import as_input, describe, matrix_view
         a = as_input(x)
         if a.ndim > _MAX_RANK:
             raise ValueError(f"x must have at most {_MAX_RANK} dimensions")
@@ -272,13 +272,10 @@ class Session:
             raise ValueError("x must not be empty")
         flag = 1 if requires_grad else 0
         if a.ndim > 2:
-            if not a.flags.c_contiguous:
-                raise ValueError("x with more than two dimensions must be C-contiguous; "
-                                 "pass numpy.ascontiguousarray(x)")
             # the same memory as its row-major (rows, last axis) matrix view,
             # plus the full shape; it stays referenced until the binding has
             # copied it
-            m = a.reshape(-1, a.shape[-1])
+            m = matrix_view(a, "x")
             return int(self._b.ops_upload(self._sid(), describe(m, "x"), [flag, a.ndim] + list(a.shape)))
         # `a` as it is (Mojo casts it to float32 on the executor); it stays
         # referenced until the binding has copied it
