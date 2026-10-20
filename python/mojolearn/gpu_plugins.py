@@ -164,8 +164,7 @@ def package_distribution():
             dist = metadata.distribution(name)
         except metadata.PackageNotFoundError:
             continue
-        if name != META_DISTRIBUTION or dist.files is None or any(
-                str(f).startswith("mojolearn/") for f in dist.files):  # glue: skip the file-free Linux meta wheel
+        if name != META_DISTRIBUTION or not dist.read_text(PLUGIN_MARKER):  # the Linux meta wheel owns no files
             return dist
     return None
 

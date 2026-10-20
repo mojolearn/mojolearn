@@ -217,7 +217,11 @@ def main(argv=None):
     distribution = None
     try:
         import importlib.metadata as metadata
-        dist = metadata.distribution('mojolearn')
+        from mojolearn import gpu_plugins
+        # the package's files: mojolearn-core on Linux, mojolearn on macOS
+        dist = gpu_plugins.package_distribution()
+        if dist is None:
+            raise metadata.PackageNotFoundError('mojolearn')
         distribution = {'version': dist.version, 'root': str(Path(dist.locate_file('')).resolve())}
         expected = Path(dist.locate_file('mojolearn/__init__.py')).resolve()
         distribution['import_matches_distribution'] = expected == Path(ml.__file__).resolve()

@@ -50,8 +50,9 @@ def main():
   else:
    raise AssertionError('Installed qualification requires a clean environment without NumPy')
   assert pathlib.Path(ml.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()), ml.__file__
-  distribution = importlib.metadata.distribution('mojolearn')
   from mojolearn import gpu_plugins
+  distribution = gpu_plugins.package_distribution()  # mojolearn-core on Linux, mojolearn on macOS
+  assert distribution is not None, 'no installed distribution owns the mojolearn package'
   plugins = (gpu_plugins.core_requirements(distribution.version)
              if distribution.read_text(gpu_plugins.CORE_MARKER) is not None else [])
   errors = metadata_errors(distribution.requires or [],
