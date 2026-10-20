@@ -150,6 +150,11 @@ The source commit is the one inside the wheel's `identity_columns/COMMIT`,
 not the later commit of the qualification tools. No native rebuild is
 needed to exercise retained wheel bytes.
 
+The shell qualifier uses the CLI's routine verification profile. Do not put
+neural-training lanes into that selection: the CLI requires the explicit
+`--neural-training` profile for them. Keep a separate profile receipt when
+running those checks, as in the retained RTX 3090 record below.
+
 The gate requires both the existing expanded CLI smoke and the selected
 base-fixture identity checks. For PTX it additionally requires:
 
@@ -173,6 +178,32 @@ artifact or selection and preserve previous failures.
 The lower-level `tools/qualify_verifier_wheel.py --require-ptx` option
 requires this route for its expanded smoke. It does not force PTX or admit
 an identity column by itself.
+
+## Retained RTX 3090 check, 2026-10-20
+
+[The dated result](../bench/results/ptx_qualification/2026-10-20/summary.json)
+checks the published 0.8.55 artifacts on an RTX 3090 (`sm_86`), driver
+580.126.09. Automatic selection loaded the `sm_80` PTX payload. The expanded
+installed smoke passed; the broader identity qualification did **not** pass.
+
+The 393-lane routine profile reported 1,247 identical parts and 718 N/A
+parts, including four undeclared batch probes. The 64-lane neural-training
+profile reported 187 identical, 129 N/A and four divergent parts:
+`sequence-adamax/train`, `sequence-nadam/train`, and
+`sequence-lr-schedulers/{train,batch}`. The already completed `knn` smoke
+supplied the remaining lane without repeating it. Both numerical profiles
+loaded the pinned PTX binding bytes. The original profile-selection refusal
+and all later failures remain in the retained evidence.
+
+The missing batch declarations now have real row-wise prediction probes and
+batch-only revisions in `tools/identity_break.py`. Their new cross-vendor
+reference evidence is pending. The three sequence lanes need review against
+the pending autograd changes; this older wheel does not test those changes.
+
+The same machine passed the three small GEMM measurement-smoke recipes
+(`gemm`, `gemm-bf16`, `gemm-int8`) with Torch opponents and worker provenance.
+These check the timing pipeline, not full-dataset performance. No board
+performance result or broad paper identity claim is admitted from this run.
 
 ## Paper evidence
 

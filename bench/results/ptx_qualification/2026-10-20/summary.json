@@ -1,0 +1,470 @@
+{
+  "schema": "mojolearn.ptx-qualification-summary.v1",
+  "status": "NOT_QUALIFIED",
+  "date": "2026-10-20",
+  "source_commit": "a8255828597a3bd19ac7bb5f657a38d09b8c732f",
+  "tooling_commit": "3141d7bdc8936971655a7732c709a91e47925f20",
+  "package_version": "0.8.55",
+  "artifacts": [
+    {
+      "name": "mojolearn-0.8.55-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "ca912ce50c59efaeffd64d7b195215d4ea48c67e00c9dabd619475a6be4c1170"
+    },
+    {
+      "name": "mojolearn_nvidia-0.8.55-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "b37c82ba8438daab6ac278f280943ff441110f892a01d3ecb428fc4079901b14"
+    },
+    {
+      "name": "mojolearn_nvidia_ptx-0.8.55-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "4a3aa1b4633a7cbaf9e39f397298eeae41ae3e4ce4f1f79a3acb0bcc343b0d02"
+    }
+  ],
+  "hardware": [
+    {
+      "name": "NVIDIA GeForce RTX 3090",
+      "uuid": "GPU-70197f26-4c75-c8aa-52c5-873aba76f7c5",
+      "compute_capability": "8.6",
+      "driver_version": "580.126.09"
+    }
+  ],
+  "ptx_target": "sm_80",
+  "physical_arch": "sm_86",
+  "automatic_selection": true,
+  "ptx_manifest_sha256": "9487c6c07bd40f668cd1e70736aabb90dec9b034ddedb71ad8b0213fe90ddd5e",
+  "requested_lanes": 458,
+  "fixtures": [
+    "base"
+  ],
+  "parts": [
+    "train",
+    "infer",
+    "model",
+    "batch",
+    "stepfull"
+  ],
+  "repeats": 1,
+  "profiles": [
+    {
+      "name": "routine",
+      "lanes": 393,
+      "exit_code": 0,
+      "verdict": "VERIFIED",
+      "counts": {
+        "DIVERGENT": 0,
+        "IDENTICAL": 1247,
+        "N/A": 718,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "execution": {
+        "batch_cells": 24,
+        "batch_stops": [],
+        "batched_cells": 393,
+        "batches": 17,
+        "completed_cells": 393,
+        "crashed_cells": [],
+        "fallback_cells": [],
+        "fresh_cells": 0,
+        "interrupted": null,
+        "mode": "batched-worker",
+        "timeout_s": 120.0,
+        "total_cells": 393
+      },
+      "ptx_worker_bindings": {
+        "bindings": 33,
+        "sha256": [
+          "0987e2eec458d790f393ab25174d6c6dfad8b73a249aac64e079366dc2f67be4",
+          "12548501091c7114c80abf5b038d94520119da7cddf368741b27f25ff22098e1",
+          "1b0584ac7d8dca196cbee1a1c471665fb8e069d6883b92275e5f4747392f65d3",
+          "1c4b8d8aa08bd933a3f7756ea718caa51e06f91dd24bda5d980968f0347d4621",
+          "3126570cd7125a66baec5ccdc4b4374e4d8f5bfd36424746f66d5dfd68ca8e19",
+          "33562c5611a1255cb2525f98ba2f84b597fe38b7c349e24b0b2afe19570ba76f",
+          "355b2ecbe3a2b57d170684200432f1a5e23a8b795016fdf01e96055405e521a0",
+          "419574b86885a2bde25d086410d8340f36a2951075a9c3cd4ea66a5f657a9220",
+          "439a23450335b0fbe612d5eab9588e76df1015f4dbd51cb6a9ab3f3fd5d3a798",
+          "4c7365d10d6370d9af1b9e675fe23b712abe2cac54c06124f1c5f3001cdd74be",
+          "4d6094b65478a4db721ad115f0f0cf89c8d0ba5a18f7fb0848874e33454b3d4b",
+          "51f6ec22c98df6b4637bc9a9771afa56d1dc842fce2ad9ca6fcacea7aeeed67e",
+          "5b439d917dc5c20f6fe037f75936a6a5cc41648b1326cb44bd74db5e1ace18e9",
+          "5d93c3c1d3475c6a3918d34d365cf5f61946dc14da07cf0c1f1f1a316e2ab060",
+          "685b4dc022772b630ce0d92a0217440e83f11024cb3a78e42245309f7c54c754",
+          "69d3387c03de74b3ce6241b7a1e1c075457955a48f3b1cdcc0b62e5ca601a6f2",
+          "726df4416f6d955538be8e36e4933325fb60e540df655b1817557f4cb3985fcb",
+          "768d349d9a968ed5d64faacc4da51497d70c488d7388f2fb658867eb1cbdefa0",
+          "814e73a3b5691ecb3b287ddf93855910f5e1bba220178545e4b3fa854bc3c7e1",
+          "81c968e15d74bc7d30f6e0cdf6b5f96488b5a5efd883396f2a9dbec78f63a362",
+          "8e80a522badfda73634a58c3bf2f3e9bdef613d9eef6ea8ed1046627427667a2",
+          "9805f7985afddc0d3ae2b6c03b59c2bb7e62b2a486c6c0082a5b0f66c60b4f8d",
+          "9e72f7f212870072ce37fb533612d1a507c3ab80147a63cd1b5f200e44e260e2",
+          "af327f9fef939d1d951a7d0aa4a6b9dcb870252ab42daf4478c43c7fcada272b",
+          "b79c00925725eb484fc22f9bd2a68b6ee345c5ed61e08f678f9c3f425781f931",
+          "c6a6cad7470983865d32c010e16f9c8ba7e8844793fd411039c716379fb9fa8a",
+          "de97f73165827a30f6ee6823fc5e2c992569a2bcbfa95eff46fdd4222be15ba6",
+          "ead3e978cdfc2c4ace54541468271f6c3f86e054a9c58292a9d5fddf6611a401",
+          "eb0227c2919dead7f59ff50721b5b99dfc526d8e542d8f8ebfe1358ae749741a",
+          "ec504ab74be417d4f0ba69fad697d37710046e0c094f43c97a094ceaab0d264f",
+          "eea3425110b46c4286b01f2f331e55eec559fd4887da601f3aff6bfd08048f17",
+          "f571d3e9ff240700f8ad765337bd643d5afe41438ae0bfe02957a2c5623ccf52",
+          "fd3854a02fdc3b30b854a72c1095919496f4ae3bc0c72d52fea44f91b36f98bc"
+        ]
+      },
+      "report_sha256": "c5dffc123944295898466cc2c3d58dae77af9b1f59351de3a0abeea115f78fbb",
+      "failures": [],
+      "undeclared": [
+        {
+          "lane": "et-clf-weighted",
+          "part": "batch"
+        },
+        {
+          "lane": "et-reg-weighted",
+          "part": "batch"
+        },
+        {
+          "lane": "gbdt-class-weights",
+          "part": "batch"
+        },
+        {
+          "lane": "gbdt-multiclass-offgrid",
+          "part": "batch"
+        }
+      ]
+    },
+    {
+      "name": "neural-training",
+      "lanes": 64,
+      "exit_code": 1,
+      "verdict": "MISMATCH",
+      "counts": {
+        "DIVERGENT": 4,
+        "IDENTICAL": 187,
+        "N/A": 129,
+        "OWED": 0,
+        "REFUSED": 0
+      },
+      "execution": {
+        "batch_cells": 24,
+        "batch_stops": [],
+        "batched_cells": 64,
+        "batches": 3,
+        "completed_cells": 64,
+        "crashed_cells": [],
+        "fallback_cells": [],
+        "fresh_cells": 0,
+        "interrupted": null,
+        "mode": "batched-worker",
+        "timeout_s": 120.0,
+        "total_cells": 64
+      },
+      "ptx_worker_bindings": {
+        "bindings": 33,
+        "sha256": [
+          "0987e2eec458d790f393ab25174d6c6dfad8b73a249aac64e079366dc2f67be4",
+          "12548501091c7114c80abf5b038d94520119da7cddf368741b27f25ff22098e1",
+          "1b0584ac7d8dca196cbee1a1c471665fb8e069d6883b92275e5f4747392f65d3",
+          "1c4b8d8aa08bd933a3f7756ea718caa51e06f91dd24bda5d980968f0347d4621",
+          "3126570cd7125a66baec5ccdc4b4374e4d8f5bfd36424746f66d5dfd68ca8e19",
+          "33562c5611a1255cb2525f98ba2f84b597fe38b7c349e24b0b2afe19570ba76f",
+          "355b2ecbe3a2b57d170684200432f1a5e23a8b795016fdf01e96055405e521a0",
+          "419574b86885a2bde25d086410d8340f36a2951075a9c3cd4ea66a5f657a9220",
+          "439a23450335b0fbe612d5eab9588e76df1015f4dbd51cb6a9ab3f3fd5d3a798",
+          "4c7365d10d6370d9af1b9e675fe23b712abe2cac54c06124f1c5f3001cdd74be",
+          "4d6094b65478a4db721ad115f0f0cf89c8d0ba5a18f7fb0848874e33454b3d4b",
+          "51f6ec22c98df6b4637bc9a9771afa56d1dc842fce2ad9ca6fcacea7aeeed67e",
+          "5b439d917dc5c20f6fe037f75936a6a5cc41648b1326cb44bd74db5e1ace18e9",
+          "5d93c3c1d3475c6a3918d34d365cf5f61946dc14da07cf0c1f1f1a316e2ab060",
+          "685b4dc022772b630ce0d92a0217440e83f11024cb3a78e42245309f7c54c754",
+          "69d3387c03de74b3ce6241b7a1e1c075457955a48f3b1cdcc0b62e5ca601a6f2",
+          "726df4416f6d955538be8e36e4933325fb60e540df655b1817557f4cb3985fcb",
+          "768d349d9a968ed5d64faacc4da51497d70c488d7388f2fb658867eb1cbdefa0",
+          "814e73a3b5691ecb3b287ddf93855910f5e1bba220178545e4b3fa854bc3c7e1",
+          "81c968e15d74bc7d30f6e0cdf6b5f96488b5a5efd883396f2a9dbec78f63a362",
+          "8e80a522badfda73634a58c3bf2f3e9bdef613d9eef6ea8ed1046627427667a2",
+          "9805f7985afddc0d3ae2b6c03b59c2bb7e62b2a486c6c0082a5b0f66c60b4f8d",
+          "9e72f7f212870072ce37fb533612d1a507c3ab80147a63cd1b5f200e44e260e2",
+          "af327f9fef939d1d951a7d0aa4a6b9dcb870252ab42daf4478c43c7fcada272b",
+          "b79c00925725eb484fc22f9bd2a68b6ee345c5ed61e08f678f9c3f425781f931",
+          "c6a6cad7470983865d32c010e16f9c8ba7e8844793fd411039c716379fb9fa8a",
+          "de97f73165827a30f6ee6823fc5e2c992569a2bcbfa95eff46fdd4222be15ba6",
+          "ead3e978cdfc2c4ace54541468271f6c3f86e054a9c58292a9d5fddf6611a401",
+          "eb0227c2919dead7f59ff50721b5b99dfc526d8e542d8f8ebfe1358ae749741a",
+          "ec504ab74be417d4f0ba69fad697d37710046e0c094f43c97a094ceaab0d264f",
+          "eea3425110b46c4286b01f2f331e55eec559fd4887da601f3aff6bfd08048f17",
+          "f571d3e9ff240700f8ad765337bd643d5afe41438ae0bfe02957a2c5623ccf52",
+          "fd3854a02fdc3b30b854a72c1095919496f4ae3bc0c72d52fea44f91b36f98bc"
+        ]
+      },
+      "report_sha256": "6db7060349d2761fc6aa2d1020185e692f7b9a41d24a50bdc91d0284de5f8611",
+      "failures": [
+        {
+          "lane": "sequence-adamax",
+          "fixture": "base",
+          "part": "train",
+          "state": "DIVERGENT",
+          "value": "26cc2c2648fa8bb2",
+          "reference": "f5d88e3cf2ab67ee",
+          "detail": "this box 26cc2c2648fa8bb2, reference f5d88e3cf2ab67ee"
+        },
+        {
+          "lane": "sequence-nadam",
+          "fixture": "base",
+          "part": "train",
+          "state": "DIVERGENT",
+          "value": "c3e6f1be4f0f537f",
+          "reference": "c84124a296495f2f",
+          "detail": "this box c3e6f1be4f0f537f, reference c84124a296495f2f"
+        },
+        {
+          "lane": "sequence-lr-schedulers",
+          "fixture": "base",
+          "part": "batch",
+          "state": "DIVERGENT",
+          "value": "920e438adb20c152",
+          "reference": "5058b755ea82d792",
+          "detail": "this box 920e438adb20c152, reference 5058b755ea82d792"
+        },
+        {
+          "lane": "sequence-lr-schedulers",
+          "fixture": "base",
+          "part": "train",
+          "state": "DIVERGENT",
+          "value": "fc55dad78a22e94f",
+          "reference": "ab6a6ae5537bfe43",
+          "detail": "this box fc55dad78a22e94f, reference ab6a6ae5537bfe43"
+        }
+      ],
+      "undeclared": []
+    }
+  ],
+  "reused_knn": {
+    "counts": {
+      "IDENTICAL": 4,
+      "N/A": 1
+    },
+    "sha256": "d696fab9fe20ad06e3b440ad70cec915e7120a740063ea820b689e6b185e8d73",
+    "ptx_worker_bindings": {
+      "bindings": 33,
+      "sha256": [
+        "0987e2eec458d790f393ab25174d6c6dfad8b73a249aac64e079366dc2f67be4",
+        "12548501091c7114c80abf5b038d94520119da7cddf368741b27f25ff22098e1",
+        "1b0584ac7d8dca196cbee1a1c471665fb8e069d6883b92275e5f4747392f65d3",
+        "1c4b8d8aa08bd933a3f7756ea718caa51e06f91dd24bda5d980968f0347d4621",
+        "3126570cd7125a66baec5ccdc4b4374e4d8f5bfd36424746f66d5dfd68ca8e19",
+        "33562c5611a1255cb2525f98ba2f84b597fe38b7c349e24b0b2afe19570ba76f",
+        "355b2ecbe3a2b57d170684200432f1a5e23a8b795016fdf01e96055405e521a0",
+        "419574b86885a2bde25d086410d8340f36a2951075a9c3cd4ea66a5f657a9220",
+        "439a23450335b0fbe612d5eab9588e76df1015f4dbd51cb6a9ab3f3fd5d3a798",
+        "4c7365d10d6370d9af1b9e675fe23b712abe2cac54c06124f1c5f3001cdd74be",
+        "4d6094b65478a4db721ad115f0f0cf89c8d0ba5a18f7fb0848874e33454b3d4b",
+        "51f6ec22c98df6b4637bc9a9771afa56d1dc842fce2ad9ca6fcacea7aeeed67e",
+        "5b439d917dc5c20f6fe037f75936a6a5cc41648b1326cb44bd74db5e1ace18e9",
+        "5d93c3c1d3475c6a3918d34d365cf5f61946dc14da07cf0c1f1f1a316e2ab060",
+        "685b4dc022772b630ce0d92a0217440e83f11024cb3a78e42245309f7c54c754",
+        "69d3387c03de74b3ce6241b7a1e1c075457955a48f3b1cdcc0b62e5ca601a6f2",
+        "726df4416f6d955538be8e36e4933325fb60e540df655b1817557f4cb3985fcb",
+        "768d349d9a968ed5d64faacc4da51497d70c488d7388f2fb658867eb1cbdefa0",
+        "814e73a3b5691ecb3b287ddf93855910f5e1bba220178545e4b3fa854bc3c7e1",
+        "81c968e15d74bc7d30f6e0cdf6b5f96488b5a5efd883396f2a9dbec78f63a362",
+        "8e80a522badfda73634a58c3bf2f3e9bdef613d9eef6ea8ed1046627427667a2",
+        "9805f7985afddc0d3ae2b6c03b59c2bb7e62b2a486c6c0082a5b0f66c60b4f8d",
+        "9e72f7f212870072ce37fb533612d1a507c3ab80147a63cd1b5f200e44e260e2",
+        "af327f9fef939d1d951a7d0aa4a6b9dcb870252ab42daf4478c43c7fcada272b",
+        "b79c00925725eb484fc22f9bd2a68b6ee345c5ed61e08f678f9c3f425781f931",
+        "c6a6cad7470983865d32c010e16f9c8ba7e8844793fd411039c716379fb9fa8a",
+        "de97f73165827a30f6ee6823fc5e2c992569a2bcbfa95eff46fdd4222be15ba6",
+        "ead3e978cdfc2c4ace54541468271f6c3f86e054a9c58292a9d5fddf6611a401",
+        "eb0227c2919dead7f59ff50721b5b99dfc526d8e542d8f8ebfe1358ae749741a",
+        "ec504ab74be417d4f0ba69fad697d37710046e0c094f43c97a094ceaab0d264f",
+        "eea3425110b46c4286b01f2f331e55eec559fd4887da601f3aff6bfd08048f17",
+        "f571d3e9ff240700f8ad765337bd643d5afe41438ae0bfe02957a2c5623ccf52",
+        "fd3854a02fdc3b30b854a72c1095919496f4ae3bc0c72d52fea44f91b36f98bc"
+      ]
+    }
+  },
+  "expanded_smoke": {
+    "status": "PASSED",
+    "full_release_qualified": false,
+    "receipt_sha256": "8db65cfc3608b65c1f492e1e116c94d33ebff77d3615271b82edec84632d496a"
+  },
+  "measurement_smoke": {
+    "status": "PASSED",
+    "exit_code": 0,
+    "recipes": [
+      "gemm",
+      "gemm-bf16",
+      "gemm-int8"
+    ],
+    "eligible": 3,
+    "passed": 3,
+    "unsupported": 0,
+    "scope": "Small synthetic GEMM timing pipeline; one warmup and one scored sample; ours and Torch arms. No full-dataset measurements or performance promotion.",
+    "receipt_sha256": "07a206f6a926bd9de0361aa70cc1edb365b2a57cbc20ebb42a02f4cf020960ae"
+  },
+  "followup": {
+    "neural": "Autograd peer: diagnose the three sequence lanes/four mismatching parts against the new frozen artifacts; this run predates the pending changes.",
+    "batch": "da14b3ee3 adds four missing tree batch declarations and batch-only revisions; reference evidence remains pending on NVIDIA, AMD and Apple.",
+    "release": "0.8.56 held for autograd integration; this evidence does not qualify its new native artifacts.",
+    "paper": "Do not add a broad PTX identity claim or performance result from this failed qualification and reduced smoke.",
+    "neural_diagnosis": "Cause unassigned: the reference GPU columns are from b6c49ce419c47b224b5d257440dadc6210d33151 (0.8.44), while the tested wheel is a8255828597a3bd19ac7bb5f657a38d09b8c732f (0.8.55). Recurrent/autograd source changed between them. Compare matching native/PTX artifacts and source/protocol evidence before attributing the mismatches to PTX codegen or autograd.",
+    "source_locations": [
+      "tools/identity_lanes/sequence.py:223 (Adamax standalone optimizer plus GRU fit)",
+      "tools/identity_lanes/sequence.py:237 (NAdam standalone optimizer plus RNN fit)",
+      "tools/identity_lanes/sequence.py:252 (schedulers, LSTM fit and NAdam)",
+      "autograd/optim.mojo:439 (optimizer scalars)",
+      "sequence/recurrent.mojo:439 (recurrent optimizer scalars)"
+    ],
+    "reference_history": "The report also marks harness.matches_table=false: installed harness 95320c326c7951152f0513ad86701fe58ae0e16b989bf3ec1a5aae93021ea2d2 versus table harness 81e2dba68c8747e69b10b2da2826b975d7dacd782e51ec9eab01c3ae510c725d. Fixture and part-protocol witnesses are retained. Audit the affected lane source/protocol history before diagnosing a numerical codegen fault."
+  },
+  "evidence": {
+    "local_root": "/Users/andrewhendel/mojolearn-evidence/ptx-qualification-20261020",
+    "r2_archive": {
+      "local_path": "/Users/andrewhendel/mojolearn-evidence/box-archive/ptx-12mpxrcd7v25k6-20261020T1841Z/archive-lq.tgz",
+      "bytes": 52880453,
+      "sha256": "a2d6e80cd7f93eb13af0156f9ede98f6874978fc78d0cb26f9ee770866f64017",
+      "status": "ARCHIVED_MAC_AND_R2",
+      "r2_key": "measurements/box-archive/ptx-12mpxrcd7v25k6/ptx-12mpxrcd7v25k6-20261020T1841Z.tgz",
+      "r2_bucket": "mojolearn-data",
+      "archive_members": 2213
+    },
+    "large_measurement_archives": {
+      "local_path": "/Users/andrewhendel/mojolearn-evidence/ptx-qualification-20261020/measurement-large-artifacts.tar.xz",
+      "sha256": "25d03cb13c97a0ffad814e998c843f23fd434da59cce83b130ce9879043e2c98",
+      "bytes": 61850616,
+      "members": [
+        {
+          "file": "measurement-smoke/evidence/runs/race-75896byi/run.tar.gz",
+          "sha256": "5a04f8cf50d74b73bce1c7112329f0f3289346eb37d2ae258e84f040253cb0f4",
+          "bytes": 61771950
+        },
+        {
+          "file": "measurement-smoke/evidence/runs/race-c_dzlqj7/run.tar.gz",
+          "sha256": "5565b929009dbc703b8bc0f57d29886508afadf09bf6bc5608c948d7c97def4b",
+          "bytes": 59670715
+        },
+        {
+          "file": "measurement-smoke/evidence/runs/race-g35oofc9/run.tar.gz",
+          "sha256": "78358114cf801014f2b97fe314c19a4966e30b2d0220d913f12ff2846e0363f4",
+          "bytes": 59812417
+        }
+      ],
+      "r2_key": "measurements/box-archive/ptx-12mpxrcd7v25k6/measurement-large-25d03cb13c97a0ffad814e998c843f23fd434da59cce83b130ce9879043e2c98.tar.xz",
+      "status": "verified",
+      "verification": "GET sha256",
+      "r2_bucket": "mojolearn-data"
+    }
+  },
+  "reference_table": {
+    "format": "mojolearn.verify-reference.v1",
+    "harness_sha256": "81e2dba68c8747e69b10b2da2826b975d7dacd782e51ec9eab01c3ae510c725d",
+    "path": "/root/results-ptx-qualification-20261020/identity/venv/lib/python3.11/site-packages/mojolearn/verify_reference/table.json",
+    "records": 121,
+    "sha256": "8fea73103eaa261118fa8074ff00bb735836d68db6514187b6ce6f7283ffdd27"
+  },
+  "identity_harness": {
+    "how": "wheel copy",
+    "matches_table": false,
+    "path": "/root/results-ptx-qualification-20261020/identity/venv/lib/python3.11/site-packages/mojolearn/_identity_break.py",
+    "sha256": "95320c326c7951152f0513ad86701fe58ae0e16b989bf3ec1a5aae93021ea2d2"
+  },
+  "verification_contract": {
+    "batch_revisions": {
+      "optim-maximize": "expansion-batch-2026-09-28-v1",
+      "resample-bca": "bca-distribution-batch-2026-09-28-v2",
+      "resample-perm-samples": "expansion-batch-2026-09-28-v1",
+      "resample-unpaired": "bca-distribution-batch-2026-09-28-v2",
+      "resample-utils": "expansion-batch-2026-09-28-v1",
+      "sequence-adafactor": "expansion-batch-2026-09-28-v1",
+      "sequence-adagrad": "expansion-batch-2026-09-28-v1",
+      "sequence-adamax": "expansion-batch-2026-09-28-v1",
+      "sequence-autoarima": "expansion-batch-2026-09-28-v1",
+      "sequence-croston": "expansion-batch-2026-09-28-v1",
+      "sequence-ets": "expansion-batch-2026-09-28-v1",
+      "sequence-garch": "expansion-batch-2026-09-28-v1",
+      "sequence-gru": "expansion-batch-2026-09-28-v1",
+      "sequence-lamb": "expansion-batch-2026-09-28-v1",
+      "sequence-layernorm": "layernorm-batch-width-2026-09-28-v2",
+      "sequence-lion": "expansion-batch-2026-09-28-v1",
+      "sequence-lr-schedulers": "expansion-batch-2026-09-28-v1",
+      "sequence-lstm": "expansion-batch-2026-09-28-v1",
+      "sequence-mlp": "expansion-batch-2026-09-28-v1",
+      "sequence-moe": "expansion-batch-2026-09-28-v1",
+      "sequence-nadam": "expansion-batch-2026-09-28-v1",
+      "sequence-prophet": "expansion-batch-2026-09-28-v1",
+      "sequence-rmsprop": "expansion-batch-2026-09-28-v1",
+      "sequence-rnn": "expansion-batch-2026-09-28-v1",
+      "sequence-stl": "expansion-batch-2026-09-28-v1",
+      "sequence-theta": "expansion-batch-2026-09-28-v1",
+      "sequence-var": "expansion-batch-2026-09-28-v1",
+      "x-cnn-dropout2d": "expansion-batch-2026-09-28-v1",
+      "x-cnn-gcn": "expansion-batch-2026-09-28-v1",
+      "x-cnn-gnn-options": "expansion-batch-2026-09-28-v1",
+      "x-cnn-sage": "expansion-batch-2026-09-28-v1",
+      "x-decomp-als": "expansion-batch-2026-09-28-v1",
+      "x-decomp-lstsq-rsvd": "expansion-batch-2026-09-28-v1",
+      "x-decomp-lu": "expansion-batch-2026-09-28-v1",
+      "x-decomp-nmf": "nmf-inverse-batch-2026-09-28-v2",
+      "x-decomp-spectral-rbf": "expansion-batch-2026-09-28-v1",
+      "x-decomp-umap-options": "expansion-batch-2026-09-28-v1",
+      "x-isotonic": "expansion-batch-2026-09-28-v1",
+      "x-metrics-classification": "expansion-batch-2026-09-28-v1",
+      "x-metrics-cluster": "expansion-batch-2026-09-28-v1",
+      "x-metrics-ranking": "expansion-batch-2026-09-28-v1",
+      "x-metrics-regression": "expansion-batch-2026-09-28-v1",
+      "x-metrics-search": "expansion-batch-2026-09-28-v1",
+      "x-metrics-splitters": "expansion-batch-2026-09-28-v1",
+      "x-neighbors-connected-components": "expansion-batch-2026-09-28-v1",
+      "x-neighbors-gp-cov": "expansion-batch-2026-09-28-v1",
+      "x-neighbors-louvain": "expansion-batch-2026-09-28-v1",
+      "x-neighbors-metrics": "expansion-batch-2026-09-28-v1",
+      "x-neighbors-pagerank": "expansion-batch-2026-09-28-v1",
+      "x-neighbors-svm-precomputed": "expansion-batch-2026-09-28-v1",
+      "x-prep-label-binarizer": "expansion-batch-2026-09-28-v1",
+      "x-prep-label-binarizer-multilabel": "expansion-batch-2026-09-28-v1",
+      "x-prep-label-encoder": "expansion-batch-2026-09-28-v1",
+      "x-prep-mi-discrete": "expansion-batch-2026-09-28-v1",
+      "x-prep-multilabel-binarizer": "expansion-batch-2026-09-28-v1",
+      "x-prep-mutual-info": "expansion-batch-2026-09-28-v1",
+      "x-prep-priors": "expansion-batch-2026-09-28-v1"
+    },
+    "fixtures": {
+      "base": {
+        "X": "b5b0a0005efa3788",
+        "y_clf": "3a1bce5286de1274",
+        "y_reg": "308c22120b664e5b"
+      }
+    },
+    "harness_sha256": "95320c326c7951152f0513ad86701fe58ae0e16b989bf3ec1a5aae93021ea2d2",
+    "heldout": {
+      "base": {
+        "X": "d4de6b4eb682c465"
+      }
+    },
+    "protocols": {
+      "batch": {
+        "alone": 16,
+        "enabled": true,
+        "prefix": "1,7,full-1",
+        "split": [
+          1,
+          8,
+          "n"
+        ]
+      },
+      "stepfull": {
+        "compared": "bitwise, position by position",
+        "full": "forward(x) from a zero state, one pass",
+        "length": 16,
+        "rows": 2,
+        "stepped": "allocate_state then step(x_t, state) at every position"
+      }
+    }
+  },
+  "rental": {
+    "provider": "RunPod",
+    "pod_id": "12mpxrcd7v25k6",
+    "key": "nvc1",
+    "rate_usd_per_hour": 0.22,
+    "status": "SHARED_WITH_AUTOGRAD_USABILITY",
+    "session_work_complete": true,
+    "teardown": "Not deleted: autograd-usability is now mapped to this pod; central queue owns the lease and idle teardown."
+  }
+}
