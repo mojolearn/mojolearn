@@ -208,14 +208,14 @@ def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> Pyt
 
 
 def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    stages: PythonObject, tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
+    options: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[HostExec]()
     if len(ids) != 1 or ids[0] != 0:
         raise Error("CPU replay uses devices=(0,); logical shards retain the distributed reduction order")
     executors.append(HostExec())
-    var handle = partition_open[HostExec, OPS_HOST](sid, pid, ids, stages, tensor_shards, microbatches, optimizer, parameters, seed, executors^)
+    var handle = partition_open[HostExec, OPS_HOST](sid, pid, ids, options[0], options[1], options[2], options[3], options[4], options[5], executors^)
     return distributed_object(cls, binding, handle)
 
 
@@ -261,14 +261,14 @@ def ops_partitioned_profile_binding(id: PythonObject) raises -> PythonObject:
 
 
 def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    logical_shards: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
+    options: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[HostExec]()
     if len(ids) != 1 or ids[0] != 0:
         raise Error("CPU replay uses devices=(0,); logical shards retain the distributed reduction order")
     executors.append(HostExec())
-    var handle = distributed_open[HostExec, OPS_HOST](sid, pid, ids, logical_shards, optimizer, parameters, seed, executors^)
+    var handle = distributed_open[HostExec, OPS_HOST](sid, pid, ids, options[0], options[1], options[2], options[3], executors^)
     return distributed_object(cls, binding, handle)
 
 
