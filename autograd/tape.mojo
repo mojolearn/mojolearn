@@ -39,6 +39,13 @@ from autograd.embedding_ops import (
     embedding_refuse_ids, embedding_forward_into, embedding_plan, embedding_perm_words, embedding_backward_into,
 )
 from std.sys.compile import is_defined
+from std.memory import bitcast
+# lane ag-rankn-core: rank-N shapes and views (docs/plans/AUTOGRAD_RANKN.md)
+from autograd.rankn import (
+    ShapeN, RN_MAX_RANK, PERMUTE_N, RN_TAG_FIRST, RN_TAG_END, RN_VIEW_MARK, rn_check, rn_collapse,
+    rn_desc_view, rn_normalize_axis,
+)
+from autograd.rankn_ops import rn_copy_strided
 
 comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
 comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it was used: record the graph again"
@@ -366,6 +373,10 @@ struct Tape(Movable):
     var _word_node: Int
     # lane ag-embedding-op: the ids of this graph (Tape.ids), cleared by reset
     var _ids: List[_Ids]
+    # lane ag-rankn-core: one rank-N shape per node, parallel to _nodes
+    # (appended by _record, cleared by reset). The node's rows x cols is its
+    # matrix view: rows = the product of the leading dims, cols = the last.
+    var _shapes: List[ShapeN]
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -385,6 +396,7 @@ struct Tape(Movable):
         self._word_armed = False
         self._word_node = -1
         self._ids = List[_Ids]()
+        self._shapes = List[ShapeN]()
 
     def no_grad(mut self):
         """Enter inference mode: later operations keep no graph or gradients.
@@ -470,6 +482,7 @@ struct Tape(Movable):
         self._word_armed = False
         self._word_node = -1
         self._ids.clear()
+        self._shapes.clear()
 
     def arm_fold_word(mut self, dst: FP, factor: Float32):
         """AUTOGRAD_CURVE_WORD: the next AXIS_ALL sum or mean recorded on
@@ -500,29 +513,55 @@ struct Tape(Movable):
     # a leaf must stay unchanged until backward finishes), so the copy made
     # later is the copy made at record time. value() refuses a pending view
     # (call materialize or value_of): no reader can see the unfilled buffer.
+    #
+    # Lane ag-rankn-core generalises the pending view (AUTOGRAD_RANKN.md 1.3):
+    # a PERMUTE_N node, and a custom node of a rank-N tag (RN_TAG_FIRST ..
+    # RN_TAG_END) recorded with Tape.strided_view_args (saved.i10 =
+    # RN_VIEW_MARK), are pending strided views: saved.p0 the source, saved.i0
+    # the base offset, saved.i1..i8 the strides, saved.p11 the descriptor.
+    # A strided reader (operand_nd; matmul through GEMM strides when the
+    # view's matrix view has two strides) reads them in place; a dense reader
+    # fills the value buffer once with OP_RN_COPY_STRIDED (_fill_view). These
+    # views are pending regardless of AUTOGRAD_TRANSPOSE_VIEW, which governs
+    # the transpose node only; the TRANSPOSE branch is the code above.
     @always_inline
     def _pending(self, i: Int) -> Bool:
+        if self._nodes[i].saved.i9 != 1:
+            return False
+        var op = self._nodes[i].op
+        if op == PERMUTE_N:
+            return True
+        if op >= CUSTOM + RN_TAG_FIRST and op < CUSTOM + RN_TAG_END and self._nodes[i].saved.i10 == RN_VIEW_MARK:
+            return True
         comptime if AUTOGRAD_TRANSPOSE_VIEW:
-            return self._nodes[i].op == TRANSPOSE and self._nodes[i].saved.i9 == 1
+            return op == TRANSPOSE
         else:
             return False
 
+    def _fill_view[E: Exec](self, mut ex: E, i: Int) raises:
+        """Write pending view i's words into its value buffer (one copy
+        launch); the caller clears or keeps the pending flag."""
+        var n = self._nodes[i]
+        if n.op == TRANSPOSE:
+            _transpose(ex, n.value, n.saved.p0, n.saved.i0, n.saved.i1)
+        else:
+            rn_copy_strided(ex, n.value, n.saved.p0, n.saved.i0, n.saved.p11, 0, n.rows * n.cols)
+
     def _materialize_at[E: Exec](mut self, mut ex: E, i: Int) raises:
         if self._pending(i):
-            var n = self._nodes[i]
-            _transpose(ex, n.value, n.saved.p0, n.saved.i0, n.saved.i1)
+            self._fill_view(ex, i)
             self._nodes[i].saved.i9 = 0
 
     def _use[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Int:
-        """_check, then materialize a pending transpose view (its value is
-        about to be read as a dense matrix)."""
+        """_check, then materialize a pending view (its value is about to
+        be read as a dense matrix)."""
         var i = self._check(x)
         self._materialize_at(ex, i)
         return i
 
     def materialize[E: Exec](mut self, mut ex: E, x: Tensor) raises:
-        """Make x's value buffer hold its values (a transpose recorded as a
-        view is copied once; anything else is unchanged)."""
+        """Make x's value buffer hold its values (a transpose or permute
+        recorded as a view is copied once; anything else is unchanged)."""
         _ = self._use(ex, x)
 
     def value_of[E: Exec](mut self, mut ex: E, x: Tensor) raises -> FP:
@@ -728,6 +767,7 @@ struct Tape(Movable):
             var at = len(self._nodes)
             self._nodes.append(_Node(value, dummy_ptr(), rows, cols, False, op, len(self._parents), 0,
                                      saved, False, True, False, False, -1, dummy_ptr()))
+            self._shapes.append(ShapeN.matrix(rows, cols))
             return Tensor(Int(self._identity.value()), self._generation, at)
         var requires = leaf_grad
         var start = len(self._parents)
@@ -751,6 +791,7 @@ struct Tape(Movable):
         var index = len(self._nodes)
         self._nodes.append(_Node(value, grad, rows, cols, requires, op, start, len(parents), saved, ready, False, False,
                                  requires and caller_grad, -1, grad))
+        self._shapes.append(ShapeN.matrix(rows, cols))
         return Tensor(Int(self._identity.value()), self._generation, index)
 
     def variable[E: Exec](
@@ -909,7 +950,7 @@ struct Tape(Movable):
         """Return the executor pointer for a tensor's values."""
         var i = self._check(x)
         if self._pending(i):
-            raise Error("autograd: the tensor is a transpose view whose values are not copied yet: call materialize(ex, x) or value_of(ex, x)")
+            raise Error("autograd: the tensor is a view whose values are not copied yet: call materialize(ex, x) or value_of(ex, x)")
         return self._nodes[i].value
 
     def gradient(self, x: Tensor) raises -> FP:
@@ -968,9 +1009,9 @@ struct Tape(Movable):
         var vi = self._check(x)
         var n = self._nodes[vi]
         if self._pending(vi):
-            # a transpose view: fill its buffer (the flag stays; a later
+            # a pending view: fill its buffer (the flag stays; a later
             # materialize copies the same words again)
-            _transpose(ex, n.value, n.saved.p0, n.saved.i0, n.saved.i1)
+            self._fill_view(ex, vi)
         var result = List[Float32](length=n.rows * n.cols, fill=0)
         ex.download(FP(unsafe_from_address=Int(result.unsafe_ptr())), n.value, len(result))
         return result^
