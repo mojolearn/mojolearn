@@ -32,7 +32,7 @@ def _file_header(path: PythonObject) raises -> PythonObject:
         raise Error("ValueError: safetensors file has no header")
     var count = UInt64(0)
     for k in range(8):  # small-loop(8: safetensors header-length bytes): file metadata
-        count |= UInt64(py=raw[k]) << (8 * k)
+        count |= UInt64(py=raw[k]) << UInt64(8 * k)
     if count > UInt64(len(raw) - 8):
         raise Error("ValueError: safetensors header exceeds the file")
     var b = Python.import_module("builtins")
