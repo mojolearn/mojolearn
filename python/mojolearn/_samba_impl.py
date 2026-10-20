@@ -707,6 +707,13 @@ class SambaStack(object):
             ``loss``, ``lr``, ``step`` and ``total_norm`` (the gradient norm before
             clipping, or None when `max_norm` is None).
         """
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "model_train_step", (self, inputs, targets), _native_samba_bridge.CONTEXT)
+
+    # Historical implementation retained while custom Python schedule and
+    # externally rebound optimizer ownership remain explicit runtime debt.
+    # No product entry routes here as an implicit Python fallback.
+    def _legacy_train_step(self, inputs, targets):
         ids = self._ids(inputs, "inputs")
         y = self._ids(targets, "targets")
         if y.shape != ids.shape:
