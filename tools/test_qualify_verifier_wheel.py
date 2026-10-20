@@ -129,7 +129,7 @@ class ExpandedWheelTests(unittest.TestCase):
 
     def _split_wheels(self, root, plugin_version='0.8.7'):
         import json, zipfile
-        core = root/'mojolearn-0.8.7-py3-none-manylinux_2_35_x86_64.whl'
+        core = root/'mojolearn_core-0.8.7-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(core,'w') as archive:
             archive.writestr('mojolearn/verify_reference/models/models.json',json.dumps({'models':[]}))
             archive.writestr('mojolearn/identity_columns/COMMIT','a'*40)
@@ -175,7 +175,7 @@ class ExpandedWheelTests(unittest.TestCase):
 
     def _installed(self, root, versions, commit='a'*40, extra=()):
         """Qualify a fake installed package (--installed-python): the first
-        job reports where it is and the three versions, the next fails."""
+        job reports where it is and the split projects' versions, the next fails."""
         import json
         from unittest.mock import patch
         from qualify_verifier_wheel import main
@@ -204,7 +204,8 @@ class ExpandedWheelTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as temp:
-            three = {'mojolearn':'0.9.0','mojolearn-nvidia':'0.9.0','mojolearn-amd':'0.9.0'}
+            three = {n: '0.9.0' for n in ('mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd',
+                                         'mojolearn-nvidia-ptx')}
             rc, commands, receipt = self._installed(Path(temp), three, extra=('--expected-source-commit','a'*40))
             self.assertEqual(rc, 1)   # the fake pip check fails; everything before it ran
             self.assertEqual(commands[0][:2], ['/venv/bin/python','-c'])
@@ -218,12 +219,16 @@ class ExpandedWheelTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as temp:
-            rc, commands, receipt = self._installed(Path(temp), {'mojolearn':'0.9.0','mojolearn-nvidia':'0.9.0',
-                                                                 'mojolearn-amd':None})
-            self.assertEqual((rc, len(commands), receipt['status']), (1, 1, 'FAILED'))
-            self.assertIn('mojolearn-amd', receipt['reason'])
+            for missing in ('mojolearn-amd', 'mojolearn-core'):
+                versions = {n: '0.9.0' for n in ('mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd',
+                                                  'mojolearn-nvidia-ptx')}
+                versions[missing] = None
+                rc, commands, receipt = self._installed(Path(temp) / missing, versions)
+                self.assertEqual((rc, len(commands), receipt['status']), (1, 1, 'FAILED'))
+                self.assertIn(missing, receipt['reason'])
         with tempfile.TemporaryDirectory() as temp:
-            three = {'mojolearn':'0.9.0','mojolearn-nvidia':'0.9.0','mojolearn-amd':'0.9.0'}
+            three = {n: '0.9.0' for n in ('mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd',
+                                         'mojolearn-nvidia-ptx')}
             rc, commands, receipt = self._installed(Path(temp), three, extra=('--expected-source-commit','b'*40))
             self.assertEqual((rc, len(commands), receipt['status']), (1, 1, 'FAILED'))
             self.assertIn('records source commit', receipt['reason'])

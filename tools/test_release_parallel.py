@@ -21,7 +21,8 @@ import release  # noqa: E402
 import release_check  # noqa: E402
 
 COMMIT = "a" * 40
-WHEEL = "mojolearn-0.8.14-py3-none-manylinux_2_35_x86_64.whl"
+#: the Linux core, mojolearn-core (2026-10-20)
+WHEEL = "mojolearn_core-0.8.14-py3-none-manylinux_2_35_x86_64.whl"
 
 
 def args(**kw):
@@ -70,10 +71,10 @@ class Columns(unittest.TestCase):
         with zipfile.ZipFile(final, "w") as z:
             z.writestr("mojolearn/identity_columns/COMMIT", COMMIT + "\n")
         self.final = final
-        # the split set: the core above and both plugins beside it
+        # the split set: the core above and the vendor and payload packages beside it
         self.plugins = {}
         for prefix in ("mojolearn_nvidia", "mojolearn_amd", "mojolearn_nvidia_ptx"):
-            p = final.parent / WHEEL.replace("mojolearn-", prefix + "-", 1)
+            p = final.parent / WHEEL.replace("mojolearn_core-", prefix + "-", 1)
             with zipfile.ZipFile(p, "w") as z:
                 z.writestr(f"mojolearn/{prefix}.txt", prefix)
             self.plugins[prefix] = p
@@ -90,7 +91,7 @@ class Columns(unittest.TestCase):
         out = r.rel / ("smoke-linux" if name == "nvidia" else "column-amd")
         out.mkdir(parents=True, exist_ok=True)
         if rc == 0:
-            # each column's smoke receipt: the core, with both plugins installed beside it
+            # each column's smoke receipt: the core, with every vendor and payload package installed beside it
             (out / "results.json").write_text(json.dumps(dict(
                 status="PASSED", scope="expanded", source_commit=COMMIT,
                 # the loader's selection on the box (Release.column_arch_ok)
