@@ -170,12 +170,12 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
             # Trusted repository file-only checker; never import package/native code.
             # (tools/ is on sys.path from the module top, DEVIATION 2290.)
             from check_linux_release_qualification import check_release061
-            # DEVIATION 2293: one owner for the Hopper slot's two spellings.
+            # One owner of the release contract (the gpu_plugins registry).
             import verify_linux_surface_qualification as surface
             result = check_release061(path, qualification_root, source_root)
             require(result.get('status') == 'PASSED'
                     and result.get('wheel_sha256') == wheel_digest(path)
-                    # DEVIATION 2293: Hopper spelled sm_90 or sm_90a, never both.
+                    # every required set, optional registered sets, each slot once.
                     and surface.arch_set_ok(set(result.get('runtime_coverage', {}))),
                     'exact final combined wheel runtime qualification missing')
             return sorted(tags)
