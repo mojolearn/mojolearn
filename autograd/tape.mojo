@@ -318,7 +318,7 @@ def _first_order_kind(op: Int) -> Bool:
     return (op == LEAF or (op >= ADD and op <= DIVIDE) or (op >= RELU and op <= SCALE) or op == TRANSPOSE
             or op == RESHAPE or op == REDUCE or op == SOFTMAX or op == LOG_SOFTMAX or op == LOSS_ELEM
             or op == LOSS_CE or op == LOSS_SCE or op == LOSS_REDUCED or op == MATMUL or op == LINEAR
-            or op == DROPOUT or op == EMBEDDING or op == EXPAND or op == CLAMP)
+            or op == DROPOUT or op == EMBEDDING or op == EXPAND or op == CLAMP or op == PERMUTE_N)
 
 
 @always_inline
