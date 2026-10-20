@@ -15,6 +15,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 # The 48 mlp_cases digests (case, epochs, digest), recorded on host, Metal, NVIDIA and AMD.
 MLP_DIGESTS = ROOT / 'autograd/checks/mlp_cases_digests.tsv'
+<<<<<<< HEAD
 # The generated higher-order suite names its expected counts on its first line
 # (autograd/checks/generate_higher_oracles.py): '# HIGHER_EXPECT cases=N refusals=K fused=F'.
 HIGHER_SUITE = ROOT / 'autograd/checks/higher.mojo'
@@ -25,12 +26,23 @@ def higher_expect():
     if first[:2] != ['#', 'HIGHER_EXPECT']:
         raise RuntimeError(f'{HIGHER_SUITE} has no HIGHER_EXPECT line (regenerate it)')
     return {k: int(v) for k, v in (field.split('=') for field in first[2:])}
+=======
+# The rank-N lanes' checks (docs/plans/AUTOGRAD_RANKN.md section 6): each
+# prints `RANKN <lane> <case> digest <d>` lines and PASS, and raises on a
+# failed comparison. The orchestrator diffs the RANKN lines of CPU, Metal,
+# NVIDIA and AMD; here the local CPU and GPU lines must agree.
+RANKN_LANES = ('core', 'fold', 'bmm', 'layout', 'conv')
+>>>>>>> origin/lane/ag-rankn-python
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', choices=('cpu', 'gpu', 'both'), default='cpu')
+<<<<<<< HEAD
     parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example', 'higher'), default='all')
+=======
+    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example', 'rankn'), default='all')
+>>>>>>> origin/lane/ag-rankn-python
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--mojo', default='mojo')
     args = parser.parse_args()
@@ -171,6 +183,7 @@ def main():
                                           'results': len(a), 'mismatches': mismatches})
             if mismatches:
                 raise RuntimeError(f'local CPU/GPU fixture bits differ: {mismatches}')
+<<<<<<< HEAD
         if args.only == 'higher':
             # Higher-order gradients (create_graph): the generated suite on each
             # backend; HIGHER_DIGEST <case> <digest> lines are kept per backend
@@ -211,6 +224,26 @@ def main():
                                               'results': len(a), 'mismatches': mismatches})
                 if mismatches:
                     raise RuntimeError(f'local CPU/GPU higher-order bits differ: {mismatches}')
+=======
+        rankn_logs = {}
+        for backend in backends:
+            if args.only in ('all', 'rankn'):
+                for lane in RANKN_LANES:
+                    path = native(f'{backend}-rankn-{lane}', f'autograd/checks/rankn_{lane}_{backend}.mojo')
+                    text = path.read_text()
+                    lines = [line for line in text.splitlines() if line.startswith(f'RANKN {lane} ')]
+                    if not lines or 'PASS' not in text or 'FAIL' in text:
+                        raise RuntimeError(f'rankn {lane} ({backend}): no RANKN lines, no PASS, or a FAIL')
+                    rankn_logs[(backend, lane)] = sorted(lines)
+        for lane in RANKN_LANES:
+            if ('cpu', lane) in rankn_logs and ('gpu', lane) in rankn_logs:
+                a, b = rankn_logs[('cpu', lane)], rankn_logs[('gpu', lane)]
+                mismatches = sorted(set(a) ^ set(b))
+                report['comparisons'].append({'kind': f'local CPU/GPU rankn {lane} digest comparison',
+                                              'results': len(a), 'mismatches': mismatches})
+                if mismatches:
+                    raise RuntimeError(f'local CPU/GPU rankn {lane} digests differ: {mismatches[:4]}')
+>>>>>>> origin/lane/ag-rankn-python
         if args.only in ('all', 'example'):
             native('custom-regression', 'autograd/examples/custom_regression.mojo')
         report['status'] = 'passed'

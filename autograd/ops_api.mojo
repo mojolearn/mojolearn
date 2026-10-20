@@ -49,7 +49,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from autograd.tape import Tape, Tensor
-from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
+from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
 from autograd.layers import NeuralRules, layer_norm
 from autograd.higher import backward_recorded, backward_scalar_recorded
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
@@ -59,6 +59,18 @@ from core.cast_in import CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
+# Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
+# core's shape metadata and views, the fold / bmm / layout / conv lanes'
+# entries, and the shared glue (autograd/rankn_api.mojo).
+from autograd.rankn import RN_MAX_RANK, ShapeN, rn_normalize_axis
+from autograd.rankn_fold import rankn_binary, rankn_sum, rankn_max
+from autograd.rankn_bmm import rankn_matmul
+from autograd.rankn_layout import rankn_concat, rankn_narrow, rankn_take
+from autograd.rankn_conv import rankn_conv2d, rankn_max_pool2d, rankn_avg_pool2d
+from autograd.rankn_api import (
+    RN_CONCAT_MAX, RankNRules, rn_as_shape, rn_axis_mask, rn_check_permutation, rn_dims,
+    rn_mask_axes, rn_reduced, rn_resolve, rn_shape, rn_softmax_along,
+)
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -113,6 +125,24 @@ comptime OPS_DETACH = 29
 comptime OPS_FULL = 30
 comptime OPS_COPY = 31
 comptime OPS_EMBEDDING = 32
+# Rank-N operations (lane ag-rankn-python; plan section 5). Integer
+# arguments longer than OPS_PACK_INTS travel by the list entry (ops_op).
+comptime OPS_RESHAPE_N = 33      # [mode, ...]: 0 reshape dims (one -1), 1 flatten start end, 2 squeeze axes, 3 unsqueeze axis
+comptime OPS_PERMUTE = 34        # [mode, ...]: 0 permute axes, 1 swap two axes
+comptime OPS_SUM_N = 35          # [keepdims (-1 default, 0, 1), axes...]; no axes: every element
+comptime OPS_MEAN_N = 36
+comptime OPS_MAX = 37
+comptime OPS_MATMUL_N = 38       # the batched product (OPS_MATMUL routes rank-N operands here too)
+comptime OPS_CONCAT = 39         # [axis]; any number of tensors
+comptime OPS_NARROW = 40         # [axis, piece, mode, ...]: mode 0 sizes..., mode 1 sections
+comptime OPS_TAKE = 41           # [ids descriptor (7 words), axis]
+comptime OPS_SOFTMAX_N = 42      # [axis]
+comptime OPS_LOG_SOFTMAX_N = 43  # [axis]
+comptime OPS_CONV2D = 44         # [stride, padding]; x, weight, optional bias
+comptime OPS_MAXPOOL2D = 45      # [kernel, stride]
+comptime OPS_AVGPOOL2D = 46      # [kernel, stride]
+# 47 (OPS_ARGMAX) is reserved for the plan's int32 argmax result; the fold
+# lane's interface names no argmax entry yet.
 
 # Metric codes of ops_metric.
 comptime OPS_METRIC_ACCURACY = 1
@@ -197,6 +227,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var generation: List[Int]
     var rows: List[Int]
     var cols: List[Int]
+    #: the full shape of each tensor (rows, cols above are its matrix view)
+    var shapes: List[ShapeN]
     #: address of a session-owned buffer (an uploaded tensor), 0 otherwise
     var owned: List[Int]
     var wants_grad: List[Bool]
@@ -219,6 +251,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.generation = List[Int]()
         self.rows = List[Int]()
         self.cols = List[Int]()
+        self.shapes = List[ShapeN]()
         self.owned = List[Int]()
         self.wants_grad = List[Bool]()
         self.index_rows = List[Int]()
@@ -238,6 +271,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def _add(mut self, t: Tensor, owned: Int, wants_grad: Bool, index_rows: Int) raises -> Int:
         var r = self.tape.rows(t)
         var c = self.tape.cols(t)
+        var sh = self.tape.shape_of(t)
         var slot: Int
         if len(self.free_slots) > 0:
             slot = self.free_slots.pop()
@@ -245,6 +279,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.live[slot] = True
             self.rows[slot] = r
             self.cols[slot] = c
+            self.shapes[slot] = sh
             self.owned[slot] = owned
             self.wants_grad[slot] = wants_grad
             self.index_rows[slot] = index_rows
@@ -257,6 +292,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.generation.append(0)
             self.rows.append(r)
             self.cols.append(c)
+            self.shapes.append(sh)
             self.owned.append(owned)
             self.wants_grad.append(wants_grad)
             self.index_rows.append(index_rows)
@@ -281,6 +317,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var slot = self._slot(h)
         return (self.rows[slot], self.cols[slot])
 
+    def shape_nd(self, h: Int) raises -> ShapeN:
+        """The full shape of tensor h."""
+        return self.shapes[self._slot(h)]
+
     def recording(self) -> Bool:
         return self.tape.is_recording()
 
@@ -301,6 +341,28 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var buf = self.ex.alloc(n)
         upload_cast(self.ex, buf, src)
         var t = self.tape.variable(self.ex, buf, rows, cols, requires_grad)
+        return self._add(t, Int(buf), requires_grad, 0)
+
+    def upload_nd(mut self, src: CastIn, shape: ShapeN, requires_grad: Bool) raises -> Int:
+        """`upload` of a C-order array of any rank: `src` is its row-major
+        (rows, cols) matrix view and `shape` its full shape (the same
+        element count). A rank-2 shape is `upload` itself."""
+        if shape.ndim == 2:
+            if shape.d[0] != src.rows or shape.d[1] != src.cols:
+                raise Error("ops: tensor: the shape does not match the array")
+            return self.upload(src, requires_grad)
+        src.check("ops: tensor")
+        var rows = src.rows
+        var cols = src.cols
+        if rows <= 0 or cols <= 0 or rows > ((1 << 60) // 4) // cols:
+            raise Error("ops: tensor dimensions must be positive")
+        if shape.count() != rows * cols:
+            raise Error("ops: tensor: the shape does not match the array")
+        if requires_grad and not self.tape.is_recording():
+            raise Error("ops: requires_grad needs a recording session (Session(record=True))")
+        var buf = self.ex.alloc(rows * cols)
+        upload_cast(self.ex, buf, src)
+        var t = self.tape.variable_nd(self.ex, buf, shape, requires_grad)
         return self._add(t, Int(buf), requires_grad, 0)
 
     def download(mut self, h: Int, dst: FP) raises:
@@ -339,8 +401,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var r = self.rows[slot]
                 var c = self.cols[slot]
                 var grad = self.wants_grad[slot] and self.tape.is_recording()
-                var leaf = self.tape.variable(self.ex, buf, r, c, grad)
-                self.tensors[slot] = leaf
+                if self.shapes[slot].ndim == 2:
+                    var leaf = self.tape.variable(self.ex, buf, r, c, grad)
+                    self.tensors[slot] = leaf
+                else:
+                    var leaf_nd = self.tape.variable_nd(self.ex, buf, self.shapes[slot], grad)
+                    self.tensors[slot] = leaf_nd
         for i in range(len(self.retired)):  # driver-loop: over freed uploads
             var old = FP(unsafe_from_address=self.retired[i])
             self.ex.free(old)
@@ -374,7 +440,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if not self.tape.is_recording():
             raise Error("ops: backward needs a recording session (Session(record=True))")
         var t = self.tensor(h)
-        self.tape.backward_scalar_with_rules(self.ex, t, NeuralRules(), accumulate)
+        # RankNRules: NeuralRules plus the rank-N lanes' custom tags
+        # (autograd/rankn_api.mojo); a graph without rank-N nodes runs as
+        # with NeuralRules
+        self.tape.backward_scalar_with_rules(self.ex, t, RankNRules(), accumulate)
 
     def gradient_into(mut self, h: Int, dst: FP) raises:
         """The gradient of tensor `h` from the last backward into the caller's memory."""
@@ -819,27 +888,35 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """Run operation `code` on the tensors `hs` with integer and float
         arguments; returns the new tensor's handle."""
         var x = List[Tensor]()
-        for i in range(len(hs)):  # small-loop(hs: an op's input handles, at most three): handle lookup, no data
+        for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
             x.append(self.tensor(hs[i]))
         var n = len(x)
         var ni = len(ints)
         var nf = len(fs)
         var t: Tensor
-        if code == OPS_MATMUL:
+        if code == OPS_MATMUL or code == OPS_MATMUL_N:
             _need("matmul", n, 2, 0, ni, 0, nf)
-            t = self.tape.matmul(self.ex, x[0], x[1])
+            var ma = self.tape.ndim(x[0])
+            var mb = self.tape.ndim(x[1])
+            if ma < 2 or mb < 2:
+                raise Error("ops: matmul takes tensors of at least 2 dimensions")
+            if ma == 2 and mb == 2:
+                t = self.tape.matmul(self.ex, x[0], x[1])
+            else:
+                # batched product (rank-N @ rank-2 routes to the 2-D GEMM inside)
+                t = rankn_matmul(self.tape, self.ex, x[0], x[1])
         elif code == OPS_ADD:
             _need("add", n, 2, 0, ni, 0, nf)
-            t = self.tape.add(self.ex, x[0], x[1])
+            t = self._binary(x[0], x[1], ADD)
         elif code == OPS_SUB:
             _need("sub", n, 2, 0, ni, 0, nf)
-            t = self.tape.subtract(self.ex, x[0], x[1])
+            t = self._binary(x[0], x[1], SUBTRACT)
         elif code == OPS_MUL:
             _need("mul", n, 2, 0, ni, 0, nf)
-            t = self.tape.multiply(self.ex, x[0], x[1])
+            t = self._binary(x[0], x[1], MULTIPLY)
         elif code == OPS_DIV:
             _need("div", n, 2, 0, ni, 0, nf)
-            t = self.tape.divide(self.ex, x[0], x[1])
+            t = self._binary(x[0], x[1], DIVIDE)
         elif code == OPS_RELU:
             _need("relu", n, 1, 0, ni, 0, nf)
             t = self.tape.relu(self.ex, x[0])
@@ -863,7 +940,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             t = self.tape.scale(self.ex, x[0], fs[0])
         elif code == OPS_TRANSPOSE:
             _need("transpose", n, 1, 0, ni, 0, nf)
-            t = self.tape.transpose(self.ex, x[0])
+            t = self._swap(x[0], -2, -1)
         elif code == OPS_RESHAPE:
             _need("reshape", n, 1, 2, ni, 0, nf)
             t = self.tape.reshape(self.ex, x[0], ints[0], ints[1])
@@ -888,6 +965,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 t = self.tape.linear(self.ex, x[0], x[1], Optional[Tensor](x[2]), act)
             else:
                 t = self.tape.linear(self.ex, x[0], x[1], None, act)
+            var lx = self.tape.shape_of(x[0])
+            if lx.ndim > 2:
+                # the last axis is the feature axis: x's leading dims + (outputs,)
+                var ld = rn_dims(lx)
+                ld[lx.ndim - 1] = self.tape.cols(t)
+                t = rn_as_shape(self.tape, self.ex, t, rn_shape(ld, "ops: linear"))
         elif code == OPS_LAYER_NORM:
             _need("layer_norm", n, 3, 0, ni, 1, nf)
             t = layer_norm(self.tape, self.ex, x[0], x[1], x[2], fs[0])
@@ -899,6 +982,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # indices must be a permutation output: every value lies in
             # [0, its row count), checked here against X's rows, no download.
             _need("gather_rows", n, 2, 2, ni, 0, nf)
+            if self.tape.ndim(x[0]) != 2:
+                raise Error("ops: gather_rows takes a 2-D tensor")
             var gx = self._slot(hs[0])
             var gj = self._slot(hs[1])
             var g_bound = self.index_rows[gj]
@@ -939,22 +1024,47 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             t = binary_cross_entropy_with_logits(self.tape, self.ex, x[0], x[1], ints[0])
         elif code == OPS_CROSS_ENTROPY:
             _need("cross_entropy", n, 2, 1, ni, 0, nf)
-            t = cross_entropy(self.tape, self.ex, x[0], x[1], ints[0])
+            if self.tape.ndim(x[0]) != 2 or self.tape.ndim(x[1]) != 2:
+                # logits [..., classes] and codes of the leading shape: the
+                # loss's (rows, classes) and (rows, 1) views (free)
+                var ce_rows = self.tape.rows(x[0])
+                var ce_cols = self.tape.cols(x[0])
+                if self.tape.shape_of(x[1]).count() != ce_rows:
+                    raise Error("ops: cross_entropy takes one class code per row of logits")
+                var ce_z = rn_as_shape(self.tape, self.ex, x[0], ShapeN.matrix(ce_rows, ce_cols))
+                var ce_c = rn_as_shape(self.tape, self.ex, x[1], ShapeN.matrix(ce_rows, 1))
+                t = cross_entropy(self.tape, self.ex, ce_z, ce_c, ints[0])
+            else:
+                t = cross_entropy(self.tape, self.ex, x[0], x[1], ints[0])
         elif code == OPS_DETACH:
             _need("detach", n, 1, 0, ni, 0, nf)
             t = self.tape.detach(self.ex, x[0])
         elif code == OPS_FULL:
-            _need("full", n, 0, 2, ni, 1, nf)
-            var f_rows = ints[0]
-            var f_cols = ints[1]
-            if f_rows <= 0 or f_cols <= 0 or f_rows > ((1 << 60) // 4) // f_cols:
+            if n != 0 or nf < 1 or ni < 1:
+                raise Error("ops: full takes a shape and a value")
+            if ni == 2:
+                var f_rows = ints[0]
+                var f_cols = ints[1]
+                if f_rows <= 0 or f_cols <= 0 or f_rows > ((1 << 60) // 4) // f_cols:
+                    raise Error("ops: full needs positive dimensions")
+                var f_dst = self.tape.reserve(self.ex, f_rows * f_cols)
+                var fa = Args()
+                fa.p0 = f_dst
+                fa.f0 = fs[0]
+                self.ex.launch[OP_FILL](fa, f_rows * f_cols)
+                return self._constant(f_dst, f_rows, f_cols, 0)
+            # any other rank: the dims, one fill, a free view of the shape
+            var fn_shape = rn_shape(ints, "ops: full")
+            var fn_count = fn_shape.count()
+            if fn_count > (1 << 60) // 4:
                 raise Error("ops: full needs positive dimensions")
-            var f_dst = self.tape.reserve(self.ex, f_rows * f_cols)
-            var fa = Args()
-            fa.p0 = f_dst
-            fa.f0 = fs[0]
-            self.ex.launch[OP_FILL](fa, f_rows * f_cols)
-            return self._constant(f_dst, f_rows, f_cols, 0)
+            var fn_dst = self.tape.reserve(self.ex, fn_count)
+            var fna = Args()
+            fna.p0 = fn_dst
+            fna.f0 = fs[0]
+            self.ex.launch[OP_FILL](fna, fn_count)
+            var fn_t = self.tape.variable(self.ex, fn_dst, fn_shape.rows(), fn_shape.cols(), False)
+            t = rn_as_shape(self.tape, self.ex, fn_t, fn_shape)
         elif code == OPS_EMBEDDING:
             # lane ag-embedding-op: table[ids] (Tape.embedding). ints: the
             # caller's ids as an input descriptor (lane ag-thin-glue2: address,
@@ -983,15 +1093,290 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var c_count = self.rows[cx] * self.cols[cx]
             var c_rows = self.rows[cx]
             var c_cols = self.cols[cx]
+            var c_shape = self.shapes[cx]
             var c_dst = self.tape.reserve(self.ex, c_count)
             var ca = Args()
             ca.p0 = self.tape.value_of(self.ex, x[0])
             ca.p1 = c_dst
             self.ex.launch[OP_COPY](ca, c_count)
-            return self._constant(c_dst, c_rows, c_cols, 0)
+            if c_shape.ndim == 2:
+                return self._constant(c_dst, c_rows, c_cols, 0)
+            var c_t = self.tape.variable(self.ex, c_dst, c_rows, c_cols, False)
+            t = rn_as_shape(self.tape, self.ex, c_t, c_shape)
+        elif code == OPS_RESHAPE_N:
+            t = self._reshape_n(x, ints)
+        elif code == OPS_PERMUTE:
+            if n != 1 or ni < 1:
+                raise Error("ops: permute takes one tensor and its axes")
+            if ints[0] == 0:
+                var p_axes = List[Int](capacity=ni - 1)
+                for k in range(1, ni):  # small-loop(ni: at most 8 axes): argument parsing, no data
+                    p_axes.append(ints[k])
+                var p_nd = self.tape.ndim(x[0])
+                t = self.tape.permute(self.ex, x[0], rn_check_permutation(p_axes, p_nd, "ops: permute"))
+            else:
+                _need("transpose", n, 1, 3, ni, 0, nf)
+                t = self._swap(x[0], ints[1], ints[2])
+        elif code == OPS_SUM_N or code == OPS_MEAN_N:
+            if n != 1 or ni < 1:
+                raise Error("ops: sum and mean take one tensor, keepdims and the axes")
+            t = self._reduce_n(x[0], ints, code == OPS_MEAN_N, False)
+        elif code == OPS_MAX:
+            if n != 1 or ni < 1:
+                raise Error("ops: max takes one tensor, keepdims and the axes")
+            t = self._reduce_n(x[0], ints, False, True)
+        elif code == OPS_CONCAT:
+            _need("concat", 1, 1, 1, ni, 0, nf)
+            if n < 1:
+                raise Error("ops: concat takes at least one tensor")
+            t = self._concat(x, ints[0])
+        elif code == OPS_NARROW:
+            if n != 1 or ni < 4:
+                raise Error("ops: split takes one tensor, the axis, the piece and the sizes or sections")
+            t = self._piece(x[0], ints)
+        elif code == OPS_TAKE:
+            # lane ag-rankn-python: x's slices at integer ids along an axis
+            # (plan 2.6). The ids arrive as embedding's do: an input
+            # descriptor cast on the executor to int32 words in a session
+            # buffer returned at the next reset or close.
+            _need("take", n, 1, 8, ni, 0, nf)
+            var k_src = CastIn(
+                ints[0], cast_in_kind(ints[1], ints[2], "ops: take indices"), ints[2],
+                ints[3], ints[4], ints[5], ints[6],
+            )
+            k_src.check("ops: take indices")
+            var k_n = k_src.count()
+            var k_buf = self.ex.alloc(k_n)
+            self.retired.append(Int(k_buf))
+            upload_cast_i32(self.ex, k_buf, k_src, "ops: take indices")
+            var k_ids = self.tape.ids(self.ex, k_buf, k_n)
+            var k_nd = self.tape.ndim(x[0])
+            var k_axis = rn_normalize_axis(ints[7], k_nd if k_nd > 0 else 1)
+            t = rankn_take(self.tape, self.ex, x[0], k_ids, k_axis)
+        elif code == OPS_SOFTMAX_N or code == OPS_LOG_SOFTMAX_N:
+            _need("softmax", n, 1, 1, ni, 0, nf)
+            t = rn_softmax_along(self.tape, self.ex, x[0], ints[0], code == OPS_LOG_SOFTMAX_N)
+        elif code == OPS_CONV2D:
+            if n != 2 and n != 3:
+                raise Error("ops: conv2d takes an input, a weight and an optional bias")
+            _need("conv2d", 2, 2, 2, ni, 0, nf)
+            if self.tape.ndim(x[0]) != 4 or self.tape.ndim(x[1]) != 4:
+                raise Error("ops: conv2d takes x (N, C, H, W) and weight (out_channels, C, kh, kw)")
+            if ints[0] < 1 or ints[1] < 0:
+                raise Error("ops: conv2d needs stride >= 1 and padding >= 0")
+            if n == 3:
+                var oc = self.tape.dim(x[1], 0)
+                if self.tape.shape_of(x[2]).count() != oc:
+                    raise Error("ops: conv2d: the bias needs one value per output channel")
+                var oc_dims = List[Int]()
+                oc_dims.append(oc)
+                var cb = rn_as_shape(self.tape, self.ex, x[2], rn_shape(oc_dims, "ops: conv2d"))
+                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], Optional[Tensor](cb), ints[0], ints[1])
+            else:
+                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], None, ints[0], ints[1])
+        elif code == OPS_MAXPOOL2D or code == OPS_AVGPOOL2D:
+            _need("pool2d", n, 1, 2, ni, 0, nf)
+            if self.tape.ndim(x[0]) != 4:
+                raise Error("ops: pooling takes x (N, C, H, W)")
+            if ints[0] < 1 or ints[1] < 1:
+                raise Error("ops: pooling needs kernel_size >= 1 and stride >= 1")
+            if code == OPS_MAXPOOL2D:
+                t = rankn_max_pool2d(self.tape, self.ex, x[0], ints[0], ints[1])
+            else:
+                t = rankn_avg_pool2d(self.tape, self.ex, x[0], ints[0], ints[1])
         else:
             raise Error("ops: unknown operation code " + String(code))
+        if n >= 1 and _keeps_shape(code):
+            # elementwise and row-wise ops keep x's full shape (a free view
+            # when the op records only the matrix view)
+            var ks = self.tape.shape_of(x[0])
+            if ks.ndim != 2:
+                t = rn_as_shape(self.tape, self.ex, t, ks)
         return self._add(t, 0, False, 0)
+
+    # ------------------------------------------------------------ rank-N helpers
+    def _binary(mut self, x: Tensor, y: Tensor, op: Int) raises -> Tensor:
+        """x op y: two matrices take the tape's 2-D op (its words and
+        broadcasts, unchanged); any other ranks the fold lane's rankn_binary
+        (NumPy broadcasting; trailing broadcasts route back to the 2-D op)."""
+        if self.tape.ndim(x) == 2 and self.tape.ndim(y) == 2:
+            if op == ADD:
+                return self.tape.add(self.ex, x, y)
+            if op == SUBTRACT:
+                return self.tape.subtract(self.ex, x, y)
+            if op == MULTIPLY:
+                return self.tape.multiply(self.ex, x, y)
+            return self.tape.divide(self.ex, x, y)
+        return rankn_binary(self.tape, self.ex, x, y, op)
+
+    def _swap(mut self, x: Tensor, a: Int, b: Int) raises -> Tensor:
+        """x with axes a and b swapped: on a matrix the tape's transpose
+        (its view and words), otherwise a permute view."""
+        var nd = self.tape.ndim(x)
+        if nd < 2:
+            raise Error("ops: transpose takes a tensor of at least 2 dimensions")
+        var aa = rn_normalize_axis(a, nd)
+        var bb = rn_normalize_axis(b, nd)
+        if nd == 2 and aa != bb:
+            return self.tape.transpose(self.ex, x)
+        var axes = List[Int](capacity=nd)
+        for k in range(nd):  # small-loop(nd: tensor rank, at most 8): shape metadata, no data
+            axes.append(k)
+        axes[aa] = bb
+        axes[bb] = aa
+        return self.tape.permute(self.ex, x, axes)
+
+    def _reshape_n(mut self, x: List[Tensor], ints: List[Int]) raises -> Tensor:
+        """The free views: reshape (mode 0, dims with one -1), flatten
+        (mode 1, start and end axes), squeeze (mode 2, axes or none for
+        every length-1 axis), unsqueeze (mode 3, the new axis)."""
+        if len(x) != 1 or len(ints) < 1:
+            raise Error("ops: reshape takes one tensor and its new shape")
+        var s = self.tape.shape_of(x[0])
+        var mode = ints[0]
+        var dims = List[Int]()
+        if mode == 0:
+            for k in range(1, len(ints)):  # small-loop(ints: at most 8 dims): argument parsing, no data
+                dims.append(ints[k])
+            return self.tape.view_nd(self.ex, x[0], rn_resolve(s, dims, "ops: reshape"))
+        if mode == 1:
+            if len(ints) != 3:
+                raise Error("ops: flatten takes a start and an end axis")
+            var nd = s.ndim if s.ndim > 0 else 1
+            var start = rn_normalize_axis(ints[1], nd)
+            var end = rn_normalize_axis(ints[2], nd)
+            if end < start:
+                raise Error("ops: flatten: end must not come before start")
+            for k in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+                if k == start:
+                    dims.append(-1)
+                elif k < start or k > end:
+                    dims.append(s.d[k])
+            if s.ndim == 0:
+                dims.append(1)
+            return self.tape.view_nd(self.ex, x[0], rn_resolve(s, dims, "ops: flatten"))
+        if mode == 2:
+            var listed = List[Int]()
+            for k in range(1, len(ints)):  # small-loop(ints: at most 8 axes): argument parsing, no data
+                listed.append(ints[k])
+            var mask = rn_axis_mask(s.ndim, listed, "ops: squeeze")
+            for k in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+                if len(listed) == 0:
+                    mask[k] = s.d[k] == 1
+                elif mask[k] and s.d[k] != 1:
+                    raise Error("ops: squeeze: axis " + String(k) + " has length " + String(s.d[k]) + ", not 1")
+            return self.tape.view_nd(self.ex, x[0], rn_reduced(s, mask, False, "ops: squeeze"))
+        if mode == 3:
+            if len(ints) != 2:
+                raise Error("ops: unsqueeze takes one axis")
+            var at = rn_normalize_axis(ints[1], s.ndim + 1)
+            for k in range(s.ndim + 1):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+                if k == at:
+                    dims.append(1)
+                if k < s.ndim:
+                    dims.append(s.d[k])
+            return self.tape.view_nd(self.ex, x[0], rn_shape(dims, "ops: unsqueeze"))
+        raise Error("ops: unknown reshape mode " + String(mode))
+
+    def _reduce_n(mut self, x: Tensor, ints: List[Int], mean: Bool, is_max: Bool) raises -> Tensor:
+        """sum, mean or max over the listed axes (none: every element).
+        ints[0] is keepdims: 1 keeps each reduced axis with length 1, 0
+        removes it, -1 (the default) keeps them for a tensor of at most 2
+        dimensions and removes them otherwise. Every element (no axes,
+        default keepdims) gives a (1, 1) tensor. Matrices take the tape's
+        sums (AXIS_ALL / AXIS_ROWS / AXIS_COLS: today's words); other
+        ranks the fold lane's rankn_sum / rankn_max."""
+        var s = self.tape.shape_of(x)
+        var kd = ints[0]
+        if kd < -1 or kd > 1:
+            raise Error("ops: keepdims must be -1, 0 or 1")
+        var listed = List[Int]()
+        for k in range(1, len(ints)):  # small-loop(ints: at most 8 axes): argument parsing, no data
+            listed.append(ints[k])
+        var mask = rn_axis_mask(s.ndim, listed, "ops: reduce")
+        if len(listed) == 0:
+            for k in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+                mask[k] = True
+        var axes = rn_mask_axes(mask)
+        var every = len(axes) == s.ndim
+        var t: Tensor
+        if is_max:
+            t = rankn_max(self.tape, self.ex, x, axes)
+        elif every:
+            t = self.tape.mean(self.ex, x, AXIS_ALL) if mean else self.tape.sum(self.ex, x, AXIS_ALL)
+        elif s.ndim == 2:
+            var axis = AXIS_ROWS if mask[0] else AXIS_COLS
+            t = self.tape.mean(self.ex, x, axis) if mean else self.tape.sum(self.ex, x, axis)
+        else:
+            t = rankn_sum(self.tape, self.ex, x, axes, mean)
+        if len(listed) == 0 and kd == -1:
+            return rn_as_shape(self.tape, self.ex, t, ShapeN.matrix(1, 1))
+        var keep = kd == 1 or (kd == -1 and s.ndim <= 2)
+        return rn_as_shape(self.tape, self.ex, t, rn_reduced(s, mask, keep, "ops: reduce"))
+
+    def _concat(mut self, x: List[Tensor], axis: Int) raises -> Tensor:
+        """x[0], x[1], ... joined along axis: one layout-lane concat node
+        per RN_CONCAT_MAX operands, chained (copies: the same words)."""
+        var nd = self.tape.ndim(x[0])
+        var a = rn_normalize_axis(axis, nd if nd > 0 else 1)
+        if len(x) == 1:
+            return self.tape.view_nd(self.ex, x[0], self.tape.shape_of(x[0]))
+        var first = List[Tensor]()
+        var i = 0
+        while i < len(x) and i < RN_CONCAT_MAX:  # small-loop(x: the first concat node's operands, at most 10): handle lists, no data
+            first.append(x[i])
+            i += 1
+        var acc = rankn_concat(self.tape, self.ex, first, a)
+        while i < len(x):  # driver-loop: over concat operands (one node per RN_CONCAT_MAX - 1 more)
+            var part = List[Tensor]()
+            part.append(acc)
+            while i < len(x) and len(part) < RN_CONCAT_MAX:  # driver-loop: over concat operands
+                part.append(x[i])
+                i += 1
+            acc = rankn_concat(self.tape, self.ex, part, a)
+        return acc
+
+    def _piece(mut self, x: Tensor, ints: List[Int]) raises -> Tensor:
+        """Piece ints[1] of split(x, axis=ints[0]): mode 0 lists the
+        sizes (summing to the axis length), mode 1 the number of equal
+        sections. A free strided view (the layout lane's narrow)."""
+        var s = self.tape.shape_of(x)
+        var nd = s.ndim if s.ndim > 0 else 1
+        var a = rn_normalize_axis(ints[0], nd)
+        var length_a = s.d[a] if s.ndim > 0 else 1
+        var piece = ints[1]
+        var mode = ints[2]
+        var start = 0
+        var length = 0
+        if mode == 0:
+            var pieces = len(ints) - 3
+            if piece < 0 or piece >= pieces:
+                raise Error("ops: split: piece out of range")
+            var total = 0
+            for k in range(pieces):  # small-loop(pieces: the split sizes, a handful): argument parsing, no data
+                var sz = ints[3 + k]
+                if sz < 1:
+                    raise Error("ops: split: every size must be positive")
+                if k < piece:
+                    start += sz
+                if k == piece:
+                    length = sz
+                total += sz
+            if total != length_a:
+                raise Error("ops: split: the sizes sum to " + String(total) + ", the axis has "
+                            + String(length_a))
+        elif mode == 1:
+            var sections = ints[3]
+            if sections < 1 or length_a % sections != 0:
+                raise Error("ops: split: " + String(length_a) + " is not divisible into "
+                            + String(sections) + " equal sections")
+            if piece < 0 or piece >= sections:
+                raise Error("ops: split: piece out of range")
+            length = length_a // sections
+            start = piece * length
+        else:
+            raise Error("ops: unknown split mode " + String(mode))
+        return rankn_narrow(self.tape, self.ex, x, a, start, length)
 
     def op_packed(mut self, code: Int, block: Int) raises -> Int:
         """`op` with its arguments in a packed block at address `block`
@@ -1041,6 +1426,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: roc_auc takes one score column")
             return roc_auc(self.ex, yt, pv, rows)
         raise Error("ops: unknown metric code " + String(kind))
+
+
+def _keeps_shape(code: Int) -> Bool:
+    """Ops whose output has x's shape: elementwise maps, dropout, the row
+    softmaxes and layer norm, detach."""
+    return (code == OPS_RELU or code == OPS_SIGMOID or code == OPS_TANH or code == OPS_EXP
+            or code == OPS_LOG or code == OPS_SQRT or code == OPS_SCALE or code == OPS_SOFTMAX
+            or code == OPS_LOG_SOFTMAX or code == OPS_LAYER_NORM or code == OPS_DROPOUT
+            or code == OPS_DETACH)
 
 
 # ---------------------------------------------------------------- the session table

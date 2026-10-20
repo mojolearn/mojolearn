@@ -11,12 +11,20 @@ import os
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_model')
 from . import _backend
-from ._cast_in import as_input, describe
+from ._cast_in import as_input, describe, matrix_view
 
 # Description codes (autograd/model.mojo LAYER_*, LOSS_*, ...).
 _SPEC_VERSION = 1
+# Version 2 (autograd/model.mojo SPEC2_*): a per-sample input shape of any
+# rank and the shape layers; [2, ndim, d0 .. d7, layer count] then per layer
+# (code, six arguments, 0).
+_SPEC2_VERSION = 2
+_SPEC2_DIMS = 8
+_SPEC2_ARGS = 6
 _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
-          "layer_norm": 6, "dropout": 7, "residual": 8}
+          "layer_norm": 6, "dropout": 7, "residual": 8,
+          "reshape": 9, "permute": 10, "flatten": 11, "conv2d": 12, "max_pool2d": 13, "avg_pool2d": 14}
+_SHAPE_LAYERS = frozenset((9, 10, 11, 12, 13, 14))
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -40,6 +48,35 @@ def _x_2d(X, name):
     return X, describe(X, name)
 
 
+def _x_nd(X, name):
+    # X of any rank >= 2: a 2-D X as it is; a higher-rank X (C order) as its
+    # (n_samples, values per sample) view of the same memory. Returns the
+    # array, its matrix view and the view's descriptor.
+    X = as_input(X)
+    if X.ndim < 2 or X.ndim > _SPEC2_DIMS:
+        raise ValueError(f"{name} must have shape (n_samples, ...) with 2 to {_SPEC2_DIMS} dimensions")
+    M = X if X.ndim == 2 else matrix_view(X, name, samples=True)
+    return X, M, describe(M, name)
+
+
+def _shape_arg(values, name, allow_infer=False):
+    values = tuple(values)
+    if not 1 <= len(values) <= _SPEC2_ARGS:
+        raise ValueError(f"{name} must list 1 to {_SPEC2_ARGS} dimensions")
+    out = []
+    for v in values:  # glue: at most six shape arguments
+        if isinstance(v, bool) or not isinstance(v, (int, np.integer)) or not (v >= 1 or (allow_infer and v == -1)):
+            raise ValueError(f"{name} must hold positive integers" + (" or -1" if allow_infer else ""))
+        out.append(int(v))
+    return out
+
+
+def _positive(value, name, low=1):
+    if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < low:
+        raise ValueError(f"{name} must be an integer >= {low}")
+    return int(value)
+
+
 class Sequential:
     """A feed-forward model built layer by layer and trained on the GPU.
 
@@ -58,13 +95,24 @@ class Sequential:
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available
         on Apple GPUs only.
+    input_shape : tuple of int or None, default None
+        The shape of one sample, for example ``(channels, height, width)``.
+        None takes it from ``X`` at fit. With an input shape, ``fit`` and
+        ``predict`` also accept a 2-D ``X`` whose rows hold each sample's
+        values in row-major order.
+
+    A ``linear`` layer acts on the last axis of each sample. The model's
+    output must be one vector per sample: end a model on images or
+    sequences with :meth:`flatten` and a ``linear`` layer.
 
     Attributes
     ----------
     params_ : ndarray of float32
         All trained parameters as one flat vector, layers in order (a linear
         layer's weight ``(in, out)`` row-major, then its bias; a layer norm's
-        weight, then its bias).
+        weight, then its bias; a conv2d layer's weight
+        ``(out_channels, in_channels, kernel_size, kernel_size)`` row-major,
+        then its bias).
     loss_curve_ : list of float
         Mean training loss of every epoch.
     n_iter_ : int
@@ -94,8 +142,9 @@ class Sequential:
     >>> proba = clf.predict_proba(X)
     """
 
-    def __init__(self, numeric_mode=None):
+    def __init__(self, numeric_mode=None, *, input_shape=None):
         self.numeric_mode = numeric_mode
+        self.input_shape = None if input_shape is None else tuple(_shape_arg(input_shape, "input_shape"))
         self._layers = []
         self._options = None
 
@@ -108,9 +157,12 @@ class Sequential:
         kind : str
             One of ``'linear'`` (``units``, ``bias=True``), ``'relu'``,
             ``'sigmoid'``, ``'tanh'``, ``'softmax'``, ``'layer_norm'``
-            (``eps=1e-5``) or ``'residual'`` (``source=-1``: add the output
+            (``eps=1e-5``), ``'residual'`` (``source=-1``: add the output
             of layer ``source``, or the model input for -1, to the current
-            output).
+            output), ``'reshape'`` (``shape``), ``'permute'`` (``axes``),
+            ``'flatten'``, ``'conv2d'`` (``out_channels``, ``kernel_size``,
+            ``stride=1``, ``padding=0``, ``bias=True``), ``'max_pool2d'``
+            or ``'avg_pool2d'`` (``kernel_size``, ``stride=None``).
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
 
@@ -135,33 +187,49 @@ class Sequential:
             return self._dropout(*args, **kwargs)
         if kind == "residual":
             return self._residual(*args, **kwargs)
+        if kind == "reshape":
+            return self.reshape(*args, **kwargs)
+        if kind == "permute":
+            return self.permute(*args, **kwargs)
+        if kind == "conv2d":
+            return self.conv2d(*args, **kwargs)
+        if kind == "max_pool2d":
+            return self.max_pool2d(*args, **kwargs)
+        if kind == "avg_pool2d":
+            return self.avg_pool2d(*args, **kwargs)
         if args or kwargs:
             raise TypeError(f"{kind} takes no arguments")
-        self._layers.append((_LAYER[kind], 0, 0, 0.0))
+        self._append(_LAYER[kind])
         return self
+
+    def _append(self, code, a0=0, a1=0, f=0.0, args=None):
+        # one layer: (code, arg0, arg1, float argument, the six integer
+        # arguments of a version-2 description record)
+        args = [a0, a1, 0, 0, 0, 0] if args is None else list(args)
+        self._layers.append((code, a0, a1, f, tuple(args)))
 
     def _linear(self, units, bias=True):
         if isinstance(units, bool) or not isinstance(units, (int, np.integer)) or units < 1:
             raise ValueError("units must be a positive integer")
-        self._layers.append((_LAYER["linear"], int(units), 1 if bias else 0, 0.0))
+        self._append(_LAYER["linear"], int(units), 1 if bias else 0)
         return self
 
     def _layer_norm(self, eps=1e-5):
         if not eps > 0:
             raise ValueError("eps must be positive")
-        self._layers.append((_LAYER["layer_norm"], 0, 0, float(eps)))
+        self._append(_LAYER["layer_norm"], f=float(eps))
         return self
 
     def _dropout(self, p):
         if not 0 <= p < 1:
             raise ValueError("p must be in [0, 1)")
-        self._layers.append((_LAYER["dropout"], 0, 0, float(p)))
+        self._append(_LAYER["dropout"], f=float(p))
         return self
 
     def _residual(self, source=-1):
         if isinstance(source, bool) or not isinstance(source, (int, np.integer)):
             raise ValueError("source must be -1 or the index of an earlier layer")
-        self._layers.append((_LAYER["residual"], int(source), 0, 0.0))
+        self._append(_LAYER["residual"], int(source))
         return self
 
     def linear(self, units, bias=True):
@@ -196,11 +264,66 @@ class Sequential:
         """Add the output of layer ``source`` (-1: the model input) to the current output."""
         return self._residual(source)
 
+    def reshape(self, shape):
+        """Append a reshape of each sample to ``shape`` (up to 6
+        dimensions, one of them -1 to infer it)."""
+        dims = _shape_arg(shape, "shape", allow_infer=True)
+        self._append(_LAYER["reshape"], args=dims + [0] * (_SPEC2_ARGS - len(dims)))
+        return self
+
+    def permute(self, axes):
+        """Append a reordering of each sample's axes: output axis ``k`` is
+        input axis ``axes[k]`` (axes count from 0 within a sample)."""
+        values = tuple(axes)
+        if not 1 <= len(values) <= _SPEC2_ARGS:
+            raise ValueError(f"axes must list 1 to {_SPEC2_ARGS} axes")
+        order = [_positive(a, "axes", 0) for a in values]  # glue: at most six axes
+        self._append(_LAYER["permute"], args=order + [-1] * (_SPEC2_ARGS - len(order)))
+        return self
+
+    def flatten(self):
+        """Append a flattening of each sample into one vector."""
+        self._append(_LAYER["flatten"])
+        return self
+
+    def conv2d(self, out_channels, kernel_size, stride=1, padding=0, bias=True):
+        """Append a 2-D convolution of ``(channels, height, width)``
+        samples with ``out_channels`` square ``kernel_size`` kernels,
+        ``stride`` and zero ``padding`` on every side."""
+        oc = _positive(out_channels, "out_channels")
+        k = _positive(kernel_size, "kernel_size")
+        st = _positive(stride, "stride")
+        pad = _positive(padding, "padding", 0)
+        self._append(_LAYER["conv2d"], oc, k, args=[oc, k, st, pad, 1 if bias else 0, 0])
+        return self
+
+    def max_pool2d(self, kernel_size, stride=None):
+        """Append a max pooling of ``(channels, height, width)`` samples
+        over square ``kernel_size`` windows, ``stride`` apart (by default
+        ``kernel_size``)."""
+        k = _positive(kernel_size, "kernel_size")
+        st = k if stride is None else _positive(stride, "stride")
+        self._append(_LAYER["max_pool2d"], k, st)
+        return self
+
+    def avg_pool2d(self, kernel_size, stride=None):
+        """Append an average pooling of ``(channels, height, width)``
+        samples over square ``kernel_size`` windows, ``stride`` apart (by
+        default ``kernel_size``)."""
+        k = _positive(kernel_size, "kernel_size")
+        st = k if stride is None else _positive(stride, "stride")
+        self._append(_LAYER["avg_pool2d"], k, st)
+        return self
+
     @property
     def layers(self):
-        """The layers as ``(kind, arg0, arg1, float_arg)`` tuples, in order."""
+        """The layers in order: ``(kind, arg0, arg1, float_arg)`` tuples,
+        and ``(kind, arguments, float_arg)`` for ``reshape``, ``permute``,
+        ``flatten``, ``conv2d`` and the pools, with ``arguments`` the
+        layer's six integer arguments."""
         names = {v: k for k, v in _LAYER.items()}  # glue: inverts the layer name table
-        return [(names[c], a0, a1, f) for c, a0, a1, f in self._layers]  # glue: describes the recorded layers
+        return [(names[c], args, f) if c in _SHAPE_LAYERS else (names[c], a0, a1, f)
+                for c, a0, a1, f, args in self._layers]  # glue: describes the recorded layers
 
     def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=0.9, nesterov=False,
                 beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
@@ -266,14 +389,36 @@ class Sequential:
     def _binding(self):
         return _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
 
-    def _program(self, n_features):
-        prog = [_SPEC_VERSION, int(n_features), len(self._layers)]
-        for code, a0, a1, _ in self._layers:  # glue: one description record per layer
-            prog += [code, a0, a1, 0]
+    def _program(self, n_features, sample=None):
+        if sample is None:
+            prog = [_SPEC_VERSION, int(n_features), len(self._layers)]
+            for code, a0, a1, _, _ in self._layers:  # glue: one description record per layer
+                prog += [code, a0, a1, 0]
+            return prog
+        # version 2: the per-sample shape, padded with 1, then 8 words a layer
+        prog = [_SPEC2_VERSION, len(sample)] + list(sample) + [1] * (_SPEC2_DIMS - len(sample))
+        prog.append(len(self._layers))
+        for code, _, _, _, args in self._layers:  # glue: one description record per layer
+            prog += [code] + list(args) + [0]
         return prog
 
     def _table(self):
-        return [f for _, _, _, f in self._layers]  # glue: one float argument per layer
+        return [f for _, _, _, f, _ in self._layers]  # glue: one float argument per layer
+
+    def _sample_of(self, X):
+        # the per-sample shape of a version-2 model (None: version 1)
+        uses_shape = self.input_shape is not None or X.ndim > 2 or any(
+            c in _SHAPE_LAYERS for c, _, _, _, _ in self._layers)  # glue: a layer-kind check
+        if not uses_shape:
+            return None
+        if self.input_shape is None:
+            if X.ndim - 1 > _SPEC2_DIMS - 1:
+                raise ValueError(f"a sample has at most {_SPEC2_DIMS - 1} dimensions")
+            return tuple(int(d) for d in X.shape[1:])  # glue: at most seven dimensions
+        if X.ndim > 2 and tuple(X.shape[1:]) != self.input_shape:
+            raise ValueError(f"X samples have shape {tuple(X.shape[1:])}, the model's input_shape is "
+                             f"{self.input_shape}")
+        return self.input_shape
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False):
@@ -281,9 +426,11 @@ class Sequential:
 
         Parameters
         ----------
-        X : array-like of shape (n_samples, n_features)
+        X : array-like of shape (n_samples, n_features) or (n_samples, ...)
             Training inputs: a bool, integer, float16, float32 or float64
-            array in any memory layout, used as float32.
+            array, used as float32. A 2-D array may have any memory layout;
+            an array of 3 or more dimensions (one sample per index of the
+            first axis) must be C-contiguous.
         y : array-like
             Targets: (n_samples,) or (n_samples, n_outputs) for ``mse`` and
             ``huber``; one label per row for ``cross_entropy`` (any number
@@ -331,11 +478,14 @@ class Sequential:
         if int(epochs) < 1 or int(batch_size) < 1:
             raise ValueError("epochs and batch_size must be >= 1")
         o = self._options
-        X, xd = _x_2d(X, "X")
-        n, d = X.shape
+        X, M, xd = _x_nd(X, "X")
+        n, d = M.shape
         if resume and d != self.n_features_in_:
             raise ValueError(f"X has {d} features, the model was fitted on {self.n_features_in_}")
-        prog = self._program(d)
+        sample = self._sample_of(X)
+        if resume and sample != getattr(self, "_sample_shape", None):
+            raise ValueError("resume=True takes inputs of the shape the model was fitted on")
+        prog = self._program(d, sample)
         table = self._table()
         b = self._binding()
         n_params, n_out = (int(v) for v in b.model_n_params(prog, table))  # glue: two counts returned by Mojo
@@ -367,6 +517,7 @@ class Sequential:
         self.n_iter_ = n_iter
         self.loss_curve_ = curve[:n_iter].tolist()
         self.n_features_in_ = d
+        self._sample_shape = sample
         self.n_outputs_ = n_out
         self._fit_loss = o["loss"]
         self._target = target
@@ -381,6 +532,11 @@ class Sequential:
             raise ValueError("call fit before saving the model")
         if not export and getattr(self, "_fit_state", None) is None:
             raise ValueError("this model holds no training state (it was loaded from an export); use export")
+        if getattr(self, "_sample_shape", None) is not None:
+            # the checkpoint format holds version-1 descriptions only
+            # (training/checkpoint.mojo); a shape-layer model is refused by name
+            raise ValueError("save_checkpoint and export take models of 2-D inputs without reshape, "
+                             "permute, flatten, conv2d or pooling layers")
         o = self._options
         classes = getattr(self, "classes_", None)
         k = 0 if classes is None else int(classes.shape[0])
@@ -491,7 +647,9 @@ class Sequential:
         b = model._binding()
         path = os.fspath(path)
         export, layers, ints, floats = b.model_checkpoint_info(path)  # cpu-route: checkpoint file read on the host
-        model._layers = [(int(c), int(a0), int(a1), float(f)) for c, a0, a1, f in layers]  # glue: one description record per layer
+        for c, a0, a1, f in layers:  # glue: one description record per layer
+            model._append(int(c), int(a0), int(a1), float(f))
+        model._sample_shape = None
         (loss, target, opt, flags, sched, step_size, patience, batch, shuffle, d, n_out, y_1d,
          n_run, k, class_kind, class_size, n_params) = (int(v) for v in ints)  # glue: counts returned by Mojo
         lr, f1, f2, eps, wd, _, tol, gamma, huber = (float(v) for v in floats)  # glue: options returned by Mojo
@@ -580,14 +738,21 @@ class Sequential:
     def _forward(self, X, transform, width=None):
         if not hasattr(self, "params_"):
             raise ValueError("call fit before predict")
-        X, xd = _x_2d(X, "X")
-        if X.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {X.shape[1]} features, the model was fitted on {self.n_features_in_}")
+        sample = getattr(self, "_sample_shape", None)
+        if sample is None:
+            X, xd = _x_2d(X, "X")
+            M = X
+        else:
+            X, M, xd = _x_nd(X, "X")
+            if X.ndim > 2 and tuple(X.shape[1:]) != sample:
+                raise ValueError(f"X samples have shape {tuple(X.shape[1:])}, the model was fitted on {sample}")
+        if M.shape[1] != self.n_features_in_:
+            raise ValueError(f"X has {M.shape[1]} features, the model was fitted on {self.n_features_in_}")
         width = self.n_outputs_ if width is None else width
-        out = np.zeros((X.shape[0], width), dtype=np.float32)
+        out = np.zeros((M.shape[0], width), dtype=np.float32)
         self._binding().model_predict([xd, self.params_.ctypes.data, out.ctypes.data],
-                                      self._program(self.n_features_in_), self._table(),
-                                      [X.shape[0], _PREDICT_CHUNK, transform])
+                                      self._program(self.n_features_in_, sample), self._table(),
+                                      [M.shape[0], _PREDICT_CHUNK, transform])
         return out
 
     def predict(self, X):

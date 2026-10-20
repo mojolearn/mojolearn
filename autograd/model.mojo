@@ -26,6 +26,11 @@ from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 from core.cast_in import CAST_KIND_SIGNED, CastIn
 from autograd.cast_ops import upload_cast
+# Description version 2 (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md
+# section 5): per-sample input shapes of any rank and the shape layers.
+from autograd.rankn import RN_MAX_RANK, ShapeN
+from autograd.rankn_conv import rankn_conv2d, rankn_max_pool2d, rankn_avg_pool2d
+from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
 
 # Lane ag-data adds `Tape.dropout`; lane ag-forward adds the tape's
 # inference mode. Until they land these stay off and the model trainer does
@@ -67,6 +72,20 @@ comptime LAYER_SOFTMAX = 5
 comptime LAYER_LAYER_NORM = 6    # float: epsilon
 comptime LAYER_DROPOUT = 7       # float: drop probability
 comptime LAYER_RESIDUAL = 8      # arg0: -1 the model input, else an earlier layer's index
+# Version 2 only (shape layers; per-sample shapes exclude the batch axis):
+comptime LAYER_RESHAPE = 9       # args: the new per-sample dims (one may be -1), 0 pads
+comptime LAYER_PERMUTE = 10      # args: a permutation of the per-sample axes, -1 pads
+comptime LAYER_FLATTEN = 11      # the per-sample shape becomes one axis
+comptime LAYER_CONV2D = 12       # (out_channels, kernel, stride, padding, bias 0/1); input (C, H, W)
+comptime LAYER_MAXPOOL2D = 13    # (kernel, stride); input (C, H, W)
+comptime LAYER_AVGPOOL2D = 14    # (kernel, stride); input (C, H, W)
+
+# Version 2: [2, ndim, d0 .. d7 (unused 1), layer count, then per layer
+# (code, arg0 .. arg5, 0)]; one float per layer as in version 1.
+comptime SPEC2_VERSION = 2
+comptime SPEC2_HEADER = 2 + RN_MAX_RANK + 1
+comptime SPEC2_RECORD = 8
+comptime SPEC2_ARGS = 6
 
 comptime LOSS_MSE = 0
 comptime LOSS_CROSS_ENTROPY = 1
@@ -109,6 +128,14 @@ struct ModelSpec(Copyable, Movable):
     var out_width: List[Int]
     var param_off: List[Int]
     var n_params: Int
+    #: 1 or 2 (SPEC2_VERSION: the per-sample shapes below are set)
+    var version: Int
+    #: version 2: the per-sample input shape, each layer's per-sample input
+    #: and output shapes, and SPEC2_ARGS integer arguments per layer
+    var sample: ShapeN
+    var in_shape: List[ShapeN]
+    var out_shape: List[ShapeN]
+    var xargs: List[Int]
 
     def __init__(out self):
         self.n_inputs = 0
@@ -120,6 +147,11 @@ struct ModelSpec(Copyable, Movable):
         self.out_width = List[Int]()
         self.param_off = List[Int]()
         self.n_params = 0
+        self.version = SPEC_VERSION
+        self.sample = ShapeN.matrix(1, 1)
+        self.in_shape = List[ShapeN]()
+        self.out_shape = List[ShapeN]()
+        self.xargs = List[Int]()
 
     def n_layers(self) -> Int:
         return len(self.kinds)
@@ -149,6 +181,8 @@ def parse_model(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
     var s = ModelSpec()
     if len(prog) < SPEC_HEADER:
         raise Error("model: the description is empty")
+    if prog[0] == SPEC2_VERSION:
+        return parse_model_v2(prog, ptab)
     if prog[0] != SPEC_VERSION:
         raise Error("model: unknown description version " + String(prog[0]))
     var d = prog[1]
@@ -214,6 +248,171 @@ def parse_model(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
         s.param_off.append(p_off)
     if not has_linear:
         raise Error("model: add at least one Linear layer")
+    s.n_params = off
+    return s^
+
+
+def _arg(prog: List[Int], base: Int, k: Int) -> Int:
+    return prog[base + 1 + k]
+
+
+def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
+    """Validate a version-2 description (SPEC2_*): the per-sample input
+    shape, then the layers with their per-sample shapes, widths (the last
+    axis) and parameter offsets. A Linear layer acts on the last axis; the
+    model's output must be one vector per sample."""
+    var s = ModelSpec()
+    s.version = SPEC2_VERSION
+    if len(prog) < SPEC2_HEADER:
+        raise Error("model: the description is empty")
+    var nd = prog[1]
+    if nd < 1 or nd > RN_MAX_RANK - 1:
+        raise Error("model: the input shape takes 1 to " + String(RN_MAX_RANK - 1) + " dimensions")
+    var idims = List[Int](capacity=nd)
+    for k in range(nd):  # small-loop(nd: the input rank, at most 7): description parsing, no data
+        idims.append(prog[2 + k])
+    var cur = rn_shape(idims, "model: input shape")
+    var n = prog[SPEC2_HEADER - 1]
+    if n < 1:
+        raise Error("model: add at least one layer")
+    if len(prog) != SPEC2_HEADER + SPEC2_RECORD * n:
+        raise Error("model: the description holds " + String(len(prog)) + " integers, "
+                    + String(SPEC2_HEADER + SPEC2_RECORD * n) + " expected for " + String(n) + " layers")
+    if len(ptab) != n:
+        raise Error("model: the float table holds " + String(len(ptab)) + " values, one per layer ("
+                    + String(n) + ") expected")
+    s.sample = cur
+    s.n_inputs = cur.count()
+    if s.n_inputs >= MODEL_MAX_ROWS:
+        raise Error("model: the input holds more than 2^24 - 1 values per sample")
+    var off = 0
+    var has_linear = False
+    for i in range(n):  # driver-loop: over layers
+        var base = SPEC2_HEADER + SPEC2_RECORD * i
+        var k = prog[base]
+        var a0 = _arg(prog, base, 0)
+        var a1 = _arg(prog, base, 1)
+        var f = ptab[i]
+        var p_off = -1
+        var width = cur.cols()
+        s.in_width.append(width)
+        s.in_shape.append(cur)
+        var nxt = cur
+        if k == LAYER_LINEAR:
+            if a0 < 1 or a0 >= MODEL_MAX_ROWS:
+                raise Error(_layer_name(i) + " (Linear): output units must be between 1 and 2^24 - 1")
+            if a1 != 0 and a1 != 1:
+                raise Error(_layer_name(i) + " (Linear): bias must be 0 or 1")
+            p_off = off
+            off += width * a0 + (a0 if a1 == 1 else 0)
+            var ld = rn_dims(cur)
+            ld[cur.ndim - 1] = a0
+            nxt = rn_shape(ld, _layer_name(i) + " (Linear)")
+            has_linear = True
+        elif k == LAYER_RELU or k == LAYER_SIGMOID or k == LAYER_TANH or k == LAYER_SOFTMAX:
+            pass
+        elif k == LAYER_LAYER_NORM:
+            if not (f > Float32(0)):
+                raise Error(_layer_name(i) + " (LayerNorm): epsilon must be positive")
+            p_off = off
+            off += 2 * width
+        elif k == LAYER_DROPOUT:
+            if not (f >= Float32(0) and f < Float32(1)):
+                raise Error(_layer_name(i) + " (Dropout): the drop probability must be in [0, 1)")
+        elif k == LAYER_RESIDUAL:
+            if a0 < -1 or a0 >= i:
+                raise Error(_layer_name(i) + " (Residual): the source must be -1 (the model input) "
+                            + "or the index of an earlier layer")
+            var from_shape = s.sample if a0 == -1 else s.out_shape[a0]
+            if not from_shape.same(cur):
+                raise Error(_layer_name(i) + " (Residual): adds tensors of different shapes")
+        elif k == LAYER_RESHAPE:
+            var rd = List[Int]()
+            for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): description parsing, no data
+                var v = _arg(prog, base, j)
+                if v == 0:
+                    break
+                rd.append(v)
+            if len(rd) < 1:
+                raise Error(_layer_name(i) + " (Reshape): give the new shape")
+            nxt = rn_resolve(cur, rd, _layer_name(i) + " (Reshape)")
+        elif k == LAYER_PERMUTE:
+            var seen = List[Bool](length=cur.ndim, fill=False)
+            var pd = List[Int](capacity=cur.ndim)
+            for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): description parsing, no data
+                var v = _arg(prog, base, j)
+                if j < cur.ndim:
+                    if v < 0 or v >= cur.ndim or seen[v]:
+                        raise Error(_layer_name(i) + " (Permute): the axes must list each of the "
+                                    + String(cur.ndim) + " sample axes once")
+                    seen[v] = True
+                    pd.append(cur.d[v])
+                elif v != -1:
+                    raise Error(_layer_name(i) + " (Permute): the axes must list each of the "
+                                + String(cur.ndim) + " sample axes once")
+            nxt = rn_shape(pd, _layer_name(i) + " (Permute)")
+        elif k == LAYER_FLATTEN:
+            var fd = List[Int]()
+            fd.append(cur.count())
+            nxt = rn_shape(fd, _layer_name(i) + " (Flatten)")
+        elif k == LAYER_CONV2D or k == LAYER_MAXPOOL2D or k == LAYER_AVGPOOL2D:
+            if cur.ndim != 3:
+                raise Error(_layer_name(i) + ": convolution and pooling take a (channels, height, width) input")
+            var c = cur.d[0]
+            var h = cur.d[1]
+            var w = cur.d[2]
+            var ch: Int
+            var ks: Int
+            var st: Int
+            var pad: Int
+            if k == LAYER_CONV2D:
+                ch = a0
+                ks = a1
+                st = _arg(prog, base, 2)
+                pad = _arg(prog, base, 3)
+                var bias = _arg(prog, base, 4)
+                if ch < 1 or ks < 1 or st < 1 or pad < 0 or (bias != 0 and bias != 1):
+                    raise Error(_layer_name(i) + " (Conv2d): out_channels, kernel_size and stride must be "
+                                + "positive, padding >= 0 and bias 0 or 1")
+                p_off = off
+                off += ch * c * ks * ks + (ch if bias == 1 else 0)
+            else:
+                ch = c
+                ks = a0
+                st = a1
+                pad = 0
+                if ks < 1 or st < 1:
+                    raise Error(_layer_name(i) + " (pooling): kernel_size and stride must be positive")
+            var oh = (h + 2 * pad - ks) // st + 1
+            var ow = (w + 2 * pad - ks) // st + 1
+            if h + 2 * pad < ks or w + 2 * pad < ks or oh < 1 or ow < 1:
+                raise Error(_layer_name(i) + ": the kernel is larger than the (padded) input")
+            var cd = List[Int]()
+            cd.append(ch)
+            cd.append(oh)
+            cd.append(ow)
+            nxt = rn_shape(cd, _layer_name(i))
+        else:
+            raise Error(_layer_name(i) + ": unknown layer code " + String(k))
+        if nxt.ndim > RN_MAX_RANK - 1:
+            raise Error(_layer_name(i) + ": a sample has at most " + String(RN_MAX_RANK - 1) + " dimensions")
+        if off > MODEL_MAX_PARAMS:
+            raise Error("model: more than 2^31 - 1 parameters")
+        s.kinds.append(k)
+        s.arg0.append(a0)
+        s.arg1.append(a1)
+        for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): description parsing, no data
+            s.xargs.append(_arg(prog, base, j))
+        s.farg.append(f)
+        s.out_shape.append(nxt)
+        s.out_width.append(nxt.cols())
+        s.param_off.append(p_off)
+        cur = nxt
+    if not has_linear:
+        raise Error("model: add at least one Linear layer")
+    if cur.ndim != 1:
+        raise Error("model: the output must be one vector per sample; add flatten() before the last "
+                    + "linear layer")
     s.n_params = off
     return s^
 
@@ -325,6 +524,16 @@ def model_init_params[E: Exec](mut ex: E, spec: ModelSpec, P: FP, seed: UInt64) 
             var w = spec.in_width[i]
             _fill(ex, P + off, w, Float32(1))
             _fill(ex, P + off + w, w, Float32(0))
+        elif k == LAYER_CONV2D:
+            # Glorot uniform over the receptive field: fan_in = C kh kw,
+            # fan_out = out_channels kh kw; the bias from the same draw, as Linear
+            var oc = spec.arg0[i]
+            var ks = spec.arg1[i]
+            var c = spec.in_shape[i].d[0]
+            var fan = c * ks * ks + oc * ks * ks
+            var bound = ftz(identical_sqrt(ftz(identical_div(Float32(6), Float32(fan)))))
+            var n = oc * c * ks * ks + (oc if spec.xargs[SPEC2_ARGS * i + 4] == 1 else 0)
+            _init_uniform(ex, P + off, n, off, seed, bound)
 
 
 def _param[E: Exec](
@@ -343,6 +552,8 @@ def model_forward[E: Exec](
     """Record the model's forward on the tape from input x (B, n_inputs).
     Dropout acts only when `train`; `step` (the optimizer step) and the
     layer index pick its masks."""
+    if spec.version == SPEC2_VERSION:
+        return _model_forward_v2(tape, ex, spec, P, Gr, x, train, seed, step)
     var outs = List[Tensor]()
     var h = x
     var i = 0
@@ -397,6 +608,102 @@ def model_forward[E: Exec](
             h = tape.add(ex, h, src)
         outs.append(h)
         i += 1
+    return h
+
+
+def _model_forward_v2[E: Exec](
+    mut tape: Tape, mut ex: E, spec: ModelSpec, P: FP, Gr: FP, x: Tensor, train: Bool,
+    seed: UInt64, step: Int,
+) raises -> Tensor:
+    """model_forward of a version-2 description: x is the (B, n_inputs)
+    batch, viewed as (B,) + the per-sample shape (free). Each layer's output
+    is held in its recorded shape (a free view when the op records only the
+    matrix view). Linear, the activations, LayerNorm and Dropout act on the
+    last axis through the matrix view (their 2-D words); reshape and
+    flatten are views, permute a strided view, conv2d and the pools the
+    conv lane's rank-4 ops (autograd/rankn_conv.mojo)."""
+    var B = tape.rows(x)
+    var x0 = rn_as_shape(tape, ex, x, rn_with_batch(B, spec.sample, "model"))
+    var outs = List[Tensor]()
+    var h = x0
+    var i = 0
+    while i < spec.n_layers():  # driver-loop: over layers
+        var k = spec.kinds[i]
+        var xa = SPEC2_ARGS * i
+        if k == LAYER_LINEAR:
+            var fi = spec.in_width[i]
+            var fo = spec.arg0[i]
+            var off = spec.param_off[i]
+            var w = _param(tape, ex, P, Gr, off, fi, fo, train)
+            var bias: Optional[Tensor] = None
+            if spec.arg1[i] == 1:
+                bias = Optional[Tensor](_param(tape, ex, P, Gr, off + fi * fo, 1, fo, train))
+            var act = _absorbed_activation(spec, i)
+            h = tape.linear(ex, h, w, bias, act)
+            h = rn_as_shape(tape, ex, h, rn_with_batch(B, spec.out_shape[i], "model"))
+            if act != 0:
+                outs.append(h)
+                i += 1
+        elif k == LAYER_RELU:
+            h = tape.relu(ex, h)
+        elif k == LAYER_SIGMOID:
+            h = tape.sigmoid(ex, h)
+        elif k == LAYER_TANH:
+            h = tape.tanh(ex, h)
+        elif k == LAYER_SOFTMAX:
+            h = tape.softmax(ex, h)
+        elif k == LAYER_LAYER_NORM:
+            var d = spec.in_width[i]
+            var off = spec.param_off[i]
+            var weight = _param(tape, ex, P, Gr, off, 1, d, train)
+            var lbias = _param(tape, ex, P, Gr, off + d, 1, d, train)
+            h = layer_norm(tape, ex, h, weight, lbias, spec.farg[i])
+        elif k == LAYER_DROPOUT:
+            if train and spec.farg[i] > Float32(0):
+                comptime if HAS_DROPOUT:
+                    h = tape.dropout(ex, h, spec.farg[i], seed, step * spec.n_layers() + i)
+                else:
+                    raise Error("model fit: Dropout is not available in this build")
+        elif k == LAYER_RESIDUAL:
+            var src = x0 if spec.arg0[i] == -1 else outs[spec.arg0[i]]
+            h = tape.add(ex, h, src)
+        elif k == LAYER_RESHAPE or k == LAYER_FLATTEN:
+            h = tape.view_nd(ex, h, rn_with_batch(B, spec.out_shape[i], "model"))
+        elif k == LAYER_PERMUTE:
+            var axes = List[Int]()
+            axes.append(0)
+            for j in range(spec.in_shape[i].ndim):  # small-loop(ndim: the sample rank, at most 7): shape metadata, no data
+                axes.append(spec.xargs[xa + j] + 1)
+            h = tape.permute(ex, h, axes)
+        elif k == LAYER_CONV2D:
+            var oc = spec.arg0[i]
+            var ks = spec.arg1[i]
+            var c = spec.in_shape[i].d[0]
+            var off = spec.param_off[i]
+            var wd = List[Int]()
+            wd.append(oc)
+            wd.append(c)
+            wd.append(ks)
+            wd.append(ks)
+            var w2 = _param(tape, ex, P, Gr, off, oc, c * ks * ks, train)
+            var w4 = tape.view_nd(ex, w2, rn_shape(wd, "model"))
+            if spec.xargs[xa + 4] == 1:
+                var bd = List[Int]()
+                bd.append(oc)
+                var b2 = _param(tape, ex, P, Gr, off + oc * c * ks * ks, 1, oc, train)
+                var b1 = tape.view_nd(ex, b2, rn_shape(bd, "model"))
+                h = rankn_conv2d(tape, ex, h, w4, Optional[Tensor](b1), spec.xargs[xa + 2], spec.xargs[xa + 3])
+            else:
+                h = rankn_conv2d(tape, ex, h, w4, None, spec.xargs[xa + 2], spec.xargs[xa + 3])
+        elif k == LAYER_MAXPOOL2D:
+            h = rankn_max_pool2d(tape, ex, h, spec.arg0[i], spec.arg1[i])
+        elif k == LAYER_AVGPOOL2D:
+            h = rankn_avg_pool2d(tape, ex, h, spec.arg0[i], spec.arg1[i])
+        h = rn_as_shape(tape, ex, h, rn_with_batch(B, spec.out_shape[i], "model"))
+        outs.append(h)
+        i += 1
+    # the (B, outputs) result is read densely by the loss and the prediction copy
+    tape.materialize(ex, h)
     return h
 
 
@@ -709,7 +1016,11 @@ def model_fit_state[E: Exec](
                     tape.arm_fold_word(dloss + bi, Float32(B))
             var loss = model_loss(tape, ex, cfg, out, target)
             var word_done = tape.disarm_fold_word(loss)
-            tape.backward_scalar_with_rules(ex, loss, NeuralRules())
+            if spec.version == SPEC2_VERSION:
+                # the rank-N lanes' custom tags (conv2d, pools) beside NeuralRules
+                tape.backward_scalar_with_rules(ex, loss, RankNRules())
+            else:
+                tape.backward_scalar_with_rules(ex, loss, NeuralRules())
             if not word_done:
                 # the batch's loss times its rows, for the epoch's weighted mean
                 var weighted = tape.scale(ex, loss, Float32(B))

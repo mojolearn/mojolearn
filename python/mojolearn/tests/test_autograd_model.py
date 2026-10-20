@@ -304,3 +304,56 @@ def test_session_embedding_takes_ids_as_they_are():
             s.embedding(w, np.array([1, -(2 ** 40)], dtype=np.int64))
         with pytest.raises(TypeError, match="integers"):
             s.embedding(w, np.array([1.0, 2.0]))
+
+
+def _has_rankn_model():
+    try:
+        m = ml.Sequential(input_shape=(1, 4, 4)).conv2d(1, 3).flatten().linear(1).compile(loss="mse")
+        m.fit(np.zeros((2, 1, 4, 4), dtype=np.float32), np.zeros(2, dtype=np.float32), epochs=1)
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _has_rankn_model(), reason="the sequence binding has no rank-N models (rebuild it)")
+def test_rank4_conv_model():
+    # a small image classifier: conv2d -> relu -> max_pool2d -> flatten -> linear
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((48, 2, 7, 9)).astype(np.float32)
+    y = (X[:, 0, :3].mean(axis=(1, 2)) > X[:, 1, 4:].mean(axis=(1, 2))).astype(np.int64)
+    digests = []
+    for _ in range(2):  # two fits with one seed
+        m = (ml.Sequential().conv2d(3, 3, padding=1).relu().max_pool2d(2).flatten().linear(2)
+             .compile(loss="cross_entropy", optimizer="adam", lr=0.02))
+        m.fit(X, y, epochs=12, batch_size=16, seed=5)
+        digests.append(_digest(m))
+        print(f"RANKN_MODEL_DIGEST conv2d {digests[-1]}")
+    assert digests[0] == digests[1]
+    assert np.isfinite(m.params_).all() and m.loss_curve_[-1] < m.loss_curve_[0]
+    # 3 x (2 x 3 x 3) weights + 3 biases, then (3 * 3 * 4) x 2 + 2
+    assert m.params_.shape == (3 * 2 * 9 + 3 + 36 * 2 + 2,)
+    p = m.predict_proba(X)
+    assert p.shape == (48, 2) and np.allclose(p.sum(axis=1), 1.0, atol=1e-5)
+    # the same samples as flat rows of a model with an input_shape
+    flat = (ml.Sequential(input_shape=(2, 7, 9)).conv2d(3, 3, padding=1).relu().max_pool2d(2).flatten()
+            .linear(2).compile(loss="cross_entropy", optimizer="adam", lr=0.02))
+    flat.fit(X.reshape(48, -1), y, epochs=12, batch_size=16, seed=5)
+    assert _digest(flat) == digests[0]
+    assert np.array_equal(flat.predict_proba(X), p)
+    with pytest.raises(ValueError, match="input_shape"):
+        flat.fit(np.ascontiguousarray(X[:, :, :6]), y, epochs=1)
+    with pytest.raises(Exception, match="one vector per sample"):
+        ml.Sequential().conv2d(2, 3).linear(1).compile(loss="mse").fit(X, y.astype(np.float32), epochs=1)
+
+
+@pytest.mark.skipif(not _has_rankn_model(), reason="the sequence binding has no rank-N models (rebuild it)")
+def test_rank3_sequence_model_with_permute_and_reshape():
+    rng = np.random.default_rng(4)
+    X = rng.standard_normal((40, 5, 6)).astype(np.float32)
+    y = X[:, :, 0].sum(axis=1) - X[:, 0, :].mean(axis=1)
+    m = (ml.Sequential().linear(4).tanh().permute((1, 0)).reshape((-1,)).linear(1)
+         .compile(loss="mse", optimizer="adam", lr=0.02))
+    m.fit(X, y, epochs=10, batch_size=8, seed=1)
+    assert m.loss_curve_[-1] < m.loss_curve_[0]
+    assert m.predict(X).shape == (40,)
+    assert m.layers[2] == ("permute", (1, 0, -1, -1, -1, -1), 0.0)

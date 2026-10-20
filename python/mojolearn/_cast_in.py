@@ -41,3 +41,16 @@ def describe(x, name):
         rows, cols = x.shape
         s0, s1 = x.strides
     return [x.ctypes.data, dt.num, size, rows, cols, s0, s1]
+
+
+def matrix_view(x, name, samples=False):
+    """The row-major matrix view of a C-contiguous ndarray `x` of 3 or more
+    dimensions, the same memory with no copy (numpy's reshape of a
+    C-contiguous array is a view): (product of the leading axes, last axis),
+    or with `samples` (first axis, product of the others). The rank-N
+    entries take this view plus the full shape (docs/plans/AUTOGRAD_RANKN.md
+    section 5: C order first, per-axis strides a follow-up)."""
+    if not x.flags.c_contiguous:
+        raise ValueError(f"{name} with more than two dimensions must be C-contiguous; "
+                         f"pass numpy.ascontiguousarray({name})")
+    return x.reshape(x.shape[0], -1) if samples else x.reshape(-1, x.shape[-1])
