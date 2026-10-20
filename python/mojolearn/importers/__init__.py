@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from ._graph import UnsupportedModel
 
+UnsupportedModel.__module__ = __name__  # documented as mojolearn.importers.UnsupportedModel
+
 __all__ = ["UnsupportedModel", "supported_ops", "import_model"]
 
 

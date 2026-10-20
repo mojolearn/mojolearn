@@ -66,3 +66,7 @@ ops.Session	operation session: checks pending on CPU, Apple, NVIDIA and AMD
 MoEBlock.backward	new tape backward; no NVIDIA+AMD reference records yet (sequence/checks/moe_backward_check.mojo)
 Session.embedding	operation session embedding: its tape checks (embedding_check tape case, autograd embedding_gpu/cpu) pending on CPU, Apple, NVIDIA and AMD
 # Rank-N tensors (docs/plans/AUTOGRAD_RANKN.md): remove a line once its checks' digests match on CPU, Apple, NVIDIA and AMD.
+# Model import (docs/plans/MODEL_IMPORT.md): remove a line once the IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
+importers.UnsupportedModel	model import: the lowering and its IMPORT_DIGEST checks are pending
+importers.supported_ops	model import: the lowering table is pending
+onnx.read	model import: ONNX reader; the lowering and its IMPORT_DIGEST checks are pending
