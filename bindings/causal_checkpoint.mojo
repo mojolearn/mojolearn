@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native safetensors header admission, mapped reads and owned tensor buffers."""
 from std.python import Python, PythonObject
+from std.memory import bitcast
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
@@ -80,7 +81,7 @@ def safetensors_init_binding(value: PythonObject, input_path: PythonObject, cont
             raise Error("safetensors: file is shorter than its 8-byte header length")
         var length = UInt64(0)
         for i in range(8):
-            length |= UInt64(Int(py=head[i])) << (8 * i)
+            length |= UInt64(Int(py=head[i])) << UInt64(8 * i)
         if length > 100 * 1024 * 1024:
             raise Error("safetensors: header length exceeds 104857600")
         n = Int(length)
@@ -184,7 +185,7 @@ def safetensors_read_binding(value: PythonObject, name: PythonObject, bf16: Pyth
             var source = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(py=owned._addr))
             var dest = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
             for i in range(count):
-                dest[i] = f16_bits_to_f32(source[i]) if dtype == "F16" else (UInt32(source[i]) << 16).bitcast[DType.float32]()
+                dest[i] = f16_bits_to_f32(source[i]) if dtype == "F16" else bitcast[DType.float32](UInt32(source[i]) << 16)
         return out
     if dtype == "BF16" and format == "bits" and len(info.shape) == 2:
         var packed = bi.object.__new__(context["bf16_class"])
