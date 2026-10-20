@@ -100,3 +100,40 @@ def test_rejected_snapshot_does_not_partially_publish():
     after = checked('snapshot', model)
     for key in before['weights']:
         assert np.asarray(before['weights'][key]).tobytes() == np.asarray(after['weights'][key]).tobytes()
+
+
+def test_ordered_gradient_fold_has_fixed_left_association_and_owns_inputs():
+    first = [np.array([1., -1.], np.float32), np.arange(6, dtype=np.float32).reshape(2, 3)]
+    tiny = np.float32(2**-24)
+    parts = [first, [np.array([tiny, -tiny], np.float32), np.ones((2, 3), np.float32)],
+             [np.array([tiny, -tiny], np.float32), np.full((2, 3), 2, np.float32)]]
+    folded = checked('ordered_sum', parts)
+    # Both separate additions tie to even; a tree combining the tiny terms
+    # first would produce a one-ULP change and fail this independent oracle.
+    np.testing.assert_array_equal(np.asarray(folded[0]).view(np.uint32), [0x3f800000, 0xbf800000])
+    np.testing.assert_array_equal(np.asarray(folded[1]), first[1] + np.float32(3))
+    np.asarray(folded[1])[:] = 100
+    np.testing.assert_array_equal(first[1], np.arange(6, dtype=np.float32).reshape(2, 3))
+
+
+def test_native_adamw_update_matches_independent_first_two_step_equations():
+    state = checked('snapshot', model_fixture())
+    names = state['parameter_order']
+    original = np.concatenate([np.asarray(state['weights'][name]).reshape(-1) for name in names])
+    gradients = [np.full(np.asarray(state['weights'][name]).shape, .125, np.float32) for name in names]
+    expected = original.astype(np.float64)
+    m = np.zeros_like(expected)
+    v = np.zeros_like(expected)
+    cfg = state['config']
+    for step in (1, 2):
+        state = checked('apply', state, gradients)
+        m = cfg['beta1'] * m + (1 - cfg['beta1']) * .125
+        v = cfg['beta2'] * v + (1 - cfg['beta2']) * .125**2
+        expected = expected * (1 - cfg['lr'] * cfg['weight_decay']) - cfg['lr'] * (
+            m / (1 - cfg['beta1']**step)) / (np.sqrt(v / (1 - cfg['beta2']**step)) + cfg['eps'])
+        observed = np.concatenate([np.asarray(state['weights'][name]).reshape(-1) for name in names])
+        np.testing.assert_allclose(observed, expected, rtol=3e-6, atol=3e-7)
+        np.testing.assert_allclose(np.asarray(state['optimizer']['m']), m, rtol=0, atol=1e-8)
+        np.testing.assert_allclose(np.asarray(state['optimizer']['v']), v, rtol=0, atol=1e-8)
+        assert state['optimizer']['step'] == step
+    assert state['data_schedule'] == {'dataset': 'independent-small-mlp'}
