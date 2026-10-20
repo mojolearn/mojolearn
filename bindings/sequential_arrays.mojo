@@ -135,8 +135,10 @@ def sequential_x(value: PythonObject, name: String, context: PythonObject) raise
 
 
 def sequential_curve(value: PythonObject, count: Int) raises -> PythonObject:
-    var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
     var result = Python.list()
+    if count == 0:
+        return result
+    var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
     for k in range(count):  # driver-loop: over the native training engine's per-epoch scalar report
         result.append(PythonObject(pointer[k]))
     return result
