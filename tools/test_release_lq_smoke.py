@@ -50,7 +50,7 @@ class Plan(unittest.TestCase):
         self.assertEqual(lqs.lq_target(self.lq, "amd"), ["root@192.0.2.2"])
 
     def test_box_plan_renames_files_and_drops_the_rented_options(self):
-        smoke = ["/m/final/mojolearn-0.8.37-x.whl", "--expected-source-commit", COMMIT, "--out", "/m/out",
+        smoke = ["/m/final/mojolearn_core-0.8.37-x.whl", "--expected-source-commit", COMMIT, "--out", "/m/out",
                  "--rent", "--vendor", "hip", "--provider", "auto", "--gpu", "NVIDIA L40S",
                  "--column", "/m/selection-hip.json",
                  "--ref-column", "/m/check/metal/column.json", "--ref-column", "/m/check/cpu/column.json",
@@ -58,12 +58,12 @@ class Plan(unittest.TestCase):
         uploads, argv = lqs.box_plan(smoke, "/root/release-smoke/0.8.37/amd")
         rin = "/root/release-smoke/0.8.37/amd/in"
         self.assertEqual(argv, [
-            "bash", "tools/release_wheel_smoke.sh", f"{rin}/mojolearn-0.8.37-x.whl",
+            "bash", "tools/release_wheel_smoke.sh", f"{rin}/mojolearn_core-0.8.37-x.whl",
             "--expected-source-commit", COMMIT, "--vendor", "hip", "--column", f"{rin}/selection-hip.json",
             "--ref-column", f"{rin}/ref-0-metal-column.json", "--ref-column", f"{rin}/ref-1-cpu-column.json",
             "--plugin", f"{rin}/mojolearn_amd-0.8.37-x.whl", "--plugin", f"{rin}/mojolearn_nvidia-0.8.37-x.whl",
             "--local", "--out", "/root/release-smoke/0.8.37/amd/out"])
-        self.assertEqual([str(l) for l, _ in uploads][:2], ["/m/final/mojolearn-0.8.37-x.whl", "/m/selection-hip.json"])
+        self.assertEqual([str(l) for l, _ in uploads][:2], ["/m/final/mojolearn_core-0.8.37-x.whl", "/m/selection-hip.json"])
         self.assertEqual(len(uploads), 6)
 
     def test_lq_line_queues_next_with_no_build(self):
@@ -88,7 +88,7 @@ class Run(unittest.TestCase):
         self._t = tempfile.TemporaryDirectory()
         self.tmp = pathlib.Path(self._t.name)
         (self.tmp / "lq").write_text(LQ_TEXT)
-        self.wheel = self.tmp / "mojolearn-0.8.37-x.whl"
+        self.wheel = self.tmp / "mojolearn_core-0.8.37-x.whl"
         self.wheel.write_bytes(b"core")
         self.sel = self.tmp / "selection-cuda.json"
         self.sel.write_text("{}")
