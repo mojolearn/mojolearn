@@ -84,8 +84,8 @@ def load_gpu_plugins():
         _GPU_PLUGINS_MODULE = module
     return _GPU_PLUGINS_MODULE
 BYTE_FILES = {'byte-lm-identical.json', 'byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'}
-# DEVIATION 2290. The combined three-architecture Linux profile is named for its
-# shape, `release-linux3` (CUDA sm_89, CUDA sm_90, HIP gfx942), not for a version.
+# DEVIATION 2290. The combined Linux profile is `release-linux3`; the sets it
+# carries are the registry's (RELEASE_ARCHES below), not a version.
 # It was authored as `release-0.6.1`, a number that was never published; that
 # name stays accepted as a deprecated alias mapping to the same code path, so
 # the retained 2026-09-07 preparation evidence and the older documents still
@@ -96,64 +96,72 @@ BYTE_FILES = {'byte-lm-identical.json', 'byte-lm-before.json', 'byte-lm-after.js
 RELEASE_PROFILE = 'release-linux3'
 RELEASE_PROFILES = frozenset({RELEASE_PROFILE, 'release-0.6.1'})
 
-# DEVIATION 2293: THE HOPPER SLOT HAS TWO LEGAL SPELLINGS AND ONLY ONE OF THEM
-# IS BUILDABLE. Asked for sm_90 through --target-accelerator on an H100, the
-# compiler emits binaries carrying sm_90a, and every gate that reads an
-# architecture back off the binaries then refuses the set for being named
-# something it was not verified to carry. That refusal is right and is not
-# relaxed anywhere; what was wrong is that six separate gates spelled the slot
-# `sm_90` and nothing else, and `sm_90` has never once been built. 0.6.0's
-# Linux wheel shipped gfx942 only and NVIDIA was a source build, so the
-# literal was never exercised.
+# THE RELEASE CONTRACT IS THE REGISTRY (2026-10-20). Which architecture sets a
+# Linux release carries is python/mojolearn/gpu_plugins.py, the table the
+# loader and the packer read, never a second spelling here:
 #
-# sm_90a is not a fallback. python/mojolearn/_backend.py already PREFERS it:
-# a device reporting sm_90 takes a carried sm_90a as "architecture-specific
-# build for this exact device", ahead of any family rule, because the `a`
-# restricts which devices the code runs on and Hopper is what it restricts to.
+# - REQUIRED: gpu_plugins.required_sets(vendor) -- every native slot's first
+#   spelling (cuda/sm_89, hip/gfx942) plus the shipped PTX slot (cuda/sm_80,
+#   packed into its own mojolearn-nvidia-ptx wheel at mojolearn/cuda_ptx/sm_80
+#   and keyed cuda/sm_80 at the build layout). The PTX set is a set like any
+#   other: built by its own leg, proved by its own build proof, qualified under
+#   its own runtime key (Andrew 2026-10-10: PTX is a normal target; no flag).
+# - OPTIONAL: every other architecture the vendor row registers (Hopper
+#   sm_90/sm_90a, Blackwell sm_100.. sm_121a). A release may carry one, and a
+#   carried one is checked like a required set, but none is required (0.8.37:
+#   with sm_90a the NVIDIA wheel exceeds PyPI's 100 MiB file limit).
 #
-# ONE definition, read by the packer, the admission checker and the alpha
-# verifier, because a contract clause spelled separately in six places is six
-# chances to disagree.
-RELEASE_HOPPER = ('sm_90', 'sm_90a')
-RELEASE_ARCHES = frozenset({'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+# DEVIATION 2293 still holds per hardware slot: the compiler emits sm_90a for
+# sm_90 on an H100, so a slot may be spelled either way (sm_N or sm_Na), but
+# never filled twice. An unregistered architecture is refused.
+_REGISTRY = load_gpu_plugins()
+LINUX_VENDORS = ('cuda', 'hip')
+
+#: Each plugin's required sets, 'vendor/arch' (gpu_plugins.required_sets):
+#: the split profile packs `mojolearn-nvidia` + `mojolearn-nvidia-ptx` from
+#: PLUGIN_ARCHES['cuda'] and `mojolearn-amd` from PLUGIN_ARCHES['hip'].
+PLUGIN_ARCHES = {vendor: frozenset('/'.join(k) for k in _REGISTRY.required_sets(vendor))
+                 for vendor in LINUX_VENDORS}
+#: Each plugin's registered but optional sets (Hopper, Blackwell).
+OPTIONAL_ARCHES = {vendor: frozenset(vendor + '/' + a for a in _REGISTRY.plugin(vendor)['arches'])
+                   - PLUGIN_ARCHES[vendor] for vendor in LINUX_VENDORS}
+#: The sets a release of both vendors must carry.
+RELEASE_ARCHES = frozenset().union(*PLUGIN_ARCHES.values())
+#: Every set a release may carry and a qualification may be keyed by.
+REGISTERED_ARCHES = RELEASE_ARCHES.union(*OPTIONAL_ARCHES.values())
 
 
 def normalise_arch(key):
-    """Collapse the Hopper slot's two spellings onto one, for set comparison.
-
-    'cuda/sm_90a' -> 'cuda/sm_90'; everything else is returned unchanged, so a
-    wrong architecture is still a wrong architecture.
-    """
-    return 'cuda/sm_90' if key == 'cuda/sm_90a' else key
-
-
-def arch_set_ok(keys):
-    """True when `keys` is exactly the release triple, Hopper spelled either way.
-
-    Refuses a set that fills the Hopper slot twice, which normalising alone
-    would silently accept.
-    """
-    keys = list(keys)
-    hopper = [k for k in keys if k in ('cuda/sm_90', 'cuda/sm_90a')]
-    return len(hopper) <= 1 and {normalise_arch(k) for k in keys} == RELEASE_ARCHES
-
-
-#: Each plugin's architecture sets: the split profile packs `mojolearn-nvidia`
-#: from exactly PLUGIN_ARCHES['cuda'] (native sm_89 and the PTX slot sm_80;
-#: Andrew 2026-10-10: PTX is a normal target; no flag) and `mojolearn-amd` from
-#: exactly PLUGIN_ARCHES['hip'], read from python/mojolearn/gpu_plugins.py
-#: (gpu_plugins.required_sets), never spelled a second time.
-PLUGIN_ARCHES = {vendor: frozenset('/'.join(k) for k in load_gpu_plugins().required_sets(vendor))
-                 for vendor in ('cuda', 'hip')}
+    """The hardware slot of a 'vendor/arch' key: an architecture-specific
+    CUDA spelling collapses onto its family ('cuda/sm_90a' -> 'cuda/sm_90');
+    everything else is returned unchanged."""
+    vendor, _, arch = key.partition('/')
+    return key[:-1] if vendor == 'cuda' and re.fullmatch(r'sm_[0-9]+a', arch) else key
 
 
 def plugin_arch_set_ok(vendor, keys):
-    """True when `keys` is exactly `vendor`'s share of the release triple,
-    Hopper spelled either way and never twice."""
+    """True when `keys` is a complete release set of `vendor`'s plugin: every
+    required set, optionally registered optional sets, nothing else, and no
+    hardware slot filled twice (sm_N and sm_Na)."""
     keys = list(keys)
-    hopper = [k for k in keys if k in ('cuda/sm_90', 'cuda/sm_90a')]
-    return (len(hopper) <= 1 and all(k.split('/')[0] == vendor for k in keys)
-            and {normalise_arch(k) for k in keys} == PLUGIN_ARCHES[vendor])
+    found = set(keys)
+    return (len(keys) == len(found) and all(k.split('/')[0] == vendor for k in keys)
+            and PLUGIN_ARCHES[vendor] <= found <= PLUGIN_ARCHES[vendor] | OPTIONAL_ARCHES[vendor]
+            and len({normalise_arch(k) for k in found}) == len(found))
+
+
+def arch_set_ok(keys):
+    """True when `keys` is a complete release set of both vendors."""
+    keys = list(keys)
+    return all(plugin_arch_set_ok(v, [k for k in keys if k.split('/')[0] == v]) for v in LINUX_VENDORS) \
+        and all(k.split('/')[0] in LINUX_VENDORS for k in keys)
+
+
+def release_contract(vendors=LINUX_VENDORS):
+    """The contract of `vendors` in words, for refusal messages."""
+    return '; '.join(v + ': ' + ', '.join(sorted(PLUGIN_ARCHES[v])) + ' required'
+                     + (', optional ' + ', '.join(sorted(OPTIONAL_ARCHES[v])) if OPTIONAL_ARCHES[v] else '')
+                     for v in sorted(vendors))
 VERSION_PATTERN = re.compile(r'''^__version__\s*=\s*(['"])([^'"]+)\1\s*$''', re.MULTILINE)
 
 
