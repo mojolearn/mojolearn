@@ -64,7 +64,7 @@ FAMILIES = (
             # the model-description trainer (autograd/model.mojo)
             "model_fit", "model_predict", "model_n_params", "model_labels",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
-            "ops_open", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
+            "ops_open", "ops_session_create", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
             "ops_shape", "ops_free", "ops_reset", "ops_metric", "ops_backward", "ops_grad",
             "ops_profile_reset", "ops_profile_report", "ops_op_packed",
             # checkpoints (autograd/model_checkpoint.mojo)

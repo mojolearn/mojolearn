@@ -42,5 +42,7 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     b.setattr(session, "_program_class", program_class)
     b.setattr(session, "_distributed_binding", entry.distributed)
     b.setattr(session, "_opt_kind", b.dict())
-    b.setattr(session, "_id", entry.open(Int(recording)))
+    var created = entry.open(Int(recording))
+    b.setattr(session, "_lifetime", created[1])
+    b.setattr(session, "_id", created[0])
     return PythonObject(None)

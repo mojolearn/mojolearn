@@ -12,6 +12,7 @@ from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, op
 from autograd.program_save import ops_program_save_native_py
 from bindings.native_json import native_path
 from autograd.weight_frontend import ops_weights_native_py
+from autograd.session_lifetime import SessionLifetime
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -97,15 +98,6 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     var name = String(operation)
     if name == "enter":
         return session
-    if name == "finalize":
-        # Partially constructed instances and interpreter teardown are
-        # legitimate destructor paths. Keep their handling inside native code.
-        try:
-            if not _nil(session._id):
-                _ = session._session_native(session, "close", Python.import_module("builtins").tuple())
-        except:
-            pass
-        return PythonObject(None)
     if name == "free_program":
         if not _nil(session._id) and not _nil(args[0]._id):
             var owner = ops_session[E, KIND](Int(py=session._id))
@@ -114,7 +106,8 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         return PythonObject(None)
     if name == "close" or name == "exit":
         if not _nil(session._id):
-            _ = ops_close_py[E, KIND](session._id)
+            var owner = session._lifetime.downcast_value_ptr[SessionLifetime[E, KIND]]()
+            owner[].close()
             Python.import_module("builtins").setattr(session, "_id", PythonObject(None))
         return PythonObject(False) if name == "exit" else PythonObject(None)
     if name == "profile_reset":

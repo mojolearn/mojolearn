@@ -230,9 +230,6 @@ class Session:
     def __exit__(self, *exc):
         return self._session_native(self, "exit", ())
 
-    def __del__(self):
-        return _SESSION_FINALIZE(self, "finalize", ())
-
     def _sid(self):
         if self._id is None:
             raise ValueError("this session is closed")
@@ -1471,7 +1468,7 @@ def _connect_session_mode(mode):
     )
     result = SimpleNamespace(
         binding=module, initialize=module.ops_session_initialize,
-        numeric_mode=module.x_sequence_numeric_mode, open=module.ops_open,
+        numeric_mode=module.x_sequence_numeric_mode, open=module.ops_session_create,
         call=module.ops_session_call, execute=module.ops_program_execute,
         inspect=module.ops_program_inspect, control=module.ops_program_control,
         fit=module.ops_program_fit_native, distributed=distributed)
@@ -1494,4 +1491,3 @@ if isinstance(_session_connected, str):
 if isinstance(_session_connected, str):
     raise ImportError(_session_connected)
 _SESSION_INITIALIZE = _session_connected.initialize
-_SESSION_FINALIZE = _session_connected.call
