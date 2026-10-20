@@ -185,3 +185,20 @@ def test_missing_device_images_are_not_generally_exempt(tmp_path):
         assert cc.audit_file(glue, 'sm_89')['errors']
     # Byte-only auditing has no scoped delegate evidence and stays strict.
     assert cc.audit_bytes(blob(), 'sm_89')['errors'] == ['no fatbin embedded']
+
+
+def test_merged_file_is_audited_by_its_own_fatbins_and_names_its_members(tmp_path):
+    import json
+    directory = tmp_path / 'mojolearn/cuda/sm_89/identical'
+    directory.mkdir(parents=True)
+    members = ['_mojolearn_x_trees', '_mojolearn_rf', '_mojolearn_gbdt']
+    merged = directory / '_mojolearn_native.so'
+    merged.write_bytes(blob(fake_fatbin(89)))
+    (directory / '_mojolearn_merged.json').write_text(json.dumps(
+        {'format': 1, 'files': {'_mojolearn_native.so': members}}))
+    row = cc.audit_file(merged, 'sm_89')
+    assert row['errors'] == [] and row['members'] == members and 'delegates' not in row
+    errors, rows = cc.audit_tree(tmp_path)
+    assert errors == [] and [r['file'] for r in rows] == ['mojolearn/cuda/sm_89/identical/_mojolearn_native.so']
+    merged.write_bytes(blob())
+    assert cc.audit_file(merged, 'sm_89')['errors'] == ['no fatbin embedded']

@@ -342,9 +342,21 @@ def audit_bytes(data, arch=None):
 def audit_file(path, arch=None):
     """Audit device-free registered glue through actual same-tier delegates."""
     from device_glue import ARCH, DEVICE_GLUE
+    from merged_layout import read_index
     path = Path(path)
     data = path.read_bytes()
     row = audit_bytes(data, arch)
+    # A merged file (packaging/linux/merged_layout.py) serves every member its
+    # index names; the row says which, and x_trees inside it is audited by the
+    # merged file's own fatbins (no delegation: rf and gbdt are the same file).
+    try:
+        members = (read_index(path.parent) or {}).get(path.name)
+    except ValueError as exc:
+        row["errors"].append(str(exc))
+        members = None
+    if members is not None:
+        row["members"] = members
+        return row
     delegates = DEVICE_GLUE.get((path.parent.name, path.stem))
     if (not delegates or not arch or row["errors"] != ["no fatbin embedded"]
             or row["ptx_modules"] or ARCH.search(data)):
