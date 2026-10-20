@@ -46,10 +46,11 @@ def _equal(actual, expected):
     assert a.tobytes() == b.tobytes(), "output words differ"
 
 
-def _refuses(call, text):
+def _refuses(call, text, error_type=Exception):
     try:
         call()
     except Exception as error:
+        assert isinstance(error, error_type), (error_type.__name__, type(error).__name__)
         assert text in str(error), (text, str(error))
         if _AUDITS and _AUDITS[-1]["exception"] is not None:
             _AUDITS[-1]["expected_refusal"] = True
@@ -72,6 +73,9 @@ def native_inputs():
         _refuses(lambda: _invoke(p.run, x, x), "input arrays")
         _refuses(lambda: _invoke(p.run, [[1.0], [2.0, 3.0]]), "rectangular")
         _refuses(lambda: _invoke(p.run, x.astype(">f4")), "native byte order")
+        integer = s.ids(np.array([[1, 2]], dtype=np.int64))
+        id_program = s.capture(integer, s.embedding(s.tensor(np.ones((4, 2), np.float32)), integer))
+        _refuses(lambda: _invoke(id_program.run, np.ones((1, 2), np.float32)), "integer", TypeError)
         _equal(_invoke(p.run, x), outputs[0])
         return outputs
 
@@ -86,7 +90,7 @@ def dynamic_shapes_and_recovery():
         a = np.arange(18, dtype=np.float32).reshape(3, 2, 3)
         out = _invoke(p.run, a, dynamic_shapes=True)
         _equal(out, a @ w)
-        _refuses(lambda: _invoke(p.run, a), "shape")
+        _refuses(lambda: _invoke(p.run, a), "shape", ValueError)
         _refuses(lambda: _invoke(p.run, np.ones((2, 3), np.float32), dynamic_shapes=True), "rank")
         _refuses(lambda: _invoke(p.run, np.ones((3, 2, 5), np.float32), dynamic_shapes=True), "program node 0")
         _equal(_invoke(p.run, a, dynamic_shapes=True), out)
