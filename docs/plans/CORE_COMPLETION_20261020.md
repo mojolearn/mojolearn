@@ -29,8 +29,10 @@ into a single suite result.
 | Native transport, process workers and block backward | `stage28-native-tests.xml`, `stage28-tests-tmp/` | 43 of 44 tests pass; the remaining test used default options while expecting nondefault refusal. The corrected fixture passes separately against the same binary in `backward-refusal-supplement/`. Child audit reports retain the complete child-loop boundary. |
 | Cross-vendor worker protocol on Apple | `stage28-worker-metal.xml` | Both chained and unchained protocol tests pass with independent numerical oracles and native audits. One physical GPU; no general multi-device qualification implied. |
 | Native block construction | `stage28-neural-block.xml` | 11 tests pass, including Mamba3 construction. |
-| Graph optimizer and diagnostics | `validation-graph-stage27/{cpu,metal}.json` | CPU: 19/20 cases, 85 digests. Metal: 18/20 cases, 77 digests. Lifetime fails on both. Metal also exposed a missing raw-word flag in the tiled forward transpose route; its separate repair requires fresh affected-case evidence. |
+| Graph optimizer and diagnostics | `validation-graph-stage27/{cpu,metal}.json`; `stage30-targeted-graph-comparison.json` | The initial CPU run passed 19/20 cases and Metal 18/20. Lifetime fails on both. The tiled forward transpose repair subsequently passes all seven affected cases on CPU and Metal, with 56 matching digests. These overlapping incremental runs are not a full qualification pass. |
+| Conditional graph training and continuation | `stage31-targeted-control-comparison.json`, `stage31-ordinary-graph.xml` | Five conditional/control/checkpoint cases pass on CPU and Metal with 34 matching digests; 11 ordinary Program tests pass without skips. Installed-wheel and physical NVIDIA/AMD checks remain pending. |
 | Native MLP and Samba state | `stage30-model-state-summary.json` | First run: 18 pass, 14 fail, 2 GPU-only skips. Twelve MLP cases encounter Python attribute interception; two Samba cases encounter NumPy preparation. These are product defects to repair, not audit exemptions. |
+| Native model and public parallel-training integration | `stage32-native-models-summary.json`, `stage32-native-models-tmp/` | After those repairs, 46 of 48 CPU tests pass with no skips. Both remaining failures concern restored Samba attention blocks inheriting the wrong normalization default. The separate default repair retains the original failures and needs an affected-case rerun. Actual MLP child loops, rollback and checkpoint replay pass their strict native audits. |
 | Installed AMD graph execution | `retrieved/amd-installed/graph-stage15-tierfix/` | 13 cases and 36 digests match the corresponding CPU reference on this earlier freeze. This does not qualify subsequent graph source. |
 | PTX references and four weighted-tree batch checks | `apple-0855-seven-lanes.json`, `cpu/seven-lanes.json`, `retrieved/{amd,ptx}/` | Current CPU, Apple, AMD and PTX results agree for the selected checks. Independent native NVIDIA evidence is still missing; the four original PTX reference mismatches remain unadmitted. Compatible rental attempts have returned out of stock. |
 
@@ -77,5 +79,11 @@ The owned AMD machine `610973312` was archived, deleted and verified absent
 and R2
 `measurements/box-archive/do-amd-610973312/do-amd-610973312-20261020T2143Z.tgz`.
 Accepted binaries excluded from the general archive were retained separately
-with their build provenance. The shared NVIDIA machine belongs to multiple
-sessions and must not be deleted by this lane.
+with their build provenance. The shared NVIDIA machine was later retired by its
+idle lease; the provider confirms it is gone. This lane did not delete it.
+Its accepted binaries and our required results were retained before retirement.
+
+A snapshot of 653 complete retained logs, reports and controller artifacts is
+also in R2 at
+`measurements/core-completion/2026-10-20/session-record/results-20261020T2222Z.tgz`.
+That snapshot is an incremental record, not an all-green release result.
