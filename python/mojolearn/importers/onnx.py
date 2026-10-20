@@ -247,8 +247,8 @@ def _toposort(nodes, available, problems):
 def read(path):
     """Read the ONNX model at ``path`` into an import graph.
 
-    Returns a :class:`~mojolearn.importers._graph.GraphIR` whose nodes are
-    in topological order and whose initializers are views of the file's
+    Returns the model's graph: its inputs and outputs with their types and
+    shapes, its nodes in topological order and whose initializers are views of the file's
     bytes (``Constant`` nodes become initializers). Raises
     :class:`UnsupportedModel` listing every problem found at once: an opset
     older than 13, a node outside the default ONNX domain, an initializer,
