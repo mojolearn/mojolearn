@@ -69,66 +69,14 @@ class ParallelByteLanguageModelTrainer:
     """
 
     def __init__(self, state, *, devices=(0,), logical_shards=1, pool_optimizer=True):
-        devices = tuple(devices)
-        if (type(logical_shards) is not int or not 1 <= logical_shards <= 1024
-                or not 1 <= len(devices) <= logical_shards):
-            raise ValueError('require 1 <= device count <= logical_shards <= 1024')
-        if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):  # glue: validates the devices argument
-            raise ValueError('devices must be distinct nonnegative integer indices')
-        if type(pool_optimizer) is not bool:
-            raise ValueError("pool_optimizer must be bool")
-        self.pool_optimizer = pool_optimizer
-        self.devices = devices
-        self.logical_shards = logical_shards
-        self._state = _validate_state(state)
-        self._shape = state_shape(self._state)
-        self._session = None
-        self._binding = None
-        self._closed = False
-        self._lost = False
-        self._lock = threading.RLock()
+        return _native_parallel_byte("init", (self, state, devices, logical_shards, pool_optimizer))
 
     @property
     def step_(self):
-        return self._state['completed_steps']
+        return _native_parallel_byte("step", (self,))
 
     def _open(self):
-        if self._closed or self._lost:
-            raise RuntimeError('parallel trainer is closed or lost; restore a state export')
-        if self._session is not None:
-            return
-        # Reuse the existing binding resolver and profile/vendor admission.
-        seed = self._state
-        helper = SmallByteLanguageModelTrainer(seed['parameters'],
-            data_schedule=seed['data_schedule'], shape=self._shape)
-        binding = helper._binding()
-        for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):  # glue: binds six binding entry points
-            if not callable(getattr(binding, 'byte_lm_parallel_' + name, None)):
-                raise _missing_entry('byte_lm_parallel', 'parallel training')
-        open_name = 'byte_lm_parallel_open_pooled' if self.pool_optimizer else 'byte_lm_parallel_open'
-        opener = getattr(binding, open_name, None)
-        if not callable(opener):
-            raise _missing_entry('byte_lm_parallel', 'optimizer pooling')
-        if not callable(getattr(binding, 'byte_lm_parallel_reduction_pool_available', None)):
-            raise _missing_entry('byte_lm_parallel', 'distributed reduction buffers')
-        if binding.byte_lm_parallel_reduction_pool_available() != 1:
-            raise RuntimeError('binding refused distributed reduction availability')
-        cfg = seed['config']
-        params = [0, self.step_, cfg['kind'], cfg['lr'], cfg['beta1'], cfg['beta2'],
-                  cfg['eps'], cfg['weight_decay'], cfg['momentum'], cfg['dampening'],
-                  int(cfg['nesterov']), cfg['max_norm']]
-        session = binding.byte_lm_parallel_create()
-        try:
-            completed = opener(session,
-                [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],  # glue: four named state arrays
-                params, list(self._shape.native_shape), list(self.devices), self.logical_shards)
-            if completed != self.step_:
-                raise RuntimeError('parallel admission returned wrong step')
-        except BaseException:
-            binding.byte_lm_parallel_close(session)
-            raise
-        self._binding, self._session = binding, session
-        self._state = dict(seed, parameters=None, m=None, v=None)
+        return _native_parallel_byte("open", (self,))
 
     def train_step(self, shards):
         """Consume exactly logical_shards microbatches; return per-shard losses.
@@ -136,48 +84,11 @@ class ParallelByteLanguageModelTrainer:
         Each microbatch has shape (batch, length + 1). The loss vector retains
         logical order; no host floating-point reduction participates in training.
         """
-        with self._lock:
-            shards = list(shards)
-            if len(shards) != self.logical_shards:
-                raise ValueError('logical shard count mismatch')
-            shape = (self._shape.batch, self._shape.length + 1)
-            tokens = [_array(x, shape, 'shard', '<i4') for x in shards]  # glue: one token buffer per shard
-            self._open()
-            before = self.step_
-            # Native failures already recover this transaction. An admission
-            # refusal must never roll back the preceding successful step.
-            losses = self._binding.byte_lm_parallel_step(self._session,
-                [addr_ro(x, name='shard') for x in tokens], before)  # glue: one address per shard buffer
-            try:
-                if len(losses) != self.logical_shards:
-                    raise RuntimeError('parallel step returned wrong loss count')
-                result = dict(losses=tuple(losses), completed_steps=before + 1,
-                              logical_shards=self.logical_shards, reduction='ordered_sum')
-            except BaseException:
-                try:
-                    restored = self._binding.byte_lm_parallel_rollback(self._session)
-                    if restored != before:
-                        self._lost = True
-                except BaseException:
-                    self._lost = True
-                raise
-            self._state['completed_steps'] = before + 1
-            self._state['next_batch_index'] = before + 1
-            return result
+        return _native_parallel_byte("train_step", (self, shards))
 
     def state_dict(self, *, rank=0):
         """Export a replica in the existing portable byte-LM state format."""
-        with self._lock:
-            self._open()
-            state = dict(self._state)
-            for key in ('parameters', 'm', 'v'):  # glue: three named state arrays
-                state[key] = empty((self._shape.n_total,), '<f4')
-            state['flags'] = empty((self._shape.n_tensors,), '<i4')
-            step = self._binding.byte_lm_parallel_export(self._session,
-                [addr(state[k], name=k) for k in ('parameters', 'm', 'v', 'flags')], rank, False)  # glue: four named state arrays
-            if step != self.step_:
-                raise RuntimeError('parallel export returned wrong step')
-            return _validate_state(state)
+        return _native_parallel_byte("state", (self, rank))
 
     def export_raw(self, *, rank=0, into=None):
         """The four state arrays of one replica, freshly downloaded, as
@@ -194,21 +105,7 @@ class ParallelByteLanguageModelTrainer:
         for flags) that are written in place and returned as the dict;
         nothing is allocated. The bytes are the same as the no-argument
         form's (`_export_target` says what is refused)."""
-        with self._lock:
-            if into is None:
-                out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}  # glue: three named state arrays
-                out['flags'] = empty((self._shape.n_tensors,), '<i4')
-            else:
-                if not isinstance(into, dict) or set(into) != set(STATE_ARRAYS):
-                    raise ValueError('mojolearn: into must be a dict with keys %s' % (STATE_ARRAYS,))
-                out = into
-            addresses = [_export_target(out[k], self._shape.n_tensors if k == 'flags' else self._shape.n_total,
-                                        '<i4' if k == 'flags' else '<f4', k) for k in STATE_ARRAYS]  # glue: the named state arrays
-            self._open()
-            step = self._binding.byte_lm_parallel_export(self._session, addresses, rank, False)
-            if step != self.step_:
-                raise RuntimeError('parallel export returned wrong step')
-            return out
+        return _native_parallel_byte("export_raw", (self, rank, into))
 
     def set_lr(self, lr):
         """Set the learning rate every replica uses at its NEXT update (a
@@ -218,40 +115,16 @@ class ParallelByteLanguageModelTrainer:
         and returns the float32 bits it stored, which must be the bits
         that were sent. The exported state's `config['lr']` follows, so a
         checkpoint written after this call records the rate in effect."""
-        with self._lock:
-            value = _float32(lr, 'lr')
-            if value <= 0:
-                raise ValueError('Byte-LM requires lr > 0')
-            if self._session is not None:
-                setter = getattr(self._binding, 'byte_lm_parallel_set_lr', None)
-                if not callable(setter):
-                    raise RuntimeError('this byte-LM binary predates set_lr; rebuild bindings/build_byte_lm.sh')
-                import struct
-                stored = int(setter(self._session, value))
-                (want,) = struct.unpack('<I', struct.pack('<f', value))
-                if stored != want:
-                    raise RuntimeError('byte_lm_parallel_set_lr stored 0x%08x, sent 0x%08x' % (stored, want))
-            self._state['config'] = dict(self._state['config'], lr=value)
-            return value
+        return _native_parallel_byte("set_lr", (self, lr))
 
     def export_gradients(self, *, rank=0, into=None):
         """The summed gradient of the last committed step, float32[n_total].
         `into`, when given, is a caller-owned float32[n_total] buffer written
         in place and returned; nothing is allocated (same bytes)."""
-        with self._lock:
-            out = empty((self._shape.n_total,), '<f4') if into is None else into
-            target = _export_target(out, self._shape.n_total, '<f4', 'gradients')
-            self._open()
-            step = self._binding.byte_lm_parallel_export(self._session, [target], rank, True)
-            if step != self.step_:
-                raise RuntimeError('parallel gradient export returned wrong step')
-            return out
+        return _native_parallel_byte("export_gradients", (self, rank, into))
 
     def _require_split_step(self, name):
-        if self.pool_optimizer or len(self.devices) != 1:
-            raise ValueError(name + ' requires devices=(d,) and pool_optimizer=False')
-        if not callable(getattr(self._binding, 'byte_lm_parallel_' + name, None)):
-            raise RuntimeError('this byte-LM binary predates ' + name + '; rebuild bindings/build_byte_lm.sh')
+        return _native_parallel_byte("require_split", (self, name))
 
     def shard_gradient(self, ids):
         """One logical shard's gradient from the CURRENT state, with no
@@ -259,131 +132,67 @@ class ParallelByteLanguageModelTrainer:
         whose shards run in other processes, on any vendor
         (`mojolearn.cross_vendor`). Same kernels as one shard of
         `train_step`."""
-        with self._lock:
-            tokens = _array(ids, (self._shape.batch, self._shape.length + 1), 'shard', '<i4')
-            self._open()
-            self._require_split_step('shard_gradient')
-            out = empty((self._shape.n_total,), '<f4')
-            loss = self._binding.byte_lm_parallel_shard_gradient(self._session,
-                [addr_ro(tokens, name='shard'), addr(out, name='gradient')], self.step_)
-            return float(loss), out
+        return _native_parallel_byte("shard_gradient", (self, ids))
 
     def apply_gradient(self, total):
         """Commit one step with `total`, the ordered left fold of every
         shard's gradient (`mojolearn.cross_vendor.ordered_fold`). The update
         is the one `train_step` runs after its own fold."""
-        with self._lock:
-            total = _array(total, (self._shape.n_total,), 'summed gradient')
-            self._open()
-            self._require_split_step('apply_gradient')
-            before = self.step_
-            # A native failure has already rolled the replica back to `before`.
-            done = self._binding.byte_lm_parallel_apply_gradient(self._session,
-                [addr_ro(total, name='summed gradient')], before)
-            if done != before + 1:
-                self._lost = True
-                raise RuntimeError('apply_gradient returned the wrong step')
-            self._state['completed_steps'] = before + 1
-            self._state['next_batch_index'] = before + 1
-            return done
+        return _native_parallel_byte("apply_gradient", (self, total))
 
     # ---- the device fold for a live worker (mojolearn.cross_vendor, chained) ----
 
     def _require_fold(self):
-        self._require_split_step('shard_gradient')
-        if not callable(getattr(self._binding, 'byte_lm_parallel_fold_export', None)):
-            raise RuntimeError('this byte-LM binary predates the device fold; rebuild bindings/build_byte_lm.sh')
+        return _native_parallel_byte("require_fold", (self,))
 
     @property
     def has_device_fold(self):
         """True when the binding folds on the device (a live worker uses it
         instead of `cross_vendor.ordered_fold` on the host)."""
-        with self._lock:
-            self._open()
-            return callable(getattr(self._binding, 'byte_lm_parallel_fold_export', None))
+        return _native_parallel_byte("has_device_fold", (self,))
 
     def fold_reset(self, prefix=None):
         """Start this worker's device fold: empty, or from `prefix`, an
         already folded run of the shards before this worker's block."""
-        with self._lock:
-            self._open()
-            self._require_fold()
-            if prefix is None:
-                self._binding.byte_lm_parallel_fold_reset(self._session, [])
-            else:
-                prefix = _array(_floats(prefix), (self._shape.n_total,), 'fold prefix')
-                self._binding.byte_lm_parallel_fold_reset(self._session, [addr_ro(prefix, name='fold prefix')])
+        return _native_parallel_byte("fold_reset", (self, prefix))
 
     def shard_gradient_fold(self, ids):
         """One shard's gradient, folded into the device total with the
         ordered add `train_step` uses; returns the loss. No update."""
-        with self._lock:
-            tokens = _array(ids, (self._shape.batch, self._shape.length + 1), 'shard', '<i4')
-            self._open()
-            self._require_fold()
-            return float(self._binding.byte_lm_parallel_shard_gradient_fold(self._session,
-                [addr_ro(tokens, name='shard')], self.step_))
+        return _native_parallel_byte("shard_gradient_fold", (self, ids))
 
     def fold_add(self, gradient):
         """Fold a host-held shard gradient into the device total."""
-        with self._lock:
-            gradient = _array(_floats(gradient), (self._shape.n_total,), 'shard gradient')
-            self._open()
-            self._require_fold()
-            self._binding.byte_lm_parallel_fold_add(self._session, [addr_ro(gradient, name='shard gradient')])
+        return _native_parallel_byte("fold_add", (self, gradient))
 
     def fold_export(self, *, into=None):
         """The device fold's total, as float32 bytes. With `into` (a
         caller-owned float32[n_total] buffer) the total is written there
         and `into` is returned instead, with no allocation and no copy to
         `bytes`; its bytes are the ones the no-argument form returns."""
-        with self._lock:
-            out = empty((self._shape.n_total,), '<f4') if into is None else into
-            target = _export_target(out, self._shape.n_total, '<f4', 'fold total')
-            self._open()
-            self._require_fold()
-            self._binding.byte_lm_parallel_fold_export(self._session, [target])
-            if into is not None:
-                return into
-            return flat_bytes(out, name='fold total').tobytes()
+        return _native_parallel_byte("fold_export", (self, into))
 
     def optimizer_ownership(self):
         """Actual native ownership and moment/rollback/reduction bytes per device."""
-        with self._lock:
-            self._open()
-            rows = self._binding.byte_lm_parallel_ownership(self._session)
-            return tuple(dict(device=device, first=int(row[0]), count=int(row[1]),
-                              moment_bytes=int(row[2]), rollback_bytes=int(row[3]),
-                              reduction_bytes=int(row[4]))
-                         for device, row in zip(self.devices, rows))  # glue: one record per device
+        return _native_parallel_byte("ownership", (self,))
 
     def checkpoint(self):
         """Portable state plus the logical reduction contract required for replay."""
-        return dict(schema='mojolearn.parallel-byte-lm.v1',
-                    logical_shards=self.logical_shards, reduction='ordered_sum',
-                    state=self.state_dict())
+        return _native_parallel_byte("checkpoint", (self,))
 
     @classmethod
     def from_checkpoint(cls, checkpoint, *, devices=(0,), pool_optimizer=True):
-        if (checkpoint.get('schema') != 'mojolearn.parallel-byte-lm.v1'
-                or checkpoint.get('reduction') != 'ordered_sum'):
-            raise ValueError('unsupported parallel checkpoint contract')
-        return cls(checkpoint['state'], devices=devices,
-                   logical_shards=checkpoint['logical_shards'], pool_optimizer=pool_optimizer)
+        return _native_parallel_byte("from_checkpoint", (cls, checkpoint, devices, pool_optimizer))
 
     def close(self):
         """Release device resources. Export/checkpoint before closing to retain state."""
-        with self._lock:
-            self._closed = True
-            if self._session is not None:
-                self._binding.byte_lm_parallel_close(self._session)
-                self._session = None
+        return _native_parallel_byte("close", (self,))
 
     def __enter__(self):
-        return self
+        return _native_parallel_byte("enter", (self,))
 
     def __exit__(self, *exc):
-        self.close()
+        return _native_parallel_byte("close", (self,))
 
 
 def _floats(value):
@@ -544,3 +353,24 @@ class ParallelNeuralTrainer:
 
     def __exit__(self, *exc):
         self.close()
+
+
+def _connect_parallel_byte_native():
+    # ABI connection only. Product methods below hand off once to native Mojo.
+    from . import _backend
+    from ._array import Array
+    from ._byte_lm_config import ByteLanguageModelConfig
+    from .tokenizer import _binding as _tokenizer_binding
+    runtime = _tokenizer_binding()._module.parallel_byte_call
+    _backend.default_mode()
+    vendor = _backend.vendor()
+    modes = {"identical": (_backend.load_host_module("_mojolearn_byte_lm_host")
+                            if vendor == "cpu" else
+                            _backend.binding("_mojolearn_byte_lm", "identical"))}
+    if vendor == "metal":
+        modes["fast"] = _backend.binding("_mojolearn_byte_lm", "fast")
+    runtime("initialize", (Array, ByteLanguageModelConfig, modes, vendor))
+    return runtime
+
+
+_native_parallel_byte = _connect_parallel_byte_native()
