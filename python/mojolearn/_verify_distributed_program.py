@@ -55,7 +55,7 @@ def verify(devices=(0,), expected=None):
                 w = s.tensor(np.zeros((1, 1), np.float32))
                 p = s.capture([x], [s.matmul(x, w)])
                 opt = s.optimizer("sgd", lr=0.125)
-                with p.distribute(devices, logical_shards=max(3, len(devices)), optimizer=opt) as d:
+                with native("sgd.open", p.distribute, devices, logical_shards=max(3, len(devices)), optimizer=opt) as d:
                     X, y = np.ones((5, 1), np.float32), np.full((5, 1), 2, np.float32)
                     losses = native("sgd.fit", d.fit, X, targets=y, epochs=1, batch_size=5, shuffle=False)
                     prediction = native("sgd.run", d.run, X)
@@ -80,7 +80,7 @@ def verify(devices=(0,), expected=None):
                                   schedule="step", step_size=2, gamma=0.5)
                 logical = max(4, len(devices))
                 path = str(pathlib.Path(directory) / "resume.ckpt")
-                with p.distribute(devices, logical_shards=logical, optimizer=opt, seed=91) as d:
+                with native("adam.open", p.distribute, devices, logical_shards=logical, optimizer=opt, seed=91) as d:
                     native("adam.fit.first", d.fit, X, targets=y, epochs=2, batch_size=7)
                     native("adam.save", d.save, path)
                     before = native("adam.state.first", d.state)
@@ -90,17 +90,13 @@ def verify(devices=(0,), expected=None):
                     report["residency"] = residency
                     native("adam.fit.continue", d.fit, X, targets=y, epochs=3, batch_size=7)
                     final = native("adam.state.final", d.state)
-                # load_distributed is a constructor wrapper; audit the native
-                # binding itself, then construct only the forwarding owner.
-                from ._distributed_program import DistributedProgram
-                handle = native("adam.load.native", b.ops_distributed_load, path, (0,))
-                with DistributedProgram(b, handle) as restored:
+                with native("adam.load", s.load_distributed, path, devices=(0,)) as restored:
                     assert _digest(native("adam.state.restored", restored.state)) == _digest(before)
                     native("adam.fit.resume", restored.fit, X, targets=y, epochs=3, batch_size=7)
                     assert _digest(native("adam.state.resumed", restored.state)) == _digest(final)
                 report["cases"].append({"name": "checkpoint_resume", "status": "PASS", "digest": _digest(final),
                     "scope": "15 optimizer steps, uneven batches, dropout, row shuffle, AdamW moments and step schedule."})
-                with p.distribute((0,), logical_shards=logical, optimizer=opt, seed=91) as single:
+                with native("topology.open.single", p.distribute, (0,), logical_shards=logical, optimizer=opt, seed=91) as single:
                     native("topology.fit.single", single.fit, X, targets=y, epochs=5, batch_size=7)
                     assert _digest(native("topology.state.single", single.state)) == _digest(final)
                 report["cases"].append({"name": "physical_topology", "status": "PASS" if len(devices) > 1 else "PENDING",
