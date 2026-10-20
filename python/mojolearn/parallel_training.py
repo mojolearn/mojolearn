@@ -212,14 +212,7 @@ def ordered_sum_gradients(parts):
     Separate from training.accumulate_grads, whose balanced-tree contract is
     unchanged. Neither this fold nor the byte-LM fold divides by shard count.
     """
-    from ._training_impl import accumulate_grads
-    parts = list(parts)
-    if not parts:
-        raise ValueError('ordered reduction needs at least one shard')
-    total = [x.copy() for x in parts[0]]  # glue: copies each parameter tensor buffer
-    for part in parts[1:]:  # glue: one native accumulate call per shard
-        total = accumulate_grads([total, part], tokens=None, numeric_mode='identical')
-    return total
+    return _native_parallel_neural("ordered_sum", (parts,))
 
 
 class ParallelNeuralTrainer:
@@ -235,124 +228,30 @@ class ParallelNeuralTrainer:
     """
 
     def __init__(self, model, *, devices=(0,), logical_shards=1):
-        from ._mlp_impl import SmallMLPTrainer
-        from ._samba_impl import SambaStack
-        from ._parallel_pool import DevicePool
-        if type(logical_shards) is not int or not 1 <= logical_shards <= 1024:
-            raise ValueError('logical_shards must be in [1, 1024]')
-        if isinstance(model, SmallMLPTrainer):
-            self._operation = 'mlp_gradient'
-        elif isinstance(model, SambaStack):
-            if model.optimizer.accumulation_steps != 1:
-                raise ValueError('parallel Samba requires accumulation_steps=1; logical_shards owns accumulation')
-            if model.numeric_mode not in (None, 'identical'):
-                raise ValueError('parallel training requires IDENTICAL numeric mode')
-            self._operation = 'samba_gradient'
-        else:
-            raise TypeError('ParallelNeuralTrainer supports SmallMLPTrainer and SambaStack')
-        if model.state_dict().get('numeric_mode') != 'identical':
-            raise ValueError('parallel training requires an IDENTICAL model')
-        self._pool = DevicePool(devices)
-        if len(self._pool.devices) > logical_shards:
-            self._pool.close()
-            raise ValueError('physical device count exceeds logical shard count')
-        self._update_pool = DevicePool(self._pool.devices, cooperative=True)
-        self.model = model
-        self.logical_shards = logical_shards
-        self._lock = threading.RLock()
-        self._closed = False
-        self._gradients = None
+        return _native_parallel_neural("init", (self, model, devices, logical_shards))
 
     def train_step(self, shards):
         """Each shard is (inputs, targets); loss normalization is per microbatch."""
-        with self._lock:
-            if self._closed:
-                raise RuntimeError('parallel trainer is closed')
-            shards = list(shards)
-            if len(shards) != self.logical_shards:
-                raise ValueError('logical shard count mismatch')
-            snapshot = self.model.state_dict()
-            self._gradients = None
-            try:
-                requests = []
-                if self._operation == 'samba_gradient':
-                    stream = (self.model.generator.next_stream()
-                              if self.model.config.dropout > 0 else None)
-                    offset = 0
-                    for inputs, targets in shards:  # glue: one worker request per shard
-                        inputs = self.model._ids(inputs, 'inputs')
-                        targets = self.model._ids(targets, 'targets')
-                        requests.append((self._operation, snapshot, (inputs, targets, stream, offset)))
-                        offset += inputs.size
-                else:
-                    from ._mlp_impl import _batch, _targets
-                    for inputs, targets in shards:  # glue: one worker request per shard
-                        inputs = _batch(inputs)
-                        targets = _targets(targets, len(inputs))
-                        requests.append((self._operation, snapshot, (inputs, targets)))
-                results = self._pool.map(requests)
-                losses = tuple(part[0] for part in results)  # glue: one scalar loss per shard
-                update_state = snapshot
-                if self._operation == 'samba_gradient':
-                    update_state = dict(snapshot, rng=self.model.generator.state_dict())
-                # The cooperative worker owns gradient columns, whole clipping
-                # tensors and update ranges, retaining the original norm tree.
-                updated, retained, step = self._update_pool.map([(
-                    self._operation.replace('_gradient', '_update'), update_state,
-                    [part[1] for part in results])])[0]  # glue: one gradient list per shard
-                result = dict(losses=losses, completed_steps=step,
-                              logical_shards=self.logical_shards, reduction='ordered_sum')
-                self.model.load_state_dict(updated)
-            except BaseException:
-                self.model.load_state_dict(snapshot)
-                raise
-            self._gradients = retained
-            return result
+        return _native_parallel_neural("train", (self, shards))
 
     def export_gradients(self):
-        with self._lock:
-            if self._gradients is None:
-                raise RuntimeError('no committed parallel gradient')
-            return [g.copy() for g in self._gradients]  # glue: copies each parameter gradient buffer
+        return _native_parallel_neural("export_gradients", (self,))
 
     def checkpoint(self):
-        with self._lock:
-            return dict(schema='mojolearn.parallel-neural.v1', operation=self._operation,
-                        logical_shards=self.logical_shards, reduction='ordered_sum',
-                        state=self.model.state_dict())
+        return _native_parallel_neural("checkpoint", (self,))
 
     @classmethod
     def from_checkpoint(cls, checkpoint, *, devices=(0,)):
-        if (checkpoint.get('schema') != 'mojolearn.parallel-neural.v1'
-                or checkpoint.get('reduction') != 'ordered_sum'):
-            raise ValueError('unsupported parallel neural checkpoint contract')
-        state = checkpoint['state']
-        operation = checkpoint.get('operation')
-        if operation == 'mlp_gradient':
-            from ._mlp_impl import SmallMLPTrainer, _validate_state
-            weights, _, _, schedule = _validate_state(state)
-            model = SmallMLPTrainer(*weights, data_schedule=schedule)
-        elif operation == 'samba_gradient':
-            from ._samba_impl import SambaStack, SambaConfig
-            from ._training_impl import Generator
-            model = SambaStack(SambaConfig.from_dict(state['config']),
-                               generator=Generator(0, 'identical'), numeric_mode='identical')
-        else:
-            raise ValueError('unsupported parallel neural checkpoint operation')
-        model.load_state_dict(state)
-        return cls(model, devices=devices, logical_shards=checkpoint['logical_shards'])
+        return _native_parallel_neural("restore", (cls, checkpoint, devices))
 
     def close(self):
-        with self._lock:
-            self._closed = True
-            self._pool.close()
-            self._update_pool.close()
+        return _native_parallel_neural("close", (self,))
 
     def __enter__(self):
-        return self
+        return _native_parallel_neural("enter", (self,))
 
     def __exit__(self, *exc):
-        self.close()
+        return _native_parallel_neural("exit", (self,))
 
 
 def _connect_parallel_byte_native():
@@ -375,3 +274,5 @@ def _connect_parallel_byte_native():
 
 
 _native_parallel_byte = _connect_parallel_byte_native()
+
+from ._parallel_neural import _native_parallel_neural
