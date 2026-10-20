@@ -140,8 +140,8 @@ def rankn_binary[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, y: Tensor, op: I
     var yo = tape.operand_nd(ex, y)
     var xbuf = xo[0]
     var ybuf = yo[0]
-    var xs = xo[3]
-    var ys = yo[3]
+    var xs = xo[3].copy()
+    var ys = yo[3].copy()
     var count = so.count()
     var orm = _row_major(so)
     # forward descriptor: every output axis kept, in order
@@ -174,8 +174,7 @@ def rankn_binary[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, y: Tensor, op: I
     saved.i6 = 1 if sx.same(so) else 0
     saved.i7 = 1 if sy.same(so) else 0
     if tape.is_recording():
-        # driver-loop: over node inputs (the two operands)
-        for e in range(2):
+        for e in range(2):  # driver-loop: over node inputs (the two operands)
             var s = sx if e == 0 else sy
             if s.same(so):
                 continue
@@ -222,8 +221,7 @@ def _binary_vjp[E: Exec](
     mut ex: E, saved: Args, output: FP, upstream: FP, gradients: List[FP],
 ) raises:
     var count = saved.i0
-    # driver-loop: over node inputs (the two operands)
-    for e in range(2):
+    for e in range(2):  # driver-loop: over node inputs (the two operands)
         var a = Args()
         a.p0 = saved.p0
         if saved.i10 == 1:
@@ -450,7 +448,8 @@ def rankn_max_argmax[E: Exec](
 
 def rankn_max[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, axes: List[Int]) raises -> Tensor:
     """The max of x over `axes` (rankn_max_argmax without the argmax)."""
-    return rankn_max_argmax(tape, ex, x, axes)[0]
+    var r = rankn_max_argmax(tape, ex, x, axes)
+    return r[0]
 
 
 # ---------------------------------------------------------------- softmax
