@@ -1,0 +1,53 @@
+SMOKE_BINDING {"binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so", "family": "x_sequence", "numeric_mode": 1, "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py", "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610", "vendor": "metal", "version": "0.8.55"}
+0.05659662187099457
+0.05659662187099457
+PUBLIC_DIGEST guide_sequential_params 672665adde8b44b2
+PUBLIC_DIGEST guide_sequential_proba 1895f8777920840c
+.PUBLIC_DIGEST guide_session_probs 2f6d8fbfb03bbea7
+PUBLIC_DIGEST guide_session_total 870cb6d82421dc21
+PUBLIC_DIGEST guide_session_grad 17721d20641433da
+.PUBLIC_DIGEST guide_session_trained 34b5cad9b0eeb907
+.0.05659662187099457
+PUBLIC_DIGEST guide_export_labels 1924fa1ca48922ec
+.PUBLIC_DIGEST guide_mixture_proba d2688c89ab0e25be
+PUBLIC_DIGEST guide_mixture_hard c92c3dbbdb5fb2c2
+PUBLIC_DIGEST guide_mixture_params 790706a65ea8e56a
+PUBLIC_DIGEST guide_mixture_accuracy 6879109c9274ca54
+.PUBLIC_DIGEST guide_shapes_conv_grads 4b9ab37bc53c196a
+PUBLIC_DIGEST guide_shapes_attention 4994611e3c3f90ca
+PUBLIC_DIGEST guide_shapes_attention_grad 1faa822ad42084ee
+.PUBLIC_DIGEST guide_shapes_seq_params eda4399dcfb4feee
+PUBLIC_DIGEST guide_shapes_seq_proba 0861ff66428e2f03
+.PUBLIC_DIGEST guide_program_first a62ad8aef1e3977e
+PUBLIC_DIGEST guide_program_second 2f8b15c43dacfc44
+.PUBLIC_DIGEST guide_import_params c62442fca61e80d2
+PUBLIC_DIGEST guide_import_logits 3706524116a77d86
+PUBLIC_DIGEST guide_import_session 3706524116a77d86
+.[('x', (8, 3, 8, 8), 'float32')]
+[('y', (8, 10), 'float32')]
+[('x', (8, 3, 8, 8), 'float32')]
+[('y', (8, 10), 'float32')]
+PUBLIC_DIGEST guide_import_model_logits ddb699a979259cd0
+PUBLIC_DIGEST guide_import_model_eager ddb699a979259cd0
+PUBLIC_DIGEST guide_import_model_bits_equal_eager yes
+.[('x', (4, 3, 224, 224), 'float32')]
+GUIDE_PRETRAINED max_abs=3.576e-06 top1_agree=1.00
+PUBLIC_DIGEST guide_import_pretrained_logits 9405361102fa3508
+.PUBLIC_DIGEST guide_verify_model_output 17bbc7b5c1e8ec74
+.PUBLIC_DIGEST doc_ops_probs 6875588fabc6512a
+.PUBLIC_DIGEST doc_ops_Session_total 2b22e79075982664
+PUBLIC_DIGEST doc_ops_Session_grad_w 5309c879d00b5231
+.PUBLIC_DIGEST doc_Sequential_pred 3f1dc022309ebf79
+PUBLIC_DIGEST doc_Sequential_proba 79dca152d4597fa7
+...PUBLIC_DIGEST doc_ops_Program_proba f3d2b30501dfa2ca
+.PUBLIC_DIGEST doc_ops_Session_capture_probs 6efbf524b6b10a05
+.PUBLIC_DIGEST doc_Sequential_load_state_dict_pred 34084707d501c1fa
+.PUBLIC_DIGEST doc_ops_Session_load_weights_probs 7d81ddb04e5b69e5
+.
+=============================== warnings summary ===============================
+mojolearn/tests/test_autograd_public.py::test_guide_import_pretrained
+  /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/lib/python3.14/copyreg.py:104: FutureWarning: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+    return cls.__new__(cls, *args)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+21 passed, 1 warning in 16.43s

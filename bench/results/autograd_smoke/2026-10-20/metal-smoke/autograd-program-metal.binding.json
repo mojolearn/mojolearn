@@ -1,0 +1,9 @@
+{
+  "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py",
+  "version": "0.8.55",
+  "binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so",
+  "family": "x_sequence",
+  "vendor": "metal",
+  "numeric_mode": 1,
+  "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610"
+}

@@ -3,12 +3,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE AUTOGRAD SMOKE ENTRIES (2026-10-19, lane ag-bench): does the tape start on this vendor.
 
-Eleven "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
+"Does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
 
   autograd-gradients     autograd/checks/gpu.mojo, the gradient suite on the vendor's GPU (every
                          case prints PASS and its digest; the digests equal the CPU column's).
-  autograd-mlp-identity  autograd/checks/mlp_gpu.mojo, the MLP tape fits against the hand-written
-                         trainer on the GPU (run_mlp_cases).
+  autograd-mlp-identity  autograd/checks/mlp_gpu.mojo, the MLP tape fits checked against the stored
+                         48-case digests when the binary finishes (the hand trainer was deleted).
   autograd-fit-smoke     tests/test_autograd_smoke.py through the installed bindings: a tiny MLP
                          and a tiny LSTM fit on the default (tape) path, finite losses, the
                          expected-digest file present.
@@ -21,8 +21,8 @@ Eleven "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothin
                          seeded 256 x 8 set; finite probabilities, a SMOKE_DIGEST line (params_).
   autograd-session-smoke (2026-10-19, lane ag-board-twins) the board's ops-session-step in
                          miniature: one Session(record=True) step (linear, relu, linear, softmax
-                         cross-entropy, backward, the SGD update with the session's ops); finite
-                         loss and gradients, a SMOKE_DIGEST line (the gradients).
+                         cross-entropy, backward, native Session.step); finite loss and gradients,
+                         and the updated parameters checked against an independent SGD oracle.
   causal-lm-generate-smoke
                          (2026-10-19, lane ag-inference-board) the board's causal-lm-generate lanes
                          in miniature: a seeded two-layer checkpoint in the byte-LM format (no final
@@ -52,6 +52,11 @@ Eleven "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothin
                          1 x 3 x 64 x 64 input, import_model, one Program.run; finite (1, 1000)
                          logits and a SMOKE_DIGEST line, or SMOKE_REFUSED lines naming each node.
 
+The registry also covers dropout/resume, validation and best-state restore, Program.fit and dynamic
+replay, program persistence, session optimizers, rank-N operations, and public higher-order derivatives
+(including LayerNorm). Native import operations and the Mamba, LM, small-MLP and Samba tape checks
+are pinned too. `list` is the complete list; both vendor gates consume this registry.
+
 A check binary is built ONCE per vendor by the orchestrator (`build-commands` prints the lines; this
 tool never builds), then `run` starts each entry with a 5 s timer:
 
@@ -61,7 +66,11 @@ tool never builds), then `run` starts each entry with a 5 s timer:
 A row is `ok` (exited 0 inside its timer), `STARTED` (still running at the timer: it started, no
 verdict), `failed` (non-zero exit, with its last lines) or `not built` (no binary: refused by name,
 never a pass); a probe that prints a `SKIPPED <reason>` line reads `SKIPPED` (never silence, never
-`ok`). tools/apple_smoke_set.py lists these entries beside its derived lanes and
+`ok`). A model refusal reads `REFUSED`; incomplete pytest coverage reads `SKIPPED` or `PARTIAL`
+and fails the gate. Each Python entry checks its actual compiled binding vendor and numeric mode before
+running. Installed-package checks use isolated Python; --source-package explicitly selects a source
+tree and labels that scope in the report. This is smoke coverage, not performance or identity qualification.
+tools/apple_smoke_set.py lists these entries beside its derived lanes and
 tools/gate_smoke_box.py runs them after the board smoke on NVIDIA and AMD.
 """
 import argparse
@@ -71,10 +80,12 @@ import signal
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VENDORS = ("metal", "nvidia", "amd")
+BINDING_VENDOR = {"metal": "metal", "nvidia": "cuda", "amd": "hip"}
 #: Andrew, 2026-10-14: smoke is a 5 s "does it start"
 TIMEOUT_S = 5
 #: the vendor column define a GPU check is built with (bindings/build_byte_lm.sh's rule)
@@ -83,7 +94,7 @@ ENTRIES = (
     {"name": "autograd-gradients", "source": "autograd/checks/gpu.mojo",
      "what": "the autograd gradient suite on the vendor's GPU, one PASS line and digest per case"},
     {"name": "autograd-mlp-identity", "source": "autograd/checks/mlp_gpu.mojo",
-     "what": "the MLP tape fits against the hand-written trainer on the vendor's GPU"},
+     "what": "48 MLP tape fits against stored digests when the GPU check completes"},
     {"name": "autograd-fit-smoke", "pytest": "tests/test_autograd_smoke.py",
      "what": "a tiny MLP and LSTM fit through the installed bindings' default path"},
     {"name": "autograd-public", "pytest": "python/mojolearn/tests/test_autograd_public.py", "pytest_args": ["-s"],
@@ -93,14 +104,38 @@ ENTRIES = (
      "what": "a tiny Sequential fit + predict_proba (the sequential-fit board lane) through the installed bindings"},
     {"name": "autograd-session-smoke", "probe": "session",
      "what": "one tiny ops.Session(record=True) step (the ops-session-step board lane) through the installed bindings"},
+    {"name": "autograd-program-smoke", "probe": "program",
+     "what": "the program-run board runner: repeated captured inference equals the eager runner"},
+    {"name": "autograd-usability", "pytest": "python/mojolearn/tests/test_autograd_usability.py",
+     "what": "validation, best-state restore, native Program.fit, custom loss, frozen parameters and dynamic replay"},
+    {"name": "autograd-dropout", "pytest": "python/mojolearn/tests/test_autograd_model.py::test_dropout_trains",
+     "what": "seeded Sequential dropout, inference and resumed training"},
+    {"name": "autograd-program", "pytest": "python/mojolearn/tests/test_ops_program.py",
+     "what": "captured inference, embedding inputs, save/load and replay refusals"},
+    {"name": "autograd-optimizer", "pytest": "python/mojolearn/tests/test_ops_optimizer.py",
+     "what": "native session updates, schedules, optimizer save/load and accumulation"},
+    {"name": "autograd-rankn", "pytest": "python/mojolearn/tests/test_ops_rankn.py",
+     "what": "rank-N shapes, reductions, broadcasting, convolution and their gradients"},
+    {"name": "autograd-higher-public", "pytest": "python/mojolearn/tests/test_ops_higher.py",
+     "what": "public HVP/JVP/VJP and LayerNorm Hessian-vector products"},
     # 2026-10-19 (lane ag-inference-board): the inference board lanes, in miniature
-    {"name": "causal-lm-generate-smoke", "probe": "generate",
+    {"name": "causal-lm-generate-smoke", "probe": "generate", "binding": "byte_lm",
      "what": "CausalLM.load + greedy generate of a tiny byte-LM checkpoint (the causal-lm-generate board lanes)"},
     {"name": "sequential-predict-smoke", "probe": "predict",
      "what": "a tiny Sequential predict_proba inside the board's memory pass (the sequential-predict board lane)"},
     # 2026-10-19 (lane ag-ho-checks): higher-order gradients, docs/plans/AUTOGRAD_HIGHER_ORDER.md section 6
     {"name": "autograd-higher", "source": "autograd/checks/higher_gpu.mojo",
      "what": "the higher-order gradient suite (create_graph) on the vendor's GPU, HIGHER_DIGEST lines"},
+    {"name": "autograd-import-ops", "source": "autograd/checks/import_gpu.mojo",
+     "what": "native importer operations, including boolean reductions, cumulative sums and multi-index gather"},
+    {"name": "autograd-mamba-tape", "source": "mamba/checks/mamba_tape_backward_check.mojo",
+     "what": "Mamba-1/2 tape backward against stored gradient digests and the Mamba-1 host oracle"},
+    {"name": "autograd-lm-tape", "source": "training/checks/lm_tape_backward_check.mojo",
+     "what": "language-model tape backward and updated parameters against stored digests"},
+    {"name": "autograd-small-mlp-tape", "source": "training/checks/mlp_tape_step_check.mojo",
+     "what": "small-MLP tape backward, two AdamW steps and stored output/state digests"},
+    {"name": "autograd-samba-tape", "source": "training/checks/samba_tape_step_check.mojo",
+     "what": "Samba whole-stack tape backward, loss, gradients and updated parameter digests"},
     # 2026-10-20 (lane ag-import-docs): model import, docs/plans/MODEL_IMPORT.md
     {"name": "import-model-smoke", "probe": "import",
      "what": "mojolearn.import_model of a tiny ONNX file written in process, then one Program.run"},
@@ -159,13 +194,41 @@ def probe_session():
         s.backward(loss)
         value = s.scalar(loss)
         grads = [s.grad(p) for p in ps]
-        updated = [s.numpy(s.sub(s.detach(p), s.scale(s.tensor(g), 0.05))) for p, g in zip(ps, grads)]
+        opt = s.optimizer("sgd", lr=0.05, momentum=0.0, weight_decay=0.0)
+        s.step(opt, ps)
+        updated = [s.numpy(p) for p in ps]
     finite = np.isfinite(value) and all(np.isfinite(a).all() for a in grads + updated)
     if not finite:
         print("SMOKE_FAIL session loss %r finite %s" % (value, finite))
         return 1
+    for initial, grad, actual in zip(init, grads, updated):
+        np.testing.assert_allclose(actual, initial - np.float32(0.05) * grad, rtol=2e-6, atol=2e-7)
     print("SMOKE_DIGEST session grads %s loss %.6f vendor %s mode %s"
           % (_probe_digest(grads), value, mojolearn.vendor(), mojolearn.numeric_mode()))
+    print("SMOKE_DIGEST session updated %s" % _probe_digest(updated))
+    return 0
+
+
+def probe_program():
+    """Exercise the actual board's captured/eager runners on its small correctness fixture."""
+    import importlib.util
+    import numpy as np
+    spec = importlib.util.spec_from_file_location("bench_board_neural", ROOT / "tools/bench_board_neural.py")
+    board = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(board)
+    data = board.ops_arrays("small", np.random.default_rng(board.SEED), {})
+    captured = board.OursProgramRun("program-run", "small", data)
+    eager = board.OursProgramRun("program-run", "small", data, eager=True)
+    try:
+        for _ in range(2):
+            captured.call()
+            eager.call()
+            np.testing.assert_array_equal(captured.out.view(np.uint32), eager.out.view(np.uint32))
+            assert np.isfinite(captured.out).all()
+        print("SMOKE_DIGEST program output %s" % _probe_digest([captured.out]))
+    finally:
+        captured.s.close()
+        eager.s.close()
     return 0
 
 
@@ -354,23 +417,102 @@ def probe_real_model():
     return 0
 
 
-PROBES = {"sequential": probe_sequential, "session": probe_session, "generate": probe_generate,
+PROBES = {"sequential": probe_sequential, "session": probe_session, "program": probe_program, "generate": probe_generate,
           "predict": probe_predict, "import": probe_import, "import-torch": probe_import_torch,
           "real-model": probe_real_model}
 
 
-def _skipped_line(log, offset=0):
-    """The first `SKIPPED <reason>` line a probe printed after `offset` (the log appends), or None."""
+def _probe_status(log, offset=0):
+    """A refusal or skip from this invocation, never from an earlier appended log."""
     try:
         with open(log, "rb") as fh:
             fh.seek(offset)
             text = fh.read().decode(errors="replace")
         for line in text.splitlines():
+            if line.startswith("SMOKE_REFUSED "):
+                return "REFUSED", line[:300]
             if line.startswith("SKIPPED "):
-                return line[:300]
+                return "SKIPPED", line[:300]
     except OSError:
         pass
     return None
+
+
+def check_binding(vendor, family="x_sequence"):
+    """Read the binary actually used by the probe, not the package-wide vendor selector."""
+    import hashlib
+    import mojolearn
+    from mojolearn import _backend
+    b = _backend.binding("_mojolearn_" + family, "identical")
+    info = {"package": mojolearn.__file__, "version": getattr(mojolearn, "__version__", None),
+            "binding": getattr(b, "__file__", None), "family": family,
+            "vendor": getattr(b, family + "_vendor")(),
+            "numeric_mode": getattr(b, family + "_numeric_mode")()}
+    if info["vendor"] != BINDING_VENDOR[vendor] or info["numeric_mode"] != 1:
+        raise RuntimeError("wrong smoke binding: requested %s/identical, read %s" % (vendor, info))
+    if info["binding"]:
+        with open(info["binding"], "rb") as stream:
+            info["sha256"] = hashlib.file_digest(stream, "sha256").hexdigest()
+    return info
+
+
+def python_entry(entry, vendor, binding_report, junit, source_package=None):
+    """One isolated child process, including binding readback before pytest can skip missing APIs."""
+    if source_package:
+        sys.path.insert(0, str(Path(source_package).resolve()))
+    info = check_binding(vendor, entry.get("binding", "x_sequence"))
+    Path(binding_report).write_text(json.dumps(info, indent=2) + "\n")
+    print("SMOKE_BINDING " + json.dumps(info, sort_keys=True), flush=True)
+    if "probe" in entry:
+        return PROBES[entry["probe"]]()
+    import pytest
+    return int(pytest.main(["-q", "-s", "-x", "-p", "no:cacheprovider", "--import-mode=importlib",
+                           "--junitxml=" + str(junit), str(ROOT / entry["pytest"])]))
+
+
+def pytest_result(path):
+    root = ET.parse(path).getroot()
+    counts = {key: sum(int(s.get(key, 0)) for s in root.iter("testsuite"))
+              for key in ("tests", "failures", "errors", "skipped")}
+    if counts["failures"] or counts["errors"] or not counts["tests"]:
+        status = "failed"
+    elif counts["skipped"] == counts["tests"]:
+        status = "SKIPPED"
+    elif counts["skipped"]:
+        status = "PARTIAL"
+    else:
+        status = "ok"
+    return status, counts
+
+
+def check_mlp_digests(log, offset=0):
+    """A completed MLP binary emits hashes; the controller must actually compare them."""
+    reference = ROOT / "autograd/checks/mlp_cases_digests.tsv"
+    expected = {int(case): (int(epochs), digest) for line in reference.read_text().splitlines()
+                if line and not line.startswith(("#", "case"))
+                for case, epochs, digest in [line.split()]}
+    epochs, digests = {}, {}
+    with open(log, "rb") as stream:
+        stream.seek(offset)
+        for line in stream.read().decode(errors="replace").splitlines():
+            fields = line.split()
+            if fields[:1] == ["CASE"]:
+                case = int(fields[1])
+                if case in epochs:
+                    raise ValueError("duplicate MLP case %s" % case)
+                epochs[case] = int(fields[3])
+            elif fields[:1] == ["DIGEST"]:
+                case = int(fields[1])
+                if case in digests:
+                    raise ValueError("duplicate MLP digest %s" % case)
+                digests[case] = fields[2]
+    if len(expected) != 48 or set(epochs) != set(expected) or set(digests) != set(expected):
+        raise ValueError("incomplete MLP coverage: expected 48 cases and digests, got %d/%d"
+                         % (len(epochs), len(digests)))
+    mismatches = [case for case, want in expected.items() if (epochs[case], digests[case]) != want]
+    if mismatches:
+        raise ValueError("MLP stored-digest mismatch in cases %s" % mismatches)
+    return {"cases": len(expected), "reference": str(reference)}
 
 
 def binary(bin_dir, entry, vendor):
@@ -426,50 +568,80 @@ def start(cmd, log, timeout, env=None, cwd=None):
     return ("ok" if rc == 0 else "failed"), rc, seconds
 
 
-def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S):
-    logs = Path(out).with_suffix("")
+def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source_package=None):
+    selected = list(ENTRIES) if entries is None else [e for e in ENTRIES if e["name"] in entries]
+    unknown = set(entries or ()) - {e["name"] for e in ENTRIES}
+    if unknown or not selected:
+        raise ValueError("empty or unknown smoke selection: %s" % sorted(unknown))
+    logs = Path(out).resolve().with_suffix("")
     logs.mkdir(parents=True, exist_ok=True)
+    (logs / "tmp").mkdir(exist_ok=True)
     rows = []
-    for e in ENTRIES:
+    for e in selected:
         log = logs / ("%s-%s.log" % (e["name"], vendor))
         row = {"name": e["name"], "vendor": vendor, "what": e["what"], "timeout_s": timeout, "log": str(log)}
         if "source" in e:
-            exe = binary(bin_dir, e, vendor)
+            exe = binary(bin_dir, e, vendor).resolve()
             if not exe.is_file():
                 row.update(status="not built", detail="no %s (tools/autograd_smoke.py build-commands)" % exe)
                 rows.append(row)
                 continue
             cmd = [str(exe)]
             env = None
-        elif "probe" in e:
-            # through the installed bindings: `python` is the wheel's environment, nothing on PYTHONPATH
-            cmd = [python, str(Path(__file__).resolve()), "probe", e["probe"]]
-            env = dict(os.environ)
-            env.pop("PYTHONPATH", None)
         else:
-            cmd = ([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"] + e.get("pytest_args", [])
-                   + [str(ROOT / e["pytest"])])
+            binding_report = log.with_suffix(".binding.json")
+            junit = log.with_suffix(".xml")
+            # Stale reports must not turn an incomplete new process into a pass.
+            binding_report.unlink(missing_ok=True)
+            junit.unlink(missing_ok=True)
+            cmd = [python, "-I", str(Path(__file__).resolve()), "entry", e["name"], "--vendor", vendor,
+                   "--binding-report", str(binding_report), "--junit", str(junit)]
+            if source_package:
+                cmd += ["--source-package", str(Path(source_package).resolve())]
             env = dict(os.environ, MOJOLEARN_AUTOGRAD_SMOKE_OUT=str(logs / ("fit-digests-%s.json" % vendor)))
+            env.pop("PYTHONPATH", None)
+            env.pop("MOJOLEARN_VENDOR_FORCE", None)
+            env.pop("MOJOLEARN_VENDOR", None)
+            if vendor != "metal":
+                env["MOJOLEARN_VENDOR"] = BINDING_VENDOR[vendor]
+            env.update(MOJOLEARN_NUMERIC_MODE="identical", TMPDIR=str(logs / "tmp"))
+            row.update(binding_report=str(binding_report))
+            if "pytest" in e:
+                row["junit"] = str(junit)
         offset = log.stat().st_size if log.exists() else 0
         status, rc, seconds = start(cmd, log, timeout, env=env, cwd=str(ROOT))
         row.update(command=cmd, status=status, rc=rc, seconds=seconds)
-        if status == "ok" and "probe" in e:
-            skipped = _skipped_line(log, offset)
-            if skipped:
-                row.update(status="SKIPPED", detail=skipped)
-                status = "SKIPPED"
+        if status == "ok":
+            try:
+                if "source" not in e:
+                    row["binding"] = json.loads(binding_report.read_text())
+                if "probe" in e:
+                    result = _probe_status(log, offset)
+                    if result:
+                        status, row["detail"] = result
+                elif "pytest" in e:
+                    status, row["tests"] = pytest_result(junit)
+                elif e["name"] == "autograd-mlp-identity":
+                    row["identity"] = check_mlp_digests(log, offset)
+            except (OSError, ValueError, ET.ParseError, IndexError) as exc:
+                status, row["detail"] = "failed", str(exc)
+            row["status"] = status
         if status == "failed":
             row["tail"] = _tail(log)
         rows.append(row)
         print("AUTOGRAD-SMOKE vendor=%s entry=%s status=%s seconds=%s" % (vendor, e["name"], status, seconds),
               flush=True)
     doc = {"schema": "mojolearn-autograd-smoke/1", "vendor": vendor, "rows": rows,
+           "coverage": "full registry" if entries is None else "selected entries",
+           "package_scope": "source" if source_package else "installed",
+           "source_package": str(Path(source_package).resolve()) if source_package else None,
            "counts": {s: sum(1 for r in rows if r["status"] == s) for s in sorted({r["status"] for r in rows})}}
     tmp = str(out) + ".tmp"
     with open(tmp, "w") as fh:
         json.dump(doc, fh, indent=1, sort_keys=True)
     os.replace(tmp, out)
-    bad = [r for r in rows if r["status"] in ("failed", "not built")]
+    bad = [r for r in rows if r["status"] in ("failed", "not built")
+           or ("junit" in r and r["status"] in ("SKIPPED", "PARTIAL"))]
     return 1 if bad else 0
 
 
@@ -487,9 +659,17 @@ def main(argv=None):
     r.add_argument("--python", default=sys.executable)
     r.add_argument("--out", required=True)
     r.add_argument("--timeout", type=float, default=TIMEOUT_S)
+    r.add_argument("--entries", help="comma-separated subset; omitted means the whole registry")
+    r.add_argument("--source-package", help="explicit source package parent (e.g. repo/python); default: installed")
     sub.add_parser("list", help="the entries, one line each")
     pr = sub.add_parser("probe", help="one installed-bindings probe (what the probe entries start)")
     pr.add_argument("kind", choices=sorted(PROBES))
+    child = sub.add_parser("entry", help="internal isolated Python entry with compiled-binding readback")
+    child.add_argument("name", choices=[e["name"] for e in ENTRIES if "source" not in e])
+    child.add_argument("--vendor", choices=VENDORS, required=True)
+    child.add_argument("--binding-report", required=True)
+    child.add_argument("--junit", required=True)
+    child.add_argument("--source-package")
     a = ap.parse_args(argv)
     if a.cmd == "list":
         for e in ENTRIES:
@@ -497,11 +677,15 @@ def main(argv=None):
         return 0
     if a.cmd == "probe":
         return PROBES[a.kind]()
+    if a.cmd == "entry":
+        entry = next(e for e in ENTRIES if e["name"] == a.name)
+        return python_entry(entry, a.vendor, a.binding_report, a.junit, a.source_package)
     if a.cmd == "build-commands":
         for cmd in build_commands(a.vendor, a.mojo, a.bin_dir, a.target_accelerator):
             print(" ".join(cmd))
         return 0
-    return run(a.vendor, a.bin_dir, a.python, a.out, a.timeout)
+    return run(a.vendor, a.bin_dir, a.python, a.out, a.timeout,
+               entries=a.entries.split(",") if a.entries is not None else None, source_package=a.source_package)
 
 
 if __name__ == "__main__":

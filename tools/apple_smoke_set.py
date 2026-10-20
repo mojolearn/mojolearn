@@ -40,7 +40,11 @@ on its files first. They are tools/autograd_smoke.py's ENTRIES (the gradient sui
 identity check, the tiny fit test, the public examples, and since 2026-10-19 (lane ag-board-twins)
 the Sequential and ops.Session probes of the board's sequential-fit and ops-session-step lanes, and
 since 2026-10-20 the importer probes import-model-smoke and import-torch-smoke, the latter `SKIPPED`
-without torch),
+without torch). The same registry now includes captured training/replay, dropout/resume, validation,
+optimizers, rank-N and higher-order public tests, native importer operations, and the Mamba, LM,
+small-MLP and Samba tape checks. A completed row is only `ok` after its checks pass; skipped or partial
+pytest coverage and importer refusals retain their own status. Python entries verify the actual
+compiled binding's vendor and numeric mode. All entries are
 each a 5 s "does it start" row on the vendor (`metal` here),
 listed by `--autograd` and run by `tools/autograd_smoke.py run --vendor metal`.
 """

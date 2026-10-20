@@ -1,0 +1,20 @@
+SMOKE_BINDING {"binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so", "family": "x_sequence", "numeric_mode": 1, "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py", "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610", "vendor": "metal", "version": "0.8.55"}
+PROGRAM_DIGEST quickstart d3e89d9632c21314
+PROGRAM_DIGEST quickstart_new_inputs 47ab1fc8bf29178f
+.PROGRAM_DIGEST mixture 7e7050e80f9077f6
+PROGRAM_DIGEST mixture_new_inputs 8aba6623039358f6
+.PROGRAM_DIGEST shapes_conv 11c64db4e1b883a9
+PROGRAM_DIGEST shapes_conv_new_inputs be871e6d282e3b5f
+.PROGRAM_DIGEST shapes_attention 57585a2fb90147a8
+PROGRAM_DIGEST shapes_attention_new_inputs eedc12fa4e813f46
+.PROGRAM_DIGEST embedding_lm 9c68a1b5bfb3d985
+PROGRAM_DIGEST embedding_lm_new_inputs e43d78eae417fe05
+.PROGRAM_DIGEST embedding_take 419a97632caaf199
+PROGRAM_DIGEST embedding_take_new_inputs 0f202444c66a5363
+.PROGRAM_DIGEST embedding_ids_tensor fcea61830cd8364c
+.PROGRAM_DIGEST saved_embedding_lm db2c6a1e40f1107c
+.PROGRAM_DIGEST saved_mlp 0c46d2d820c82cd3
+.PROGRAM_DIGEST guide_program_first a62ad8aef1e3977e
+PROGRAM_DIGEST guide_program_second 2f8b15c43dacfc44
+..
+11 passed in 0.39s

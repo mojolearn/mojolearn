@@ -1,0 +1,10 @@
+SMOKE_BINDING {"binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so", "family": "x_sequence", "numeric_mode": 1, "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py", "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610", "vendor": "metal", "version": "0.8.55"}
+RANKN_DIGEST views 0d0c1bc9c551b37d
+..RANKN_DIGEST reductions 0534cd441618f893
+..RANKN_DIGEST broadcast 26149fe834c71b32
+.RANKN_DIGEST bmm_attention e920cf071acdf110
+.RANKN_DIGEST layout 3ea8174b84d910c8
+.RANKN_DIGEST softmax_axis b81ada379df07f1a
+.RANKN_DIGEST conv2d_pools 29f9513758a9080d
+...
+11 passed in 0.32s
