@@ -44,4 +44,4 @@ class DistributedProgram:
         return self._b.ops_distributed_enter(self._id, self)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        return self._b.ops_distributed_close(self._id)
+        return self._b.ops_distributed_exit(self._id)

@@ -53,7 +53,7 @@ def verify(devices=(0,), expected=None):
 
     try:
         b = _backend.binding("_mojolearn_x_sequence", "identical")
-        names = ("open", "load", "fit", "run", "state", "residency", "save", "close", "enter", "profile")
+        names = ("open", "load", "fit", "run", "state", "residency", "save", "close", "enter", "exit", "profile")
         missing = ["ops_partitioned_"+name for name in names if not hasattr(b, "ops_partitioned_"+name)]
         if missing:
             raise RuntimeError("installed binding lacks entries: " + ", ".join(missing))
