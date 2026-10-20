@@ -172,15 +172,36 @@ def test_guide_shapes_sequential(capsys):
         _emit("guide_shapes_seq_params", _digest(cnn.params_))
         _emit("guide_shapes_seq_proba", _digest(proba))
 
+def test_guide_program(tmp_path, monkeypatch):
+    b = _blocks()
+    if "program" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+        pytest.skip("no captured-program entries in this binding (rebuild it)")
+    monkeypatch.chdir(tmp_path)
+    ns = _run(b["program"])
+    first, second, eager = ns["first"], ns["second"], ns["eager"]
+    assert first.shape == (8, 2) and np.isfinite(first).all()
+    assert np.array_equal(first.view(np.uint32), eager.view(np.uint32))
+    assert np.array_equal(ns["served_second"].view(np.uint32), second.view(np.uint32))
+    ns2 = _run(b["program"])
+    assert _digest(first, second) == _digest(ns2["first"], ns2["second"])
+    _emit("guide_program_first", _digest(first))
+    _emit("guide_program_second", _digest(second))
+
+
 def _docstring_examples():
     import mojolearn
     from mojolearn import ops
     return [("ops", ops), ("ops.Session", ops.Session), ("Sequential", mojolearn.Sequential),
-            ("Sequential.add", mojolearn.Sequential.add), ("Sequential.compile", mojolearn.Sequential.compile)]
+            ("Sequential.add", mojolearn.Sequential.add), ("Sequential.compile", mojolearn.Sequential.compile),
+            ("ops.Program", ops.Program), ("ops.Session.capture", ops.Session.capture)]
 
 
-@pytest.mark.parametrize("name", ["ops", "ops.Session", "Sequential", "Sequential.add", "Sequential.compile"])
+@pytest.mark.parametrize("name", ["ops", "ops.Session", "Sequential", "Sequential.add", "Sequential.compile",
+                                  "ops.Program", "ops.Session.capture"])
 def test_docstring_examples_run(name):
+    if name.startswith("ops.Program") or name == "ops.Session.capture":
+        if not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+            pytest.skip("no captured-program entries in this binding (rebuild it)")
     obj = dict(_docstring_examples())[name]
     finder = doctest.DocTestFinder(recurse=False)
     runner = doctest.DocTestRunner(optionflags=doctest.ELLIPSIS)
