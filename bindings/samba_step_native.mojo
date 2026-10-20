@@ -128,6 +128,66 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
     return _samba_step_finish(fields, opt, info, scalar)
 
 
+
+def _samba_parameter_pack(fields: PythonObject, opt: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Parameters may have been rebound after construction. Preserve the
+    # optimizer's writable C-buffer interface instead of assuming flat views.
+    var bi = Python.import_module("builtins")
+    var params = opt["params"]
+    if len(params) != len(fields["names"]):
+        raise Error("Samba: optimizer parameter registry has changed")
+    var views = bi.list()
+    var original_flat = True
+    for i in range(len(params)):  # driver-loop: over caller-owned optimizer parameter buffers
+        var value = params[i]
+        var view = PythonObject(None)
+        var shape = PythonObject(None)
+        if bi.type(value) is context["neural"]["array_class"]:
+            if String(value.dtype) != "<f4":
+                raise Error("TypeError: Samba optimizer parameters must be float32")
+            if String(value.order) != "C" or Bool(py=value._readonly):
+                raise Error("Samba optimizer parameters must be C-contiguous and writable")
+            view = value._mv
+            shape = value.shape
+        else:
+            view = bi.memoryview(value)
+            var fmt = String(view.format)
+            if fmt != "f" and fmt != "<f" and fmt != "=f" and fmt != "@f":
+                raise Error("TypeError: Samba optimizer parameters must be float32")
+            if not Bool(py=view.c_contiguous) or Bool(py=view.readonly):
+                raise Error("Samba optimizer parameters must be C-contiguous and writable")
+            shape = view.shape
+        if Bool(py=shape != fields["shapes"][fields["names"][i]]):
+            raise Error("Samba optimizer parameter shape differs from its gradient")
+        var raw = view.cast("B")
+        var begin = 4 * Int(py=fields["offsets"][i])
+        var end = 4 * Int(py=fields["offsets"][i + 1])
+        if len(raw) != end - begin:
+            raise Error("Samba optimizer parameter size differs from its registry")
+        original_flat = original_flat and bi.type(value) is context["neural"]["array_class"]
+        if original_flat:
+            original_flat = Int(py=value._addr) == Int(py=fields["flat"]._addr) + begin
+        views.append(raw)
+    if original_flat:
+        return Python.tuple(fields["flat"], bi.list())
+    var flat = generation_array([Int(py=fields["n_total"])])
+    var destination = flat._mv.cast("B")
+    for i in range(len(views)):  # driver-loop: over replacement parameter buffers
+        var begin = 4 * Int(py=fields["offsets"][i])
+        var end = 4 * Int(py=fields["offsets"][i + 1])
+        destination[bi.slice(begin, end)] = views[i]
+    return Python.tuple(flat, views)
+
+
+def _samba_parameter_publish(flat: PythonObject, views: PythonObject, fields: PythonObject) raises:
+    var bi = Python.import_module("builtins")
+    var raw = flat._mv.cast("B")
+    for i in range(len(views)):  # driver-loop: over caller-owned parameter write-back buffers
+        var begin = 4 * Int(py=fields["offsets"][i])
+        var end = 4 * Int(py=fields["offsets"][i + 1])
+        var target = views[i]
+        target[bi.slice(PythonObject(None))] = raw[bi.slice(begin, end)]
+
 def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = Python.import_module("builtins")
@@ -137,19 +197,6 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
     var entries = samba_entries(context, fields["numeric_mode"])
     # Admit the built-in schedule before consuming a stream or changing state.
     _ = samba_schedule_snapshot(opt["lr_schedule"], context)
-    if Bool(py=opt.get("_p_dev", PythonObject(False))):
-        raise Error("NotImplementedError: private native Samba step does not yet own externally transferred optimizer parameter buffers")
-    if len(opt["params"]) != len(fields["names"]):
-        raise Error("Samba: optimizer parameter registry has changed")
-    for i in range(len(fields["names"])):  # driver-loop: over live optimizer parameter metadata
-        var name = fields["names"][i]
-        var value = opt["params"][i]
-        if bi.type(value) is not context["neural"]["array_class"]:
-            raise Error("NotImplementedError: private native Samba step requires its original flat parameter views")
-        if Bool(py=value.shape != fields["shapes"][name]) or String(value.dtype) != "<f4" or String(value.order) != "C":
-            raise Error("Samba: optimizer parameter shape or layout has changed")
-        if Int(py=value._addr) != Int(py=fields["flat"]._addr) + 4 * Int(py=fields["offsets"][i]):
-            raise Error("NotImplementedError: private native Samba step requires its original flat parameter views")
     var ids = samba_ids(inputs, Int(py=config["vocab"]), False, context)
     var y = samba_ids(targets, Int(py=config["vocab"]), True, context)
     if Bool(py=ids.shape != y.shape):
@@ -205,21 +252,39 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
         _ = total^
     _ = losses^
     _ = stacked^
+    var device_parameters = Bool(py=opt.get("_p_dev", PythonObject(False)))
+    var parameter_owner = PythonObject(None)
+    var parameter_buffer = fields["flat"]
+    if not device_parameters:
+        parameter_owner = _samba_parameter_pack(fields, opt, context)
+        parameter_buffer = parameter_owner[0]
     var plan = _samba_step_plan(fields, opt, context)
-    opt["packed_"] = True
+    if not device_parameters:
+        opt["packed_"] = True
     var info = generation_array([3])
     _samba_open_optimizer(opt, entries, context)
-    if opt["_res"] is not None:
+    if device_parameters:
+        if opt["_res"] is None or not Bool(py=bi.hasattr(entries, "optimizer_resident_step_io")):
+            raise Error("RuntimeError: Samba optimizer device parameters require their native resident owner")
+        # Preserve step_device semantics: forward reads the existing host
+        # weights, while the optimizer updates its device parameters. Host
+        # aliases remain stale until the caller requests params_to_host().
+        var io = 2 if fields["max_norm"] is None else 10
+        _native_function(entries, "optimizer_resident_step_io")(info._addr, gradient._addr, opt["offsets"]._addr,
+            opt["buf_initialized"]._addr, info._addr, plan, Python.list(opt["_res"], PythonObject(io)))
+        opt["_host_fresh"] = False
+        opt["_g_dev"] = True
+    elif opt["_res"] is not None:
         if Int(py=plan[12]) != 0 and Bool(py=bi.hasattr(entries, "optimizer_maximize_dev")):
-            _native_function(entries, "optimizer_resident_step_io")(fields["flat"]._addr, gradient._addr, opt["offsets"]._addr,
+            _native_function(entries, "optimizer_resident_step_io")(parameter_buffer._addr, gradient._addr, opt["offsets"]._addr,
                 opt["buf_initialized"]._addr, info._addr, plan, Python.list(opt["_res"], PythonObject(15)))
         else:
-            _native_function(entries, "optimizer_resident_step")(fields["flat"]._addr, gradient._addr, opt["offsets"]._addr,
+            _native_function(entries, "optimizer_resident_step")(parameter_buffer._addr, gradient._addr, opt["offsets"]._addr,
                 opt["buf_initialized"]._addr, info._addr, plan, opt["_res"])
         opt["_host_fresh"] = False
     else:
         var moments = _samba_moments(opt, context)
-        _native_function(entries, "optimizer_step")(fields["flat"]._addr, gradient._addr, moments[0]._addr, moments[1]._addr,
+        _native_function(entries, "optimizer_step")(parameter_buffer._addr, gradient._addr, moments[0]._addr, moments[1]._addr,
             opt["offsets"]._addr, opt["buf_initialized"]._addr, info._addr, plan)
         for i in range(2):  # driver-loop: over caller-owned moment aliases
             var original = opt["_m" if i == 0 else "_v"]
@@ -227,5 +292,9 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
                 var view = bi.memoryview(original)
                 view[bi.slice(PythonObject(None))] = moments[i]._mv
         _ = moments^
+    if not device_parameters:
+        _samba_parameter_publish(parameter_buffer, parameter_owner[1], fields)
+    _ = parameter_owner^
+    _ = parameter_buffer^
     _ = gradient^
     return _samba_step_finish(fields, opt, info, loss)
