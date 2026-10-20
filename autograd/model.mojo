@@ -10,6 +10,7 @@ the tape's fixed blocked folds), so the bits are the same on Apple, NVIDIA
 and AMD. Host loops run over layers, batches and epochs only.
 """
 from std.sys.compile import is_defined
+from std.memory import bitcast, memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import (
     FP, Args, OP_COPY, OP_FILL, OP_GATHER_ROWS, OP_MLP_PERM, OP_ONE_HOT, OP_PROBA2, OP_SEQ_IOTA,
@@ -477,9 +478,60 @@ def model_lr(cfg: FitConfig, epoch: Int) -> Float32:
     return Float32(Float64(cfg.lr) * identical_pow64(Float64(cfg.sched_gamma), Float64(k)))
 
 
+# ---------------------------------------------------------------- resumable state
+# The state a fit carries from one epoch to the next beyond the parameters
+# and the two optimizer buffers: one int64 word each, floats by their bits.
+# `model_fit_state` writes it at the end of every fit; with `resume` it
+# starts from it, so 2 + 2 epochs give the words of 4 epochs (the epoch
+# index keys the shuffle (mlp_epoch_key) and the schedule, the step counter
+# keys the optimizer's bias correction and the dropout masks).
+comptime FIT_STATE_WORDS = 12
+comptime FS_VALID = 0      # 1 once a fit has written the state
+comptime FS_EPOCH = 1      # epochs completed: the next epoch's index
+comptime FS_STEP = 2       # optimizer steps completed
+comptime FS_STALL = 3      # early stopping: epochs without improvement
+comptime FS_BEST = 4       # early stopping: the best epoch loss (float64 bits)
+comptime FS_PW1 = 5        # OptState.pw1, beta1^t (float32 bits)
+comptime FS_PW2 = 6        # OptState.pw2, beta2^t (float32 bits)
+comptime FS_MU = 7         # OptState.mu_prod (float32 bits)
+comptime FS_OPT = 8        # the optimizer kind the buffers belong to
+comptime FS_NPARAMS = 9    # the parameter count they cover
+comptime FS_SEED_LO = 10   # the fit's seed, low 32 bits
+comptime FS_SEED_HI = 11   # the fit's seed, high 32 bits
+
+comptime IP64 = UnsafePointer[Int64, MutUntrackedOrigin]
+
+
+def _f32_word(v: Float32) -> Int64:
+    return Int64(bitcast[DType.uint32](v))
+
+
+def _word_f32(w: Int64) -> Float32:
+    return bitcast[DType.float32](UInt32(w & Int64(0xFFFFFFFF)))
+
+
 # ---------------------------------------------------------------- fit / predict
 def model_fit[E: Exec](
     mut ex: E, spec: ModelSpec, cfg: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
+) raises -> Int:
+    """`model_fit_state` from a fresh start, the optimizer state discarded."""
+    var m = List[Float32](length=spec.n_params, fill=Float32(0))
+    var v = List[Float32](length=spec.n_params, fill=Float32(0))
+    var st = List[Int64](length=FIT_STATE_WORDS, fill=Int64(0))
+    var n_iter = model_fit_state(
+        ex, spec, cfg, X, Y, N, Pio, curve, FP(unsafe_from_address=Int(m.unsafe_ptr())),
+        FP(unsafe_from_address=Int(v.unsafe_ptr())), IP64(unsafe_from_address=Int(st.unsafe_ptr())),
+        curve, False,
+    )
+    _ = m^
+    _ = v^
+    _ = st^
+    return n_iter
+
+
+def model_fit_state[E: Exec](
+    mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
+    Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
 ) raises -> Int:
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
 
@@ -500,7 +552,38 @@ def model_fit[E: Exec](
     (sequence/recurrent.mojo opt_step). With patience > 0 training stops
     after `patience` epochs whose loss did not improve on the best by more
     than tol (one word read back per epoch).
+
+    Mio and Vio (n_params each) receive the optimizer's two state buffers
+    (the momentum buffer, or Adam's first and second moments) and St the
+    FIT_STATE_WORDS counters. With `resume` they are also the starting
+    state: training continues at epoch St[FS_EPOCH] and step St[FS_STEP]
+    with the first fit's seed, Pio holds the parameters (cfg.init must be
+    False), curve_prev holds the St[FS_EPOCH] earlier epochs' losses and
+    curve receives all of them, the earlier ones first. Without `resume`,
+    curve[0:epochs run] receives this fit's.
     """
+    var cfg = cfg_in.copy()
+    var start = 0
+    var step = 0
+    var stall = 0
+    var best = Float64(1.0e308)
+    var st = OptState()
+    if resume:
+        if cfg.init:
+            raise Error("model fit: resuming continues from the saved parameters (init must be 0)")
+        if St[FS_VALID] != 1 or Int(St[FS_OPT]) != cfg.opt.kind or Int(St[FS_NPARAMS]) != spec.n_params:
+            raise Error("model fit: resume needs the training state of an earlier fit of this model "
+                        + "with the same optimizer")
+        start = Int(St[FS_EPOCH])
+        step = Int(St[FS_STEP])
+        stall = Int(St[FS_STALL])
+        best = bitcast[DType.float64](St[FS_BEST])
+        st.pw1 = _word_f32(St[FS_PW1])
+        st.pw2 = _word_f32(St[FS_PW2])
+        st.mu_prod = _word_f32(St[FS_MU])
+        cfg.seed = (UInt64(St[FS_SEED_HI]) << 32) | UInt64(St[FS_SEED_LO])
+        if start < 0 or step < 0 or start + cfg.epochs >= MODEL_MAX_ROWS:
+            raise Error("model fit: the saved epoch and step counters are out of range")
     check_fit(spec, cfg, N)
     var D = spec.n_inputs
     var O = spec.out_features()
@@ -539,6 +622,11 @@ def model_fit[E: Exec](
     var s1 = ex.alloc(np_)
     var s2 = ex.alloc(np_)
     var s3 = ex.alloc(np_)
+    if resume:
+        # the optimizer buffers where the earlier fit left them (s3 is not
+        # read by sgd, momentum, adam or adamw)
+        ex.upload(s1, Mio, np_)
+        ex.upload(s2, Vio, np_)
     var didx = ex.alloc(N)
     var xb = ex.alloc(bs * D)
     var yb = ex.alloc(bs * TW)
@@ -558,24 +646,23 @@ def model_fit[E: Exec](
     var dcurve = ex.alloc(cfg.epochs)
     var tape = Tape()
     var epoch_tape = Tape()
-    var st = OptState()
     var word = List[Float32](length=1, fill=Float32(0))
     var inv_n = ftz(identical_div(Float32(1), Float32(N)))
-    var best = Float64(1.0e308)
-    var stall = 0
     var n_iter = 0
-    var step = 0
-    for epoch in range(cfg.epochs):  # driver-loop: over epochs
+    for e in range(cfg.epochs):  # driver-loop: over epochs
+        # the absolute epoch index: a resumed fit continues the row orders
+        # and the schedule of the fit it resumes
+        var epoch = start + e
         if cfg.shuffle:
             ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(cfg.seed, epoch), didx), N)
-        elif epoch == 0:
+        elif e == 0:
             var ia = Args()
             ia.p0 = didx
             ex.launch[OP_SEQ_IOTA](ia, N)
         var lr = model_lr(cfg, epoch)
         comptime if AUTOGRAD_GATHER_EPOCH:
             # the order changes only when shuffling: an unshuffled fit keeps epoch 0's copy
-            if epoch_gather and (cfg.shuffle or epoch == 0):
+            if epoch_gather and (cfg.shuffle or e == 0):
                 gather_epoch(ex, dX, dY, didx, N, D, TW, Xp, Yp)
         for bi in range(n_batches):  # driver-loop: over batches
             var off = bi * bs
@@ -622,11 +709,11 @@ def model_fit[E: Exec](
         epoch_tape.reset()
         var parts = epoch_tape.variable(ex, dloss, 1, n_batches, False)
         var mean = epoch_tape.scale(ex, epoch_tape.sum(ex, parts), inv_n)
-        _copy(ex, dcurve + epoch, epoch_tape.value(mean), 1)
-        n_iter = epoch + 1
+        _copy(ex, dcurve + e, epoch_tape.value(mean), 1)
+        n_iter = e + 1
         if cfg.patience > 0:
             ex.sync()
-            ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())), dcurve + epoch, 1)
+            ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())), dcurve + e, 1)
             var value = Float64(word[0])
             if value > best - cfg.tol:
                 stall += 1
@@ -638,7 +725,23 @@ def model_fit[E: Exec](
                 break
     ex.sync()
     ex.download(Pio, P, np_)
-    ex.download(curve, dcurve, n_iter)
+    ex.download(Mio, s1, np_)
+    ex.download(Vio, s2, np_)
+    if resume and start > 0:
+        memcpy(dest=curve, src=curve_prev, count=start)
+    ex.download(curve + start, dcurve, n_iter)
+    St[FS_VALID] = 1
+    St[FS_EPOCH] = Int64(start + n_iter)
+    St[FS_STEP] = Int64(step)
+    St[FS_STALL] = Int64(stall)
+    St[FS_BEST] = bitcast[DType.int64](best)
+    St[FS_PW1] = _f32_word(st.pw1)
+    St[FS_PW2] = _f32_word(st.pw2)
+    St[FS_MU] = _f32_word(st.mu_prod)
+    St[FS_OPT] = Int64(cfg.opt.kind)
+    St[FS_NPARAMS] = Int64(np_)
+    St[FS_SEED_LO] = Int64(cfg.seed & UInt64(0xFFFFFFFF))
+    St[FS_SEED_HI] = Int64(cfg.seed >> 32)
     tape.release(ex)
     epoch_tape.release(ex)
     _ = word^
