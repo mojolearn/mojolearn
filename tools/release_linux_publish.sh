@@ -172,6 +172,14 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   # shellcheck disable=SC2086
   gh release create "$TAG" --latest --target "$HEAD_SHA" --title "$(basename "$WHL" | cut -d- -f1 | tr _ -) $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \
     "$ART/$(basename "$WHL")" "$ART/alpha-manifest.json" ${TAR:+"$TAR"} ${LIGHT_ASSET:+"$LIGHT_ASSET"}
+else
+  # A rerun after a failed upload (0.8.55: the first macOS wheel was over PyPI's limit) finds the candidate release
+  # already made: replace its assets with this attempt's, or the workflow downloads the old wheel and manifest and
+  # stops on "Manifest hash/bound mismatch". PyPI never accepts a second copy of a published file, so this only
+  # ever replaces an unpublished candidate.
+  # shellcheck disable=SC2086
+  gh release upload "$TAG" --clobber \
+    "$ART/$(basename "$WHL")" "$ART/alpha-manifest.json" ${TAR:+"$TAR"} ${LIGHT_ASSET:+"$LIGHT_ASSET"}
 fi
 
 echo "== dispatch release-provenance.yml publish=$PUBLISH =="
