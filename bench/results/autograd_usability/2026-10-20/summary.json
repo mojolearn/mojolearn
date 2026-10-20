@@ -1230,7 +1230,7 @@
   },
   "evidence_root": "~/mojolearn-evidence/autograd-usability-20261020",
   "r2_key": "measurements/autograd-usability/2026-10-20/evidence.tar.gz",
-  "retention": "upload pending",
+  "retention": "complete",
   "compiler": "Mojo 1.0.0 (ed45d567)",
   "binaries": {
     "apple_host": {
@@ -1264,5 +1264,14 @@
     "Earlier Linux runs were host-selected or failed environment probes and are retained but not admitted as GPU evidence.",
     "CPU skips only the two GPU transfer cases; those cases passed on each GPU.",
     "No performance claim; no published release or installed-wheel qualification."
-  ]
+  ],
+  "archive": {
+    "key": "measurements/autograd-usability/2026-10-20/evidence.tar.gz",
+    "bytes": 216022473,
+    "sha256": "d1f4f50e2a7f788be07c92b90dc12b9bde401934a5d7e51d4a0984e3e90be2ad",
+    "upload_exit_code": 0,
+    "local_archive": "/Users/andrewhendel/mojolearn-evidence/autograd-usability-20261020-evidence.tar.gz",
+    "amd_archive_sha256": "deaeb79900e0943ba7c2affca099cd9bffa2cc70107f55ac9103b1a39158edb8",
+    "cuda_model_files_verified": 49
+  }
 }
