@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # MoE block backward on the tape (lane ag-moe-backward, 2026-10-19;
-# TAPE_EVERYWHERE_PLAN.md path 5). The kernels are sequence/moe_backward.mojo.
+# TAPE_EVERYWHERE_PLAN.md path 5). The kernels are autograd/kernels/moe.mojo.
 #
 # NEW CAPABILITY, NEW BITS: there is no hand MoE backward, so the tape owns
 # the structure and every VJP is a new kernel; the words are defined by the
@@ -49,7 +49,7 @@ from std.sys.compile import is_defined
 from autograd.tape import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_MOE_ROUTE
-from sequence.moe_backward import (
+from autograd.kernels.moe import (
     MOEB_GROUP_BLOCK,
     OP_MOEB_DDOWN,
     OP_MOEB_DGATEUP,

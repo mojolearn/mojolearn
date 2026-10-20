@@ -122,9 +122,9 @@ from sequence.ops import (
 )
 from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_chunk_sumsq, op_af_blk_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply, op_lamb_blk, op_lamb_segfold, op_lamb_clip, op_lamb_trust, op_lamb_apply_all
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
-from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
+from sequence.mlp import op_act, op_act_bwd, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.mlp import op_mlp_epoch_loss, op_mlp_l2fold, op_mlp_l2part, op_mlp_perm, op_mlp_rowpart
-from sequence.mlp import op_agk_gemm_epi
+from autograd.kernels.linear import op_agk_gemm_epi, op_colsum_div
 from sequence.mlp import op_mlp_lb_epoch_fold, op_mlp_lb_epoch_part, op_mlp_lb_fold, op_mlp_lb_part
 from sequence.stl import op_stl
 from sequence.theta import op_theta
@@ -151,7 +151,7 @@ from autograd.ops import OP_AG_SOFTMAX_FWD, OP_AG_SOFTMAX_VJP
 from autograd.row_ops import OP_ROW_FIRST, OP_ROW_LAST, ROW_COOP, apply_rows, row_softmax_fwd, row_softmax_vjp
 from autograd.fold_ops import OP_AGS_FIRST, OP_AGS_LAST, apply_fold_ops
 from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_split
-from sequence.moe_backward import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
+from autograd.kernels.moe import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
 from autograd.embedding_ops import OP_EMB_FIRST, OP_EMB_LAST, apply_embedding
 # lane ag-ho-fused (H2): the recorded loss VJPs' one-hot constant
 from autograd.higher_loss_ops import OP_HL_FIRST, OP_HL_LAST, apply_higher_loss
@@ -337,7 +337,7 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
         OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
     ), "pass-6 gemm opcode collides with recurrent scan"
-    # The MoE backward family (sequence/moe_backward.mojo OP_MOEB_*, 2900..;
+    # The MoE backward family (autograd/kernels/moe.mojo OP_MOEB_*, 2900..;
     # lane ag-moe-backward), disjoint from every autograd range and the scans.
     comptime assert OP_MOEB_FIRST <= OP_MOEB_LAST, "MoE backward opcode range is empty"
     comptime assert OP_MOEB_FIRST > OP_AG_LAST or OP_MOEB_LAST < OP_AG_FIRST, "MoE backward opcodes overlap the tape's"
