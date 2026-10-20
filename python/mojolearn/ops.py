@@ -1057,6 +1057,10 @@ class Session:
         return self._program_execute(self._id, program._id, program._s._id,
                                            arrays, dynamic_shapes, optimize, False)
 
+    def load_control(self, path):
+        """Load control components and shared parameters from one checkpoint."""
+        return self._session_native(self, "load_control", (path,))
+
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
 
@@ -1432,6 +1436,10 @@ class Program:
             self._s._id, self._id, arrays, targets,
             (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta))
         return self
+
+    def save_control(self, path, *, condition, otherwise=None, max_iterations=None):
+        """Save a conditional or bounded loop with shared parameters in one file."""
+        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations))
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,

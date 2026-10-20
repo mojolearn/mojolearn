@@ -21,9 +21,9 @@ EXPECTED_CASES = (
     "training_after_optimization", "node_diagnostics_and_profile",
     "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
     "variable_rank_replay",
-    "executed_control_vjp", "executor_accounting",
+    "executed_control_vjp", "executor_accounting", "control_checkpoint",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9)))
 
 
 _AUDITS = []
@@ -378,6 +378,93 @@ def node_diagnostics_and_profile():
                  "program node 0 (matmul) inputs=[(2, 5), (3, 2)]")
         _equal(_invoke(p.run, a), out)
         return [out]
+
+
+def control_checkpoint():
+    import struct
+    import numpy as np
+    from . import ops
+    outputs = []
+    seed = np.array([[0.5]], np.float32)
+    with tempfile.TemporaryDirectory(prefix="mojolearn-control-checkpoint-") as d, ops.Session() as s:
+        root = Path(d)
+        x, w = s.tensor([[1.25]]), s.tensor([[2.0]])
+        condition = s.capture(x, s.less(x, w))
+        body = s.capture(x, s.mul(x, w))
+        other = s.capture(x, s.add(x, w))
+        branch_file, loop_file = root / "conditional.mjl", root / "loop.mjl"
+        _invoke(body.save_control, branch_file, condition=condition, otherwise=other)
+        _invoke(body.save_control, loop_file, condition=condition, max_iterations=3)
+        assert sorted(path.name for path in root.iterdir()) == ["conditional.mjl", "loop.mjl"]
+        _refuses(lambda: _invoke(body.save_control, root / "bad.mjl", condition=condition,
+                                otherwise=other, max_iterations=2), "does not take", ValueError)
+        _refuses(lambda: _invoke(body.save_control, root / "bad.mjl", condition=condition,
+                                max_iterations=-1), "must be >=", ValueError)
+        with ops.Session() as restored:
+            branch = _invoke(restored.load_control, branch_file)
+            loop = _invoke(restored.load_control, loop_file)
+            rb, rc, ro = branch["body"], branch["condition"], branch["otherwise"]
+            rw, = rb.params
+            assert rc.params == ro.params == (rw,), "shared parameters must restore to one handle"
+            assert branch["kind"] == "if" and branch["max_iterations"] is None
+            assert loop["kind"] == "while" and loop["max_iterations"] == 3 and loop["otherwise"] is None
+            assert loop["body"].params == loop["condition"].params
+            result = _invoke(rb.vjp_if, rc, ro, [[1.25]], seeds=seed, parameters=[rw])
+            _equal(result["outputs"], np.array([[2.5]], np.float32))
+            _equal(result["input_gradients"][0], np.array([[1]], np.float32))
+            _equal(result["parameter_gradients"][rw], np.array([[0.625]], np.float32))
+            outputs.extend((result["outputs"], result["input_gradients"][0], result["parameter_gradients"][rw]))
+            lw, = loop["body"].params
+            result = _invoke(loop["body"].vjp_while, [[1.25]], condition=loop["condition"],
+                             max_iterations=loop["max_iterations"], seeds=seed, parameters=[lw])
+            assert result["iterations"] == 1 and result["stopped"]
+            outputs.extend((result["outputs"], result["input_gradients"][0], result["parameter_gradients"][lw]))
+            for a, b in zip(outputs[:3], outputs[3:]):
+                _equal(a, b)
+            _invoke(restored.load_weights, {"w": np.array([[4]], np.float32)}, [(rw, "w")])
+            selected = _invoke(rb.run_if, rc, ro, [[3]])
+            _equal(selected, np.array([[12]], np.float32))
+            _invoke(restored.load_weights, {"w": np.array([[1]], np.float32)}, [(rw, "w")])
+            alternate = _invoke(rb.run_if, rc, ro, [[3]])
+            _equal(alternate, np.array([[4]], np.float32))
+            outputs.extend((selected, alternate))
+            # Deliberately damage the control record while retaining a valid
+            # outer container hash: these exercise semantic parser refusals.
+            original = branch_file.read_bytes()
+            extension = sum(struct.unpack_from("<4I", original, 12))
+            ni, _ = struct.unpack_from("<2I", original, extension)
+            ints = list(struct.unpack_from("<" + "q" * ni, original, extension + 8))
+            cursor = 4
+            for _ in range(ints[3]):
+                cursor += ints[cursor] + 2  # rank, dimensions, dtype kind
+            first_reference = cursor + 3  # component lengths precede refs
+            for tag, index, bad_value, reason in (("kind", 1, 7, "invalid kind"),
+                                                  ("reference", first_reference, ints[3], "out of range")):
+                raw = bytearray(original)
+                struct.pack_into("<q", raw, extension + 8 + index * 8, bad_value)
+                digest = 0xCBF29CE484222325
+                for byte in raw[:-8]:
+                    digest = ((digest ^ byte) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+                struct.pack_into("<Q", raw, len(raw) - 8, digest)
+                damaged = root / (tag + ".mjl")
+                damaged.write_bytes(raw)
+                _refuses(lambda: _invoke(restored.load_control, damaged), reason, ValueError)
+            truncated = root / "truncated.mjl"
+            truncated.write_bytes(original[:-9])
+            _refuses(lambda: _invoke(restored.load_control, truncated), "CKPT_")
+            _equal(_invoke(rb.run_if, rc, ro, [[3]]), alternate)
+        empty = s.capture(x, x)
+        _invoke(empty.save_control, root / "empty.mjl", condition=empty, max_iterations=0)
+        with ops.Session() as restored:
+            bundle = _invoke(restored.load_control, root / "empty.mjl")
+            assert bundle["body"].params == bundle["condition"].params == ()
+            value = _invoke(bundle["body"].while_loop, [[1]], condition=bundle["condition"],
+                            max_iterations=bundle["max_iterations"])["outputs"]
+            _equal(value, np.array([[1]], np.float32))
+            outputs.append(value)
+        _invoke(body.save, root / "ordinary.mjl")
+        _refuses(lambda: _invoke(s.load_control, root / "ordinary.mjl"), "not a control-flow", ValueError)
+    return outputs
 
 
 def executor_accounting():

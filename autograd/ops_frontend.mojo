@@ -14,6 +14,7 @@ from bindings.native_json import native_path
 from autograd.weight_frontend import ops_weights_native_py
 from autograd.session_lifetime import SessionLifetime
 from autograd.execution_profile_pyapi import execution_profile_object
+from autograd.control_checkpoint import control_save_py, control_load_py
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -125,6 +126,15 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         return PythonObject(None)
     if name == "execution_profile_end":
         return execution_profile_object(s[].ex.execution_profile_end())
+    if name == "save_control":
+        return control_save_py[E, KIND](sid, args[0], args[2], args[3], args[4], args[1])
+    if name == "load_control":
+        var bundle = control_load_py[E, KIND](sid, args[0])
+        bundle["body"] = _program_object(session, bundle["body"])
+        bundle["condition"] = _program_object(session, bundle["condition"])
+        if bundle["otherwise"] is not PythonObject(None):
+            bundle["otherwise"] = _program_object(session, bundle["otherwise"])
+        return bundle
     if name == "save_program":
         return ops_program_save_native_py[E, KIND](args[0], args[1])
     if name == "load_weights":

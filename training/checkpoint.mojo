@@ -163,7 +163,10 @@ comptime CKPT_SECTION_SESSION = 2
 """Parameters and optimizer state saved from an operation session."""
 comptime CKPT_SECTION_PROGRAM = 3
 """A captured operation-session program: its description and parameters."""
-comptime CKPT_SECTION_MAX = 3
+# Section IDs 4 and 5 belong to distributed and partitioned programs.
+comptime CKPT_SECTION_CONTROL_PROGRAM = 6
+# Conditional/loop component graphs with a single shared parameter table.
+comptime CKPT_SECTION_MAX = 6
 comptime CKPT_EXT_HEAD_BYTES = 8
 
 
