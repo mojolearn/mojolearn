@@ -17,7 +17,8 @@ top-level `.libs/` fails the run.
 
 `MergedAuditSplit` reruns every case on the merged-bindings layout (each set
 directory holds one merged native file plus its index _mojolearn_merged.json,
-packaging/linux/merged_layout.py) and checks that the repaired wheel keeps
+packaging/linux/merged_layout.py, as test_split_wheels.make_sets
+builds it) and checks that the repaired wheel keeps
 every index, and that a repair which drops one fails.
 """
 import json
@@ -81,25 +82,6 @@ elif "twine check" in cmd:
 INDEX = "_mojolearn_merged.json"
 
 
-def merge_sets(root):
-    """Rewrite make_sets' per-binding set directories into the merged layout:
-    in each tier directory (<arch>/, <arch>/identical/) and host/, the
-    members' own .so files become one merged native file and the index that
-    names them, as bindings/merged_build.sh leaves a directory."""
-    for adir in sorted((root / "sets").glob("*/*")):
-        for d, stem, pattern in ((adir, "_mojolearn_native", "_mojolearn*.so"),
-                                 (adir / "identical", "_mojolearn_native", "_mojolearn*.so"),
-                                 (adir / "host", "_mojolearn_native_host", "_mojolearn_*_host.so")):
-            own = sorted(d.glob(pattern))
-            if not own:
-                continue
-            members = [p.stem for p in own]
-            for p in own:
-                p.unlink()
-            (d / f"{stem}.so").write_bytes(f"merged {d.relative_to(root)} {' '.join(members)}".encode())
-            (d / INDEX).write_text(json.dumps({"format": 1, "files": {f"{stem}.so": members}}) + "\n")
-
-
 class AuditSplit(unittest.TestCase):
     MERGED = False
 
@@ -107,9 +89,9 @@ class AuditSplit(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.tmp.name)
-        cls.set_dirs = tsw.make_sets(cls.root)
-        if cls.MERGED:
-            merge_sets(cls.root)
+        # the merged layout from test_split_wheels.make_sets itself: one host file
+        # with the same bytes in every set, the PTX manifest naming merged files
+        cls.set_dirs = tsw.make_sets(cls.root, merged=cls.MERGED)
         args = [a for s in cls.set_dirs for a in ("--set", s)]
         cls.packed = cls.root / "packed"
         assert tsw.pw.main(args + ["--out", str(cls.packed)], _gates=False) == 0
