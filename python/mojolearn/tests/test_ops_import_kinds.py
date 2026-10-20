@@ -346,9 +346,10 @@ def test_cumsum(shape, axis, exclusive, reverse):
     tag = f"lm/cumsum-{'x'.join(map(str, shape))}-axis{axis}-{int(exclusive)}{int(reverse)}"
     y, g = _twice(tag, run)
     assert y.shape == X.shape
-    np.testing.assert_allclose(y, _np_cumsum(X, axis, exclusive, reverse), rtol=1e-5, atol=1e-4)
+    # float32 sums of up to 4500 terms of [-2, 2] against float64 running sums
+    np.testing.assert_allclose(y, _np_cumsum(X, axis, exclusive, reverse), rtol=1e-5, atol=1e-3)
     # the gradient of sum(W * cumsum(x)) is W summed the other way
-    np.testing.assert_allclose(g, _np_cumsum(W, axis, exclusive, not reverse), rtol=1e-5, atol=1e-4)
+    np.testing.assert_allclose(g, _np_cumsum(W, axis, exclusive, not reverse), rtol=1e-5, atol=1e-3)
 
 
 @pytest.mark.parametrize("axes", [(0, 1), (1, 2), (0, 2)])
@@ -381,7 +382,7 @@ def test_index_refusals():
         x = s.tensor(_x((4, 5), 26))
         far = s.tensor(np.array([[0, 4]], dtype=np.float32))
         with pytest.raises(Exception):
-            s.numpy(s.index(x, (far, far)))  # 4 is outside axis 1 (length 5 is fine) -> axis 0 has 4 rows
+            s.numpy(s.index(x, (far, far)))  # position 4 is outside axis 0 (4 rows)
         with pytest.raises(Exception):
             s.index(x, (far, far), axes=(1, 0))  # the axes must ascend
         with pytest.raises(ValueError):
