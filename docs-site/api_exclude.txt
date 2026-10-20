@@ -76,3 +76,5 @@ Session.embedding	operation session embedding: its tape checks (embedding_check 
 # lane ag-import-torch
 # end lane ag-import-torch
 # The import elementwise family (docs/plans/MODEL_IMPORT.md 3.3): remove a line once the IMPORT and OPS_IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
+_catalog.catalog	model catalog: no verified entry yet (tools/model_catalog.py build from NVIDIA+AMD runs); remove once one lands
+_catalog.verify_catalog_entry	model catalog: no verified entry yet; remove once one lands
