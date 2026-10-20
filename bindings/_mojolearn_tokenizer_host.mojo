@@ -75,12 +75,13 @@ spelling of the same arm.
 from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from std.python.bindings import PythonModuleBuilder
+from std.python._cpython import GILReleased, PyObjectPtr
+from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 
 from bindings.hostptr import i32_ptr
+from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1421,6 +1422,320 @@ def vocab_fingerprint_binding(tokenizer: PythonObject) raises -> PythonObject:
     return h.hexdigest()
 
 
+def _vocab_pattern(pattern: PythonObject) raises -> Int:
+    var name = String(pattern)
+    if name == "gpt2":
+        return 0
+    if name == "llama3":
+        return 1
+    if name == "qwen2":
+        return 2
+    raise Error("tokenizer: unknown pattern " + name)
+
+
+def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: PythonObject) raises:
+    var bi = Python.import_module("builtins")
+    _ = _vocab_pattern(options[0])
+    if options[2] is not None and String(options[2]) != "NFC":
+        raise Error("tokenizer: normalizer must be null or NFC")
+    tokenizer.pattern = options[0]
+    tokenizer.normalizer = options[2]
+    tokenizer.source = options[6]
+    tokenizer.added = bi.dict() if options[1] is None else bi.dict(options[1])
+    tokenizer._added_by_id = bi.dict()
+    var keys = bi.list(tokenizer.added)
+    for i in range(len(keys)):
+        var content = keys[i]
+        var id = tokenizer.added[content]
+        if bi.type(content) is not bi.str or len(content) == 0 or bi.type(id) is not bi.int or Int(py=id) < 0:
+            raise Error("tokenizer: added token must map nonempty str to nonnegative int")
+        if Bool(py=tokenizer._added_by_id.__contains__(id)):
+            raise Error("tokenizer: added tokens share an id")
+        tokenizer._added_by_id[id] = content
+    var bos = bi.list()
+    var eos = bi.list()
+    var input = bi.list(options[3])
+    for i in range(len(input)):
+        bos.append(bi.int(input[i]))
+    input = bi.list(options[4])
+    for i in range(len(input)):
+        eos.append(bi.int(input[i]))
+    tokenizer.bos_ids = bi.tuple(bos)
+    tokenizer.eos_ids = bi.tuple(eos)
+    tokenizer._m = module
+
+
+def _vocab_finish(tokenizer: PythonObject, var tok: VocabTokenizer) raises:
+    var bi = Python.import_module("builtins")
+    var sp_arena = List[UInt8]()
+    var sp_lengths = List[Int]()
+    var sp_ids = List[Int]()
+    var keys = bi.list(tokenizer.added)
+    for i in range(len(keys)):
+        var text = keys[i].encode("utf-8")
+        sp_lengths.append(len(text))
+        sp_ids.append(Int(py=tokenizer.added[keys[i]]))
+        for j in range(len(text)):
+            sp_arena.append(UInt8(Int(py=text[j])))
+    tok.set_specials(sp_arena, sp_lengths, sp_ids)
+    tokenizer._n_ranks = PythonObject(tok.n_ranks())
+    tokenizer._n_vocab = PythonObject(tok.n_vocab())
+    tokenizer._max_token_bytes = PythonObject(tok.max_token_bytes())
+    var handle = VocabHandle()
+    handle.tok = tok^
+    tokenizer._handle = PythonObject(alloc=handle^)
+
+
+def _token_bytes(value: PythonObject) raises -> List[UInt8]:
+    var raw = PythonObject(None)
+    try:
+        raw = Python.import_module("builtins").memoryview(value).tobytes()
+    except error:
+        raise Error("TypeError: token/merge part must be bytes-like: " + String(error))
+    var out = List[UInt8](capacity=len(raw))
+    for i in range(len(raw)):
+        out.append(UInt8(Int(py=raw[i])))
+    return out^
+
+
+def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, merges: PythonObject,
+                             options: PythonObject, module: PythonObject) raises -> PythonObject:
+    _vocab_settle(tokenizer, options, module)
+    var bi = Python.import_module("builtins")
+    var entries = bi.list(tokens)
+    var arena = List[UInt8]()
+    var lengths = List[Int]()
+    for i in range(len(entries)):
+        var bytes = _token_bytes(entries[i])
+        lengths.append(len(bytes))
+        for j in range(len(bytes)):
+            arena.append(bytes[j])
+    var table = table_from_tokens(arena, lengths)
+    var checks = MergeCheck(len(entries))
+    var pairs = bi.list(merges)
+    for i in range(len(pairs)):
+        if len(pairs[i]) != 2:
+            raise Error("tokenizer: every merge must be a pair of bytes")
+        var left = _token_bytes(pairs[i][0])
+        var right = _token_bytes(pairs[i][1])
+        check_merge(table, left, right, "merge " + String(i), checks)
+    check_loose(table, checks, Bool(py=options[5]))
+    var tok = VocabTokenizer(table^, builtin_unicode_classes(), _vocab_pattern(options[0]))
+    _vocab_finish(tokenizer, tok^)
+    return PythonObject(None)
+
+
+def vocab_spelled_public_binding(cls: PythonObject, vocab: PythonObject, merges: PythonObject,
+                                options: PythonObject, module: PythonObject) raises -> PythonObject:
+    var tokenizer = Python.import_module("builtins").object.__new__(cls)
+    _vocab_settle(tokenizer, options, module)
+    var table = _table_from_spelled(vocab, merges, False, Bool(py=options[5]))
+    var tok = VocabTokenizer(table^, builtin_unicode_classes(), _vocab_pattern(options[0]))
+    _vocab_finish(tokenizer, tok^)
+    return tokenizer
+
+
+def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    if pre is None:
+        raise Error("tokenizer: pre_tokenizer is null; byte-level BPE requires a cut")
+    var kind = String(pre.get("type"))
+    if kind == "ByteLevel":
+        if Bool(py=pre.get("use_regex", PythonObject(True))):
+            return PythonObject("gpt2")
+        raise Error("tokenizer: ByteLevel use_regex false is not a known cut")
+    if kind == "Metaspace":
+        raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
+    if kind != "Sequence":
+        raise Error("tokenizer: pre_tokenizer type " + kind + " is not a known cut")
+    var found = PythonObject(None)
+    var steps = pre.get("pretokenizers", bi.list())
+    for i in range(len(steps)):
+        var step = steps[i]
+        var t = String(step.get("type"))
+        if t == "Split":
+            var pat = step.get("pattern", bi.dict())
+            if bi.type(pat) is not bi.dict or pat.get("Regex") is None:
+                raise Error("tokenizer: Split pattern requires a Regex")
+            var behavior = step.get("behavior")
+            if (behavior is not None and String(behavior) != "Isolated") or Bool(py=step.get("invert", PythonObject(False))):
+                raise Error("tokenizer: Split requires Isolated behavior without invert")
+            var name = patterns.get(pat["Regex"])
+            if name is None:
+                raise Error("tokenizer: pre_tokenizer regex " + String(pat["Regex"]) + " is not one of the known patterns; refused by name")
+            if found is not None and not Bool(py=found == name):
+                raise Error("tokenizer: two Split steps with different patterns")
+            found = name
+        elif t == "ByteLevel":
+            if Bool(py=step.get("use_regex", PythonObject(False))):
+                if found is not None and String(found) != "gpt2":
+                    raise Error("tokenizer: Split followed by ByteLevel use_regex true cuts twice")
+                found = PythonObject("gpt2")
+        elif t == "Metaspace":
+            raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
+        else:
+            raise Error("tokenizer: pre_tokenizer step " + t + " is not a known cut")
+    if found is None:
+        raise Error("tokenizer: pre_tokenizer Sequence names no cut")
+    return found
+
+
+def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: PythonObject,
+                             cfg: PythonObject, module: PythonObject, patterns: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    if bi.type(data) is not bi.dict:
+        raise Error("tokenizer: not a JSON object")
+    var model = data.get("model")
+    if model is None:
+        model = bi.dict()
+    if String(model.get("type")) != "BPE":
+        raise Error("tokenizer: model.type must be BPE; SentencePiece Unigram is unsupported")
+    if Bool(py=model.get("byte_fallback", PythonObject(False))):
+        raise Error("tokenizer: model.byte_fallback identifies SentencePiece-style BPE")
+    if Bool(py=model.get("continuing_subword_prefix")) or Bool(py=model.get("end_of_word_suffix")):
+        raise Error("tokenizer: continuing_subword_prefix / end_of_word_suffix is not byte-level BPE")
+    var dec = data.get("decoder")
+    if dec is not None and String(dec.get("type")) != "ByteLevel":
+        raise Error("tokenizer: decoder must be ByteLevel")
+    var norm = data.get("normalizer")
+    var normalizer = PythonObject(None)
+    if norm is not None:
+        var kind = String(norm.get("type"))
+        if kind == "NFC":
+            normalizer = PythonObject("NFC")
+        elif kind == "Sequence":
+            var steps = norm.get("normalizers", bi.list())
+            if len(steps) == 0:
+                raise Error("tokenizer: empty normalizer Sequence")
+            for i in range(len(steps)):
+                if String(steps[i].get("type")) != "NFC":
+                    raise Error("tokenizer: normalizer must be null or NFC")
+            normalizer = PythonObject("NFC")
+        else:
+            raise Error("tokenizer: normalizer '" + kind + "' must be null or NFC")
+    var pattern = _vocab_config_pattern(data.get("pre_tokenizer"), patterns)
+    var added = bi.dict()
+    var entries = data.get("added_tokens")
+    if entries is not None:
+        for i in range(len(entries)):
+            var content = entries[i].get("content")
+            var id = entries[i].get("id")
+            if bi.type(content) is not bi.str or bi.type(id) is not bi.int:
+                raise Error("tokenizer: added token lacks string content or int id")
+            added[content] = id
+    var vocab = model.get("vocab")
+    if bi.type(vocab) is not bi.dict:
+        raise Error("tokenizer: model.vocab is not an object")
+    var base = bi.dict(vocab)
+    var keys = bi.list(added)
+    for i in range(len(keys)):
+        base.pop(keys[i], PythonObject(None))
+    var merges = model.get("merges")
+    if merges is None:
+        merges = bi.list()
+    if bi.type(merges) is not bi.list:
+        raise Error("tokenizer: model.merges is not a list")
+    var bos = bi.list()
+    var eos = bi.list()
+    var post = data.get("post_processor")
+    if post is not None:
+        var kind = String(post.get("type"))
+        if kind == "TemplateProcessing":
+            var single = post.get("single", bi.list())
+            var specials = post.get("special_tokens", bi.dict())
+            var seen = False
+            for i in range(len(single)):
+                var item = single[i]
+                if Bool(py=item.__contains__("Sequence")):
+                    seen = True
+                elif Bool(py=item.__contains__("SpecialToken")):
+                    var name = item["SpecialToken"].get("id")
+                    var ids = specials.get(name, bi.dict()).get("ids")
+                    if ids is None or len(ids) == 0:
+                        raise Error("tokenizer: post_processor special token has no ids")
+                    for j in range(len(ids)):
+                        if seen:
+                            eos.append(bi.int(ids[j]))
+                        else:
+                            bos.append(bi.int(ids[j]))
+                else:
+                    raise Error("tokenizer: post_processor template must contain Sequence or SpecialToken")
+        elif kind != "ByteLevel":
+            raise Error("tokenizer: post_processor type " + kind + " is not honored")
+    if cfg is not None and bi.type(cfg) is bi.dict:
+        var flag = cfg.get("add_bos_token")
+        if bi.type(flag) is bi.bool and not Bool(py=flag):
+            bos.clear()
+        flag = cfg.get("add_eos_token")
+        if bi.type(flag) is bi.bool and not Bool(py=flag):
+            eos.clear()
+    var options = bi.list()
+    options.append(pattern)
+    options.append(added)
+    options.append(normalizer)
+    options.append(bos)
+    options.append(eos)
+    options.append(model.get("ignore_merges", PythonObject(False)))
+    var source = native_path(path)
+    if not Bool(py=source.startswith("/")):
+        source = Python.import_module("os").getcwd() + PythonObject("/") + source
+    options.append(source)
+    var tokenizer = vocab_spelled_public_binding(cls, base, merges, options, module)
+    tokenizer.bos_token_id = bos[0] if len(bos) != 0 else PythonObject(None)
+    tokenizer.eos_token_id = eos[len(eos) - 1] if len(eos) != 0 else PythonObject(None)
+    if cfg is not None and bi.type(cfg) is bi.dict:
+        for key in [String("bos_token"), String("eos_token")]:
+            var value = cfg.get(key)
+            if bi.type(value) is bi.dict:
+                value = value.get("content")
+            if bi.type(value) is bi.str and Bool(py=added.__contains__(value)):
+                bi.setattr(tokenizer, key + "_id", added[value])
+    return tokenizer
+
+
+def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, module: PythonObject,
+                                   patterns: PythonObject) raises -> PythonObject:
+    var text = native_path(path)
+    var filename = text
+    var directory = PythonObject(".")
+    if native_path_exists(text, True):
+        directory = text.rstrip("/")
+        filename = directory + PythonObject("/tokenizer.json")
+        if not native_path_exists(filename):
+            if native_path_exists(directory + PythonObject("/tokenizer.model")):
+                raise Error("tokenizer: tokenizer.model without tokenizer.json is a SentencePiece family")
+            raise Error("FileNotFoundError: directory holds no tokenizer.json")
+    else:
+        var pieces = text.rsplit("/", 1)
+        if len(pieces) == 2:
+            directory = pieces[0] if len(pieces[0]) != 0 else PythonObject("/")
+    if not native_path_exists(filename):
+        raise Error("FileNotFoundError: tokenizer.json does not exist")
+    var data = native_json_read(filename)
+    var cfg = PythonObject(None)
+    var config_path = directory + PythonObject("/tokenizer_config.json")
+    if native_path_exists(config_path):
+        cfg = native_json_read(config_path)
+    if not Bool(py=filename.startswith("/")):
+        filename = Python.import_module("os").getcwd() + PythonObject("/") + filename
+    return vocab_json_public_binding(cls, data, filename, cfg, module, patterns)
+
+
+def vocab_pattern_name_binding(regex: PythonObject, patterns: PythonObject) raises -> PythonObject:
+    return patterns.get(regex)
+
+
+def vocab_pretokenize_pattern_binding(data: PythonObject, pattern: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var raw = data.encode("utf-8") if bi.type(data) is bi.str else bi.memoryview(data).tobytes()
+    var bytes = _token_bytes(raw)
+    var offsets = pretokenize_pattern(bytes, builtin_unicode_classes(), _vocab_pattern(pattern))
+    var out = bi.list()
+    for i in range(len(offsets)):
+        out.append(offsets[i])
+    return out
+
+
 def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var raw = data.encode("utf-8") if Bool(py=bi.isinstance(data, bi.str)) else bi.memoryview(data).tobytes()
@@ -1435,6 +1750,45 @@ def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject
     for i in range(len(offsets) - 1):
         out.append(raw[bi.slice(offsets[i], offsets[i + 1])])
     return out
+
+
+def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # Supported stdlib C binding API keeps public exception classes native.
+    # See std.python.bindings.raise_python_exception (Mojo 1.0).
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        comptime count = 5 if operation == 0 or operation == 1 or operation == 4 else (6 if operation == 2 else (4 if operation == 3 or operation == 5 else (1 if operation == 9 else 2)))
+        if len(args) != count:
+            raise Error("TypeError: tokenizer binding received incorrect argument count")
+        var result = PythonObject(None)
+        comptime if operation == 0:
+            result = vocab_init_public_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 1:
+            result = vocab_spelled_public_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 2:
+            result = vocab_json_public_binding(args[0], args[1], args[2], args[3], args[4], args[5])
+        elif operation == 3:
+            result = vocab_pretrained_public_binding(args[0], args[1], args[2], args[3])
+        elif operation == 4:
+            result = vocab_encode_public_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 5:
+            result = vocab_decode_public_binding(args[0], args[1], args[2], args[3])
+        elif operation == 6:
+            result = vocab_pretokenize_public_binding(args[0], args[1])
+        elif operation == 7:
+            result = vocab_pretokenize_pattern_binding(args[0], args[1])
+        elif operation == 8:
+            result = vocab_pattern_name_binding(args[0], args[1])
+        elif operation == 9:
+            result = native_json_parse(args[0])
+        return result.steal_data()
+    except error:
+        var message = String(error)
+        if message.startswith("TypeError:"):
+            return raise_python_exception(error, ExceptionType.TypeError)
+        if message.startswith("FileNotFoundError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+        return raise_python_exception(error, ExceptionType.ValueError)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_host.mojo
@@ -1475,9 +1829,16 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[vocab_encode_binding]("vocab_encode")
         module.def_function[vocab_pretokenize_binding]("vocab_pretokenize")
         module.def_function[vocab_decode_binding]("vocab_decode")
-        module.def_function[vocab_encode_public_binding]("vocab_encode_public")
-        module.def_function[vocab_decode_public_binding]("vocab_decode_public")
-        module.def_function[vocab_pretokenize_public_binding]("vocab_pretokenize_public")
+        module.def_py_c_function(_vocab_public_c[0], "vocab_init_public")
+        module.def_py_c_function(_vocab_public_c[1], "vocab_spelled_public")
+        module.def_py_c_function(_vocab_public_c[2], "vocab_json_public")
+        module.def_py_c_function(_vocab_public_c[3], "vocab_pretrained_public")
+        module.def_py_c_function(_vocab_public_c[4], "vocab_encode_public")
+        module.def_py_c_function(_vocab_public_c[5], "vocab_decode_public")
+        module.def_py_c_function(_vocab_public_c[6], "vocab_pretokenize_public")
+        module.def_py_c_function(_vocab_public_c[7], "vocab_pretokenize_pattern")
+        module.def_py_c_function(_vocab_public_c[8], "vocab_pattern_name")
+        module.def_py_c_function(_vocab_public_c[9], "native_json_parse")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[generation_initialize_binding]("generation_initialize")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
