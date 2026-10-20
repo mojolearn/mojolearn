@@ -106,3 +106,33 @@ The parent will compile the combined conditional fit/checkpoint source once and
 run its affected native cases plus existing ordinary-fit regression coverage.
 These source changes do not resolve the confirmed std.python ownership leak,
 qualify untested physical vendors, or promote any optimization default.
+
+## Broadcast/ReLU motion candidate
+
+The opt-in native pipeline now has one additional source pass,
+`broadcast_relu_hoist`: adjacent `expand -> relu` becomes `relu -> expand`.
+Only a single-consumer expand that is not a graph output is eligible. The source
+must have an exact shape guaranteed by a fixed parameter or a retained explicit
+positive reshape. Captured input dimensions and inferred reshapes do not prove
+a dynamic shape and are declined. A static broadcast check retains the original
+validity domain; the pass only applies when the expansion increases the element
+count. This is a cost rule over every positive shape, not dimension targeting.
+
+Both routes execute the existing ReLU body and existing expand. The pointwise
+operation is `F(relu(F(x)))`, where `F` is the existing FTZ normalization;
+expand either aliases its input or copies through `F`. Since `F(F(x)) = F(x)`,
+the reordered operations have the same input/output words. Neither reductions
+nor floating arithmetic are reassociated. Source-node provenance moves with the
+operations, while the captured graph, derivatives and optimizer order remain
+unchanged. The report gives the numbers of ReLU elements before and after for
+rewritten nodes. These are work counts, not timing estimates or a speed claim.
+
+Three verifier cases are added for exact special-value words; observed operation
+placement and profiled logical output bytes; declined observable/shared/no-op or
+ambiguous dynamic expansions; invalid-shape refusal and recovery; finite
+differences and original VJPs; lazy branches and bounded loops; plain/control
+checkpoint replay; and unchanged Adam training state after optimized inference.
+The source registry has 26 cases and 126 expected output digests. Source/controller
+checks do not execute or qualify this candidate. Native compilation, physical
+vendor and installed-package evidence remain pending; the default remains off.
+The existing upstream PythonObject ownership blocker remains unchanged.
