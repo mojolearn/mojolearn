@@ -363,6 +363,10 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
             plan.n_heads = config.n_heads
             plan.block_options["n_kv_heads"] = config.n_kv_heads
             plan.block_options["head_dim"] = config.head_dim
+            # Samba's attention blocks use TransformerBlock's 1e-6 default.
+            # The checkpoint model interface defaults to 1e-5 instead, and
+            # SambaConfig.norm_eps controls only the final stack normalization.
+            plan.block_options["norm_eps"] = PythonObject(1e-6)
         var bindings = _model_bindings(route, kind, nc, model.numeric_mode)
         var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, nc)
         var block_fields = samba_fields(block)
