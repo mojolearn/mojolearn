@@ -34,8 +34,8 @@ from autograd.layers import NeuralRules, layer_norm
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
 from autograd.data import permutation, gather_rows
 from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
-from core.cast_in import CastIn
-from autograd.cast_ops import upload_cast
+from core.cast_in import CastIn, cast_in_kind
+from autograd.cast_ops import upload_cast, upload_cast_i32
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -453,19 +453,26 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self._constant(f_dst, f_rows, f_cols, 0)
         elif code == OPS_EMBEDDING:
             # lane ag-embedding-op: table[ids] (Tape.embedding). ints: the
-            # host address of the caller's int32 ids, their count, and
-            # padding_idx (-1 none). The ids are copied (bits) into a session
-            # buffer that lives with the graph: it is returned at the next
-            # reset or close, like a freed upload.
-            _need("embedding", n, 1, 3, ni, 0, nf)
-            var e_n = ints[1]
-            if ints[0] == 0 or e_n < 1:
-                raise Error("ops: embedding needs at least one id")
+            # caller's ids as an input descriptor (lane ag-thin-glue2: address,
+            # NumPy dtype number, item size, rows, cols, row and column byte
+            # strides; any integer dtype and strides, flattened row-major) and
+            # padding_idx (-1 none). The ids are cast on the executor to int32
+            # words (autograd/cast_ops.mojo upload_cast_i32; values outside
+            # int32 saturate and the embedding's id check refuses them) in a
+            # session buffer that lives with the graph: it is returned at the
+            # next reset or close, like a freed upload.
+            _need("embedding", n, 1, 8, ni, 0, nf)
+            var e_src = CastIn(
+                ints[0], cast_in_kind(ints[1], ints[2], "ops: embedding ids"), ints[2],
+                ints[3], ints[4], ints[5], ints[6],
+            )
+            e_src.check("ops: embedding ids")
+            var e_n = e_src.count()
             var e_buf = self.ex.alloc(e_n)
             self.retired.append(Int(e_buf))
-            self.ex.upload(e_buf, FP(unsafe_from_address=ints[0]), e_n)
+            upload_cast_i32(self.ex, e_buf, e_src, "ops: embedding ids")
             var e_ids = self.tape.ids(self.ex, e_buf, e_n)
-            t = self.tape.embedding(self.ex, x[0], e_ids, ints[2])
+            t = self.tape.embedding(self.ex, x[0], e_ids, ints[7])
         elif code == OPS_COPY:
             _need("copy", n, 1, 0, ni, 0, nf)
             var cx = self._slot(hs[0])

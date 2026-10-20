@@ -369,6 +369,29 @@ def cast_f32_bits(raw: UInt64, kind: Int, itemsize: Int) -> UInt32:
 
 
 @always_inline
+def cast_i32_bits(raw: UInt64, kind: Int, itemsize: Int) -> UInt32:
+    """The int32 (bits) of one integer or bool item (`cast_raw_bits`),
+    saturated: a value below -2^31 becomes -2^31 and one above 2^31 - 1
+    becomes 2^31 - 1. Every int32 value is exact. The index consumers (the
+    embedding op's id check) refuse both saturated values: no table has 2^31
+    rows, so a value outside int32 is refused by position, never wrapped."""
+    if kind == CAST_KIND_BOOL:
+        return UInt32(1) if raw != 0 else UInt32(0)
+    if kind == CAST_KIND_SIGNED:
+        var v = _sign_extend(raw, itemsize)
+        if (v >> 63) != 0:
+            if v < UInt64(0xFFFFFFFF80000000):  # below -2^31
+                return UInt32(0x80000000)
+            return UInt32(v & UInt64(0xFFFFFFFF))
+        if v > UInt64(0x7FFFFFFF):
+            return UInt32(0x7FFFFFFF)
+        return UInt32(v)
+    if raw > UInt64(0x7FFFFFFF):
+        return UInt32(0x7FFFFFFF)
+    return UInt32(raw)
+
+
+@always_inline
 def cast_w64_bits(raw: UInt64, kind: Int, itemsize: Int) -> UInt64:
     """The 64-bit label word of one item: float64 bits for a float, int64
     bits for an integer or bool (core/label_encode.mojo LABEL_KIND_*)."""

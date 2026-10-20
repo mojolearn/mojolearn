@@ -11,17 +11,22 @@
 # on Apple, NVIDIA, AMD and the host. A float32 C-order input takes no
 # launch at all: its words are uploaded as before (no bit moves).
 #
-# Codes OP_CAST_FIRST..OP_CAST_LAST (3500..3501) are this family;
+# Codes OP_CAST_FIRST..OP_CAST_LAST (3500..3502) are this family;
 # sequence/dispatch.mojo routes and fences them.
 from std.memory import bitcast, memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
-from core.cast_in import CastIn, cast_f32_bits, cast_raw_bits
+from core.cast_in import (
+    CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CastIn, cast_f32_bits, cast_i32_bits, cast_raw_bits,
+)
 
 comptime OP_CAST_F32 = 3500
 comptime OP_CAST_GATHER = 3501
+# lane ag-thin-glue2: integer ids (any integer dtype, any strides) to the
+# int32 words the embedding op reads
+comptime OP_CAST_I32 = 3502
 comptime OP_CAST_FIRST = OP_CAST_F32
-comptime OP_CAST_LAST = OP_CAST_GATHER
+comptime OP_CAST_LAST = OP_CAST_I32
 
 comptime _BP = MutPointer[UInt8, MutUntrackedOrigin]
 
@@ -37,6 +42,17 @@ def op_cast_f32(t: Int, a: Args):
     var c = t - r * a.i2
     var raw = cast_raw_bits(a.p0, a.i5 + r * a.i3 + c * a.i4, a.i1)
     a.p1.unsafe_store(t, bitcast[DType.float32](cast_f32_bits(raw, a.i0, a.i1)))
+
+
+@always_inline
+def op_cast_i32(t: Int, a: Args):
+    """dst[t] = the int32 bits (core/cast_in.mojo cast_i32_bits, saturated)
+    of the caller's row-major integer element t, in one float32 word. The
+    slots are op_cast_f32's."""
+    var r = t // a.i2
+    var c = t - r * a.i2
+    var raw = cast_raw_bits(a.p0, a.i5 + r * a.i3 + c * a.i4, a.i1)
+    a.p1.unsafe_store(t, bitcast[DType.float32](cast_i32_bits(raw, a.i0, a.i1)))
 
 
 @always_inline
@@ -78,6 +94,8 @@ def apply_cast[OP: Int](t: Int, a: Args):
         op_cast_f32(t, a)
     elif OP == OP_CAST_GATHER:
         op_cast_gather(t, a)
+    elif OP == OP_CAST_I32:
+        op_cast_i32(t, a)
 
 
 # ---------------------------------------------------------------- drivers
@@ -132,6 +150,32 @@ def upload_cast[E: Exec](mut ex: E, dst: FP, src: CastIn) raises:
     a.i4 = src.s1
     a.i5 = src.origin()
     ex.launch[OP_CAST_F32](a, src.count())
+    ex.free(raw)
+
+
+def upload_cast_i32[E: Exec](mut ex: E, dst: FP, src: CastIn, what: String) raises:
+    """dst (src.count() words, row-major) = the caller's integer array as
+    int32 bits (values outside int32 saturate; see cast_i32_bits). int32 in
+    C order is one plain upload (the words as they are); every other integer
+    array is one upload of its bytes and one OP_CAST_I32 launch. `src` must
+    have passed CastIn.check."""
+    if src.kind != CAST_KIND_SIGNED and src.kind != CAST_KIND_UNSIGNED:
+        raise Error(what + " must be integers")
+    if src.kind == CAST_KIND_SIGNED and src.itemsize == 4 and src.is_c_order():
+        ex.upload(dst, FP(unsafe_from_address=src.addr), src.count())
+        return
+    var raw = ex.alloc(src.words())
+    upload_bytes(ex, raw, src.start(), src.nbytes())
+    var a = Args()
+    a.p0 = raw
+    a.p1 = dst
+    a.i0 = src.kind
+    a.i1 = src.itemsize
+    a.i2 = src.cols
+    a.i3 = src.s0
+    a.i4 = src.s1
+    a.i5 = src.origin()
+    ex.launch[OP_CAST_I32](a, src.count())
     ex.free(raw)
 
 
