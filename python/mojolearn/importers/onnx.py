@@ -32,9 +32,10 @@ _BUF_MODEL, _BUF_BLOB, _BUF_EXTERNAL = 0, 1, 2
 _A_FLOAT, _A_INT, _A_STRING, _A_TENSOR, _A_FLOATS, _A_INTS, _A_STRINGS, _A_TENSORS = 1, 2, 3, 4, 6, 7, 8, 9
 
 
-def _binding():
-    from .. import _backend
-    b = _backend.binding("_mojolearn_x_sequence")
+def _binding(b=None):
+    if b is None:
+        from .. import _backend
+        b = _backend.binding("_mojolearn_x_sequence")
     if not hasattr(b, "onnx_read"):  # cpu-route: model file parsing in Mojo (the reader entry)
         raise RuntimeError("mojolearn: this install's x_sequence binding has no ONNX reader (onnx_read); "
                            "rebuild the x_sequence bindings")
@@ -148,8 +149,10 @@ def _views(b, h, c, strings):
 class _Native:
     """The Mojo reader's handle of one graph, released with its GraphIR."""
 
-    def __init__(self, b, h):
-        self.b, self.h = b, h
+    def __init__(self, b, h, views=()):
+        # views: one memoryview per buffer the graph's byte ranges point into
+        # (importers.import_model hands their addresses to the Mojo lowering)
+        self.b, self.h, self.views = b, h, tuple(views)
 
     def resolve(self, shapes=None):
         """importers._graph.resolve of this graph, by the Mojo rules."""
@@ -177,7 +180,7 @@ class _Native:
         return Resolved(shapes_out, dtypes, folded, no_rule, tuple(_problems(c, strings)))
 
 
-def read(path):
+def read(path, binding=None):
     """Read the ONNX model at ``path`` into an import graph.
 
     Returns the model's graph: its inputs and outputs with their types and
@@ -188,8 +191,10 @@ def read(path):
     input or output of an unsupported type, a subgraph attribute; raises
     ``ValueError`` when the file is not an ONNX model.
     """
+    # binding: the x_sequence module to read with (import_model passes its
+    # session's, so the graph handle and the session live in one module)
     path = os.fspath(path)
-    b = _binding()
+    b = _binding(binding)
     h = int(b.onnx_read(os.fsdecode(path)))  # cpu-route: model file parsing in Mojo
     try:
         words, strings, floats = b.onnx_info(h)  # cpu-route: model file parsing in Mojo
@@ -220,6 +225,6 @@ def read(path):
         b.onnx_close(h)
         raise
     g = GraphIR(opset=opset, inputs=inputs, outputs=outputs, nodes=tuple(nodes), initializers=inits, source=path)
-    g._native = _Native(b, h)
+    g._native = _Native(b, h, views)
     weakref.finalize(g, b.onnx_close, h)
     return g
