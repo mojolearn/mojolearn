@@ -508,7 +508,7 @@ def ops_profile_report_py() raises -> PythonObject:
 # the replay is the session's, on its executor.
 def _dims_out(shapes: List[ShapeN]) raises -> PythonObject:
     var out = Python.list()
-    for k in range(len(shapes)):  # driver-loop: over a program's inputs or outputs
+    for k in range(len(shapes)):  # small-loop(shapes: a program's inputs or outputs): result packing, no data
         var dims = rn_dims(shapes[k])
         var d = Python.list()
         for j in range(len(dims)):  # small-loop(dims: a tensor's rank, at most 8): result packing, no data
@@ -524,7 +524,7 @@ def program_info(pid: Int, p: OpsProgram) raises -> PythonObject:
     res.append(_dims_out(p.in_shapes))
     res.append(_dims_out(p.out_shapes))
     var ph = Python.list()
-    for j in range(len(p.params)):  # driver-loop: over program parameters
+    for j in range(len(p.params)):  # small-loop(params: a program's parameter handles): result packing, no data
         ph.append(PythonObject(p.params[j]))
     res.append(ph)
     return res
@@ -555,10 +555,10 @@ def ops_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
     per input, addrs one float32 destination address per output (an array
     of the output's shape)."""
     var srcs = List[CastIn]()
-    for k in range(len(descs)):  # driver-loop: over program inputs
+    for k in range(len(descs)):  # small-loop(descs: one descriptor per program input): argument parsing, no data
         srcs.append(cast_in_of(descs[k], "program input"))
     var dsts = List[FP]()
-    for k in range(len(addrs)):  # driver-loop: over program outputs
+    for k in range(len(addrs)):  # small-loop(addrs: one destination per program output): argument parsing, no data
         dsts.append(fptr(addrs[k], "program output"))
     var p = ops_session[E, KIND](Int(py=sid))
     p[].run_program(Int(py=pid), srcs, dsts)

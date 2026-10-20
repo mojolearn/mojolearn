@@ -934,7 +934,8 @@ class Session:
             keep.append(m)
             descs.append(describe(m, "x"))
         outs = [np.empty(sh, dtype=np.float32) for sh in program.output_shapes]  # glue: one destination per output
-        self._b.ops_program_run(self._sid(), program._id, descs, [o.ctypes.data for o in outs])  # glue: output addresses
+        addrs = [o.ctypes.data for o in outs]  # glue: one destination address per program output
+        self._b.ops_program_run(self._sid(), program._id, descs, addrs)
         del keep
         return outs[0] if len(outs) == 1 else tuple(outs)
 
