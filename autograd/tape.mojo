@@ -39,7 +39,6 @@ from autograd.embedding_ops import (
     embedding_refuse_ids, embedding_forward_into, embedding_plan, embedding_perm_words, embedding_backward_into,
 )
 from std.sys.compile import is_defined
-<<<<<<< HEAD
 from std.memory import bitcast
 # lane ag-rankn-core: rank-N shapes and views (docs/plans/AUTOGRAD_RANKN.md)
 from autograd.rankn import (
@@ -47,11 +46,9 @@ from autograd.rankn import (
     rn_desc_view, rn_normalize_axis,
 )
 from autograd.rankn_ops import rn_copy_strided
-=======
 # lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the node kinds
 # the recorded backward adds, whose VJPs the first-order backward runs
 from autograd.higher_ops import EXPAND, CLAMP, OP_HO_CLAMP_VJP
->>>>>>> origin/main
 
 comptime _INFERRED_REFUSAL = "tensor was computed in inference mode (no_grad) and has no graph: call record() and run the forward again to differentiate it"
 comptime _STALE_REFUSAL = "output depends on a tensor marked mutated after it was used: record the graph again"
@@ -387,12 +384,10 @@ struct Tape(Movable):
     var _word_node: Int
     # lane ag-embedding-op: the ids of this graph (Tape.ids), cleared by reset
     var _ids: List[_Ids]
-<<<<<<< HEAD
     # lane ag-rankn-core: one rank-N shape per node, parallel to _nodes
     # (appended by _record, cleared by reset). The node's rows x cols is its
     # matrix view: rows = the product of the leading dims, cols = the last.
     var _shapes: List[ShapeN]
-=======
     # lane ag-ho-core (higher-order gradients, autograd/higher.mojo): the
     # node holding each node's gradient after the last recorded backward
     # (backward_recorded; -1: none), empty until one runs, cleared by
@@ -401,7 +396,6 @@ struct Tape(Movable):
     # The last backward was a recorded one: gradient() reads _grad_node.
     # Cleared by reset and by every first-order backward.
     var _recorded_live: Bool
->>>>>>> origin/main
 
     def __init__(out self):
         self._nodes = List[_Node]()
@@ -421,12 +415,9 @@ struct Tape(Movable):
         self._word_armed = False
         self._word_node = -1
         self._ids = List[_Ids]()
-<<<<<<< HEAD
         self._shapes = List[ShapeN]()
-=======
         self._grad_node = List[Int]()
         self._recorded_live = False
->>>>>>> origin/main
 
     def no_grad(mut self):
         """Enter inference mode: later operations keep no graph or gradients.
@@ -512,12 +503,9 @@ struct Tape(Movable):
         self._word_armed = False
         self._word_node = -1
         self._ids.clear()
-<<<<<<< HEAD
         self._shapes.clear()
-=======
         self._grad_node.clear()
         self._recorded_live = False
->>>>>>> origin/main
 
     def arm_fold_word(mut self, dst: FP, factor: Float32):
         """AUTOGRAD_CURVE_WORD: the next AXIS_ALL sum or mean recorded on
