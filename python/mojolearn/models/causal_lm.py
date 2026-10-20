@@ -1,73 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`CausalLM`: a whole decoder-only language model assembled from a Hugging
-Face checkpoint (lane/model-loader, 2026-09-17).
+"""Load causal language models and run prefill, decoding and generation.
 
-    lm = CausalLM.load("path/to/model", weight_format="bfloat16")
-    logits = lm.forward(ids)                    # (B, L) int32 in, (B, L, vocab) float32 out
-    state = lm.allocate_state(B, max_tokens)
-    logits = lm.forward(ids, state)             # prefill, state carried
-    logits = lm.step(next_ids, state)           # one token per row, (B, vocab)
-    out = lm.generate(ids, 16)                  # greedy, (B, L + 16) int32
+`CausalLM.load` accepts a supported Hugging Face checkpoint directory. Token
+arrays use `(batch, length)` shape. `forward` returns vocabulary logits;
+`generate` appends a bounded continuation. `stream` exposes bounded reads and
+resumable generation state. Pass a matching `models.Tokenizer` for text input
+and output.
 
-THE STACK. Embedding gather -> N blocks in checkpoint order -> final RMSNorm
--> tied or untied head, exactly the spelling `SambaStack._forward` and
-`SambaInference._run` use for the same three non-block steps: on a GPU
-column the `_training_impl` primitives (`embedding_forward`,
-`rms_norm_forward`, `linear_forward`; the `_mojolearn_training` binding),
-on the CPU column the three entries of `_mojolearn_neural_host` at the
-addresses `SambaInference._run` hands them. So those bits are the ones the
-Samba lanes certified; nothing new is spelled here. The blocks are the
-library's own (`TransformerBlock`, `Mamba1Block`, `Mamba2Block` on a GPU;
-their `*Inference` twins on the CPU), built ONCE in `__init__` and kept, so
-the device-resident session a `TransformerBlock` carries per Python object
-(commit 9da5c4685) lives as long as this model does; `SambaStack` rebuilds
-its blocks per call and this class deliberately does not.
-
-WHICH OPTIONS REACH THE BLOCK. `config.py` plans every interface option
-with its value; `_block_kwargs` reads the LIVE block signature and passes a
-keyword only when the value differs from the interface default, and refuses
-by name any option the live block does not accept whose value differs from
-what today's block fixes. That is how a Llama 3 config is refused at
-`norm_eps=1e-5` today (the block fixes 1e-6) and honored the day lane B1's
-signature lands, without a line changing here.
-
-NUMERIC PROFILE. `numeric_profile=` names the number format the matrix
-products compute in (`mojolearn._numeric_profile`). It is its own parameter,
-independent of `numeric_mode`, and opt in: None is the process default,
-which is `fp32_v1` unless the caller changed it, and a registered profile
-that no block computes under yet is refused by name before any tensor is
-read. `weight_format` below is storage and does not change the arithmetic.
-
-WEIGHT FORMATS. `weight_format="float32"` keeps every tensor float32.
-`"bfloat16"` hands the blocks their projection matrices as
-`lowbit.BF16Weight`: bits copied straight from a BF16 checkpoint (no
-conversion at all), or `lowbit.pack_one` of a float32/float16 checkpoint;
-`"int8"` is `lowbit.pack_one(..., "int8")` of the materialized float32.
-Which tensors count as projections is BY NAME (`_PROJECTIONS`): the
-attention and MLP matrices, Mamba's `in_proj`/`x_proj`/`dt_proj`/`out_proj`;
-`A_log` stays float32 and so do the embedding table and the head, which
-never pass through a block (the head GEMM takes float32). Every block then
-reports `weight_format` equal to what was asked.
-
-POSITIONS. A transformer block refuses absolute positions at or above 8192
-in Mojo (DEVIATION 812). `max_positions` defaults to the smaller of the
-config's `max_position_embeddings` and that ceiling, is refused by name
-above either, and every `forward`, `step` and `generate` checks the
-sequence length against it BEFORE any kernel runs. Mamba models are
-recurrent and carry no position; their `max_positions` is None.
-
-GREEDY DECODING. `generate` is greedy only (`greedy=True`; anything else is
-refused by name): the next id is the argmax of the last position's logits,
-ties to the LOWEST index, spelled as a sequential scan with a strict `>`
-over the row (`_byte_lm_host._greedy_next_bytes`'s rule), which no fold
-order can move. The logits are the certified bits; the argmax is a host
-selection over them, part of no identity claim.
-
-NO REAL CHECKPOINT HAS BEEN LOADED THROUGH THIS CLASS YET (lane C runs
-that). This lane loaded the synthetic checkpoints of
-`tests/test_models_loader.py` only, and it moves no arithmetic bit, so it
-takes no DEVIATION number.
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
 import array as _pyarray
 import inspect
@@ -499,19 +440,11 @@ class CausalLM:
     # ------------------------------------------------------------ surface
     @property
     def blocks(self):
-        return list(self._blocks)
+        return self._runtime.causal_lm_blocks(self)
 
     def parameters(self):
-        """Every tensor by CHECKPOINT name, as held (packed where packed)."""
-        p = self.plan
-        out = {p.embed_name: self._embed, p.norm_name: self._norm}
-        if p.head_name is not None:
-            out[p.head_name] = self._head
-        for i, blk in enumerate(self._blocks):  # glue: walks the model layers
-            names = dict((k, n) for k, n, _ in p.layer_weights(i))  # glue: names the weights of one layer
-            for key, w in zip(blk._W_NAMES, blk._w):  # glue: walks the named weights of one layer
-                out.setdefault(names.get(key, f"layers.{i}.{key}"), w)
-        return out
+        """Return tensors by checkpoint name, retaining their existing storage."""
+        return self._runtime.causal_lm_parameters(self)
 
     def _ids(self, x, what, step=False):
         pb = probe(x)

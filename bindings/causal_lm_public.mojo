@@ -33,6 +33,7 @@ def causal_lm_admit_binding(
 ) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entries = g[].bi.dict()
+    entries["weight_names"] = g[].bi.object.__getattribute__(model._blocks[0], "_W_NAMES")
     for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:
         entries[name] = _native_function(primitives, name)
     var kind = String(model.kind)
@@ -90,6 +91,32 @@ def _positions(model: PythonObject, state: PythonObject, length: Int) raises:
         raise Error("CausalLM: sequence exceeds max_positions")
     if state is not None and have + length > Int(py=state.max_tokens):
         raise Error("CausalLM: sequence exceeds allocated state capacity")
+
+
+def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var result = g[].bi.dict()
+    var p = model.plan
+    result[p.embed_name] = model._embed
+    result[p.norm_name] = model._norm
+    if p.head_name is not None:
+        result[p.head_name] = model._head
+    var weight_names = model._native_entries["weight_names"]
+    for i in range(len(model._blocks)):
+        var names = g[].bi.dict()
+        for j in range(len(p._layer_map)):
+            var entry = p._layer_map[j]
+            names[entry[0]] = PythonObject(String(entry[1]).replace("{i}", String(i)))
+        var blk = _block(model, i)
+        for j in range(min(len(weight_names), len(blk["_w"]))):
+            var key = weight_names[j]
+            var name = names.get(key, PythonObject("layers." + String(i) + "." + String(key)))
+            result.setdefault(name, blk["_w"][j])
+    return result
+
+
+def causal_lm_blocks_binding(model: PythonObject) raises -> PythonObject:
+    return GENERATION_BOUNDARY.get_or_create_ptr()[].bi.list(model._blocks)
 
 
 def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacity: PythonObject) raises -> PythonObject:
@@ -274,6 +301,8 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
                     raise Error("CausalLM: layer state is owned by a decode session")
                 var old_profile = g[].bi.getattr(st, "arithmetic_profile", PythonObject(None))
                 var profile_id = blk.get("_arithmetic_profile", PythonObject(None))
+                if old_profile is None and Int(py=st.cached_tokens) != 0 and Bool(py=blk.get("_arithmetic_profile_changed", PythonObject(False))):
+                    raise Error("CausalLM: cached state requires arithmetic profile metadata")
                 if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
                     raise Error("CausalLM: state arithmetic profile differs")
                 if profile_id is not None:
@@ -289,6 +318,7 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
                 if device15:
                     if blk["_native_session"] is None:
                         blk["_native_session"] = e["create"]()
+                        blk["_session_binding"] = e["block_binding"]
                     st.cached_tokens = e["forward15"](blk["_native_session"], addresses, params)
                 elif profile:
                     st.cached_tokens = e["forward15_host"](addresses, params)
@@ -720,7 +750,7 @@ def _array_bytes(value: PythonObject) raises -> PythonObject:
 
 
 def _hash() raises -> PythonObject:
-    return _native_function(Python.import_module("hashlib"), "sha256")()
+    return GENERATION_BOUNDARY.get_or_create_ptr()[].hash_type()
 
 
 def _hash_scalar(hash: PythonObject, value: PythonObject) raises:
@@ -783,7 +813,7 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     var h = _hash()
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     for name in [String("schema"), String("model"), String("options"), String("maximum"),
-                 String("produced"), String("positions"), String("lengths"), String("finished"), String("text")]:
+                 String("produced"), String("positions"), String("lengths"), String("finished"), String("text"), String("tokenizer")]:
         _hash_scalar(h, checkpoint[name])
     h.update(checkpoint["pending_bytes"])
     h.update(_array_bytes(checkpoint["prompt"]))
@@ -822,6 +852,9 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
         finished.append(s[].finished[i])
     result["finished"] = finished
     result["text"] = PythonObject(s[].tokenizer is not None)
+    result["tokenizer"] = PythonObject(None)
+    if s[].tokenizer is not None:
+        result["tokenizer"] = _native_function(s[].tokenizer._m, "vocab_fingerprint")(s[].tokenizer)
     result["pending_bytes"] = g[].bi.bytes(s[].pending_bytes)
     var options = g[].bi.list()
     options.append(s[].greedy)
@@ -866,6 +899,10 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
         raise Error("generation: checkpoint checksum differs")
     if Bool(py=checkpoint["text"]) and tokenizer is None:
         raise Error("generation: a text checkpoint requires its tokenizer")
+    if Bool(py=checkpoint["text"]):
+        var fingerprint = _native_function(tokenizer._m, "vocab_fingerprint")(tokenizer)
+        if not Bool(py=checkpoint["tokenizer"] == fingerprint):
+            raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])
     var s = stream._native.downcast_value_ptr[GenerationHandle]()
     s[].produced = Int(py=checkpoint["produced"])

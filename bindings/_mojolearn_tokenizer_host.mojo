@@ -117,13 +117,14 @@ from tokenizer.train.bpe_train import (
     TrainedVocabulary,
     train_bpe,
 )
-from bindings.generation_buffers import generation_initialize_binding
+from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
 from bindings.causal_lm_public import (
     GenerationHandle, causal_lm_admit_binding, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
     causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
     causal_lm_snapshot_binding, causal_lm_resume_binding,
+    causal_lm_parameters_binding, causal_lm_blocks_binding,
 )
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
@@ -1395,6 +1396,47 @@ def vocab_decode_public_binding(tokenizer: PythonObject, seq: PythonObject, byte
     return raw.decode("utf-8", errors)
 
 
+def vocab_fingerprint_binding(tokenizer: PythonObject) raises -> PythonObject:
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var h = g[].hash_type()
+    ref tok = owner[].tok.value()
+    for i in range(tok.ranks.n_tokens()):
+        h.update(PythonObject(String(tok.ranks.length[i]) + ":").encode("ascii"))
+        var bytes = g[].bi.bytearray()
+        for j in range(tok.ranks.length[i]):
+            bytes.append(Int(tok.ranks.arena[tok.ranks.offset[i] + j]))
+        h.update(bytes)
+    for i in range(len(tok.sp_id)):
+        h.update(PythonObject(String(tok.sp_id[i]) + ":" + String(tok.sp_length[i]) + ":").encode("ascii"))
+        var bytes = g[].bi.bytearray()
+        for j in range(tok.sp_length[i]):
+            bytes.append(Int(tok.sp_arena[tok.sp_offset[i] + j]))
+        h.update(bytes)
+    for value in [tokenizer.pattern, tokenizer.normalizer, tokenizer.unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]:
+        h.update(g[].bi.str(value).encode("utf-8"))
+        h.update(PythonObject("\n").encode("ascii"))
+    return h.hexdigest()
+
+
+def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var raw = data.encode("utf-8") if Bool(py=bi.isinstance(data, bi.str)) else bi.memoryview(data).tobytes()
+    var bytes = List[UInt8](capacity=len(raw))
+    for i in range(len(raw)):
+        bytes.append(UInt8(Int(py=raw[i])))
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var offsets = owner[].tok.value().pretokenize(bytes)
+    var out = bi.list()
+    for i in range(len(offsets) - 1):
+        out.append(raw[bi.slice(offsets[i], offsets[i + 1])])
+    return out
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1435,6 +1477,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[vocab_decode_binding]("vocab_decode")
         module.def_function[vocab_encode_public_binding]("vocab_encode_public")
         module.def_function[vocab_decode_public_binding]("vocab_decode_public")
+        module.def_function[vocab_pretokenize_public_binding]("vocab_pretokenize_public")
+        module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[generation_initialize_binding]("generation_initialize")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         module.def_function[causal_lm_admit_binding]("causal_lm_admit")
@@ -1450,6 +1494,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[causal_lm_resident_binding]("causal_lm_resident")
         module.def_function[causal_lm_snapshot_binding]("causal_lm_snapshot")
         module.def_function[causal_lm_resume_binding]("causal_lm_resume")
+        module.def_function[causal_lm_parameters_binding]("causal_lm_parameters")
+        module.def_function[causal_lm_blocks_binding]("causal_lm_blocks")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))
