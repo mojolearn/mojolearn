@@ -65,3 +65,10 @@ ops	operation session (mojolearn.ops.Session): checks pending on CPU, Apple, NVI
 ops.Session	operation session: checks pending on CPU, Apple, NVIDIA and AMD
 MoEBlock.backward	new tape backward; no NVIDIA+AMD reference records yet (sequence/checks/moe_backward_check.mojo)
 Session.embedding	operation session embedding: its tape checks (embedding_check tape case, autograd embedding_gpu/cpu) pending on CPU, Apple, NVIDIA and AMD
+Session.optimizer	operation session optimizer: its session-vs-Sequential bit checks (test_ops_optimizer) pending on CPU, Apple, NVIDIA and AMD
+Session.step	operation session optimizer: its session-vs-Sequential bit checks (test_ops_optimizer) pending on CPU, Apple, NVIDIA and AMD
+Session.scheduler_step	operation session optimizer: its session-vs-Sequential bit checks (test_ops_optimizer) pending on CPU, Apple, NVIDIA and AMD
+Session.learning_rate	operation session optimizer: its session-vs-Sequential bit checks (test_ops_optimizer) pending on CPU, Apple, NVIDIA and AMD
+Session.zero_grad	operation session optimizer: its session-vs-Sequential bit checks (test_ops_optimizer) pending on CPU, Apple, NVIDIA and AMD
+Session.optimizer_state	operation session optimizer: its session-vs-Sequential bit checks (test_ops_optimizer) pending on CPU, Apple, NVIDIA and AMD
+Session.load_optimizer_state	operation session optimizer: its session-vs-Sequential bit checks (test_ops_optimizer) pending on CPU, Apple, NVIDIA and AMD
