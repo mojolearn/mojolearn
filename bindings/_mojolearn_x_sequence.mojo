@@ -16,7 +16,8 @@ from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
-from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py
+from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py
+from autograd.program_control import ops_program_control_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
@@ -277,6 +278,21 @@ def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> Pyt
 
 def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject) raises -> PythonObject:
     return ops_program_dynamic_py[DeviceExec, OPS_DEVICE](sid, pid, arrays)
+
+
+def ops_program_execute_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject,
+                                dynamic_shapes: PythonObject, optimize: PythonObject, profile: PythonObject) raises -> PythonObject:
+    return ops_program_execute_py[DeviceExec, OPS_DEVICE](sid, pid, arrays, dynamic_shapes, optimize, profile)
+
+
+def ops_program_inspect_binding(sid: PythonObject, pid: PythonObject, optimize: PythonObject) raises -> PythonObject:
+    return ops_program_inspect_py[DeviceExec, OPS_DEVICE](sid, pid, optimize)
+
+
+def ops_program_control_binding(sid: PythonObject, pid: PythonObject, condition: PythonObject,
+                                other: PythonObject, arrays: PythonObject, limit: PythonObject,
+                                optimize: PythonObject) raises -> PythonObject:
+    return ops_program_control_py[DeviceExec, OPS_DEVICE](sid, pid, condition, other, arrays, limit, optimize)
 
 
 def ops_program_fit_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -668,6 +684,9 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_program_info_binding]("ops_program_info")
         m.def_function[ops_program_run_binding]("ops_program_run")
         m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
+        m.def_function[ops_program_execute_binding]("ops_program_execute")
+        m.def_function[ops_program_inspect_binding]("ops_program_inspect")
+        m.def_function[ops_program_control_binding]("ops_program_control")
         m.def_function[ops_program_fit_binding]("ops_program_fit")
         m.def_function[ops_program_free_binding]("ops_program_free")
         m.def_function[ops_save_program_binding]("ops_save_program")

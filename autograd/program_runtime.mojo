@@ -58,7 +58,7 @@ def replay_values[E: Exec & Movable & Deinitable](
             # Preserve the caller's stream key; advance its counter per
             # optimizer step and node so distinct layers never share masks.
             ints[len(ints) - 1] += step * p.n_nodes() + k
-        var h = s._op_run(p.code[k], hs, ints, fs)
+        var h = s._program_op(k, p.code[k], hs, ints, fs)
         temps.append(h)
         vals.append(h)
     var outputs = List[Int]()

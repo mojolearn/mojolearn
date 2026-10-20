@@ -1207,7 +1207,7 @@ class Session:
         info = self._b.ops_capture(self._sid(), ins, outs)
         return Program(self, info)
 
-    def run(self, program, *arrays, dynamic_shapes=False):
+    def run(self, program, *arrays, dynamic_shapes=False, optimize=False):
         """Run ``program`` on new input arrays: one call that uploads them,
         runs every captured operation on the device and returns the outputs.
 
@@ -1224,30 +1224,20 @@ class Session:
         natively. A captured reshape should use ``-1`` for an inferred
         dimension when its element count can change.
         """
-        from ._cast_in import as_input, describe, matrix_view
         if not isinstance(program, Program) or program._s is not self:
             raise ValueError("program must be a Program of this session")
-        if dynamic_shapes:
-            return self._b.ops_program_dynamic(self._sid(), program._id, arrays)
-        if len(arrays) != len(program.input_shapes):
-            raise ValueError(f"this program takes {len(program.input_shapes)} input arrays, got {len(arrays)}")
-        keep, descs = [], []
-        for k, x in enumerate(arrays):  # glue: one descriptor per program input
-            a = as_input(x)
-            want = program.input_shapes[k]
-            have = a.shape if a.ndim > 1 else (a.size, 1)
-            if tuple(have) != want:
-                raise ValueError(f"input {k} must have the shape {want}, got {tuple(a.shape)}")
-            if program.input_kinds[k] == 1 and a.dtype.kind not in "iu":
-                raise TypeError(f"input {k} holds ids and must be an integer array, got dtype {a.dtype}")
-            m = matrix_view(a, "x") if a.ndim > 2 else a
-            keep.append(m)
-            descs.append(describe(m, "x"))
-        outs = [np.empty(sh, dtype=np.float32) for sh in program.output_shapes]  # glue: one destination per output
-        addrs = [o.ctypes.data for o in outs]  # glue: one destination address per program output
-        self._b.ops_program_run(self._sid(), program._id, descs, addrs)
-        del keep
-        return outs[0] if len(outs) == 1 else tuple(outs)
+        try:
+            return self._b.ops_program_execute(self._sid(), program._id, arrays,
+                                               dynamic_shapes, optimize, False)
+        except Exception as error:
+            # Preserve Python-facing argument error categories; native Mojo
+            # owns all validation and array preparation before graph replay.
+            message = str(error)
+            if message.startswith("ValueError: "):
+                raise ValueError(message[12:]) from error
+            if message.startswith("TypeError: "):
+                raise TypeError(message[11:]) from error
+            raise
 
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
@@ -1610,9 +1600,32 @@ class Program:
         kinds = info[4] if len(info) > 4 else [0] * len(self.input_shapes)
         self.input_kinds = tuple(int(k) for k in kinds)  # glue: one kind per program input
 
-    def run(self, *arrays, dynamic_shapes=False):
+    def run(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
-        return self._s.run(self, *arrays, dynamic_shapes=dynamic_shapes)
+        return self._s.run(self, *arrays, dynamic_shapes=dynamic_shapes, optimize=optimize)
+
+    def inspect(self, *, optimize=False):
+        """Return the graph's operations, references, attributes and shapes."""
+        return self._s._b.ops_program_inspect(self._s._sid(), self._id, optimize)
+
+    def profile(self, *arrays, dynamic_shapes=False, optimize=False):
+        """Run and return outputs with per-node timing and storage accounting."""
+        return self._s._b.ops_program_execute(self._s._sid(), self._id, arrays,
+                                             dynamic_shapes, optimize, True)
+
+    def run_if(self, condition, otherwise, *arrays, optimize=False):
+        """Evaluate a scalar condition graph and execute its selected branch."""
+        if condition._s is not self._s or otherwise._s is not self._s:
+            raise ValueError("control-flow programs must belong to the same session")
+        return self._s._b.ops_program_control(self._s._sid(), self._id, condition._id,
+                                             otherwise._id, arrays, 0, optimize)
+
+    def while_loop(self, *arrays, condition, max_iterations, optimize=False):
+        """Apply this state graph while the scalar condition holds, up to a limit."""
+        if condition._s is not self._s:
+            raise ValueError("control-flow programs must belong to the same session")
+        return self._s._b.ops_program_control(self._s._sid(), self._id, condition._id,
+                                             0, arrays, max_iterations, optimize)
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
