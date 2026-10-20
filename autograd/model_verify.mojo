@@ -95,7 +95,7 @@ def _rotr(x: UInt32, n: UInt32) -> UInt32:
 def _sha256_block(mut h: List[UInt32], k: List[UInt32], mut w: List[UInt32], src: List[UInt8], off: Int):
     """One 64-byte block of `src` at `off` into the state `h`. UInt32
     arithmetic wraps, as SHA-256 requires."""
-    for t in range(16):  # small-loop(16: the block's message words)
+    for t in range(16):  # the block's message words
         var o = off + 4 * t
         w[t] = (
             (src[o].cast[DType.uint32]() << 24)
@@ -103,7 +103,7 @@ def _sha256_block(mut h: List[UInt32], k: List[UInt32], mut w: List[UInt32], src
             | (src[o + 2].cast[DType.uint32]() << 8)
             | src[o + 3].cast[DType.uint32]()
         )
-    for t in range(16, 64):  # small-loop(48: the message schedule)
+    for t in range(16, 64):  # the message schedule
         var s0 = _rotr(w[t - 15], 7) ^ _rotr(w[t - 15], 18) ^ (w[t - 15] >> 3)
         var s1 = _rotr(w[t - 2], 17) ^ _rotr(w[t - 2], 19) ^ (w[t - 2] >> 10)
         w[t] = w[t - 16] + s0 + w[t - 7] + s1
@@ -115,7 +115,7 @@ def _sha256_block(mut h: List[UInt32], k: List[UInt32], mut w: List[UInt32], src
     var f = h[5]
     var g = h[6]
     var hh = h[7]
-    for t in range(64):  # small-loop(64: the compression rounds)
+    for t in range(64):  # the compression rounds
         var big1 = _rotr(e, 6) ^ _rotr(e, 11) ^ _rotr(e, 25)
         var ch = (e & f) ^ ((~e) & g)
         var t1 = hh + big1 + ch + k[t] + w[t]
@@ -143,7 +143,7 @@ def _sha256_block(mut h: List[UInt32], k: List[UInt32], mut w: List[UInt32], src
 def _hex32(v: UInt32) -> String:
     comptime DIGITS = "0123456789abcdef"
     var out = String("")
-    for i in range(8):  # small-loop(8: the word's hex digits)
+    for i in range(8):  # the word's hex digits
         var nib = Int((v >> UInt32(28 - 4 * i)) & UInt32(0xF))
         out += String(DIGITS[byte=nib])
     return out
@@ -162,18 +162,18 @@ def sha256_hex(data: List[UInt8]) -> String:
         _sha256_block(h, k, w, data, 64 * blk)
     # the tail, the 0x80 marker, zeros and the message length in bits (big-endian)
     var tail = List[UInt8]()
-    for i in range(64 * full, n):  # small-loop(< 64: the last partial block)
+    for i in range(64 * full, n):  # the last partial block
         tail.append(data[i])
     tail.append(UInt8(0x80))
-    while len(tail) % 64 != 56:  # small-loop(< 64: padding bytes)
+    while len(tail) % 64 != 56:  # padding bytes
         tail.append(UInt8(0))
     var bits = UInt64(n) * UInt64(8)
-    for i in range(8):  # small-loop(8: the length bytes)
+    for i in range(8):  # the length bytes
         tail.append(((bits >> UInt64(56 - 8 * i)) & UInt64(0xFF)).cast[DType.uint8]())
-    for blk in range(len(tail) // 64):  # small-loop(1 or 2: the padded tail blocks)
+    for blk in range(len(tail) // 64):  # the padded tail blocks
         _sha256_block(h, k, w, tail, 64 * blk)
     var out = String("")
-    for i in range(8):  # small-loop(8: the state words)
+    for i in range(8):  # the state words
         out += _hex32(h[i])
     return out
 
