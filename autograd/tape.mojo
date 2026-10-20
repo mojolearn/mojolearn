@@ -1126,6 +1126,7 @@ struct Tape(Movable):
             host[i] = bitcast[DType.float32](Int32(w))
         var p = self._alloc(ex, len(words))
         ex.upload(p, FP(unsafe_from_address=Int(host.unsafe_ptr())), len(words))
+        _ = len(host)  # keep-alive: Mojo frees a local at its last named use, which would be inside the upload's arguments
         return p
 
     def strided_view_args[E: Exec](

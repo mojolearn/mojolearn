@@ -122,6 +122,7 @@ def _put_ids[E: Exec](mut ex: E, ids: List[Int32]) raises -> FP:
     """The ids' bit patterns in executor words (Tape.ids' layout)."""
     var p = ex.alloc(len(ids))
     ex.upload(p, FP(unsafe_from_address=Int(ids.unsafe_ptr())), len(ids))
+    _ = len(ids)  # keep-alive (Mojo frees a local at its last named use)
     return p
 
 
