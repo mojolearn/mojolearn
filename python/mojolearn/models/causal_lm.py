@@ -358,8 +358,11 @@ class CausalLM:
             primitives = self._prims._ext
         int15_binding = None
         if self._head_int15 is not None:
-            from .._linalg_impl import _int15_binding
-            int15_binding = _int15_binding()
+            if self.device == "cpu":
+                int15_binding = _backend.load_host_module("_mojolearn_linalg_host")
+            else:
+                from .._linalg_impl import _int15_binding
+                int15_binding = _int15_binding()
         self._runtime.causal_lm_admit(self, self._blocks[0]._extension(), primitives, int15_binding)
 
     def _make_blocks(self, cls, layers, kwargs):
