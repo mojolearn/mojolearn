@@ -572,7 +572,7 @@ def _causal_native_connections():
         neural = _binding()
     except (ImportError, RuntimeError, ValueError, OSError) as exc:
         neural = str(exc)
-    entries.update(transformer=neural, mamba1=neural, mamba2=neural, primitives=neural)
+    entries.update(transformer=neural, mamba1=neural, mamba2=neural, mamba3=neural, primitives=neural)
     try:
         entries["linalg"] = _backend.load_host_module("_mojolearn_linalg_host")
     except (ImportError, RuntimeError, ValueError, OSError) as exc:

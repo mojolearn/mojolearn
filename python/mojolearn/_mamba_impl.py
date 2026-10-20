@@ -1496,58 +1496,9 @@ class Mamba3Block(_MambaBase):
         "out_proj.weight",
     )
 
-    def __init__(self, weights):
-        what = "Mamba3Block"
-        # lane/identical-lowbit-inference (2026-09-17): packed projection
-        # weights (mojolearn.lowbit) materialized exactly, fp32 path after.
-        weights, self.weight_format = _lowbit.unpack(weights, what)
-        arrs = _take(weights, what, self._W_NAMES)
-        norm_w = _f32_strict(arrs[0], what, "block_norm.weight")
-        if norm_w.ndim != 1 or norm_w.shape[0] < 1:
-            raise ValueError(
-                f"mojolearn {what}: block_norm.weight must be 1-D "
-                f"(d_model,), got shape {norm_w.shape}"
-            )
-        dm = int(norm_w.shape[0])
-        if dm % (_M3_HEADDIM // _M3_EXPAND) != 0:
-            # Mamba3Dims.of's rule, quoted; the Mojo constructor remains
-            # the authority (raw-binding callers hit it), this copy
-            # exists because the state buffers below cannot be sized
-            # without a whole nheads (DEVIATION 793's accepted
-            # duplication, same as Mamba2Block's).
-            raise ValueError(
-                f"mojolearn {what}: d_model must be a multiple of "
-                f"{_M3_HEADDIM // _M3_EXPAND} so that nheads = "
-                f"2*d_model/{_M3_HEADDIM} is whole (profile constants "
-                "headdim 64, expand 2 -- Mamba3Dims.of carries the same "
-                f"refusal); got {dm}"
-            )
-        di = _M3_EXPAND * dm
-        nh = di // _M3_HEADDIM
-        dip = (2 * di + 2 * _M3_NGROUPS * _M3_D_STATE + 3 * nh
-               + _M3_NUM_ROPE_ANGLES)
-        self.d_model = dm
-        self.d_inner = di
-        self.nheads = nh
-        self.d_in_proj = dip
-        self._w = [
-            norm_w,
-            _want_shape(_f32_strict(arrs[1], what, "in_proj.weight"),
-                        what, "in_proj.weight", (dip, dm)),
-            _want_shape(_f32_strict(arrs[2], what, "dt_bias"),
-                        what, "dt_bias", (nh,)),
-            _want_shape(_f32_strict(arrs[3], what, "B_norm.weight"),
-                        what, "B_norm.weight", (_M3_D_STATE,)),
-            _want_shape(_f32_strict(arrs[4], what, "C_norm.weight"),
-                        what, "C_norm.weight", (_M3_D_STATE,)),
-            _want_shape(_f32_strict(arrs[5], what, "B_bias"),
-                        what, "B_bias", (nh, _M3_D_STATE)),
-            _want_shape(_f32_strict(arrs[6], what, "C_bias"),
-                        what, "C_bias", (nh, _M3_D_STATE)),
-            _want_shape(_f32_strict(arrs[7], what, "D"), what, "D", (nh,)),
-            _want_shape(_f32_strict(arrs[8], what, "out_proj.weight"),
-                        what, "out_proj.weight", (dm, di)),
-        ]
+    def __init__(self, weights, *, numeric_mode=None):
+        return _native_neural_bridge.RUNTIME.neural_block_init(
+            self, weights, "mamba3", (None, numeric_mode), _native_neural_bridge.CONTEXT)
 
     def allocate_state(self, batch_size):
         """Return a zero `Mamba3State` for `batch_size` sequences.
@@ -2143,6 +2094,8 @@ class _Mamba3DecodeSession:
 from . import _native_neural_bridge
 Mamba1Block.__init__ = Mamba1Block.__init__.__wrapped__
 Mamba2Block.__init__ = Mamba2Block.__init__.__wrapped__
+Mamba3Block.__init__ = Mamba3Block.__init__.__wrapped__
 Mamba1Block.__getattribute__ = object.__getattribute__
 Mamba2Block.__getattribute__ = object.__getattribute__
+Mamba3Block.__getattribute__ = object.__getattribute__
 from .models import causal_lm as _causal_native_connection

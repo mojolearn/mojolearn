@@ -367,7 +367,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             shapes.append(py_ints([di, 16]))
             shapes.append(py_ints([di]))
             shapes.append(py_ints([dm, di]))
-        else:
+        elif kind == "mamba2":
             if dm % 32 != 0:
                 raise Error("CausalLM: Mamba2 d_model must be a multiple of 32")
             var nh = di // 64
@@ -391,6 +391,24 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             shapes.append(py_ints([nh]))
             shapes.append(py_ints([di]))
             shapes.append(py_ints([dm, di]))
+        elif kind == "mamba3":
+            if dm % 32 != 0:
+                raise Error("Mamba3Block: d_model must be a multiple of 32")
+            var nh = di // 64
+            var dip = 2 * di + 256 + 3 * nh + 32
+            fields["nheads"] = PythonObject(nh)
+            fields["d_in_proj"] = PythonObject(dip)
+            shapes.append(py_ints([dm]))
+            shapes.append(py_ints([dip, dm]))
+            shapes.append(py_ints([nh]))
+            shapes.append(py_ints([128]))
+            shapes.append(py_ints([128]))
+            shapes.append(py_ints([nh, 128]))
+            shapes.append(py_ints([nh, 128]))
+            shapes.append(py_ints([nh]))
+            shapes.append(py_ints([dm, di]))
+        else:
+            raise Error("neural block: unsupported block kind " + kind)
     for i in range(len(names)):  # driver-loop: over fixed block weight slots
         var name = names[i]
         if kind == "transformer" and i == 6 and not gated:
@@ -402,7 +420,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         var shape = List[Int]()
         for j in range(len(shapes[i])):  # driver-loop: over tensor shape metadata
             shape.append(Int(py=shapes[i][j]))
-        if kind != "transformer" and i == 2 and len(value.shape) == 2:
+        if (kind == "mamba1" or kind == "mamba2") and i == 2 and len(value.shape) == 2:
             shape = [shape[0], 4]
         _model_shape(value, shape, String(name))
         base.append(value)
