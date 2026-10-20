@@ -67,3 +67,8 @@ Program.while_loop	native loop execution; cross-vendor qualification pending
 Program.distribute	native distributed captured programs: qualification pending
 Session.load_distributed	native distributed captured programs: qualification pending
 _distributed_program.DistributedProgram	native distributed captured programs: qualification pending
+
+# Native model/tensor/pipeline partitioning awaits installed-vendor qualification.
+mojolearn.ops.Program.partition
+mojolearn.ops.Session.load_partitioned
+mojolearn._partitioned_program.PartitionedProgram

@@ -61,6 +61,7 @@ np = require_numpy('mojolearn.ops')
 
 from . import _backend
 from ._distributed_program import DistributedProgram as _DistributedProgram
+from ._partitioned_program import PartitionedProgram as _PartitionedProgram
 
 __all__ = ["Session", "Program"]
 
@@ -1067,6 +1068,10 @@ class Session:
         return self._program_execute(self._id, program._id, program._s._id,
                                            arrays, dynamic_shapes, optimize, False)
 
+    def load_partitioned(self, path, devices=(0,)):
+        """Restore a complete partitioned program onto physical devices."""
+        return _PartitionedProgram(self._b, self._b.ops_partitioned_load(path, devices))
+
     def load_distributed(self, path, devices=(0,)):
         """Restore a complete distributed program onto the given devices."""
         return _DistributedProgram(self._b, self._b.ops_distributed_load(path, devices))
@@ -1474,6 +1479,19 @@ class Program:
             self._s._id, self._id, arrays, targets,
             (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta))
         return self
+
+    def partition(self, devices=(0,), *, stages=2, tensor_shards=1,
+                  microbatches=2, optimizer, parameters=(), seed=0):
+        """Partition captured operations and model state across native workers.
+
+        ``stages`` and ``tensor_shards`` fix the logical graph; ``microbatches``
+        fixes the pipeline and gradient order. Physical devices may change
+        when restoring a checkpoint. Eligible matrix products split independent
+        output columns; stage-owned parameters and moments stay on one device.
+        """
+        return _PartitionedProgram(self._s._b, self._s._b.ops_partitioned_open(
+            self._s._id, self._id, devices, stages, tensor_shards,
+            microbatches, optimizer, parameters, seed))
 
     def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
                    parameters=(), seed=0):

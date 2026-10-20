@@ -38,3 +38,28 @@ Pending: integration compilation, installed CPU/Apple/NVIDIA/AMD executions,
 physical two-GPU NVIDIA/AMD coverage, whole-workload performance, tensor
 parallelism, model-state partitioning and overlapped pipeline execution.
 The latter three are not represented as completed by this data-parallel path.
+
+## Model, tensor and pipeline executor (qualification pending)
+
+`Program.partition` builds a separate immutable logical graph. Eligible
+single-use rank-two matrix weights are packed into independent output-column
+slices before device upload. Every parameter slice and its optimizer buffers
+have one physical owner. Shared tensors retain one authoritative owner and
+are copied transiently to consumers. The checkpoint retains the transformed
+graph, logical placement, full parameter/moment bytes, optimizer configuration,
+epoch, step, shuffle seed and dropout coordinates; a load may change physical
+device count while preserving this logical graph.
+
+Native worker tasks schedule DAG levels across pipeline microbatches. Independent
+tensor branches and different microbatch stages can run concurrently. Every
+operation interval records node, microbatch, logical stage and physical device.
+Activations are staged through native host buffers; local VJPs recompute each
+node. This is a correctness-first executor, with substantial transfer and
+recomputation cost. No memory-limit or throughput improvement is admitted until
+physical-device residency, overlap and full-workload measurements establish it.
+
+The initial native data-parallel debug run found a transfer-buffer lifetime bug:
+converting a List pointer to an untracked FP let Mojo destroy the List before
+the copy. Retained native disassembly proves free-before-write; the repair keeps
+the List owner alive through the final transfer. The failing run remains part
+of the evidence.

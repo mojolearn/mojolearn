@@ -26,6 +26,11 @@ from autograd.distributed_pyapi import (
     distributed_run_py, distributed_state_py, distributed_residency_py,
     distributed_save_py, distributed_close_py,
 )
+from autograd.partition_pyapi import (
+    partition_open, partition_load, partition_fit_py, partition_run_py,
+    partition_state_py, partition_residency_py, partition_save_py,
+    partition_close_py, partition_profile_py,
+)
 from max.gpu.host import DeviceContext
 from sequence.launch_profile import launch_profile_level
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
@@ -285,6 +290,60 @@ def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: Python
 def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
     return ops_program_info_py[DeviceExec, OPS_DEVICE](sid, pid)
 
+
+
+def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
+    stages: PythonObject, tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject,
+) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    return partition_open[DeviceExec, OPS_DEVICE](sid, pid, ids, stages, tensor_shards, microbatches, optimizer, parameters, seed, executors^)
+
+
+def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    return partition_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+
+
+def ops_partitioned_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
+    loss: PythonObject, epochs: PythonObject, batch: PythonObject, shuffle: PythonObject, delta: PythonObject,
+) raises -> PythonObject:
+    return partition_fit_py[DeviceExec, OPS_DEVICE](id, arrays, targets, loss, epochs, batch, shuffle, delta)
+
+
+def ops_partitioned_run_binding(id: PythonObject, arrays: PythonObject) raises -> PythonObject:
+    return partition_run_py[DeviceExec, OPS_DEVICE](id, arrays)
+
+
+def ops_partitioned_state_binding(id: PythonObject) raises -> PythonObject:
+    return partition_state_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_partitioned_residency_binding(id: PythonObject) raises -> PythonObject:
+    return partition_residency_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_partitioned_save_binding(id: PythonObject, path: PythonObject) raises -> PythonObject:
+    return partition_save_py[DeviceExec, OPS_DEVICE](id, path)
+
+
+def ops_partitioned_close_binding(id: PythonObject) raises -> PythonObject:
+    return partition_close_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_partitioned_profile_binding(id: PythonObject) raises -> PythonObject:
+    return partition_profile_py[DeviceExec, OPS_DEVICE](id)
 
 
 def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
@@ -812,6 +871,15 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_py_c_function(ops_program_inspect_c_binding, "ops_program_inspect")
         m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")
         m.def_function[ops_program_fit_binding]("ops_program_fit")
+        m.def_function[ops_partitioned_open_binding]("ops_partitioned_open")
+        m.def_function[ops_partitioned_load_binding]("ops_partitioned_load")
+        m.def_function[ops_partitioned_fit_binding]("ops_partitioned_fit")
+        m.def_function[ops_partitioned_run_binding]("ops_partitioned_run")
+        m.def_function[ops_partitioned_state_binding]("ops_partitioned_state")
+        m.def_function[ops_partitioned_residency_binding]("ops_partitioned_residency")
+        m.def_function[ops_partitioned_save_binding]("ops_partitioned_save")
+        m.def_function[ops_partitioned_close_binding]("ops_partitioned_close")
+        m.def_function[ops_partitioned_profile_binding]("ops_partitioned_profile")
         m.def_function[ops_distributed_open_binding]("ops_distributed_open")
         m.def_function[ops_distributed_load_binding]("ops_distributed_load")
         m.def_function[ops_distributed_fit_binding]("ops_distributed_fit")
