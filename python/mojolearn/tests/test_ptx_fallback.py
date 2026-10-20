@@ -89,7 +89,8 @@ class Install(unittest.TestCase):
 
     def build(self, dirty=False):
         B, gp = self.B, self.B.gpu_plugins
-        self.dist_info("mojolearn", (gp.CORE_MARKER, json.dumps(gp.core_marker(self.version))))
+        # the split core is its own distribution, mojolearn-core (2026-10-20)
+        self.dist_info(gp.CORE_DISTRIBUTION, (gp.CORE_MARKER, json.dumps(gp.core_marker(self.version))))
         self.arches = ["sm_89"]
         for arch in self.arches:
             for tier in ("", "identical"):
