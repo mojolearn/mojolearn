@@ -79,7 +79,7 @@ _OP = {
     "hard_sigmoid": 54, "hard_swish": 55, "clip": 56, "abs": 57, "floor": 58, "ceil": 59,
     "round": 60, "sin": 61, "cos": 62, "sign": 63, "reciprocal": 64, "pow": 65,
     "minimum": 66, "maximum": 67, "where": 68, "compare": 69, "logical": 70,
-    "expand": 71, "argmax": 72, "pad": 73,
+    "expand": 71, "argmax": 72, "pad": 73, "any_all": 74, "cumsum": 75, "index": 76,
 }
 # autograd/ops_api.mojo OPS_COMPARE and OPS_LOGICAL kinds
 _COMPARE = {"eq": 0, "gt": 1, "lt": 2, "ge": 3, "le": 4, "ne": 5}
@@ -789,6 +789,62 @@ class Session:
         if not counts or len(counts) > 2 * _MAX_RANK:
             raise ValueError(f"pads must list two counts for each of 1 to {_MAX_RANK} axes")
         return self._op("pad", (x,), counts, [float(value)])
+
+    def any(self, x, axis=None, keepdims=None):
+        """1.0 where some element over ``axis`` is nonzero, else 0.0, with
+        the axes and shapes of :meth:`sum`. A NaN counts as nonzero. No
+        gradient flows through it."""
+        return self._op("any_all", (x,), [0, _keepdims(keepdims)] + _axes(axis))
+
+    def all(self, x, axis=None, keepdims=None):
+        """1.0 where every element over ``axis`` is nonzero, else 0.0, with
+        the axes and shapes of :meth:`sum`. A NaN counts as nonzero. No
+        gradient flows through it."""
+        return self._op("any_all", (x,), [1, _keepdims(keepdims)] + _axes(axis))
+
+    def cumsum(self, x, axis, exclusive=False, reverse=False):
+        """The running sum of ``x`` along ``axis``; the result has ``x``'s shape.
+
+        ``exclusive=True`` leaves each position's own value out (the first
+        position is 0) and ``reverse=True`` sums from the last position to
+        the first, as ONNX ``CumSum`` does. The additions follow one fixed
+        order, so the result has the same bits on every device. The
+        gradient flows back to ``x``.
+
+        >>> h = s.cumsum(s.tensor(np.ones((2, 4), dtype=np.float32)), axis=1)
+        >>> s.numpy(h)[0]
+        array([1., 2., 3., 4.], dtype=float32)
+        """
+        return self._op("cumsum", (x,), [_int(axis, "axis"), 1 if exclusive else 0, 1 if reverse else 0])
+
+    def index(self, x, indices, axes=None):
+        """``x`` picked at several index tensors at once, as ``x[i, j]`` with
+        integer arrays in NumPy or torch.
+
+        ``indices`` lists tensors of integer positions (stored as float
+        values, a negative one counting from the end of its axis), one for
+        each of ``axes`` (ascending; by default the leading axes). The
+        index tensors broadcast together; the result's axes are their
+        broadcast shape followed by ``x``'s other axes, except that when the
+        indexed axes are consecutive the broadcast axes stand where the
+        first of them stood. A position outside its axis raises an error.
+        The gradient flows back to ``x``; the index tensors take none.
+
+        >>> x = s.tensor(np.arange(12, dtype=np.float32).reshape(3, 4))
+        >>> i = s.tensor(np.array([[0, 2]], dtype=np.float32))
+        >>> j = s.tensor(np.array([[1, 3]], dtype=np.float32))
+        >>> s.numpy(s.index(x, (i, j)))
+        array([[ 1., 11.]], dtype=float32)
+        """
+        indices = tuple(indices)
+        if not indices or len(indices) > _MAX_RANK:
+            raise ValueError(f"index takes 1 to {_MAX_RANK} index tensors")
+        if axes is None:
+            axes = range(len(indices))
+        axes = [_int(a, "axes") for a in axes]  # glue: at most eight axis arguments
+        if len(axes) != len(indices):
+            raise ValueError("index takes one axis for each index tensor")
+        return self._op("index", (x,) + indices, axes)
 
     # ------------------------------------------------------------ layers
     def linear(self, x, weight, bias=None, activation=None):
