@@ -9,7 +9,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 def graph_python_error(error: Error) -> PyObjectPtr:
     var message = String(error)
     if message.startswith("TypeError: "):
-        return raise_python_exception(Error(message[11:]), ExceptionType.TypeError)
+        return raise_python_exception(Error(message[byte=11:]), ExceptionType.TypeError)
     if message.startswith("ValueError: "):
-        return raise_python_exception(Error(message[12:]), ExceptionType.ValueError)
+        return raise_python_exception(Error(message[byte=12:]), ExceptionType.ValueError)
     return raise_python_exception(error)
