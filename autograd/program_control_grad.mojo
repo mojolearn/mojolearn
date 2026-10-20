@@ -127,7 +127,9 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
                 var node = value_ref - body.n_in
                 if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
                     raise Error("ValueError: while_loop state outputs must hold floating-point values")
-    var prepared = program_inputs(body, arrays, True, True)
+    # A while VJP differentiates the same state domain as inference while:
+    # dimensions may grow, but each input and carried state keeps its rank.
+    var prepared = program_inputs(body, arrays, True, not is_loop)
     var buffers = List[FP]()
     var temps = List[Int]()
     var initial = List[Int]()
@@ -178,6 +180,8 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
                     break
                 outputs = _replay_handles(s[], body, outputs, leaves, temps, True)
                 for k in range(len(outputs)):  # driver-loop: over loop state output kinds
+                    if s[].shape_nd(outputs[k]).ndim != body.in_shapes[k].ndim:
+                        raise Error("ValueError: while_loop body must preserve each state tensor's rank")
                     if s[].int_words[s[]._slot(outputs[k])]:
                         raise Error("ValueError: while_loop state outputs must hold floating-point values")
                 iterations += 1

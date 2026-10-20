@@ -223,6 +223,10 @@ def executed_control_vjp():
         integer_body = s.capture(x, s.argmax(x, keepdims=True, int32=True))
         _refuses(lambda: _invoke(integer_body.vjp_while, [[1.25]], condition=loop_condition,
                                 max_iterations=1, seeds=seed), "outputs must hold floating", ValueError)
+        rank_changing = s.capture(x, s.reshape(x, (1, 1, 1)))
+        _refuses(lambda: _invoke(rank_changing.vjp_while, [[1.25]], condition=loop_condition,
+                                max_iterations=1, seeds=np.ones((1, 1, 1), np.float32)),
+                 "preserve each state tensor's rank", ValueError)
         integer_x = s.ids(np.array([[0]], np.int32))
         integer_identity = s.capture(integer_x, integer_x)
         _refuses(lambda: _invoke(integer_identity.vjp_while, np.array([[0]], np.int32),
