@@ -272,7 +272,7 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var view = _parallel_view(value)
     var shape = value.shape if g[].bi.type(value) is g[].array_cls else view.shape
-    var fmt = String(PythonObject(view.format).lstrip("=@<"))
+    var fmt = String(view.format.lstrip("=@<"))
     if len(shape) != 1 or Int(py=shape[0]) != rows:
         raise Error("SmallMLPTrainer targets must match batch rows")
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
@@ -297,8 +297,6 @@ def _mlp_gemm(a: PythonObject, b: PythonObject, m: Int, n: Int, k: Int, transpos
     if Int(py=written) != m * n:
         raise Error("RuntimeError: SmallMLPTrainer neural GEMM returned incomplete output")
     _mlp_finite(out, "GEMM")
-    _ = a^
-    _ = b^
     return out
 
 
@@ -308,8 +306,6 @@ def _mlp_bias(values: PythonObject, bias: PythonObject, rows: Int, columns: Int,
     if Int(py=written) != rows * columns:
         raise Error("RuntimeError: SmallMLPTrainer bias returned incomplete output")
     _mlp_finite(out, "bias/activation")
-    _ = values^
-    _ = bias^
     return out
 
 
@@ -319,7 +315,6 @@ def _mlp_sum(values: PythonObject, rows: Int, columns: Int) raises -> PythonObje
     if Int(py=written) != columns:
         raise Error("RuntimeError: SmallMLPTrainer sum returned incomplete output")
     _mlp_finite(out, "bias gradient")
-    _ = values^
     return out
 
 
