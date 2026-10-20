@@ -21,10 +21,10 @@
 #           attention: the layer tape entry (refusal scan of s.dh, 27 + A
 #             launches, one wait), then 9 _d2d of bst.dw_* into grad and 1
 #             _d2d of bst.d_x into s.dh
-#           Mamba-3: mamba3_prefill_backward_on (~30 launches, its own
-#             closing synchronize), 9 _d2d into grad + 1 into s.dh, then ONE
-#             MORE ctx.synchronize() to keep its gradients alive past the
-#             copies
+#           Mamba-3: the Mamba-3 walk D1-D5 (~30 launches, its own
+#             closing synchronize; autograd/rules_mamba3.mojo), 9 _d2d into
+#             grad + 1 into s.dh, then ONE MORE ctx.synchronize() to keep
+#             its gradients alive past the copies
 #   embed   identical_embedding_backward_into s.dh -> pair[0:vd] or grad[0]
 #   tied    _pair_add_device grad[0] = pair[0:vd] + pair[vd:2vd]
 #
@@ -35,10 +35,11 @@
 #                          the transformer rules; the nine weight gradients
 #                          land in bst.dw_*, bound to views of grad), input
 #                          gradient bst.d_x;
-#                          Mamba-3: one M3_BLOCK node (autograd/rules_mamba3)
-#                          [x, nine weights (variable_into grad views)] ->
-#                          st.residual_out, input gradient storage a
-#                          per-layer buffer of the session (m3_dx)
+#                          Mamba-3: mamba3_block_record's stage nodes
+#                          (autograd/rules_mamba3, M3_NORM .. M3_RESID, tags
+#                          73-78) over x and the nine weights (variable_into
+#                          grad views) -> st.residual_out, input gradient
+#                          storage a per-layer buffer of the session (m3_dx)
 #                          layer i's output gradient storage is G(i+1), the
 #                          storage of the next layer's input; G(n) = s.dh
 #   norm_f.weight (variable_into grad[norm_f])
@@ -66,11 +67,12 @@
 #     in place into grad views, the input gradient is read in place by the
 #     next rule), no per-layer wait (the refusal scans are deferred to the
 #     step's closing wait, AUTOGRAD_REFUSE_DEFER);
-#   - Mamba-3: no extra synchronize per block (the gradients stay alive in
-#     the keep list); the 10 copies stay (the VJP allocates its outputs) and
-#     so does the VJP's own closing synchronize (its contract);
+#   - Mamba-3: no extra synchronize per block and no copies (the stage
+#     rules write the nine weight gradients into grad views and the input
+#     gradient into m3_dx in place); the walk's own closing synchronize per
+#     block stays (the block's scratch is freed after it);
 #   - the embedding reads G(0) in place (no copy into s.dh first).
-# One wait at the end (ex.sync(), before the keep list and the views go).
+# One wait at the end (ex.sync(), before the Mamba-3 blocks and the views go).
 #
 # Refused (samba_resident_train_step raises, samba_tape_eligible): an attention
 # layer with non-default block options (the resident session builds default ones).
@@ -95,11 +97,12 @@ from autograd.rules_transformer import (
     TransformerRules,
 )
 from autograd.rules_mamba3 import (
-    M3_BLOCK,
-    M3KeepRef,
+    M3BlockRef,
     M3StagesRef,
     M3WeightsRef,
-    Mamba3BlockRules,
+    Mamba3Rules,
+    mamba3_supports,
+    mamba3_writes_total,
 )
 
 # The Samba train step's backward runs on the tape only (training/checks/samba_tape_step_check.mojo
@@ -160,7 +163,7 @@ def samba_tape_eligible(ws: List[LlamaDeviceWeights]) -> Bool:
 struct SambaRules(BackwardRules):
     """Backward adapters for the Samba stack's fused native ops (embedding,
     final norm, head, loss), each attention layer's TransformerRules and each
-    Mamba-3 layer's M3_BLOCK rule, picked by the slot in Args i11.
+    Mamba-3 layer's stage rules (Mamba3Rules), picked by the slot in Args i11.
 
     Holds pointers to the session's buffers and stages; all must outlive
     the backward."""
@@ -173,7 +176,7 @@ struct SambaRules(BackwardRules):
     var sin_tab: FP
     var m3_w: List[M3WeightsRef]
     var m3_st: List[M3StagesRef]
-    var keep: M3KeepRef
+    var m3_blk: List[M3BlockRef]
     var ton: Bool
     var b: Int
     var l: Int
@@ -206,7 +209,7 @@ struct SambaRules(BackwardRules):
         out self, ctx: DeviceContext,
         var bsts: List[SambaBstRef], var fwds: List[SambaFwdRef], var t_eps: List[Float32],
         cos_tab: FP, sin_tab: FP,
-        var m3_w: List[M3WeightsRef], var m3_st: List[M3StagesRef], keep: M3KeepRef, ton: Bool,
+        var m3_w: List[M3WeightsRef], var m3_st: List[M3StagesRef], var m3_blk: List[M3BlockRef], ton: Bool,
         b: Int, l: Int, dm: Int, vocab: Int, eps: Float32, seed: FP,
         dh: SambaF32Ref, dhn: SambaF32Ref, dlogits: SambaF32Ref, ws_a: SambaF32Ref, ws_b: SambaF32Ref,
         dot_out: SambaF32Ref, dh_tmp: SambaF32Ref, dprod: SambaF32Ref, rstd: SambaF32Ref,
@@ -222,7 +225,7 @@ struct SambaRules(BackwardRules):
         self.sin_tab = sin_tab
         self.m3_w = m3_w^
         self.m3_st = m3_st^
-        self.keep = keep
+        self.m3_blk = m3_blk^
         self.ton = ton
         self.b = b
         self.l = l
@@ -270,8 +273,8 @@ struct SambaRules(BackwardRules):
                 self.ctx, self.bsts[0], self.fwds[0], self.cos_tab, self.sin_tab, self.t_eps[0], self.b, self.l, 0,
             )
             return tf.writes_total(tag, saved, edge)
-        if tag == M3_BLOCK:
-            return True
+        if mamba3_supports(tag):
+            return mamba3_writes_total(tag, edge)
         # embedding, final norm, head, loss: each input has one consumer, the
         # plain first-contribution write in place (accumulation order, header)
         return False
@@ -279,7 +282,7 @@ struct SambaRules(BackwardRules):
     def supports(self, tag: Int) -> Bool:
         return (
             (tag >= TF_RMS_NORM_INPUT and tag <= TF_RESIDUAL)
-            or tag == M3_BLOCK
+            or mamba3_supports(tag)
             or (tag >= SAMBA_EMBEDDING and tag <= SAMBA_CE)
         )
 
@@ -299,10 +302,12 @@ struct SambaRules(BackwardRules):
                 # the layer's output: the hand path's entry refusal of d_out
                 self._refuse_nonfinite(upstream, rows[1] * cols[1], layer)
             tf.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
-        elif tag == M3_BLOCK:
+        elif mamba3_supports(tag):
             var slot = saved.i11
             self._slot_check(slot, len(self.m3_w), "Mamba-3")
-            var m3 = Mamba3BlockRules(self.ctx, self.m3_w[slot], self.m3_st[slot], self.keep, self.b, self.l, self.ton)
+            var m3 = Mamba3Rules(
+                self.ctx, self.m3_w[slot], self.m3_st[slot], self.m3_blk[slot], self.b, self.l, self.ton
+            )
             m3.apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif tag == SAMBA_EMBEDDING:
             self._embedding(upstream, gradients)
