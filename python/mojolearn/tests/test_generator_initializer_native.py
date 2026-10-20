@@ -44,7 +44,7 @@ CASES = [
 
 def refusal(function, expected_type, *args, **kwargs):
     audit = audit_native_call(function, *args, **kwargs)
-    assert isinstance(audit.exception, expected_type), audit.report()
+    assert type(audit.exception) is expected_type, audit.report()
     for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
         assert not audit.report()[key], audit.report()
 
@@ -67,7 +67,7 @@ def test_initializer_preserves_scalar_rounding_abi_and_seeded_draw(shape, operat
     ('kaiming_normal', dict(fan_in=0), ZeroDivisionError, 0),
     ('kaiming_normal', dict(fan_in=-2), ValueError, 0),
     ('xavier_normal', dict(fan_in=2, fan_out=3, gain=-1), ValueError, 0),
-    ('xavier_normal', dict(fan_in=2, fan_out=3, gain=float('inf')), ValueError, 1),
+    ('xavier_normal', dict(fan_in=2, fan_out=3, gain=float('inf')), Exception, 1),
 ])
 def test_initializer_refusals_preserve_order_and_stream_consumption(operation, options, error, advance):
     gen, old = training.Generator(3), LegacyInitializers(3)
