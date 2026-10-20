@@ -33,9 +33,7 @@ def supported_ops():
     # imports before the lowering module exists.
     try:
         from . import _lower
-    except ModuleNotFoundError as e:
-        if e.name != f"{__name__}._lower":
-            raise
+    except ImportError:  # the lowering lane's module is not in this tree yet (`from pkg import missing` raises ImportError)
         return []
     return list(getattr(_lower, "SUPPORTED_OPS", ()))
 
