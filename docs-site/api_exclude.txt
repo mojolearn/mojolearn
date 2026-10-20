@@ -76,3 +76,7 @@ Session.embedding	operation session embedding: its tape checks (embedding_check 
 # lane ag-import-torch
 # end lane ag-import-torch
 # The import elementwise family (docs/plans/MODEL_IMPORT.md 3.3): remove a line once the IMPORT and OPS_IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
+# >>> lane ag-program-embedding: ids tensors in captured programs; remove once test_ops_program.py PROGRAM_DIGEST embedding_* and test_import_lower.py IMPORT_DIGEST embedding_linear lines match on CPU, Apple, NVIDIA and AMD.
+Session.ids	ids tensors for captured embedding and take: PROGRAM_DIGEST and IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
+Program.input_kinds	ids inputs of captured programs: PROGRAM_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
+# <<< lane ag-program-embedding
