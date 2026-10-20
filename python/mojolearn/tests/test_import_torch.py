@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """The torch.export reader (docs/plans/MODEL_IMPORT.md lane 4).
 
-Skipped unless torch imports (the package itself never imports torch; the
-first test checks that in a fresh interpreter). The shared fixtures of
+Skipped loudly unless torch imports: each torch test skips with
+``no torch in this environment (<the import error>)``, and with
+``MOJOLEARN_REQUIRE_TORCH=1`` (the box runs set it) the skip is a failure
+instead. The package itself never imports torch; the first test checks that
+in a fresh interpreter. Torch's bits are a reference here, never a gate. The shared fixtures of
 tests/_onnx_fixture.py are rebuilt as ``nn.Module``s holding the same
 weights and exported with ``torch.export.export``:
 
@@ -37,10 +40,25 @@ from mojolearn.tests import _onnx_fixture as fx
 try:
     import torch
     import torch.export  # noqa: F401
-except Exception:  # torch absent or too old for torch.export
+    _TORCH_ERROR = None
+except Exception as _exc:  # torch absent or too old for torch.export
     torch = None
+    _TORCH_ERROR = "%s: %s" % (type(_exc).__name__, str(_exc)[:160])
 
-needs_torch = pytest.mark.skipif(torch is None, reason="torch with torch.export is not installed")
+#: MOJOLEARN_REQUIRE_TORCH=1 (set by the box runs): a missing torch fails the torch tests instead of skipping them
+REQUIRE_TORCH = os.environ.get("MOJOLEARN_REQUIRE_TORCH") == "1"
+
+
+@pytest.fixture
+def _torch_required():
+    if torch is None:
+        reason = "no torch in this environment (%s)" % _TORCH_ERROR
+        if REQUIRE_TORCH:
+            pytest.fail("MOJOLEARN_REQUIRE_TORCH=1: " + reason)
+        pytest.skip(reason)
+
+
+needs_torch = pytest.mark.usefixtures("_torch_required")
 
 FIXTURES = ["linear_layernorm_linear", "conv_relu_maxpool_flatten_gemm", "attention_two_head_causal",
             "batchnorm_relu"]
@@ -274,10 +292,11 @@ def _digest(arrays):
 
 
 @needs_torch
-@pytest.mark.skipif(not _can_import(), reason="the import lowering or the sequence binding's Program entries "
-                                              "are not available")
 @pytest.mark.parametrize("name", FIXTURES)
 def test_import_equals_onnx_twin(tmp_path, name):
+    # the binding skip sits in the body, after the torch fixture, so MOJOLEARN_REQUIRE_TORCH=1 fails first
+    if not _can_import():
+        pytest.skip("the import lowering or the sequence binding's Program entries are not available")
     import mojolearn
     f = fx.write_fixture(name, tmp_path)
     ep, m = _export(name, f)

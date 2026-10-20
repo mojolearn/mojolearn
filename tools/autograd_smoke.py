@@ -41,6 +41,12 @@ Ten "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing t
                          Conv/Relu/MaxPool/Flatten/Gemm ONNX fixture, written in process to a
                          temporary directory, then one Program.run; finite logits of the
                          expected shape, a SMOKE_DIGEST line (the logits).
+  import-torch-smoke     (2026-10-20, lane ag-torch-twins) mojolearn.import_model of a torch.export
+                         ExportedProgram: a tiny nn.Module (linear, layer norm, linear: the shared
+                         fixture's shapes and weights) exported in process, then one Program.run;
+                         prints `RUN torch <version>` and a SMOKE_DIGEST line, or `SKIPPED no torch
+                         (<reason>)` and exits 0 when torch is missing (MOJOLEARN_REQUIRE_TORCH=1 makes
+                         that a failure). The row's status reads `SKIPPED` then, never `ok`.
 
 A check binary is built ONCE per vendor by the orchestrator (`build-commands` prints the lines; this
 tool never builds), then `run` starts each entry with a 5 s timer:
@@ -50,7 +56,8 @@ tool never builds), then `run` starts each entry with a 5 s timer:
 
 A row is `ok` (exited 0 inside its timer), `STARTED` (still running at the timer: it started, no
 verdict), `failed` (non-zero exit, with its last lines) or `not built` (no binary: refused by name,
-never a pass). tools/apple_smoke_set.py lists these entries beside its derived lanes and
+never a pass); a probe that prints a `SKIPPED <reason>` line reads `SKIPPED` (never silence, never
+`ok`). tools/apple_smoke_set.py lists these entries beside its derived lanes and
 tools/gate_smoke_box.py runs them after the board smoke on NVIDIA and AMD.
 """
 import argparse
@@ -93,6 +100,9 @@ ENTRIES = (
     # 2026-10-20 (lane ag-import-docs): model import, docs/plans/MODEL_IMPORT.md
     {"name": "import-model-smoke", "probe": "import",
      "what": "mojolearn.import_model of a tiny ONNX file written in process, then one Program.run"},
+    # 2026-10-20 (lane ag-torch-twins): the torch.export source of the importer; RUN or SKIPPED, never silent
+    {"name": "import-torch-smoke", "probe": "import-torch",
+     "what": "mojolearn.import_model of a tiny torch.export ExportedProgram, then one Program.run (SKIPPED without torch)"},
 )
 
 
@@ -250,8 +260,74 @@ def probe_import():
     return 0
 
 
+def _load_onnx_fixture():
+    """The tests' fixture module, loaded by path (the wheel ships no tests)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "smoke_onnx_fixture", ROOT / "python" / "mojolearn" / "tests" / "_onnx_fixture.py")
+    fx = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = fx      # its dataclasses resolve their module by name
+    spec.loader.exec_module(fx)
+    return fx
+
+
+def probe_import_torch():
+    """import-torch-smoke: does a torch.export import start and its Program run. The module is the
+    shared linear_layernorm_linear fixture (x [4, 6] -> Linear 5 -> LayerNorm -> Linear 3) rebuilt as
+    an nn.Sequential holding the fixture's weights, exported at batch 4. Prints RUN or SKIPPED, always."""
+    import tempfile
+    import numpy as np
+    try:
+        import torch
+        import torch.export  # noqa: F401
+    except Exception as exc:  # torch absent, or too old for torch.export
+        print("SKIPPED no torch (%s: %s)" % (type(exc).__name__, str(exc)[:160]), flush=True)
+        if os.environ.get("MOJOLEARN_REQUIRE_TORCH") == "1":
+            print("SMOKE_FAIL import-torch MOJOLEARN_REQUIRE_TORCH=1 and torch does not import")
+            return 1
+        return 0
+    import mojolearn
+    print("RUN torch %s" % torch.__version__, flush=True)
+    fx = _load_onnx_fixture()
+    with tempfile.TemporaryDirectory() as tmp:
+        f = fx.write_fixture("linear_layernorm_linear", tmp)
+    I = {k: torch.frombuffer(bytearray(v.data), dtype=torch.float32).reshape(v.shape).clone()
+         for k, v in f.initializers.items()}
+    fc1, ln, fc2 = torch.nn.Linear(6, 5), torch.nn.LayerNorm(5, eps=1e-5), torch.nn.Linear(5, 3)
+    with torch.no_grad():
+        fc1.weight.copy_(I["w1"]); fc1.bias.copy_(I["b1"])
+        ln.weight.copy_(I["ln_scale"]); ln.bias.copy_(I["ln_bias"])
+        fc2.weight.copy_(I["w2"]); fc2.bias.copy_(I["b2"])
+    module = torch.nn.Sequential(fc1, ln, fc2).eval()
+    x = np.random.default_rng(7).standard_normal((4, 6), dtype=np.float32)
+    ep = torch.export.export(module, (torch.from_numpy(x),))
+    model = mojolearn.import_model(ep)
+    y = model.run(x)
+    y = np.asarray(y[0] if isinstance(y, (list, tuple)) else y)
+    if y.shape != (4, 3) or not np.isfinite(y).all():
+        print("SMOKE_FAIL import-torch output %s finite %s" % (y.shape, bool(np.isfinite(y).all())))
+        return 1
+    print("SMOKE_DIGEST import-torch logits %s vendor %s mode %s"
+          % (_probe_digest([y]), mojolearn.vendor(), mojolearn.numeric_mode()))
+    return 0
+
+
 PROBES = {"sequential": probe_sequential, "session": probe_session, "generate": probe_generate,
-          "predict": probe_predict, "import": probe_import}
+          "predict": probe_predict, "import": probe_import, "import-torch": probe_import_torch}
+
+
+def _skipped_line(log, offset=0):
+    """The first `SKIPPED <reason>` line a probe printed after `offset` (the log appends), or None."""
+    try:
+        with open(log, "rb") as fh:
+            fh.seek(offset)
+            text = fh.read().decode(errors="replace")
+        for line in text.splitlines():
+            if line.startswith("SKIPPED "):
+                return line[:300]
+    except OSError:
+        pass
+    return None
 
 
 def binary(bin_dir, entry, vendor):
@@ -331,8 +407,14 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S):
             cmd = ([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"] + e.get("pytest_args", [])
                    + [str(ROOT / e["pytest"])])
             env = dict(os.environ, MOJOLEARN_AUTOGRAD_SMOKE_OUT=str(logs / ("fit-digests-%s.json" % vendor)))
+        offset = log.stat().st_size if log.exists() else 0
         status, rc, seconds = start(cmd, log, timeout, env=env, cwd=str(ROOT))
         row.update(command=cmd, status=status, rc=rc, seconds=seconds)
+        if status == "ok" and "probe" in e:
+            skipped = _skipped_line(log, offset)
+            if skipped:
+                row.update(status="SKIPPED", detail=skipped)
+                status = "SKIPPED"
         if status == "failed":
             row["tail"] = _tail(log)
         rows.append(row)
