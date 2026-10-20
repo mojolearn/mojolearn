@@ -24,6 +24,7 @@ from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prop
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
 from autograd.program_control import ops_program_control_py
 from autograd.distributed_pyapi import (
+    distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
     distributed_run_py, distributed_state_py, distributed_residency_py,
     distributed_save_py, distributed_close_py,
@@ -211,23 +212,26 @@ def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> Pyt
 
 
 def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    stages: PythonObject, tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject,
+    stages: PythonObject, tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[HostExec]()
     if len(ids) != 1 or ids[0] != 0:
         raise Error("CPU replay uses devices=(0,); logical shards retain the distributed reduction order")
     executors.append(HostExec())
-    return partition_open[HostExec, OPS_HOST](sid, pid, ids, stages, tensor_shards, microbatches, optimizer, parameters, seed, executors^)
+    var handle = partition_open[HostExec, OPS_HOST](sid, pid, ids, stages, tensor_shards, microbatches, optimizer, parameters, seed, executors^)
+    return distributed_object(cls, binding, handle)
 
 
-def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject) raises -> PythonObject:
+def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[HostExec]()
     if len(ids) != 1 or ids[0] != 0:
         raise Error("CPU replay uses devices=(0,); logical shards retain the distributed reduction order")
     executors.append(HostExec())
-    return partition_load[HostExec, OPS_HOST](path, ids, executors^)
+    var handle = partition_load[HostExec, OPS_HOST](path, ids, executors^)
+    return distributed_object(cls, binding, handle)
+
 
 
 def ops_partitioned_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -261,23 +265,26 @@ def ops_partitioned_profile_binding(id: PythonObject) raises -> PythonObject:
 
 
 def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    logical_shards: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject,
+    logical_shards: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[HostExec]()
     if len(ids) != 1 or ids[0] != 0:
         raise Error("CPU replay uses devices=(0,); logical shards retain the distributed reduction order")
     executors.append(HostExec())
-    return distributed_open[HostExec, OPS_HOST](sid, pid, ids, logical_shards, optimizer, parameters, seed, executors^)
+    var handle = distributed_open[HostExec, OPS_HOST](sid, pid, ids, logical_shards, optimizer, parameters, seed, executors^)
+    return distributed_object(cls, binding, handle)
 
 
-def ops_distributed_load_binding(path: PythonObject, devices: PythonObject) raises -> PythonObject:
+def ops_distributed_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[HostExec]()
     if len(ids) != 1 or ids[0] != 0:
         raise Error("CPU replay uses devices=(0,); logical shards retain the distributed reduction order")
     executors.append(HostExec())
-    return distributed_load[HostExec, OPS_HOST](path, ids, executors^)
+    var handle = distributed_load[HostExec, OPS_HOST](path, ids, executors^)
+    return distributed_object(cls, binding, handle)
+
 
 
 def ops_distributed_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
