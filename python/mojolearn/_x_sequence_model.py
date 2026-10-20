@@ -276,8 +276,8 @@ class Sequential:
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training inputs: a bool, integer, float32 or float64 array in C
-            or Fortran order, used as float32.
+            Training inputs: a bool, integer, float16, float32 or float64
+            array in any memory layout, used as float32.
         y : array-like
             Targets: (n_samples,) or (n_samples, n_outputs) for ``mse`` and
             ``huber``; one label per row for ``cross_entropy`` (any number
@@ -385,8 +385,8 @@ class Sequential:
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Inputs: a bool, integer, float32 or float64 array in C or
-            Fortran order, used as float32.
+            Inputs: a bool, integer, float16, float32 or float64 array in
+            any memory layout, used as float32.
 
         Returns
         -------
@@ -419,8 +419,8 @@ class Sequential:
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Inputs: a bool, integer, float32 or float64 array in C or
-            Fortran order, used as float32.
+            Inputs: a bool, integer, float16, float32 or float64 array in
+            any memory layout, used as float32.
 
         Returns
         -------

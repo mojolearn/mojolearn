@@ -195,7 +195,8 @@ class Session:
         """Copy an array to the device; returns its handle.
 
         ``x`` is a scalar, a 1-D array (one column) or a 2-D array of bool,
-        integers, float32 or float64 in C or Fortran order, used as float32.
+        integers, float16, float32 or float64 in any memory layout, used as
+        float32.
         ``requires_grad=True`` (recording sessions only) makes it a
         trainable input whose gradient :meth:`grad` returns after
         :meth:`backward`.

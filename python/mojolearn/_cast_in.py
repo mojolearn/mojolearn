@@ -19,12 +19,12 @@ def as_input(x):
 
 
 def describe(x, name):
-    """The descriptor of ndarray `x` (0-, 1- or 2-D, numeric, C or Fortran
-    order). A 1-D array of n is (n, 1), a scalar (1, 1). The caller keeps
-    `x` alive across the call into Mojo."""
+    """The descriptor of ndarray `x` (0-, 1- or 2-D, numeric, any strides:
+    Mojo reads it by its signed byte strides). A 1-D array of n is (n, 1), a
+    scalar (1, 1). The caller keeps `x` alive across the call into Mojo."""
     dt = x.dtype
-    if dt.kind not in "biuf" or (dt.kind == "f" and dt.itemsize not in (4, 8)):
-        raise TypeError(f"{name} must be a numeric array (bool, integer, float32 or float64), "
+    if dt.kind not in "biuf" or (dt.kind == "f" and dt.itemsize not in (2, 4, 8)):
+        raise TypeError(f"{name} must be a numeric array (bool, integer, float16, float32 or float64), "
                         f"got dtype {dt}")
     if not dt.isnative:
         raise TypeError(f"{name} must be in native byte order, got dtype {dt.str}")
@@ -32,8 +32,6 @@ def describe(x, name):
         raise ValueError(f"{name} must have at most 2 dimensions, got {x.ndim}")
     if x.size == 0:
         raise ValueError(f"{name} must not be empty")
-    if any(st < 0 for st in x.strides):  # glue: at most two stride words, no data
-        raise ValueError(f"{name} must not be a reversed view; pass numpy.ascontiguousarray({name})")
     size = dt.itemsize
     if x.ndim == 0:
         rows, cols, s0, s1 = 1, 1, size, size

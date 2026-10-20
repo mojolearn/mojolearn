@@ -245,7 +245,9 @@ user's arrays travel as INPUT DESCRIPTORS `[address, NumPy dtype number,
 item size, rows, cols, row stride, column stride]` (strides in bytes; a 1-D
 array of n is `(n, 1)`, a scalar `(1, 1)`; `python/mojolearn/_cast_in.py`
 `describe`, parsed by `autograd/pyapi.mojo` `cast_in_of`): bool, int8..int64,
-uint8..uint64, float32 or float64 in C or Fortran order, cast to row-major
+uint8..uint64, float16, float32 or float64 with any byte strides (negative
+included: the span starts at the lowest corner byte, `CastIn.start`/`origin`;
+only overlapping elements are refused), cast to row-major
 float32 on the executor (`core/cast_in.mojo`, `autograd/cast_ops.mojo`
 `OP_CAST_F32` 3500; float32 C order is the plain upload). Python makes no
 copy or cast (lane ag-thin-glue).
