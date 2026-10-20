@@ -108,6 +108,7 @@ out="$tmpdir/_mojolearn_rf.so"
 # shellcheck disable=SC2086  # both flag strings are deliberately word-split
 # MOJOLEARN_EXTRA_DEFINES: diagnostic defines passed through verbatim (the
 # RF candidate A/B builds); empty by default, and it does not move OUTDIR.
+# compiles the entry bindings/entry/entry__mojolearn_rf.mojo, which imports the module body bindings/_mojolearn_rf.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_EXTRA_DEFINES:-} \
     $LINK_FLAGS \

@@ -45,6 +45,7 @@ out=$tmpdir/_mojolearn_x_trees.so
 # Intentionally split compiler option lists, consistent with existing builders.
 # MOJOLEARN_EXTRA_DEFINES: diagnostic defines passed through verbatim (the
 # tools/aft_ab.sh arms); empty by default, and it does not move the outdir.
+# compiles the entry bindings/entry/entry__mojolearn_x_trees.mojo, which imports the module body bindings/_mojolearn_x_trees.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags ${MOJOLEARN_EXTRA_DEFINES:-} -I . -I bindings \
     bindings/entry/entry__mojolearn_x_trees.mojo -o "$out"

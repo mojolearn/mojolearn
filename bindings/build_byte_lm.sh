@@ -87,6 +87,7 @@ esac
 # Compiler concurrency: two workers by default, as before; a shared box
 # sets MOJOLEARN_COMPILE_JOBS=1. `mojo build` refuses a repeated -j, so
 # the value has to be substituted here rather than appended.
+# compiles the entry bindings/entry/entry__mojolearn_byte_lm.mojo, which imports the module body bindings/_mojolearn_byte_lm.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $byte_lm_mode_define -I . -I bindings \
     bindings/entry/entry__mojolearn_byte_lm.mojo -o "$byte_lm_tmpdir/_mojolearn_byte_lm.so"

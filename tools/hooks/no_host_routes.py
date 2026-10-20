@@ -419,7 +419,9 @@ def _gpu_roots(ref_files, texts_of):
                and not p.endswith("_host.sh") and p != "bindings/build_host_family.sh"]
     roots = set()
     for p, t in texts_of(scripts).items():
-        for m in re.finditer(r"bindings/(_mojolearn\w*)\.mojo", t):
+        # bindings/entry/entry_<name>.mojo (the per-binding entry, tools/merged_bindings.py)
+        # only exports the PyInit of the module body bindings/<name>.mojo: the body is the root
+        for m in re.finditer(r"bindings/(?:entry/entry_)?(_mojolearn\w*)\.mojo", t):
             q = f"bindings/{m.group(1)}.mojo"
             if not q.endswith("_host.mojo") and q in ref_files:
                 roots.add(q)

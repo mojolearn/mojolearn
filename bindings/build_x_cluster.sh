@@ -43,6 +43,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-x-cluster.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_x_cluster.so
 # Intentionally split compiler option lists, consistent with existing builders.
+# compiles the entry bindings/entry/entry__mojolearn_x_cluster.mojo, which imports the module body bindings/_mojolearn_x_cluster.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/entry/entry__mojolearn_x_cluster.mojo -o "$out"

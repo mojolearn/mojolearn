@@ -21,6 +21,7 @@ cp bench/results/mamba3/2026-09-09-statepass/reproduction/speed_torch_seq.py too
 for arm in baseline fresh; do
  extra=(-D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL=1)
  if [ "$arm" = fresh ]; then extra=(-D MOJOLEARN_TRANSFORMER_FRESH_PREFILL=1); fi
+ # compiles the entry bindings/entry/entry__mojolearn_transformer.mojo, which imports the module body bindings/_mojolearn_transformer.mojo
  mojo build -j 2 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${extra[@]}" -I . -I bindings bindings/entry/entry__mojolearn_transformer.mojo -o "$out/$arm.so" > "$out/build-$arm.log" 2>&1
  cp "$out/$arm.so" python/mojolearn/identical/_mojolearn_transformer.so
  "$python" tools/transformer_transfer_check.py --output "$out/$arm.json" > "$out/check-$arm.log" 2>&1
