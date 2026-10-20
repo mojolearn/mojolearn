@@ -593,11 +593,33 @@ def native_session_boundary():
     a = np.arange(6, dtype=np.float32).reshape(2, 3)
     _refuses(lambda: _invoke(ops.Session, numeric_mode="invalid"), "numeric_mode", ValueError)
     held = [_invoke(ops.Session)]
+    import weakref
+    released_session = weakref.ref(held[0])
     released_sid = held[0]._id
     released_tensor = held[0].tensor([[1.0]])
     native_shape = held[0]._b.ops_shape
     _invoke(operator.delitem, held, 0)
+    assert released_session() is None, "native setup must not retain a Session reference"
     _refuses(lambda: _invoke(native_shape, released_sid, released_tensor), "session")
+    with tempfile.TemporaryDirectory(prefix="mojolearn-session-lifetime-") as d:
+        with ops.Session() as source:
+            x = source.tensor([[2.0]])
+            program = source.capture(x, source.scale(x, 3))
+            program.save(Path(d) / "program.mjl")
+        loaded_session = _invoke(ops.Session)
+        loaded = _invoke(loaded_session.load_program, Path(d) / "program.mjl")
+        owner_ref, program_ref = weakref.ref(loaded_session), weakref.ref(loaded)
+        loaded_sid = loaded_session._id
+        loaded_tensor = loaded_session.tensor([[1]])
+        native_loaded_shape = loaded_session._b.ops_shape
+        del loaded_session
+        assert owner_ref() is not None, "a live Program must retain its owning Session"
+        _equal(_invoke(loaded.run, [[2]]), np.array([[6]], np.float32))
+        programs = [loaded]
+        del loaded
+        _invoke(operator.delitem, programs, 0)
+        assert program_ref() is None and owner_ref() is None, "native load must not leak Program or Session references"
+        _refuses(lambda: _invoke(native_loaded_shape, loaded_sid, loaded_tensor), "session")
     with _invoke(ops.Session, numeric_mode=" IDENTICAL ") as s:
         assert _invoke(s.__enter__) is s
         x = _invoke(s.tensor, a.tolist())

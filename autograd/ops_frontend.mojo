@@ -78,20 +78,23 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 def _program_object(session: PythonObject, info: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var out = b.object.__new__(session._program_class)
-    b.setattr(out, "_s", session)
-    b.setattr(out, "_id", info[0])
-    b.setattr(out, "_execute_native", session._program_execute)
-    b.setattr(out, "_inspect_native", session._program_inspect)
-    b.setattr(out, "_control_native", session._program_control)
-    b.setattr(out, "_fit_native", session._program_fit)
-    b.setattr(out, "_session_native", session._session_native)
-    b.setattr(out, "params", b.tuple(info[3]))
-    b.setattr(out, "input_kinds", b.tuple(info[4]))
+    out._s = session
+    out._id = info[0]
+    out._execute_native = session._program_execute
+    out._inspect_native = session._program_inspect
+    out._control_native = session._program_control
+    out._fit_native = session._program_fit
+    out._session_native = session._session_native
+    out.params = b.tuple(info[3])
+    out.input_kinds = b.tuple(info[4])
     for k in range(2):  # small-loop(2: input/output shape descriptors): metadata only
         var dims = Python.list()
         for j in range(len(info[k + 1])):  # driver-loop: over graph input/output shapes
             dims.append(b.tuple(info[k + 1][j]))
-        b.setattr(out, "input_shapes" if k == 0 else "output_shapes", b.tuple(dims))
+        if k == 0:
+            out.input_shapes = b.tuple(dims)
+        else:
+            out.output_shapes = b.tuple(dims)
     return out
 
 
@@ -105,13 +108,15 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         if not _nil(session._id) and not _nil(args[0]._id):
             var owner = ops_session[E, KIND](Int(py=session._id))
             owner[].program_free(Int(py=args[0]._id))
-        Python.import_module("builtins").setattr(args[0], "_id", PythonObject(None))
+        var program = args[0]
+        program._id = PythonObject(None)
         return PythonObject(None)
     if name == "close" or name == "exit":
         if not _nil(session._id):
             var owner = session._lifetime.downcast_value_ptr[SessionLifetime[E, KIND]]()
             owner[].close()
-            Python.import_module("builtins").setattr(session, "_id", PythonObject(None))
+            var target = session
+            target._id = PythonObject(None)
         return PythonObject(False) if name == "exit" else PythonObject(None)
     if name == "profile_reset":
         _ = ops_profile_reset_py()
