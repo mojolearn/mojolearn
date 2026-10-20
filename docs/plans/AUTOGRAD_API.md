@@ -394,6 +394,40 @@ metrics on frozen predictions; permutation gather; a recording session's
 gradient against the closed form; refusals). Its `OPS_DIGEST` lines must be
 equal on CPU, Metal, NVIDIA and AMD.
 
+### Optimizers (lane ag-session-optim, 2026-10-19)
+
+The session trains in place: `optimizer` makes an optimizer, `step` updates
+trainable uploads on the executor from the last backward's gradients, with
+the optimizer state on the executor in the session. Nothing is read back
+and nothing is re-uploaded (tools/bench_board_neural.py `OursOpsStep` uses
+it; the old loop downloaded every gradient with `grad` and re-uploaded it).
+
+| Python | Entry | Mojo (`OpsSession`) | Launches |
+|---|---|---|---|
+| `optimizer(kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma)` | `ops_optimizer(sid, [kind, nesterov, schedule, step_size], [lr, momentum, beta1, beta2, eps, wd, gamma])` | `optimizer`: kinds OPT_SGD / OPT_ADAM / OPT_ADAMW, packed as Sequential.compile packs them (`optimizer_config_packed`), schedules autograd/model.mojo SCHED_* | none |
+| `step(opt, params)` | `ops_step(sid, opt, handles)` | `step`: per parameter, its `(optimizer, parameter)` state (an `autograd/optim.mojo` OptimizerState: zero moment buffers, step 0, allocated at the first step), then `step_lr` at `epoch_lr` of the schedule's epoch and the parameter's next step count | ONE OP_OPT per parameter, no clip, no sync |
+| `scheduler_step(opt)`, `learning_rate(opt)` | `ops_scheduler_step`, `ops_learning_rate` | the schedule's epoch; `epoch_lr` (model_fit's `model_lr` delegates to it) | none |
+| `zero_grad()` | `ops_zero_grad(sid)` | `Tape.clear_gradient` on every trainable leaf: the next accumulate=True backward starts it from zero | none |
+| `optimizer_state(opt, p)` | `ops_optimizer_state(sid, opt, h)` -> [t, beta1^t, beta2^t, mu product, h1, h2, h3] | copies of the used state buffers as session tensors (valid until reset) | one OP_COPY per used buffer |
+| `load_optimizer_state(opt, p, state)` | `ops_load_optimizer_state(sid, opt, h, [t, h1, h2, h3], [beta1^t, beta2^t, mu])` | every handle checked, then each used buffer copied in; t and the running products set | one OP_COPY per used buffer |
+
+Identity: OP_OPT is elementwise and its host scalars (f5, f6: Adam's
+lr / (1 - beta1^t) and sqrt(1 - beta2^t) from running products) are a
+function of t and lr alone, so one launch per parameter tensor gives each
+word the flat launch of `model_fit` gives it (`sequence/recurrent.mojo`
+`opt_step`; `autograd/optim.mojo` `optimizer_scalars` is `opt_scalars` word
+for word). State is per parameter (torch's per-parameter `step`); stepping
+every parameter every call equals the flat trainer's global step count. A
+freed parameter's state is retired with it; `close` frees every state.
+
+Check: `python/mojolearn/tests/test_ops_optimizer.py` (a two-layer MLP
+trained by the session ends on `model_fit`'s float32 words from the same
+starting weights, full batch, no shuffle: sgd with a step schedule, sgd with
+Nesterov momentum and weight decay, adam, adam with an exponential schedule,
+adamw; a saved and loaded optimizer state continues bit for bit; zero_grad
+then an accumulating backward equals a plain backward; refusals). Its
+`OPS_OPT_DIGEST` lines must be equal on CPU, Metal, NVIDIA and AMD.
+
 ## Program form (design note, not implemented)
 
 The session runs one Mojo call per op and a Python branch costs one
