@@ -1047,25 +1047,14 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
             if not baseline_path.is_file():
                 raise SystemExit("pack_wheel: the PTX set (cuda/sm_80) requires its PTX_BASELINE.json")
             doc = json.loads(baseline_path.read_text())
-            # binaries only: an index is no PTX row (PTX_BASELINE.json binds it in `indexes`)
+            # binaries only: an index is no PTX row; a merged set's manifest binds
+            # its tier indexes in `indexes` ({} per-binding, which must list none)
             digests = {rel.split("/", 2)[2]: sha(src).hex() for rel, src in files.items() if rel.endswith(".so")}
+            tier_indexes = {rel: sha(p).hex() for rel, p in indexes.items() if not rel.startswith("host/")}
             try:
-                gpu_plugins.validate_baseline_manifest(doc, digests)
+                gpu_plugins.validate_baseline_manifest(doc, digests, indexes=tier_indexes)
             except ValueError as exc:
                 raise SystemExit(f"pack_wheel: invalid PTX set manifest: {exc}") from exc
-            # A merged PTX set's manifest binds its indexes too (top-level
-            # `indexes`, [{"file": "[identical/]_mojolearn_merged.json",
-            # "sha256": hex}], packaging/linux/ptx_baseline.py); per-binding has none.
-            tier_indexes = {rel: sha(p).hex() for rel, p in indexes.items() if not rel.startswith("host/")}
-            rows = doc.get("indexes")
-            if layout == "merged":
-                bound = ({r.get("file"): r.get("sha256") for r in rows if isinstance(r, dict)}
-                         if isinstance(rows, list) else None)
-                if bound != tier_indexes or len(rows) != len(tier_indexes):
-                    raise SystemExit("pack_wheel: invalid PTX set manifest: its indexes do not match the "
-                                     f"set's merged indexes {sorted(tier_indexes)}")
-            elif rows:
-                raise SystemExit("pack_wheel: invalid PTX set manifest: indexes on a per-binding set")
             files[f"{vendor}/{arch}/{gpu_plugins.BASELINE_MANIFEST}"] = baseline_path
         elif baseline_path.exists():
             raise SystemExit("pack_wheel: PTX manifest on a native architecture set")
@@ -1275,7 +1264,9 @@ def main(argv=None, _gates=True):
         bundle = dict(manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest())
         try:
             gpu_plugins.validate_bundled_ptx(bundle, manifest_bytes,
-                {rel.split("/", 2)[2]: sha(path).hex() for rel, path in ptx_set.files.items() if rel.endswith(".so")})
+                {rel.split("/", 2)[2]: sha(path).hex() for rel, path in ptx_set.files.items() if rel.endswith(".so")},
+                indexes={rel.split("/", 2)[2]: sha(path).hex() for rel, path in ptx_set.files.items()
+                         if merged_layout.is_index(rel)})
         except ValueError as exc:
             raise SystemExit(f"pack_wheel: invalid PTX set: {exc}") from exc
     if a.profile == RELEASE_PROFILE:
