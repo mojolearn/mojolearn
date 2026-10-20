@@ -27,9 +27,14 @@ words), and the outputs are downloaded into the caller's arrays. The host
 loop over nodes is a driver loop over model structure; every element of
 work is on the executor.
 
-Not captured: operations whose integer arguments carry the address of a
-caller array (`embedding`'s and `take`'s ids), since the array the
-address named is gone by the time the program runs.
+Index arguments (lane ag-program-embedding): `embedding` and `take`
+called with an ids TENSOR (a session tensor of int32 words: one uploaded
+with `OpsSession.upload_ids`, or an input of the program) record the ids as
+a value ref like any other input, so a program holds them; each input has a
+kind (PROGRAM_IN_FLOAT: cast to float32 at each run; PROGRAM_IN_IDS: cast
+to int32 words, as `upload_ids` casts them). Not captured: the same
+operations called with a caller ARRAY of ids, whose integer arguments carry
+the array's address, gone by the time the program runs.
 
 The description round-trips through integer and float words
 (`program_words` / `program_from_words`), the extension record of a
@@ -41,7 +46,15 @@ from autograd.rankn import RN_MAX_RANK, ShapeN
 from autograd.rankn_api import rn_dims, rn_shape
 
 # The description's record version (the first extension word of a saved program).
-comptime PROGRAM_RECORD_VERSION = 1
+# Version 2 (lane ag-program-embedding) adds one kind word per input after
+# the input shapes; a program whose inputs are all PROGRAM_IN_FLOAT is still
+# written as version 1, word for word what it was, and both versions load.
+comptime PROGRAM_RECORD_VERSION_1 = 1
+comptime PROGRAM_RECORD_VERSION = 2
+# The kind of a program input: float32 values, or int32 words (embedding and
+# take ids), each cast from the caller's array at every run.
+comptime PROGRAM_IN_FLOAT = 0
+comptime PROGRAM_IN_IDS = 1
 # The largest operation code a program may hold (autograd/ops_api.mojo OPS_*):
 # OPS_PAD 73, the last of the import family (lane ag-import-kernels), so a
 # saved imported model that uses those operations loads again. Code 47 is
@@ -111,6 +124,8 @@ struct OpsProgram(Copyable, Movable):
     var live: Bool
     var n_in: Int
     var in_shapes: List[ShapeN]
+    #: PROGRAM_IN_FLOAT or PROGRAM_IN_IDS per input
+    var in_kinds: List[Int]
     #: session handles of the parameters, and the shapes they had at capture
     var params: List[Int]
     var param_shapes: List[ShapeN]
@@ -128,6 +143,7 @@ struct OpsProgram(Copyable, Movable):
         self.live = True
         self.n_in = 0
         self.in_shapes = List[ShapeN]()
+        self.in_kinds = List[Int]()
         self.params = List[Int]()
         self.param_shapes = List[ShapeN]()
         self.code = List[Int]()
@@ -175,11 +191,17 @@ def shape_text(s: ShapeN) -> String:
     return out + ")"
 
 
-def program_refuses_code(code: Int) -> Bool:
-    """Operations a program cannot hold: their integer arguments carry the
-    address of a caller array (autograd/ops_api.mojo OPS_EMBEDDING = 32,
-    OPS_TAKE = 41), and the reserved code 47, which names no operation."""
-    return code == 32 or code == 41 or code == 47
+def program_refuses_node(code: Int, n_args: Int) -> Bool:
+    """Operations a program cannot hold: the reserved code 47, which names
+    no operation, and embedding and take (autograd/ops_api.mojo
+    OPS_EMBEDDING = 32, OPS_TAKE = 41) called with a caller array of ids
+    (one tensor argument; the integer arguments carry the array's address).
+    With the ids as a tensor (two tensor arguments) they are held."""
+    if code == 47:
+        return True
+    if code == 32 or code == 41:
+        return n_args != 2
+    return False
 
 
 # ---------------------------------------------------------------- words
@@ -191,15 +213,23 @@ def _put_shape(mut xi: List[Int64], s: ShapeN):
 
 def program_words(p: OpsProgram) -> Tuple[List[Int64], List[Float32]]:
     """The program's description as checkpoint extension words:
-    ints [record version, n_in, (ndim, dims...) per input, n_params,
+    ints [record version, n_in, (ndim, dims...) per input, (version 2
+    only) one kind word per input, n_params,
     (ndim, dims...) per parameter, n_nodes, per node (code, n_args, the
     refs, n_ints, the ints, n_floats), n_out, the output refs, (ndim,
     dims...) per output]; floats every node's float arguments in node order."""
     var xi = List[Int64]()
-    xi.append(Int64(PROGRAM_RECORD_VERSION))
+    var any_ids = False
+    for k in range(len(p.in_kinds)):  # driver-loop: over program inputs
+        if p.in_kinds[k] != PROGRAM_IN_FLOAT:
+            any_ids = True
+    xi.append(Int64(PROGRAM_RECORD_VERSION if any_ids else PROGRAM_RECORD_VERSION_1))
     xi.append(Int64(p.n_in))
     for k in range(p.n_in):  # driver-loop: over program inputs
         _put_shape(xi, p.in_shapes[k])
+    if any_ids:
+        for k in range(p.n_in):  # driver-loop: over program inputs
+            xi.append(Int64(p.in_kinds[k]))
     xi.append(Int64(len(p.params)))
     for k in range(len(p.params)):  # driver-loop: over program parameters
         _put_shape(xi, p.param_shapes[k])
@@ -252,7 +282,8 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     names an input, a parameter or an earlier node). Its parameters are the
     caller's to fill: `params` holds one 0 per parameter shape."""
     var r = _Reader(len(xi))
-    if r.take(xi, what) != PROGRAM_RECORD_VERSION:
+    var version = r.take(xi, what)
+    if version != PROGRAM_RECORD_VERSION_1 and version != PROGRAM_RECORD_VERSION:
         raise Error(what + ": an unknown program record version")
     var p = OpsProgram()
     var n_in = r.take(xi, what)
@@ -261,6 +292,13 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     p.n_in = n_in
     for _ in range(n_in):  # driver-loop: over program inputs
         p.in_shapes.append(r.shape(xi, what))
+    for _ in range(n_in):  # driver-loop: over program inputs
+        var kind = PROGRAM_IN_FLOAT
+        if version == PROGRAM_RECORD_VERSION:
+            kind = r.take(xi, what)
+            if kind != PROGRAM_IN_FLOAT and kind != PROGRAM_IN_IDS:
+                raise Error(what + ": a program input has an unknown kind")
+        p.in_kinds.append(kind)
     var n_p = r.take(xi, what)
     if n_p < 0:
         raise Error(what + ": a damaged parameter count")
@@ -273,12 +311,14 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     var nf_total = 0
     for k in range(nn):  # driver-loop: over program nodes
         var code = r.take(xi, what)
-        if code < 1 or code > PROGRAM_MAX_CODE or program_refuses_code(code):
+        if code < 1 or code > PROGRAM_MAX_CODE or code == 47:
             raise Error(what + ": node " + String(k) + " holds an unknown operation code " + String(code))
         p.code.append(code)
         var na = r.take(xi, what)
         if na < 0 or na > len(xi):
             raise Error(what + ": a damaged argument count")
+        if program_refuses_node(code, na):
+            raise Error(what + ": node " + String(k) + " reads a caller's index array, which a program cannot hold")
         for _ in range(na):  # small-loop(args: a node's input refs): description words, no data
             var rf = r.take(xi, what)
             if rf < -n_p or rf >= n_in + k:
