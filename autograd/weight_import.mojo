@@ -177,7 +177,7 @@ def wi_matrix(src: WeightSource, transpose: Bool) raises -> CastIn:
             var last = len(ld) - 1
             rows = ld[last]
             s0 = ls[last]
-            for j in range(last):  # small-loop(nd: the tensor rank, at most 4): shape metadata, no data
+            for j in range(last):  # small-loop(last: the leading axes, at most 3): shape metadata, no data
                 var k = last - 1 - j
                 if ls[k] != ld[k + 1] * ls[k + 1]:
                     raise Error(_q(src.name) + ": the tensor's leading axes are not laid out in C order; "
