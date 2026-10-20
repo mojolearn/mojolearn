@@ -98,7 +98,7 @@ def rn_shape(dims: List[Int], what: String) raises -> ShapeN:
     if len(dims) > RN_MAX_RANK:
         raise Error(what + ": tensors have at most " + String(RN_MAX_RANK) + " dimensions")
     var d = InlineArray[Int, RN_MAX_RANK](fill=1)
-    for k in range(len(dims)):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+    for k in range(len(dims)):  # small-loop(dims: the tensor dims, at most 8): shape metadata, no data
         if dims[k] < 1:
             raise Error(what + ": every dimension must be positive")
         d[k] = dims[k]
@@ -127,7 +127,7 @@ def rn_resolve(s: ShapeN, dims: List[Int], what: String) raises -> ShapeN:
     same element count as `s`."""
     var known = 1
     var infer = -1
-    for k in range(len(dims)):  # small-loop(ndim: target rank, at most 8): shape metadata, no data
+    for k in range(len(dims)):  # small-loop(dims: the target dims, at most 8): shape metadata, no data
         if dims[k] == -1:
             if infer != -1:
                 raise Error(what + ": at most one dimension can be -1")
@@ -163,7 +163,7 @@ def rn_axis_mask(ndim: Int, axes: List[Int], what: String) raises -> List[Bool]:
 def rn_mask_axes(mask: List[Bool]) -> List[Int]:
     """The ascending axes whose flag is set."""
     var out = List[Int]()
-    for k in range(len(mask)):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+    for k in range(len(mask)):  # small-loop(mask: one flag per axis, at most 8): shape metadata, no data
         if mask[k]:
             out.append(k)
     return out^
@@ -199,7 +199,7 @@ def rn_check_permutation(axes: List[Int], ndim: Int, what: String) raises -> Lis
 def rn_inverse(axes: List[Int]) -> List[Int]:
     """The inverse permutation of `axes`."""
     var inv = List[Int](length=len(axes), fill=0)
-    for k in range(len(axes)):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+    for k in range(len(axes)):  # small-loop(axes: a permutation, at most 8 axes): shape metadata, no data
         inv[axes[k]] = k
     return inv^
 
@@ -228,7 +228,7 @@ def rn_softmax_along[E: Exec](
         var y = tape.log_softmax(ex, x) if log else tape.softmax(ex, x)
         return rn_as_shape(tape, ex, y, s)
     var p = List[Int](capacity=nd)
-    for k in range(nd):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+    for k in range(nd):  # small-loop(nd: tensor rank, at most 8): shape metadata, no data
         if k != a:
             p.append(k)
     p.append(a)

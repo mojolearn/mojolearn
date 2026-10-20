@@ -919,7 +919,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: permute takes one tensor and its axes")
             if ints[0] == 0:
                 var p_axes = List[Int](capacity=ni - 1)
-                for k in range(1, ni):  # small-loop(ints: at most 8 axes): argument parsing, no data
+                for k in range(1, ni):  # small-loop(ni: at most 8 axes): argument parsing, no data
                     p_axes.append(ints[k])
                 var p_nd = self.tape.ndim(x[0])
                 t = self.tape.permute(self.ex, x[0], rn_check_permutation(p_axes, p_nd, "ops: permute"))
@@ -1029,7 +1029,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if nd == 2 and aa != bb:
             return self.tape.transpose(self.ex, x)
         var axes = List[Int](capacity=nd)
-        for k in range(nd):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+        for k in range(nd):  # small-loop(nd: tensor rank, at most 8): shape metadata, no data
             axes.append(k)
         axes[aa] = bb
         axes[bb] = aa
@@ -1162,7 +1162,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if piece < 0 or piece >= pieces:
                 raise Error("ops: split: piece out of range")
             var total = 0
-            for k in range(pieces):  # small-loop(ints: the split sizes, a handful): argument parsing, no data
+            for k in range(pieces):  # small-loop(pieces: the split sizes, a handful): argument parsing, no data
                 var sz = ints[3 + k]
                 if sz < 1:
                     raise Error("ops: split: every size must be positive")

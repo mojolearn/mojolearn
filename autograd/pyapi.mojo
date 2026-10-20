@@ -214,7 +214,7 @@ def ops_upload_py[E: Exec & Movable & Deinitable, KIND: Int](
     if nd < 0 or len(ip) != 2 + nd:
         raise Error("ops_upload: the shape takes ndim and ndim dimensions")
     var dims = List[Int](capacity=nd)
-    for k in range(nd):  # small-loop(ip: the tensor's dims, at most 8): argument parsing, no data
+    for k in range(nd):  # small-loop(nd: the tensor rank, at most 8): argument parsing, no data
         dims.append(ival(ip, 2 + k))
     return PythonObject(p[].upload_nd(src, rn_shape(dims, "ops: tensor"), ival(ip, 0) != 0))
 
