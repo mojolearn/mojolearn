@@ -131,5 +131,7 @@ fi
 } | tee "$D/SUMMARY.txt"
 
 rm -rf "$PKGROOT" "$D/wheels/tools-venv"
-rm -rf "$SET"/_mojolearn*.so "$SET"/identical "$SET"/.libs
+# The set's binaries in either binding layout: one .so per binding, or the
+# merged native file plus its index _mojolearn_merged.json (merged_layout.py).
+rm -rf "$SET"/_mojolearn*.so "$SET"/_mojolearn_merged.json "$SET"/identical "$SET"/.libs
 [ "$BUILD_RC" = 0 ] && [ "$SMOKE_RC" = 0 ] && [ "$SAB_RC" = 0 ]
