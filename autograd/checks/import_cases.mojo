@@ -714,7 +714,6 @@ def _index_case[E: Exec](mut ex: E, mut tape: Tape, a0: Int, a1: Int) raises -> 
     var iv: List[Float32] = [Float32(1), Float32(-1), Float32(1)]
     var jv: List[Float32] = [Float32(2), Float32(0)]
     var d0 = dims[a0]
-    var d1 = dims[a1]
     var rest = dims[other]
     var name = String("index/4x5x6/axes") + String(a0) + String(a1)
     tape.reset()
@@ -759,7 +758,6 @@ def _index_case[E: Exec](mut ex: E, mut tape: Tape, a0: Int, a1: Int) raises -> 
                 var g = ftz(gv[o])
                 wdx[src] = g if not seen[src] else add(wdx[src], g)
                 seen[src] = True
-    _ = d1
     var d = _same(name + "/value", tape.values(ex, y), want)
     d = _mix(d, _same_grad(name + "/dx", tape.gradients(ex, x), wdx))
     print("IMPORT", name, "digest", d)
