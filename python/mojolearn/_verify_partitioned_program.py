@@ -5,6 +5,7 @@ No product path imports this verifier. Oracles and data preparation are test
 code, outside every audited native public operation.
 """
 from __future__ import annotations
+from contextlib import contextmanager
 import hashlib
 import json
 import pathlib
@@ -40,9 +41,19 @@ def verify(devices=(0,), expected=None):
         report["runtime_audits"].append(item)
         return audited.assert_native()
 
+    @contextmanager
+    def opened(name, operation, *args, **kwargs):
+        # Testing-only context controller: audit each complete public boundary.
+        instance = native(name, operation, *args, **kwargs)
+        try:
+            assert native(name + ".enter", instance.__enter__) is instance
+            yield instance
+        finally:
+            native(name + ".exit", instance.__exit__, None, None, None)
+
     try:
         b = _backend.binding("_mojolearn_x_sequence", "identical")
-        names = ("open", "load", "fit", "run", "state", "residency", "save", "close", "profile")
+        names = ("open", "load", "fit", "run", "state", "residency", "save", "close", "enter", "profile")
         missing = ["ops_partitioned_"+name for name in names if not hasattr(b, "ops_partitioned_"+name)]
         if missing:
             raise RuntimeError("installed binding lacks entries: " + ", ".join(missing))
@@ -51,7 +62,7 @@ def verify(devices=(0,), expected=None):
             w = s.tensor(np.zeros((1, 4), np.float32))
             p = s.capture([a], [s.matmul(a, w)])
             opt = s.optimizer("sgd", lr=.125)
-            with native("analytic.open", p.partition, devices, stages=max(2, len(devices)),
+            with opened("analytic.open", p.partition, devices, stages=max(2, len(devices)),
                         tensor_shards=2, microbatches=3, optimizer=opt) as d:
                 x = np.ones((5, 1), np.float32)
                 y = np.full((5, 4), 2, np.float32)
@@ -86,7 +97,7 @@ def verify(devices=(0,), expected=None):
                 opt = s.optimizer("adamw", lr=.01, weight_decay=.02,
                                   schedule="step", step_size=2, gamma=.5)
                 stages = max(3, len(devices))
-                with native("pipeline.open", plain.partition, devices, stages=stages, tensor_shards=1,
+                with opened("pipeline.open", plain.partition, devices, stages=stages, tensor_shards=1,
                             microbatches=3, optimizer=opt) as p:
                     prediction = native("pipeline.run", p.run, x)
                     np.testing.assert_allclose(prediction, np.tanh(x@w0+b0)@v0, rtol=2e-6, atol=2e-7)
@@ -94,8 +105,8 @@ def verify(devices=(0,), expected=None):
                         "digest": hashlib.sha256(prediction.tobytes()).hexdigest(), "oracle": "Independent NumPy dense/tanh/dense."})
                 dropped = s.dropout(hidden, p=.25, seed=17)
                 graph = s.capture([a], [s.matmul(dropped, v)])
-                path = str(pathlib.Path(temp)/"partition.ckpt")
-                with native("resume.open", graph.partition, devices, stages=stages, tensor_shards=2,
+                path = pathlib.Path(temp) / "partition.ckpt"
+                with opened("resume.open", graph.partition, devices, stages=stages, tensor_shards=2,
                             microbatches=3, optimizer=opt, seed=41) as p:
                     native("resume.fit.first", p.fit, x, targets=y, epochs=2, batch_size=4)
                     before = native("resume.state.first", p.state)
@@ -104,12 +115,12 @@ def verify(devices=(0,), expected=None):
                     final = native("resume.state.final", p.state)
                     report["partition_residency"] = native("resume.residency", p.residency)
                     report["operation_intervals"] = native("resume.profile", p.profile)
-                with native("resume.load", s.load_partitioned, path, devices=(0,)) as restored:
+                with opened("resume.load", s.load_partitioned, path, devices=(0,)) as restored:
                     assert _digest(native("resume.state.loaded", restored.state)) == _digest(before)
-                    assert restored.residency()["partitioned_products"] == 2
+                    assert native("resume.residency.loaded", restored.residency)["partitioned_products"] == 2
                     native("resume.fit.restored", restored.fit, x, targets=y, epochs=3, batch_size=4)
                     assert _digest(native("resume.state.restored", restored.state)) == _digest(final)
-                with native("topology.open", graph.partition, (0,), stages=stages, tensor_shards=2,
+                with opened("topology.open", graph.partition, (0,), stages=stages, tensor_shards=2,
                             microbatches=3, optimizer=opt, seed=41) as single:
                     native("topology.fit", single.fit, x, targets=y, epochs=5, batch_size=4)
                     assert _digest(native("topology.state", single.state)) == _digest(final)

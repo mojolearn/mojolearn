@@ -1515,6 +1515,7 @@ def _connect_session_mode(mode):
         ops_distributed_residency=getattr(module, "ops_distributed_residency", None),
         ops_distributed_save=getattr(module, "ops_distributed_save", None),
         ops_distributed_close=getattr(module, "ops_distributed_close", None),
+        ops_distributed_enter=getattr(module, "ops_distributed_enter", None),
         ops_partitioned_open=getattr(module, "ops_partitioned_open", None),
         ops_partitioned_load=getattr(module, "ops_partitioned_load", None),
         ops_partitioned_fit=getattr(module, "ops_partitioned_fit", None),
@@ -1523,6 +1524,7 @@ def _connect_session_mode(mode):
         ops_partitioned_residency=getattr(module, "ops_partitioned_residency", None),
         ops_partitioned_save=getattr(module, "ops_partitioned_save", None),
         ops_partitioned_close=getattr(module, "ops_partitioned_close", None),
+        ops_partitioned_enter=getattr(module, "ops_partitioned_enter", None),
         ops_partitioned_profile=getattr(module, "ops_partitioned_profile", None),
     )
     result = SimpleNamespace(

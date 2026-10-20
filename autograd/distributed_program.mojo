@@ -139,10 +139,24 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         var output = self.session.tensor(outs[0])
         var y = self.session.tape.variable(self.session.ex, self.batch_target, count, self.target_cols, False)
         var loss = program_loss(self.session.tape, self.session.ex, output, y, loss_kind, delta)
-        self.session.tape.backward_scalar_with_rules(self.session.ex, loss, ImportRules())
+        if self.session.tape.requires_grad(loss):
+            self.session.tape.backward_scalar_with_rules(self.session.ex, loss, ImportRules())
         for j in range(len(self.params)):  # driver-loop: parameter gradients
             if self.trainable[j]:
-                self.gradients[j] = self.session.tape.gradient(self.session.tensor(phs[j]))
+                var parameter = self.session.tensor(phs[j])
+                if self.session.tape._nodes[parameter._index].grad_ready:
+                    self.gradients[j] = self.session.tape.gradient(parameter)
+                else:
+                    # A selected parameter behind detach/copy has the zero
+                    # derivative. Keep the existing global optimizer clock:
+                    # momentum/decay still use this explicit zero gradient.
+                    var n = self.program.param_shapes[j].count()
+                    var zero = self.session.tape.reserve(self.session.ex, n)
+                    var fill = Args()
+                    fill.p0 = zero
+                    fill.f0 = Float32(0)
+                    self.session.ex.launch[OP_FILL](fill, n)
+                    self.gradients[j] = zero
         var word = List[Float32](length=1, fill=Float32(0))
         self.session.ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())),
                                  self.session.tape.value(loss), 1)

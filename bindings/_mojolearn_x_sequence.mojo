@@ -27,12 +27,12 @@ from autograd.distributed_pyapi import (
     distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
     distributed_run_py, distributed_state_py, distributed_residency_py,
-    distributed_save_py, distributed_close_py,
+    distributed_save_py, distributed_close_py, distributed_enter_py,
 )
 from autograd.partition_pyapi import (
     partition_open, partition_load, partition_fit_py, partition_run_py,
     partition_state_py, partition_residency_py, partition_save_py,
-    partition_close_py, partition_profile_py,
+    partition_close_py, partition_enter_py, partition_profile_py,
 )
 from max.gpu.host import DeviceContext
 from sequence.launch_profile import launch_profile_level
@@ -349,6 +349,10 @@ def ops_partitioned_save_binding(id: PythonObject, path: PythonObject) raises ->
     return partition_save_py[DeviceExec, OPS_DEVICE](id, path)
 
 
+def ops_partitioned_enter_binding(id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    return partition_enter_py[DeviceExec, OPS_DEVICE](id, owner)
+
+
 def ops_partitioned_close_binding(id: PythonObject) raises -> PythonObject:
     return partition_close_py[DeviceExec, OPS_DEVICE](id)
 
@@ -404,6 +408,10 @@ def ops_distributed_residency_binding(id: PythonObject) raises -> PythonObject:
 
 def ops_distributed_save_binding(id: PythonObject, path: PythonObject) raises -> PythonObject:
     return distributed_save_py[DeviceExec, OPS_DEVICE](id, path)
+
+
+def ops_distributed_enter_binding(id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    return distributed_enter_py[DeviceExec, OPS_DEVICE](id, owner)
 
 
 def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
@@ -908,6 +916,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_partitioned_residency_binding]("ops_partitioned_residency")
         m.def_function[ops_partitioned_save_binding]("ops_partitioned_save")
         m.def_function[ops_partitioned_close_binding]("ops_partitioned_close")
+        m.def_function[ops_partitioned_enter_binding]("ops_partitioned_enter")
         m.def_function[ops_partitioned_profile_binding]("ops_partitioned_profile")
         m.def_function[ops_distributed_open_binding]("ops_distributed_open")
         m.def_function[ops_distributed_load_binding]("ops_distributed_load")
@@ -917,6 +926,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_distributed_residency_binding]("ops_distributed_residency")
         m.def_function[ops_distributed_save_binding]("ops_distributed_save")
         m.def_function[ops_distributed_close_binding]("ops_distributed_close")
+        m.def_function[ops_distributed_enter_binding]("ops_distributed_enter")
         m.def_py_c_function(ops_program_fit_native_c_binding, "ops_program_fit_native")
         m.def_function[ops_program_free_binding]("ops_program_free")
         m.def_function[ops_save_program_binding]("ops_save_program")
