@@ -74,3 +74,7 @@ Session.run	captured program: checks pending on CPU, Apple, NVIDIA and AMD
 Session.load_program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
 Sequential.load_state_dict	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD
 Session.load_weights	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD
+# Model import (docs/plans/MODEL_IMPORT.md): remove a line once the IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
+importers.UnsupportedModel	model import: the lowering and its IMPORT_DIGEST checks are pending
+importers.supported_ops	model import: the lowering table is pending
+onnx.read	model import: ONNX reader; the lowering and its IMPORT_DIGEST checks are pending
