@@ -9,12 +9,12 @@ from sequence.ops import FP
 from autograd.ops_api import ops_session, _OpsStore
 from autograd.partition_plan import GraphBytes, partition_plan, column_bytes
 from autograd.partition_runtime import PartitionedProgram
+from autograd.partition_stage import stage_input_bytes
 from autograd.partition_checkpoint import partition_checkpoint, partition_from_checkpoint, restore_partition_state
 from autograd.distributed_pyapi import distributed_optimizer_config
 from autograd.program_pyapi import array_input, output_array
 from autograd.program_arrays import initialize_program_arrays
 from autograd.rankn import ShapeN
-from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.optim import optimizer_slots
 from core.cast_in import CastIn
 from training.checkpoint import read_checkpoint_unchecked, save_checkpoint
@@ -202,16 +202,8 @@ def partition_run_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject
     var inputs = List[GraphBytes]()
     for k in range(len(arrays)):  # driver-loop: native dtype conversion and byte staging
         var parsed = array_input(arrays[k], "partitioned input")
-        var words = List[Float32](length=parsed[1].count(), fill=Float32(0))
-        var buf = d[].workers[0].session.ex.alloc(parsed[1].count())
         var integer = d[].plan.program.in_kinds[k] != 0
-        if integer:
-            upload_cast_i32(d[].workers[0].session.ex, buf, parsed[0], "partitioned ids")
-        else:
-            upload_cast(d[].workers[0].session.ex, buf, parsed[0])
-        d[].workers[0].session.ex.download(FP(unsafe_from_address=Int(words.unsafe_ptr())), buf, parsed[1].count())
-        d[].workers[0].session.ex.free(buf)
-        inputs.append(GraphBytes(parsed[1], words^, integer))
+        inputs.append(stage_input_bytes(d[].workers[0].session.ex, parsed[0], parsed[1], integer))
     return graph_array_output(d[].run(inputs))
 
 

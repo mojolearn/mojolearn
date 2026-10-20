@@ -5,7 +5,7 @@
 # activation bytes are staged on the host, while arithmetic stays in Exec.
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
-from sequence.ops import FP
+from sequence.ops import FP, dummy_ptr
 from autograd.partition_plan import GraphBytes, PartitionPlan
 from autograd.partition_stage import ModelStage, NodeGradients
 from autograd.optim import OptimizerConfig
@@ -208,16 +208,26 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
         var bs = min(n, batch)
         var full = List[FP]()
         var batches = List[FP]()
-        var ty = self.workers[0].session.ex.alloc(max(1, target.count()))
-        var yb = self.workers[0].session.ex.alloc(max(1, bs * target.cols))
-        var indices = self.workers[0].session.ex.alloc(n)
+        var storage = List[FP]()
+        var ty = dummy_ptr()
+        var yb = dummy_ptr()
+        var indices = dummy_ptr()
         self.busy = True
         self.events.clear()
         try:
+            ty = self.workers[0].session.ex.alloc(max(1, target.count()))
+            storage.append(ty)
+            yb = self.workers[0].session.ex.alloc(max(1, bs * target.cols))
+            storage.append(yb)
+            indices = self.workers[0].session.ex.alloc(n)
+            storage.append(indices)
             for k in range(len(srcs)):  # driver-loop: call-scoped dataset buffers
                 var buf = self.workers[0].session.ex.alloc(srcs[k].count())
+                storage.append(buf)
                 full.append(buf)
-                batches.append(self.workers[0].session.ex.alloc(bs * (shapes[k].count() // n)))
+                var batch_buf = self.workers[0].session.ex.alloc(bs * (shapes[k].count() // n))
+                storage.append(batch_buf)
+                batches.append(batch_buf)
                 if p.in_kinds[k] == PROGRAM_IN_IDS:
                     upload_cast_i32(self.workers[0].session.ex, buf, srcs[k], "partitioned ids")
                 else:
@@ -287,18 +297,16 @@ struct PartitionedProgram[E: Exec & Movable & Deinitable](Movable):
         except err:
             self.usable = False
             self.busy = False
-            self.release_inputs(full, batches, ty, yb, indices)
+            self.release_inputs(storage)
             raise err
-        self.release_inputs(full, batches, ty, yb, indices)
+        self.release_inputs(storage)
         self.busy = False
 
-    def release_inputs(mut self, full: List[FP], batches: List[FP], ty: FP, yb: FP, indices: FP) raises:
-        for k in range(len(full)):  # driver-loop: call-scoped input owners
-            self.workers[0].session.ex.free(full[k])
-            self.workers[0].session.ex.free(batches[k])
-        self.workers[0].session.ex.free(ty)
-        self.workers[0].session.ex.free(yb)
-        self.workers[0].session.ex.free(indices)
+    def release_inputs(mut self, storage: List[FP]) raises:
+        # One acquisition ledger handles partial setup without parallel-list
+        # indexing and releases call storage before a failed object is closed.
+        for k in range(len(storage)):  # driver-loop: call-scoped input owners
+            self.workers[0].session.ex.free(storage[k])
 
     def close(mut self) raises:
         if self.busy:
