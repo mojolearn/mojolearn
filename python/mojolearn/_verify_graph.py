@@ -359,6 +359,9 @@ def structural_view_optimization():
         x = s.tensor(a)
         first = s.permute(x, (2, 0, 1))
         second = s.permute(first, (1, 2, 0))
+        _equal(_invoke(s.numpy, x), a)
+        _equal(_invoke(s.numpy, first), a.transpose(2, 0, 1))
+        _equal(_invoke(s.numpy, second), a)
         permuted = s.capture(x, second)
         report = _invoke(permuted.inspect, optimize=True)
         assert report["nodes_removed"] == 1 and len(report["nodes"]) == 1
@@ -402,7 +405,11 @@ def structural_view_optimization():
         # Return the immutable expected snapshots, not the deliberately changed output.
         outputs.extend((alias_values[0], result, alias_values[2], alias_values[-1]))
 
-        swapped = s.capture(x, s.transpose(s.transpose(x)))
+        first_swap = s.transpose(x)
+        second_swap = s.transpose(first_swap)
+        _equal(_invoke(s.numpy, first_swap), a.swapaxes(-2, -1))
+        _equal(_invoke(s.numpy, second_swap), a)
+        swapped = s.capture(x, second_swap)
         assert _invoke(swapped.inspect, optimize=True)["nodes_removed"] == 1
         for fixture in (a.reshape(6, 4), a):
             value = _invoke(swapped.run_dynamic, fixture, optimize=True)

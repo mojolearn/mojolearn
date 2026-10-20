@@ -233,12 +233,14 @@ def _accumulate[E: Exec](mut ex: E, dst: FP, src: FP, n: Int) raises:
     ex.launch[OP_AG_ACCUMULATE](a, n)
 
 
-def _transpose[E: Exec](mut ex: E, dst: FP, src: FP, src_rows: Int, src_cols: Int) raises:
+def _transpose[E: Exec](mut ex: E, dst: FP, src: FP, src_rows: Int, src_cols: Int,
+                       preserve_words: Bool = False) raises:
     var a = Args()
     a.p0 = src
     a.p1 = dst
     a.i0 = src_rows
     a.i1 = src_cols
+    a.i2 = Int(preserve_words)
     ex.launch[OP_AG_TRANSPOSE](a, src_rows * src_cols)
 
 
@@ -566,9 +568,9 @@ struct Tape(Movable):
         launch); the caller clears or keeps the pending flag."""
         var n = self._nodes[i]
         if n.op == TRANSPOSE:
-            _transpose(ex, n.value, n.saved.p0, n.saved.i0, n.saved.i1)
+            _transpose(ex, n.value, n.saved.p0, n.saved.i0, n.saved.i1, True)
         else:
-            rn_copy_strided(ex, n.value, n.saved.p0, n.saved.i0, n.saved.p11, 0, n.rows * n.cols)
+            rn_copy_strided(ex, n.value, n.saved.p0, n.saved.i0, n.saved.p11, 0, n.rows * n.cols, True)
 
     def _materialize_at[E: Exec](mut self, mut ex: E, i: Int) raises:
         if self._pending(i):
@@ -1765,7 +1767,7 @@ struct Tape(Movable):
             saved.i9 = 1
             return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], saved)
         else:
-            _transpose(ex, output, n.value, n.rows, n.cols)
+            _transpose(ex, output, n.value, n.rows, n.cols, True)
             return self._record(ex, output, n.cols, n.rows, TRANSPOSE, [x], Args())
 
     def _operand(self, i: Int) -> Tuple[FP, Int, Int, Int]:
