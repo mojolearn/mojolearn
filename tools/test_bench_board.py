@@ -501,8 +501,11 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # 335, gbdt-depthwise races `ours-prebinned` beside `ours` (+1 cell x 2 datasets)
     # 2026-10-19 (lane ag-bench): 104 races, 365 cells with the five neural fit lanes, each on Apple
     # ours-fast + 4 torch GPU settings + mlx-fp32 (+5 races, +30 cells)
-    assert len(before) == 104 and sum(len(r["arms"]) for r in before) == 365
-    assert "TOTAL races=%d cells=%d" % (104 + len(algos), 365 + sum(len(r["arms"]) for r in algos)) in text
+    # 2026-10-20 (lane ag-inference-board): 109 races with sequential-fit, ops-session-step, sequential-predict and the two
+    # causal-lm-generate lanes; the cell total is derived from the plan so a new arm does not stale this line.
+    cells = sum(len(r["arms"]) for r in before)
+    assert len(before) == 109
+    assert "TOTAL races=%d cells=%d" % (109 + len(algos), cells + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
