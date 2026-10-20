@@ -62,3 +62,18 @@ def test_native_loader_preserves_public_refusal_classes(tmp_path):
         Tokenizer([bytes([i]) for i in range(256)], [], pattern="unknown")
     with pytest.raises(TypeError):
         module._NATIVE.vocab_init_public()
+
+
+def test_caller_defined_path_protocol_is_preserved_and_visible_to_audit(tmp_path):
+    tokens, merges = _small_vocab()
+    data = _tokenizer_json(tokens, merges, module.PATTERNS["gpt2"][0])
+    path = tmp_path / "tokenizer.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    class CallerPath:
+        def __fspath__(self):
+            return str(path)
+    audit = audit_native_call(Tokenizer.from_pretrained, CallerPath())
+    assert audit.exception is None
+    assert audit.result.encode("hello")
+    assert not audit.passed
+    assert any("CallerPath.__fspath__" in name for _, _, name in audit.frames)
