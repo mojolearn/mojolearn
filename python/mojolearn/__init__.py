@@ -202,6 +202,10 @@ _CPU_INFERENCE = {
     # The operation session (`mojolearn.ops`, autograd/ops_api.mojo): loads on
     # first touch, so the package imports without NumPy.
     "ops": None,
+    # Model import (docs/plans/MODEL_IMPORT.md, lane ag-import-docs): the
+    # package and its entry point load on first touch, as `ops` does.
+    "importers": None,
+    "import_model": ".importers",
     "MLPInference": ".neural_inference", "TransformerBlockInference": ".neural_inference",
     "Mamba1BlockInference": ".neural_inference", "Mamba2BlockInference": ".neural_inference",
     "Mamba3BlockInference": ".neural_inference", "SambaInference": ".neural_inference",
@@ -471,6 +475,8 @@ __all__ = [
     "neural_network",
     "language_model",
     "ops",
+    "importers",
+    "import_model",
     "tokenizer",
     "transformer",
     "training",
