@@ -459,18 +459,6 @@ def _c_pool(G, n):
     if k and any(p < 0 or p >= k[0] for p in pads):  # cpu-route: model graph lowered on the host (one per side)
         # a pad of the kernel's size or more makes windows of padding only
         out.append(f"pads={pads} (each pad must be between 0 and kernel_shape - 1)")
-    if n.attrs.get("auto_pad", "NOTSET") not in ("NOTSET", "VALID"):
-        out.append(f"auto_pad={n.attrs.get('auto_pad')} (only NOTSET and VALID are supported)")
-    elif n.op == "MaxPool":
-        # lane ag-real-models (2026-10-20): a padded MaxPool (torchvision's ResNet stem) lowers as a
-        # constant pad with the lowest float32 and an unpadded pool. A pad smaller than the kernel
-        # leaves a real element in every window, so the padded positions never win the max.
-        if k and any(p >= k[0] for p in pads):  # cpu-route: model graph lowered on the host (one per side)
-            out.append(f"pads={pads} (only pads smaller than the kernel are supported)")
-        elif any(p < 0 for p in pads):  # cpu-route: model graph lowered on the host (one per side)
-            out.append(f"pads={pads} (negative pads are not supported)")
-    elif any(p != 0 for p in pads):  # cpu-route: model graph lowered on the host (one per side)
-        out.append(f"pads={pads} (only zero pads are supported)")
     if any(d != 1 for d in dil):  # cpu-route: model graph lowered on the host (one per spatial axis)
         out.append(f"dilations={dil} (only 1 is supported)")
     if n.attrs.get("storage_order", 0):
@@ -1082,14 +1070,6 @@ def _l_pool(L, n):
     count = s.conv2d(image, s.full((1, 1, kk, kk), 1.0), None, stride=stride, padding=0)
     count = count if L.cur_const else L.persist(count)
     return [s.div(total, count)] + rest
-    k, st, pads, _ = _window(n, 2)
-    x = _x(L, n)
-    if n.op == "MaxPool" and any(pads):  # cpu-route: model graph lowered on the host (four sides)
-        # ONNX pads (top, left, bottom, right) as session pads: two per axis of (N, C, H, W)
-        x = L.s.pad(x, [0, 0, pads[0], pads[1], 0, 0, pads[2], pads[3]], _MAXPOOL_PAD)
-        return [L.s.max_pool2d(x, k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
-    f = L.s.max_pool2d if n.op == "MaxPool" else L.s.avg_pool2d
-    return [f(x, k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
 
 
 def _l_pad(L, n):
