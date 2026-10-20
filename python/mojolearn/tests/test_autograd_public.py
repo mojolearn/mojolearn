@@ -271,6 +271,25 @@ def test_guide_import_pretrained(tmp_path, monkeypatch):
     _emit("guide_import_pretrained_logits", _digest(logits))
 
 
+def test_guide_verify_model(tmp_path, monkeypatch, capsys):
+    """The verify-model block: an export writes its report beside the model, and verify-model on the same
+    install reproduces it (exit 0, every output MATCH)."""
+    b = _blocks()
+    if "verify-model" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "verify_digest"):
+        pytest.skip("no verify entries in this binding (rebuild it)")
+    import json
+    from mojolearn.__main__ import main as cli
+    monkeypatch.chdir(tmp_path)
+    _run(b["verify-model"])
+    with open("classifier.ckpt.verify.json") as fh:
+        report = json.load(fh)
+    assert report["model"]["kind"] == "sequential-export" and len(report["outputs"]) == 1
+    capsys.readouterr()
+    assert cli(["verify-model", "classifier.ckpt"]) == 0
+    assert "verdict  MATCH" in capsys.readouterr().out
+    _emit("guide_verify_model_output", report["outputs"][0]["digest"])
+
+
 def _docstring_examples():
     import mojolearn
     from mojolearn import ops
