@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Sequential weight admission and transfer use the existing import ABI.
-# Source mappings and CPU torch tensor protocols remain caller-owned APIs;
-# ordinary dict/ndarray and safetensors paths need no Python product helpers.
+# Ordinary CPU torch tensors use their native dtype/device/shape metadata and
+# C data_ptr/stride entries, without __array__ or a conversion helper. Custom
+# mapping/tensor subclasses can define caller protocols; those are not a
+# qualification of arbitrary Python callbacks as native execution.
 from std.python import Python, PythonObject
 from autograd.weight_frontend import _checkpoint, _record
 from autograd.program_pyapi import ProgramInput

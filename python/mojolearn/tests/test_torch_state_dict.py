@@ -20,6 +20,7 @@ import os
 
 import numpy as np
 import pytest
+from mojolearn._verify_native_runtime import audit_native_call
 
 try:
     import torch
@@ -102,16 +103,51 @@ def test_sequential_load_torch_state_dict(dtype):
     import mojolearn as ml
     m = _module(dtype)
     state = m.state_dict()
-    model = ml.Sequential().linear(H).layer_norm().linear(O).load_state_dict(state)
+    model = ml.Sequential().linear(H).layer_norm().linear(O)
+    assert audit_native_call(model.load_state_dict, state).assert_native() is model
     expected = _expected_params(state)
     assert model.params_.shape == expected.shape
     assert np.array_equal(_bits(model.params_), _bits(expected))
-    again = ml.Sequential().linear(H).layer_norm().linear(O).load_state_dict(state, source="torch")
+    again = ml.Sequential().linear(H).layer_norm().linear(O)
+    assert audit_native_call(again.load_state_dict, state, source="torch").assert_native() is again
     assert np.array_equal(_bits(again.params_), _bits(model.params_))
     pred = np.asarray(model.predict(_x()))
     assert pred.shape == (32, O) and np.isfinite(pred).all()
     print(f"TORCH_STATE_DICT_DIGEST sequential_{dtype} {_digest(model.params_, pred)}")
     _reference_line(f"sequential_{dtype}", pred, m)
+
+
+@pytest.mark.parametrize("dtype", ["float16", "bfloat16", "float32", "float64"])
+@pytest.mark.parametrize("strided", [False, True])
+def test_native_sequential_torch_parameters_and_views_avoid_array_protocol(dtype, strided, monkeypatch):
+    import inspect
+    import mojolearn as ml
+    m = _module(dtype)
+    # keep_vars includes ordinary nn.Parameter owners as well as Tensor
+    # state_dict values. Both expose the native TensorBase buffer metadata.
+    state = m.state_dict(keep_vars=True)
+    if strided:
+        views = {}
+        for name, value in state.items():
+            backing = torch.empty(tuple(2 * size for size in value.shape), dtype=value.dtype)
+            view = backing[(slice(None, None, 2),) * value.ndim]
+            with torch.no_grad():
+                view.copy_(value)
+            views[name] = view
+        state = views
+    for value in state.values():
+        assert inspect.isbuiltin(value.data_ptr)
+        assert inspect.isbuiltin(value.stride)
+    expected = _expected_params(state)
+    out = ml.Sequential().linear(H).layer_norm().linear(O)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Tensor.__array__ must not run during native weight import")
+
+    monkeypatch.setattr(torch.Tensor, "__array__", forbidden)
+    assert audit_native_call(out.load_state_dict, state).assert_native() is out
+    assert out.params_.dtype == expected.dtype
+    assert out.params_.tobytes() == expected.tobytes()
 
 
 @pytest.mark.parametrize("dtype", DTYPES)
