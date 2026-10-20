@@ -40,8 +40,8 @@ def _index(directory):
     with open(path, encoding="utf-8") as f:
         record = json.load(f)
     owners = {}
-    for fname, names in record.get("files", {}).items():
-        for name in names:
+    for fname, names in record.get("files", {}).items():  # glue: read the merged-file index (file names)
+        for name in names:  # glue: member module names of one merged file
             owners[name] = os.path.join(directory, fname)
     _INDEX_CACHE[path] = (stamp, owners)
     return owners
@@ -72,18 +72,18 @@ def binding_exists(directory, name):
 
 def merged_members(directory):
     """Every member name a merged file in `directory` serves, sorted."""
-    return sorted(n for n, p in _index(directory).items() if os.path.isfile(p))
+    return sorted(n for n, p in _index(directory).items() if os.path.isfile(p))  # glue: list member module names
 
 
 def merged_files(directory):
     """The merged files `directory`'s index names that exist, sorted."""
-    return sorted({p for p in _index(directory).values() if os.path.isfile(p)})
+    return sorted({p for p in _index(directory).values() if os.path.isfile(p)})  # glue: list merged file paths
 
 
 def is_merged_file(path):
     """True when `path` is a merged file its directory's index names."""
     real = os.path.realpath(path)
-    return any(os.path.realpath(p) == real for p in _index(os.path.dirname(path) or ".").values())
+    return any(os.path.realpath(p) == real for p in _index(os.path.dirname(path) or ".").values())  # glue: compare file paths
 
 
 def load(fullname, path):
@@ -107,7 +107,7 @@ class MergedFinder(importlib.abc.MetaPathFinder):
         leaf = fullname.rpartition(".")[2]
         if not leaf.startswith("_mojolearn"):
             return None
-        for directory in path:
+        for directory in path:  # glue: the package search directories
             merged = merged_file(directory, leaf)
             if merged is not None:
                 loader = importlib.machinery.ExtensionFileLoader(fullname, merged)
@@ -120,5 +120,5 @@ _FINDER = MergedFinder()
 
 def install():
     """Append the finder once (idempotent)."""
-    if not any(isinstance(f, MergedFinder) for f in sys.meta_path):
+    if not any(isinstance(f, MergedFinder) for f in sys.meta_path):  # glue: the import finders
         sys.meta_path.append(_FINDER)
