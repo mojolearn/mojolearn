@@ -523,7 +523,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     assert len(neural) == 21  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
     assert len(both) == 28  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes at both shapes
-    assert "family neural     races=23 cells=112" in text
+    assert "family neural     races=%d cells=%d" % (len(both), sum(len(r["arms"]) for r in both)) in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
