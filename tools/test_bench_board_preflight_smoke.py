@@ -91,6 +91,8 @@ def test_mamba_reference_torch_arms_are_excluded_by_name_not_missing_probes(monk
 
 def test_macos_manifest_is_core_only():
     assert P.distributions("apple") == ["mojolearn"]
-    assert P.distributions("nvidia") == ["mojolearn", "mojolearn-nvidia"]
+    assert P.distributions("nvidia") == ["mojolearn-core", "mojolearn-nvidia", "mojolearn-nvidia-ptx"]
+    assert P.distributions("amd") == ["mojolearn-core", "mojolearn-amd"]
+    assert P.distributions("nvidia", legacy=True) == ["mojolearn", "mojolearn-nvidia"]
     with pytest.raises(ValueError):
         P.distributions("intel")

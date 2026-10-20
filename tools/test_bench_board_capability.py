@@ -13,7 +13,11 @@ class Capabilities(unittest.TestCase):
         # 0509dcc94: FAST BF16 is an optional native Apple capability, decided per run by the worker's binding
         # (probe_fast_bf16_capability), so planning only marks it pending; FAST INT8 always requires IDENTICAL.
         fast=B.plan_races('apple',['fast']); identical=B.plan_races('apple',['identical'])
-        self.assertEqual(len(fast),len(identical))
+        # Other families can have mode-specific configurations; this capability
+        # contract concerns the same three GEMM recipes in each numeric mode.
+        for plan in (fast, identical):
+            self.assertEqual({r['lane'] for r in plan if r['lane'].startswith('gemm')},
+                             {'gemm', 'gemm-bf16', 'gemm-int8'})
         self.assertEqual(B.plan_summary(fast)['unsupported_races'],1)
         self.assertEqual(B.plan_summary(identical)['unsupported_races'],0)
         self.assertEqual({r['lane'] for r in fast if B.unsupported_our_arms(r)}, {'gemm-int8'})
