@@ -63,3 +63,4 @@ Program.inspect	graph diagnostics; installed-release qualification pending
 Program.profile	graph diagnostics; installed-release qualification pending
 Program.run_if	native conditional execution; cross-vendor qualification pending
 Program.while_loop	native loop execution; cross-vendor qualification pending
+Program.run_dynamic	native variable-rank replay; cross-vendor qualification pending

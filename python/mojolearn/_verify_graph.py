@@ -20,8 +20,9 @@ EXPECTED_CASES = (
     "bounded_while", "shape_growing_while", "exact_duplicate_elimination",
     "training_after_optimization", "node_diagnostics_and_profile",
     "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
+    "variable_rank_replay",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6)))
 
 
 _AUDITS = []
@@ -95,6 +96,36 @@ def dynamic_shapes_and_recovery():
         _refuses(lambda: _invoke(p.run, np.ones((3, 2, 5), np.float32), dynamic_shapes=True), "program node 0")
         _equal(_invoke(p.run, a, dynamic_shapes=True), out)
         return [out]
+
+
+def variable_rank_replay():
+    import numpy as np
+    from . import ops
+    w = np.array([[1, 0], [0, 1], [1, -1]], np.float32)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-ranks-") as d, ops.Session() as s:
+        x = s.tensor(np.zeros((2, 2, 3), np.float32))
+        product = s.matmul(x, s.tensor(w))
+        p = s.capture(x, product)
+        reduced = s.capture(x, s.sum(product, axis=-1, keepdims=True))
+        path = Path(d) / "rank-program.mjl"
+        _invoke(p.save, path)
+        loaded = _invoke(s.load_program, path)
+        for shape in ((2, 3), (2, 2, 3), (2, 1, 2, 3), (1, 1, 1, 1, 1, 1, 2, 3)):
+            a = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
+            out = _invoke(p.run_dynamic, a)
+            _equal(out, a @ w)
+            _equal(_invoke(loaded.run_dynamic, a), out)
+            outputs.append(out)
+        for shape in ((2, 3), (2, 1, 2, 3)):
+            a = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
+            out = _invoke(reduced.run_dynamic, a)
+            _equal(out, np.sum(a @ w, axis=-1, keepdims=True))
+            outputs.append(out)
+        _refuses(lambda: _invoke(p.run_dynamic, np.ones((2, 5), np.float32)), "program node 0")
+        _refuses(lambda: _invoke(p.run_dynamic, np.ones((1,) * 9, np.float32)), "rank", ValueError)
+        _equal(_invoke(p.run_dynamic, np.arange(6, dtype=np.float32).reshape(2, 3)), outputs[0])
+    return outputs
 
 
 def lazy_conditional():

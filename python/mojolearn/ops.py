@@ -1357,6 +1357,11 @@ class Program:
             (condition._s._id, condition._id, otherwise._s._id, otherwise._id),
             arrays, 0, optimize)
 
+    def run_dynamic(self, *arrays, optimize=False, profile=False):
+        """Replay on compatible input ranks and dimensions, deriving every output shape."""
+        return self._execute_native(self._s._id, self._id, self._s._id,
+                                    arrays, 2, optimize, profile)
+
     def while_loop(self, *arrays, condition, max_iterations, optimize=False):
         """Apply this state graph while the scalar condition holds, up to a limit."""
         return self._control_native(

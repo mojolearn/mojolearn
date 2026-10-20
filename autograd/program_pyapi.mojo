@@ -116,13 +116,13 @@ struct ProgramInput(Movable):
                                   self.shape.rows(), self.shape.cols(), self.shape.cols() * 8, 8)
 
 
-def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool) raises -> List[ProgramInput]:
+def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_rank: Bool = False) raises -> List[ProgramInput]:
     if len(arrays) != p.n_in:
         raise Error("ValueError: this program takes " + String(p.n_in) + " input arrays, got " + String(len(arrays)))
     var out = List[ProgramInput]()
     for k in range(p.n_in):  # driver-loop: over input descriptors, owners retained through replay
         var item = ProgramInput(arrays[k], p.in_kinds[k] == PROGRAM_IN_IDS)
-        if (dynamic and item.shape.ndim != p.in_shapes[k].ndim) or (not dynamic and not same_shape(item.shape, p.in_shapes[k])):
+        if (dynamic and not variable_rank and item.shape.ndim != p.in_shapes[k].ndim) or (not dynamic and not same_shape(item.shape, p.in_shapes[k])):
             raise Error("ValueError: input " + String(k) + " must keep its captured "
                         + ("rank" if dynamic else "shape") + " " + shape_text(p.in_shapes[k])
                         + "; got " + shape_text(item.shape))
@@ -153,7 +153,11 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     var original_nodes = p.n_nodes()
     if Bool(py=optimize):
         p = program_cse(p)
-    var inputs = program_inputs(p, arrays, Bool(py=dynamic_shapes))
+    # Native ABI shape policy: bool preserves the existing fixed-rank
+    # dynamic contract; integer 2 selects compatibility checked at each node.
+    # Every operation still validates its own rank/axes/parameter constraints.
+    var variable_rank = is_integer_input(dynamic_shapes) and Int(py=dynamic_shapes) == 2
+    var inputs = program_inputs(p, arrays, Bool(py=dynamic_shapes), variable_rank)
     # Validate every descriptor and parameter before allocation. Earlier
     # dynamic replay leaked input buffers on a later input/parameter error.
     var params = parameter_buffers(s[], p)
