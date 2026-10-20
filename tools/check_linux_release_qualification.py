@@ -269,6 +269,8 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
                     host_out[path.removeprefix('mojolearn/')] = digest
             elif path.endswith('.so') and '/_mojolearn' in path:
                 raise ValueError('Unexpected wheel extension location: ' + path)
+            elif path.endswith('/' + surface.MERGED_INDEX):
+                raise ValueError('Unexpected merged index location: ' + path)
         require(declared == set(paths), 'RECORD does not cover the complete wheel')
         require({v for v, _, _ in sets} == set(vendors),
                 'Final release wheel must contain ' + ' and '.join(v.upper() for v in sorted(vendors)))
