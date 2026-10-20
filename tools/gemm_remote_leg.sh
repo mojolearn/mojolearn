@@ -1484,7 +1484,8 @@ for line in sys.stdin:
     tooling=name.startswith("tools/") and name.endswith((".py", ".sh"))
     # stage_libs imports this helper and compiles its owned C/header sources.
     portable_math=name.startswith("packaging/portable_math/") and name.endswith((".py", ".c", ".h"))
-    metadata=name in {".gitattributes", "pixi.toml", "pixi.lock", "python/pyproject.toml", "python/mojolearn_diagnostics.py", "python/mojolearn/ALPHA_API.md", "README.md", "CITATION.cff", "LICENSE", "NOTICE"}
+    # bindings/merged_groups.json: the merged bindings manifest bindings/merged_build.sh compiles from.
+    metadata=name in {".gitattributes", "pixi.toml", "pixi.lock", "bindings/merged_groups.json", "python/pyproject.toml", "python/mojolearn_diagnostics.py", "python/mojolearn/ALPHA_API.md", "README.md", "CITATION.cff", "LICENSE", "NOTICE"}
     if native or tooling or metadata or portable_math:
         if any(c.isspace() for c in name): raise SystemExit("Whitespace source paths unsupported")
         print(name)
