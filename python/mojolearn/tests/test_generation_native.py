@@ -37,12 +37,12 @@ def load_fixture(tmp_path, family="llama", *, uniform=False, profile="fp32_v1"):
 
 
 def block_reference(model, ids, state=None):
-    """Independent test arm through the established public block interfaces."""
+    """Independent retained block driver; it does not call the new native owner."""
     b, l = ids.shape
     x = model._prims.embedding(model._embed, ids.reshape((b * l,)))
     x = x.reshape((b, l, model.d_model))
     for i, blk in enumerate(model.blocks):
-        x = blk.forward(x, None if state is None else state.layers[i])
+        x = blk._call(x, None if state is None else state.layers[i], step=False)
     x = x.reshape((b * l, model.d_model))
     if model._norm is not None:
         x = model._prims.rms_norm(x, model._norm, model.norm_eps)

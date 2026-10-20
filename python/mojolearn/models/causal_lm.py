@@ -540,7 +540,10 @@ def _connect_causal_native():
                     entries[name] = str(exc)
             bindings["gpu:" + mode] = entries
     return runtime, {
-        "runtime": runtime, "backend": _backend, "selected_vendor": vendor,
+        "runtime": runtime, "backend": _backend, "selected_vendor": vendor, "model_class": CausalLM,
+        "block_option_names": ("n_kv_heads", "head_dim", "window", "rope_theta", "rope_scaling",
+                               "rope_dim", "max_positions", "qkv_bias", "o_bias", "norm", "norm_eps",
+                               "norm_bias", "mlp", "mlp_bias", "qk_norm", "attn_softcap"),
         "bindings": bindings, "profiles": _numeric_profile.PROFILES,
         "profile_defaults": _numeric_profile._defaults,
         "rejected_profiles": _numeric_profile.REJECTED,
@@ -561,3 +564,7 @@ def _connect_causal_native():
 
 
 _NATIVE, _NATIVE_CONTEXT = _connect_causal_native()
+
+from .. import _native_neural_bridge
+_native_neural_bridge.RUNTIME = _NATIVE
+_native_neural_bridge.CONTEXT = _NATIVE_CONTEXT

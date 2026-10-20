@@ -173,8 +173,8 @@ def _model_route(device: PythonObject, context: PythonObject) raises -> PythonOb
     return PythonObject(route)
 
 
-def _model_bindings(route: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
-    var mode = PythonObject("identical") if String(route) == "cpu" else context["backend"]._DEFAULT_MODE
+def _model_bindings(route: PythonObject, kind: String, context: PythonObject, requested_mode: PythonObject) raises -> PythonObject:
+    var mode = PythonObject("identical") if String(route) == "cpu" else (context["backend"]._DEFAULT_MODE if requested_mode is None else requested_mode.strip().lower())
     var key = route + PythonObject(":") + mode
     var entries = context["bindings"].get(key)
     if entries is None:
@@ -196,6 +196,10 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject) ra
         if String(_native_function(arithmetic, "linalg_vendor")()) != vendor or Int(py=_native_function(arithmetic, "linalg_numeric_mode")()) != mode_code:
             raise Error("CausalLM: packed weight binding vendor or mode differs from model")
     return entries
+
+
+def _model_bindings(route: PythonObject, kind: String, context: PythonObject) raises -> PythonObject:
+    return _model_bindings(route, kind, context, PythonObject(None))
 
 
 def _model_bits(value: PythonObject, name: String) raises -> Int:
@@ -228,6 +232,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             format = tag
         w[keys[i]] = _model_unpack(v, bindings["linalg"], context)
     fields["weight_format"] = PythonObject(format)
+    fields["_native_kind"] = plan.kind
+    fields["_native_route"] = route
     var dm = Int(py=plan.d_model)
     var base = bi.list()
     var optional = bi.list()

@@ -62,6 +62,11 @@ def causal_lm_admit_binding(
         entries[name] = _native_function(primitives, name)
     if kind == "transformer":
         entries["forward"] = _native_function(block_binding, "transformer_forward")
+        entries["decode"] = _native_function(block_binding, "transformer_decode_step")
+        entries["block_binding"] = block_binding
+        for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:
+            if Bool(py=g[].bi.hasattr(block_binding, name)):
+                entries[name] = _native_function(block_binding, name)
         if Bool(py=g[].bi.hasattr(block_binding, "transformer_session_forward")):
             entries["create"] = _native_function(block_binding, "transformer_session_create")
             entries["forward_session"] = _native_function(block_binding, "transformer_session_forward")
@@ -87,12 +92,14 @@ def causal_lm_admit_binding(
                 entries["causal_lm_session_open_int15"] = _native_function(block_binding, "causal_lm_session_open_int15")
     elif kind == "mamba1":
         entries["forward"] = _native_function(block_binding, "mamba1_forward")
+        entries["decode"] = _native_function(block_binding, "mamba1_decode_step")
         var profile = 1
         if Bool(py=g[].bi.hasattr(block_binding, "mamba1_profile")):
             profile = Int(py=_native_function(block_binding, "mamba1_profile")())
         entries["mamba1_profile"] = PythonObject(profile)
     elif kind == "mamba2":
         entries["forward"] = _native_function(block_binding, "mamba2_forward")
+        entries["decode"] = _native_function(block_binding, "mamba2_decode_step")
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
     model._native_entries = entries
@@ -142,6 +149,52 @@ def causal_lm_blocks_binding(model: PythonObject) raises -> PythonObject:
     return GENERATION_BOUNDARY.get_or_create_ptr()[].bi.list(model._blocks)
 
 
+def causal_layer_allocate(model: PythonObject, i: Int, b: Int, cap: Int) raises -> PythonObject:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var kind = String(model.kind)
+    var blk = _block(model, i)
+    var st = g[].bi.object.__new__(g[].layer_classes[kind])
+    if kind == "transformer":
+        var window = Int(py=blk["window"])
+        var nkv = Int(py=blk["n_kv_heads"])
+        var hd = Int(py=blk["head_dim"])
+        var n = b * nkv * (cap if window == 0 else window) * hd
+        st.batch_size = PythonObject(b)
+        st.n_kv_heads = PythonObject(nkv)
+        st.head_dim = PythonObject(hd)
+        st.max_tokens = PythonObject(cap)
+        st.window = PythonObject(window)
+        st.k_cache = generation_array([n])
+        st.v_cache = generation_array([n])
+        st.cached_tokens = PythonObject(0)
+        st._resident_session = PythonObject(None)
+        st._numeric_profile = model.numeric_profile
+    elif kind == "mamba1":
+        var di = Int(py=blk["d_inner"])
+        var profile = Int(py=model._native_entries["mamba1_profile"])
+        st.conv_window = generation_array([b, di, 4])
+        st.h = generation_array([b, di, 16])
+        st.profile_id = PythonObject(profile)
+        st.absolute_position = PythonObject(0)
+        st._nn34_usable = PythonObject(True)
+        st.affine_boundary = PythonObject(None)
+        st.affine_a = PythonObject(None)
+        st.affine_b = PythonObject(None)
+        if profile == 2:
+            st.affine_boundary = generation_array([b, di, 16])
+            st.affine_a = generation_array([b, di, 16, 6])
+            st.affine_b = generation_array([b, di, 16, 6])
+    else:
+        var cd = Int(py=blk["conv_dim"])
+        var nh = Int(py=blk["nheads"])
+        st.conv_window = generation_array([b, cd, 4])
+        st.h = generation_array([b, nh, 64, 128])
+        st.buffer_xbc = generation_array([b, 256, cd])
+        st.buffer_dtraw = generation_array([b, 256, nh])
+        st.buffered_tokens = PythonObject(0)
+    return st
+
+
 def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacity: PythonObject) raises -> PythonObject:
     var b = Int(py=batch)
     var cap = Int(py=capacity)
@@ -158,47 +211,7 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
     state.layers = g[].bi.list()
     var kind = String(model.kind)
     for i in range(len(model._blocks)):
-        var blk = _block(model, i)
-        var st = g[].bi.object.__new__(g[].layer_classes[kind])
-        if kind == "transformer":
-            var window = Int(py=blk["window"])
-            var nkv = Int(py=blk["n_kv_heads"])
-            var hd = Int(py=blk["head_dim"])
-            var n = b * nkv * (cap if window == 0 else window) * hd
-            st.batch_size = PythonObject(b)
-            st.n_kv_heads = PythonObject(nkv)
-            st.head_dim = PythonObject(hd)
-            st.max_tokens = PythonObject(cap)
-            st.window = PythonObject(window)
-            st.k_cache = generation_array([n])
-            st.v_cache = generation_array([n])
-            st.cached_tokens = PythonObject(0)
-            st._resident_session = PythonObject(None)
-            st._numeric_profile = model.numeric_profile
-        elif kind == "mamba1":
-            var di = Int(py=blk["d_inner"])
-            var profile = Int(py=model._native_entries["mamba1_profile"])
-            st.conv_window = generation_array([b, di, 4])
-            st.h = generation_array([b, di, 16])
-            st.profile_id = PythonObject(profile)
-            st.absolute_position = PythonObject(0)
-            st._nn34_usable = PythonObject(True)
-            st.affine_boundary = PythonObject(None)
-            st.affine_a = PythonObject(None)
-            st.affine_b = PythonObject(None)
-            if profile == 2:
-                st.affine_boundary = generation_array([b, di, 16])
-                st.affine_a = generation_array([b, di, 16, 6])
-                st.affine_b = generation_array([b, di, 16, 6])
-        else:
-            var cd = Int(py=blk["conv_dim"])
-            var nh = Int(py=blk["nheads"])
-            st.conv_window = generation_array([b, cd, 4])
-            st.h = generation_array([b, nh, 64, 128])
-            st.buffer_xbc = generation_array([b, 256, cd])
-            st.buffer_dtraw = generation_array([b, 256, nh])
-            st.buffered_tokens = PythonObject(0)
-        state.layers.append(st)
+        state.layers.append(causal_layer_allocate(model, i, b, cap))
     return state
 
 
@@ -299,6 +312,96 @@ def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) rai
     return p
 
 
+def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
+    var b = Int(py=x.shape[0])
+    var l = Int(py=x.shape[1])
+    var d = Int(py=model.d_model)
+    var kind = String(model.kind)
+    var e = model._native_entries
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    var blk = _block(model, i)
+    var st = supplied_state
+    var y = generation_array([b, l, d])
+    var addresses = PythonObject(None)
+    var params = PythonObject(None)
+    if kind == "transformer":
+        var g = GENERATION_BOUNDARY.get_or_create_ptr()
+        if g[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
+            raise Error("CausalLM: layer state is owned by a decode session")
+        var old_profile = g[].bi.getattr(st, "arithmetic_profile", PythonObject(None))
+        var profile_id = blk.get("_arithmetic_profile", PythonObject(None))
+        if old_profile is None and Int(py=st.cached_tokens) != 0 and Bool(py=blk.get("_arithmetic_profile_changed", PythonObject(False))):
+            raise Error("CausalLM: cached state requires arithmetic profile metadata")
+        if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
+            raise Error("CausalLM: state arithmetic profile differs")
+        if profile_id is not None:
+            st.arithmetic_profile = profile_id
+        var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
+        var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
+        params = _transformer_params(blk, st, b, l)
+        var profile = model._head_int15 is not None
+        var device15 = profile and Bool(py=e.__contains__("forward15"))
+        addresses = _transformer_args(model, blk, st, x, y, b, l, device15, keep)
+        addresses[10] = PythonObject(_mutable(st.k_cache, [cache_n], keep, copies))
+        addresses[11] = PythonObject(_mutable(st.v_cache, [cache_n], keep, copies))
+        if device15:
+            if blk["_native_session"] is None:
+                blk["_native_session"] = e["create"]()
+                blk["_session_binding"] = e["block_binding"]
+            st.cached_tokens = e["forward15"](blk["_native_session"], addresses, params)
+        elif profile:
+            st.cached_tokens = e["forward15_host"](addresses, params)
+        elif Bool(py=e.__contains__("forward_session")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
+            if blk["_native_session"] is None:
+                blk["_native_session"] = e["create"]()
+                blk["_session_binding"] = e["block_binding"]
+            st.cached_tokens = e["forward_session"](blk["_native_session"], addresses, params)
+        else:
+            if step:
+                params.pop(1)
+            st.cached_tokens = e["decode" if step else "forward"](addresses, params)
+    else:
+        if GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
+            raise Error("neural block: state is owned by a resident decode session")
+        addresses = py_ints([_addr(x, keep)])
+        for j in range(len(blk["_w"])):
+            addresses.append(_addr(blk["_w"][j], keep))
+        if kind == "mamba1":
+            var di = Int(py=blk["d_inner"])
+            addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies))
+            addresses.append(_mutable(st.h, [b, di, 16], keep, copies))
+            addresses.append(_addr(y, keep))
+            params = py_ints([b, d]) if step else py_ints([b, l, d])
+            var profile = Int(py=e["mamba1_profile"])
+            if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
+                raise Error("CausalLM: incompatible or failed Mamba1 state")
+            if profile == 2:
+                addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies))
+                addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies))
+                addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies))
+                params.append(st.absolute_position)
+            e["decode" if step else "forward"](addresses, params)
+            st.absolute_position = PythonObject(Int(py=st.absolute_position) + l)
+        else:
+            var nh = Int(py=blk["nheads"])
+            var cd = Int(py=blk["conv_dim"])
+            addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies))
+            addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies))
+            addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
+            addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
+            addresses.append(_addr(y, keep))
+            var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
+            addresses.append(_addr(last, keep))
+            params = py_ints([b, d, Int(py=st.buffered_tokens)]) if step else py_ints([b, l, d, Int(py=st.buffered_tokens)])
+            params.extend(blk["dt_limit"])
+            st.buffered_tokens = e["decode" if step else "forward"](addresses, params)
+            blk["h_last_"] = last
+    _writeback(copies)
+    _ = keep^
+    return y
+
+
 def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
     var b = Int(py=ids.shape[0])
     var l = Int(py=ids.shape[1])
@@ -313,81 +416,7 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
     var kind = String(model.kind)
     try:
         for i in range(len(model._blocks)):
-            var blk = _block(model, i)
-            var st = state.layers[i]
-            var y = generation_array([b, l, d])
-            var addresses = PythonObject(None)
-            var params = PythonObject(None)
-            if kind == "transformer":
-                var g = GENERATION_BOUNDARY.get_or_create_ptr()
-                if g[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
-                    raise Error("CausalLM: layer state is owned by a decode session")
-                var old_profile = g[].bi.getattr(st, "arithmetic_profile", PythonObject(None))
-                var profile_id = blk.get("_arithmetic_profile", PythonObject(None))
-                if old_profile is None and Int(py=st.cached_tokens) != 0 and Bool(py=blk.get("_arithmetic_profile_changed", PythonObject(False))):
-                    raise Error("CausalLM: cached state requires arithmetic profile metadata")
-                if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
-                    raise Error("CausalLM: state arithmetic profile differs")
-                if profile_id is not None:
-                    st.arithmetic_profile = profile_id
-                var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
-                var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
-                params = _transformer_params(blk, st, b, l)
-                var profile = model._head_int15 is not None
-                var device15 = profile and Bool(py=e.__contains__("forward15"))
-                addresses = _transformer_args(model, blk, st, x, y, b, l, device15, keep)
-                addresses[10] = PythonObject(_mutable(st.k_cache, [cache_n], keep, copies))
-                addresses[11] = PythonObject(_mutable(st.v_cache, [cache_n], keep, copies))
-                if device15:
-                    if blk["_native_session"] is None:
-                        blk["_native_session"] = e["create"]()
-                        blk["_session_binding"] = e["block_binding"]
-                    st.cached_tokens = e["forward15"](blk["_native_session"], addresses, params)
-                elif profile:
-                    st.cached_tokens = e["forward15_host"](addresses, params)
-                elif Bool(py=e.__contains__("forward_session")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
-                    if blk["_native_session"] is None:
-                        blk["_native_session"] = e["create"]()
-                        blk["_session_binding"] = e["block_binding"]
-                    st.cached_tokens = e["forward_session"](blk["_native_session"], addresses, params)
-                else:
-                    st.cached_tokens = e["forward"](addresses, params)
-            else:
-                addresses = py_ints([_addr(x, keep)])
-                for j in range(len(blk["_w"])):
-                    addresses.append(_addr(blk["_w"][j], keep))
-                if kind == "mamba1":
-                    var di = Int(py=blk["d_inner"])
-                    addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies))
-                    addresses.append(_mutable(st.h, [b, di, 16], keep, copies))
-                    addresses.append(_addr(y, keep))
-                    params = py_ints([b, l, d])
-                    var profile = Int(py=e["mamba1_profile"])
-                    if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
-                        raise Error("CausalLM: incompatible or failed Mamba1 state")
-                    if profile == 2:
-                        addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies))
-                        addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies))
-                        addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies))
-                        params.append(st.absolute_position)
-                    e["forward"](addresses, params)
-                    st.absolute_position = PythonObject(Int(py=st.absolute_position) + l)
-                else:
-                    var nh = Int(py=blk["nheads"])
-                    var cd = Int(py=blk["conv_dim"])
-                    addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies))
-                    addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies))
-                    addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
-                    addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
-                    addresses.append(_addr(y, keep))
-                    var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
-                    addresses.append(_addr(last, keep))
-                    params = py_ints([b, l, d, Int(py=st.buffered_tokens)])
-                    params.extend(blk["dt_limit"])
-                    st.buffered_tokens = e["forward"](addresses, params)
-                    blk["h_last_"] = last
-            _writeback(copies)
-            x = y
+            x = causal_layer_run(model, i, x, state.layers[i])
         var hn = x
         if model._norm is not None:
             hn = generation_array([b, l, d])

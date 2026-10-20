@@ -530,49 +530,9 @@ class Mamba1Block(_MambaBase):
         "out_proj.weight",
     )
 
-    def __init__(self, weights):
-        what = "Mamba1Block"
-        # lane/identical-lowbit-inference (2026-09-17): packed projection
-        # weights (mojolearn.lowbit) materialized exactly, fp32 path after.
-        weights, self.weight_format = _lowbit.unpack(weights, what)
-        arrs = _take(weights, what, self._W_NAMES)
-        norm_w = _f32_strict(arrs[0], what, "norm.weight")
-        if norm_w.ndim != 1 or norm_w.shape[0] < 1:
-            raise ValueError(
-                f"mojolearn {what}: norm.weight must be 1-D (d_model,), "
-                f"got shape {norm_w.shape}"
-            )
-        dm = int(norm_w.shape[0])
-        di = _M1_EXPAND * dm
-        r = int(math.ceil(dm / 16.0))
-        xr = r + 2 * _M1_D_STATE
-        self.d_model = dm
-        self.d_inner = di
-        self.dt_rank = r
-        # Every weight to float32 C-order ONCE, at construction, shapes
-        # checked against the profile's derivation rules so a transposed
-        # projection cannot cross as a plausible buffer.
-        self._w = [
-            norm_w,
-            _want_shape(_f32_strict(arrs[1], what, "in_proj.weight"),
-                        what, "in_proj.weight", (2 * di, dm)),
-            _want_shape(_f32_strict(arrs[2], what, "conv1d.weight"),
-                        what, "conv1d.weight", (di, 1, _M1_D_CONV),
-                        alt=(di, _M1_D_CONV)),
-            _want_shape(_f32_strict(arrs[3], what, "conv1d.bias"),
-                        what, "conv1d.bias", (di,)),
-            _want_shape(_f32_strict(arrs[4], what, "x_proj.weight"),
-                        what, "x_proj.weight", (xr, di)),
-            _want_shape(_f32_strict(arrs[5], what, "dt_proj.weight"),
-                        what, "dt_proj.weight", (di, r)),
-            _want_shape(_f32_strict(arrs[6], what, "dt_proj.bias"),
-                        what, "dt_proj.bias", (di,)),
-            _want_shape(_f32_strict(arrs[7], what, "A_log"),
-                        what, "A_log", (di, _M1_D_STATE)),
-            _want_shape(_f32_strict(arrs[8], what, "D"), what, "D", (di,)),
-            _want_shape(_f32_strict(arrs[9], what, "out_proj.weight"),
-                        what, "out_proj.weight", (dm, di)),
-        ]
+    def __init__(self, weights, *, numeric_mode=None):
+        return _native_neural_bridge.RUNTIME.neural_block_init(
+            self, weights, "mamba1", (None, numeric_mode), _native_neural_bridge.CONTEXT)
 
     def allocate_state(self, batch_size):
         """Return a zero `Mamba1State` for `batch_size` sequences.
@@ -586,21 +546,8 @@ class Mamba1Block(_MambaBase):
         -------
         Mamba1State
         """
-        b = int(batch_size)
-        if b < 1:
-            raise ValueError(
-                f"mojolearn Mamba1Block: batch_size must be positive, "
-                f"got {batch_size!r}"
-            )
-        profile = _m1_profile(self._extension())
-        return Mamba1State(
-            zeros((b, self.d_inner, _M1_D_CONV), "<f4"),
-            zeros((b, self.d_inner, _M1_D_STATE), "<f4"),
-            profile_id=profile,
-            affine_boundary=zeros((b, self.d_inner, _M1_D_STATE), "<f4") if profile == 2 else None,
-            affine_a=zeros((b, self.d_inner, _M1_D_STATE, 6), "<f4") if profile == 2 else None,
-            affine_b=zeros((b, self.d_inner, _M1_D_STATE, 6), "<f4") if profile == 2 else None,
-        )
+        return _native_neural_bridge.RUNTIME.neural_block_allocate(
+            self, batch_size, None, _native_neural_bridge.CONTEXT)
 
     def _call(self, x, state, step):
         what = "Mamba1Block.step" if step else "Mamba1Block.forward"
@@ -675,12 +622,8 @@ class Mamba1Block(_MambaBase):
         y : mojolearn.Array, shape (B, L, d_model)
             Block output, residual included. ``numpy.asarray(y)`` is zero-copy.
         """
-        if lengths is not None:
-            what = type(self).__name__ + ".forward"
-            x = _batch_tokens(x, what, self.d_model, False)
-            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
-                                          x, state, lengths, "<f4", what)[0]
-        return self._call(x, state, step=False)
+        return _native_neural_bridge.RUNTIME.neural_block_forward(
+            self, x, state, False, lengths, _native_neural_bridge.CONTEXT)
 
     def backward(self, x, grad_output):
         """Gradients of a zero-state prefill (a vector-Jacobian product).
@@ -760,13 +703,8 @@ class Mamba1Block(_MambaBase):
         -------
         y : mojolearn.Array, shape (B, 1, d_model)
         """
-        if state is None:
-            raise ValueError(
-                "mojolearn Mamba1Block.step: state is required (a decode "
-                "step continues a sequence; allocate_state(B) makes the "
-                "fresh one)"
-            )
-        return self._call(x, state, step=True)
+        return _native_neural_bridge.RUNTIME.neural_block_forward(
+            self, x, state, True, None, _native_neural_bridge.CONTEXT)
 
     def decode_session(self, state):
         """Open a `Mamba1DecodeSession` for fast token-by-token decoding.
@@ -1100,63 +1038,9 @@ class Mamba2Block(_MambaBase):
         "out_proj.weight",
     )
 
-    def __init__(self, weights, *, dt_limit=(0.0, float("inf"))):
-        what = "Mamba2Block"
-        # lane/identical-lowbit-inference (2026-09-17): packed projection
-        # weights (mojolearn.lowbit) materialized exactly, fp32 path after.
-        weights, self.weight_format = _lowbit.unpack(weights, what)
-        arrs = _take(weights, what, self._W_NAMES)
-        norm_w = _f32_strict(arrs[0], what, "block_norm.weight")
-        if norm_w.ndim != 1 or norm_w.shape[0] < 1:
-            raise ValueError(
-                f"mojolearn {what}: block_norm.weight must be 1-D "
-                f"(d_model,), got shape {norm_w.shape}"
-            )
-        dm = int(norm_w.shape[0])
-        if dm % (_M2_HEADDIM // _M2_EXPAND) != 0:
-            # Mamba2Dims.of's rule, quoted; the Mojo constructor remains
-            # the authority (raw-binding callers hit it), this copy
-            # exists because the state buffers below cannot be sized
-            # without a whole nheads.
-            raise ValueError(
-                f"mojolearn {what}: d_model must be a multiple of "
-                f"{_M2_HEADDIM // _M2_EXPAND} so that nheads = "
-                f"2*d_model/{_M2_HEADDIM} is whole (profile constants "
-                "headdim 64, expand 2 -- Mamba2Dims.of carries the same "
-                f"refusal); got {dm}"
-            )
-        di = _M2_EXPAND * dm
-        nh = di // _M2_HEADDIM
-        cd = di + 2 * _M2_NGROUPS * _M2_D_STATE
-        dip = 2 * di + 2 * _M2_NGROUPS * _M2_D_STATE + nh
-        self.d_model = dm
-        self.d_inner = di
-        self.nheads = nh
-        self.conv_dim = cd
-        # CONVERSION, NOT POLICY: the pair goes down unjudged (DEVIATION
-        # 788's clamp defines its own NaN/zero-sign behavior by
-        # construction), a non-number still raises here.
-        lo, hi = dt_limit
-        self.dt_limit = (float(lo), float(hi))
-        self._w = [
-            norm_w,
-            _want_shape(_f32_strict(arrs[1], what, "in_proj.weight"),
-                        what, "in_proj.weight", (dip, dm)),
-            _want_shape(_f32_strict(arrs[2], what, "conv1d.weight"),
-                        what, "conv1d.weight", (cd, 1, _M2_D_CONV),
-                        alt=(cd, _M2_D_CONV)),
-            _want_shape(_f32_strict(arrs[3], what, "conv1d.bias"),
-                        what, "conv1d.bias", (cd,)),
-            _want_shape(_f32_strict(arrs[4], what, "dt_bias"),
-                        what, "dt_bias", (nh,)),
-            _want_shape(_f32_strict(arrs[5], what, "A_log"),
-                        what, "A_log", (nh,)),
-            _want_shape(_f32_strict(arrs[6], what, "D"), what, "D", (nh,)),
-            _want_shape(_f32_strict(arrs[7], what, "norm.weight"),
-                        what, "norm.weight", (di,)),
-            _want_shape(_f32_strict(arrs[8], what, "out_proj.weight"),
-                        what, "out_proj.weight", (dm, di)),
-        ]
+    def __init__(self, weights, *, dt_limit=(0.0, float("inf")), numeric_mode=None):
+        return _native_neural_bridge.RUNTIME.neural_block_init(
+            self, weights, "mamba2", (None, numeric_mode, dt_limit), _native_neural_bridge.CONTEXT)
 
     def allocate_state(self, batch_size):
         """Return a zero `Mamba2State` for `batch_size` sequences.
@@ -1172,19 +1056,8 @@ class Mamba2Block(_MambaBase):
         -------
         Mamba2State
         """
-        b = int(batch_size)
-        if b < 1:
-            raise ValueError(
-                f"mojolearn Mamba2Block: batch_size must be positive, "
-                f"got {batch_size!r}"
-            )
-        return Mamba2State(
-            zeros((b, self.conv_dim, _M2_D_CONV), "<f4"),
-            zeros((b, self.nheads, _M2_HEADDIM, _M2_D_STATE), "<f4"),
-            zeros((b, _M2_CHUNK_SIZE, self.conv_dim), "<f4"),
-            zeros((b, _M2_CHUNK_SIZE, self.nheads), "<f4"),
-            0,
-        )
+        return _native_neural_bridge.RUNTIME.neural_block_allocate(
+            self, batch_size, None, _native_neural_bridge.CONTEXT)
 
     def _call(self, x, state, step):
         what = "Mamba2Block.step" if step else "Mamba2Block.forward"
@@ -1264,12 +1137,8 @@ class Mamba2Block(_MambaBase):
         y : mojolearn.Array, shape (B, L, d_model)
             Block output, residual included. ``numpy.asarray(y)`` is zero-copy.
         """
-        if lengths is not None:
-            what = type(self).__name__ + ".forward"
-            x = _batch_tokens(x, what, self.d_model, False)
-            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
-                                          x, state, lengths, "<f4", what)[0]
-        return self._call(x, state, step=False)
+        return _native_neural_bridge.RUNTIME.neural_block_forward(
+            self, x, state, False, lengths, _native_neural_bridge.CONTEXT)
 
     def backward(self, x, grad_output):
         """Gradients of a zero-state prefill (a vector-Jacobian product).
@@ -1311,13 +1180,8 @@ class Mamba2Block(_MambaBase):
         -------
         y : mojolearn.Array, shape (B, 1, d_model)
         """
-        if state is None:
-            raise ValueError(
-                "mojolearn Mamba2Block.step: state is required (a decode "
-                "step continues a sequence; allocate_state(B) makes the "
-                "fresh one)"
-            )
-        return self._call(x, state, step=True)
+        return _native_neural_bridge.RUNTIME.neural_block_forward(
+            self, x, state, True, None, _native_neural_bridge.CONTEXT)
 
     def _decode_session(self, state):
         """Keep Mamba-2 weights and recurrent state resident for repeated
@@ -2310,3 +2174,11 @@ class _Mamba3DecodeSession:
 
     def __repr__(self):
         return "Mamba3DecodeSession(open=%r, rows=%d)" % (self._open, self._b)
+
+
+from . import _native_neural_bridge
+Mamba1Block.__init__ = Mamba1Block.__init__.__wrapped__
+Mamba2Block.__init__ = Mamba2Block.__init__.__wrapped__
+Mamba1Block.__getattribute__ = object.__getattribute__
+Mamba2Block.__getattribute__ = object.__getattribute__
+from .models import causal_lm as _causal_native_connection

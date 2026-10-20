@@ -85,6 +85,7 @@ from bindings.native_json import native_json_parse, native_json_read, native_pat
 from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
+from bindings.neural_block_public import neural_block_c
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1867,6 +1868,9 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(checkpoint_c[15], "safetensors_names")
         module.def_py_c_function(checkpoint_c[16], "safetensors_contains")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
+        module.def_py_c_function(neural_block_c[0], "neural_block_init")
+        module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
+        module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
