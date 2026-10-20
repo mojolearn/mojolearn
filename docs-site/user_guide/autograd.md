@@ -182,9 +182,9 @@ on the machine that trained it. To keep training later, save with `save_checkpoi
 [Moving training between vendors](cross_vendor_training.md).
 
 ```python
-model.export("model.ckpt")
+clf.export("model.ckpt")
 served = mojolearn.Sequential.load("model.ckpt")
-labels = served.predict(X_new)
+labels_served = served.predict(X)
 ```
 
 ## Numeric modes
