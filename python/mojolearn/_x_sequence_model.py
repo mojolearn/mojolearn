@@ -645,8 +645,8 @@ class Sequential:
                 recs += src.record(key, i, slot, LAYOUT_TORCH)
             params = np.empty(n_params, dtype=np.float32)
             # Mojo checks every dtype and shape, then writes every parameter
-            n_params, n_out, n_in = (int(v) for v in b.model_import_params(
-                prog, table, recs, keys, params.ctypes.data))  # glue: three counts returned by Mojo
+            counts = b.model_import_params(prog, table, recs, keys, params.ctypes.data)
+            n_params, n_out, n_in = (int(v) for v in counts)  # glue: three counts returned by Mojo
         self.params_ = params
         self.n_features_in_ = n_in
         self.n_outputs_ = n_out

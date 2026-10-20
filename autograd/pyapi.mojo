@@ -194,8 +194,15 @@ def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonOb
 
 def _names(p: PythonObject) raises -> List[String]:
     var out = List[String]()
-    for i in range(len(p)):  # driver-loop: over source tensor names
+    for i in range(len(p)):  # small-loop(p: one name per source weight tensor): argument parsing, no data
         out.append(String(py=p[i]))
+    return out^
+
+
+def _record_ints(p: PythonObject) raises -> List[Int]:
+    var out = List[Int]()
+    for i in range(len(p)):  # small-loop(p: WI_RECORD words per source weight tensor): argument parsing, no data
+        out.append(ival(p, i))
     return out^
 
 
@@ -209,7 +216,7 @@ def model_import_params_py[E: Exec](
     (model_n_params' count). Returns [parameter count, output width, input
     values per sample]."""
     var spec = parse_model(_ints(prog), _floats(ptab, 0))
-    model_import_params(ex, spec, _ints(recs), _names(names), fptr(params_addr, "params"))
+    model_import_params(ex, spec, _record_ints(recs), _names(names), fptr(params_addr, "params"))
     var out = Python.list()
     out.append(PythonObject(spec.n_params))
     out.append(PythonObject(spec.out_features()))
@@ -285,18 +292,18 @@ def ops_load_weights_py[E: Exec & Movable & Deinitable, KIND: Int](
     records, the target handle in word 0) into the session's uploaded
     tensors, in place. Every record is checked before any tensor is
     written. Returns the number of tensors written."""
-    var r_ = _ints(recs)
+    var r_ = _record_ints(recs)
     var nm = _names(names)
     var n = len(nm)
     if n < 1 or len(r_) != n * WI_RECORD:
         raise Error("load_weights: the import takes " + String(WI_RECORD) + " integers per source tensor")
     var p = ops_session[E, KIND](Int(py=sid))
     var views = List[CastIn]()
-    for r in range(n):  # driver-loop: over source tensors
+    for r in range(n):  # small-loop(n: one per source weight tensor): checks metadata, no data
         var h = r_[r * WI_RECORD]
         var src = wi_source(r_, r, nm[r])
         views.append(session_load_check(src, r_[r * WI_RECORD + 2], rn_dims(p[].shape_nd(h))))
-    for r in range(n):  # driver-loop: over source tensors
+    for r in range(n):  # small-loop(n: one per source weight tensor): one cast launch each
         p[].load_into(r_[r * WI_RECORD], views[r])
     return PythonObject(n)
 
