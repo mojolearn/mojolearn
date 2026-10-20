@@ -1,0 +1,16 @@
+SMOKE_BINDING {"binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so", "family": "x_sequence", "numeric_mode": 1, "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py", "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610", "vendor": "metal", "version": "0.8.55"}
+OPS2_DIGEST example_first ea6fe8e9a9b06b8c
+OPS2_DIGEST example_hvp 2a2e6f86b1b59bff
+OPS2_DIGEST example_hvp_helper 2a2e6f86b1b59bff
+.OPS2_DIGEST hvp_softmax_cross_entropy f311fd7defa5586b
+.OPS2_DIGEST hvp_zero_curvature 9d908ecfb6b256de
+.OPS2_DIGEST vjp 20dc454e6c56bf69
+OPS2_DIGEST jvp 7dbffda75006738d
+.OPS2_DIGEST vjp_create_graph 25003aecbf071674
+.OPS2_DIGEST physics_du 7f32f83ab1c4c606
+OPS2_DIGEST physics_d2u 93d649b8be78511c
+..OPS2_DIGEST layer_norm_hvp_x d4f9e4e4e33fc268
+OPS2_DIGEST layer_norm_hvp_w 18cf41e13a5527b4
+OPS2_DIGEST layer_norm_hvp_b 4ad4cbda93458728
+.
+8 passed in 0.33s

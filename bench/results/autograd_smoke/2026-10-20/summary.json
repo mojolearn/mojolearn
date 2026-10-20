@@ -1,0 +1,83 @@
+{
+  "schema": "mojolearn-autograd-smoke-audit/1",
+  "source_commit": "3e8fba8ecb8eb48a3d683cce6c20a05797b33a75",
+  "runtime_source_commit": "7939b679a2079051f191d707067a487a9741fcce",
+  "runtime_source_unchanged": true,
+  "retained_logs": "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020",
+  "controller_and_cpu_checks": {
+    "controller-tests": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "regression-tests": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 113,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "final-controller-tests": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "cpu-fit": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "cpu-required-fit": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "metal_initial_smoke_counts": {
+    "STARTED": 1,
+    "ok": 10
+  },
+  "metal_completed_entries": 11,
+  "metal_completed_counts": {
+    "ok": 11
+  },
+  "metal_unique_pytest_counts": {
+    "tests": 72,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "fit_reference_digests": {
+    "lstm": "ff646fc6945ed702",
+    "mlp": "df507350b0b49f3f"
+  },
+  "fit_reference_columns": [
+    "cpu",
+    "metal"
+  ],
+  "scope": [
+    "Correctness and smoke-controller validation only; no performance measurement.",
+    "Source-package checks using previously qualified native bindings, not installed-wheel qualification.",
+    "The original five-second public-example timeout is retained; only that incomplete entry and the changed fit reference check were rerun to completion.",
+    "Native check sources were added to the shared registry and build commands were tested; their binaries were not rebuilt or rerun in this audit.",
+    "No fresh NVIDIA/AMD run, full 24-entry release gate, or cross-vendor identity qualification."
+  ]
+}

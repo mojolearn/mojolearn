@@ -1,0 +1,96 @@
+{
+ "counts": {
+  "ok": 2
+ },
+ "coverage": "selected entries",
+ "package_scope": "source",
+ "rows": [
+  {
+   "binding": {
+    "binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so",
+    "family": "x_sequence",
+    "numeric_mode": 1,
+    "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py",
+    "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610",
+    "vendor": "metal",
+    "version": "0.8.55"
+   },
+   "binding_report": "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-fit-smoke-metal.binding.json",
+   "command": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/autograd-usability/tools/autograd_smoke.py",
+    "entry",
+    "autograd-fit-smoke",
+    "--vendor",
+    "metal",
+    "--binding-report",
+    "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-fit-smoke-metal.binding.json",
+    "--junit",
+    "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-fit-smoke-metal.xml",
+    "--source-package",
+    "/Users/andrewhendel/mojolearn-wt/autograd-usability/python"
+   ],
+   "junit": "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-fit-smoke-metal.xml",
+   "log": "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-fit-smoke-metal.log",
+   "name": "autograd-fit-smoke",
+   "rc": 0,
+   "seconds": 1.15,
+   "status": "ok",
+   "tests": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 2
+   },
+   "timeout_s": 30.0,
+   "vendor": "metal",
+   "what": "a tiny MLP and LSTM fit through the installed bindings' default path"
+  },
+  {
+   "binding": {
+    "binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so",
+    "family": "x_sequence",
+    "numeric_mode": 1,
+    "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py",
+    "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610",
+    "vendor": "metal",
+    "version": "0.8.55"
+   },
+   "binding_report": "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-public-metal.binding.json",
+   "command": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python",
+    "-I",
+    "/Users/andrewhendel/mojolearn-wt/autograd-usability/tools/autograd_smoke.py",
+    "entry",
+    "autograd-public",
+    "--vendor",
+    "metal",
+    "--binding-report",
+    "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-public-metal.binding.json",
+    "--junit",
+    "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-public-metal.xml",
+    "--source-package",
+    "/Users/andrewhendel/mojolearn-wt/autograd-usability/python"
+   ],
+   "junit": "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-public-metal.xml",
+   "log": "/Users/andrewhendel/mojolearn-evidence/autograd-measurement-audit-20261020/metal-completion/autograd-public-metal.log",
+   "name": "autograd-public",
+   "rc": 0,
+   "seconds": 18.54,
+   "status": "ok",
+   "tests": {
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "tests": 21
+   },
+   "timeout_s": 30.0,
+   "vendor": "metal",
+   "what": "the public Sequential and ops.Session examples of the docs, PUBLIC_DIGEST lines"
+  }
+ ],
+ "schema": "mojolearn-autograd-smoke/1",
+ "source_package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python",
+ "vendor": "metal"
+}

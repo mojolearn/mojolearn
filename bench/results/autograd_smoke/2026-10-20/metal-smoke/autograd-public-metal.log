@@ -1,0 +1,34 @@
+SMOKE_BINDING {"binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so", "family": "x_sequence", "numeric_mode": 1, "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py", "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610", "vendor": "metal", "version": "0.8.55"}
+0.05659662187099457
+0.05659662187099457
+PUBLIC_DIGEST guide_sequential_params 672665adde8b44b2
+PUBLIC_DIGEST guide_sequential_proba 1895f8777920840c
+.PUBLIC_DIGEST guide_session_probs 2f6d8fbfb03bbea7
+PUBLIC_DIGEST guide_session_total 870cb6d82421dc21
+PUBLIC_DIGEST guide_session_grad 17721d20641433da
+.PUBLIC_DIGEST guide_session_trained 34b5cad9b0eeb907
+.0.05659662187099457
+PUBLIC_DIGEST guide_export_labels 1924fa1ca48922ec
+.PUBLIC_DIGEST guide_mixture_proba d2688c89ab0e25be
+PUBLIC_DIGEST guide_mixture_hard c92c3dbbdb5fb2c2
+PUBLIC_DIGEST guide_mixture_params 790706a65ea8e56a
+PUBLIC_DIGEST guide_mixture_accuracy 6879109c9274ca54
+.PUBLIC_DIGEST guide_shapes_conv_grads 4b9ab37bc53c196a
+PUBLIC_DIGEST guide_shapes_attention 4994611e3c3f90ca
+PUBLIC_DIGEST guide_shapes_attention_grad 1faa822ad42084ee
+.PUBLIC_DIGEST guide_shapes_seq_params eda4399dcfb4feee
+PUBLIC_DIGEST guide_shapes_seq_proba 0861ff66428e2f03
+.PUBLIC_DIGEST guide_program_first a62ad8aef1e3977e
+PUBLIC_DIGEST guide_program_second 2f8b15c43dacfc44
+.PUBLIC_DIGEST guide_import_params c62442fca61e80d2
+PUBLIC_DIGEST guide_import_logits 3706524116a77d86
+PUBLIC_DIGEST guide_import_session 3706524116a77d86
+.[('x', (8, 3, 8, 8), 'float32')]
+[('y', (8, 10), 'float32')]
+[('x', (8, 3, 8, 8), 'float32')]
+[('y', (8, 10), 'float32')]
+PUBLIC_DIGEST guide_import_model_logits ddb699a979259cd0
+PUBLIC_DIGEST guide_import_model_eager ddb699a979259cd0
+PUBLIC_DIGEST guide_import_model_bits_equal_eager yes
+./Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/lib/python3.14/multiprocessing/resource_tracker.py:475: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-ttmcssrj'}
+  warnings.warn(

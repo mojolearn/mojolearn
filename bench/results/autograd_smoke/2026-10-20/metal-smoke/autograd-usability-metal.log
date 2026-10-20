@@ -1,0 +1,10 @@
+SMOKE_BINDING {"binding": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/identical/_mojolearn_x_sequence.so", "family": "x_sequence", "numeric_mode": 1, "package": "/Users/andrewhendel/mojolearn-wt/autograd-usability/python/mojolearn/__init__.py", "sha256": "10d3be92645b46a9d44279037818f1a768e1a8623b4d4a6c2c7b62e9b283e610", "vendor": "metal", "version": "0.8.55"}
+USABILITY_DIGEST validation_restore 5c972d1fc8fea349
+.USABILITY_DIGEST validation_class_codes ac777dcb7b34da4e
+...USABILITY_DIGEST dynamic_5_7_3 041342d8cdeef271
+USABILITY_DIGEST dynamic_1_2_3 3c096abe870f2218
+USABILITY_DIGEST dynamic_2_4_3 f9b0a8e8c2f19a2d
+.USABILITY_DIGEST program_adam dfbb65f97dc2548f
+.USABILITY_DIGEST program_custom_loss f03639dab07895c3
+..
+8 passed in 0.35s
