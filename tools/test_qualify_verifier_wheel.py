@@ -1,7 +1,77 @@
 import copy
 import unittest
 
-from qualify_verifier_wheel import admit, expanded_checks
+from qualify_verifier_wheel import admit, admit_ptx_bindings, admit_ptx_selection, expanded_checks
+
+
+def ptx_install():
+    return dict(vendor='cuda', gpu_arch='sm_80', device_arch='sm_86',
+        ptx_payload_files={'identical/_mojolearn_native.so': 'a'*64, '_mojolearn_native.so': 'b'*64},
+        ptx_selection=dict(schema='mojolearn.ptx-selection.v2', selected='ptx', code_format='ptx',
+            arch='sm_80', numeric_mode='identical', source_commit='c'*40, manifest_sha256='d'*64,
+            loaded_files=[dict(file='identical/_mojolearn_native.so', sha256='a'*64)]))
+
+
+class PTXQualificationTests(unittest.TestCase):
+    def test_ptx_target_and_physical_architecture_are_distinct(self):
+        installed = ptx_install()
+        self.assertEqual(admit_ptx_selection(installed, 'c'*40)['arch'], 'sm_80')
+        self.assertEqual(installed['device_arch'], 'sm_86')
+
+    def test_native_cpu_missing_or_mismatched_ptx_never_qualifies(self):
+        changes = [
+            lambda d: d.update(vendor='cpu'),
+            lambda d: d.update(gpu_arch='sm_89'),
+            lambda d: d.update(ptx_selection=None),
+            lambda d: d['ptx_selection'].update(code_format='native'),
+            lambda d: d['ptx_selection'].update(source_commit='e'*40),
+            lambda d: d['ptx_selection'].update(numeric_mode='fast'),
+            lambda d: d['ptx_selection'].update(loaded_files=[]),
+            lambda d: d['ptx_selection']['loaded_files'][0].update(sha256='f'*64),
+            lambda d: d['ptx_selection']['loaded_files'][0].update(
+                file='_mojolearn_native.so', sha256='b'*64),
+        ]
+        for change in changes:
+            installed = ptx_install()
+            change(installed)
+            with self.subTest(change=change), self.assertRaises(AssertionError):
+                admit_ptx_selection(installed, 'c'*40)
+
+    def test_numerical_workers_must_load_the_manifest_ptx_bytes(self):
+        report = dict(bindings=[dict(module='_mojolearn_native', sha256='a'*64),
+                                dict(module='mojolearn._host.core', sha256='e'*64, kind='host')])
+        proof = admit_ptx_bindings(report, ptx_install())
+        self.assertEqual(proof, dict(bindings=1, sha256=['a'*64]))
+        for change in [
+                lambda d: d['bindings'][0].update(sha256='f'*64),
+                lambda d: d['bindings'][0].update(sha256='b'*64),
+                lambda d: d['bindings'].pop(0),
+                lambda d: d.update(bindings_error='worker inventory failed')]:
+            broken = copy.deepcopy(report)
+            change(broken)
+            with self.subTest(change=change), self.assertRaises(AssertionError):
+                admit_ptx_bindings(broken, ptx_install())
+
+    def test_ptx_scope_refuses_cpu_only_before_starting_jobs(self):
+        from unittest.mock import patch
+        from qualify_verifier_wheel import main
+        with patch('sys.argv', ['qualifier', '--require-ptx', '--scope', 'cpu-only',
+                               '--output', '/nonexistent']), patch('subprocess.Popen') as spawn:
+            with self.assertRaises(SystemExit):
+                main()
+            spawn.assert_not_called()
+
+    def test_wrong_route_stops_before_numerical_jobs(self):
+        from pathlib import Path
+        from qualify_verifier_wheel import qualify_jobs
+        calls = []
+        def run(name, *args):
+            calls.append(name)
+            return dict(vendor='cuda', gpu_arch='sm_89', ptx_selection=None)
+        with self.assertRaises(AssertionError):
+            qualify_jobs(run, lambda: None, dict(require_ptx=True, source_commit='c'*40),
+                         '/python', Path('/work'), Path('/out'), [], 'expanded', None, '1.0')
+        self.assertEqual(calls, ['installed'])
 
 
 class VerifierAdmissionTests(unittest.TestCase):
