@@ -193,7 +193,7 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
 
 
 def native_path(value: PythonObject) raises -> PythonObject:
-    """Read str/bytes or standard pathlib storage without Python __fspath__."""
+    """Read standard paths natively; preserve an explicit caller PathLike protocol."""
     var bi = Python.import_module("builtins")
     if bi.type(value) is bi.str:
         return value
@@ -203,7 +203,11 @@ def native_path(value: PythonObject) raises -> PythonObject:
     var module = String(cls.__module__)
     var name = String(cls.__name__)
     if (module != "pathlib" and module != "pathlib._local") or (name != "PosixPath" and name != "PurePosixPath"):
-        raise Error("TypeError: path requires str, bytes or a standard PosixPath")
+        # os.fspath is a C builtin. A caller-defined __fspath__ may execute
+        # caller Python; preserve that explicitly supplied protocol while no
+        # package path preparation/orchestration executes in Python.
+        var result = Python.import_module("os").fspath(value)
+        return result.decode("utf-8", "surrogateescape") if bi.type(result) is bi.bytes else result
     var parts = PythonObject(None)
     try:
         parts = bi.object.__getattribute__(value, "_raw_paths")
