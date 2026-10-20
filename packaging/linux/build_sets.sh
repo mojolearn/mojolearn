@@ -562,7 +562,7 @@ for t in $TIERS; do
     [ -f "$so" ] || { echo "$t $n MISSING" >> "$ARCHBACK"; continue; }
     a=$(arch_of "$so")
     if [[ -z "$a" ]]; then
-      a=$(python3 "$REPO/packaging/linux/device_glue.py" classify "$t" "$n")
+      a=$(python3 "$REPO/packaging/linux/device_glue.py" classify "$t" "$n" "$so")
     fi
     echo "$t $n $a" >> "$ARCHBACK"
   done

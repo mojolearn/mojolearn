@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from device_glue import validate, NO_IMAGE
+from device_glue import classify, validate, NO_IMAGE
 from test_split_wheels import make_sets, pw
 
 
@@ -51,6 +51,18 @@ class DeviceGlue(unittest.TestCase):
             (adir / '_mojolearn_x_trees.so').write_bytes(b'embedded gfx942 image')
             with self.assertRaisesRegex(SystemExit, 'contradicts binary'):
                 pw.load_set(paths[0], include_byte_lm=True)
+
+    def test_classify_delegates_only_from_an_own_file(self):
+        self.assertEqual(classify('fast', '_mojolearn_x_trees'), NO_IMAGE)
+        self.assertEqual(classify('fast', '_mojolearn_x_trees', 'd/_mojolearn_x_trees.so'), NO_IMAGE)
+        # merged layout: x_trees shares _mojolearn_native.so with rf and gbdt
+        self.assertEqual(classify('fast', '_mojolearn_x_trees', 'd/_mojolearn_native.so'), 'NONE')
+        self.assertEqual(classify('identical', '_mojolearn_gp', 'd/_mojolearn_gp.so'), 'NONE')
+
+    def test_merged_rows_need_no_delegation(self):
+        # every member of a merged file reads that file's architecture
+        validate([[t, n, 'sm_89'] for t in ('fast', 'identical')
+                  for n in ('_mojolearn_x_trees', '_mojolearn_rf', '_mojolearn_gbdt')])
 
     def test_unregistered_missing_image_still_fails_packer(self):
         with tempfile.TemporaryDirectory() as tmp:

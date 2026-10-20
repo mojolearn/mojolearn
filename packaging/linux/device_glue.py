@@ -3,8 +3,16 @@
 bindings/_mojolearn_x_trees.mojo registers xtrees/api.mojo ensemble glue.
 Tree fits are delegated by the Python API to _mojolearn_rf/_mojolearn_gbdt.
 Both delegates must carry the requested image in the same numerical tier.
+
+The delegation exists only in the PER-BINDING layout, where x_trees is its own
+file with no device code. In the MERGED layout (one _mojolearn_native.so per
+tier, packaging/linux/merged_layout.py) x_trees is a member of the same file as
+rf and gbdt, so its row carries that file's architecture and needs no
+delegation; a merged file with no image is refused like any GPU binary
+(`classify` answers NONE for a member served by a merged file).
 """
 import re
+from pathlib import Path
 
 NO_IMAGE = "NONE-DELEGATED"
 DEVICE_GLUE = {
@@ -35,10 +43,19 @@ def validate(rows, root=None):
                 raise ValueError(f"device-free witness contradicts binary: {binary}")
 
 
+def classify(tier, name, file=None):
+    """The architecture word for a binding whose binary names none: the
+    delegation marker for registered glue in its OWN file (per-binding
+    layout), NONE otherwise (a merged file never delegates)."""
+    own = file is None or Path(file).name == name + ".so"
+    return NO_IMAGE if own and (tier, name) in DEVICE_GLUE else "NONE"
+
+
 if __name__ == "__main__":
     import sys
     from pathlib import Path
     if sys.argv[1] == "classify":
-        print(NO_IMAGE if tuple(sys.argv[2:4]) in DEVICE_GLUE else "NONE")
+        # classify TIER NAME [FILE]: FILE is the binary NAME loads from
+        print(classify(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None))
     else:
         validate([line.split() for line in Path(sys.argv[2]).read_text().splitlines()])
