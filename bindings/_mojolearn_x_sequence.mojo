@@ -17,6 +17,13 @@ from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py
+from autograd.distributed_pyapi import (
+    distributed_devices, distributed_open, distributed_load, distributed_fit_py,
+    distributed_run_py, distributed_state_py, distributed_residency_py,
+    distributed_save_py, distributed_close_py,
+)
+from max.gpu.host import DeviceContext
+from sequence.launch_profile import launch_profile_level
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
@@ -273,6 +280,57 @@ def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: Python
 
 def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
     return ops_program_info_py[DeviceExec, OPS_DEVICE](sid, pid)
+
+
+
+def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
+    logical_shards: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject,
+) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    return distributed_open[DeviceExec, OPS_DEVICE](sid, pid, ids, logical_shards, optimizer, parameters, seed, executors^)
+
+
+def ops_distributed_load_binding(path: PythonObject, devices: PythonObject) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    return distributed_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+
+
+def ops_distributed_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
+    loss: PythonObject, epochs: PythonObject, batch: PythonObject, shuffle: PythonObject, delta: PythonObject,
+) raises -> PythonObject:
+    return distributed_fit_py[DeviceExec, OPS_DEVICE](id, arrays, targets, loss, epochs, batch, shuffle, delta)
+
+
+def ops_distributed_run_binding(id: PythonObject, arrays: PythonObject) raises -> PythonObject:
+    return distributed_run_py[DeviceExec, OPS_DEVICE](id, arrays)
+
+
+def ops_distributed_state_binding(id: PythonObject) raises -> PythonObject:
+    return distributed_state_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_distributed_residency_binding(id: PythonObject) raises -> PythonObject:
+    return distributed_residency_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_distributed_save_binding(id: PythonObject, path: PythonObject) raises -> PythonObject:
+    return distributed_save_py[DeviceExec, OPS_DEVICE](id, path)
+
+
+def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
+    return distributed_close_py[DeviceExec, OPS_DEVICE](id)
 
 
 def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject) raises -> PythonObject:
@@ -669,6 +727,14 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_program_run_binding]("ops_program_run")
         m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
         m.def_function[ops_program_fit_binding]("ops_program_fit")
+        m.def_function[ops_distributed_open_binding]("ops_distributed_open")
+        m.def_function[ops_distributed_load_binding]("ops_distributed_load")
+        m.def_function[ops_distributed_fit_binding]("ops_distributed_fit")
+        m.def_function[ops_distributed_run_binding]("ops_distributed_run")
+        m.def_function[ops_distributed_state_binding]("ops_distributed_state")
+        m.def_function[ops_distributed_residency_binding]("ops_distributed_residency")
+        m.def_function[ops_distributed_save_binding]("ops_distributed_save")
+        m.def_function[ops_distributed_close_binding]("ops_distributed_close")
         m.def_function[ops_program_free_binding]("ops_program_free")
         m.def_function[ops_save_program_binding]("ops_save_program")
         m.def_function[ops_load_program_binding]("ops_load_program")

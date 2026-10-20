@@ -60,6 +60,7 @@ from ._optional_numpy import require_numpy
 np = require_numpy('mojolearn.ops')
 
 from . import _backend
+from ._distributed_program import DistributedProgram as _DistributedProgram
 
 __all__ = ["Session", "Program"]
 
@@ -1249,6 +1250,10 @@ class Session:
         del keep
         return outs[0] if len(outs) == 1 else tuple(outs)
 
+    def load_distributed(self, path, devices=(0,)):
+        """Restore a complete distributed program onto the given devices."""
+        return _DistributedProgram(self._b, self._b.ops_distributed_load(path, devices))
+
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
 
@@ -1669,6 +1674,18 @@ class Program:
             self._s._sid(), self._id, arrays, targets, params, ip, [float(huber_delta)])
         self.n_iter_ = int(epochs)
         return self
+
+    def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
+                   parameters=(), seed=0):
+        """Copy this program into native workers with sharded optimizer state.
+
+        Keep ``logical_shards`` unchanged when comparing physical topologies.
+        ``optimizer`` is a session optimizer handle; its state is copied too.
+        ``parameters`` lists trainable handles, or is empty to train every
+        floating-point parameter. ``seed`` controls native row permutations.
+        """
+        return _DistributedProgram(self._s._b, self._s._b.ops_distributed_open(
+            self._s._sid(), self._id, devices, logical_shards, optimizer, parameters, seed))
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,
