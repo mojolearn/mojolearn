@@ -1175,8 +1175,10 @@ def model_fit_state[E: Exec](
     St[FS_VALID] = 1
     St[FS_EPOCH] = Int64(start + n_iter)
     St[FS_STEP] = Int64(step)
-    St[FS_STALL] = Int64(stall)
-    St[FS_BEST] = bitcast[DType.int64](best)
+    # Validation monitoring is per call. Do not compare its loss with a
+    # different validation set, or with training loss after a resumed fit.
+    St[FS_STALL] = Int64(0 if validation else stall)
+    St[FS_BEST] = bitcast[DType.int64](Float64(1.0e308) if validation else best)
     St[FS_PW1] = _f32_word(st.pw1)
     St[FS_PW2] = _f32_word(st.pw2)
     St[FS_MU] = _f32_word(st.mu_prod)

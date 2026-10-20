@@ -70,6 +70,17 @@ def test_validation_early_stopping():
     assert len(m.validation_loss_curve_) == 3
 
 
+def test_resume_does_not_compare_training_loss_with_validation_loss():
+    x, y = data()
+    m = ml.Sequential().linear(1, bias=False).compile(
+        loss="mse", lr=0.01, n_iter_no_change=2, tol=0.0)
+    zeros = np.zeros((5, 3), np.float32)
+    m.fit(x, y * 100, epochs=1, validation_data=(zeros, np.zeros((5, 1), np.float32)))
+    assert m.validation_loss_curve_ == [0.0]
+    m.fit(x, y * 100, epochs=5, resume=True)
+    assert m.n_iter_ == 6
+
+
 def test_dynamic_program_shapes_and_recovery():
     rng = np.random.default_rng(19)
     w = rng.standard_normal((3, 2), dtype=np.float32)
@@ -128,3 +139,19 @@ def test_program_custom_loss_minibatches_and_frozen_constants():
         assert model.loss_curve_[-1] < model.loss_curve_[0] * 0.1
         np.testing.assert_array_equal(s.numpy(scale), [[2]])
         digest("program_custom_loss", s.numpy(w), model.loss_curve_)
+
+
+def test_program_training_failure_restores_the_session():
+    x, y = data()
+    with ops.Session() as s:
+        a = s.tensor(x)
+        initial = np.zeros((3, 1), np.float32)
+        w = s.tensor(initial)
+        model = s.capture([a], [s.matmul(a, w)])
+        opt = s.optimizer("sgd", lr=0.01)
+        with pytest.raises(Exception):
+            model.fit(x[:, :2], targets=y, optimizer=opt, epochs=1)
+        np.testing.assert_array_equal(s.numpy(w), initial)
+        model.fit(x, targets=y, optimizer=opt, epochs=2)
+        assert model.loss_curve_[-1] < model.loss_curve_[0]
+        assert model.run(x).shape == y.shape

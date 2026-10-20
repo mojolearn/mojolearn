@@ -25,7 +25,7 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
         dims.append(Int(py=a.shape[0]))
         dims.append(1)
     else:
-        for k in range(nd):  # small-loop(ndim: at most eight shape words)
+        for k in range(nd):  # small-loop(nd: input tensor rank): shape metadata, not array elements
             dims.append(Int(py=a.shape[k]))
     var sh = ShapeN.of(dims)
     var size = Int(py=a.itemsize)
@@ -46,7 +46,7 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
 
 def output_array(shape: ShapeN) raises -> PythonObject:
     var dims = Python.list()
-    for k in range(shape.ndim):  # small-loop(ndim: returned buffer's shape)
+    for k in range(shape.ndim):  # small-loop(shape.ndim: tensor rank): at most eight shape words
         dims.append(PythonObject(shape.d[k]))
     # Allocation only: all output values are written by the native executor.
     return Python.import_module("numpy").empty(dims, dtype="float32")

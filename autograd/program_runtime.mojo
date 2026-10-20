@@ -88,6 +88,20 @@ def program_loss[E: Exec](
     raise Error("unknown program loss")
 
 
+def release_training_buffers[E: Exec](
+    mut ex: E, full: List[FP], batches: List[FP], ty: FP, yb: FP,
+    indices: FP, batch_losses: FP, losses: FP,
+) raises:
+    for k in range(len(full)):  # driver-loop: over input buffer owners
+        ex.free(full[k])
+        ex.free(batches[k])
+    ex.free(ty)
+    ex.free(yb)
+    ex.free(indices)
+    ex.free(batch_losses)
+    ex.free(losses)
+
+
 def train_program[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
@@ -120,9 +134,12 @@ def train_program[E: Exec & Movable & Deinitable](
             raise Error("Program.fit parameter is not a parameter of this program")
     var full = List[FP]()
     var batches = List[FP]()
-    for k in range(len(srcs)):  # driver-loop: over program input arrays
+    for k in range(len(srcs)):  # driver-loop: over input shape contracts
         if shapes[k].ndim < 2 or shapes[k].d[0] != n or shapes[k].ndim != p.in_shapes[k].ndim:
             raise Error("Program.fit inputs must have equal sample counts and their captured ranks")
+    if loss_kind != 0 and target.rows != n:
+        raise Error("Program.fit targets must match the input sample count")
+    for k in range(len(srcs)):  # driver-loop: over program input arrays
         var buf = s.ex.alloc(srcs[k].count())
         if p.in_kinds[k] == PROGRAM_IN_IDS:
             upload_cast_i32(s.ex, buf, srcs[k], "program ids")
@@ -133,8 +150,6 @@ def train_program[E: Exec & Movable & Deinitable](
     var ty = s.ex.alloc(max(1, target.count()))
     var yb = s.ex.alloc(max(1, bs * target.cols))
     if loss_kind != 0:
-        if target.rows != n:
-            raise Error("Program.fit targets must match the input sample count")
         upload_cast(s.ex, ty, target)
     for j in range(len(params)):  # driver-loop: over trainable parameter state
         if trainable[j]:
@@ -214,16 +229,10 @@ def train_program[E: Exec & Movable & Deinitable](
         s.tape.no_grad()
         swap(held, s.tape)
         swap(held, s.prog_tape)
+        release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
         raise err
     s._drop_temps(temps)
     s.tape.no_grad()
     swap(held, s.tape)
     swap(held, s.prog_tape)
-    for k in range(len(full)):  # driver-loop: over input buffers
-        s.ex.free(full[k])
-        s.ex.free(batches[k])
-    s.ex.free(ty)
-    s.ex.free(yb)
-    s.ex.free(indices)
-    s.ex.free(batch_losses)
-    s.ex.free(losses)
+    release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)

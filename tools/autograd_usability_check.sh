@@ -31,7 +31,7 @@ build)
     exit "$rc"
     ;;
 test)
-    test_python=${MOJOLEARN_TEST_PYTHON:?set the test environment's Python executable}
+    test_python=${MOJOLEARN_TEST_PYTHON:?set the test Python executable}
     export PYTHONPATH="$root/python" MOJOLEARN_NUMERIC_MODE=identical
     case "$target" in
         cpu) export MOJOLEARN_VENDOR=cpu ;;
