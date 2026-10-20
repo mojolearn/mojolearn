@@ -1717,8 +1717,10 @@ def gp_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
 
-@export
-def PyInit__mojolearn_gp() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gp.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_gp() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
         m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")

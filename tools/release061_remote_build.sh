@@ -202,8 +202,7 @@ cat > "$OUT/postflight.py" <<'PYPOST'
 import json, pathlib, sys
 out = pathlib.Path(sys.argv[1])
 sys.path.insert(0, str(pathlib.Path.cwd() / 'tools'))
-from verify_linux_surface_qualification import MODES, expected_bindings
-expected_count = sum(len(expected_bindings(mode, True)) for mode in MODES)
+from verify_linux_surface_qualification import MERGED_INDEX, MODES, expected_set_files
 before = json.loads((out / 'preflight.json').read_text())
 proof = json.loads((out / 'build/build-provenance.json').read_text())
 if (proof.get('complete') is not True or proof.get('build_exit') != 0
@@ -220,12 +219,33 @@ witness = before['device_architecture']
 if len(built) != 1 or not (built == {witness} or (before['vendor'] == 'cuda' and built == {witness + 'a'})):
     raise SystemExit('Built architecture differs from physical GPU witness: ' + repr((sorted(built), witness)))
 prefix = 'mojolearn/' + before['vendor'] + '/' + next(iter(built)) + '/'
+# THE MERGED BINDINGS: the build proof names the layout it read back from the
+# set directories; per-binding ships one file per binding, merged one file per
+# group of bindings/merged_groups.json plus each directory's index.
+layout = proof.get('binding_layout', 'per-binding')
+if layout not in ('merged', 'per-binding'):
+    raise SystemExit('Build proof has no single binding layout: ' + repr(layout))
+expected_count = sum(len(expected_set_files(mode, True, layout)) for mode in MODES)
 if len(proof.get('extensions', {})) != expected_count or not all(p.startswith(prefix) for p in proof['extensions']):
     raise SystemExit('Built architecture differs from physical GPU witness')
-byte_members = {p for p in proof['extensions'] if p.endswith('/_mojolearn_byte_lm.so')}
-if byte_members != {prefix + 'identical/_mojolearn_byte_lm.so'}:
-    raise SystemExit('Byte LM must exist exactly once, in IDENTICAL')
-print(json.dumps(dict(status='BUILT_NOT_INSTALLED', extensions=expected_count,
+indexes = proof.get('merged_indexes') or {}
+if layout == 'merged':
+    want = {prefix + d + MERGED_INDEX for d in ('', 'identical/', 'host/')}
+    if set(indexes) != want:
+        raise SystemExit('Merged build lacks an index: ' + repr(sorted(set(indexes) ^ want)))
+    # The byte LM: a member of the identical index exactly once, of no fast one.
+    byte_members = {k for k, row in indexes.items() for m in row['files'].values() if '_mojolearn_byte_lm' in m}
+    own = {p for p in proof['extensions'] if p.endswith('/_mojolearn_byte_lm.so')}
+    if own or byte_members != {prefix + 'identical/' + MERGED_INDEX} or sum(
+            m.count('_mojolearn_byte_lm') for row in indexes.values() for m in row['files'].values()) != 1:
+        raise SystemExit('Byte LM must be a member exactly once, of the IDENTICAL index')
+else:
+    if indexes:
+        raise SystemExit('Per-binding build proof carries merged indexes')
+    byte_members = {p for p in proof['extensions'] if p.endswith('/_mojolearn_byte_lm.so')}
+    if byte_members != {prefix + 'identical/_mojolearn_byte_lm.so'}:
+        raise SystemExit('Byte LM must exist exactly once, in IDENTICAL')
+print(json.dumps(dict(status='BUILT_NOT_INSTALLED', extensions=expected_count, binding_layout=layout,
                      vendor=before['vendor'], architecture=before['device_architecture'])))
 PYPOST
 run build-proof-check 30 "$PY" "$OUT/postflight.py" "$OUT"

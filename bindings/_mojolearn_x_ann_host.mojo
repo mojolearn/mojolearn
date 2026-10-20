@@ -340,8 +340,10 @@ def host_sabotage_binding() raises -> PythonObject:
     return PythonObject(X_ANN_HOST_SABOTAGE)
 
 
-@export
-def PyInit__mojolearn_x_ann_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_ann_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_ann_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_ann_host")
         m.def_function[ivf_pq_build_binding]("x_ann_ivf_pq_build")

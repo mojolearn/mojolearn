@@ -284,8 +284,10 @@ def arima_fit_binding(
     return PythonObject(written)
 
 
-@export
-def PyInit__mojolearn_arima_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_arima_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_arima_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_arima_host")
         module.def_function[arima_host_numeric_mode_binding]("arima_host_numeric_mode")

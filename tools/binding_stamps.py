@@ -14,6 +14,11 @@ release would have skipped the lanes the fix touched.
         after a build: record the sha256 of the binding's source closure
         (tools/bincache.py source_digest: the Mojo import closure of the file
         the script builds, the shell scripts it execs, pixi.toml, pixi.lock)
+    python3 tools/binding_stamps.py write-merged <output .so> <member,member,...>
+        after a merged build (bindings/merged_build.sh): one stamp for the
+        merged file, recording every member's own build script digest (the
+        closure of the module body it compiles) plus the merged build's own
+        inputs (MERGED_INPUTS); check holds every one of them
     python3 tools/binding_stamps.py check [--quiet]
         before a pass: every mojolearn binding in the package must carry a
         stamp whose digest equals the closure's digest in THIS tree. Prints
@@ -24,6 +29,7 @@ Stamps live in python/.binding-stamps/ (gitignored, never packaged), one JSON
 per binding named after its package path.
 """
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -68,6 +74,41 @@ def cmd_write(script, so, stamps=STAMPS, pkg=PKG, repo=REPO):
     return rec
 
 
+#: The files a merged build reads besides the members' closures: the build
+#: script, the root generator and the manifest the root is generated from.
+MERGED_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh",
+                 "tools/merged_bindings.py", "bindings/merged_groups.json")
+
+
+def member_script(name):
+    """The per-binding build script of a member (build.sh for _mojolearn)."""
+    return "build.sh" if name == "_mojolearn" else "build_" + name[len("_mojolearn_"):] + ".sh"
+
+
+def merged_inputs_digest(repo=REPO):
+    h = hashlib.sha256()
+    for rel in MERGED_INPUTS:
+        f = Path(repo) / rel
+        h.update(rel.encode() + b"\0" + (hashlib.sha256(f.read_bytes()).hexdigest().encode()
+                                          if f.is_file() else b"absent") + b"\n")
+    return h.hexdigest()
+
+
+def cmd_write_merged(so, members, stamps=STAMPS, pkg=PKG, repo=REPO):
+    names = [n for n in members.split(",") if n]
+    if not names:
+        raise SystemExit("binding_stamps: write-merged needs at least one member")
+    rows = {}
+    for n in names:
+        info = digest(member_script(n), repo)
+        rows[n] = dict(script=member_script(n), scope=info["scope"], digest=info["digest"])
+    stamps.mkdir(parents=True, exist_ok=True)
+    rec = dict(schema=2, binding=os.path.relpath(Path(so).resolve(), pkg.resolve()), script="merged_build.sh",
+               commit=commit(repo), merged_inputs=merged_inputs_digest(repo), members=rows)
+    stamp_path(so, stamps, pkg).write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
+    return rec
+
+
 def bindings(pkg=PKG):
     for p in sorted(pkg.rglob("_mojolearn*.so")):
         if ".dylibs" not in p.parts and ".libs" not in p.parts:
@@ -84,6 +125,22 @@ def cmd_check(quiet=False, stamps=STAMPS, pkg=PKG, repo=REPO):
             bad.append(f"UNSTAMPED {rel}: no record of the sources it was built from")
             continue
         rec = json.loads(sp.read_text())
+        if "members" in rec:
+            # a merged file: every member's closure and the merged build's inputs
+            if rec.get("merged_inputs") != merged_inputs_digest(repo):
+                bad.append(f"STALE {rel}: built at {rec.get('commit', '?')[:12]} by a merged build whose "
+                           f"inputs ({', '.join(MERGED_INPUTS)}) have changed since")
+                continue
+            moved = []
+            for n, row in sorted(rec["members"].items()):
+                if row["script"] not in cache:
+                    cache[row["script"]] = digest(row["script"], repo)["digest"]
+                if cache[row["script"]] != row.get("digest"):
+                    moved.append(n)
+            if moved:
+                bad.append(f"STALE {rel}: built at {rec.get('commit', '?')[:12]}; the sources of "
+                           f"{', '.join(moved)} have changed since")
+            continue
         if rec.get("script") not in cache:
             cache[rec.get("script")] = digest(rec["script"], repo)["digest"]
         if cache[rec["script"]] != rec.get("digest"):
@@ -123,13 +180,28 @@ def self_test():
         (repo / "k.mojo").write_text("fn f() -> Int:\n    return 2\n")
         ok.append(cmd_check(True, stamps, pkg, repo) == 1)          # a source edit is STALE
         shutil.rmtree(stamps)
+        # a merged file: stale when any member's sources or the merged inputs move
+        so.unlink()
+        (repo / "j.mojo").write_text("fn g() -> Int:\n    return 1\n")
+        (repo / "bindings" / "build_j.sh").write_text("mojo build j.mojo -o python/mojolearn/identical/_mojolearn_j.so\n")
+        merged = repo / "python" / "mojolearn" / "identical" / "_mojolearn_native.so"
+        merged.write_bytes(b"\0")
+        ok.append(cmd_check(True, stamps, pkg, repo) == 1)          # unstamped merged refuses
+        cmd_write_merged(merged, "_mojolearn_k,_mojolearn_j", stamps, pkg, repo)
+        ok.append(cmd_check(True, stamps, pkg, repo) == 0)          # fresh merged passes
+        (repo / "j.mojo").write_text("fn g() -> Int:\n    return 2\n")
+        ok.append(cmd_check(True, stamps, pkg, repo) == 1)          # a member's source edit is STALE
+        cmd_write_merged(merged, "_mojolearn_k,_mojolearn_j", stamps, pkg, repo)
+        (repo / "bindings" / "merged_groups.json").write_text("{}\n")
+        ok.append(cmd_check(True, stamps, pkg, repo) == 1)          # a manifest edit is STALE
+        shutil.rmtree(stamps)
     print("self-test", "PASS" if all(ok) else f"FAIL {ok}")
     return 0 if all(ok) else 1
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("cmd", nargs="?", choices=("write", "check"))
+    ap.add_argument("cmd", nargs="?", choices=("write", "write-merged", "check"))
     ap.add_argument("args", nargs="*")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--self-test", action="store_true")
@@ -140,6 +212,11 @@ def main():
         if len(a.args) != 2:
             ap.error("write <build script> <output .so>")
         cmd_write(a.args[0], a.args[1])
+        return 0
+    if a.cmd == "write-merged":
+        if len(a.args) != 2:
+            ap.error("write-merged <output .so> <member,member,...>")
+        cmd_write_merged(a.args[0], a.args[1])
         return 0
     if a.cmd == "check":
         return cmd_check(a.quiet)

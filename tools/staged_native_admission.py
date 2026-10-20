@@ -89,6 +89,12 @@ def validate_staged(proof, source_root=None):
     require(proof.get('schema') == SCHEMA and proof.get('action') == 'stage-validated-native'
             and proof.get('complete') is True, 'Incomplete staged admission')
     require('build_exit' not in proof, 'Staged admission must not impersonate a build')
+    # A staged admission re-binds RETAINED per-binding outputs, one original
+    # compiler receipt and closure stamp per binding (expected_outputs). The
+    # merged bindings (one file per group plus its index) have no such
+    # per-binding receipts, so a merged set is admitted only by a build proof.
+    require(proof.get('binding_layout', 'per-binding') == 'per-binding' and not proof.get('merged_indexes'),
+            'Staged admission covers the per-binding layout only; a merged set needs a build proof')
     source = proof.get('source_commit')
     require(valid_sha(source, 40), 'Invalid admitted source')
     admission = decoded(proof.get('stage_witness'))

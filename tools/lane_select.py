@@ -1626,6 +1626,14 @@ def _binding_export_params(rel):
     return out
 
 
+def _is_module_init(name):
+    """A binding's module init: `PyInit_*`, or the module body builder
+    `build_<binding>` that the merged-bindings layout moved it into (the
+    @export PyInit now lives in bindings/entry/ and the merged roots,
+    tools/merged_bindings.py)."""
+    return name.startswith("PyInit_") or name.startswith("build__mojolearn")
+
+
 def binding_additions(ref, path):
     """The export names a binding source's diff against `ref` ADDS, when the
     diff is ONLY additions; None otherwise.
@@ -1712,10 +1720,10 @@ def binding_additions(ref, path):
 
     exports = set()
     # the module init last: its new def_function lines may name what an import between blocks gained
-    for name, body in sorted(ob.items(), key=lambda kv: kv[0].startswith("PyInit_")):
+    for name, body in sorted(ob.items(), key=lambda kv: _is_module_init(kv[0])):
         if trimmed(nb[name]) == trimmed(body):
             continue
-        if not name.startswith("PyInit_"):
+        if not _is_module_init(name):
             # AN IMPORT BETWEEN BLOCKS MAY ONLY GAIN NAMES (2026-10-13). _mojolearn_x_decomp.mojo has import lines
             # after its first def, so they sit inside a block; `from m import a, b` becoming `from m import a, b, c`
             # there binds a new name nothing old can resolve to, exactly the prelude rule above. Every other line of
@@ -2077,7 +2085,7 @@ def mojo_changed_definitions(old_text, new_text):
             if rebound & set(_MOJO_IDENT_RE.findall(text)):
                 changed.add(unit)
     for unit in changed:
-        if unit[0] == "t" and unit[1].startswith("PyInit_"):
+        if unit[0] == "t" and _is_module_init(unit[1]):
             return None, "the module init (PyInit_*) changed: what it registers reaches every export"
     return changed, ""
 

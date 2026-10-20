@@ -431,8 +431,10 @@ def linkage_fit_binding(
     return PythonObject(-1)
 
 
-@export
-def PyInit__mojolearn_solver_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_solver_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_solver_host")
         module.def_function[solver_host_numeric_mode_binding]("solver_host_numeric_mode")

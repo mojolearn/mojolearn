@@ -91,12 +91,17 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
         case " $MODES " in *' fast '*)
             if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=fast \
                     "$tmp/venv/bin/python" - <<'PYBYTEFAST'
-import pathlib, sys
+import os, pathlib, sys
 import mojolearn
+from mojolearn import _merged
 from mojolearn import _mojolearn_byte_lm as native
 package = pathlib.Path(mojolearn.__file__).resolve().parent
 assert package.is_relative_to(pathlib.Path(sys.prefix).resolve())
-assert pathlib.Path(native.__file__).resolve() == package / '_mojolearn_byte_lm.so'
+# Its own file (per-binding layout) or the merged file serving it.
+_want = pathlib.Path(_merged.binding_path(str(package), '_mojolearn_byte_lm')).resolve()
+assert pathlib.Path(native.__file__).resolve() == _want, (native.__file__, _want)
+if os.environ.get('MOJOLEARN_MERGED_BINDINGS', '1') == '1':
+    assert _merged.is_merged_file(str(_want)), f'{_want} is not a merged file; the wheel is not in the merged layout'
 assert native.byte_lm_numeric_mode() == 0 and native.byte_lm_vendor() == 'metal'
 assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 print('Byte LM FAST native available; numerical training qualification separate')
@@ -108,12 +113,18 @@ PYBYTEFAST
         # Availability plus bounded generalized/resident native execution.
         if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \
                 "$tmp/venv/bin/python" - <<'PYBYTE'
-import pathlib, sys
+import os, pathlib, sys
 import mojolearn
+from mojolearn import _merged
 from mojolearn import _mojolearn_byte_lm as native
 package = pathlib.Path(mojolearn.__file__).resolve().parent
 assert package.is_relative_to(pathlib.Path(sys.prefix).resolve())
-assert pathlib.Path(native.__file__).resolve() == package / 'identical/_mojolearn_byte_lm.so'
+_merged_layout = os.environ.get('MOJOLEARN_MERGED_BINDINGS', '1') == '1'
+# Its own file (per-binding layout) or the merged file serving it.
+_want = pathlib.Path(_merged.binding_path(str(package / 'identical'), '_mojolearn_byte_lm')).resolve()
+assert pathlib.Path(native.__file__).resolve() == _want, (native.__file__, _want)
+if _merged_layout:
+    assert _merged.is_merged_file(str(_want)), f'{_want} is not a merged file; the wheel is not in the merged layout'
 assert native.byte_lm_numeric_mode() == 1 and native.byte_lm_vendor() == 'metal'
 assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
 # THE CPU TRAINING BINDING, FROM THE INSTALLED WHEEL. It is reached through its
@@ -121,7 +132,7 @@ assert native.byte_lm_profile() == 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v25
 # its absence, and a LanguageModelHostTrainer that raises at construction is
 # exactly what shipping the export without the binary produces.
 from mojolearn import _byte_lm_host
-host_so = package / 'host' / '_mojolearn_byte_lm_host.so'
+host_so = pathlib.Path(_merged.binding_path(str(package / 'host'), '_mojolearn_byte_lm_host')).resolve()
 assert host_so.exists(), f'installed wheel has no CPU training binding at {host_so}'
 assert pathlib.Path(_byte_lm_host.binary_path()).resolve() == host_so
 host = _byte_lm_host._load()
@@ -138,8 +149,9 @@ print('PASS installed CPU training binding')
 from mojolearn import _backend, host_surface
 _host_exports = {family['binding']: family['exports'] for family in host_surface.FAMILIES}
 for _name in host_surface.wheel_bindings():
-    _so = package / 'host' / (_name + '.so')
+    _so = pathlib.Path(_merged.binding_path(str(package / 'host'), _name)).resolve()
     assert _so.exists(), f'installed wheel has no host binding at {_so}'
+    assert not _merged_layout or _merged.is_merged_file(str(_so)), f'{_name} is not served by a merged host file'
     assert pathlib.Path(_backend.host_module_path(_name)).resolve() == _so
     _m = _backend.load_host_module(_name)
     _missing = [name for name in _host_exports[_name] if not callable(getattr(_m, name, None))]

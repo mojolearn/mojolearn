@@ -860,6 +860,30 @@ class MacosAssembleTests(unittest.TestCase):
                 self.assertEqual(doc["files"][rel]["archive_path"], r["archive_path"])
             self.assertEqual(len(doc["files"]), 2)
 
+    def test_a_merged_published_wheel_is_named_as_why_a_member_cannot_be_reused(self):
+        import base64
+        with tempfile.TemporaryDirectory() as d:
+            tmp = pathlib.Path(d)
+            rows = [b.row() for b in rr.bindings(rr.MACOS)]
+            whl = tmp / "mojolearn-0.8.56-py3-none-macosx_11_0_arm64.whl"
+            files = {"mojolearn/identical/_mojolearn_native.so": b"METAL MERGED",
+                     "mojolearn/identical/_mojolearn_merged.json":
+                         json.dumps({"format": 1, "files": {"_mojolearn_native.so": [rows[0]["name"]]}}).encode()}
+            with zipfile.ZipFile(whl, "w") as z:
+                lines = []
+                for name, payload in files.items():
+                    z.writestr(name, payload)
+                    digest = base64.urlsafe_b64encode(hashlib.sha256(payload).digest()).rstrip(b"=").decode()
+                    lines.append("%s,sha256=%s,%d" % (name, digest, len(payload)))
+                z.writestr("mojolearn-0.8.56.dist-info/RECORD", "\n".join(lines) + "\n")
+            plan = dict(schema=rr.PLAN_SCHEMA, commit=CUR_COMMIT,
+                        previous=dict(version="0.8.56", source_commit=PREV_COMMIT),
+                        rows=[dict(rows[0], decision="REUSE", reason="test", identity_digest="d" * 64)],
+                        legs=[], leg_reasons={}, runtime=dict(decision="REUSE"))
+            with self.assertRaises(SystemExit) as caught:
+                rr.assemble_macos(plan, whl, tmp / "macos", say=lambda *_: None)
+            self.assertIn("ships merged bindings", str(caught.exception))
+
 
 # ---------------------------------------------------------------- builder views
 LINUX_SETS_SH = "packaging/linux/build_sets.sh"

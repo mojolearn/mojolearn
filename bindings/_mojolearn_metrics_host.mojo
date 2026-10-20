@@ -1367,8 +1367,10 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
     return PythonObject(config.n_components)
 
 
-@export
-def PyInit__mojolearn_metrics_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_metrics_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_metrics_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_metrics_host")
         module.def_function[metrics_host_numeric_mode_binding]("metrics_host_numeric_mode")

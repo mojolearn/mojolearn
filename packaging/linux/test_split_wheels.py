@@ -13,6 +13,12 @@ PTX_BASELINE.json manifest, all inert bytes -- are packed by the real
 generic`, which never carries the PTX slot) and all of them as the split
 (the default). Then the wheels are opened as zip files.
 
+BOTH BINDING LAYOUTS: `SplitWheels` packs per-binding sets (one `<name>.so`
+per binding) and `SplitWheelsMerged` reruns every test on merged sets (one
+`_mojolearn_native.so` / `_mojolearn_native_host.so` per directory plus the
+index `_mojolearn_merged.json`, the bindings/merged_groups.json plan);
+`MergedLayoutRefusals` covers what only the merged layout can get wrong.
+
 THE IDENTITY PROOF is `test_the_three_wheels_are_the_combined_wheel`: every
 member of the combined wheel outside its .dist-info is in exactly one split
 wheel, at the same archive path, with the same bytes, and the split wheels
@@ -53,43 +59,81 @@ def source_head():
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
 
+MERGED_INDEX = pw.MERGED_INDEX
+
+
 def write_ptx_manifest(adir, source=None, dirty=False, **override):
     """A v2 PTX_BASELINE.json (gpu_plugins.validate_baseline_manifest) over the
-    set's GPU bindings, as packaging/linux/ptx_baseline.py writes it."""
-    files = []
+    set's GPU bindings, as packaging/linux/ptx_baseline.py writes it: a merged
+    file's row names its `members`, and `indexes` hashes each merged index."""
+    files, indexes = [], []
     for binary in sorted(Path(adir).rglob("_mojolearn*.so")):
         rel = binary.relative_to(adir).as_posix()
         if rel.startswith(("host/", ".libs/")):
             continue
         mode = rel.split("/", 1)[0] if "/" in rel else "fast"
-        files.append(dict(file=rel, numeric_mode=mode, sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
-                          ptx_modules=[dict(target="sm_80", sha256="b" * 64)]))
+        row = dict(file=rel, numeric_mode=mode, sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                   ptx_modules=[dict(target="sm_80", sha256="b" * 64)])
+        index = binary.parent / MERGED_INDEX
+        if index.is_file():
+            row["members"] = json.loads(index.read_text())["files"][binary.name]
+        files.append(row)
+    for index in sorted(Path(adir).rglob(MERGED_INDEX)):
+        rel = index.relative_to(adir).as_posix()
+        if not rel.startswith("host/"):
+            indexes.append(dict(file=rel, sha256=hashlib.sha256(index.read_bytes()).hexdigest()))
     doc = dict(schema=pw.gpu_plugins.PTX_MANIFEST_SCHEMA, code_format=pw.gpu_plugins.PTX_CODE_FORMAT,
                vendor="cuda", target="sm_80", min_compute_capability=[8, 0],
                source_commit=source or source_head(), source_dirty=dirty, mojo_version="test",
-               errors=[], files=files)
+               errors=[], files=files, **({"indexes": indexes} if indexes else {}))
     doc.update(override)
     path = Path(adir) / pw.gpu_plugins.BASELINE_MANIFEST
     path.write_text(json.dumps(doc))
     return path
 
 
-def make_sets(root, sets=SETS, libs_differ=False, include_byte_lm=False):
+def write_index(directory, files):
+    """A format-1 merged index {"<stem>.so": [members]} (bindings/merged_build.sh's)."""
+    (Path(directory) / MERGED_INDEX).write_text(json.dumps(dict(format=1, files=files), indent=1, sort_keys=True))
+
+
+def dir_files(vendor, arch, tier, include_byte_lm=False, merged=False):
+    """{file name: bytes} one tier directory (fast, identical) or host/ holds:
+    one inert file per binding, or the merged plan's files and the index."""
+    if tier == "host":
+        if not merged:
+            return {f"{name}.so": f"host {name}".encode() for name in pw.HOST_NAMES}
+        plan = pw.merged_layout.plan("host", include_byte_lm)
+        out = {f: f"host {f[:-3]}".encode() for f in plan}
+    else:
+        if not merged:
+            return {f"{name}.so": f"{vendor}/{arch}/{tier}/{name}".encode()
+                    for name in pw.tier_names(tier, include_byte_lm)}
+        plan = pw.merged_layout.plan(tier, include_byte_lm)
+        out = {f: f"{vendor}/{arch}/{tier}/{f[:-3]}".encode() for f in plan}
+    out[MERGED_INDEX] = json.dumps(dict(format=1, files=plan), indent=1, sort_keys=True).encode()
+    return out
+
+
+def make_sets(root, sets=SETS, libs_differ=False, include_byte_lm=False, merged=False):
     """sets/<vendor>/<arch>/ trees in build_sets.sh's shape, inert bytes; the
-    cuda/sm_80 PTX slot also gets its manifest."""
+    cuda/sm_80 PTX slot also gets its manifest. `merged`: every directory in
+    the merged layout (read-back rows still name each binding)."""
     for vendor, arch in sets:
         adir = root / "sets" / vendor / arch
         rb, ab = [], []
         for tier in pw.TIERS:
             d = adir if tier == "fast" else adir / tier
             d.mkdir(parents=True, exist_ok=True)
+            for f, data in dir_files(vendor, arch, tier, include_byte_lm, merged).items():
+                (d / f).write_bytes(data)
             for name in pw.tier_names(tier, include_byte_lm):
-                (d / f"{name}.so").write_bytes(f"{vendor}/{arch}/{tier}/{name}".encode())
                 rb.append(f"{tier} {name} {vendor}")
                 ab.append(f"{tier} {name} {arch}")
         (adir / "host").mkdir()
+        for f, data in dir_files(vendor, arch, "host", include_byte_lm, merged).items():
+            (adir / "host" / f).write_bytes(data)
         for name in pw.HOST_NAMES:
-            (adir / "host" / f"{name}.so").write_bytes(f"host {name}".encode())
             rb.append(f"host {name} cpu")
             ab.append(f"host {name} NONE-BY-DESIGN")
         (adir / "readback.txt").write_text("\n".join(rb) + "\n")
@@ -124,12 +168,19 @@ def meta(whl, leaf="METADATA"):
 
 
 class SplitWheels(unittest.TestCase):
+    #: the binding layout every set of this class is made in
+    MERGED = False
+
+    @classmethod
+    def make_sets(cls, root, **kwargs):
+        return make_sets(root, merged=cls.MERGED, **kwargs)
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.tmp.name)
-        cls.set_dirs = make_sets(cls.root)
-        cls.native_dirs = make_sets(cls.root / "native", sets=NATIVE_SETS)
+        cls.set_dirs = cls.make_sets(cls.root)
+        cls.native_dirs = cls.make_sets(cls.root / "native", sets=NATIVE_SETS)
         cls.version = pw.read_version()
         args = [a for s in cls.set_dirs for a in ("--set", s)]
         native = [a for s in cls.native_dirs for a in ("--set", s)]
@@ -190,14 +241,24 @@ class SplitWheels(unittest.TestCase):
         differ = [n for n in single if hashlib.sha256(single[n]).digest() != hashlib.sha256(union[n]).digest()]
         self.assertEqual(differ, [])
         union.update(ptx)
-        # and the sets really are in there, every tier of every architecture,
-        # the PTX slot at cuda_ptx/sm_80 with its manifest
+        # and the sets really are in there, every tier of every architecture
+        # (its binaries, and its index when merged), the PTX slot at
+        # cuda_ptx/sm_80 with its manifest, and host/ once in the core
         for vendor, arch in SETS:
             for tier in pw.TIERS:
-                for name in pw.tier_names(tier):
+                shipped = dir_files(vendor, arch, tier, merged=self.MERGED)
+                for f, data in shipped.items():
                     rel = pw.gpu_plugins.installed_member(
-                        f"mojolearn/{vendor}/{arch}/" + ("" if tier == "fast" else tier + "/") + name + ".so")
-                    self.assertEqual(union[rel], f"{vendor}/{arch}/{tier}/{name}".encode())
+                        f"mojolearn/{vendor}/{arch}/" + ("" if tier == "fast" else tier + "/") + f)
+                    self.assertEqual(union[rel], data)
+                tier_dir = pw.gpu_plugins.installed_member(
+                    f"mojolearn/{vendor}/{arch}/" + ("" if tier == "fast" else tier + "/") + "x.so").rsplit("/", 1)[0]
+                self.assertEqual(sorted(n.rsplit("/", 1)[1] for n in union if n.rsplit("/", 1)[0] == tier_dir
+                                        and (n.endswith(".so") or n.endswith(MERGED_INDEX))), sorted(shipped))
+        for f, data in dir_files("cuda", "sm_89", "host", merged=self.MERGED).items():
+            self.assertEqual(union[f"mojolearn/host/{f}"], data)
+        self.assertEqual(sorted(n for n in union if n.startswith("mojolearn/host/")),
+                         sorted(f"mojolearn/host/{f}" for f in dir_files("cuda", "sm_89", "host", merged=self.MERGED)))
         self.assertIn(pw.gpu_plugins.BUNDLED_PTX_ROOT + "/" + pw.gpu_plugins.BASELINE_MANIFEST, ptx)
         self.assertTrue(pw.gpu_plugins.BUNDLED_PTX_ROOT.startswith("mojolearn/cuda_ptx/sm_80"))
 
@@ -410,7 +471,7 @@ class SplitWheels(unittest.TestCase):
 
     def test_split_refuses_closures_that_differ(self):
         root = Path(tempfile.mkdtemp(dir=self.root))
-        dirs = make_sets(root, libs_differ=True)
+        dirs = self.make_sets(root, libs_differ=True)
         out = root / "out"
         with self.assertRaises(SystemExit) as ctx:
             pw.main([a for s in dirs for a in ("--set", s)] + ["--out", str(out)], _gates=False)
@@ -473,7 +534,7 @@ class SplitWheels(unittest.TestCase):
     def test_vendor_requires_all_its_native_architecture_slots(self):
         root = Path(tempfile.mkdtemp(dir=self.root))
         # 0.8.37: the Hopper slot is not required (gpu_plugins.py), so the slot that must be filled is sm_89
-        dirs = make_sets(root, sets=(("cuda", "sm_90a"), ("cuda", "sm_80")))
+        dirs = self.make_sets(root, sets=(("cuda", "sm_90a"), ("cuda", "sm_80")))
         with self.assertRaisesRegex(SystemExit, "requires one set per registered architecture slot"):
             self.pack("--wheels", "nvidia", sets=dirs)
         with self.assertRaisesRegex(SystemExit, "name each"):
@@ -484,7 +545,7 @@ class SplitWheels(unittest.TestCase):
     def test_the_nvidia_wheel_requires_the_ptx_slot(self):
         from unittest.mock import patch
         root = Path(tempfile.mkdtemp(dir=self.root))
-        dirs = make_sets(root, sets=(("cuda", "sm_89"),))
+        dirs = self.make_sets(root, sets=(("cuda", "sm_89"),))
         # while the registry ships the slot (ptx_shipped; off since 2026-10-12, PyPI's 100 MiB limit)
         with patch.dict(pw.gpu_plugins.PLUGINS["cuda"], {"ptx_shipped": True}):
             with self.assertRaisesRegex(SystemExit, "the PTX slot cuda/sm_80 included"):
@@ -510,12 +571,12 @@ class SplitWheels(unittest.TestCase):
                 ("wrong bytes", dict(files=[]), "does not match")):
             with self.subTest(label):
                 root = Path(tempfile.mkdtemp(dir=self.root))
-                dirs = make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")))
+                dirs = self.make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")))
                 write_ptx_manifest(root / "sets/cuda/sm_80", **override)
                 with self.assertRaisesRegex(SystemExit, why):
                     self.pack("--wheels", "nvidia", sets=dirs)
         root = Path(tempfile.mkdtemp(dir=self.root))
-        dirs = make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")))
+        dirs = self.make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")))
         (root / "sets/cuda/sm_80" / pw.gpu_plugins.BASELINE_MANIFEST).unlink()
         with self.assertRaisesRegex(SystemExit, "requires its PTX_BASELINE.json"):
             self.pack("--wheels", "nvidia", sets=dirs)
@@ -554,14 +615,14 @@ class SplitWheels(unittest.TestCase):
 
     def test_native_generic_does_not_start_accepting_optional_byte_lm(self):
         root = Path(tempfile.mkdtemp(dir=self.root))
-        dirs = make_sets(root, sets=(("cuda", "sm_89"),), include_byte_lm=True)
+        dirs = self.make_sets(root, sets=(("cuda", "sm_89"),), include_byte_lm=True)
         with self.assertRaisesRegex(SystemExit, "undeclared or missing native payload"):
             self.pack("--wheels", "nvidia", sets=dirs)
 
     def _check_ptx_slot(self, include_byte_lm):
         root = Path(tempfile.mkdtemp(dir=self.root))
-        make_sets(root, sets=(("cuda", "sm_89"),))
-        dirs = make_sets(root, sets=(("cuda", "sm_80"),), include_byte_lm=include_byte_lm)
+        self.make_sets(root, sets=(("cuda", "sm_89"),))
+        dirs = self.make_sets(root, sets=(("cuda", "sm_80"),), include_byte_lm=include_byte_lm)
         adir = root / "sets" / "cuda" / "sm_80"
         wheels = self.pack("--wheels", "nvidia-ptx", sets=dirs)
         self.assertEqual(len(wheels), 1)
@@ -571,20 +632,33 @@ class SplitWheels(unittest.TestCase):
         self.assertIn(root_ptx + "PTX_BASELINE.json", payload)
         self.assertTrue(all(n.startswith((root_ptx, "mojolearn/cuda_native/sm_89/"))
                             for n in payload if ".dist-info/" not in n))
-        for binary in adir.rglob("_mojolearn*.so"):
+        for binary in [*adir.rglob("_mojolearn*.so"), *adir.rglob(MERGED_INDEX)]:
             rel = binary.relative_to(adir).as_posix()
             if not rel.startswith("host/"):
                 self.assertEqual(payload[root_ptx + rel], binary.read_bytes())
+        self.assertEqual(any(n.endswith("/" + MERGED_INDEX) for n in payload), self.MERGED)
         marker = json.loads(payload[f"{dist_info(wheels[0])}/{pw.gpu_plugins.PLUGIN_MARKER}"])
         self.assertEqual(marker["bundled_ptx"]["manifest_sha256"],
                          hashlib.sha256((adir / pw.gpu_plugins.BASELINE_MANIFEST).read_bytes()).hexdigest())
         self.assertEqual(wheel_api_audit.split_audit(wheels)["problems"], [])
         byte_member = root_ptx + "identical/_mojolearn_byte_lm.so"
-        self.assertEqual(byte_member in payload, include_byte_lm)
+        packed_doc = json.loads(payload[root_ptx + "PTX_BASELINE.json"])
+        if self.MERGED:
+            # the byte LM is a member of the identical index, once, and of no fast index
+            self.assertNotIn(byte_member, payload)
+            identical = json.loads(payload[root_ptx + "identical/" + MERGED_INDEX])["files"]
+            fast = json.loads(payload[root_ptx + MERGED_INDEX])["files"]
+            self.assertEqual(sum(m.count("_mojolearn_byte_lm") for m in identical.values()), int(include_byte_lm))
+            self.assertFalse(any("_mojolearn_byte_lm" in m for m in fast.values()))
+            self.assertEqual(any("_mojolearn_byte_lm" in row.get("members", []) for row in packed_doc["files"]),
+                             include_byte_lm)
+            self.assertEqual({row["file"] for row in packed_doc["indexes"]}, {MERGED_INDEX, "identical/" + MERGED_INDEX})
+        else:
+            self.assertEqual(byte_member in payload, include_byte_lm)
         if include_byte_lm:
-            self.assertEqual(payload[byte_member], (adir / "identical/_mojolearn_byte_lm.so").read_bytes())
-            packed_doc = json.loads(payload[root_ptx + "PTX_BASELINE.json"])
-            self.assertTrue(any(row["file"] == "identical/_mojolearn_byte_lm.so" for row in packed_doc["files"]))
+            if not self.MERGED:
+                self.assertEqual(payload[byte_member], (adir / "identical/_mojolearn_byte_lm.so").read_bytes())
+                self.assertTrue(any(row["file"] == "identical/_mojolearn_byte_lm.so" for row in packed_doc["files"]))
             witness = adir / "readback.txt"
             original = witness.read_text()
             witness.write_text("\n".join(line for line in original.splitlines()
@@ -650,6 +724,118 @@ class SplitWheels(unittest.TestCase):
                 self.assertTrue(problems, label)
                 if label in why:
                     self.assertIn(why[label], "\n".join(problems))
+
+
+
+class SplitWheelsMerged(SplitWheels):
+    """Every SplitWheels test again, on sets in the merged layout."""
+    MERGED = True
+
+
+class MergedLayoutRefusals(unittest.TestCase):
+    """What only a merged set can get wrong, each refused at pack time."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def pack(self, dirs, *extra):
+        out = self.root / "out"
+        return pw.main([a for d in dirs for a in ("--set", d)] + list(extra) + ["--out", str(out)], _gates=False)
+
+    def native(self, merged=True, root=None):
+        return make_sets(root or self.root, sets=NATIVE_SETS, merged=merged)
+
+    def test_merged_generic_wheel_ships_files_and_indexes(self):
+        dirs = self.native()
+        self.assertEqual(self.pack(dirs, "--profile", "generic"), 0)
+        names = set(members(next((self.root / "out").glob("*.whl"))))
+        for vendor, arch in NATIVE_SETS:
+            for sub in ("", "identical/"):
+                self.assertIn(f"mojolearn/{vendor}/{arch}/{sub}_mojolearn_native.so", names)
+                self.assertIn(f"mojolearn/{vendor}/{arch}/{sub}{MERGED_INDEX}", names)
+                self.assertNotIn(f"mojolearn/{vendor}/{arch}/{sub}_mojolearn_gbdt.so", names)
+        self.assertIn("mojolearn/host/_mojolearn_native_host.so", names)
+        self.assertIn(f"mojolearn/host/{MERGED_INDEX}", names)
+        self.assertFalse([n for n in names if n.startswith("mojolearn/host/") and n.endswith(".so")
+                          and n != "mojolearn/host/_mojolearn_native_host.so"])
+
+    def test_load_set_reads_the_layout_from_the_directory(self):
+        dirs = self.native()
+        for d in dirs:
+            for s in pw.load_set(d):
+                self.assertEqual(s.layout, "merged")
+                self.assertEqual(sorted(s.indexes), sorted([MERGED_INDEX, "identical/" + MERGED_INDEX,
+                                                            "host/" + MERGED_INDEX]))
+                self.assertEqual({p.name for p in s.hosts.values()}, {"_mojolearn_native_host.so"})
+                self.assertEqual(set(s.hosts), set(pw.HOST_NAMES))
+        per = self.native(merged=False, root=self.root / "per")
+        self.assertEqual({s.layout for d in per for s in pw.load_set(d)}, {"per-binding"})
+
+    def test_sets_of_two_layouts_never_share_a_wheel(self):
+        merged = make_sets(self.root, sets=(("cuda", "sm_89"),), merged=True)
+        per = make_sets(self.root / "per", sets=(("hip", "gfx942"),), merged=False)
+        with self.assertRaisesRegex(SystemExit, "mix the merged and per-binding layouts"):
+            self.pack(merged + per, "--profile", "generic")
+
+    def test_a_set_never_mixes_layouts_across_its_directories(self):
+        dirs = self.native()
+        ident = self.root / "sets/cuda/sm_89/identical"
+        index = json.loads((ident / MERGED_INDEX).read_text())["files"]
+        for f in list(index):
+            (ident / f).unlink()
+        (ident / MERGED_INDEX).unlink()
+        for f, data in dir_files("cuda", "sm_89", "identical").items():
+            (ident / f).write_bytes(data)
+        with self.assertRaisesRegex(SystemExit, "mixes the merged and per-binding layouts"):
+            self.pack(dirs, "--profile", "generic")
+
+    def test_an_own_member_file_beside_the_index_is_refused(self):
+        dirs = self.native()
+        (self.root / "sets/cuda/sm_89/_mojolearn_gbdt.so").write_bytes(b"shadow")
+        with self.assertRaisesRegex(SystemExit, "shadow the merged file"):
+            self.pack(dirs, "--profile", "generic")
+
+    def test_an_index_missing_a_member_is_refused(self):
+        dirs = self.native()
+        index = self.root / "sets/hip/gfx942/identical" / MERGED_INDEX
+        doc = json.loads(index.read_text())
+        doc["files"]["_mojolearn_native.so"].remove("_mojolearn_gbdt")
+        index.write_text(json.dumps(doc))
+        with self.assertRaisesRegex(SystemExit, "undeclared or missing native payload"):
+            self.pack(dirs, "--profile", "generic")
+
+    def test_an_index_off_the_manifest_plan_is_refused(self):
+        dirs = self.native()
+        fast = self.root / "sets/cuda/sm_89"
+        doc = json.loads((fast / MERGED_INDEX).read_text())
+        names = doc["files"].pop("_mojolearn_native.so")
+        doc["files"] = {"_mojolearn_native.so": names[:1], "_mojolearn_native_b.so": names[1:]}
+        (fast / MERGED_INDEX).write_text(json.dumps(doc))
+        (fast / "_mojolearn_native_b.so").write_bytes(b"second group")
+        with self.assertRaisesRegex(SystemExit, "merged_groups.json plan"):
+            self.pack(dirs, "--profile", "generic")
+
+    def test_host_index_must_be_byte_identical_across_sets(self):
+        dirs = self.native()
+        index = self.root / "sets/hip/gfx942/host" / MERGED_INDEX
+        index.write_text(json.dumps(json.loads(index.read_text())))  # same content, other bytes
+        with self.assertRaisesRegex(SystemExit, "merged host index"):
+            self.pack(dirs, "--profile", "generic")
+
+    def test_a_host_member_never_read_back_is_refused(self):
+        dirs = self.native()
+        adir = self.root / "sets/cuda/sm_89"
+        dropped = sorted(pw.HOST_NAMES)[0]
+        for witness in ("readback.txt", "arch_readback.txt"):
+            path = adir / witness
+            path.write_text("".join(ln + "\n" for ln in path.read_text().splitlines()
+                                    if not ln.startswith(f"host {dropped} ")))
+        with self.assertRaisesRegex(SystemExit, "undeclared or missing native payload"):
+            self.pack(dirs, "--profile", "generic")
 
 
 if __name__ == "__main__":

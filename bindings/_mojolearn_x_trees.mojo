@@ -214,8 +214,10 @@ def tree_shap_cache_release_binding(handle: PythonObject) raises -> PythonObject
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_x_trees() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_trees.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_trees() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_trees")
         register(m)

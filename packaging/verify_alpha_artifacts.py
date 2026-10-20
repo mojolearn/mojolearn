@@ -239,7 +239,19 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
         require(isinstance(modules, tuple) and modules and all(isinstance(n, str) for n in modules)
                 and provenance.get('required_module_registry') == list(modules), 'native registry provenance mismatch')
         directories = sorted({str(Path(n).parent) for n in native if Path(n).name.startswith('_mojolearn')})
-        missing = {d: [module for module in modules if not any(str(Path(n).parent) == d and
+        # A directory in the merged layout serves its members from the files
+        # its _mojolearn_merged.json names (bindings/merged_build.sh).
+        def merged_served(d):
+            index = d + '/_mojolearn_merged.json'
+            if index not in files:
+                return set()
+            record = decode(small(index))
+            require(isinstance(record, dict) and isinstance(record.get('files'), dict),
+                    'invalid merged-bindings index: ' + index)
+            return {m for f, ms in record['files'].items() if d + '/' + f in native for m in ms}
+        served = {d: merged_served(d) for d in directories}
+        missing = {d: [module for module in modules if module not in served[d] and not any(
+                    str(Path(n).parent) == d and
                     (Path(n).name == module + '.so' or Path(n).name.startswith(module + '.'))
                     for n in native)] for d in directories}
         require(provenance.get('missing_optional_native_modules_by_present_directory') == missing,

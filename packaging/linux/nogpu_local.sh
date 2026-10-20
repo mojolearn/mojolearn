@@ -40,7 +40,9 @@ mkdir -p "$ROOT/mojolearn"
 cp "$REPO"/python/mojolearn/*.py "$ROOT/mojolearn/"
 cp -R "$SET" "$ROOT/mojolearn/$VENDOR"
 rm -f "$ROOT/mojolearn/$VENDOR/manifest.json" "$ROOT/mojolearn/$VENDOR/readback.txt"
-echo "package root: $(find "$ROOT" -name '*.so' | wc -l | tr -d ' ') extensions, vendor $VENDOR"
+# Either binding layout: per-binding .so files, or merged native files plus
+# their _mojolearn_merged.json indexes (packaging/linux/merged_layout.py).
+echo "package root: $(find "$ROOT" -name '*.so' | wc -l | tr -d ' ') extensions, $(find "$ROOT" -name _mojolearn_merged.json | wc -l | tr -d ' ') merged index(es), vendor $VENDOR"
 
 OUT="$ROOT/import.txt"
 set +e

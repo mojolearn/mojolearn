@@ -976,8 +976,10 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     return PythonObject(n_cols)
 
 
-@export
-def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_linalg.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_linalg() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_linalg")
         m.def_function[linalg_vendor_binding]("linalg_vendor")

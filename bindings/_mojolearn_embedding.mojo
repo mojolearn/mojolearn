@@ -1093,8 +1093,10 @@ def embedding_backward_dev_binding(
     return PythonObject(vocab * width)
 
 
-@export
-def PyInit__mojolearn_embedding() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_embedding.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_embedding() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_embedding")
         m.def_function[embedding_vendor_binding]("embedding_vendor")

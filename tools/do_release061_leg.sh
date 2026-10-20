@@ -99,6 +99,13 @@ if proof.get('source_commit') != commit:
     sys.exit('the NVIDIA build is of %s, not %s' % (proof.get('source_commit'), commit))
 if proof.get('complete') is not True or proof.get('build_exit') != 0:
     sys.exit('the NVIDIA build proof is not complete with build_exit 0')
+# THE MERGED BINDINGS: a merged host set (host/_mojolearn_merged.json) ships the
+# core host binding inside _mojolearn_native_host.so, which a one-binding probe
+# build can never reproduce; its cross-leg identity is pack_wheel.py's compare.
+merged = sorted((base / 'build' / 'sets' / 'cuda').glob('*/host/_mojolearn_merged.json'))
+if merged:
+    sys.exit('the NVIDIA host set is merged (' + str(merged[0]) + '): the per-binding core host probe '
+             'does not apply; leave MOJOLEARN_EXPECT_CORE_HOST_SHA256 unset (skip, compared at pack time)')
 sos = sorted((base / 'build' / 'sets' / 'cuda').glob('*/host/_mojolearn_core_host.so'))
 if not sos:
     sys.exit('no staged build/sets/cuda/<arch>/host/_mojolearn_core_host.so under ' + str(base))
@@ -582,7 +589,11 @@ if [ "$UBUNTU22" = 1 ] && [ "$CORE_HOST_SHA" != skip ]; then
 fi
 # The staged AMD copy, recorded for the pack-time compare (pack_wheel.py
 # refuses a host binding that differs across legs; this line says so early).
-AMD_CORE_HOST="$OUT/release-build/build/sets/$LEG_VENDOR/$LEG_ARCH/host/_mojolearn_core_host.so"
+# The file serving _mojolearn_core_host: its own file, or the merged host file
+# the set's index names (packaging/linux/merged_layout.py).
+AMD_CORE_HOST=$(python3 "$REPO/packaging/linux/merged_layout.py" member \
+  "$OUT/release-build/build/sets/$LEG_VENDOR/$LEG_ARCH/host" _mojolearn_core_host 2>/dev/null) \
+  || AMD_CORE_HOST="$OUT/release-build/build/sets/$LEG_VENDOR/$LEG_ARCH/host/_mojolearn_core_host.so"
 if [ "$LEG_MODE" = build ] && [ -f "$AMD_CORE_HOST" ]; then
   AMD_CORE_SHA=$(sha256_of "$AMD_CORE_HOST")
   echo "staged_core_host_sha256=$AMD_CORE_SHA" >> "$STATE"

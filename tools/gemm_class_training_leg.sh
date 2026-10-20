@@ -38,10 +38,11 @@ for arm in base class; do
         [ "$arm" != base ] || EXTRA='-D MOJOLEARN_GEMM_LEGACY_CLASS_FLUSH=1'
         [ "$kind" != timers ] || EXTRA="$EXTRA -D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1"
         # All builds have the same source directory and compiler output path.
+        # compiles the entry bindings/entry/entry__mojolearn_byte_lm.mojo, which imports the module body bindings/_mojolearn_byte_lm.mojo
         run "build-$arm-$kind" pixi run mojo build -j 2 --emit shared-lib \
             --target-accelerator "$MOJOLEARN_GPU_ARCHS" --target-cpu x86-64-v3 \
             -D "$COLUMN" -D MOJOLEARN_NUMERIC_IDENTICAL=1 $EXTRA -I . -I bindings \
-            bindings/_mojolearn_byte_lm.mojo -o "$OUT/build/_mojolearn_byte_lm.so"
+            bindings/entry/entry__mojolearn_byte_lm.mojo -o "$OUT/build/_mojolearn_byte_lm.so"
         cp "$OUT/build/_mojolearn_byte_lm.so" "$OUT/bin/$arm-$kind.so"
         python3 tools/gemm_class_sections.py "$OUT/build/_mojolearn_byte_lm.so" > "$OUT/sections-$arm-$kind.json"
     done

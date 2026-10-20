@@ -264,8 +264,10 @@ def solver_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
 
-@export
-def PyInit__mojolearn_solver() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_solver.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_solver() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_solver")
         m.def_function[hierarchy_parallel_available_binding]("hierarchy_parallel_available")

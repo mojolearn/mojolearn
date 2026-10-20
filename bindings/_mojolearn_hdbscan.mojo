@@ -618,8 +618,10 @@ def hdbscan_all_points_membership_vectors_binding(
     return PythonObject(count)
 
 
-@export
-def PyInit__mojolearn_hdbscan() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_hdbscan.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_hdbscan() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_hdbscan")
         m.def_function[hdbscan_rows_parallel_available]("hdbscan_rows_parallel_available")

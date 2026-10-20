@@ -599,8 +599,10 @@ def arima_product_df_count_binding(stage: PythonObject) raises -> PythonObject:
     return PythonObject(product_df_count(Int(py=stage)))
 
 
-@export
-def PyInit__mojolearn_arima() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_arima.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_arima() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_arima")
         comptime if ARIMA_K3_DF_ON:

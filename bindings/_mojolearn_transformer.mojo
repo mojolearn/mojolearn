@@ -3623,8 +3623,10 @@ def transformer_session_backward_tape_binding(
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_transformer() -> PythonObject:
     # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
     # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those

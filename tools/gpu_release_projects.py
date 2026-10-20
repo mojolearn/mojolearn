@@ -83,7 +83,12 @@ def classify(wheels, *, version=None, require_complete=False):
                     gpu_member = gpu_plugins.member_vendor(member) is not None
                     flat_native = (member.startswith("mojolearn/") and member.endswith(".so")
                                    and not member.startswith(("mojolearn/host/", "mojolearn/.libs/")))
-                    if gpu_member or flat_native:
+                    # A merged-bindings index (_mojolearn_merged.json) outside host/
+                    # names GPU-set members, which only the vendor packages carry; the
+                    # core's one legitimate index is host/'s (its merged host file).
+                    flat_index = (member.startswith("mojolearn/") and member.endswith("/_mojolearn_merged.json")
+                                  and member != "mojolearn/host/_mojolearn_merged.json")
+                    if gpu_member or flat_native or flat_index:
                         raise ValueError(f"Linux core carries a GPU payload member: {member}")
         if (normalize(message.get("Name", "")) != distribution
                 or message.get("Version") != wheel_version):

@@ -18,7 +18,16 @@ def write_json(path, value):
     path.write_text(json.dumps(value))
 
 
-def make_wheel(root, vendors=('hip', 'cuda'), omit=None, corrupt=False):
+def merged_index_bytes(files):
+    """A set directory's _mojolearn_merged.json for {'<stem>.so': [members]}."""
+    return json.dumps({'format': 1, 'files': files}, sort_keys=True).encode()
+
+
+def make_wheel(root, vendors=('hip', 'cuda'), omit=None, corrupt=False, merged=False, extra=None, index_edit=None):
+    """A synthetic dual-vendor wheel in the per-binding layout, or with
+    `merged` in the merged layout (one file per group of the plan plus each
+    set directory's index). `extra` adds raw members; `index_edit(prefix,
+    files)` may rewrite an index's {file: members} before it is written."""
     root.mkdir(parents=True, exist_ok=True)
     wrapper = root / 'python/mojolearn/__init__.py'
     wrapper.parent.mkdir(parents=True, exist_ok=True)
@@ -28,10 +37,20 @@ def make_wheel(root, vendors=('hip', 'cuda'), omit=None, corrupt=False):
         arch = 'gfx942' if vendor == 'hip' else 'sm_89'
         for mode in gate.surface.MODES:
             prefix = f'mojolearn/{vendor}/{arch}/' + (mode + '/' if mode != 'fast' else '')
+            if merged:
+                plan = gate.surface.expected_set_files(mode, False, 'merged')
+                for stem in plan:
+                    if prefix + stem != omit:
+                        files[prefix + stem] = (prefix + stem).encode()
+                index = index_edit(prefix, copy.deepcopy(plan)) if index_edit else plan
+                if prefix + gate.surface.MERGED_INDEX != omit:
+                    files[prefix + gate.surface.MERGED_INDEX] = merged_index_bytes(index)
+                continue
             for binding in gate.surface.expected_bindings(mode):
                 name = prefix + binding + '.so'
                 if name != omit:
                     files[name] = name.encode()
+    files.update(extra or {})
     record = 'mojolearn-0.6.0.dist-info/RECORD'
     rows = io.StringIO()
     writer = csv.writer(rows)
@@ -61,6 +80,62 @@ class ReleaseAdmissionTests(unittest.TestCase):
             self.assertEqual(sorted(sets.values()), sorted(len(gate.surface.expected_bindings(m))
                                                            for m in gate.surface.MODES for _ in 'ab'))
 
+    def test_complete_dual_wheel_merged_layout(self):
+        # The merged layout: one file per group of the plan and one index per
+        # set directory; the indexes are collected beside the .so map.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wheel = make_wheel(root, merged=True)
+            indexes = {}
+            extensions, sets = gate.inspect_wheel(wheel, root, index_out=indexes)
+            per_arch = sum(len(gate.surface.expected_set_files(m, False, 'merged')) for m in gate.surface.MODES)
+            self.assertEqual(len(extensions), 2 * per_arch)
+            self.assertTrue(all(p.endswith('.so') for p in extensions))
+            self.assertEqual(len(indexes), 2 * len(gate.surface.MODES))
+            self.assertEqual(gate.wheel_layout(indexes), 'merged')
+            for path, row in indexes.items():
+                self.assertTrue(path.endswith('/' + gate.surface.MERGED_INDEX))
+                members = sorted(n for m in row['files'].values() for n in m)
+                mode = 'identical' if '/identical/' in path else 'fast'
+                self.assertEqual(members, sorted(gate.surface.expected_bindings(mode)))
+
+    def test_merged_layout_defects_refuse(self):
+        member = 'mojolearn/hip/gfx942/identical/'
+        stem = next(iter(gate.surface.expected_set_files('identical', False, 'merged')))
+        def drop_gbdt(prefix, files):
+            for m in files.values():
+                if '_mojolearn_gbdt' in m:
+                    m.remove('_mojolearn_gbdt')
+            return files
+        def twice(prefix, files):
+            files['_mojolearn_twice.so'] = ['_mojolearn_gbdt']
+            return files
+        cases = {
+            'own file shadows the merged file': dict(extra={member + '_mojolearn_gbdt.so': b'own'}),
+            'index lacks a member': dict(index_edit=drop_gbdt),
+            'member in two files': dict(index_edit=twice),
+            'merged file missing': dict(omit=member + stem),
+            'index missing': dict(omit=member + gate.surface.MERGED_INDEX),
+            'index outside a set': dict(extra={'mojolearn/hip/gfx942/other/' + gate.surface.MERGED_INDEX: b'{}'}),
+        }
+        for why, options in cases.items():
+            with self.subTest(why=why), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                wheel = make_wheel(root, merged=True, **options)
+                with self.assertRaises(ValueError):
+                    gate.inspect_wheel(wheel, root, index_out={})
+
+    def test_mixed_layouts_refuse(self):
+        # One vendor's sets merged, the other's per binding: one layout per wheel.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            merged = make_wheel(root / 'm', merged=True)
+            with zipfile.ZipFile(merged) as archive:
+                hip = {n: archive.read(n) for n in archive.namelist() if n.startswith('mojolearn/hip/')}
+            wheel = make_wheel(root, vendors=('cuda',), extra=hip)
+            with self.assertRaises(ValueError):
+                gate.inspect_wheel(wheel, root, index_out={})
+
     def test_vendor_candidates_missing_modes_and_corrupt_record_refuse(self):
         cases = [dict(vendors=('hip',)), dict(vendors=('cuda',)),
                  dict(omit='mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so'),
@@ -86,9 +161,10 @@ class ReleaseAdmissionTests(unittest.TestCase):
             (root / 'new.mojo').write_text('new native code')
             self.assertNotEqual(gate.native_inventory(root), first)
 
-    def vendor_fixture(self, root):
-        wheel = make_wheel(root)
-        extensions, sets = gate.inspect_wheel(wheel, root)
+    def vendor_fixture(self, root, merged=False):
+        wheel = make_wheel(root, merged=merged)
+        indexes = {}
+        extensions, sets = gate.inspect_wheel(wheel, root, index_out=indexes)
         inventory = gate.native_inventory(root)
         wheel_sha = gate.digest_file(wheel)
         source_sha = gate.inventory_digest(inventory)
@@ -99,11 +175,16 @@ class ReleaseAdmissionTests(unittest.TestCase):
                  'source_inventory': inventory, 'source_sha256': source_sha,
                  'extensions': {'mojolearn/' + p: h for p, h in extensions.items()
                                 if p.startswith('hip/')}}
+        if merged:
+            proof.update(binding_layout='merged',
+                         merged_indexes={'mojolearn/' + p: r for p, r in indexes.items() if p.startswith('hip/')})
         write_json(out / 'build-provenance.json', proof)
         audit = {'sha256': wheel_sha, 'qualification_vendor': 'hip',
                  'advertised_vendors': ['cuda', 'hip'], 'extension_hashes': extensions,
                  'sets': sets, 'source_sha256': source_sha,
                  'build_provenance_sha256': gate.digest_file(out / 'build-provenance.json')}
+        if merged:
+            audit.update(merged_indexes=indexes, binding_layout='merged')
         write_json(out / 'wheel-audit.json', audit)
         records = {}
         package = '/vanished/qualification/venv/lib/python3.11/site-packages/mojolearn'
@@ -113,7 +194,8 @@ class ReleaseAdmissionTests(unittest.TestCase):
                 prefix = 'hip/gfx942/' + (mode + '/' if mode != 'fast' else '')
                 bindings = {}
                 for binding in gate.surface.expected_bindings(mode):
-                    member = prefix + binding + '.so'
+                    # Each member loads from its own file or its directory's merged file.
+                    member = gate.surface.member_file(prefix, binding, indexes)
                     bindings[binding] = {'path': package + '/' + member,
                                          'sha256': extensions[member], 'mode_code': code}
                 installed = {'vendor': 'hip', 'mode': mode, 'wheel_sha256': wheel_sha,
@@ -125,7 +207,30 @@ class ReleaseAdmissionTests(unittest.TestCase):
                     write_json(out / (name + '.json'), {})
         qualification = {'vendor': 'hip', 'wheel_sha256': wheel_sha,
                          'source_sha256': source_sha, 'installed_records': records}
+        if merged:
+            return out, qualification, wheel_sha, inventory, extensions, sets, indexes
         return out, qualification, wheel_sha, inventory, extensions, sets
+
+    def test_merged_installed_members_load_from_the_indexed_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out, qualification, wheel_sha, inventory, extensions, sets, indexes = self.vendor_fixture(
+                Path(directory), merged=True)
+            with patch.object(gate.surface, 'retained', return_value=(qualification, {})), \
+                    patch.object(gate.surface, 'check_quality'):
+                gate.check_vendor(out, 'hip', wheel_sha, inventory, extensions, sets, indexes=indexes)
+                # The audit's indexes must be the wheel's.
+                with self.assertRaisesRegex(ValueError, 'merged indexes'):
+                    gate.check_vendor(out, 'hip', wheel_sha, inventory, extensions, sets)
+            # A member claiming a per-binding file the merged set does not ship refuses.
+            path = out / 'smoke-fast.installed.json'
+            installed = json.loads(path.read_text())
+            row = installed['installed_bindings']['_mojolearn_gbdt']
+            row['path'] = row['path'].rsplit('/', 1)[0] + '/_mojolearn_gbdt.so'
+            write_json(path, installed)
+            qualification['installed_records']['smoke-fast'] = gate.digest_file(path)
+            with patch.object(gate.surface, 'retained', return_value=(qualification, {})), \
+                    patch.object(gate.surface, 'check_quality'), self.assertRaises(ValueError):
+                gate.check_vendor(out, 'hip', wheel_sha, inventory, extensions, sets, indexes=indexes)
 
     def test_all_installed_records_and_identical_quality_rechecked(self):
         # DEVIATION 2490: UMAP quality is an identical-only job, rechecked once.

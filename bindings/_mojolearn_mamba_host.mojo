@@ -579,8 +579,10 @@ def mamba3_forward_tape_enabled_binding() raises -> PythonObject:
 # The module's one C export. (The tape flag above was once inserted between
 # this decorator and PyInit, which left PyInit unexported: an import read
 # "dynamic module does not define module export function".)
-@export
-def PyInit__mojolearn_mamba_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mamba_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_mamba_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mamba_host")
         m.def_function[mamba_host_numeric_mode_binding]("mamba_host_numeric_mode")

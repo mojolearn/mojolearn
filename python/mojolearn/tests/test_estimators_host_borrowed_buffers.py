@@ -8,7 +8,9 @@ import pytest
 
 
 def _binding():
-    path = Path(__file__).parents[1] / "host" / "_mojolearn_estimators_host.so"
+    from mojolearn import _merged
+    # its own file, or the merged host file that serves it (bindings/merged_build.sh)
+    path = Path(_merged.binding_path(str(Path(__file__).parents[1] / "host"), "_mojolearn_estimators_host"))
     if not path.exists():
         pytest.skip("_mojolearn_estimators_host.so is not built")
     spec = importlib.util.spec_from_file_location("_mojolearn_estimators_host", path)

@@ -154,10 +154,16 @@ def test_dependency_policy_allows_the_source_tree_check_only_where_it_is_skipped
 def test_fast_tier_gpu_sets_are_the_only_math_exemption():
     import wheel
     ok = ["mojolearn/cuda/sm_89/_mojolearn_gp.so", "mojolearn/hip/gfx942/_mojolearn.so",
-          "mojolearn/_mojolearn_gp.so"]
+          "mojolearn/_mojolearn_gp.so",
+          # the merged-bindings layout: one native file per set directory
+          "mojolearn/cuda/sm_89/_mojolearn_native.so", "mojolearn/cuda_ptx/sm_80/_mojolearn_native.so",
+          "mojolearn/_mojolearn_native.so"]
     enforced = ["mojolearn/cuda/sm_89/identical/_mojolearn_gp.so",
                 "mojolearn/host/_mojolearn_gp_host.so", "mojolearn/identical/_mojolearn_gp.so",
-                "mojolearn/.libs/libfoo.so"]
+                "mojolearn/.libs/libfoo.so",
+                "mojolearn/cuda/sm_89/identical/_mojolearn_native.so",
+                "mojolearn/hip/gfx942/identical/_mojolearn_native.so",
+                "mojolearn/host/_mojolearn_native_host.so", "mojolearn/identical/_mojolearn_native.so"]
     assert "__sincosf_stret" in wheel.MATH_SYMBOLS
     assert all(wheel.FAST_SET.match(p) for p in ok)
     assert not any(wheel.FAST_SET.match(p) for p in enforced)

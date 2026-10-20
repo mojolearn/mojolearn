@@ -365,8 +365,10 @@ def gmm_score_bic_aic_binding(
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_mixture() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_mixture.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_mixture() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_mixture")
         m.def_function[gmm_parallel_available]("gmm_parallel_available")

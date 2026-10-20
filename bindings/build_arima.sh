@@ -163,11 +163,12 @@ out="$tmpdir/_mojolearn_arima.so"
 # the import fails with "dynamic module does not define module export
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
+# compiles the entry bindings/entry/entry__mojolearn_arima.mojo, which imports the module body bindings/_mojolearn_arima.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn_arima.mojo \
+    bindings/entry/entry__mojolearn_arima.mojo \
     -o "$out"
 
 air_blobs() {

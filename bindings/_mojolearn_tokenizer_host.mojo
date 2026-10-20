@@ -1326,8 +1326,10 @@ def vocab_decode_binding(
     return PythonObject(len(out))
 
 
-@export
-def PyInit__mojolearn_tokenizer_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_tokenizer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_host")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")

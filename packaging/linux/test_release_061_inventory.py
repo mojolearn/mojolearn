@@ -19,7 +19,10 @@ class ReleaseInventory(unittest.TestCase):
             self.assertEqual(entries[path].read_bytes(), (packer.PKG / "models" / (name + ".py")).read_bytes())
         self.assertFalse(any("/tests/" in path for path in entries))
 
-    def fixture(self, root):
+    def fixture(self, root, merged=False):
+        """Three release sets and their proofs. `merged`: each set directory
+        in the merged layout (bindings/merged_groups.json plan files and the
+        index), the proofs naming the merged files and their indexes."""
         # DEVIATION 2290: the fixture root declares its own version; the tests
         # read it back through the packer's shared reader and pin no number.
         version_file = root / 'python/mojolearn/_version.py'
@@ -30,9 +33,24 @@ class ReleaseInventory(unittest.TestCase):
         inventory = [['source.py', packer.sha(source).hex()]]
         source_sha = hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()
         sets, proofs = [], []
+        index_name = packer.MERGED_INDEX
         for vendor, arch in sorted(packer.RELEASE_061_SETS):
-            files = {}
+            files, indexes = {}, {}
             for mode in packer.TIERS:
+                if merged:
+                    sub = '' if mode == 'fast' else mode + '/'
+                    plan = packer.merged_layout.plan(mode, True)
+                    for f in plan:
+                        rel = f'{vendor}/{arch}/{sub}{f}'
+                        binary = root / rel
+                        binary.parent.mkdir(parents=True, exist_ok=True)
+                        binary.write_bytes(rel.encode())  # inert bytes; never loaded
+                        files[rel] = binary
+                    index = root / f'{vendor}/{arch}/{sub}{index_name}'
+                    index.write_text(json.dumps(dict(format=1, files=plan), sort_keys=True))
+                    files[f'{vendor}/{arch}/{sub}{index_name}'] = index
+                    indexes[sub + index_name] = index
+                    continue
                 # FROM THE PACKER'S OWN DEFINITION, never a second list. This
                 # read `EXT_NAMES + byte_lm`, which was right until DEVIATION
                 # 2490 moved every non-tree binding into identical and narrowed
@@ -55,20 +73,37 @@ class ReleaseInventory(unittest.TestCase):
             # manifest name, the same bytes on every leg; the absent case is
             # the generic profile's and is not what release_inventory packs.
             hosts = {}
-            for name in packer.HOST_NAMES:
-                binary = root / f'{vendor}/{arch}/host/{name}.so'
-                binary.parent.mkdir(parents=True, exist_ok=True)
-                binary.write_bytes(f'inert host {name}'.encode())
-                hosts[name] = binary
+            if merged:
+                # one merged host file serves every host binding, beside its index
+                plan = packer.merged_layout.plan('host', True)
+                for f, names in plan.items():
+                    binary = root / f'{vendor}/{arch}/host/{f}'
+                    binary.parent.mkdir(parents=True, exist_ok=True)
+                    binary.write_bytes(f'inert host {f}'.encode())
+                    hosts.update({name: binary for name in names})
+                index = root / f'{vendor}/{arch}/host/{index_name}'
+                index.write_text(json.dumps(dict(format=1, files=plan), sort_keys=True))
+                indexes['host/' + index_name] = index
+            else:
+                for name in packer.HOST_NAMES:
+                    binary = root / f'{vendor}/{arch}/host/{name}.so'
+                    binary.parent.mkdir(parents=True, exist_ok=True)
+                    binary.write_bytes(f'inert host {name}'.encode())
+                    hosts[name] = binary
             # The seventh element (2026-09-23) is the set's reuse.json record,
-            # None for a set a leg built with nothing taken from a published wheel.
-            sets.append(packer.SetDir(vendor, arch, files, {}, {}, hosts, None))
+            # None for a set a leg built with nothing taken from a published wheel;
+            # the eighth and ninth the binding layout and its indexes.
+            sets.append(packer.SetDir(vendor, arch, files, {}, {}, hosts, None,
+                                      'merged' if merged else 'per-binding', indexes))
             proof = root / f'{vendor}-{arch}.json'
             proof.write_text(json.dumps(dict(
                 schema='mojolearn.linux.build-provenance.v1', complete=True,
                 build_exit=0, action='build', source_commit='a' * 40,
                 source_inventory=inventory, source_sha256=source_sha,
-                extensions={'mojolearn/' + n: packer.sha(p).hex() for n, p in files.items()})))
+                extensions={'mojolearn/' + n: packer.sha(p).hex() for n, p in files.items() if n.endswith('.so')},
+                **(dict(binding_layout='merged', merged_indexes={
+                    f'mojolearn/{vendor}/{arch}/{rel}': packer.index_record(path)
+                    for rel, path in indexes.items()}) if merged else {}))))
             proofs.append(proof)
         return sets, proofs
 
@@ -145,6 +180,75 @@ class ReleaseInventory(unittest.TestCase):
                 proofs[0].write_text(json.dumps(proof))
                 with self.assertRaises(SystemExit):
                     packer.release_inventory(sets, proofs, packer.read_version(root), root)
+
+    def test_merged_sets_inventory_their_files_and_indexes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sets, proofs = self.fixture(root, merged=True)
+            result = packer.release_inventory(sets, proofs, packer.read_version(root), root)
+            self.assertEqual(result['binding_layout'], 'merged')
+            # `extensions` are the shipped binaries: the planned files per mode
+            per_arch = sum(len(packer.merged_layout.plan(mode, True)) for mode in packer.TIERS)
+            self.assertEqual(len(result['extensions']), per_arch * 3)
+            self.assertTrue(all(n.endswith('.so') for n in result['extensions']))
+            # one index per merged GPU directory, and the host index once
+            gpu = {f'mojolearn/{v}/{a}/{sub}{packer.MERGED_INDEX}'
+                   for v, a in packer.RELEASE_061_SETS for sub in ('', 'identical/')}
+            self.assertEqual(set(result['merged_indexes']), gpu | {'mojolearn/host/' + packer.MERGED_INDEX})
+            for name, row in result['merged_indexes'].items():
+                self.assertRegex(row['sha256'], '^[0-9a-f]{64}$')
+                members = sorted(n for m in row['files'].values() for n in m)
+                if name.startswith('mojolearn/host/'):
+                    self.assertEqual(members, sorted(packer.HOST_NAMES))
+                else:
+                    mode = 'identical' if '/identical/' in name else 'fast'
+                    self.assertEqual(members, sorted(packer.tier_names(mode, True)))
+            # every host binding's record names the merged host file it loads from
+            self.assertEqual({r['archive_path'] for r in result['host_native'].values()},
+                             {'mojolearn/host/_mojolearn_native_host.so'})
+            self.assertEqual(set(result['host_native']), set(packer.HOST_NAMES))
+            per, per_proofs = self.fixture(root / 'per')
+            flat = packer.release_inventory(per, per_proofs, packer.read_version(root / 'per'), root / 'per')
+            self.assertEqual((flat['binding_layout'], flat['merged_indexes']), ('per-binding', {}))
+
+    def test_merged_proof_must_index_every_binding_and_name_its_layout(self):
+        def byte_lm_dropped(doc, key):
+            row = doc['merged_indexes'][key + 'identical/' + packer.MERGED_INDEX]
+            for members in row['files'].values():
+                if '_mojolearn_byte_lm' in members:
+                    members.remove('_mojolearn_byte_lm')
+
+        def byte_lm_in_fast(doc, key):
+            row = doc['merged_indexes'][key + packer.MERGED_INDEX]
+            next(iter(row['files'].values())).append('_mojolearn_byte_lm')
+
+        def stale_index(doc, key):
+            doc['merged_indexes'][key + packer.MERGED_INDEX]['sha256'] = '0' * 64
+
+        def no_host_index(doc, key):
+            del doc['merged_indexes'][key + 'host/' + packer.MERGED_INDEX]
+
+        def per_binding_layout(doc, key):
+            doc['binding_layout'] = 'per-binding'
+
+        for mutate in (byte_lm_dropped, byte_lm_in_fast, stale_index, no_host_index, per_binding_layout):
+            with self.subTest(mutate.__name__), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                sets, proofs = self.fixture(root, merged=True)
+                doc = json.loads(proofs[0].read_text())
+                mutate(doc, f'mojolearn/{sets[0].vendor}/{sets[0].arch}/')
+                proofs[0].write_text(json.dumps(doc))
+                with self.assertRaises(SystemExit):
+                    packer.release_inventory(sets, proofs, packer.read_version(root), root)
+
+    def test_merged_and_per_binding_sets_never_share_an_inventory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            merged, merged_proofs = self.fixture(root, merged=True)
+            per, per_proofs = self.fixture(root / 'per')
+            with self.assertRaisesRegex(SystemExit, 'one binding layout'):
+                packer.release_inventory(merged[:2] + per[2:], merged_proofs[:2] + per_proofs[2:],
+                                         packer.read_version(root), root)
 
 
 if __name__ == '__main__':

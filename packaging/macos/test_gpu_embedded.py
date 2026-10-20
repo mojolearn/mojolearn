@@ -2,6 +2,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import struct
 import tempfile
@@ -66,6 +67,36 @@ class EmbeddedTests(unittest.TestCase):
                 self.assertEqual(gate.main([rf, rf]), 1)
                 gbdt.write_bytes(b'no GPU code')
                 self.assertEqual(gate.main([glue, rf, gbdt]), 1)
+
+    def test_merged_files_are_judged_by_their_index(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            def put(rel, data):
+                p = root / rel;p.parent.mkdir(parents=True, exist_ok=True);p.write_bytes(data);return p
+            def index(rel, files):
+                (root / rel).mkdir(parents=True, exist_ok=True)
+                (root / rel / '_mojolearn_merged.json').write_text(json.dumps({'format': 1, 'files': files}))
+            native = put('identical/_mojolearn_native.so', library())
+            glue = put('identical/_mojolearn_native_m1.so', b'host glue')
+            fast = put('_mojolearn_native.so', library())
+            index('identical', {'_mojolearn_native.so': ['_mojolearn_rf', '_mojolearn_gbdt'],
+                                '_mojolearn_native_m1.so': ['_mojolearn_x_trees']})
+            index('.', {'_mojolearn_native.so': ['_mojolearn_rf', '_mojolearn_gbdt']})
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(gate.main([native, fast]), 0)
+                # a glue-only merged file passes only beside its same-tier delegates
+                self.assertEqual(gate.main([native, glue]), 0)
+                self.assertEqual(gate.main([fast, glue]), 1)
+                # a member served twice in one tier is refused
+                own = put('identical/_mojolearn_rf.so', library())
+                self.assertEqual(gate.main([native, own]), 1)
+                own.unlink()
+                # a merged file that is not all glue needs its own kernels
+                index('identical', {'_mojolearn_native.so': ['_mojolearn_rf', '_mojolearn_gbdt'],
+                                    '_mojolearn_native_m1.so': ['_mojolearn_x_trees', '_mojolearn_estimators']})
+                self.assertEqual(gate.main([native, glue]), 1)
+                native.write_bytes(b'no GPU code')
+                self.assertEqual(gate.main([native, fast]), 1)
 
 
 if __name__ == '__main__':

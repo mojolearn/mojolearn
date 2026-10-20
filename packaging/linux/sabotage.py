@@ -51,7 +51,16 @@ The cases, with `V` the box's vendor and `W` the other one:
                         and MOJOLEARN_VENDOR. It must not load W/.
   tier_mislabeled       V/identical/_mojolearn_gbdt.so replaced by the
                         FAST binary. The existing tier read-back must
-                        refuse it on the new layout too.
+                        refuse it on the new layout too. In the merged
+                        layout (an identical/_mojolearn_merged.json index,
+                        packaging/linux/merged_layout.py) the file replaced
+                        is the identical merged file that serves
+                        _mojolearn_gbdt, by the fast merged file that serves
+                        it; the index is left as it is.
+
+Both binding layouts are handled: a set directory is per-binding (one .so
+per binding) or merged (one native file per group plus the index), read
+from the directory itself.
 
 Each case records the exit status, the head and tail of stderr and whether
 the expected substrings appeared. Exit 0 only if every case behaved.
@@ -69,6 +78,9 @@ import shlex
 import shutil
 import subprocess
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import merged_layout  # noqa: E402  (packaging/linux: the set's binding layout)
 
 OTHER = {"cuda": "hip", "hip": "cuda"}
 PROBE_SNIPPET = (
@@ -160,6 +172,18 @@ def main():
         for so in (pkg / V).glob("_mojolearn*.so"):
             for d in (pkg / W, pkg / W / "identical"):
                 (d / so.name).write_bytes(os.urandom(4096))
+        # Every set directory under V (<arch>/, <arch>/identical/) is
+        # mirrored under W with its binaries replaced by random bytes. A
+        # merged set's index is copied as it is, so the loader is pointed at
+        # the poisoned merged file by a well-formed index and the failure is
+        # the LOAD's, not the index's.
+        for so in sorted((pkg / V).glob("*/**/_mojolearn*.so")):  # glue: set files
+            dst = pkg / W / so.relative_to(pkg / V)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(os.urandom(4096))
+            idx = so.parent / merged_layout.INDEX
+            if idx.is_file() and not (dst.parent / merged_layout.INDEX).exists():
+                shutil.copyfile(idx, dst.parent / merged_layout.INDEX)
 
     def remove_v(pkg):
         link_tree(pkg / V, pkg / W)
@@ -170,10 +194,19 @@ def main():
         # architecture axis (2026-08-30), and at <vendor>/ on a legacy set.
         # Find it rather than assume; the fast binary is its sibling's
         # parent either way.
-        t = next((pkg / V).glob("*/identical/_mojolearn_gbdt.so"), None)
-        if t is None:
-            t = pkg / V / "identical" / "_mojolearn_gbdt.so"
-        fast = t.parent.parent / "_mojolearn_gbdt.so"
+        #
+        # The binding is found through the directory's layout: its own
+        # `_mojolearn_gbdt.so` (per-binding), or the merged file the
+        # directory's index names for it (merged). The fast file that
+        # replaces it is found the same way in the fast directory.
+        ident = next((p.parent for p in sorted((pkg / V).glob("*/identical/" + merged_layout.INDEX))), None)
+        if ident is None:
+            t = next((pkg / V).glob("*/identical/_mojolearn_gbdt.so"), None)
+            ident = t.parent if t is not None else pkg / V / "identical"
+        t = merged_layout.member_file(ident, "_mojolearn_gbdt")
+        fast = merged_layout.member_file(ident.parent, "_mojolearn_gbdt")
+        if not t.is_file() or not fast.is_file():
+            raise SystemExit(f"tier_mislabeled: no _mojolearn_gbdt binary at {t} or {fast}")
         t.unlink()
         os.link(fast, t)
 

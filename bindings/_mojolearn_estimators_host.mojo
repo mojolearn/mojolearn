@@ -1559,8 +1559,10 @@ def rbf_sampler_transform_binding(
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_estimators_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_estimators_host")
         module.def_function[estimators_host_numeric_mode_binding]("estimators_host_numeric_mode")

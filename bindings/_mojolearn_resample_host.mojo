@@ -526,8 +526,10 @@ def monte_carlo_integrate_binding(
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_resample_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_resample_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_resample_host() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_resample_host")
         m.def_function[resample_host_numeric_mode_binding]("resample_host_numeric_mode")

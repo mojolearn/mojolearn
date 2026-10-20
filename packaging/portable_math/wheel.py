@@ -33,7 +33,10 @@ MATH_SYMBOLS |= {"__sincosf_stret", "__sincos_stret", "__sincospif_stret", "__si
                  "__sinpif", "__cospif", "__tanpif", "__sinpi", "__cospi", "__tanpi",
                  "__exp10f", "__exp10"}
 #: A FAST-tier binding of a Linux GPU set: mojolearn/<cuda|hip>/<arch>/<name>.so
-#: with no tier directory (identical/ sits one level deeper).
+#: with no tier directory (identical/ sits one level deeper). The merged
+#: bindings' native file of a FAST set (`_mojolearn_native.so`, holding every
+#: FAST member, packaging/linux/merged_layout.py) matches the same pattern;
+#: its index `_mojolearn_merged.json` is not a binary and is never audited here.
 FAST_SET = re.compile(r"^mojolearn/(cuda|hip|cuda_native|hip_native|cuda_ptx)/[^/]+/_mojolearn[^/]*\.so$"
                       # macOS: FAST GPU bindings sit at the package root; host/
                       # and identical/ are directories below it.

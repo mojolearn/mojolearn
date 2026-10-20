@@ -284,10 +284,89 @@ reused_sha() {
     [ -n "$REUSE_PLAN" ] || return 0
     python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"].get(sys.argv[2], {}).get("sha256", ""))' "$REUSE_PLAN" "$1"
 }
+# MERGED BINDINGS (lane/merged-bindings, 2026-10-20). Every binding compiled
+# on its own embeds the code it shares with the others again (the sequence
+# ops, linalg, common kernels, the Mojo stdlib): on the 0.8.55 wheel 60% of
+# the embedded Metal libraries and 38% of the host code were repeats, and the
+# wheel was 97 MiB against PyPI's 100 MiB file limit. With
+# MOJOLEARN_MERGED_BINDINGS=1 (the default) each directory set ships the
+# merged files bindings/merged_groups.json plans (`python3
+# tools/merged_bindings.py plan --dir fast|identical|host --platform darwin`),
+# built by bindings/merged_build.sh, plus the index _mojolearn_merged.json the
+# loader (python/mojolearn/_merged.py) reads to load each member, under its own
+# module name, from the merged file. Same code, same defines, same flags per
+# member (merged_build.sh's header). MOJOLEARN_MERGED_BINDINGS=0 packs the
+# per-binding layout exactly as before, for an A/B of size and for bisecting.
+MERGED="${MOJOLEARN_MERGED_BINDINGS:-1}"
+case "$MERGED" in 0|1) ;; *) echo 'MOJOLEARN_MERGED_BINDINGS must be 0 or 1' >&2; exit 2 ;; esac
+export MOJOLEARN_MERGED_BINDINGS="$MERGED"
+MERGED_INDEX=_mojolearn_merged.json
+# A stale index would ship (package-data globs it) and send the loader to a
+# file this build did not make, so every index is rebuilt or removed.
+rm -f "$PKG/$MERGED_INDEX" "$PKG/identical/$MERGED_INDEX" "$PKG/host/$MERGED_INDEX"
+# The directories a merged build fills, in MODES order, then host/ when the
+# release profile carries the host bindings.
+merged_dirs() {
+    for mode in $MODES; do printf '%s\n' "$mode"; done
+    if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf 'host\n'; fi
+}
+# Package path of a merged directory set.
+merged_pkgdir() {
+    case "$1" in fast) printf '%s' "$PKG" ;; *) printf '%s' "$PKG/$1" ;; esac
+}
+merged_plan() {
+    python3 tools/merged_bindings.py plan --dir "$1" --platform darwin --byte-lm "$PACKAGE_BYTE_LM"
+}
+if [ "$MERGED" = 1 ]; then
+    echo "== merged bindings: one native file per group of bindings/merged_groups.json (MOJOLEARN_MERGED_BINDINGS=0 packs one file per binding)"
+    # REUSE IS PER BINDING. tools/release_reuse.py decides and extracts one
+    # published file per binding, keyed on that binding build script; a merged
+    # file is one compile of every member, so it could be reused only when the
+    # published wheel holds the same merged file and every member identity
+    # matches, which the plan does not record. Refused rather than guessed.
+    if [ -n "$REUSE_PLAN" ]; then
+        echo "MOJOLEARN_REUSE_PLAN is set, and reused bindings are per-binding files: a merged build compiles" >&2
+        echo "  every member at once. Unset MOJOLEARN_REUSE_PLAN, or pack the per-binding layout with" >&2
+        echo "  MOJOLEARN_MERGED_BINDINGS=0." >&2
+        exit 2
+    fi
+    # THE MANIFEST MUST NAME EXACTLY THE PACKER LISTS, per directory: a member
+    # the manifest lacks would ship absent, one it adds would ship ungated.
+    _byte=""; [ "$PACKAGE_BYTE_LM" = 1 ] && _byte=_mojolearn_byte_lm
+    for _d in $(merged_dirs); do
+        case "$_d" in
+            fast) _expect="$EXT_NAMES $FAST_CLASSICAL_NAMES $_byte" ;;
+            identical) _expect="$EXT_NAMES $IDENTICAL_ONLY_NAMES $FAST_CLASSICAL_NAMES $_byte" ;;
+            host) _expect="$HOST_NAMES" ;;
+            *) echo "merged bindings: no merged directory set for tier $_d" >&2; exit 2 ;;
+        esac
+        python3 tools/merged_bindings.py check --dir "$_d" --platform darwin --byte-lm "$PACKAGE_BYTE_LM" \
+            --expect "$_expect" || { echo "merged bindings: fix bindings/merged_groups.json ($_d) or the lists above" >&2; exit 2; }
+        # A member own file would shadow its merged file (the loader prefers
+        # it) and ship stale; merged_build.sh removes them for a compile, and
+        # this covers a file placed from the compile cache.
+        for _n in $_expect; do rm -f "$(merged_pkgdir "$_d")/$_n.so"; done
+    done
+    # THE COMPILE CACHE KEY. tools/bincache.py keys every MOJOLEARN_* variable,
+    # and its walk keys the .mojo tree and merged_build.sh, but not the root
+    # generator or the manifest; this digest puts them in the key. The members
+    # each merged file reads back after the build are checked against the plan
+    # as well (PYMERGED below), so a cached file can never serve another plan.
+    MOJOLEARN_MERGED_KEY=$(cat bindings/merged_groups.json tools/merged_bindings.py | shasum -a 256 | cut -d' ' -f1)
+    export MOJOLEARN_MERGED_KEY
+fi
 case "$BUILD_JOBS" in ''|*[!0-9]*|0) echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2;; esac
 [ "$BUILD_JOBS" -le 16 ] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_LOGS=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-release-builds.XXXXXX")
 build_pairs() {
+    if [ "$MERGED" = 1 ]; then
+        # One job per merged file: "<dir> merged:<stem>", the dir being fast,
+        # identical or host.
+        for d in $(merged_dirs); do
+            merged_plan "$d" | while read -r stem _cls _members; do printf '%s merged:%s\n' "$d" "$stem"; done
+        done
+        return 0
+    fi
     for mode in $MODES; do
         [ "$mode" = identical ] || continue
         for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
@@ -316,6 +395,14 @@ build_pairs() {
 # pairs are independent. Measured order-versus-heaviest-first at four builds:
 # 664 s against 595 s of compile.
 pair_weight() {
+    # A merged file is one compile of many bindings, so they all outweigh any
+    # per-binding pair; the default-flags files hold the trees, mamba and the
+    # byte LM (the heaviest compiles above), then the host file, then the
+    # metal:1 files.
+    case "$2" in
+        merged:*_m1) echo 1000; return 0 ;;
+        merged:*) case "$1" in host) echo 2000 ;; *) echo 3000 ;; esac; return 0 ;;
+    esac
     case "$1 $2" in
         "identical build_mamba.sh") echo 323 ;;
         "identical build_byte_lm.sh") echo 182 ;;
@@ -337,9 +424,43 @@ ordered_pairs() {
     done | sort -s -k1,1nr | cut -d' ' -f2-
 }
 [ "$(ordered_pairs | sort)" = "$(build_pairs | sort)" ] || { echo 'build order lost or added a pair' >&2; exit 2; }
-echo "== building $(build_pairs | wc -l | tr -d ' ') extensions, $BUILD_JOBS at a time, $MOJOLEARN_COMPILE_JOBS compiler worker(s) each (logs in $BUILD_LOGS)"
+echo "== building $(build_pairs | wc -l | tr -d ' ') $([ "$MERGED" = 1 ] && echo merged files || echo extensions), $BUILD_JOBS at a time, $MOJOLEARN_COMPILE_JOBS compiler worker(s) each (logs in $BUILD_LOGS)"
 ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     logs=$1; mode=$2; script=$3; log="$logs/${mode}_${script%.sh}.log"
+    # A MERGED FILE (MOJOLEARN_MERGED_BINDINGS=1): mode is the directory set
+    # (fast, identical, host) and script is merged:<stem>. One compile of
+    # every member; host/ compiles the CPU column with no accelerator target
+    # and no output directory override, exactly as the host pairs below.
+    case "$script" in merged:*)
+        stem="${script#merged:}"
+        log="$logs/${mode}_merged_${stem}.log"
+        case "$mode" in
+            host) output="python/mojolearn/host/$stem.so"; kind=host ;;
+            fast) output="python/mojolearn/$stem.so"; kind=gpu ;;
+            *) output="python/mojolearn/$mode/$stem.so"; kind=gpu ;;
+        esac
+        members=$(python3 tools/merged_bindings.py plan --dir "$mode" --platform darwin | awk -v s="$stem" "\$1==s{print \$3}")
+        [ -n "$members" ] || { echo "== merged $mode/$stem: not in the plan"; exit 1; }
+        runner=sh
+        if [ -n "${MOJOLEARN_BINCACHE_DIR:-}" ]; then
+            runner="python3 tools/bincache.py build"
+            export MOJOLEARN_BINCACHE_OUTPUTS="$output" MOJOLEARN_BINCACHE_SHELL=sh
+            rm -f "$output"
+        fi
+        if [ "$kind" = host ]; then
+            set -- env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_TARGET_COLUMN=cpu
+        else
+            set -- env MOJOLEARN_NUMERIC_MODE="$mode"
+        fi
+        if "$@" $runner ./bindings/merged_build.sh "$kind" --group "$stem" > "$log" 2>&1; then
+            python3 tools/binding_stamps.py write-merged "$output" "$members" >> "$log" 2>&1 || { echo "== merged $mode/$stem STAMP FAILED"; cat "$log"; exit 1; }
+            { echo "== merged $mode/$stem.so OK"; cat "$log"; }
+        else
+            { echo "== merged $mode/$stem.so FAILED"; cat "$log"; }
+            exit 1
+        fi
+        exit 0 ;;
+    esac
     # The byte LM build keeps its own gate on, as it always did here.
     skip=1; [ "$script" = build_byte_lm.sh ] && skip=
     # THE ONE FILE THIS PAIR WRITES, declared for the compile cache. Named
@@ -426,7 +547,51 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
 # every other tier is a subdirectory of the same name, so this loop does not
 # need to know which tiers exist, only what MODES says.
 ALL_SOS=""
-for n in $EXT_NAMES; do
+HOST_SOS=""
+if [ "$MERGED" = 1 ]; then
+    # THE INDEX OF EACH DIRECTORY, written again here one file at a time from
+    # the plan (a file placed from the compile cache was never indexed by
+    # merged_build.sh), then held to the plan exactly: every planned file and
+    # member, nothing stale. The index files are package data and ship.
+    for d in $(merged_dirs); do
+        dpath=$(merged_pkgdir "$d")
+        rm -f "$dpath/$MERGED_INDEX"
+        merged_plan "$d" > "$BUILD_LOGS/plan_$d.txt"
+        while read -r stem _cls members; do
+            python3 tools/merged_bindings.py index --outdir "$dpath" --stem "$stem" --members "$members" < /dev/null
+            ALL_SOS="$ALL_SOS $dpath/$stem.so"
+            [ "$d" = host ] && HOST_SOS="$HOST_SOS $dpath/$stem.so"
+        done < "$BUILD_LOGS/plan_$d.txt"
+        python3 tools/merged_bindings.py check-index --outdir "$dpath" --dir "$d" --platform darwin \
+            --byte-lm "$PACKAGE_BYTE_LM" || { echo "ERROR: $dpath/$MERGED_INDEX does not match the plan" >&2; exit 1; }
+    done
+    # EACH MERGED FILE READS BACK ITS MEMBERS: PyInit_<stem> answers
+    # merged_members(), which the generated root spells from the plan, so a
+    # file built from another manifest (or placed from a cache) fails here.
+    set --
+    for d in $(merged_dirs); do
+        while read -r stem _cls members; do
+            set -- "$@" "$(merged_pkgdir "$d")/$stem.so" "$stem" "$members"
+        done < "$BUILD_LOGS/plan_$d.txt"
+    done
+    pixi run -e pkg python - "$@" <<'PYMERGED'
+import importlib.util, sys
+args = sys.argv[1:]
+for i in range(0, len(args), 3):
+    path, stem, want = args[i:i + 3]
+    spec = importlib.util.spec_from_file_location(stem, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    got = str(module.merged_members())
+    assert sorted(got.split(',')) == sorted(want.split(',')), f'{path} serves {got}, the plan says {want}'
+    print(f'merged: {path} serves {len(want.split(","))} member(s), as planned')
+PYMERGED
+    set --
+fi
+# THE PER-BINDING FILES (MOJOLEARN_MERGED_BINDINGS=0): NONE IN A MERGED BUILD,
+# whose ALL_SOS is the merged files above. The read-backs further down load
+# every host member and the byte LM from whichever file serves it.
+[ "$MERGED" = 1 ] || for n in $EXT_NAMES; do
     for mode in $MODES; do
         if [ "$mode" = "fast" ]; then
             ALL_SOS="$ALL_SOS $PKG/$n.so"
@@ -436,11 +601,11 @@ for n in $EXT_NAMES; do
     done
 done
 # The identical-only lanes are gated in ONE tier, whatever MODES says.
-case " $MODES " in *" identical "*)
+[ "$MERGED" = 1 ] || case " $MODES " in *" identical "*)
     for n in $IDENTICAL_ONLY_NAMES $FAST_CLASSICAL_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
 esac
 # Classical ML also ships the fast tier (the package directory itself).
-case " $MODES " in *" fast "*)
+[ "$MERGED" = 1 ] || case " $MODES " in *" fast "*)
     for n in $FAST_CLASSICAL_NAMES; do ALL_SOS="$ALL_SOS $PKG/$n.so"; done ;;
 esac
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
@@ -454,8 +619,16 @@ if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     # wheel). They live beside the tiers, in host/, which is where the
     # runtime looks rather than through _backend.binding().
     for n in $HOST_NAMES; do
-        ALL_SOS="$ALL_SOS $PKG/host/$n.so"
-        pixi run -e pkg python - "$PKG/host/$n.so" "$n" <<'PYHOST'
+        host_path="$PKG/host/$n.so"
+        if [ "$MERGED" = 1 ]; then
+            # Loaded from the merged file under its own name: CPython looks up
+            # PyInit_<name> in whatever file it is given.
+            host_path=$(python3 tools/merged_bindings.py owner --outdir "$PKG/host" --name "$n")
+            [ -n "$host_path" ] || { echo "ERROR: no merged host file serves $n" >&2; exit 1; }
+        else
+            ALL_SOS="$ALL_SOS $host_path"
+        fi
+        pixi run -e pkg python - "$host_path" "$n" <<'PYHOST'
 import importlib.util, json, sys
 path, name = sys.argv[1], sys.argv[2]
 prefix = name[len('_mojolearn_'):]
@@ -476,7 +649,12 @@ PYHOST
             identical) byte_path="$PKG/identical/_mojolearn_byte_lm.so" ;;
             *) continue ;;
         esac
-        ALL_SOS="$ALL_SOS $byte_path"
+        if [ "$MERGED" = 1 ]; then
+            byte_path=$(python3 tools/merged_bindings.py owner --outdir "$(dirname "$byte_path")" --name _mojolearn_byte_lm)
+            [ -n "$byte_path" ] || { echo "ERROR: no merged $byte_mode file serves _mojolearn_byte_lm" >&2; exit 1; }
+        else
+            ALL_SOS="$ALL_SOS $byte_path"
+        fi
         pixi run -e pkg python - "$byte_path" "$byte_mode" <<'PYBYTE'
 import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location('_mojolearn_byte_lm', sys.argv[1])
@@ -622,6 +800,10 @@ for so in $ALL_SOS; do
     for n in $HOST_NAMES; do
         [ "$so" = "$PKG/host/$n.so" ] && is_host=1
     done
+    # merged: the host files of the plan, by their exact paths
+    for h in $HOST_SOS; do
+        [ "$so" = "$h" ] && is_host=1
+    done
     [ "$is_host" = 1 ] || GPU_SOS="$GPU_SOS $so"
 done
 # shellcheck disable=SC2086
@@ -663,6 +845,31 @@ rm -rf dist build ./*.egg-info
 pixi run -e pkg python -m build --wheel --no-isolation
 # PyPI refuses a file over 100 MiB: strip local symbols, re-sign, deflate 9, and fail here if still over.
 python3 "$here/packaging/macos/shrink_wheel.py" "$here/python/dist/"*.whl || exit 1
+# THE PACKED WHEEL CARRIES EACH MERGED DIRECTORY'S INDEX, byte for byte the
+# one checked above, and every file it names: without the index the loader
+# finds no member at all.
+if [ "$MERGED" = 1 ]; then
+    for d in $(merged_dirs); do
+        case "$d" in fast) printf '%s\n' "$MERGED_INDEX" ;; *) printf '%s\n' "$d/$MERGED_INDEX" ;; esac
+    done > "$BUILD_LOGS/indexes.txt"
+    python3 - "$PKG" "$BUILD_LOGS/indexes.txt" "$here/python/dist/"*.whl <<'PYINDEX' || exit 1
+import json, pathlib, sys, zipfile
+pkg, listing, wheel = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+with zipfile.ZipFile(wheel) as z:
+    names = set(z.namelist())
+    for rel in pathlib.Path(listing).read_text().split():
+        member = 'mojolearn/' + rel
+        if member not in names:
+            raise SystemExit(f'ERROR: {pathlib.Path(wheel).name} lacks {member}')
+        if z.read(member) != (pkg / rel).read_bytes():
+            raise SystemExit(f'ERROR: {member} in the wheel differs from the checked index')
+        base = member.rsplit('/', 1)[0]
+        for fname in json.loads(z.read(member))['files']:
+            if base + '/' + fname not in names:
+                raise SystemExit(f'ERROR: {member} names {fname}, which the wheel lacks')
+        print(f'wheel index: {member} ({len(json.loads(z.read(member))["files"])} merged file(s))')
+PYINDEX
+fi
 python3 "$here/tools/wheel_api_audit.py" --require-complete \
     --output "$here/python/dist/API-macos.json" "$here/python/dist/"*.whl
 

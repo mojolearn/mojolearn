@@ -210,8 +210,10 @@ def glm_ydom_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
-@export
-def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_linear.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_linear() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")

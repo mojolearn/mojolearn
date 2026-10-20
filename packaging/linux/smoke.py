@@ -312,13 +312,20 @@ def main():
             "in the installed package")
 
     per = {}
+    # The file each binding loaded from: its own `<name>.so` (per-binding
+    # layout) or its set directory's merged native file (merged layout,
+    # packaging/linux/merged_layout.py). Recorded so a leg's evidence says
+    # which layout it smoked; the loader (_merged.py) does the choosing.
+    files = {}
     names_to_load = ALL_BINDINGS
     if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
         names_to_load += ("_mojolearn_byte_lm",)
     for name in names_to_load:
         must_refuse = _must_refuse(name, mode)
         try:
-            per[name] = _backend.read_vendor(_backend.binding(name))
+            module = _backend.binding(name)
+            files[name] = os.path.basename(getattr(module, "__file__", "") or "")
+            per[name] = _backend.read_vendor(module)
         except Exception as exc:
             per[name] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
         if must_refuse:
@@ -333,6 +340,9 @@ def main():
         if per[name] != a.vendor:
             failures.append(f"{name}: read-back = {per[name]!r}")
     report["vendor_per_binding"] = per
+    report["file_per_binding"] = files
+    report["binding_layout"] = ("merged" if any(f != n + ".so" for n, f in files.items())  # glue: report
+                                else "per-binding")
     # THE CPU TRAINING BINDING (DEVIATION 2680). Reached through its own path
     # helper and NEVER _backend.binding(), because that selector refuses a
     # binary whose vendor read-back is not a GPU API and this one reads back

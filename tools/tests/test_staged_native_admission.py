@@ -96,6 +96,18 @@ class Admission(unittest.TestCase):
         self.assertTrue(a.complete_native_proof(legacy))
         self.proof['build_exit']=0;self.refused()
 
+    def test_merged_layout_needs_a_build_proof(self):
+        # staged receipts are per binding; a proof claiming the merged layout or
+        # carrying merged indexes is refused, while a merged BUILD proof admits
+        for field,value in (('binding_layout','merged'),('merged_indexes',{'mojolearn/hip/gfx942/_mojolearn_merged.json':{}})):
+            with self.subTest(field=field):
+                proof=copy.deepcopy(self.proof);proof[field]=value
+                self.assertFalse(a.complete_native_proof(proof))
+        self.proof['binding_layout']='per-binding';self.assertTrue(a.validate_staged(self.proof))
+        merged=dict(schema=a.BUILD_SCHEMA,action='build',complete=True,build_exit=0,binding_layout='merged',
+                    merged_indexes={'mojolearn/hip/gfx942/_mojolearn_merged.json':{'sha256':'a'*64,'files':{}}})
+        self.assertTrue(a.complete_native_proof(merged))
+
     def test_missing_duplicate_and_unexpected_output(self):
         for mutation in (lambda r:r.pop(),lambda r:r.append(r[0]),lambda r:r[0].update(relative='unregistered.so')):
             self.proof=fixture();self.change_stage(lambda s:mutation(s['outputs']));self.refused()

@@ -744,8 +744,10 @@ def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -
     return PythonObject(wrote)
 
 
-@export
-def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_linalg_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_linalg_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_linalg_host")
         module.def_function[linalg_host_numeric_mode_binding]("linalg_host_numeric_mode")

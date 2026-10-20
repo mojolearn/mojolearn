@@ -315,7 +315,7 @@ def script_plan(repo, script, args):
                 return None
             incs.add((repo / inc).resolve())
         if family is not None and not srcs:
-            srcs = ["bindings/_mojolearn_%s_host.mojo" % family]
+            srcs = ["bindings/entry/entry__mojolearn_%s_host.mojo" % family]
         if len(srcs) != 1 or "$" in srcs[0]:
             return None
         roots.append(repo / srcs[0].strip("\"'"))

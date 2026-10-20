@@ -36,6 +36,7 @@ which is the difference between the two builds above. Correctness is
 `packaging/macos/verify_wheel.sh` with no flag, on real Apple silicon.
 """
 
+import json
 import struct
 import sys
 from pathlib import Path
@@ -121,38 +122,67 @@ def metallib_kernels(data):
     return kernels
 
 
+#: The index a merged build writes beside its files (bindings/merged_build.sh).
+MERGED_INDEX = "_mojolearn_merged.json"
+
+
 def identity(path):
     path = Path(path)
     tier = path.parent.name if path.parent.name == "identical" else "fast"
     return tier, path.stem
 
 
+def members(path):
+    """The bindings `path` serves: the members its directory's merged index
+    names for it (a merged file), else the one binding named like the file."""
+    path = Path(path)
+    index = path.parent / MERGED_INDEX
+    if index.is_file():
+        served = json.loads(index.read_text()).get("files", {}).get(path.name)
+        if served:
+            return list(served)
+    return [path.stem]
+
+
 def main(paths):
+    """Each file must carry named Metal kernels, or serve only registered
+    device-free glue whose same-tier delegates are served by files that do.
+    A merged file (several members, one embedded library) is judged as one
+    file: its kernels are shared, so a member cannot be told apart here."""
     files = [Path(p) for p in paths]
     if not files:
         print("FAIL no device bindings supplied", file=sys.stderr)
         return 1
-    indexed = {}
+    kernels, served_by = {}, {}
     for path in files:
-        key = identity(path)
-        if key in indexed:
-            print("FAIL duplicate tier/binding: " + str(key), file=sys.stderr)
+        if path in kernels:
+            print("FAIL duplicate file: " + str(path), file=sys.stderr)
             return 1
-        indexed[key] = metallib_kernels(path.read_bytes())
+        kernels[path] = metallib_kernels(path.read_bytes())
+        tier = identity(path)[0]
+        for name in members(path):
+            key = (tier, name)
+            if key in served_by:
+                print("FAIL duplicate tier/binding: " + str(key), file=sys.stderr)
+                return 1
+            served_by[key] = path
     failed = False
     for path in files:
-        key = identity(path)
-        names = indexed[key]
+        names = kernels[path]
+        tier = identity(path)[0]
+        served = members(path)
+        label = f" ({len(served)} merged members)" if served != [path.stem] else ""
         if names:
-            print(f"  {path}: {len(names)} named Metal compute kernels with LLVM bitcode")
+            print(f"  {path}{label}: {len(names)} named Metal compute kernels with LLVM bitcode")
             continue
-        delegates = DEVICE_GLUE.get(key)
-        if delegates and all(indexed.get((key[0], name)) for name in delegates):
-            print(f"  {path}: explicit device-free glue; same-tier compiled delegates {', '.join(delegates)}")
+        glue = [DEVICE_GLUE.get((tier, name)) for name in served]
+        if all(glue) and all(kernels.get(served_by.get((tier, d))) for delegates in glue for d in delegates):
+            shown = sorted({d for delegates in glue for d in delegates})
+            print(f"  {path}{label}: explicit device-free glue; same-tier compiled delegates {', '.join(shown)}")
             continue
         failed = True
-        reason = "missing compiled same-tier delegates" if delegates else "no validated Metal compute library"
-        print(f"FAIL {path}: {reason}", file=sys.stderr)
+        reason = "missing compiled same-tier delegates" if all(glue) else "no validated Metal compute library"
+        print(f"FAIL {path}{label}: {reason}", file=sys.stderr)
     return int(failed)
 
 

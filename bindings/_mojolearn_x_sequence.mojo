@@ -600,8 +600,10 @@ def onnx_from_words_binding(
     return onnx_from_words_py(words, strings, floats, addrs)
 
 
-@export
-def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_sequence.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_sequence() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_sequence")
         m.def_function[numeric_mode_binding]("x_sequence_numeric_mode")

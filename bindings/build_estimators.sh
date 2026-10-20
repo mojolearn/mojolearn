@@ -147,12 +147,13 @@ if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi
 # shellcheck disable=SC2086
+# compiles the entry bindings/entry/entry__mojolearn_estimators.mojo, which imports the module body bindings/_mojolearn_estimators.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn_estimators.mojo \
+    bindings/entry/entry__mojolearn_estimators.mojo \
     -o "$out"
 
 air_blobs() {

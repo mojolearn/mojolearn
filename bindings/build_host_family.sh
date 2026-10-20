@@ -57,6 +57,11 @@ host_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$host_root"
 source_file="bindings/_mojolearn_${family}_host.mojo"
 [ -f "$source_file" ] || { echo "$label: no such binding source $source_file" >&2; exit 2; }
+# The module body is build__mojolearn_<family>_host() in $source_file; the
+# per-binding entry exports its PyInit (tools/merged_bindings.py entries).
+# bindings/merged_build.sh host compiles every family into one file instead.
+entry_file="bindings/entry/entry__mojolearn_${family}_host.mojo"
+[ -f "$entry_file" ] || { echo "$label: no entry $entry_file; run python3 tools/merged_bindings.py entries" >&2; exit 2; }
 [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || { echo "$label supports only MOJOLEARN_NUMERIC_MODE=identical" >&2; exit 2; }
 [ "${MOJOLEARN_TARGET_COLUMN:-cpu}" = cpu ] || { echo "$label compiles the CPU column only; MOJOLEARN_TARGET_COLUMN=$MOJOLEARN_TARGET_COLUMN is refused" >&2; exit 2; }
 host_system=$(uname -s)
@@ -100,6 +105,6 @@ host_tmpdir=$(mktemp -d "$host_outdir/.${family}-host-build.XXXXXX")
 trap 'rm -rf "$host_tmpdir"' EXIT HUP INT TERM
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings \
-    "$source_file" -o "$host_tmpdir/_mojolearn_${family}_host.so"
+    "$entry_file" -o "$host_tmpdir/_mojolearn_${family}_host.so"
 ln "$host_tmpdir/_mojolearn_${family}_host.so" "$host_destination"
 echo "built $host_destination"

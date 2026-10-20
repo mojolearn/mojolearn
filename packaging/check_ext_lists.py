@@ -277,6 +277,34 @@ def expansion_problems(read):
     return out
 
 
+#: THE MERGED BUILD'S MANIFEST (lane/merged-bindings, 2026-10-20) names the
+#: members of every merged file the macOS wheel ships
+#: (bindings/merged_groups.json, read by tools/merged_bindings.py); a member
+#: it lacks would ship absent in the merged layout. Held here per directory
+#: set, release profile (byte LM on): the package directory carries the
+#: every-tier and classical-fast bindings, identical/ every binding, host/
+#: the manifest's wheel host bindings. build_release_wheel.sh repeats the
+#: check against its own lists before it builds.
+def merged_problems(tiered, classical, want, profile_only):
+    spec = importlib.util.spec_from_file_location("check_ext_lists_merged", ROOT / "tools" / "merged_bindings.py")
+    mb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mb)
+    expect = {"fast": set(tiered) | set(classical) | set(profile_only),
+              "identical": set(want) | set(profile_only),
+              "host": set(_manifest().wheel_bindings())}
+    out = []
+    for d, names in expect.items():
+        got = [n for _stem, _cls, mem in mb.plan(d, "darwin", True) for n in mem]
+        dup = sorted({n for n in got if got.count(n) > 1})
+        if set(got) != names or dup:
+            out.append(f"  MISMATCH  bindings/merged_groups.json {d} (darwin, byte LM): "
+                       f"missing {sorted(names - set(got)) or '-'}, extra {sorted(set(got) - names) or '-'}, "
+                       f"duplicated {dup or '-'}")
+        else:
+            print(f"  OK        bindings/merged_groups.json {d} (darwin, byte LM) ({len(got)})")
+    return out
+
+
 #: THE GPU PLUGIN TABLE (2026-09-25): python/mojolearn/gpu_plugins.py says
 #: which PyPI project ships which vendor directory. (path, the token that
 #: proves the file reads the table rather than a copy of it.)
@@ -455,6 +483,10 @@ def main():
             print(f"              MISSING (ships without a gate): {', '.join(missing)}")
         if extra:
             print(f"              EXTRA (named but not a module): {', '.join(extra)}")
+    merged_bad = merged_problems(tiered, classical, want, profile_only)
+    if merged_bad:
+        print("\n".join(merged_bad))
+        bad += len(merged_bad)
     # _backend._HOST_MODULES delegates to this manifest. Keep the inventory
     # check usable before building binaries, as the release checklist requires.
     host_bad = host_problems(_read_tree, set(_manifest().routed_modules().values()))

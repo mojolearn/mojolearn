@@ -39,6 +39,11 @@ from ._version import __version__
 # The identical tier loads its own binary set from
 # python/mojolearn/identical/*.so under the canonical names; see
 # _backend.py.
+# A release ships one merged native file per directory set; this finder
+# serves a binding from it when the binding's own .so is absent
+# (`_merged.py`). Installed before any binding is imported.
+from . import _merged as _merged
+_merged.install()
 from . import _backend as _backend
 
 _backend.select()

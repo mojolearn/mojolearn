@@ -10,7 +10,7 @@ import json
 import zipfile
 
 import pytest
-from test_split_wheels import make_sets, members, pw, write_ptx_manifest, wheel_api_audit
+from test_split_wheels import MERGED_INDEX, make_sets, members, pw, write_ptx_manifest, wheel_api_audit
 
 
 @pytest.fixture(autouse=True)
@@ -21,8 +21,9 @@ def _ptx_slot_shipped(monkeypatch):
     monkeypatch.setitem(pw.gpu_plugins.PLUGINS['cuda'], 'ptx_shipped', True)
 
 
-def inputs(root, include_byte_lm=False):
-    dirs = make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")), include_byte_lm=include_byte_lm)
+def inputs(root, include_byte_lm=False, merged=False):
+    dirs = make_sets(root, sets=(("cuda", "sm_89"), ("cuda", "sm_80")), include_byte_lm=include_byte_lm,
+                     merged=merged)
     return dirs, root / 'sets/cuda/sm_80'
 
 
@@ -38,14 +39,20 @@ def rewrite(path, files):
         for member,data in files.items():archive.writestr(member,data)
 
 
-def test_ptx_set_lands_at_cuda_ptx_with_its_bytes_and_a_native_marker(tmp_path):
-    dirs,ptx=inputs(tmp_path)
+@pytest.mark.parametrize('merged', [False, True])
+def test_ptx_set_lands_at_cuda_ptx_with_its_bytes_and_a_native_marker(tmp_path, merged):
+    dirs,ptx=inputs(tmp_path, merged=merged)
     wheel=pack(tmp_path,dirs)
     files=members(wheel);prefix=pw.gpu_plugins.BUNDLED_PTX_ROOT+'/'
     assert prefix=='mojolearn/cuda_ptx/sm_80/'
     manifest=(ptx/pw.gpu_plugins.BASELINE_MANIFEST).read_bytes()
     for row in json.loads(manifest)['files']:
         assert files[prefix+row['file']]==(ptx/row['file']).read_bytes()
+    # merged: the manifest's rows are the merged files, and each index ships beside them
+    for row in json.loads(manifest).get('indexes', []):
+        assert files[prefix+row['file']]==(ptx/row['file']).read_bytes()
+    assert ('indexes' in json.loads(manifest)) == merged
+    assert (prefix+'identical/'+MERGED_INDEX in files) == merged
     assert files[prefix+pw.gpu_plugins.BASELINE_MANIFEST]==manifest
     marker=json.loads(next(data for name,data in files.items() if name.endswith('/gpu_plugin.json')))
     assert marker['arches']==['sm_80']
@@ -84,17 +91,30 @@ def test_descriptor_is_the_manifest_digest_and_nothing_else():
             gp.validate_bundle_descriptor(bad)
 
 
-def test_validate_bundled_ptx_binds_manifest_bytes_and_files(tmp_path):
-    dirs,ptx=inputs(tmp_path);gp=pw.gpu_plugins
+@pytest.mark.parametrize('merged', [False, True])
+def test_validate_bundled_ptx_binds_manifest_bytes_and_files(tmp_path, merged):
+    dirs,ptx=inputs(tmp_path, merged=merged);gp=pw.gpu_plugins
     manifest=(ptx/gp.BASELINE_MANIFEST).read_bytes()
     files={row['file']:row['sha256'] for row in json.loads(manifest)['files']}
     descriptor=dict(manifest_sha256=hashlib.sha256(manifest).hexdigest())
     assert gp.validate_bundled_ptx(descriptor,manifest,files)['schema']=='mojolearn.ptx-set.v2'
     with pytest.raises(ValueError,match='differ from the vendor marker'):gp.validate_bundled_ptx(descriptor,manifest+b' ',files)
     with pytest.raises(ValueError,match='does not match'):gp.validate_bundled_ptx(descriptor,manifest,dict(files,extra='0'*64))
+    if merged:
+        indexes={row['file']:row['sha256'] for row in json.loads(manifest)['indexes']}
+        assert gp.validate_bundled_ptx(descriptor,manifest,files,indexes)['schema']=='mojolearn.ptx-set.v2'
+        with pytest.raises(ValueError,match='merged index'):
+            gp.validate_bundled_ptx(descriptor,manifest,files,{k:'0'*64 for k in indexes})
     doc=json.loads(manifest)
     for field in ('experimental','identical_qualified','qualification_required'):
         assert field not in doc
+
+
+def test_merged_ptx_index_tampering_refused_at_pack(tmp_path):
+    dirs,ptx=inputs(tmp_path, merged=True)
+    index=ptx/'identical'/MERGED_INDEX
+    index.write_text(json.dumps(json.loads(index.read_text())))  # same members, other bytes than the manifest binds
+    with pytest.raises(SystemExit,match='invalid PTX set manifest'):pack(tmp_path,dirs)
 
 
 def test_dirty_ptx_manifest_refused(tmp_path):

@@ -1908,8 +1908,10 @@ def unique_inverse_binding(
     return PythonObject(k)
 
 
-@export
-def PyInit__mojolearn() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")

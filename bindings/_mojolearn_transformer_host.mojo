@@ -560,8 +560,10 @@ def transformer_session_backward_tape_binding(session: PythonObject,addrs: Pytho
     return PythonObject(0)
 
 
-@export
-def PyInit__mojolearn_transformer_host() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_transformer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_transformer_host")
         _ = module.add_type[HostTransformerSession]("_TransformerSession")

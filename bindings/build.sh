@@ -304,12 +304,13 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out="$tmpdir/_mojolearn.so"
 
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
+# compiles the entry bindings/entry/entry__mojolearn.mojo, which imports the module body bindings/_mojolearn.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn.mojo \
+    bindings/entry/entry__mojolearn.mojo \
     -o "$out"
 
 # COUNTING BLOBS IS A PRE-FILTER, NOT THE GATE.

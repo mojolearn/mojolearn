@@ -20,6 +20,7 @@ import subprocess
 
 from ptx_contract import APPROX, modules, plain_ops
 from device_glue import DEVICE_GLUE
+from merged_layout import INDEX, read_index
 
 FORMAT = 'ptx'
 SCHEMA = 'mojolearn.ptx-set.v2'
@@ -76,7 +77,17 @@ def audit_tree(root, source_commit, mojo_version, source_dirty=False):
     if not mojo_version.strip():
         raise ValueError('Mojo toolchain version must be recorded')
     root = Path(root)
-    rows, errors = [], []
+    rows, errors, indexes = [], [], []
+    # MERGED LAYOUT (packaging/linux/merged_layout.py): a tier directory ships
+    # _mojolearn_native.so + _mojolearn_merged.json. The merged file's row
+    # names its members (so x_trees, rf and gbdt are visibly one file with PTX
+    # modules, and x_trees needs no delegation), and the index is hashed here
+    # because the loader trusts it to say which file holds which module.
+    for path in sorted(root.rglob(INDEX)):
+        rel = path.relative_to(root)
+        if any(part in ('host', '.libs') for part in rel.parts):
+            continue
+        indexes.append(dict(file=rel.as_posix(), sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
     for path in sorted(root.rglob('*.so')):
         rel = path.relative_to(root)
         if any(part in ('host', '.libs') for part in rel.parts):
@@ -85,8 +96,18 @@ def audit_tree(root, source_commit, mojo_version, source_dirty=False):
         data = path.read_bytes()
         mods, failures = audit_binary(data, identical=mode == 'identical')
         errors.extend(f'{rel.as_posix()}: {error}' for error in failures)
-        rows.append(dict(file=rel.as_posix(), sha256=hashlib.sha256(data).hexdigest(),
-                         numeric_mode=mode, ptx_modules=mods))
+        row = dict(file=rel.as_posix(), sha256=hashlib.sha256(data).hexdigest(),
+                   numeric_mode=mode, ptx_modules=mods)
+        try:
+            members = (read_index(path.parent) or {}).get(path.name)
+        except ValueError as error:
+            errors.append(f'{rel.as_posix()}: {error}')
+            members = None
+        if members is not None:
+            row['members'] = list(members)
+            if not mods:
+                errors.append(f'{rel.as_posix()}: merged file without PTX modules')
+        rows.append(row)
     indexed = {(row['numeric_mode'], Path(row['file']).stem): row for row in rows}
     for row in rows:
         if row['ptx_modules']:
@@ -102,10 +123,13 @@ def audit_tree(root, source_commit, mojo_version, source_dirty=False):
             row['delegates'] = [dict(file=w['file'], sha256=w['sha256']) for w in witnesses]
     if not any(row['ptx_modules'] for row in rows):
         errors.append('PTX set contains no PTX modules')
-    return dict(schema=SCHEMA, code_format=FORMAT, vendor='cuda', target=TARGET,
-                min_compute_capability=[8, 0], source_commit=source_commit,
-                source_dirty=source_dirty, mojo_version=mojo_version.strip(),
-                files=rows, errors=errors)
+    report = dict(schema=SCHEMA, code_format=FORMAT, vendor='cuda', target=TARGET,
+                  min_compute_capability=[8, 0], source_commit=source_commit,
+                  source_dirty=source_dirty, mojo_version=mojo_version.strip(),
+                  files=rows, errors=errors)
+    if indexes:
+        report['indexes'] = indexes
+    return report
 
 
 def source_witness(repo):

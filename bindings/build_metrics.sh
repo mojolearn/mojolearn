@@ -170,11 +170,12 @@ fi
 # directory, so a capability module placed beside the entry point resolves as
 # a top-level import.
 # shellcheck disable=SC2086
+# compiles the entry bindings/entry/entry__mojolearn_metrics.mojo, which imports the module body bindings/_mojolearn_metrics.mojo
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
-    bindings/_mojolearn_metrics.mojo \
+    bindings/entry/entry__mojolearn_metrics.mojo \
     -o "$out"
 
 # `_gpu_shared_mem` is a prefix the compiler puts on the blob symbol; it is

@@ -47,6 +47,14 @@
 # beside it is refused. And any top-level <name>.libs/ directory in a repaired
 # wheel (mojolearn.libs/, mojolearn_nvidia.libs/, ...) means auditwheel grafted
 # a copy of something the closure already carries, which fails the run.
+#
+# THE MERGED BINDINGS (packaging/linux/merged_layout.py): a set directory may
+# ship one merged native file per group plus its index _mojolearn_merged.json
+# instead of one .so per binding. The loader trusts the index to say which
+# file holds which module, so after the repair every index of the input wheel
+# must be in the repaired wheel byte for byte, be listed in its RECORD, and
+# every file it names must sit beside it; anything else fails the run. A
+# wheel with no index is the per-binding layout and is reported as such.
 set -euo pipefail
 WHL="${1:?wheel}"; shift
 [ $# -ge 1 ] || { echo "give every set's manifest.json"; exit 2; }
@@ -136,6 +144,40 @@ for r in "$@"; do
   echo "top-level *.libs entries (want 0): $n   $(basename "$r")"
   [ "$n" = 0 ] || { echo "auditwheel repair grafted libraries into a top-level *.libs/ directory (a second copy of the staged closure); the --exclude list is incomplete"; exit 1; }
 done
+python3 - "$WHLABS" "$@" <<'PYIDX'
+import json, sys, zipfile
+INDEX = "_mojolearn_merged.json"
+src, repaired = sys.argv[1], sys.argv[2:]
+with zipfile.ZipFile(src) as z:
+    want = {n: z.read(n) for n in z.namelist() if n.rsplit("/", 1)[-1] == INDEX}
+if not want:
+    print("binding layout: per-binding (no merged index in the wheel)")
+    sys.exit(0)
+bad = []
+for r in repaired:
+    with zipfile.ZipFile(r) as z:
+        names = set(z.namelist())
+        records = [n for n in names if n.endswith(".dist-info/RECORD")]
+        listed = {line.split(",", 1)[0] for rec in records for line in z.read(rec).decode().splitlines()}
+        for n, data in sorted(want.items()):
+            if n not in names:
+                bad.append(f"{r}: {n} is gone after the repair")
+                continue
+            if z.read(n) != data:
+                bad.append(f"{r}: {n} changed in the repair")
+            if n not in listed:
+                bad.append(f"{r}: {n} is not in the RECORD")
+            base = n.rsplit("/", 1)[0] + "/"
+            for f in sorted(json.loads(data).get("files", {})):
+                if base + f not in names:
+                    bad.append(f"{r}: {base + f}, named by {n}, is not in the wheel")
+for b in bad:
+    print(b)
+if bad:
+    print("the repaired wheel does not carry the merged indexes the loader needs")
+    sys.exit(1)
+print(f"binding layout: merged, {len(want)} index(es) kept, in the RECORD, every named file beside it")
+PYIDX
 
 docker run --rm --cpus 2 --platform linux/amd64 -v "$OUT/repaired:/r:ro" python:3.12-slim \
   sh -c "pip install -q twine >/dev/null 2>&1 && twine check /r/$DIST-*.whl" 2>&1 | tee "$OUT/twine$SUFFIX.txt"

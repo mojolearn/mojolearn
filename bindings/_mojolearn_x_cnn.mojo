@@ -1560,8 +1560,10 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-@export
-def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_cnn.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_x_cnn() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_cnn")
         m.def_function[gemm_binding]("x_cnn_gemm")

@@ -701,8 +701,10 @@ def et_regressor_fit_weighted_shard_binding(x_addr: PythonObject, y_addr: Python
     return _et_regressor_fit(x_addr, y_addr, params, Int(py=tree_start), weights_addr=address)
 
 
-@export
-def PyInit__mojolearn_trees() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_trees.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_trees() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_trees")
         m.def_function[trees_shap_pair_count_py]("trees_shap_pair_count")

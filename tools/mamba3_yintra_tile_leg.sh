@@ -36,7 +36,8 @@ for arm in baseline tiled; do
   MOJOLEARN_IDENTITY_TRACE="$out/default-$arm.trace" "$out/native-$arm" > "$out/native-$arm.log" 2>&1
   MOJOLEARN_IDENTITY_TRACE="$out/long-$arm.trace" MOJOLEARN_MAMBA3_CHECK_B=2 MOJOLEARN_MAMBA3_CHECK_L=65 MOJOLEARN_MAMBA3_CHECK_DM=64 "$out/native-$arm" > "$out/native-long-$arm.log" 2>&1
   for gate in decode-cross continuation refusal; do "$out/native-$arm" "$gate" > "$out/native-$gate-$arm.log" 2>&1; done
-  mojo build --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${extra[@]}" -I . -I bindings bindings/_mojolearn_mamba.mojo -o "$out/$arm.so" > "$out/build-binding-$arm.log" 2>&1
+  # compiles the entry bindings/entry/entry__mojolearn_mamba.mojo, which imports the module body bindings/_mojolearn_mamba.mojo
+  mojo build --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 "${extra[@]}" -I . -I bindings bindings/entry/entry__mojolearn_mamba.mojo -o "$out/$arm.so" > "$out/build-binding-$arm.log" 2>&1
   cp "$out/$arm.so" python/mojolearn/identical/_mojolearn_mamba.so
   MOJOLEARN_MAMBA3_FRESH_LARGE=1 "$python" tools/mamba3_fresh_prefill_check.py > "$out/fresh-$arm.log" 2>&1
   "$python" python/mojolearn/tests/test_mamba_surface.py > "$out/surface-$arm.log" 2>&1

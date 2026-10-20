@@ -762,8 +762,10 @@ def km_scale_gamma_limbs_binding(
     return scale_gamma_limbs_device_binding(_sg_family_ctx(), x_addr, count, out_addr)
 
 
-@export
-def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_kernel_methods.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_kernel_methods() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_kernel_methods")
         m.def_function[kernel_methods_rows_parallel_available](

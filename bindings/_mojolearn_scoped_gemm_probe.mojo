@@ -114,8 +114,10 @@ def covariance_py(xx: PythonObject, cc: PythonObject, mm: PythonObject, after: P
         ctx.synchronize()
         return PythonObject(1)
 
-@export
-def PyInit__mojolearn_scoped_gemm_probe() abi("C") -> PythonObject:
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_scoped_gemm_probe.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
+def build__mojolearn_scoped_gemm_probe() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_scoped_gemm_probe")
         m.def_function[abi_py]("abi_version")

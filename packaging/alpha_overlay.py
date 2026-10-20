@@ -255,7 +255,14 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
         replacements[new_dist + '/METADATA'] = metadata.as_bytes(policy=policy.compat32.clone(max_line_length=0))
         native = {n: h for n, h in hashes.items() if n.endswith(('.so', '.dylib', '.dll', '.pyd')) or '.so.' in n}
         directories = sorted({str(PurePosixPath(n).parent) for n in native if PurePosixPath(n).name.startswith('_mojolearn')})
-        missing = {d: [module for module in expected if not any(
+        # A directory in the merged layout serves its members from the files
+        # its _mojolearn_merged.json names (bindings/merged_build.sh).
+        served = {}
+        for d in directories:
+            index = d + '/_mojolearn_merged.json'
+            record = json.loads(archive.read(index)) if index in file_names else {}
+            served[d] = {m for f, ms in record.get('files', {}).items() if d + '/' + f in native for m in ms}
+        missing = {d: [module for module in expected if module not in served[d] and not any(
             str(PurePosixPath(n).parent) == d and (PurePosixPath(n).name == module + '.so'
             or PurePosixPath(n).name.startswith(module + '.')) for n in native)] for d in directories}
         provenance = dict(schema='mojolearn.alpha-overlay.v1', version=version, release_profile='alpha-api',
