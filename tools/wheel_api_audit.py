@@ -90,10 +90,32 @@ def inspect_wheel(wheel):
             surface, modules = matrix.public_surface()
         finally:
             matrix.ROOT = original_root
+    host_binaries = sorted(n for n in names if n.startswith('mojolearn/host/') and n.endswith('.so'))
     return dict(wheel=wheel.name, sha256=hashlib.sha256(wheel.read_bytes()).hexdigest(),
                 public_names=sorted(surface), public_modules=modules,
-                host_binaries=sorted(n for n in names if n.startswith('mojolearn/host/')
-                                     and n.endswith('.so')))
+                host_binaries=host_binaries, host_bindings=host_bindings(wheel, host_binaries))
+
+
+#: The index a merged build writes beside its files (bindings/merged_build.sh).
+MERGED_INDEX = '_mojolearn_merged.json'
+
+
+def host_bindings(wheel, host_binaries):
+    """{binding: wheel member that serves it} for host/: a binding's own
+    `<name>.so`, else the merged file host/'s index names for it (the merged
+    layout ships one file for every host binding)."""
+    served = {}
+    with zipfile.ZipFile(wheel) as archive:
+        if 'mojolearn/host/' + MERGED_INDEX in archive.namelist():
+            index = json.loads(archive.read('mojolearn/host/' + MERGED_INDEX))
+            for fname, members in index.get('files', {}).items():
+                if 'mojolearn/host/' + fname in host_binaries:
+                    served.update({m: 'mojolearn/host/' + fname for m in members})
+    for member in host_binaries:
+        name = PurePosixPath(member).stem
+        if member.endswith('.so') and not any(member == f for f in served.values()):
+            served[name] = member
+    return dict(sorted(served.items()))
 
 
 def audit(wheels):
