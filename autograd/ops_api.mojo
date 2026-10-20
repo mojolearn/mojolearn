@@ -44,6 +44,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from autograd.tape import Tape, Tensor
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
 from autograd.layers import NeuralRules, layer_norm
+from autograd.higher import backward_recorded, backward_scalar_recorded
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
 from autograd.data import permutation, gather_rows
 from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
@@ -384,6 +385,189 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if self.live[slot] and self.wants_grad[slot]:
                 var leaf = self.tensors[slot]
                 self.tape.clear_gradient(leaf)
+
+    # ------------------------------------------------------------ higher order
+    # Lane ag-ho-session (docs/plans/AUTOGRAD_HIGHER_ORDER.md section 5, H3):
+    # the session surface of the recorded backward (autograd/higher.mojo,
+    # lane H1). A recorded backward expresses every gradient through tape
+    # operations, so a gradient is a session tensor that later operations
+    # (and a second backward) can use. No new kernels here: the helpers call
+    # backward_recorded / backward_scalar_recorded, Tape.grad_of, the tape's
+    # multiply / sum / add, the first-order backward, and OP_FILL / OP_COPY
+    # for the returned values. Host loops run over handle lists only.
+    def _wrt(self, hs: List[Int], what: String) raises -> List[Tensor]:
+        """The tensors of `hs`, each differentiable (an input of a VJP)."""
+        if len(hs) < 1:
+            raise Error("ops: " + what + " takes at least one input")
+        var ts = List[Tensor](capacity=len(hs))
+        for i in range(len(hs)):  # driver-loop: over the call's input handles
+            var t = self.tensor(hs[i])
+            if not self.tape.requires_grad(t):
+                raise Error("ops: every input of " + what + " must require a gradient (requires_grad=True or computed from one)")
+            ts.append(t)
+        return ts^
+
+    def _same_shapes(self, hs: List[Int], vs: List[Int], what: String) raises:
+        if len(vs) != len(hs):
+            raise Error("ops: " + what + " takes one direction per input")
+        for i in range(len(hs)):  # driver-loop: over the call's input handles
+            var a = self.shape(hs[i])
+            var b = self.shape(vs[i])
+            if a[0] != b[0] or a[1] != b[1]:
+                raise Error("ops: each direction of " + what + " must have its input's shape")
+
+    def _copy_constant(mut self, src: FP, rows: Int, cols: Int) raises -> Int:
+        """A new constant session tensor holding a copy of `src`."""
+        var dst = self.tape.reserve(self.ex, rows * cols)
+        var a = Args()
+        a.p0 = src
+        a.p1 = dst
+        self.ex.launch[OP_COPY](a, rows * cols)
+        return self._constant(dst, rows, cols, 0)
+
+    def _zeros(mut self, rows: Int, cols: Int) raises -> Int:
+        """A new constant session tensor of zeros."""
+        var dst = self.tape.reserve(self.ex, rows * cols)
+        var a = Args()
+        a.p0 = dst
+        a.f0 = Float32(0)
+        self.ex.launch[OP_FILL](a, rows * cols)
+        return self._constant(dst, rows, cols, 0)
+
+    def _directional(mut self, gs: List[Tensor], vs: List[Int]) raises -> Tensor:
+        """sum_i sum(gs[i] * vs[i]) as one recorded (1, 1) tensor, the
+        terms added in list order."""
+        var g0 = gs[0]
+        var v0 = self.tensor(vs[0])
+        var p0 = self.tape.multiply(self.ex, g0, v0)
+        var d = self.tape.sum(self.ex, p0, -1)
+        for i in range(1, len(gs)):  # driver-loop: over the call's input handles
+            var gi = gs[i]
+            var vi = self.tensor(vs[i])
+            var pi = self.tape.multiply(self.ex, gi, vi)
+            var term = self.tape.sum(self.ex, pi, -1)
+            d = self.tape.add(self.ex, d, term)
+        return d
+
+    def backward_graph(mut self, h: Int) raises:
+        """Differentiate the (1, 1) tensor `h` and record the gradient
+        computation itself, so each gradient is a tensor (grad_handle) that
+        can be differentiated again. No accumulate form: add the previous
+        gradient tensor with an operation instead."""
+        if not self.tape.is_recording():
+            raise Error("ops: backward needs a recording session (Session(record=True))")
+        var t = self.tensor(h)
+        backward_scalar_recorded(self.tape, self.ex, t)
+
+    def backward_seed(mut self, h: Int, seed_h: Int, create_graph: Bool) raises:
+        """Differentiate tensor `h` against the seed `seed_h` (a tensor of
+        h's shape): the vector-Jacobian product of h for that seed, recorded
+        when `create_graph` is set."""
+        if not self.tape.is_recording():
+            raise Error("ops: backward needs a recording session (Session(record=True))")
+        var t = self.tensor(h)
+        var seed = self.tensor(seed_h)
+        var a = self.shape(h)
+        var b = self.shape(seed_h)
+        if a[0] != b[0] or a[1] != b[1]:
+            raise Error("ops: the seed must have the output's shape")
+        if create_graph:
+            backward_recorded(self.tape, self.ex, t, seed)
+        else:
+            self.tape.backward_with_rules(self.ex, t, seed, NeuralRules(), False)
+
+    def grad_handle(mut self, h: Int) raises -> Int:
+        """The gradient of tensor `h` from the last recorded backward, as a
+        new session handle (a computed tensor: it lives until reset)."""
+        var t = self.tensor(h)
+        var g = self.tape.grad_of(t)
+        return self._add(g, 0, False, 0)
+
+    def vjp(mut self, out_h: Int, hs: List[Int], seed_h: Int, create_graph: Bool) raises -> List[Int]:
+        """The vector-Jacobian product of `out_h` for the seed `seed_h` with
+        respect to each tensor of `hs`; one new handle per input. With
+        `create_graph` the results are recorded (differentiable) tensors;
+        otherwise they are constant copies of the gradients."""
+        var xs = self._wrt(hs, "vjp")
+        self.backward_seed(out_h, seed_h, create_graph)
+        var res = List[Int](capacity=len(hs))
+        for i in range(len(xs)):  # driver-loop: over the call's input handles
+            var x = xs[i]
+            if create_graph:
+                var g = self.tape.grad_of(x)
+                res.append(self._add(g, 0, False, 0))
+            else:
+                var s = self.shape(hs[i])
+                var gbuf = self.tape.gradient(x)
+                res.append(self._copy_constant(gbuf, s[0], s[1]))
+        return res^
+
+    def hvp(mut self, loss_h: Int, hs: List[Int], vs: List[Int]) raises -> List[Int]:
+        """The Hessian-vector product of the (1, 1) tensor `loss_h` with
+        respect to the tensors `hs` along the directions `vs` (one per
+        input, of its shape); one new constant handle per input. A recorded
+        backward gives the gradients g_i as tensors; d = sum_i sum(g_i * v_i)
+        is recorded from them; a first-order backward of d gives H v. When
+        no gradient depends on an input (zero curvature) the result is
+        zeros."""
+        if not self.tape.is_recording():
+            raise Error("ops: hvp needs a recording session (Session(record=True))")
+        var xs = self._wrt(hs, "hvp")
+        self._same_shapes(hs, vs, "hvp")
+        var t = self.tensor(loss_h)
+        backward_scalar_recorded(self.tape, self.ex, t)
+        var gs = List[Tensor](capacity=len(xs))
+        for i in range(len(xs)):  # driver-loop: over the call's input handles
+            var x = xs[i]
+            gs.append(self.tape.grad_of(x))
+        var d = self._directional(gs, vs)
+        var res = List[Int](capacity=len(hs))
+        if not self.tape.requires_grad(d):
+            for i in range(len(hs)):  # driver-loop: over the call's input handles
+                var s = self.shape(hs[i])
+                res.append(self._zeros(s[0], s[1]))
+            return res^
+        self.tape.backward_scalar_with_rules(self.ex, d, NeuralRules(), False)
+        for i in range(len(xs)):  # driver-loop: over the call's input handles
+            var x = xs[i]
+            var s = self.shape(hs[i])
+            var gbuf = self.tape.gradient(x)
+            res.append(self._copy_constant(gbuf, s[0], s[1]))
+        return res^
+
+    def jvp(mut self, out_h: Int, hs: List[Int], us: List[Int]) raises -> Int:
+        """The Jacobian-vector product of tensor `out_h` along the
+        directions `us` (one per tensor of `hs`, of its shape); a new
+        constant handle of out_h's shape. By the double-VJP identity: with a
+        seed w of out_h's shape (a differentiable leaf; its value does not
+        matter, the VJP is linear in it) the recorded VJP gives J_i^T w as
+        tensors, and the gradient of sum_i sum(J_i^T w * u_i) with respect
+        to w is sum_i J_i u_i."""
+        if not self.tape.is_recording():
+            raise Error("ops: jvp needs a recording session (Session(record=True))")
+        var xs = self._wrt(hs, "jvp")
+        self._same_shapes(hs, us, "jvp")
+        var t = self.tensor(out_h)
+        var oshape = self.shape(out_h)
+        var rows = oshape[0]
+        var cols = oshape[1]
+        var wbuf = self.tape.reserve(self.ex, rows * cols)
+        var fa = Args()
+        fa.p0 = wbuf
+        fa.f0 = Float32(0)
+        self.ex.launch[OP_FILL](fa, rows * cols)
+        var w = self.tape.variable(self.ex, wbuf, rows, cols, True)
+        backward_recorded(self.tape, self.ex, t, w)
+        var gs = List[Tensor](capacity=len(xs))
+        for i in range(len(xs)):  # driver-loop: over the call's input handles
+            var x = xs[i]
+            gs.append(self.tape.grad_of(x))
+        var d = self._directional(gs, us)
+        if not self.tape.requires_grad(d):
+            return self._zeros(rows, cols)
+        self.tape.backward_scalar_with_rules(self.ex, d, NeuralRules(), False)
+        var jbuf = self.tape.gradient(w)
+        return self._copy_constant(jbuf, rows, cols)
 
     # ------------------------------------------------------------ optimizers
     def optimizer(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
