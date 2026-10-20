@@ -223,7 +223,8 @@ def program_words(p: OpsProgram) -> Tuple[List[Int64], List[Float32]]:
     for k in range(len(p.in_kinds)):  # driver-loop: over program inputs
         if p.in_kinds[k] != PROGRAM_IN_FLOAT:
             any_ids = True
-    xi.append(Int64(PROGRAM_RECORD_VERSION if any_ids else PROGRAM_RECORD_VERSION_1))
+    var version: Int = PROGRAM_RECORD_VERSION if any_ids else PROGRAM_RECORD_VERSION_1
+    xi.append(Int64(version))
     xi.append(Int64(p.n_in))
     for k in range(p.n_in):  # driver-loop: over program inputs
         _put_shape(xi, p.in_shapes[k])
@@ -293,7 +294,7 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     for _ in range(n_in):  # driver-loop: over program inputs
         p.in_shapes.append(r.shape(xi, what))
     for _ in range(n_in):  # driver-loop: over program inputs
-        var kind = PROGRAM_IN_FLOAT
+        var kind: Int = PROGRAM_IN_FLOAT
         if version == PROGRAM_RECORD_VERSION:
             kind = r.take(xi, what)
             if kind != PROGRAM_IN_FLOAT and kind != PROGRAM_IN_IDS:
