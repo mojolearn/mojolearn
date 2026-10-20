@@ -90,6 +90,7 @@ from bindings.native_transport import transport_c, transport_initialize
 from bindings.cross_vendor_native import cross_vendor_c
 from bindings.parallel_byte_native import parallel_byte_c
 from bindings.native_codec import codec_c
+from bindings.native_process_pool import process_c
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1810,6 +1811,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(cross_vendor_c, "cross_vendor_call")
         module.def_py_c_function(parallel_byte_c, "parallel_byte_call")
         module.def_py_c_function(codec_c, "native_codec_call")
+        module.def_py_c_function(process_c, "native_process_call")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")
         module.def_function[tokenizer_host_vendor_binding]("tokenizer_host_vendor")
         module.def_function[tokenizer_host_column_binding]("tokenizer_host_column")
