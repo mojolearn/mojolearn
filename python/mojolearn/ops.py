@@ -505,18 +505,6 @@ class Session:
         return out
 
     # ------------------------------------------------------------ checkpoints
-    def _optimizer_handles(self, optimizer, params):
-        # The optimizer's own state tensors per parameter (optimizer_state:
-        # live handles of its buffers): the momentum buffer, or Adam's first
-        # and second moments, and the (1, 1) step count. 0 where there is none.
-        ms, vs, ts = [], [], []
-        for h in params:  # glue: one state dict per parameter handle
-            st = self.optimizer_state(optimizer, h)
-            ms.append(int(st.get("m", st.get("momentum", 0))))
-            vs.append(int(st.get("v", 0)))
-            ts.append(int(st.get("step", 0)))
-        return ms, vs, ts
-
     def save_state(self, path, params, optimizer=None, *, seed=0, epoch=0, step=0):
         """Save parameters, optimizer state and training counters to ``path``.
 
@@ -555,12 +543,11 @@ class Session:
         hs = [_int(h, "handle", 1) for h in params]  # glue: the parameter handles
         if not hs:
             raise ValueError("params must hold at least one tensor handle")
-        if optimizer is None:
-            ms = vs = ts = [0] * len(hs)  # glue: no optimizer state per parameter
-        else:
-            ms, vs, ts = self._optimizer_handles(optimizer, hs)
+        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
         counters = _seed_words(seed) + [_int(epoch, "epoch", 0), _int(step, "step", 0)]
-        self._b.ops_save_state(self._sid(), os.fspath(path), hs, ms, vs, ts, counters)  # cpu-route: checkpoint file written on the host
+        # Mojo reads each parameter's optimizer state (step count,
+        # bias-correction products, buffers) and writes the file
+        self._b.ops_save_state(self._sid(), os.fspath(path), hs, opt, counters)  # cpu-route: checkpoint file written on the host
 
     def load_state(self, path, optimizer=None, requires_grad=True):
         """Load a file written by :meth:`save_state`.
@@ -596,13 +583,11 @@ class Session:
         """
         path = os.fspath(path)
         grad = 1 if (requires_grad and self.record) else 0
-        hs, has_opt, _, lo, hi, epoch, step = self._b.ops_load_state(self._sid(), path, grad)  # cpu-route: checkpoint file read on the host
+        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
+        # Mojo uploads the parameters and restores the optimizer state
+        # through the session's load_optimizer_state
+        hs, _, lo, hi, epoch, step = self._b.ops_load_state(self._sid(), path, grad, opt)  # cpu-route: checkpoint file read on the host
         hs = [int(h) for h in hs]  # glue: the new handles
-        if optimizer is not None:
-            if not int(has_opt):
-                raise ValueError("this file holds no optimizer state")
-            ms, vs, ts = self._optimizer_handles(optimizer, hs)
-            self._b.ops_load_optimizer_file(self._sid(), path, ms, vs, ts)  # cpu-route: checkpoint file read on the host
         return dict(params=hs, seed=(int(hi) << 32) | int(lo), epoch=int(epoch), step=int(step))
     def zero_grad(self):
         """Clear the gradient of every tensor made with ``requires_grad=True``.

@@ -303,16 +303,6 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var count = self.rows[slot] * self.cols[slot]
         self.ex.download(dst, src, count)
 
-    def assign(mut self, h: Int, src: FP) raises:
-        """Overwrite tensor `h`'s rows x cols floats in place from the
-        caller's memory (row-major float32): a checkpoint restoring a live
-        buffer, such as an optimizer's state."""
-        var slot = self._slot(h)
-        var t = self.tensors[slot]
-        var dst = self.tape.value_of(self.ex, t)
-        var count = self.rows[slot] * self.cols[slot]
-        self.ex.upload(dst, src, count)
-
     def scalar(mut self, h: Int) raises -> Float32:
         """The one value of a (1, 1) tensor, read back to the caller."""
         var slot = self._slot(h)

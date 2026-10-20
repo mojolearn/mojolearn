@@ -29,8 +29,8 @@ from autograd.pyapi import (
 )
 from autograd.ops_api import OPS_DEVICE
 from autograd.model_checkpoint import (
-    model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_optimizer_file_py,
-    ops_load_state_py, ops_save_state_py,
+    model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
+    ops_save_state_py,
 )
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.pyapi import moe_backward_py, moe_backward_run
@@ -325,20 +325,15 @@ def model_load_checkpoint_binding(path: PythonObject, addrs: PythonObject) raise
 
 
 def ops_save_state_binding(
-    sid: PythonObject, path: PythonObject, params: PythonObject, ms: PythonObject, vs: PythonObject,
-    steps: PythonObject, counters: PythonObject,
+    sid: PythonObject, path: PythonObject, params: PythonObject, optimizer: PythonObject, counters: PythonObject,
 ) raises -> PythonObject:
-    return ops_save_state_py[DeviceExec, OPS_DEVICE](sid, path, params, ms, vs, steps, counters)
+    return ops_save_state_py[DeviceExec, OPS_DEVICE](sid, path, params, optimizer, counters)
 
 
-def ops_load_state_binding(sid: PythonObject, path: PythonObject, requires_grad: PythonObject) raises -> PythonObject:
-    return ops_load_state_py[DeviceExec, OPS_DEVICE](sid, path, requires_grad)
-
-
-def ops_load_optimizer_file_binding(
-    sid: PythonObject, path: PythonObject, ms: PythonObject, vs: PythonObject, steps: PythonObject,
+def ops_load_state_binding(
+    sid: PythonObject, path: PythonObject, requires_grad: PythonObject, optimizer: PythonObject,
 ) raises -> PythonObject:
-    return ops_load_optimizer_file_py[DeviceExec, OPS_DEVICE](sid, path, ms, vs, steps)
+    return ops_load_state_py[DeviceExec, OPS_DEVICE](sid, path, requires_grad, optimizer)
 
 
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -522,7 +517,6 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[model_load_checkpoint_binding]("model_load_checkpoint")
         m.def_function[ops_save_state_binding]("ops_save_state")
         m.def_function[ops_load_state_binding]("ops_load_state")
-        m.def_function[ops_load_optimizer_file_binding]("ops_load_optimizer_file")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         # the resident optimizer state (sequence/opt_resident.mojo)

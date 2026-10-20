@@ -65,7 +65,7 @@ FAMILIES = (
             "ops_profile_reset", "ops_profile_report", "ops_op_packed",
             # checkpoints (autograd/model_checkpoint.mojo)
             "model_save_checkpoint", "model_checkpoint_info", "model_load_checkpoint",
-            "ops_save_state", "ops_load_state", "ops_load_optimizer_file",
+            "ops_save_state", "ops_load_state",
             "ops_optimizer", "ops_step", "ops_scheduler_step", "ops_learning_rate", "ops_zero_grad",
             "ops_optimizer_state", "ops_load_optimizer_state",
         ),

@@ -23,10 +23,15 @@ hyperparameters, and the extension record the rest:
            loss curve]
 
 An operation-session checkpoint is CKPT_SECTION_SESSION: tensors `p<i>` in
-the layout, the parameters and the optimizer state per parameter in the
-payload, and in the extension [record version, K, (rows, cols) per
-parameter, has optimizer, has second buffer, the optimizer's step per
-parameter, seed low, seed high, epoch, step] with no floats.
+the layout, the parameters and, per parameter, the optimizer's first and
+second state buffers in the payload (zeros where the optimizer keeps none),
+and in the extension
+  ints:   [record version, K, (rows, cols) per parameter, has optimizer,
+           then per parameter (step count, has first buffer, has second
+           buffer), seed low, seed high, epoch, step]
+  floats: per parameter (beta1^t, beta2^t, NAdam's mu product)
+the words OpsSession.optimizer_state returns; a restore goes through
+OpsSession.load_optimizer_state, the one restore path.
 
 Python passes paths, addresses and the option lists; every byte is written
 and read here, host side (a checkpoint is a host file). No arithmetic on the
@@ -42,7 +47,7 @@ from autograd.model import (
     parse_model,
 )
 from autograd.pyapi import _floats, _ints, cast_in_of
-from autograd.ops_api import ops_session
+from autograd.ops_api import OpsSession, ops_session
 from core.cast_in import CAST_KIND_FLOAT, CastIn
 from training.checkpoint import (
     CKPT_REFUSE_SHAPE, CKPT_SECTION_SEQUENTIAL, CKPT_SECTION_SESSION, Checkpoint, read_checkpoint_unchecked,
@@ -388,31 +393,33 @@ def model_load_checkpoint_py(path: PythonObject, addrs: PythonObject) raises -> 
 
 
 # ---------------------------------------------------------------- operation sessions
+comptime SESSION_PER_PARAM_INTS = 3    # step count, has first buffer, has second buffer
+comptime SESSION_PER_PARAM_FLOATS = 3  # beta1^t, beta2^t, mu product
+
+
 def _handles(p: PythonObject) raises -> List[Int]:
-    var out = List[Int]()
+    var hs = List[Int]()
     for i in range(len(p)):  # driver-loop: over parameter handles
-        out.append(Int(py=p[i]))
-    return out^
+        hs.append(Int(py=p[i]))
+    return hs^
 
 
 def ops_save_state_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, path: PythonObject, params: PythonObject, ms: PythonObject, vs: PythonObject,
-    steps: PythonObject, counters: PythonObject,
+    sid: PythonObject, path: PythonObject, params: PythonObject, optimizer: PythonObject,
+    counters: PythonObject,
 ) raises -> PythonObject:
-    """Write the session tensors `params` (handles), the optimizer state
-    `ms`, `vs` (one handle per parameter, 0 for none) and `steps` (one
-    (1, 1) step-count handle per parameter, 0 for none), and counters =
-    [seed low, seed high, epoch, step] to `path`. Returns the byte count."""
+    """Write the session tensors `params` (handles), the state of
+    `optimizer` (its handle, or 0 for none) for each of them, read through
+    OpsSession.optimizer_state, and counters = [seed low, seed high, epoch,
+    step] to `path`. Returns the byte count."""
     if len(counters) != 4:
         raise Error("ops_save_state: counters are [seed low, seed high, epoch, step]")
     var file = String(py=path)
     var hs = _handles(params)
-    var hm = _handles(ms)
-    var hv = _handles(vs)
-    var ht = _handles(steps)
     var K = len(hs)
-    if K < 1 or len(hm) != K or len(hv) != K or len(ht) != K:
-        raise Error("ops_save_state: one optimizer handle (or 0) per parameter")
+    if K < 1:
+        raise Error("ops_save_state: no parameters")
+    var opt = Int(py=optimizer)
     var p = ops_session[E, KIND](Int(py=sid))
     var ck = Checkpoint()
     ck.section_kind = CKPT_SECTION_SESSION
@@ -432,35 +439,40 @@ def ops_save_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     ck.param = List[Float32](length=n, fill=Float32(0))
     ck.m_state = List[Float32](length=n, fill=Float32(0))
     ck.v_state = List[Float32](length=n, fill=Float32(0))
-    var has_opt = False
-    var has_v = False
-    var tw = List[Float32](length=1, fill=Float32(0))
-    var step_words = List[Int64]()
+    xi.append(Int64(1) if opt != 0 else Int64(0))
+    var xf = List[Float32]()
+    var first_step = 0
     for i in range(K):  # driver-loop: over parameter handles
         var off = ck.offsets[i]
-        var size = ck.offsets[i + 1] - off
         p[].download(hs[i], FP(unsafe_from_address=Int(ck.param.unsafe_ptr())) + off)
-        if hm[i] != 0:
-            has_opt = True
-            if p[].shape(hm[i])[0] * p[].shape(hm[i])[1] != size:
-                raise Error("ops_save_state: an optimizer buffer is not the shape of its parameter")
-            p[].download(hm[i], FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off)
-        if hv[i] != 0:
-            has_v = True
-            if p[].shape(hv[i])[0] * p[].shape(hv[i])[1] != size:
-                raise Error("ops_save_state: an optimizer buffer is not the shape of its parameter")
-            p[].download(hv[i], FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off)
-        if ht[i] != 0:
-            has_opt = True
-            # the step count travels as a (1, 1) float32 tensor (exact below 2^24)
-            tw[0] = p[].scalar(ht[i])
-            step_words.append(Int64(Int(tw[0])))
-        else:
-            step_words.append(Int64(0))
-    xi.append(Int64(1) if has_opt else Int64(0))
-    xi.append(Int64(1) if has_v else Int64(0))
-    for i in range(K):  # driver-loop: over parameter handles
-        xi.append(step_words[i])
+        if opt == 0:
+            xi.append(Int64(0))
+            xi.append(Int64(0))
+            xi.append(Int64(0))
+            xf.append(Float32(1))
+            xf.append(Float32(1))
+            xf.append(Float32(1))
+            continue
+        # (step, beta1^t, beta2^t, mu product, buffer copies): the words
+        # load_optimizer_state takes back
+        var w = p[].optimizer_state(opt, hs[i])
+        if w[6] != 0:
+            raise Error("ops_save_state: this optimizer keeps a third state buffer, which the "
+                        + "session checkpoint does not hold")
+        if w[4] != 0:
+            p[].download(w[4], FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off)
+            p[].free(w[4])
+        if w[5] != 0:
+            p[].download(w[5], FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off)
+            p[].free(w[5])
+        if i == 0:
+            first_step = w[0]
+        xi.append(Int64(w[0]))
+        xi.append(Int64(1) if w[4] != 0 else Int64(0))
+        xi.append(Int64(1) if w[5] != 0 else Int64(0))
+        xf.append(w[1])
+        xf.append(w[2])
+        xf.append(w[3])
     var lo = ival(counters, 0)
     var hi = ival(counters, 1)
     xi.append(Int64(lo))
@@ -468,10 +480,10 @@ def ops_save_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     xi.append(Int64(ival(counters, 2)))
     xi.append(Int64(ival(counters, 3)))
     ck.seed = (UInt64(hi) << 32) | UInt64(lo)
-    ck.t = Int(step_words[0])
+    ck.t = first_step
     ck.ext_ints = xi^
+    ck.ext_floats = xf^
     var h = save_checkpoint(file, ck)
-    _ = tw^
     return PythonObject(h.bytes)
 
 
@@ -482,7 +494,8 @@ def _session_record(ck: Checkpoint, path: String) raises -> List[Int64]:
     if len(xi) < 2 or Int(xi[0]) != SESSION_RECORD_VERSION:
         raise Error("mojolearn: '" + path + "' holds an unknown session record version")
     var K = Int(xi[1])
-    if K < 1 or K != ck.j_count() or len(xi) != 2 + 2 * K + 2 + K + 4 or len(ck.ext_floats) != 0:
+    if (K < 1 or K != ck.j_count() or len(xi) != 2 + 2 * K + 1 + SESSION_PER_PARAM_INTS * K + 4
+            or len(ck.ext_floats) != SESSION_PER_PARAM_FLOATS * K):
         raise Error("mojolearn: '" + path + "' holds a damaged session record")
     for i in range(K):  # driver-loop: over parameter tensors
         var rows = Int(xi[2 + 2 * i])
@@ -493,69 +506,67 @@ def _session_record(ck: Checkpoint, path: String) raises -> List[Int64]:
     return xi^
 
 
+def _upload_slice[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], src: List[Float32], off: Int, rows: Int, cols: Int, grad: Bool,
+) raises -> Int:
+    """A new (rows, cols) session tensor holding src[off : off + rows * cols]."""
+    var c = CastIn(Int(src.unsafe_ptr()) + 4 * off, CAST_KIND_FLOAT, 4, rows, cols, 4 * cols, 4)
+    return s.upload(c, grad)
+
+
 def ops_load_state_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, path: PythonObject, requires_grad: PythonObject,
+    sid: PythonObject, path: PythonObject, requires_grad: PythonObject, optimizer: PythonObject,
 ) raises -> PythonObject:
-    """Upload the parameters of a session checkpoint as new tensors.
-    Returns [handles, has optimizer state, has second buffer, seed low,
-    seed high, epoch, step]."""
+    """Upload the parameters of a session checkpoint as new tensors and,
+    with `optimizer` (a handle, or 0), restore each one's saved optimizer
+    state through OpsSession.load_optimizer_state (the buffers are copied
+    from temporary tensors, freed after). Returns [handles, has optimizer
+    state, seed low, seed high, epoch, step]."""
     var file = String(py=path)
     var ck = read_checkpoint_unchecked(file)
     var xi = _session_record(ck, file)
     var K = Int(xi[1])
+    var has_opt = xi[2 + 2 * K] != 0
+    var opt = Int(py=optimizer)
+    if opt != 0 and not has_opt:
+        raise Error("mojolearn: '" + file + "' holds no optimizer state")
     var p = ops_session[E, KIND](Int(py=sid))
     var grad = Int(py=requires_grad) != 0
     var hs = Python.list()
+    var at = 2 + 2 * K + 1
     for i in range(K):  # driver-loop: over parameter tensors
         var rows = Int(xi[2 + 2 * i])
         var cols = Int(xi[3 + 2 * i])
-        var src = CastIn(Int(ck.param.unsafe_ptr()) + 4 * ck.offsets[i], CAST_KIND_FLOAT, 4, rows, cols,
-                         4 * cols, 4)
-        hs.append(PythonObject(p[].upload(src, grad)))
-    var at = 2 + 2 * K
-    var out = Python.list()
-    out.append(hs)
-    out.append(PythonObject(Int(xi[at])))
-    out.append(PythonObject(Int(xi[at + 1])))
-    var c = at + 2 + K
-    for i in range(4):  # driver-loop: over the four counters
-        out.append(PythonObject(Int(xi[c + i])))
-    _ = ck^
-    return out
-
-
-def ops_load_optimizer_file_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, path: PythonObject, ms: PythonObject, vs: PythonObject, steps: PythonObject,
-) raises -> PythonObject:
-    """Write a session checkpoint's optimizer state in place into the
-    optimizer's own tensors: `ms`, `vs` (one handle per parameter, 0 to
-    skip) and `steps` ((1, 1) step-count handles, 0 to skip)."""
-    var file = String(py=path)
-    var ck = read_checkpoint_unchecked(file)
-    var xi = _session_record(ck, file)
-    var K = Int(xi[1])
-    var hm = _handles(ms)
-    var hv = _handles(vs)
-    var ht = _handles(steps)
-    if len(hm) != K or len(hv) != K or len(ht) != K:
-        raise Error("ops_load_optimizer_file: one optimizer handle (or 0) per saved parameter")
-    var p = ops_session[E, KIND](Int(py=sid))
-    var tw = List[Float32](length=1, fill=Float32(0))
-    var at = 2 + 2 * K + 2
-    for i in range(K):  # driver-loop: over parameter tensors
         var off = ck.offsets[i]
-        var size = ck.offsets[i + 1] - off
-        if hm[i] != 0:
-            if p[].shape(hm[i])[0] * p[].shape(hm[i])[1] != size:
-                raise Error("ops_load_optimizer_file: an optimizer buffer is not the shape of its parameter")
-            p[].assign(hm[i], FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off)
-        if hv[i] != 0:
-            if p[].shape(hv[i])[0] * p[].shape(hv[i])[1] != size:
-                raise Error("ops_load_optimizer_file: an optimizer buffer is not the shape of its parameter")
-            p[].assign(hv[i], FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off)
-        if ht[i] != 0:
-            tw[0] = Float32(Int(xi[at + i]))
-            p[].assign(ht[i], FP(unsafe_from_address=Int(tw.unsafe_ptr())))
-    _ = tw^
+        var h = _upload_slice(p[], ck.param, off, rows, cols, grad)
+        hs.append(PythonObject(h))
+        if opt == 0:
+            continue
+        var base = at + SESSION_PER_PARAM_INTS * i
+        var hm = 0
+        var hv = 0
+        if xi[base + 1] != 0:
+            hm = _upload_slice(p[], ck.m_state, off, rows, cols, False)
+        if xi[base + 2] != 0:
+            hv = _upload_slice(p[], ck.v_state, off, rows, cols, False)
+        var ints = List[Int]()
+        ints.append(Int(xi[base]))
+        ints.append(hm)
+        ints.append(hv)
+        ints.append(0)
+        var fs = List[Float32]()
+        for k in range(SESSION_PER_PARAM_FLOATS):  # driver-loop: over the three bias-correction words
+            fs.append(ck.ext_floats[SESSION_PER_PARAM_FLOATS * i + k])
+        p[].load_optimizer_state(opt, h, ints, fs)
+        if hm != 0:
+            p[].free(hm)
+        if hv != 0:
+            p[].free(hv)
+    var c = at + SESSION_PER_PARAM_INTS * K
+    var res = Python.list()
+    res.append(hs)
+    res.append(PythonObject(1 if has_opt else 0))
+    for i in range(4):  # driver-loop: over the four counters
+        res.append(PythonObject(Int(xi[c + i])))
     _ = ck^
-    return PythonObject(0)
+    return res

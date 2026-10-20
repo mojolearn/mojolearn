@@ -809,10 +809,17 @@ counts do not add up to E. The record's meaning belongs to the kind:
   option floats, the per-layer table, the loss curve. An inference export
   (`Sequential.export`) is the same kind with the export flag set, zero
   optimizer buffers, zero state words and no curve.
-- **2, operation session**: layout `p<i>`; payload the parameters and the
-  optimizer state per parameter; ints: record version 1, K, (rows, cols) per
-  parameter, has optimizer, has second buffer, the optimizer step per
-  parameter, seed low, seed high, epoch, step.
+- **2, operation session**: layout `p<i>`; payload the parameters and, per
+  parameter, the optimizer's first and second state buffers (`exp_avg` /
+  `exp_avg_sq`, or `momentum_buffer` and zeros; all zeros without an
+  optimizer). Ints: record version 1, K, (rows, cols) per parameter, has
+  optimizer, then per parameter (step count, has first buffer, has second
+  buffer), seed low, seed high, epoch, step. Floats: per parameter
+  (beta1^t, beta2^t, NAdam's mu product) by their bits. These are the words
+  `OpsSession.optimizer_state` returns, and `Session.load_state` restores
+  them through `OpsSession.load_optimizer_state`, the session's one restore
+  path, so the next `step` continues word for word. The header `t` is the
+  first parameter's step count.
 
 `training/checks/checkpoint_check.mojo` arm 7 (a nonzero byte at offset 52)
 is still refused: kind 1 with E = 0.
