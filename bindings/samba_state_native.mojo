@@ -10,7 +10,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_copy, py_ints
-from bindings.causal_lm_construct import _model_f32, _model_shape, _model_block, _model_bindings
+from bindings.causal_lm_construct import _model_f32, _model_shape, _model_block, _model_bindings, _model_native_buffer
 from bindings.causal_lm_public import _native_function
 from bindings.samba_config_native import samba_config_dict, samba_config_from_dict, samba_registry, samba_block_shapes
 
@@ -156,9 +156,22 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
         opt["_m"] = generation_array([n])
     if opt["_v"] is None:
         opt["_v"] = generation_array([n])
+    var m = _model_f32(opt["_m"], "exp_avg", context["neural"])
+    var v = _model_f32(opt["_v"], "exp_avg_sq", context["neural"])
+    _model_shape(m, [n], "exp_avg")
+    _model_shape(v, [n], "exp_avg_sq")
     if opt["_res"] is not None and not Bool(py=opt["_host_fresh"]):
-        _native_function(entries, "optimizer_resident_download")(opt["_res"], opt["_m"]._addr, opt["_v"]._addr, n)
+        _native_function(entries, "optimizer_resident_download")(opt["_res"], m._addr, v._addr, n)
+        # A caller may assign writable foreign buffers to the public moment
+        # properties. Keep those aliases and write native download bytes back.
+        if m is not opt["_m"]:
+            var m_view = bi.memoryview(opt["_m"])
+            m_view[bi.slice(PythonObject(None))] = m._mv
+        if v is not opt["_v"]:
+            var v_view = bi.memoryview(opt["_v"])
+            v_view[bi.slice(PythonObject(None))] = v._mv
         opt["_host_fresh"] = True
+    var flags = _model_native_buffer(opt["buf_initialized"], "i", context["neural"])
     opt["_pristine"] = False
     var result = bi.dict()
     result["schema"] = "mojolearn.samba-stack-state.v1"
@@ -168,9 +181,9 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
     result["config"] = samba_config_dict(fields["config"])
     result["registry"] = _samba_registry(fields["config"])
     result["parameters"] = generation_copy(fields["flat"]) if copy_arrays else fields["flat"]
-    result["exp_avg"] = generation_copy(opt["_m"]) if copy_arrays else opt["_m"]
-    result["exp_avg_sq"] = generation_copy(opt["_v"]) if copy_arrays else opt["_v"]
-    result["buf_initialized"] = generation_copy(opt["buf_initialized"]) if copy_arrays else opt["buf_initialized"]
+    result["exp_avg"] = generation_copy(m) if copy_arrays else opt["_m"]
+    result["exp_avg_sq"] = generation_copy(v) if copy_arrays else opt["_v"]
+    result["buf_initialized"] = generation_copy(flags) if copy_arrays else opt["buf_initialized"]
     result["t"] = opt["t"]
     var optimizer = bi.dict()
     optimizer["kind"] = "adamw"
