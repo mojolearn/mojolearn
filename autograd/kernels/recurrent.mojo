@@ -6,7 +6,7 @@ out of sequence/recurrent.mojo, which keeps the net, the forward and the
 trainer. The cell backward scan is autograd/kernels/recurrent_scan.mojo."""
 
 from sequence.exec_trait import Exec
-from sequence.ops import OP_COLSUM, OP_GEMM_SPLITK
+from sequence.ops import FP, Args, OP_COLSUM, OP_GEMM_SPLITK
 from sequence.recurrent import (
     NN43_WGRAD_FIXED128,
     SEQ_WGRAD_BLOCKED,
