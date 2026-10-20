@@ -151,8 +151,8 @@ comptime OPS_LOG_SOFTMAX_N = 43  # [axis]
 comptime OPS_CONV2D = 44         # [stride, padding]; x, weight, optional bias
 comptime OPS_MAXPOOL2D = 45      # [kernel, stride]
 comptime OPS_AVGPOOL2D = 46      # [kernel, stride]
-# 47 (OPS_ARGMAX) is reserved for the plan's int32 argmax result; the fold
-# lane's interface names no argmax entry yet.
+# 47 stays reserved (the rank-N plan held it for an argmax result; argmax is
+# OPS_ARGMAX 72 of the import family below).
 # The import family (lane ag-import-kernels, docs/plans/MODEL_IMPORT.md 3.3;
 # 47 stays reserved). Unary maps keep x's shape; the binary kinds, where and
 # the comparisons broadcast as NumPy does.
