@@ -1,11 +1,13 @@
 # PythonObject ownership investigation
 
 This is an internal upstream-report draft and a standalone testing fixture.
-No issue has been posted externally. The standalone result is pending the
-orchestrator's ordinary Mojo 1.0 build; no compiler or standard-library files
-are patched.
+No issue has been posted externally. The ordinary pinned Mojo 1.0 build
+confirms reference retention in the supported interop API. No compiler or
+standard-library files are patched, and no compensating reference operations
+have been added to product code.
 
-The extension imports only `std.python` and `std.python.bindings`. Its six
+The extension imports only `std.python`, `std.python.bindings` and the standard
+`abort` entry used for module initialization errors. Its six
 operations distinguish generated binding overhead from direct attribute
 assignment, attribute retrieval, builtin calls and a builtin list method.
 `probe.py` compares CPython reference counts with an independent ownership
@@ -17,7 +19,7 @@ exit status. Put the resulting extension beside a copied `probe.py`, then run
 the probe in an ordinary CPython process and retain its complete JSON report.
 
 ```sh
-mojo build --emit shared-lib _mojo_python_ownership.mojo -o _mojo_python_ownership.so
+pixi run mojo build --emit shared-lib _mojo_python_ownership.mojo -o _mojo_python_ownership.so
 python probe.py
 ```
 
@@ -51,10 +53,51 @@ Reference API source, retained without changes:
 - `~/mojolearn-evidence/mojo-1.0-cpython.mojo`: borrowed-reference semantics of
   the ordinary CPython calls.
 
-The current evidence suggests an ownership problem in standard interop, but
-the standalone build must confirm or reject that diagnosis before it is
-classified as an upstream support blocker. If confirmed, the requested
-upstream behavior is balanced reference ownership for the supported setters
-and calls, with these positive and negative lifetime controls retained.
-We will wait for supported Modular functionality rather than modifying the
-toolchain or compensating reference counts in product code.
+The standalone run on 2026-10-20 used Mojo 1.0.0 (`ed45d567`), CPython 3.14.7
+and macOS 26.5.2 arm64. The build inside the supported pixi environment exited
+0; the ownership probe exited 1. The initial compiler invocation outside that
+environment failed to locate `std`; its log and exit code remain separate.
+The same extension binary was independently loaded by the retained release's
+CPython 3.12 interpreter and reproduced the same four failures. Exact command
+paths, both interpreter versions and artifact hashes are in the result JSON.
+
+| Operation | Extra value references after release | Weak-reference result | Verdict |
+|---|---:|---|---|
+| `no_op` | 0 | Collected | Pass |
+| Direct `owner.value = value` | 1 | Retained | Fail |
+| `return owner.value` | 0 | Collected | Pass |
+| Builtin `type(value)` | 1 | Retained | Fail |
+| Builtin `list(value)` | 1 | List cannot be weak-referenced | Fail |
+| Builtin `owner.append(value)` | 1 | Retained | Fail |
+
+The probe deletes the intentional attribute/list/result references before
+measuring, and checks receiver references separately. Each receiver count is
+unchanged. A testing-only control using ordinary Python operations passes all
+six cases, exit 0; its retained report is
+`~/mojolearn-evidence/finish-generation-ownership-probe-oracle-control.json`.
+
+Complete source, binary, logs, probe JSON and exit statuses are retained at
+`~/mojolearn-evidence/core-completion-20261020/stdlib-ownership/`.
+[result-20261020.json](result-20261020.json) records the exact result and
+SHA-256/size of each retained artifact. Numerical and native-call audit passes
+remain valid for their measured boundaries; they do not qualify object
+lifetime or complete native ownership.
+
+The retained standard-library source suggests two ownership transfer sites
+for upstream investigation: the setter passes an owned value through
+`steal_data()` to `PyObject_SetAttrString`, and the call path adds `Py_NewRef`
+around a transferred argument before inserting it into the call tuple.
+This is a source-level diagnosis, distinct from the independently reproduced
+retention. CPython documents the ordinary
+[attribute-setting API](https://docs.python.org/3.14/c-api/object.html#c.PyObject_SetAttrString)
+and the [reference stolen by tuple insertion](https://docs.python.org/3.14/c-api/tuple.html#c.PyTuple_SetItem).
+
+The request for Modular is a supported release in which direct
+`PythonObject` attribute assignment and ordinary calls balance their owned
+references, including calls to builtin types and methods. Please retain the
+six operation controls above and add corresponding error-path lifetime
+coverage upstream. The same ordinary build and unchanged probe must return
+exit 0 before this blocker is cleared; project model/state/buffer lifetime
+tests must then pass as well. We will wait for that supported functionality
+under the repository's explicit rule instead of patching the toolchain,
+compensating references or substituting a Python runtime.
