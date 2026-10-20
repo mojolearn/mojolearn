@@ -756,7 +756,10 @@ def _ptx_base(pkg, why, how):
         actual = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                   for p in root.rglob("*.so")
                   if not {"host", ".libs"} & set(p.relative_to(root).parts)}  # glue: inventory installed binary paths and file digests (the manifest's scope)
-        gpu_plugins.validate_baseline_manifest(doc, actual)
+        indexes = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                   for p in root.rglob(_merged.INDEX_NAME)
+                   if not {"host", ".libs"} & set(p.relative_to(root).parts)}  # glue: inventory the merged-file indexes and their digests
+        gpu_plugins.validate_baseline_manifest(doc, actual, indexes)
         source = _installed_source_commit(pkg)
         if source != doc["source_commit"] or doc.get("source_dirty") is not False:
             raise ValueError("the PTX set's source differs from the clean installed core")

@@ -235,7 +235,11 @@ def split_audit(wheels):
                         files = {m[len(prefix):]: hashlib.sha256(archive.read(m)).hexdigest()
                                  for m in payload if m.startswith(prefix) and m.endswith('.so')}
                         manifest_bytes = archive.read(manifest_member)
-                        plugins.validate_bundled_ptx(bundle, manifest_bytes, files)
+                        # the merged-file indexes (bindings/merged_build.sh) are bound too
+                        indexes = {m[len(prefix):]: hashlib.sha256(archive.read(m)).hexdigest()
+                                   for m in payload if m.startswith(prefix) and m.endswith('/_mojolearn_merged.json')
+                                   or m == prefix + '_mojolearn_merged.json'}
+                        plugins.validate_bundled_ptx(bundle, manifest_bytes, files, indexes)
                         ptx_source = json.loads(manifest_bytes)['source_commit']
                         inventory_member = dist + '/LINUX_PAYLOAD.json'
                         if inventory_member in archive.namelist():
