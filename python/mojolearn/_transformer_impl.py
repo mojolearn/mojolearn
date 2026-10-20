@@ -738,207 +738,13 @@ class TransformerBlock(NumericModeMixin):
                  rope_dim=None, max_positions=8192, qkv_bias=False,
                  o_bias=False, norm="rmsnorm", norm_eps=1e-6,
                  norm_bias=False, mlp="swiglu", mlp_bias=False,
-                 qk_norm=False, attn_softcap=None, numeric_profile=None):
-        self._runtime_lock = threading.RLock()
-        self._native_session = None
-        self._session_binding = None
-        self._arithmetic_profile = None
-        what = "TransformerBlock"
-        # lane/identical-lowbit-inference (2026-09-17): packed bf16 or int8
-        # projection weights (mojolearn.lowbit) are materialized exactly here
-        # and the block runs its certified fp32 path on the result.
-        weights, self.weight_format = _lowbit.unpack(weights, what)
-        # lane/block-options (2026-09-17): the option keywords. `head_dim`
-        # is needed for rope_dim's bound and the q/k norm widths, so the
-        # shape is read first from the norm weight and the head arguments.
-        if not hasattr(weights, "keys") or "input_layernorm.weight" not in weights:
-            _take(weights, what, self._W_NAMES)  # raises with the key set
-        dm0 = int(_f32_strict(weights["input_layernorm.weight"], what,
-                              "input_layernorm.weight").shape[0])
-        nh0 = int(n_heads)
-        if nh0 < 1:
-            raise ValueError(
-                f"mojolearn {what}: n_heads must be positive, got "
-                f"{n_heads!r}"
-            )
-        hd0 = int(head_dim) if head_dim is not None else dm0 // nh0
-        tail, flags, gated = _block_options(
-            what, hd0, rope_theta, rope_scaling, rope_dim, max_positions,
-            qkv_bias, o_bias, norm, norm_eps, norm_bias, mlp, mlp_bias,
-            qk_norm, attn_softcap)
-        self._opts_tail = tail
-        self._opts_flags = flags
-        self._gated = gated
-        self._extended = tail != _default_tail()
-        self.rope_theta = float(rope_theta)
-        self.rope_scaling = None if rope_scaling is None else dict(rope_scaling)
-        self.rope_dim = hd0 if rope_dim is None else int(rope_dim)
-        self.max_positions = int(max_positions)
-        self.qkv_bias = bool(qkv_bias)
-        self.o_bias = bool(o_bias)
-        self.norm = norm
-        self.norm_eps = float(norm_eps)
-        self.norm_bias = bool(norm_bias)
-        self.mlp = mlp
-        self.mlp_bias = bool(mlp_bias)
-        self.qk_norm = bool(qk_norm)
-        self.attn_softcap = None if attn_softcap is None else float(attn_softcap)
-        # The exact key set: the nine (minus gate_proj.weight under an
-        # ungated MLP) plus every optional tensor whose flag is on. A bias
-        # present with its flag off, or missing with its flag on, is
-        # refused by ITS name before the generic key-set message.
-        if hasattr(weights, "keys"):
-            for name in _OPT_NAMES:  # glue: checks optional tensor flags
-                present = name in weights
-                if present and not flags[name]:
-                    raise ValueError(
-                        f"mojolearn {what}: {name} is present in the weight "
-                        "dict but its option is off (pass the option that "
-                        "carries it, or drop the tensor; a silently ignored "
-                        "tensor is a wrong model that looks right)"
-                    )
-                if flags[name] and not present:
-                    raise ValueError(
-                        f"mojolearn {what}: {name} is required by the "
-                        "options passed and is missing from the weight dict"
-                    )
-            if not gated and "gate_proj.weight" in weights:
-                raise ValueError(
-                    f"mojolearn {what}: gate_proj.weight is present but "
-                    f"mlp={mlp!r} is ungated (down_proj(act(up_proj(x)))); "
-                    "drop it or pick a gated form"
-                )
-        base_names = tuple(n for n in self._W_NAMES  # glue: names of base weights
-                           if gated or n != "gate_proj.weight")
-        opt_names = tuple(n for n in _OPT_NAMES if flags[n])  # glue: names of optional weights
-        arrs_all = _take(weights, what, base_names + opt_names)
-        arrs = list(arrs_all[:len(base_names)])
-        if not gated:
-            arrs.insert(6, None)  # the gate slot, absent
-        opt_arrs = list(arrs_all[len(base_names):])
-        win = int(window)
-        if win < 0:
-            raise ValueError(
-                f"mojolearn {what}: window must be 0 (full causal) or a "
-                f"positive sliding-window width, got {window!r}"
-            )
-        self.window = win
-        norm1_w = _f32_strict(arrs[0], what, "input_layernorm.weight")
-        if norm1_w.ndim != 1 or norm1_w.shape[0] < 1:
-            raise ValueError(
-                f"mojolearn {what}: input_layernorm.weight must be 1-D "
-                f"(d_model,), got shape {norm1_w.shape}"
-            )
-        dm = int(norm1_w.shape[0])
-        nh = int(n_heads)
-        if nh < 1:
-            raise ValueError(
-                f"mojolearn {what}: n_heads must be positive, got "
-                f"{n_heads!r}"
-            )
-        hd = int(head_dim) if head_dim is not None else dm // nh
-        nkv = int(n_kv_heads) if n_kv_heads is not None else nh
-        if dm != nh * hd:
-            # LlamaDims.validate's rule, quoted; the Mojo constructor
-            # remains the authority (raw-binding callers hit it), this
-            # copy exists because the buffers below cannot be sized
-            # without it. The OTHER divisibility rules (n_heads %
-            # n_kv_heads, head_dim even) are NOT repeated: sizing does
-            # not need them, so they stay Mojo's alone, reachable.
-            raise ValueError(
-                f"mojolearn {what}: d_model must equal n_heads*head_dim "
-                f"(LlamaDims.validate carries the same refusal), got "
-                f"d_model {dm} vs n_heads {nh} * head_dim {hd}"
-            )
-        if nkv < 1:
-            raise ValueError(
-                f"mojolearn {what}: n_kv_heads must be positive, got "
-                f"{n_kv_heads!r}"
-            )
-        # `intermediate` is read from gate_proj.weight (gated) or from
-        # up_proj.weight (ungated); the other is checked against it below.
-        it_src = "gate_proj.weight" if gated else "up_proj.weight"
-        it_w = _f32_strict(arrs[6] if gated else arrs[7], what, it_src)
-        if it_w.ndim != 2 or it_w.shape[0] < 1 or it_w.shape[1] != dm:
-            raise ValueError(
-                f"mojolearn {what}: {it_src} must be "
-                f"(intermediate, d_model={dm}), got shape {it_w.shape}"
-            )
-        it = int(it_w.shape[0])
-        gate_w = it_w if gated else None
-        qw = nh * hd
-        kw = nkv * hd
-        self.d_model = dm
-        self.n_heads = nh
-        self.n_kv_heads = nkv
-        self.head_dim = hd
-        self.intermediate = it
-        # Every weight to float32 C-order ONCE, at construction, shapes
-        # checked against the profile's derivation rules so a transposed
-        # projection cannot cross as a plausible buffer.
-        self._w = [
-            norm1_w,
-            _want_shape(
-                _f32_strict(arrs[1], what,
-                            "post_attention_layernorm.weight"),
-                what, "post_attention_layernorm.weight", (dm,)),
-            _want_shape(_f32_strict(arrs[2], what, "q_proj.weight"),
-                        what, "q_proj.weight", (qw, dm)),
-            _want_shape(_f32_strict(arrs[3], what, "k_proj.weight"),
-                        what, "k_proj.weight", (kw, dm)),
-            _want_shape(_f32_strict(arrs[4], what, "v_proj.weight"),
-                        what, "v_proj.weight", (kw, dm)),
-            _want_shape(_f32_strict(arrs[5], what, "o_proj.weight"),
-                        what, "o_proj.weight", (dm, qw)),
-            (_want_shape(gate_w, what, "gate_proj.weight", (it, dm))
-             if gated else None),
-            _want_shape(_f32_strict(arrs[7], what, "up_proj.weight"),
-                        what, "up_proj.weight", (it, dm)),
-            _want_shape(_f32_strict(arrs[8], what, "down_proj.weight"),
-                        what, "down_proj.weight", (dm, it)),
-        ]
-        # The optional tensors, in `_OPT_NAMES` order, None where absent;
-        # each present one float32 and exactly its shape.
-        opt_shapes = {
-            "q_proj.bias": (qw,), "k_proj.bias": (kw,), "v_proj.bias": (kw,),
-            "o_proj.bias": (dm,), "input_layernorm.bias": (dm,),
-            "post_attention_layernorm.bias": (dm,), "up_proj.bias": (it,),
-            "down_proj.bias": (dm,), "gate_proj.bias": (it,),
-            "q_norm.weight": (hd,), "k_norm.weight": (hd,),
-        }
-        present = iter(opt_arrs)
-        self._wopt = []
-        for name in _OPT_NAMES:  # glue: collects optional weight tensors
-            if flags[name]:
-                a = next(present)
-                self._wopt.append(_want_shape(_f32_strict(a, what, name),
-                                              what, name, opt_shapes[name]))
-            else:
-                self._wopt.append(None)
-        # lane/lowbit-blocks (2026-09-29): `numeric_profile=`. None is the
-        # process default. Under `fp32_v1` nothing below runs and the block
-        # is the one it was. Under `fixed15_v1` (inference only) the seven
-        # projection weights are quantized ONCE, here, by
-        # `mojolearn.linalg.quantize_int15` (one scale per output feature,
-        # along the input features, the contracted extent of Y = X W^T,
-        # contract W-9), and kept as private (hi, lo, exponents) arrays that
-        # nothing outside this object sees or writes; `_call` sends them to
-        # the binding's profile entry, which keeps them on the device.
-        # lane/lowbit-default (2026-09-29): a bare block naming no profile
-        # stays fp32_v1 (the inference default reaches the models, not this
-        # building block, which the trainers also build and whose backward
-        # and decode session compute fp32_v1 only); `mojolearn.models` passes
-        # its profile by name.
-        self.numeric_profile = _numeric_profile.resolve(
-            numeric_profile, f"mojolearn {what} numeric_profile", family="transformer_block")
-        self._int15 = None
-        if self.numeric_profile != _numeric_profile.BASELINE:
-            if self.numeric_profile != "fixed15_v1":
-                raise NotImplementedError(
-                    f"mojolearn {what}: numeric_profile={self.numeric_profile!r} has no block "
-                    "implementation; it is never replaced by 'fp32_v1' silently")
-            from ._linalg_impl import quantize_int15
-            self._int15 = [None if a is None else quantize_int15(a) for a in self._w[2:9]]  # glue: quantizes each weight tensor binding
+                 qk_norm=False, attn_softcap=None, numeric_profile=None, numeric_mode=None):
+        return _native_neural_bridge.RUNTIME.neural_block_init(
+            self, weights, "transformer",
+            (None, numeric_mode, numeric_profile, n_heads, n_kv_heads, head_dim,
+             window, rope_theta, rope_scaling, rope_dim, max_positions,
+             qkv_bias, o_bias, norm, norm_eps, norm_bias, mlp, mlp_bias,
+             qk_norm, attn_softcap), _native_neural_bridge.CONTEXT)
 
     def _weight_addrs(self):
         """The nine base weight addresses in the binding's order; the gate
@@ -992,26 +798,8 @@ class TransformerBlock(NumericModeMixin):
         -------
         TransformerState
         """
-        b = int(batch_size)
-        if b < 1:
-            raise ValueError(
-                f"mojolearn TransformerBlock: batch_size must be "
-                f"positive, got {batch_size!r}"
-            )
-        smax = int(max_tokens)
-        if smax < 1:
-            raise ValueError(
-                f"mojolearn TransformerBlock: max_tokens must be "
-                f"positive, got {max_tokens!r}"
-            )
-        cap = self.window if self.window > 0 else smax
-        n = b * self.n_kv_heads * cap * self.head_dim
-        return TransformerState(
-            b, self.n_kv_heads, self.head_dim, smax,
-            _buffers.zeros((n,), '<f4'),
-            _buffers.zeros((n,), '<f4'),
-            0, self.window,
-        )
+        return _native_neural_bridge.RUNTIME.neural_block_allocate(
+            self, batch_size, max_tokens, _native_neural_bridge.CONTEXT)
 
     def _call_fresh_session(self, x, ext):
         """Stateless prefill on the resident session (lane/neural-net-
@@ -1302,12 +1090,8 @@ class TransformerBlock(NumericModeMixin):
         -------
         mojolearn.Array of float32, shape (B, L, d_model)
         """
-        if lengths is None:
-            return self._call(x, state, step=False)
-        what = "TransformerBlock.forward"
-        x = _batch_tokens(x, what, self.d_model, False)
-        return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
-                                      x, state, lengths, "<f4", what)[0]
+        return _native_neural_bridge.RUNTIME.neural_block_forward(
+            self, x, state, False, lengths, _native_neural_bridge.CONTEXT)
 
     def step(self, x, state):
         """Decode one token per sequence, continuing the cache in `state`.
@@ -1325,13 +1109,8 @@ class TransformerBlock(NumericModeMixin):
         -------
         mojolearn.Array of float32, shape (B, 1, d_model)
         """
-        if state is None:
-            raise ValueError(
-                "mojolearn TransformerBlock.step: state is required (a "
-                "decode step continues a sequence; allocate_state(B, "
-                "max_tokens) makes the fresh one)"
-            )
-        return self._call(x, state, step=True)
+        return _native_neural_bridge.RUNTIME.neural_block_forward(
+            self, x, state, True, None, _native_neural_bridge.CONTEXT)
 
     def _tape_configuration(self):
         # API metadata only; no tensor data is read or compared in Python.
@@ -1929,3 +1708,11 @@ class TransformerDecodeSession:
     def __repr__(self):
         return "TransformerDecodeSession(open=%r, cached_tokens=%d)" % (
             self._open, int(self._state.cached_tokens))
+
+
+# Compiled public constructors and forward/state operations need no Python
+# mode wrapper. Numeric mode is an explicit native-admitted argument.
+from . import _native_neural_bridge
+TransformerBlock.__init__ = TransformerBlock.__init__.__wrapped__
+TransformerBlock.__getattribute__ = object.__getattribute__
+from .models import causal_lm as _causal_native_connection
