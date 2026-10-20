@@ -134,7 +134,7 @@ class ReportTests(unittest.TestCase):
     def test_missing_wrong_version_and_direct_fail(self):
         _, problems = judge_report(report(mojolearn_amd=None), "pypi", V)
         self.assertTrue(any("mojolearn-amd is not in pip's report" in p for p in problems), problems)
-        _, problems = judge_report(report(**{"mojolearn-core": None}), "pypi", V)
+        _, problems = judge_report(report("pypi", **{"mojolearn-core": None}), "pypi", V)
         self.assertTrue(any("mojolearn-core is not in pip's report" in p for p in problems), problems)
         _, problems = judge_report(report("pypi", **{"mojolearn-nvidia": item("mojolearn-nvidia", "0.8.0",
                                                                               "files.pythonhosted.org")}), "pypi", V)
