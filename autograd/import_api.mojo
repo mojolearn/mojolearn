@@ -3,7 +3,9 @@
 MODEL_IMPORT.md section 3.3): the tape calls of the elementwise kinds an
 imported graph needs (autograd/import_ops.mojo), `expand` through the
 rank-N strided copy, `argmax` over the fold lane's max positions, constant
-`pad`, and `ImportRules`, their backward.
+`pad`, `cumsum` (the blocked scan of autograd/import_ops.mojo, THE SCAN
+ORDER), `index` with several index tensors (flat ids on the device, then the
+embedding's gather), and `ImportRules`, their backward.
 
 Every entry runs one launch of a body of autograd/import_ops.mojo (or of
 the rank-N core's OP_RN_COPY_STRIDED for expand, or the fold lane's max for
@@ -27,6 +29,9 @@ Tags:
     p7 the fold partials (R > 64 only); i2 O (the source's words), i3 R.
   IMP_TAG_ARGMAX 195: saved i1 the output form; no gradient.
   IMP_TAG_PAD 196: saved p11 the VJP descriptor, i0 the source's words.
+  IMP_TAG_CUMSUM 197: saved p10 the scan scratch (dummy for one leaf); i1
+    the outer count, i2 the scan length, i3 the inner count, i4 1 for a
+    reverse scan, i5 1 for an exclusive one.
 
 A broadcast operand's gradient (binary kinds, expand) is the sum of its
 VJP terms over the broadcast axes: the terms are stored once (ftz), then
@@ -48,7 +53,8 @@ from autograd.rankn_fold_ops import OP_RN_REDUCE_PART
 from autograd.rankn_api import RankNRules, rn_shape
 from autograd.import_ops import (
     OP_IMP_UNARY_FWD, OP_IMP_UNARY_VJP, OP_IMP_BIN_FWD, OP_IMP_BIN_VJP, OP_IMP_ARGMAX,
-    OP_IMP_PAD, OP_IMP_PAD_VJP, IMP_WHERE, IMP_UNARY_LAST, IMP_BINARY_LAST,
+    OP_IMP_PAD, OP_IMP_PAD_VJP, OP_IMP_SCAN_TOTALS, OP_IMP_SCAN_FINAL, OP_IMP_FLAT_IDS,
+    IMP_WHERE, IMP_UNARY_LAST, IMP_BINARY_LAST, IMP_SCAN_LEAF,
     IMP_ARGMAX_INT32, IMP_ARGMAX_FLOAT, unary_has_gradient, binary_has_gradient,
 )
 
@@ -59,6 +65,7 @@ comptime IMP_TAG_BINARY = 193
 comptime IMP_TAG_EXPAND = 194
 comptime IMP_TAG_ARGMAX = 195
 comptime IMP_TAG_PAD = 196
+comptime IMP_TAG_CUMSUM = 197
 
 
 # ---------------------------------------------------------------- shapes
@@ -450,6 +457,205 @@ def imp_pad[E: Exec](
     return tape.custom_nd(ex, [x], output, so, IMP_TAG_PAD, saved)
 
 
+# ---------------------------------------------------------------- cumsum
+def _scan_scratch(O: Int, L: Int, I: Int) -> Int:
+    """Floats of scratch a scan of length L needs: per level above one leaf,
+    the leaf totals and their scan (outer x leaves x inner each)."""
+    if L <= IMP_SCAN_LEAF:
+        return 0
+    var nb = (L + IMP_SCAN_LEAF - 1) // IMP_SCAN_LEAF
+    return 2 * O * nb * I + _scan_scratch(O, nb, I)
+
+
+def _scan_into[E: Exec](
+    mut ex: E, src: FP, dst: FP, scratch: FP, O: Int, L: Int, I: Int, rev: Int, excl: Int,
+) raises:
+    """dst = the scan of src (outer O, length L, inner I) in THE SCAN ORDER
+    of autograd/import_ops.mojo: one launch for a single leaf, else the leaf
+    totals, their inclusive scan (the same rule, one level down) and the
+    final words. `scratch` holds _scan_scratch(O, L, I) floats."""
+    var a = Args()
+    a.p0 = src
+    a.p1 = dst
+    a.i1 = L
+    a.i2 = I
+    a.i3 = rev
+    a.i4 = excl
+    if L <= IMP_SCAN_LEAF:
+        ex.launch[OP_IMP_SCAN_FINAL](a, O * L * I)
+        return
+    var nb = (L + IMP_SCAN_LEAF - 1) // IMP_SCAN_LEAF
+    var level = O * nb * I
+    var totals = scratch
+    var scanned = scratch + level
+    var deeper = scratch + 2 * level
+    var t = Args()
+    t.p0 = src
+    t.p1 = totals
+    t.i1 = L
+    t.i2 = I
+    t.i3 = rev
+    ex.launch[OP_IMP_SCAN_TOTALS](t, level)
+    # the totals are already in scan order: their scan runs forward, inclusive
+    # one level down: a recursion over scan levels, one per factor of 64 in L
+    _scan_into(ex, totals, scanned, deeper, O, nb, I, 0, 0)
+    a.p2 = scanned
+    a.i5 = 1
+    ex.launch[OP_IMP_SCAN_FINAL](a, O * L * I)
+
+
+def imp_cumsum[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, axis: Int, exclusive: Bool = False, reverse: Bool = False,
+) raises -> Tensor:
+    """The running sum of x along `axis` (ONNX CumSum, torch.cumsum), x's
+    shape. `exclusive` leaves each position's own term out (0 at the
+    first), `reverse` runs from the last position to the first. The sums
+    follow THE SCAN ORDER of autograd/import_ops.mojo; the gradient is the
+    upstream scanned the other way."""
+    var s = tape.shape_of(x)
+    if s.ndim < 1:
+        raise Error("cumsum takes a tensor of at least one dimension")
+    var ax = rn_normalize_axis(axis, s.ndim)
+    var L = s.d[ax]
+    var O = 1
+    var I = 1
+    for k in range(s.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+        if k < ax:
+            O *= s.d[k]
+        elif k > ax:
+            I *= s.d[k]
+    var n = s.count()
+    var src = tape.value_of(ex, x)
+    var output = tape.reserve(ex, n)
+    var scratch = dummy_ptr()
+    var words = _scan_scratch(O, L, I)
+    if words > 0:
+        scratch = tape.reserve(ex, words)
+    var rev = 1 if reverse else 0
+    var excl = 1 if exclusive else 0
+    _scan_into(ex, src, output, scratch, O, L, I, rev, excl)
+    var saved = Args()
+    saved.p10 = scratch
+    saved.i0 = n
+    saved.i1 = O
+    saved.i2 = L
+    saved.i3 = I
+    saved.i4 = rev
+    saved.i5 = excl
+    return tape.custom_nd(ex, [x], output, s, IMP_TAG_CUMSUM, saved)
+
+
+# ---------------------------------------------------------------- index (several index tensors)
+def _has(v: List[Int], x: Int) -> Bool:
+    for i in range(len(v)):  # small-loop(len(v) <= 8: tensor axes)
+        if v[i] == x:
+            return True
+    return False
+
+
+def imp_gather_nd[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, idx: List[Tensor], axes: List[Int],
+) raises -> Tensor:
+    """x indexed by several index tensors at once (torch's x[i, j] with
+    tensors, ONNX GatherND): idx[j] holds positions along axis axes[j]
+    (ascending, distinct; a negative position counts from the end), and the
+    index tensors broadcast together as in NumPy. The result's axes are the
+    broadcast index shape followed by x's other axes in order; when the
+    indexed axes are consecutive, the broadcast axes stand where the first
+    indexed axis stood (torch's rule). A position outside its axis is
+    refused.
+
+    One OP_IMP_FLAT_IDS launch per index tensor computes the flat ids on the
+    device (int32 words), then the embedding's gather reads x as a matrix
+    (indexed positions, rest); x's gradient is the embedding's (each row
+    sums its positions' gradients in ascending position order). The index
+    tensors take no gradient."""
+    var sx = tape.shape_of(x)
+    var k = len(idx)
+    if k < 1 or k != len(axes):
+        raise Error("index: one axis for each index tensor")
+    if k > sx.ndim:
+        raise Error("index: more index tensors than the tensor has axes")
+    var ax = List[Int]()
+    for j in range(k):  # small-loop(k <= 8: index tensors, shape metadata)
+        var a = rn_normalize_axis(axes[j], sx.ndim)
+        if j > 0 and a <= ax[j - 1]:
+            raise Error("index: the indexed axes must be distinct and ascending")
+        ax.append(a)
+    var sb = tape.shape_of(idx[0])
+    for j in range(1, k):  # small-loop(k <= 8: index tensors, shape metadata)
+        sb = rn_broadcast(sb, tape.shape_of(idx[j]))
+    var B = sb.count()
+    var perm = List[Int]()
+    var others = List[Int]()
+    var lead = True
+    for j in range(k):  # small-loop(k <= 8: index tensors, shape metadata)
+        perm.append(ax[j])
+        if ax[j] != j:
+            lead = False
+    for d in range(sx.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+        if not _has(ax, d):
+            perm.append(d)
+            others.append(d)
+    var src = x
+    if not lead:
+        # the indexed axes to the front, the others after them in order
+        src = tape.permute(ex, x, perm)
+        tape.materialize(ex, src)
+    var P = 1
+    for j in range(k):  # small-loop(k <= 8: index tensors, shape metadata)
+        P *= sx.d[ax[j]]
+    var rest = sx.count() // P
+    var table = tape.view_nd(ex, src, ShapeN.matrix(P, rest))
+    var ids = tape.reserve(ex, B)
+    var mult = 1
+    var j = k - 1
+    while j >= 0:  # driver-loop: over index tensors (the last first: each one's multiplier is the later axes' product)
+        var io = tape.operand_nd(ex, idx[j])
+        var si = tape.shape_of(idx[j])
+        var istr = io[3].copy()
+        var w = List[Int]()
+        w.append(sb.ndim)
+        w.append(io[1])
+        for d in range(sb.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+            w.append(sb.d[d])
+            w.append(_aligned_stride(si, istr, sb, d))
+        var desc = tape.descriptor(ex, w)
+        var a = Args()
+        a.p0 = io[0]
+        a.p1 = ids
+        a.p11 = desc
+        a.i1 = sx.d[ax[j]]
+        a.i2 = mult
+        a.i3 = 1 if j == k - 1 else 0
+        ex.launch[OP_IMP_FLAT_IDS](a, B)
+        mult *= sx.d[ax[j]]
+        j -= 1
+    var e = tape.embedding(ex, table, tape.ids(ex, ids, B))
+    var dims = List[Int]()
+    for d in range(sb.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+        dims.append(sb.d[d])
+    for d in range(len(others)):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+        dims.append(sx.d[others[d]])
+    if len(dims) == 0:
+        dims.append(1)
+    var y = tape.view_nd(ex, e, rn_shape(dims, "index"))
+    var adjacent = ax[k - 1] - ax[0] == k - 1
+    if adjacent and ax[0] > 0 and sb.ndim > 0 and len(others) > 0:
+        # the broadcast axes to where the first indexed axis stood:
+        # [nb .. nb + ax0 - 1, 0 .. nb - 1, nb + ax0 ..]
+        var nb = sb.ndim
+        var p = List[Int]()
+        for d in range(ax[0]):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+            p.append(nb + d)
+        for d in range(nb):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+            p.append(d)
+        for d in range(ax[0], len(others)):  # small-loop(ndim <= 8: tensor rank, shape metadata)
+            p.append(nb + d)
+        y = tape.permute(ex, y, p)
+    return y
+
+
 # ---------------------------------------------------------------- rules
 @fieldwise_init
 struct ImportRules(BackwardRules):
@@ -458,7 +664,7 @@ struct ImportRules(BackwardRules):
     def supports(self, tag: Int) -> Bool:
         if tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
             return (tag == IMP_TAG_UNARY or tag == IMP_TAG_BINARY or tag == IMP_TAG_EXPAND
-                    or tag == IMP_TAG_ARGMAX or tag == IMP_TAG_PAD)
+                    or tag == IMP_TAG_ARGMAX or tag == IMP_TAG_PAD or tag == IMP_TAG_CUMSUM)
         return RankNRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
@@ -508,6 +714,11 @@ struct ImportRules(BackwardRules):
             a.p1 = gradients[0]
             a.p11 = saved.p11
             ex.launch[OP_IMP_PAD_VJP](a, saved.i0)
+        elif tag == IMP_TAG_CUMSUM:
+            # the upstream scanned the other way, same exclusive flag; the
+            # forward's scratch is free again (backward runs after it)
+            _scan_into(ex, upstream, gradients[0], saved.p10, saved.i1, saved.i2, saved.i3,
+                       1 - saved.i4, saved.i5)
         elif tag >= IMP_TAG_FIRST and tag <= IMP_TAG_LAST:
             raise Error("import rules: unknown tag")
         else:
