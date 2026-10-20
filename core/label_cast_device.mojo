@@ -38,12 +38,12 @@ def _blocks(count: Int) -> Int:
     return (count + _TPB - 1) // _TPB if count > 0 else 1
 
 
-def _widen_kernel(raw: FP, n_: Int32, kind: Int32, isz: Int32, s0: Int32, origin: Int, dst: _U64):
+def _widen_kernel(raw: FP, n_: Int32, kind: Int32, isz: Int32, s0: Int32, origin: Int32, dst: _U64):
     var i = _tid()
     if i >= Int(n_):
         return
     var size = Int(isz)
-    dst.unsafe_store(i, cast_w64_bits(cast_raw_bits(raw, origin + i * Int(s0), size), Int(kind), size))
+    dst.unsafe_store(i, cast_w64_bits(cast_raw_bits(raw, Int(origin) + i * Int(s0), size), Int(kind), size))
 
 
 def _narrow_kernel(cls: _U64, k_: Int32, kind: Int32, isz: Int32, dst: FP, words_: Int32):
@@ -88,7 +88,7 @@ def device_unique_inverse_cast(
     var d_classes = ctx.enqueue_create_buffer[DType.uint64](n)
     ctx.enqueue_function[_widen_kernel](
         FP(unsafe_from_address=Int(d_raw.unsafe_ptr())), Int32(n), Int32(src.kind), Int32(size), Int32(src.s0),
-        src.origin(), d_src.unsafe_ptr(), grid_dim=_blocks(n), block_dim=_TPB,
+        Int32(src.origin()), d_src.unsafe_ptr(), grid_dim=_blocks(n), block_dim=_TPB,
     )
     var k = device_unique_inverse_resident(ctx, d_src, n, label_kind, d_codes, d_classes)
     if k < 0:
