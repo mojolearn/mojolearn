@@ -1005,7 +1005,7 @@ def model_fit_state[E: Exec](
     var best_mu = st.mu_prod
     var restore = False
     if validation:
-        var v = validation.value()
+        var v = validation.value().copy()
         nv = v.x.rows
         if nv < 1 or v.x.cols != D or v.y.rows != nv:
             raise Error("validation_data must have matching nonempty rows and the training input width")
@@ -1150,7 +1150,7 @@ def model_fit_state[E: Exec](
             if cfg.patience > 0 and stall >= cfg.patience:
                 break
     if validation:
-        var v = validation.value()
+        var v = validation.value().copy()
         ex.sync()
         ex.download(v.curve, vcurve, n_iter)
         v.result[0] = Int64(n_iter)

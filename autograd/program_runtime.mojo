@@ -46,8 +46,8 @@ def replay_values[E: Exec & Movable & Deinitable](
     for k in range(p.n_nodes()):  # driver-loop: over captured operations
         var hs = List[Int]()
         for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over node arguments
-            var ref = p.args[j]
-            hs.append(phs[-ref - 1] if ref < 0 else vals[ref])
+            var rf = p.args[j]
+            hs.append(phs[-rf - 1] if rf < 0 else vals[rf])
         var ints = List[Int]()
         for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over node metadata
             ints.append(p.ints[j])
@@ -63,8 +63,8 @@ def replay_values[E: Exec & Movable & Deinitable](
         vals.append(h)
     var outputs = List[Int]()
     for j in range(len(p.outs)):  # driver-loop: over program outputs
-        var ref = p.outs[j]
-        outputs.append(phs[-ref - 1] if ref < 0 else vals[ref])
+        var rf = p.outs[j]
+        outputs.append(phs[-rf - 1] if rf < 0 else vals[rf])
     return outputs^
 
 
