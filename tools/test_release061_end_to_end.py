@@ -94,10 +94,9 @@ def byte_fixture(out, vendor, binding_sha):
         gradients_hex=(struct.pack('<f', 1.0) * 34944).hex(), checkpoint_sha256=hashes))
 
 
-# DEVIATION 2293: which three architectures the fixture wheel carries. The
-# Hopper slot has two legal spellings and only sm_90a is buildable on an H100,
-# so the gate has to be exercised with both. Default is the canonical triple;
-# test_hopper_spelled_sm_90a_admits swaps it.
+# Which architecture sets the fixture wheel carries. Default is the registry's
+# required sets (gate.RELEASE_ARCHES: cuda/sm_89, the PTX set cuda/sm_80,
+# hip/gfx942); OptionalSets adds registered optional ones (Hopper, Blackwell).
 ARCHES = None
 
 
@@ -347,7 +346,7 @@ class EndToEndRelease061(unittest.TestCase):
             with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 wheel, qualification = fixture(root)
-                out = qualification / 'cuda/sm_90'
+                out = qualification / 'cuda/sm_80'  # the PTX set, checked like a native set
                 if defect == 'missing_architecture':
                     shutil.rmtree(out)
                 elif defect == 'stale_final_hash':
@@ -364,7 +363,7 @@ class EndToEndRelease061(unittest.TestCase):
                         row['device_architecture'] = 'sm_89'
                     else:
                         b = row['installed_bindings']['_mojolearn_gbdt']
-                        b['path'] = b['path'].replace('/cuda/sm_90/_', '/cuda/sm_89/_')
+                        b['path'] = b['path'].replace('/cuda/sm_80/_', '/cuda/sm_89/_')
                     write_json(path, row)
                     seal_evidence(out)  # defeat superficial stale-record hash rejection
                 if defect in ('byte_mode', 'byte_profile', 'byte_gradient', 'byte_checkpoint'):
@@ -429,7 +428,7 @@ class SplitSet(unittest.TestCase):
             root = Path(tmp)
             wheels, qualification = fixture(root, split=True)
             self.assertEqual(sorted(w.name.split('-')[0] for w in wheels),
-                             ['mojolearn', 'mojolearn_amd', 'mojolearn_core', 'mojolearn_nvidia'])
+                             ['mojolearn', 'mojolearn_amd', 'mojolearn_core', 'mojolearn_nvidia', 'mojolearn_nvidia_ptx'])
             result, ordered = self.check(wheels, qualification, root)
             self.assertEqual(result['status'], 'PASSED')
             self.assertEqual(result['assembly_profile'], gate.SPLIT_PROFILE)
@@ -440,8 +439,8 @@ class SplitSet(unittest.TestCase):
 
     def test_nvidia_only_set_admits_without_a_cross_vendor_comparison(self):
         global ARCHES
-        # the NVIDIA plugin's slots as the registry has them (gpu_plugins.required_sets: sm_89 alone
-        # since 0.8.38 dropped sm_90a and 0.8.39 took the PTX slot out while over PyPI's limit)
+        # the NVIDIA plugin's required sets as the registry has them (gpu_plugins.required_sets:
+        # native sm_89 and the PTX set sm_80, shipped in mojolearn-nvidia-ptx)
         ARCHES, saved = set(gate.surface.PLUGIN_ARCHES['cuda']), ARCHES
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -487,15 +486,15 @@ class SplitSet(unittest.TestCase):
             self.assertIn('one wheel, except with --profile release-split', r.stderr)
 
 
-class HopperSpelling(unittest.TestCase):
-    """DEVIATION 2293. sm_90 has never been built; the compiler emits sm_90a on
-    an H100 and every read-back gate refuses a set named otherwise. The whole
-    admission path therefore has to accept a wheel whose Hopper slot is spelled
-    sm_90a, and has to keep refusing one that fills that slot twice."""
+class OptionalSets(unittest.TestCase):
+    """The contract is python/mojolearn/gpu_plugins.py: the required sets
+    (native sm_89, the PTX set sm_80, gfx942) must all be carried; Hopper and
+    Blackwell are registered but optional, and a carried one is qualified like
+    any set. DEVIATION 2293: a slot may be spelled sm_N or sm_Na, never both."""
 
-    def _run(self, arches):
+    def _run(self, extra=(), drop=()):
         global ARCHES
-        ARCHES = frozenset(arches)
+        ARCHES = frozenset((gate.RELEASE_ARCHES | set(extra)) - set(drop))
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
@@ -506,27 +505,49 @@ class HopperSpelling(unittest.TestCase):
         finally:
             ARCHES = None
 
-    def test_hopper_spelled_sm_90a_admits(self):
-        result = self._run({'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
+    def test_contract_read_from_the_registry(self):
+        plugins = gate.surface.load_gpu_plugins()
+        self.assertEqual(gate.RELEASE_ARCHES, {'/'.join(k) for v in ('cuda', 'hip') for k in plugins.required_sets(v)})
+        self.assertIn('cuda/' + plugins.PTX_ARCH, gate.RELEASE_ARCHES)
+        self.assertTrue({'cuda/sm_90', 'cuda/sm_90a', 'cuda/sm_100a'} <= gate.surface.OPTIONAL_ARCHES['cuda'])
+        self.assertFalse(gate.surface.OPTIONAL_ARCHES['cuda'] & gate.RELEASE_ARCHES)
+
+    def test_required_sets_alone_admit(self):
+        result = self._run()
         self.assertEqual(result['status'], 'PASSED')
-        self.assertEqual(set(result['runtime_coverage']),
-                         {'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
+        self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES)
         self.assertEqual(result['jobs_per_runtime_architecture'], 10)  # smoke x {fast, identical}, 7 identical surfaces, byte-lm (fast + identical only since d4241beeb)
         self.assertIn(f"FULL {result['jobs_per_runtime_architecture']} installed jobs", result['scope'])
 
-    def test_hopper_spelled_sm_90_still_admits(self):
-        result = self._run({'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+    def test_hopper_spelled_sm_90a_admits(self):
+        result = self._run(extra={'cuda/sm_90a'})
         self.assertEqual(result['status'], 'PASSED')
-        self.assertEqual(set(result['runtime_coverage']),
-                         {'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})
+        self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES | {'cuda/sm_90a'})
+
+    def test_hopper_spelled_sm_90_admits(self):
+        result = self._run(extra={'cuda/sm_90'})
+        self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES | {'cuda/sm_90'})
+
+    def test_blackwell_set_admits(self):
+        result = self._run(extra={'cuda/sm_100a'})
+        self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES | {'cuda/sm_100a'})
 
     def test_hopper_slot_filled_twice_refused(self):
         with self.assertRaises((ValueError, OSError, KeyError)):
-            self._run({'cuda/sm_89', 'cuda/sm_90', 'cuda/sm_90a', 'hip/gfx942'})
+            self._run(extra={'cuda/sm_90', 'cuda/sm_90a'})
 
-    def test_missing_hopper_refused(self):
+    def test_unregistered_set_refused(self):
         with self.assertRaises((ValueError, OSError, KeyError)):
-            self._run({'cuda/sm_89', 'cuda/sm_86', 'hip/gfx942'})
+            self._run(extra={'cuda/sm_86'})
+
+    def test_missing_required_set_refused(self):
+        for key in sorted(gate.RELEASE_ARCHES):
+            with self.subTest(missing=key), self.assertRaises((ValueError, OSError, KeyError)):
+                self._run(drop={key})
+
+    def test_unregistered_runtime_key_refused(self):
+        with self.assertRaisesRegex(ValueError, 'Unknown runtime architecture'):
+            gate.release_audit(Path('unused.whl'), Path('.'), Path('.'), 'cuda/sm_86')
 
 
 class SmokeTier(unittest.TestCase):
@@ -550,16 +571,16 @@ class SmokeTier(unittest.TestCase):
 
     def test_one_full_per_vendor_admits(self):
         with tempfile.TemporaryDirectory() as tmp:
-            w, q, r = self._root(tmp, ['cuda/sm_90'])          # sm_89 full, gfx942 full
+            w, q, r = self._root(tmp, ['cuda/sm_80'])          # sm_89 full, gfx942 full, the PTX set smoke
             result = self._check(w, q, r)
             self.assertEqual(result['status'], 'PASSED')
-            self.assertEqual(result['qualification_tiers']['cuda/sm_90'], 'smoke')
+            self.assertEqual(result['qualification_tiers']['cuda/sm_80'], 'smoke')
             self.assertEqual(result['qualification_tiers']['cuda/sm_89'], 'full')
             self.assertEqual(result['qualification_tiers']['hip/gfx942'], 'full')
 
     def test_no_full_cuda_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
-            w, q, r = self._root(tmp, ['cuda/sm_89', 'cuda/sm_90'])
+            w, q, r = self._root(tmp, ['cuda/sm_89', 'cuda/sm_80'])
             with self.assertRaises((ValueError, OSError, KeyError)):
                 self._check(w, q, r)
 
@@ -573,7 +594,7 @@ class SmokeTier(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             wheel, qualification = fixture(root)
-            write_json(qualification / 'cuda/sm_90' / 'SMOKE_TIER.json',
+            write_json(qualification / 'cuda/sm_80' / 'SMOKE_TIER.json',
                        dict(schema='mojolearn.linux.smoke-tier.v1',
                             architecture='hip/gfx942', reason='wrong architecture'))
             with self.assertRaises((ValueError, OSError, KeyError)):
@@ -583,9 +604,9 @@ class SmokeTier(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             wheel, qualification = fixture(root)
-            write_json(qualification / 'cuda/sm_90' / 'SMOKE_TIER.json',
+            write_json(qualification / 'cuda/sm_80' / 'SMOKE_TIER.json',
                        dict(schema='mojolearn.linux.smoke-tier.v1',
-                            architecture='cuda/sm_90', reason='   '))
+                            architecture='cuda/sm_80', reason='   '))
             with self.assertRaises((ValueError, OSError, KeyError)):
                 self._check(wheel, qualification, root)
 

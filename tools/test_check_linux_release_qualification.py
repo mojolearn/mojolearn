@@ -183,10 +183,12 @@ class ReleaseAdmissionTests(unittest.TestCase):
         import test_release061_end_to_end as end_to_end
         cases = [('sm_90a', 'sm_90', True), ('sm_90a', 'sm_90a', True),
                  ('sm_90a', 'sm_89', False), ('sm_90a', 'sm_90b', False),
-                 ('sm_89', 'sm_89a', False), ('sm_89', 'sm_90', False)]
+                 ('sm_89', 'sm_89a', False), ('sm_89', 'sm_90', False),
+                 # the PTX set is qualified like a native set: on a device of its own architecture
+                 ('sm_80', 'sm_80', True), ('sm_80', 'sm_89', False)]
         for arch, device, accepted in cases:
             with self.subTest(arch=arch, device=device), tempfile.TemporaryDirectory() as directory, \
-                    patch.object(end_to_end, 'ARCHES', frozenset({'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})):
+                    patch.object(end_to_end, 'ARCHES', gate.RELEASE_ARCHES | {'cuda/sm_90a'}):  # Hopper optional
                 root = Path(directory)
                 wheel, qualification = end_to_end.fixture(root)
                 out = qualification / 'cuda' / arch
