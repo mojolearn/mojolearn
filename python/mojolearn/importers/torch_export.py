@@ -596,8 +596,8 @@ def _index_nd(r, n, x, tensors, axes):
         v = r.val(t)
         if tuple(sh) != bshape:
             v = r.emit("Expand", [v, r.const_i(bshape)], [r.fresh(n.name)], r.fresh(n.name))
-        parts.append(r.emit("Unsqueeze", [v, r.const_i([-1])], [r.fresh(n.name)], r.fresh(n.name)))
-    packed = r.emit("Concat", parts, [r.fresh(n.name)], r.fresh(n.name), axis=-1)
+        parts.append(r.emit("Unsqueeze", [v, r.const_i([len(bshape)])], [r.fresh(n.name)], r.fresh(n.name)))
+    packed = r.emit("Concat", parts, [r.fresh(n.name)], r.fresh(n.name), axis=len(bshape))
     nb = len(bshape)
     consecutive = list(axes) == list(range(axes[0], axes[0] + len(axes)))  # cpu-route: model graph description on the host (one per axis)
     if not (consecutive and axes[0] > 0 and nb > 0):
