@@ -5,21 +5,154 @@ from autograd.program import OpsProgram
 
 
 def program_op_name(code: Int) -> String:
-    var names = List[String](
-        "invalid", "matmul", "add", "subtract", "multiply", "divide", "relu", "sigmoid",
-        "tanh", "exp", "log", "sqrt", "scale", "transpose", "reshape", "sum", "mean",
-        "softmax", "log_softmax", "linear", "layer_norm", "dropout", "gather_rows",
-        "permutation", "mse", "mae", "huber", "bce_with_logits", "cross_entropy",
-        "detach", "full", "copy", "embedding", "reshape_nd", "permute", "sum_nd",
-        "mean_nd", "max", "matmul_nd", "concat", "narrow", "take", "softmax_nd",
-        "log_softmax_nd", "conv2d", "max_pool2d", "avg_pool2d", "reserved", "erf", "gelu",
-        "softplus", "silu", "leaky_relu", "elu", "hard_sigmoid", "hard_swish", "clip",
-        "abs", "floor", "ceil", "round", "sin", "cos", "sign", "reciprocal", "pow",
-        "minimum", "maximum", "where", "compare", "logical", "expand", "argmax",
-        "pad", "any_all", "cumsum", "index",
-    )
-    if code > 0 and code < len(names):
-        return names[code]
+    if code == 0:
+        return "invalid"
+    if code == 1:
+        return "matmul"
+    if code == 2:
+        return "add"
+    if code == 3:
+        return "subtract"
+    if code == 4:
+        return "multiply"
+    if code == 5:
+        return "divide"
+    if code == 6:
+        return "relu"
+    if code == 7:
+        return "sigmoid"
+    if code == 8:
+        return "tanh"
+    if code == 9:
+        return "exp"
+    if code == 10:
+        return "log"
+    if code == 11:
+        return "sqrt"
+    if code == 12:
+        return "scale"
+    if code == 13:
+        return "transpose"
+    if code == 14:
+        return "reshape"
+    if code == 15:
+        return "sum"
+    if code == 16:
+        return "mean"
+    if code == 17:
+        return "softmax"
+    if code == 18:
+        return "log_softmax"
+    if code == 19:
+        return "linear"
+    if code == 20:
+        return "layer_norm"
+    if code == 21:
+        return "dropout"
+    if code == 22:
+        return "gather_rows"
+    if code == 23:
+        return "permutation"
+    if code == 24:
+        return "mse"
+    if code == 25:
+        return "mae"
+    if code == 26:
+        return "huber"
+    if code == 27:
+        return "bce_with_logits"
+    if code == 28:
+        return "cross_entropy"
+    if code == 29:
+        return "detach"
+    if code == 30:
+        return "full"
+    if code == 31:
+        return "copy"
+    if code == 32:
+        return "embedding"
+    if code == 33:
+        return "reshape_nd"
+    if code == 34:
+        return "permute"
+    if code == 35:
+        return "sum_nd"
+    if code == 36:
+        return "mean_nd"
+    if code == 37:
+        return "max"
+    if code == 38:
+        return "matmul_nd"
+    if code == 39:
+        return "concat"
+    if code == 40:
+        return "narrow"
+    if code == 41:
+        return "take"
+    if code == 42:
+        return "softmax_nd"
+    if code == 43:
+        return "log_softmax_nd"
+    if code == 44:
+        return "reserved"
+    if code == 45:
+        return "erf"
+    if code == 46:
+        return "gelu"
+    if code == 47:
+        return "softplus"
+    if code == 48:
+        return "silu"
+    if code == 49:
+        return "leaky_relu"
+    if code == 50:
+        return "elu"
+    if code == 51:
+        return "hard_sigmoid"
+    if code == 52:
+        return "hard_swish"
+    if code == 53:
+        return "clip"
+    if code == 54:
+        return "abs"
+    if code == 55:
+        return "floor"
+    if code == 56:
+        return "ceil"
+    if code == 57:
+        return "round"
+    if code == 58:
+        return "sin"
+    if code == 59:
+        return "cos"
+    if code == 60:
+        return "sign"
+    if code == 61:
+        return "reciprocal"
+    if code == 62:
+        return "pow"
+    if code == 63:
+        return "minimum"
+    if code == 64:
+        return "maximum"
+    if code == 65:
+        return "where"
+    if code == 66:
+        return "compare"
+    if code == 67:
+        return "logical"
+    if code == 68:
+        return "expand"
+    if code == 69:
+        return "argmax"
+    if code == 70:
+        return "pad"
+    if code == 71:
+        return "any_all"
+    if code == 72:
+        return "cumsum"
+    if code == 73:
+        return "index"
     return "op_" + String(code)
 
 
@@ -37,13 +170,13 @@ def _same_node(p: OpsProgram, k: Int, q: OpsProgram, j: Int, args: List[Int]) ->
         return False
     if p.f_at[k + 1] - p.f_at[k] != q.f_at[j + 1] - q.f_at[j]:
         return False
-    for i in range(len(args)):  # driver-loop: node input references
+    for i in range(len(args)):  # driver-loop: over node input references
         if args[i] != q.args[q.a_at[j] + i]:
             return False
-    for i in range(p.i_at[k + 1] - p.i_at[k]):  # driver-loop: integer argument words
+    for i in range(p.i_at[k + 1] - p.i_at[k]):  # driver-loop: over integer argument words
         if p.ints[p.i_at[k] + i] != q.ints[q.i_at[j] + i]:
             return False
-    for i in range(p.f_at[k + 1] - p.f_at[k]):  # driver-loop: float argument words
+    for i in range(p.f_at[k + 1] - p.f_at[k]):  # driver-loop: over float argument words
         # Bitwise words preserve signed zero and NaN payload distinctions.
         if bitcast[DType.uint32](p.fs[p.f_at[k] + i]) != bitcast[DType.uint32](q.fs[q.f_at[j] + i]):
             return False
@@ -63,16 +196,16 @@ def program_cse(p: OpsProgram) -> OpsProgram:
     q.param_shapes = p.param_shapes.copy()
     q.out_shapes = p.out_shapes.copy()
     var refs = List[Int]()
-    for k in range(p.n_in):  # driver-loop: input refs remain unchanged
+    for k in range(p.n_in):  # driver-loop: over input refs remain unchanged
         refs.append(k)
-    for k in range(p.n_nodes()):  # driver-loop: original graph nodes
+    for k in range(p.n_nodes()):  # driver-loop: over original graph nodes
         var args = List[Int]()
-        for a in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: remapped input refs
+        for a in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over remapped input refs
             var r = p.args[a]
             args.append(r if r < 0 else refs[r])
         var found = -1
         if _cse_safe(p.code[k]):
-            for j in range(q.n_nodes()):  # driver-loop: earlier candidate nodes
+            for j in range(q.n_nodes()):  # driver-loop: over earlier candidate nodes
                 if _same_node(p, k, q, j, args):
                     found = j
                     break
@@ -81,14 +214,14 @@ def program_cse(p: OpsProgram) -> OpsProgram:
             continue
         refs.append(q.n_values())
         q.code.append(p.code[k])
-        for a in range(len(args)):  # driver-loop: node reference words
+        for a in range(len(args)):  # driver-loop: over node reference words
             q.args.append(args[a])
-        for a in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: node integer words
+        for a in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over node integer words
             q.ints.append(p.ints[a])
-        for a in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: node float words
+        for a in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over node float words
             q.fs.append(p.fs[a])
         q.end_node()
-    for k in range(len(p.outs)):  # driver-loop: output refs
+    for k in range(len(p.outs)):  # driver-loop: over output refs
         var r = p.outs[k]
         q.outs.append(r if r < 0 else refs[r])
     return q^

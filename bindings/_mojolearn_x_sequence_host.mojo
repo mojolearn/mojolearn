@@ -18,7 +18,7 @@ from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
-from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py
+from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
 from autograd.program_control import ops_program_control_py
 from autograd.distributed_pyapi import (
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
@@ -252,9 +252,9 @@ def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: Py
     return ops_program_dynamic_py[HostExec, OPS_HOST](sid, pid, arrays)
 
 
-def ops_program_execute_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject,
+def ops_program_execute_binding(sid: PythonObject, pid: PythonObject, owner_sid: PythonObject, arrays: PythonObject,
                                 dynamic_shapes: PythonObject, optimize: PythonObject, profile: PythonObject) raises -> PythonObject:
-    return ops_program_execute_py[HostExec, OPS_HOST](sid, pid, arrays, dynamic_shapes, optimize, profile)
+    return ops_program_execute_py[HostExec, OPS_HOST](sid, pid, owner_sid, arrays, dynamic_shapes, optimize, profile)
 
 
 def ops_program_inspect_binding(sid: PythonObject, pid: PythonObject, optimize: PythonObject) raises -> PythonObject:
@@ -262,9 +262,18 @@ def ops_program_inspect_binding(sid: PythonObject, pid: PythonObject, optimize: 
 
 
 def ops_program_control_binding(sid: PythonObject, pid: PythonObject, condition: PythonObject,
-                                other: PythonObject, arrays: PythonObject, limit: PythonObject,
+                                other: PythonObject, condition_sid: PythonObject, other_sid: PythonObject,
+                                arrays: PythonObject, limit: PythonObject,
                                 optimize: PythonObject) raises -> PythonObject:
-    return ops_program_control_py[HostExec, OPS_HOST](sid, pid, condition, other, arrays, limit, optimize)
+    return ops_program_control_py[HostExec, OPS_HOST](sid, pid, condition, other, condition_sid, other_sid, arrays, limit, optimize)
+
+
+def ops_program_fit_native_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject,
+                                   targets: PythonObject, optimizer: PythonObject, parameters: PythonObject,
+                                   loss: PythonObject, epochs: PythonObject, batch_size: PythonObject,
+                                   shuffle: PythonObject, seed: PythonObject, delta: PythonObject) raises -> PythonObject:
+    return ops_program_fit_native_py[HostExec, OPS_HOST](sid, pid, arrays, targets, optimizer,
+                                                        parameters, loss, epochs, batch_size, shuffle, seed, delta)
 
 
 def ops_program_fit_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -617,6 +626,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[ops_distributed_residency_binding]("ops_distributed_residency")
         m.def_function[ops_distributed_save_binding]("ops_distributed_save")
         m.def_function[ops_distributed_close_binding]("ops_distributed_close")
+        m.def_function[ops_program_fit_native_binding]("ops_program_fit_native")
         m.def_function[ops_program_free_binding]("ops_program_free")
         m.def_function[ops_save_program_binding]("ops_save_program")
         m.def_function[ops_load_program_binding]("ops_load_program")
