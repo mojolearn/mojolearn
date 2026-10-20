@@ -36,6 +36,7 @@
   }
  },
  "published": [
+  "macos",
   "linux",
   "nvidia",
   "nvidia-ptx",
@@ -43,6 +44,6 @@
  ],
  "schema": "mojolearn.release-provenance.v1",
  "source_commit": "a8255828597a3bd19ac7bb5f657a38d09b8c732f",
- "tooling_commit": "4e927c92495a43695bd5a8f524a47caef52c00bd",
+ "tooling_commit": "813f9c4d79367f39d9727ba39b5768455cc07df4",
  "version": "0.8.55"
 }
