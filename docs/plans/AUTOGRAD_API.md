@@ -485,6 +485,22 @@ is piecewise constant and passes no gradient), and the weighted scatter-add
 (a gather of the upstream rows times the weights). The metrics stay forward
 only.
 
+### Imported models (docs/plans/MODEL_IMPORT.md)
+
+`mojolearn.import_model(source, *, shapes=None, numeric_mode=None)` turns an
+ONNX file (opset 13 or later) or a `torch.export.ExportedProgram` into the
+captured inference `Program` of `Session.capture` (straight line, fixed
+shapes): the source graph is read into one intermediate graph in ONNX's
+vocabulary, every node is lowered onto the session ops above or refused by
+name in one `UnsupportedModel` error, parameter-only work (BatchNorm folding,
+the `Gemm` weight transpose) runs once as session ops in an import-time
+prologue on the device, and the body is replayed once and captured. The
+importer adds no node kind, no replay rule and no runtime of its own; its
+only kernels are the elementwise family of session codes 48..73. Identity
+follows from the replayed tape kernels; torch and onnxruntime outputs are a
+closeness reference (tools/import_compare.py), never a gate. The `IF`/`LOOP`
+words above are what a later trainable import would need.
+
 ## (c) Migration order
 
 What moves is model-level assembly: the hand-chained order of head GEMMs,
