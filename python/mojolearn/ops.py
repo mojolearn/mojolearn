@@ -1491,9 +1491,10 @@ class Program:
             self._s._id, self._id, devices, (logical_shards, optimizer, parameters, seed),
             _DistributedProgram, self._s._distributed_binding)
 
-    def save_control(self, path, *, condition, otherwise=None, max_iterations=None):
-        """Save a conditional or bounded loop with shared parameters in one file."""
-        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations))
+    def save_control(self, path, *, condition, otherwise=None, max_iterations=None,
+                     optimizer=None, seed=0):
+        """Save control components, shared parameters and optional optimizer state."""
+        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations, optimizer, seed))
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,

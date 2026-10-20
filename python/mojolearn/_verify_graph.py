@@ -23,9 +23,9 @@ EXPECTED_CASES = (
     "variable_rank_replay",
     "executed_control_vjp", "executor_accounting", "control_checkpoint", "gradient_diagnostics",
     "structural_view_optimization", "structural_control_and_derivatives", "optimizer_validation_preservation",
-    "conditional_training", "conditional_training_refusals",
+    "conditional_training", "conditional_training_refusals", "conditional_training_resume",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11)))
 
 
 _AUDITS = []
@@ -452,6 +452,91 @@ def conditional_training_refusals():
         assert s.optimizer_state(optimizer, w)["step"] == step
         _equal(body.loss_curve_, np.array([4], np.float32))
         return [recovered, body.loss_curve_]
+
+
+def conditional_training_resume():
+    import struct
+    import numpy as np
+    from . import ops
+    a = np.array([[1, 2], [-1, -2], [3, 1], [-3, -1], [2, 4], [-2, -4]], np.float32)
+    target = np.ones((len(a), 1), np.float32)
+    seed = 2**63 + 19
+
+    def components(session):
+        x = session.tensor(a)
+        w = session.tensor([[0.125], [-0.25]])
+        positive, negative = session.tensor([[0.25]]), session.tensor([[-0.25]])
+        predicate = session.capture(x, session.greater(session.sum(x), session.full((1, 1), 0)))
+        t = session.dropout(x, 0.25, seed=13, counter=5)
+        f = session.dropout(x, 0.5, seed=19, counter=7)
+        body = session.capture(x, session.add(session.matmul(t, w), positive))
+        other = session.capture(x, session.add(session.matmul(f, w), negative))
+        optimizer = session.optimizer("adamw", lr=0.01, weight_decay=0.1,
+                                      schedule="step", step_size=1, gamma=0.5)
+        return body, predicate, other, optimizer, (w, positive, negative)
+
+    def state(session, optimizer, params):
+        arrays = [session.numpy(param) for param in params]
+        scalars = []
+        for param in params:
+            values = session.optimizer_state(optimizer, param)
+            arrays.extend((session.numpy(values["exp_avg"]), session.numpy(values["exp_avg_sq"])))
+            scalars.append((values["step"], values["beta1_power"], values["beta2_power"]))
+        return arrays, scalars
+
+    with tempfile.TemporaryDirectory(prefix="mojolearn-conditional-resume-") as d, ops.Session() as whole, ops.Session() as first:
+        wb, wc, wo, wopt, wp = components(whole)
+        fb, fc, fo, fopt, fp = components(first)
+        options = dict(targets=target, batch_size=1, shuffle=True, seed=seed)
+        _invoke(wb.fit_if, wc, wo, a, optimizer=wopt, epochs=3, **options)
+        _invoke(fb.fit_if, fc, fo, a, optimizer=fopt, epochs=1, **options)
+        first_curve = np.array(fb.loss_curve_, copy=True)
+        saved, saved_scalars = state(first, fopt, fp)
+        path = Path(d) / "training.mjl"
+        _invoke(fb.save_control, path, condition=fc, otherwise=fo, optimizer=fopt, seed=seed)
+        _refuses(lambda: _invoke(fb.save_control, Path(d) / "bad.mjl", condition=fc, otherwise=fo,
+                                optimizer=999999, seed=seed), "not an optimizer", ValueError)
+        with ops.Session() as resumed:
+            bundle = _invoke(resumed.load_control, path)
+            rb, rc, ro, optimizer = (bundle[name] for name in ("body", "condition", "otherwise", "optimizer"))
+            assert bundle["seed"] == seed and optimizer is not None
+            shared = set(rb.params) & set(ro.params)
+            assert len(shared) == 1
+            params = (next(iter(shared)), next(p for p in rb.params if p not in shared),
+                      next(p for p in ro.params if p not in shared))
+            loaded, loaded_scalars = state(resumed, optimizer, params)
+            assert loaded_scalars == saved_scalars
+            for actual, expected in zip(loaded, saved):
+                _equal(actual, expected)
+            assert resumed.learning_rate(optimizer) == first.learning_rate(fopt)
+            _invoke(rb.fit_if, rc, ro, a, optimizer=optimizer, epochs=2,
+                    targets=target, batch_size=1, shuffle=True, seed=bundle["seed"])
+            actual, actual_scalars = state(resumed, optimizer, params)
+            expected, expected_scalars = state(whole, wopt, wp)
+            assert actual_scalars == expected_scalars
+            assert resumed.learning_rate(optimizer) == whole.learning_rate(wopt)
+            for value, reference in zip(actual, expected):
+                _equal(value, reference)
+            curve = np.concatenate((first_curve, rb.loss_curve_))
+            _equal(curve, wb.loss_curve_)
+            output = _invoke(rb.run_if, rc, ro, a)
+            _equal(output, _invoke(wb.run_if, wc, wo, a))
+            # Recompute the outer file hash so a corrupt step reaches the
+            # semantic state parser, and then prove a valid load still works.
+            raw = bytearray(path.read_bytes())
+            extension = sum(struct.unpack_from("<4I", raw, 12))
+            ni, _ = struct.unpack_from("<2I", raw, extension)
+            struct.pack_into("<q", raw, extension + 8 + (ni - 1) * 8, -1)
+            digest = 0xCBF29CE484222325
+            for byte in raw[:-8]:
+                digest = ((digest ^ byte) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+            struct.pack_into("<Q", raw, len(raw) - 8, digest)
+            damaged = Path(d) / "negative-step.mjl"
+            damaged.write_bytes(raw)
+            _refuses(lambda: _invoke(resumed.load_control, damaged), "invalid parameter step", ValueError)
+            fresh = _invoke(resumed.load_control, path)
+            assert fresh["seed"] == seed and fresh["optimizer"] != optimizer
+            return [*actual, curve, output]
 
 
 def structural_view_optimization():

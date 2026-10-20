@@ -9,6 +9,7 @@ from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, _Reader, _put_shape, program_words, program_from_words, same_shape
 from autograd.program_control import _signature
 from autograd.program_pyapi import _integer
+from autograd.control_training_checkpoint import ControlTraining, save_control_training, read_control_training, restore_control_training
 from autograd.pyapi import program_info
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED
@@ -18,7 +19,7 @@ from training.checkpoint import Checkpoint, CKPT_SECTION_CONTROL_PROGRAM, read_c
 
 def control_save_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, body: PythonObject, condition: PythonObject, otherwise: PythonObject,
-    maximum: PythonObject, path: PythonObject,
+    maximum: PythonObject, path: PythonObject, optimizer: Int = 0, seed: UInt64 = 0,
 ) raises -> PythonObject:
     if Int(py=body._s._id) != Int(py=sid) or Int(py=condition._s._id) != Int(py=sid):
         raise Error("ValueError: control-flow programs must belong to the same session")
@@ -61,7 +62,7 @@ def control_save_py[E: Exec & Movable & Deinitable, KIND: Int](
     ck.section_kind = CKPT_SECTION_CONTROL_PROGRAM
     ck.offsets.append(0)
     var n = 0
-    ck.ext_ints.append(1)
+    ck.ext_ints.append(Int64(2) if optimizer != 0 else Int64(1))
     ck.ext_ints.append(Int64(Int(loop)))
     ck.ext_ints.append(Int64(limit))
     ck.ext_ints.append(Int64(len(handles)))
@@ -93,6 +94,8 @@ def control_save_py[E: Exec & Movable & Deinitable, KIND: Int](
             ck.ext_ints.append(words[0][k])
         for k in range(len(words[1])):  # driver-loop: over serialized scalar options
             ck.ext_floats.append(words[1][k])
+    if optimizer != 0:
+        save_control_training(s[], handles, shapes, ck, optimizer, seed)
     var normalized = native_path(path)
     var written = save_checkpoint(String(py=normalized), ck)
     return PythonObject(written.bytes)
@@ -107,7 +110,8 @@ def control_load_py[E: Exec & Movable & Deinitable, KIND: Int](
     if ck.section_kind != CKPT_SECTION_CONTROL_PROGRAM:
         raise Error("ValueError: not a control-flow checkpoint")
     var r = _Reader(len(ck.ext_ints))
-    if r.take(ck.ext_ints, what) != 1:
+    var version = r.take(ck.ext_ints, what)
+    if version != 1 and version != 2:
         raise Error(what + ": unknown version")
     var kind = r.take(ck.ext_ints, what)
     var limit = r.take(ck.ext_ints, what)
@@ -162,6 +166,9 @@ def control_load_py[E: Exec & Movable & Deinitable, KIND: Int](
                 raise Error(what + ": shared parameter shapes disagree")
             p.params[k] = index
         programs.append(p^)
+    var training = ControlTraining()
+    if version == 2:
+        training = read_control_training(ck, kinds, r, float_at)
     if r.at != len(ck.ext_ints) or float_at != len(ck.ext_floats):
         raise Error(what + ": trailing component metadata")
     for k in range(count):  # driver-loop: over referenced parameter table entries
@@ -176,6 +183,8 @@ def control_load_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: control programs load into an inference session")
     var handles = List[Int]()
     var ids = List[Int]()
+    var optimizer = 0
+    var seed = ck.seed
     try:
         for k in range(count):  # driver-loop: over unique restored parameter buffers
             var sh = shapes[k]
@@ -184,11 +193,13 @@ def control_load_py[E: Exec & Movable & Deinitable, KIND: Int](
                                4, sh.rows(), sh.cols(), sh.cols() * 4, 4)
             var h = s[].upload_ids(source, sh) if kinds[k] == 1 else s[].upload_nd(source, sh, False)
             handles.append(h)
-        _ = ck^  # keep checkpoint payload alive until every upload has consumed it
         for j in range(components):  # driver-loop: over restored graph bindings
             for k in range(len(programs[j].params)):  # driver-loop: over shared handle rebinding
                 programs[j].params[k] = handles[programs[j].params[k]]
             ids.append(s[].add_program(programs[j].copy()))
+        if training.present:
+            optimizer = restore_control_training(s[], handles, shapes, ck, training)
+        _ = ck^  # parameter and optimizer uploads have now consumed the payload
     except error:
         for j in range(len(ids)):  # driver-loop: over partial restored graphs
             s[].program_free(ids[j])
@@ -201,4 +212,6 @@ def control_load_py[E: Exec & Movable & Deinitable, KIND: Int](
     out["body"] = program_info(ids[0], s[].program(ids[0]))
     out["condition"] = program_info(ids[1], s[].program(ids[1]))
     out["otherwise"] = program_info(ids[2], s[].program(ids[2])) if kind == 0 else PythonObject(None)
+    out["optimizer"] = PythonObject(optimizer) if training.present else PythonObject(None)
+    out["seed"] = PythonObject(Int(seed >> 32)).__lshift__(32).__or__(Int(seed & 0xffffffff))
     return out
