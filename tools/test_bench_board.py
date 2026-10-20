@@ -520,7 +520,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
     # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
     neural = bb.plan_races("apple", ["identical"], ["neural"])
-    assert len(neural) == 18 and sum(len(r["arms"]) for r in neural) == 64
+    assert len(neural) == 21  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
     assert len(both) == 23 and sum(len(r["arms"]) for r in both) == 112
     assert "family neural     races=23 cells=112" in text
