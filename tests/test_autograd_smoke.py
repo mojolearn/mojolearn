@@ -3,9 +3,9 @@
 """Autograd smoke: a tiny MLP and a tiny LSTM fit through the installed bindings' default training
 path (the MLP's and the recurrent models' backward runs on the autograd tape), in identical mode. Each fit must give finite
 losses and predictions, and its digest is checked against tests/autograd_smoke_digests.json, the
-expected-digest file, which must exist. A digest the file does not hold yet (null) is written to
-$MOJOLEARN_AUTOGRAD_SMOKE_OUT for the orchestrator to record; once recorded, every vendor must give
-the same digest (identical mode: the same bits on Apple, NVIDIA and AMD).
+expected-digest file, which must contain a reference for each model. Observed digests are also written
+to $MOJOLEARN_AUTOGRAD_SMOKE_OUT when set. Every vendor must give the recorded digest
+(identical mode: the same bits on Apple, NVIDIA and AMD).
 
 Sizes are scikit-learn-test small (a correctness check, not a measurement): it runs in seconds,
 almost all of it the binding load. tools/autograd_smoke.py runs it as a 5 s smoke entry."""
@@ -35,16 +35,15 @@ def _digest(*arrays):
 def _check(name, got):
     assert DIGESTS.is_file(), "the expected-digest file %s is missing" % DIGESTS
     doc = json.loads(DIGESTS.read_text())
-    want = doc["digests"].get(name, "absent")
-    assert want != "absent", "%s has no entry %r" % (DIGESTS.name, name)
+    want = doc["digests"].get(name)
+    assert isinstance(want, str) and len(want) == 16, "%s has no recorded digest for %r" % (DIGESTS.name, name)
     out = os.environ.get("MOJOLEARN_AUTOGRAD_SMOKE_OUT")
     if out:
         path = Path(out)
         seen = json.loads(path.read_text()) if path.is_file() else {}
         seen[name] = got
         path.write_text(json.dumps(seen, indent=1, sort_keys=True))
-    if want is not None:
-        assert got == want, "%s: digest %s, the recorded identical digest is %s" % (name, got, want)
+    assert got == want, "%s: digest %s, the recorded identical digest is %s" % (name, got, want)
 
 
 def test_mlp_fit_default_path():

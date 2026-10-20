@@ -17,6 +17,9 @@ sequential-fit and ops-session-step lanes in miniature) through the installed wh
 `not built`, never a pass. The importer probes (import-model-smoke; since 2026-10-20, lane ag-torch-twins,
 import-torch-smoke, a torch.export import) run there too; import-torch-smoke reads `SKIPPED` when the
 wheel's environment has no torch (set MOJOLEARN_REQUIRE_TORCH=1 in the box environment to fail instead).
+The shared registry also includes captured training/replay, dropout, validation, optimizers, rank-N,
+higher-order public checks and the Mamba/LM/small-MLP/Samba tape binaries. Python entries verify their
+actual compiled binding; incomplete pytest coverage and importer refusals are reported explicitly.
 Nothing here times, measures, rents or deletes anything.
 """
 

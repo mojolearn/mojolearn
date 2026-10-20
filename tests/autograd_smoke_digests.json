@@ -2,9 +2,11 @@
  "schema": "mojolearn-autograd-smoke-digests/1",
  "mode": "identical",
  "test": "tests/test_autograd_smoke.py",
- "how": "null = not recorded yet; the orchestrator copies the first green run's MOJOLEARN_AUTOGRAD_SMOKE_OUT values here, after which Apple, NVIDIA and AMD must all give them",
+ "how": "Required references recorded on CPU and Metal; every identical GPU must match. Recording these references is not a fresh NVIDIA/AMD qualification.",
+ "recorded_source": "7939b679a2079051f191d707067a487a9741fcce",
+ "evidence": "bench/results/autograd_smoke/2026-10-20/summary.json",
  "digests": {
-  "mlp": null,
-  "lstm": null
+  "mlp": "df507350b0b49f3f",
+  "lstm": "ff646fc6945ed702"
  }
 }
