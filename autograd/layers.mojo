@@ -57,4 +57,5 @@ def layer_norm[E: Exec](
     saved.p5 = rstd
     saved.p6 = tape.reserve(ex, splits * d)
     saved.p7 = tape.reserve(ex, splits * d)
-    return tape.custom(ex, [x, weight, bias], output, m, d, LAYER_NORM, saved)
+    # lane ag-rankn-core: the output keeps x's shape (metadata; rows x cols is m x d)
+    return tape.custom_nd(ex, [x, weight, bias], output, tape.shape_of(x), LAYER_NORM, saved)

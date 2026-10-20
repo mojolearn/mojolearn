@@ -1354,7 +1354,8 @@ struct Tape(Movable):
         args.p2 = output
         ex.launch[OP_AG_BIN_FWD](args, rows * cols)
         var shape = self._binary_shape(a_at, b_at, rows, cols)  # rank-N metadata only
-        return self._with_shape(self._record(ex, output, rows, cols, op, [x, y], args), shape)
+        var t = self._record(ex, output, rows, cols, op, [x, y], args)
+        return self._with_shape(t, shape)
 
     def add[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor) raises -> Tensor:
         """Add tensors with scalar, row, or column broadcasting."""
@@ -1406,7 +1407,8 @@ struct Tape(Movable):
             a.f0 = scale
             ex.launch[OP_AG_UNARY_FWD](a, n.rows * n.cols)
         var shape = self._shapes[n_at]  # rank-N metadata only: the input's shape
-        return self._with_shape(self._record(ex, output, n.rows, n.cols, op, [x], a), shape)
+        var t = self._record(ex, output, n.rows, n.cols, op, [x], a)
+        return self._with_shape(t, shape)
 
     def relu[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         return self._unary(ex, x, RELU)
@@ -1467,9 +1469,8 @@ struct Tape(Movable):
         a.p1 = output
         ex.launch[OP_AG_DROPOUT_FWD](a, n.rows * n.cols)
         var shape = self._shapes[n_at]  # rank-N metadata only: the input's shape
-        return self._with_shape(
-            self._record(ex, output, n.rows, n.cols, DROPOUT, [x], dropout_args(seed, counter, p, scale)), shape,
-        )
+        var t = self._record(ex, output, n.rows, n.cols, DROPOUT, [x], dropout_args(seed, counter, p, scale))
+        return self._with_shape(t, shape)
 
     def matmul[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor) raises -> Tensor:
         """Multiply two matrices using the existing native GEMM executor.
@@ -1514,10 +1515,12 @@ struct Tape(Movable):
             saved.i4 = r[1]
             saved.i5 = r[2]
             saved.i6 = 1
-            return self._with_shape(self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved), shape)
+            var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved)
+            return self._with_shape(t, shape)
         else:
             _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
-            return self._with_shape(self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args()), shape)
+            var t = self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
+            return self._with_shape(t, shape)
 
     def linear[E: Exec](
         mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
@@ -1648,7 +1651,8 @@ struct Tape(Movable):
         saved.f0 = l2
         saved.f1 = divisor
         var shape = self._lead_shape(a_at, cols)  # rank-N metadata only
-        return self._with_shape(self._record(ex, output, rows, cols, LINEAR, parents, saved), shape)
+        var t = self._record(ex, output, rows, cols, LINEAR, parents, saved)
+        return self._with_shape(t, shape)
 
     def transpose[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         var n_at = self._use(ex, x)
@@ -1698,7 +1702,8 @@ struct Tape(Movable):
         var n_at = self._use(ex, x)
         var n = self._nodes[n_at]
         var shape = self._shapes[n_at]  # rank-N metadata only: x's shape
-        return self._with_shape(self.variable(ex, n.value, n.rows, n.cols, False), shape)
+        var t = self.variable(ex, n.value, n.rows, n.cols, False)
+        return self._with_shape(t, shape)
 
     def _reduce[E: Exec](mut self, mut ex: E, x: Tensor, axis: Int, mean: Bool) raises -> Tensor:
         if axis < -1 or axis > 1:
