@@ -97,9 +97,9 @@ from autograd.kernels.embedding import (
 )
 from embedding.checks.embedding_oracle import EmbConfig
 from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
-from training.checks.loss import identical_ce_backward_into
+from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import CeConfig
-from training.chunked_lm_head_v2 import chunked_lm_head_v2_gemm_backward_into
+from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
     LlamaDeviceWeights,

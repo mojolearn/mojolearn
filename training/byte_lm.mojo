@@ -84,15 +84,19 @@ from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena
 from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
 from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
-    ANY_LOSS_SABOTAGE, identical_ce_forward_into, identical_ce_backward_into,
-    identical_ce_ones_floats, identical_ce_workspace_max_floats,
+    ANY_LOSS_SABOTAGE,
+    identical_ce_forward_into,
+    identical_ce_ones_floats,
+    identical_ce_workspace_max_floats,
 )
+from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_CHUNK,
-    chunked_lm_head_v2_gemm_forward_into, chunked_lm_head_v2_gemm_backward_into,
+    chunked_lm_head_v2_gemm_forward_into,
     chunked_lm_head_v2_gemm_workspace_floats,
 )
+from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
 from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
     identical_optimizer_workspace_floats,

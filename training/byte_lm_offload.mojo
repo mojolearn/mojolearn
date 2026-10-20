@@ -28,7 +28,8 @@ from gemm.contract import OP_NT
 from gemm.neural_dispatch import identical_gemm_into
 from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.neural_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
-from training.checks.loss import identical_ce_forward_into, identical_ce_backward_into
+from training.checks.loss import identical_ce_forward_into
+from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import CeConfig
 
 from core.identity_trace import IdentityTrace
