@@ -102,10 +102,12 @@ ARCHES = None
 
 
 def split_fixture(wheel, version):
-    """The split set (core, mojolearn_nvidia, mojolearn_amd as the payload's sets
-    require) the fixture's combined wheel is a partition of, with the
-    .dist-info contents tools/wheel_api_audit.py split_audit requires. The
-    combined wheel is removed."""
+    """The split set (mojolearn_core, mojolearn_nvidia, mojolearn_amd as the
+    payload's sets require, and the file-free Linux mojolearn when both vendors
+    are packed, as pack_wheel does since 2026-10-20) the fixture's combined
+    wheel is a partition of, with the .dist-info contents
+    tools/wheel_api_audit.py split_audit requires. The combined wheel is
+    removed."""
     plugins = gate.surface.load_gpu_plugins()
     dist = 'mojolearn-' + version + '.dist-info/'
     with zipfile.ZipFile(wheel) as archive:
@@ -124,21 +126,38 @@ def split_fixture(wheel, version):
         if not name.startswith(dist):
             parts.setdefault(plugins.member_vendor(name), {})[plugins.installed_member(name)] = data
     out = []
-    for vendor, files in sorted(parts.items(), key=lambda kv: kv[0] or ''):
+    entries = sorted(parts.items(), key=lambda kv: kv[0] or '')
+    if set(plugins.vendors()) <= set(parts):
+        entries.append((plugins.META_PROFILE, {}))
+    for vendor, files in entries:
         if vendor is None:
-            wdist, role, dist_name = dist, plugins.CORE_PROFILE, 'mojolearn'
-            # the core declares no extras and requires BOTH plugins exactly
-            meta = ['Metadata-Version: 2.4', 'Name: mojolearn', 'Version: ' + version]
+            wdist = plugins.CORE_WHEEL_NAME + '-' + version + '.dist-info/'
+            role, dist_name = plugins.CORE_PROFILE, plugins.CORE_DISTRIBUTION
+            # the core (mojolearn-core) declares no extras and requires no vendor
+            meta = ['Metadata-Version: 2.4', 'Name: ' + dist_name, 'Version: ' + version]
             meta += ['Requires-Dist: ' + req for req in plugins.core_requirements(version)]
             files[wdist + plugins.CORE_MARKER] = json.dumps(plugins.core_marker(version)).encode()
-            name = 'mojolearn-' + version + '-' + tag + '.whl'
+            name = plugins.CORE_WHEEL_NAME + '-' + version + '-' + tag + '.whl'
+        elif vendor == plugins.META_PROFILE:
+            # the file-free Linux mojolearn: the core and both vendors at this version
+            wdist = plugins.META_WHEEL_NAME + '-' + version + '.dist-info/'
+            role, dist_name = plugins.META_PROFILE, plugins.META_DISTRIBUTION
+            meta = ['Metadata-Version: 2.4', 'Name: ' + dist_name, 'Version: ' + version]
+            meta += ['Requires-Dist: ' + req for req in plugins.meta_requirements(version)]
+            files[wdist + plugins.PLUGIN_MARKER] = json.dumps(plugins.meta_marker(version)).encode()
+            name = plugins.META_WHEEL_NAME + '-' + version + '-' + tag + '.whl'
         else:
             row = plugins.PLUGINS[vendor]
             wdist, role, dist_name = row['wheel_name'] + '-' + version + '.dist-info/', row['profile'], row['distribution']
-            meta = ['Metadata-Version: 2.4', 'Name: ' + dist_name, 'Version: ' + version,
-                    'Requires-Dist: mojolearn==' + version]
+            # each vendor requires mojolearn-core (NVIDIA also its PTX package)
+            meta = ['Metadata-Version: 2.4', 'Name: ' + dist_name, 'Version: ' + version]
+            meta += ['Requires-Dist: ' + req for req in plugins.package_requirements(row['profile'], version)]
             arches = {n.split('/')[2] for n in files}
-            files[wdist + plugins.PLUGIN_MARKER] = json.dumps(plugins.plugin_marker(vendor, version, arches)).encode()
+            # the NVIDIA marker binds its PTX package's manifest by digest
+            # (gpu_plugins.ptx_shipped); the PTX wheel itself is not in this set
+            bundle = dict(manifest_sha256='c' * 64) if row.get('ptx') else None
+            files[wdist + plugins.PLUGIN_MARKER] = json.dumps(
+                plugins.plugin_marker(vendor, version, arches, bundled_ptx=bundle)).encode()
             name = row['wheel_name'] + '-' + version + '-' + tag + '.whl'
         files[wdist + 'METADATA'] = ('\n'.join(meta) + '\n').encode()
         files[wdist + 'WHEEL'] = ('Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: ' + tag + '\n').encode()
@@ -378,7 +397,8 @@ class SplitSet(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             wheels, qualification = fixture(root, split=True)
-            self.assertEqual(sorted(w.name.split('-')[0] for w in wheels), ['mojolearn', 'mojolearn_amd', 'mojolearn_nvidia'])
+            self.assertEqual(sorted(w.name.split('-')[0] for w in wheels),
+                             ['mojolearn', 'mojolearn_amd', 'mojolearn_core', 'mojolearn_nvidia'])
             result, ordered = self.check(wheels, qualification, root)
             self.assertEqual(result['status'], 'PASSED')
             self.assertEqual(result['assembly_profile'], gate.SPLIT_PROFILE)
@@ -396,7 +416,8 @@ class SplitSet(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 wheels, qualification = fixture(root, split=True)
-                self.assertEqual(len(wheels), 2)
+                # mojolearn_core and mojolearn_nvidia; no Linux mojolearn without AMD
+                self.assertEqual(sorted(w.name.split('-')[0] for w in wheels), ['mojolearn_core', 'mojolearn_nvidia'])
                 result, ordered = self.check(wheels, qualification, root)
                 self.assertEqual(result['vendors'], ['cuda'])
                 self.assertEqual(ordered.call_count, 0)
