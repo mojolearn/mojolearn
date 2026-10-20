@@ -77,8 +77,8 @@ def distributed_open[E: Exec & Movable & Deinitable, KIND: Int](
     var opt = Int(py=optimizer)
     var oi = s[]._opt_index(opt)
     var o = s[].opts[oi]
-    var ip = [o.cfg.kind, 1 if o.cfg.nesterov else 0, o.sched, o.sched_step]
-    var fp = [o.cfg.lr, o.cfg.momentum, o.cfg.beta1, o.cfg.beta2, o.cfg.eps, o.cfg.weight_decay, o.gamma]
+    var ip: List[Int] = [o.cfg.kind, 1 if o.cfg.nesterov else 0, o.sched, o.sched_step]
+    var fp: List[Float32] = [o.cfg.lr, o.cfg.momentum, o.cfg.beta1, o.cfg.beta2, o.cfg.eps, o.cfg.weight_decay, o.gamma]
     var values = List[List[Float32]]()
     var trainable = List[Bool](length=len(p.params), fill=False)
     for k in range(len(parameters)):  # driver-loop: selected trainable handles
