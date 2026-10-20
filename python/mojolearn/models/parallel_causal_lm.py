@@ -137,6 +137,10 @@ class ParallelCausalLM(CausalLM):
     def _initialize_native_runtime(self):
         pass
 
+    @property
+    def blocks(self):
+        return list(self._blocks)
+
     def _run(self, ids, state, step, what):
         """The stack: embedding, the blocks, the final norm, the head. ONE
         spelling for the stateless forward, the stateful forward and the

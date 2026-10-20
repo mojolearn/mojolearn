@@ -16,6 +16,7 @@ struct GenerationBoundary(Defaultable, Movable):
     var state_cls: PythonObject
     var layer_classes: PythonObject
     var stream_cls: PythonObject
+    var hash_type: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -24,6 +25,7 @@ struct GenerationBoundary(Defaultable, Movable):
         self.state_cls = PythonObject(None)
         self.layer_classes = PythonObject(None)
         self.stream_cls = PythonObject(None)
+        self.hash_type = PythonObject(None)
 
 
 comptime GENERATION_BOUNDARY = _Global[
@@ -40,6 +42,9 @@ def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
     g[].state_cls = classes[1]
     g[].layer_classes = classes[2]
     g[].stream_cls = classes[3]
+    g[].hash_type = Python.import_module("hashlib").sha256
+    if g[].bi.type(g[].hash_type) is not g[].bi.type(g[].bi.len):
+        raise Error("generation: SHA256 must be a native extension entry")
     return PythonObject(None)
 
 
@@ -111,9 +116,9 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var shape = PythonObject(None)
     var view = PythonObject(None)
+    var column_major = False
     if g[].bi.type(value) is g[].array_cls:
-        if String(value.order) != "C":
-            raise Error("generation: Array ids must be C-contiguous")
+        column_major = String(value.order) == "F"
         shape = value.shape
         view = value._mv
     else:
@@ -136,7 +141,8 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
     var out = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
     for i in range(b * l):
-        var id = Int(py=packed[i])
+        var source = (i // l) + (i % l) * b if column_major else i
+        var id = Int(py=packed[source])
         if id < 0 or id >= vocab:
             raise Error("generation: id outside vocabulary at flat index " + String(i))
         dst[i] = Int32(id)

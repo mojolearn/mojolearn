@@ -365,10 +365,7 @@ class Tokenizer:
     def pretokenize(self, data):
         """The pre-tokens of `data` (bytes) under this tokenizer's pattern,
         as a list of bytes; the cut before any merge."""
-        raw = _text_bytes(data)
-        out = array.array("q", bytes(8 * (len(raw) + 1)))
-        count = int(self._m.vocab_pretokenize(self._handle, _ro(raw, "text"), len(raw), addr(out, name="bounds")))
-        return [raw[a:b] for a, b in zip(out[:count - 1], out[1:count])]  # cpu-route: slices the text into pretokens at native bounds (text input)
+        return self._m.vocab_pretokenize_public(self, data)
 
     _bytes = staticmethod(_text_bytes)
 

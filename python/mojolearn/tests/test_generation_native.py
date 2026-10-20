@@ -147,10 +147,37 @@ def test_model_and_array_python_callbacks_are_not_used(tmp_path, monkeypatch):
             patch.setattr(model._prims, name, forbidden)
         for name in ("empty", "zeros", "array", "asarray", "ascontiguousarray"):
             patch.setattr(np, name, forbidden)
+        from mojolearn._mode import PublicOutputsMixin
+        patch.setattr(PublicOutputsMixin, "__getattribute__", forbidden)
         out = model.forward(prompt, state)
         generated = model.generate(prompt, 3, greedy=False, seed=7, top_k=1)
     assert out.shape == (1, 2, 256)
     assert np.asarray(generated).tolist() == [[33, 34, 0, 0, 0]]
+
+
+def test_transitive_runtime_audit_covers_metadata_and_state(tmp_path):
+    from mojolearn._verify_native_runtime import audit_native_call
+    model = load_fixture(tmp_path, uniform=True)
+    parameters = audit_native_call(model.parameters).assert_native()
+    assert parameters["lm_head.weight"] is model._head
+    prompt = np.array([[33, 34]], dtype="i4")
+    state = audit_native_call(model.allocate_state, 1, 8).assert_native()
+    audit_native_call(model.forward, prompt, state).assert_native()
+    audit_native_call(model.reset_state, state).assert_native()
+    stream = audit_native_call(model.stream, prompt, 3, greedy=False, seed=7).assert_native()
+    audit_native_call(stream.read, 1).assert_native()
+    saved = audit_native_call(stream.state_dict).assert_native()
+    audit_native_call(model.resume_generation, saved).assert_native()
+
+
+def test_native_generation_packs_strided_and_fortran_token_inputs(tmp_path):
+    model = load_fixture(tmp_path)
+    ids = np.array([[1, 3, 5], [2, 4, 6]], dtype="i4")
+    want = np.asarray(model.generate(ids, 2)).copy()
+    padded = np.zeros((2, 6), dtype="i8")
+    padded[:, ::2] = ids
+    for value in (padded[:, ::2], np.asfortranarray(ids), Array.from_buffer(np.asfortranarray(ids))):
+        assert np.array_equal(np.asarray(model.generate(value, 2)), want)
 
 
 def test_tokenizer_native_unicode_specials_and_text_generation(tmp_path, monkeypatch):
@@ -175,13 +202,35 @@ def test_tokenizer_native_unicode_specials_and_text_generation(tmp_path, monkeyp
         assert model.resume_generation(saved, tokenizer=tokenizer).read(9) == "\x00\x00"
 
 
+def test_text_stream_retains_incomplete_utf8_across_reads_and_resume(tmp_path):
+    model = load_fixture(tmp_path, uniform=True)
+    # The independent seed0/top-k4 oracle emits 3,1,0. Assign those base-byte
+    # ranks to the three UTF-8 bytes of U+20AC. No tokenizer merge is involved.
+    first = [0xAC, 0x82, 0x41, 0xE2]
+    order = first + [i for i in range(256) if i not in first]
+    tok = Tokenizer([bytes([i]) for i in order], [], pattern="gpt2")
+    stream = model.stream_text("!", 3, tokenizer=tok, greedy=False, seed=0, top_k=4)
+    assert stream.read(1) == ""
+    assert stream.read(1) == ""
+    saved = stream.state_dict()
+    assert stream.read(1) == "€"
+    assert model.resume_generation(saved, tokenizer=tok).read(1) == "€"
+    other = Tokenizer([bytes([i]) for i in range(256)], [], pattern="gpt2")
+    with pytest.raises(Exception, match="tokenizer differs"):
+        model.resume_generation(saved, tokenizer=other)
+    assert model.generate_text("!", 3, tokenizer=tok, greedy=False, seed=0, top_k=4) == "€"
+    short = model.stream_text("!", 2, tokenizer=tok, greedy=False, seed=0, top_k=4)
+    assert short.read(1) == ""
+    assert short.read(1) == "�"
+
+
 def test_public_execution_methods_are_one_native_call():
     import ast
     from pathlib import Path
     from mojolearn.models import causal_lm
     tree = ast.parse(Path(causal_lm.__file__).read_text())
     methods = {"forward", "step", "allocate_state", "reset_state", "generate", "stream",
-               "generate_text", "stream_text", "resume_generation", "read", "info", "state_dict"}
+               "generate_text", "stream_text", "resume_generation", "read", "info", "state_dict", "parameters"}
     checked = []
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name in methods:
