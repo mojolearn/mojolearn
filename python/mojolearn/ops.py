@@ -1083,10 +1083,7 @@ class Session:
         not record. A program saved on one install loads on any other,
         a GPU install or the CPU-only install, and gives the same outputs.
         """
-        if self.record:
-            raise ValueError("programs run in an inference session (Session(record=False))")
-        info = self._b.ops_load_program(self._sid(), os.fspath(path))  # cpu-route: program file read on the host
-        return Program(self, info)
+        return self._session_native(self, "load_program", (path,))
 
     # ------------------------------------------------------------ checkpoints
     def save_state(self, path, params, optimizer=None, *, seed=0, epoch=0, step=0):
@@ -1124,14 +1121,7 @@ class Session:
         ...     opt = s.optimizer("adam", lr=1e-3)
         ...     s.save_state("state.ckpt", [w], optimizer=opt, seed=0, epoch=3, step=120)
         """
-        hs = [_int(h, "handle", 1) for h in params]  # glue: the parameter handles
-        if not hs:
-            raise ValueError("params must hold at least one tensor handle")
-        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
-        counters = _seed_words(seed) + [_int(epoch, "epoch", 0), _int(step, "step", 0)]
-        # Mojo reads each parameter's optimizer state (step count,
-        # bias-correction products, buffers) and writes the file
-        self._b.ops_save_state(self._sid(), os.fspath(path), hs, opt, counters)  # cpu-route: checkpoint file written on the host
+        return self._session_native(self, "save_state", (path, params, optimizer, seed, epoch, step))
 
     def load_state(self, path, optimizer=None, requires_grad=True):
         """Load a file written by :meth:`save_state`.
@@ -1165,14 +1155,7 @@ class Session:
         ...     state = s.load_state("state.ckpt", optimizer=opt)
         ...     (w,) = state["params"]
         """
-        path = os.fspath(path)
-        grad = 1 if (requires_grad and self.record) else 0
-        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
-        # Mojo uploads the parameters and restores the optimizer state
-        # through the session's load_optimizer_state
-        hs, _, lo, hi, epoch, step = self._b.ops_load_state(self._sid(), path, grad, opt)  # cpu-route: checkpoint file read on the host
-        hs = [int(h) for h in hs]  # glue: the new handles
-        return dict(params=hs, seed=(int(hi) << 32) | int(lo), epoch=int(epoch), step=int(step))
+        return self._session_native(self, "load_state", (path, optimizer, requires_grad))
     def load_weights(self, path, names, *, source=None):
         """Load named tensors from a safetensors checkpoint (or a PyTorch
         state_dict) into tensors of this session.
@@ -1517,12 +1500,8 @@ class Program:
         <path>`` runs the saved program on the same inputs and checks that
         every output has the same bits.
         """
-        self._s._b.ops_save_program(self._s._sid(), self._id, os.fspath(path))  # cpu-route: program file written on the host
-        from ._verify_model import record_program
-        record_program(self, path)
+        return self._session_native(self._s, "save_program", (self, path))
 
     def free(self):
         """Release the program (its parameters stay session tensors)."""
-        if self._id is not None and self._s._id is not None:
-            self._s._b.ops_program_free(self._s._sid(), self._id)
-        self._id = None
+        return self._session_native(self._s, "free_program", (self,))

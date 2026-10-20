@@ -32,7 +32,7 @@ def initialize_program_arrays() raises:
         state[].ready = True
 
 
-def output_array(shape: ShapeN) raises -> PythonObject:
+def output_array(shape: ShapeN, dtype: String = "float32") raises -> PythonObject:
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
     if not state[].ready:
         raise Error("program array boundary must be initialized during session setup")
@@ -42,4 +42,4 @@ def output_array(shape: ShapeN) raises -> PythonObject:
     var storage = state[].builtins.bytearray(shape.count() * 4)
     # The C ndarray constructor retains storage as .base. Native executor
     # writes every value; no Python ndarray constructor/helper is involved.
-    return state[].ndarray(dims, dtype="float32", buffer=storage)
+    return state[].ndarray(dims, dtype=PythonObject(dtype), buffer=storage)

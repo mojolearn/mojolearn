@@ -19,9 +19,9 @@ EXPECTED_CASES = (
     "native_inputs", "dynamic_shapes_and_recovery", "lazy_conditional",
     "bounded_while", "shape_growing_while", "exact_duplicate_elimination",
     "training_after_optimization", "node_diagnostics_and_profile",
-    "saved_component_roundtrip", "native_session_boundary",
+    "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2)))
 
 
 _AUDITS = []
@@ -244,11 +244,21 @@ def saved_component_roundtrip():
             x = s.tensor(a)
             condition = s.capture(x, s.less(x, s.full((1, 1), 3)))
             body = s.capture(x, s.add(x, s.full((1, 1), 1)))
-            condition.save(Path(d) / "condition.mjl")
-            body.save(Path(d) / "body.mjl")
+            _invoke(condition.save, Path(d) / "condition.mjl")
+            _invoke(body.save, Path(d) / "body.mjl")
+            for name in ("condition", "body"):
+                path = Path(d) / (name + ".mjl")
+                report = json.loads(Path(str(path) + ".verify.json").read_text())
+                assert report["format"] == "mojolearn-model-verify/1"
+                assert report["model"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+                assert report["model"]["bytes"] == path.stat().st_size
+                assert report["inputs"][0]["shape"] == [1, 1]
+                assert report["outputs"][0]["shape"] == [1, 1]
+                from ._verify_model import verify, compare
+                assert compare(verify(str(path), expect=report), report)[0] == "MATCH"
         with ops.Session() as s:
-            condition = s.load_program(Path(d) / "condition.mjl")
-            body = s.load_program(Path(d) / "body.mjl")
+            condition = _invoke(s.load_program, Path(d) / "condition.mjl")
+            body = _invoke(s.load_program, Path(d) / "body.mjl")
             out = _invoke(body.while_loop, a, condition=condition, max_iterations=4)
             assert out["iterations"] == 3 and out["stopped"] is True
             _equal(out["outputs"], np.array([[3]], np.float32))
@@ -292,6 +302,37 @@ def native_session_boundary():
         _invoke(s.reset)
         _invoke(s.free, x)
     return [out, first, second]
+
+
+def native_checkpoint_boundary():
+    import numpy as np
+    from . import ops
+    with tempfile.TemporaryDirectory(prefix="mojolearn-state-") as d:
+        path = Path(d) / "state.ckpt"
+        with ops.Session(record=True) as s:
+            x = s.tensor([[2.0]], requires_grad=True)
+            opt = s.optimizer("sgd", lr=0.25, momentum=0.5)
+            s.backward(s.mul(x, x))
+            s.step(opt, x)
+            saved = s.numpy(x)
+            _equal(saved, np.array([[1]], np.float32))
+            _invoke(s.save_state, path, [x], optimizer=opt, seed=2**63 + 1, epoch=3, step=1)
+            s.reset()
+            s.backward(s.mul(x, x))
+            s.step(opt, x)
+            expected = s.numpy(x)
+        with ops.Session(record=True) as s:
+            opt = s.optimizer("sgd", lr=0.25, momentum=0.5)
+            state = _invoke(s.load_state, path, optimizer=opt)
+            assert state["seed"] == 2**63 + 1 and state["epoch"] == 3 and state["step"] == 1
+            x, = state["params"]
+            _equal(s.numpy(x), saved)
+            s.backward(s.mul(x, x))
+            s.step(opt, x)
+            restored = s.numpy(x)
+            _equal(restored, expected)
+            _equal(restored, np.array([[0]], np.float32))
+    return [saved, restored]
 
 
 def _digest(a):
