@@ -75,3 +75,5 @@ _partitioned_program.PartitionedProgram	native model/tensor/pipeline partitions:
 Program.run_dynamic	native variable-rank replay; cross-vendor qualification pending
 Program.vjp_if	native conditional differentiation; cross-vendor qualification pending
 Program.vjp_while	native loop differentiation; cross-vendor qualification pending
+Session.execution_profile_begin	native execution counters; installed-release qualification pending
+Session.execution_profile_end	native execution counters; installed-release qualification pending

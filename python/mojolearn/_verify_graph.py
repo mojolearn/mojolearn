@@ -21,9 +21,9 @@ EXPECTED_CASES = (
     "training_after_optimization", "node_diagnostics_and_profile",
     "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
     "variable_rank_replay",
-    "executed_control_vjp",
+    "executed_control_vjp", "executor_accounting",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2)))
 
 
 _AUDITS = []
@@ -361,12 +361,68 @@ def node_diagnostics_and_profile():
         assert profile["parameter_bytes"] == 24
         assert profile["node_sync_count"] == 4
         assert profile["peak_tape_reserved_bytes"] >= out.nbytes
+        executor = profile["executor"]
+        assert executor["complete"] and executor["operations"]
+        assert executor["sync_calls"] >= profile["node_sync_count"] + 1
+        assert executor["retired_bytes"] == executor["staging_bytes"] == 0
+        assert executor["peak_retained_bytes"] >= executor["retained_bytes"]
+        _invoke(s.execution_profile_begin)
+        _refuses(lambda: _invoke(p.profile, a), "already active", ValueError)
+        _invoke(s.execution_profile_end)
+        _refuses(lambda: _invoke(p.profile, np.ones((2, 5), np.float32), dynamic_shapes=True),
+                 "program node 0 (matmul)")
+        _equal(_invoke(p.profile, a)["outputs"], out)
         for row in profile["nodes"]:
             assert row["enqueue_ns"] >= 0 and row["wait_ns"] >= 0
         _refuses(lambda: _invoke(p.run, np.ones((2, 5), np.float32), dynamic_shapes=True),
                  "program node 0 (matmul) inputs=[(2, 5), (3, 2)]")
         _equal(_invoke(p.run, a), out)
         return [out]
+
+
+def executor_accounting():
+    import numpy as np
+    from . import ops
+    a = np.array([[1, -2], [3, -4]], np.float32)
+    with ops.Session(record=True) as s:
+        _refuses(lambda: _invoke(s.execution_profile_end), "no execution profile", ValueError)
+        _invoke(s.execution_profile_begin)
+        _refuses(lambda: _invoke(s.execution_profile_begin), "already active", ValueError)
+        x = _invoke(s.tensor, a, requires_grad=True)
+        y = _invoke(s.sum, _invoke(s.mul, x, x))
+        _invoke(s.backward, y)
+        gradient = _invoke(s.grad, x)
+        value = _invoke(s.numpy, y)
+        _equal(gradient, a * np.float32(2))
+        _equal(value, np.array([[30]], np.float32))
+        _invoke(s.free, x)
+        _invoke(s.reset)  # Session retirement returns owned storage at this boundary.
+        report = _invoke(s.execution_profile_end)
+        assert report["format"] == "mojolearn-execution-profile/1" and report["complete"]
+        assert report["allocations"] > 0 and report["allocated_bytes"] >= a.nbytes
+        assert report["freed_bytes"] >= a.nbytes and report["frees"] >= 1
+        assert report["retained_bytes"] == report["live_bytes"]
+        assert report["peak_retained_bytes"] >= report["retained_bytes"]
+        assert report["retired_bytes"] == report["staging_bytes"] == 0
+        assert report["sync_calls"] > 0 and report["sync_ns"] >= 0
+        assert report["operations"] and all(row["calls"] > 0 for row in report["operations"])
+        assert all(row["host_call_ns"] >= 0 for row in report["operations"])
+        assert report["upload_host_ns"] >= 0 and report["download_host_ns"] >= 0
+        if report["device"]:
+            assert report["kernel_enqueues"] > 0
+            assert report["upload_bytes"] >= a.nbytes
+            assert report["download_bytes"] >= value.nbytes + gradient.nbytes
+            assert report["peak_staging_bytes"] > 0
+        else:
+            assert report["kernel_enqueues"] == report["upload_bytes"] == report["download_bytes"] == 0
+            assert report["host_copy_bytes"] >= a.nbytes + value.nbytes + gradient.nbytes
+        _refuses(lambda: _invoke(s.execution_profile_end), "no execution profile", ValueError)
+        _invoke(s.execution_profile_begin)
+        _refuses(lambda: _invoke(s.numpy, x), "not a live", ValueError)
+        empty = _invoke(s.execution_profile_end)
+        assert empty["allocations"] == empty["frees"] == 0 and empty["operations"] == []
+        assert empty["retained_bytes"] == report["retained_bytes"]
+    return [value, gradient]
 
 
 def saved_component_roundtrip():

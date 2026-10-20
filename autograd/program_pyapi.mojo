@@ -5,6 +5,7 @@
 from std.python import Python, PythonObject
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
+from autograd.execution_profile_pyapi import execution_profile_object
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
@@ -171,6 +172,12 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         parameter_bytes += p.param_shapes[j].count() * 4
     s[].program_trace = ProgramTrace()
     s[].program_trace.enabled = Bool(py=profile)
+    if Bool(py=profile):
+        try:
+            s[].ex.execution_profile_begin()
+        except error:
+            s[].program_trace.enabled = False
+            raise error
     var started = Int(perf_counter_ns())
     try:
         for k in range(len(inputs)):  # driver-loop: over native uploads
@@ -190,6 +197,8 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[].program_trace.enabled = False
         for k in range(len(buffers)):  # driver-loop: over owners acquired before a failed upload
             s[].ex.free(buffers[k])
+        if Bool(py=profile):
+            _ = s[].ex.execution_profile_end()
         raise err
     _ = inputs^  # raw addresses erase origins; retain scalar sequence owners through upload
     var upload_ns = Int(perf_counter_ns()) - started
@@ -220,6 +229,8 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         swap(held, s[].prog_tape)
         for k in range(len(buffers)):  # driver-loop: over input owners
             s[].ex.free(buffers[k])
+        if Bool(py=profile):
+            _ = s[].ex.execution_profile_end()
         raise err
     s[].program_trace.enabled = False
     s[]._drop_temps(temps)
@@ -229,7 +240,9 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[].ex.free(buffers[k])
     if not Bool(py=profile):
         return _result(result)
+    var executor_profile = s[].ex.execution_profile_end()
     var report = _dict()
+    report["executor"] = execution_profile_object(executor_profile)
     report["timing"] = "host enqueue and synchronized wait; profiling serializes the queue"
     report["original_nodes"] = original_nodes
     report["executed_nodes"] = p.n_nodes()
