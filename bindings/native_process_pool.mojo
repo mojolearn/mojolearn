@@ -109,7 +109,7 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
     keys = bi.list(env)
     for i in range(len(keys)):  # driver-loop: over native process environment records
         result.append(String(keys[i]) + "=" + String(env[keys[i]]))
-    return result
+    return result^
 
 
 def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: String) raises -> PythonObject:
@@ -251,7 +251,7 @@ def process_pool_start(pool: PythonObject) raises:
                 group.append(devices[i])
             var env = _process_environment(devices, group)
             var token = String(p[].random(32).hex())
-            var argv = List[String](p[].executable, "-m", String(pool["module"]), String(port), token)
+            var argv = [String(p[].executable), String("-m"), String(pool["module"]), String(port), String(token)]
             var pid = transport_spawn(p[].executable, argv, env)
             var worker = bi.dict()
             worker["pid"] = pid
