@@ -6,7 +6,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session
 from autograd.program_pyapi import ProgramInput, _integer
-from autograd.program_arrays import output_array
+from autograd.program_arrays import output_array, is_integer_input
 from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
 from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from autograd.program_save import ops_program_save_native_py
@@ -22,8 +22,7 @@ def _int(x: PythonObject, name: String = "integer", low: Int = -9223372036854775
 
 
 def _is_int(x: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
-    return not Bool(py=b.isinstance(x, b.bool)) and Bool(py=b.hasattr(x, "__index__"))
+    return is_integer_input(x)
 
 
 def _ints(x: PythonObject, name: String = "integer", low: Int = -9223372036854775807) raises -> List[Int]:

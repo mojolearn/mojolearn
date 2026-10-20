@@ -8,7 +8,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
-from autograd.program_arrays import output_array
+from autograd.program_arrays import output_array, is_integer_input
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
@@ -20,6 +20,10 @@ from autograd.pyapi import _input_handles, _seed, ival, fval, _dims_out
 
 def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
     var nd = Int(py=a.ndim)
+    if nd > 8:
+        raise Error("ValueError: tensor rank must be at most 8")
+    if Int(py=a.size) == 0:
+        raise Error("ValueError: input must not be empty")
     var dims = List[Int]()
     if nd == 0:
         dims.append(1)
@@ -34,7 +38,11 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
     var size = Int(py=a.itemsize)
     if not Bool(py=a.dtype.isnative):
         raise Error("TypeError: " + what + " must be in native byte order")
-    var kind = cast_in_kind(Int(py=a.dtype.num), size, what)
+    var kind: Int
+    try:
+        kind = cast_in_kind(Int(py=a.dtype.num), size, what)
+    except error:
+        raise Error("TypeError: " + String(error))
     var s0 = sh.cols() * size
     var s1 = size
     if nd == 1:
@@ -43,7 +51,7 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
         s0 = Int(py=a.strides[0])
         s1 = Int(py=a.strides[1])
     elif nd > 2 and not Bool(py=a.flags.c_contiguous):
-        raise Error(what + ": tensors above rank two must be C-contiguous")
+        raise Error("ValueError: " + what + ": tensors above rank two must be C-contiguous")
     var src = CastIn(Int(py=a.__array_interface__["data"][0]), kind, size, sh.rows(), sh.cols(), s0, s1)
     src.check(what)
     return (src, sh)
@@ -90,7 +98,7 @@ struct ProgramInput(Movable):
             self.src = parsed[0]
             self.shape = parsed[1]
             if integer and self.src.kind != CAST_KIND_SIGNED and self.src.kind != CAST_KIND_UNSIGNED:
-                raise Error("TypeError: program input holds ids and must be an integer array")
+                raise Error("TypeError: program input holds ids and must be integers (an integer array)")
         else:
             var dims = List[Int]()
             var leaf_depth = -1
@@ -326,7 +334,7 @@ def ops_program_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
 
 def _integer(v: PythonObject, what: String, low: Int) raises -> Int:
     var b = Python.import_module("builtins")
-    if Bool(py=b.isinstance(v, b.bool)) or not Bool(py=b.hasattr(v, "__index__")):
+    if not is_integer_input(v):
         raise Error("TypeError: " + what + " must be an integer")
     var value = Int(py=v)
     if value < low:
@@ -372,7 +380,7 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var seed_word = UInt64(py=seed)
     var params = p.params.copy()
     if String(py=b.type(parameters).__name__) != "NoneType":
-        if Bool(py=b.hasattr(parameters, "__index__")):
+        if is_integer_input(parameters):
             params.clear()
             params.append(_integer(parameters, "parameter", 1))
         else:
