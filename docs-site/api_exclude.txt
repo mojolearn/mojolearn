@@ -72,3 +72,5 @@ Program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
 Session.capture	captured program: checks pending on CPU, Apple, NVIDIA and AMD
 Session.run	captured program: checks pending on CPU, Apple, NVIDIA and AMD
 Session.load_program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
+Sequential.load_state_dict	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD
+Session.load_weights	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD

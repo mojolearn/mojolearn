@@ -51,6 +51,7 @@ FAMILIES = (
                       "autograd/profile.mojo", "autograd/optim.mojo", "autograd/higher.mojo",
                       "autograd/model_checkpoint.mojo", "training/checkpoint.mojo",
                       "autograd/program.mojo"),
+                      "autograd/weight_import.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
@@ -74,6 +75,8 @@ FAMILIES = (
             # captured programs (OpsSession.capture / run_program)
             "ops_capture", "ops_program_info", "ops_program_run", "ops_program_free",
             "ops_save_program", "ops_load_program",
+            # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
+            "model_import_params", "ops_load_weights",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

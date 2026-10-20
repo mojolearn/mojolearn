@@ -384,6 +384,23 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var t = self.tape.variable_nd(self.ex, buf, shape, requires_grad)
         return self._add(t, Int(buf), requires_grad, 0)
 
+    def load_into(mut self, h: Int, src: CastIn) raises:
+        """Overwrite the values of uploaded tensor h with the caller's
+        array (any accepted dtype and strides, bfloat16 included, cast on
+        the executor by upload_cast): the weight import's write
+        (autograd/weight_import.mojo). The array must hold the tensor's
+        element count, row-major; a computed tensor is refused (its storage
+        belongs to the tape)."""
+        var slot = self._slot(h)
+        if self.owned[slot] == 0:
+            raise Error("ops: load_weights writes tensors made with tensor(); handle " + String(h)
+                        + " is a computed tensor")
+        src.check("ops: load_weights")
+        if src.count() != self.rows[slot] * self.cols[slot]:
+            raise Error("ops: load_weights: the source holds " + String(src.count())
+                        + " values, the tensor " + String(self.rows[slot] * self.cols[slot]))
+        upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
+
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
         var slot = self._slot(h)

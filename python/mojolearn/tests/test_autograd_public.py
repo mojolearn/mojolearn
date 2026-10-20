@@ -2,8 +2,8 @@
 """The public autograd surface as its documentation shows it: every Python
 block of docs-site/user_guide/autograd.md runs verbatim (the Sequential
 quickstart, the operation-session quickstart, the two-expert mixture
-classifier and the shapes section), and every ``>>>`` example of the Sequential and ops.Session
-docstrings runs. Small sizes. Each case checks shapes and finite values,
+classifier, the shapes section and the weight import), and every ``>>>`` example of the Sequential and ops.Session
+docstrings runs (load_state_dict and load_weights included). Small sizes. Each case checks shapes and finite values,
 runs twice for the same digest, and prints PUBLIC_DIGEST lines to diff
 across CPU, Metal, NVIDIA and AMD."""
 import doctest
@@ -186,6 +186,20 @@ def test_guide_program(tmp_path, monkeypatch):
     assert _digest(first, second) == _digest(ns2["first"], ns2["second"])
     _emit("guide_program_first", _digest(first))
     _emit("guide_program_second", _digest(second))
+def test_guide_import_weights():
+    b = _blocks()
+    ns = _run(b["import-weights"])
+    logits, logits_session = ns["logits"], ns["logits_session"]
+    assert logits.shape == (32, 2) and np.isfinite(logits).all()
+    assert np.allclose(logits, logits_session, atol=1e-5)
+    state = ns["state"]
+    assert np.array_equal(ns["imported"].params_[:64].reshape(4, 16), state["0.weight"].T)
+    ns2 = _run(b["import-weights"])
+    assert _digest(ns["imported"].params_, logits, logits_session) == \
+        _digest(ns2["imported"].params_, ns2["logits"], ns2["logits_session"])
+    _emit("guide_import_params", _digest(ns["imported"].params_))
+    _emit("guide_import_logits", _digest(logits))
+    _emit("guide_import_session", _digest(logits_session))
 
 
 def _docstring_examples():
@@ -198,6 +212,12 @@ def _docstring_examples():
 
 @pytest.mark.parametrize("name", ["ops", "ops.Session", "Sequential", "Sequential.add", "Sequential.compile",
                                   "ops.Program", "ops.Session.capture"])
+            ("Sequential.load_state_dict", mojolearn.Sequential.load_state_dict),
+            ("ops.Session.load_weights", ops.Session.load_weights)]
+
+
+@pytest.mark.parametrize("name", ["ops", "ops.Session", "Sequential", "Sequential.add", "Sequential.compile",
+                                  "Sequential.load_state_dict", "ops.Session.load_weights"])
 def test_docstring_examples_run(name):
     if name.startswith("ops.Program") or name == "ops.Session.capture":
         if not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):

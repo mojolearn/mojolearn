@@ -20,6 +20,7 @@ from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
+from autograd.pyapi import model_import_params_py, ops_load_weights_py
 from core.label_cast import host_unique_inverse_cast
 from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
@@ -135,6 +136,19 @@ def model_gather_labels_binding(addrs: PythonObject, ip: PythonObject) raises ->
 
 def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
     return model_n_params_py(prog, ptab)
+
+
+def model_import_params_binding(
+    prog: PythonObject, ptab: PythonObject, recs: PythonObject, names: PythonObject, params_addr: PythonObject,
+) raises -> PythonObject:
+    """Sequential.load_state_dict (autograd/weight_import.mojo)."""
+    var ex = HostExec()
+    return model_import_params_py(ex, prog, ptab, recs, names, params_addr)
+
+
+def ops_load_weights_binding(sid: PythonObject, recs: PythonObject, names: PythonObject) raises -> PythonObject:
+    """Session.load_weights (autograd/weight_import.mojo)."""
+    return ops_load_weights_py[HostExec, OPS_HOST](sid, recs, names)
 
 
 # The operation session (autograd/ops_api.mojo): one HostExec and one tape kept
@@ -415,6 +429,8 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[model_labels_binding]("model_labels")
         m.def_function[model_gather_labels_binding]("model_gather_labels")
+        m.def_function[model_import_params_binding]("model_import_params")
+        m.def_function[ops_load_weights_binding]("ops_load_weights")
         # the operation session (autograd/ops_api.mojo)
         m.def_function[ops_open_binding]("ops_open")
         m.def_function[ops_close_binding]("ops_close")
