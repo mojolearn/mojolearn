@@ -15,12 +15,17 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 # The 48 mlp_cases digests (case, epochs, digest), recorded on host, Metal, NVIDIA and AMD.
 MLP_DIGESTS = ROOT / 'autograd/checks/mlp_cases_digests.tsv'
+# The rank-N lanes' checks (docs/plans/AUTOGRAD_RANKN.md section 6): each
+# prints `RANKN <lane> <case> digest <d>` lines and PASS, and raises on a
+# failed comparison. The orchestrator diffs the RANKN lines of CPU, Metal,
+# NVIDIA and AMD; here the local CPU and GPU lines must agree.
+RANKN_LANES = ('core', 'fold', 'bmm', 'layout', 'conv')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', choices=('cpu', 'gpu', 'both'), default='cpu')
-    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example'), default='all')
+    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example', 'rankn'), default='all')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--mojo', default='mojo')
     args = parser.parse_args()
@@ -161,6 +166,24 @@ def main():
                                           'results': len(a), 'mismatches': mismatches})
             if mismatches:
                 raise RuntimeError(f'local CPU/GPU fixture bits differ: {mismatches}')
+        rankn_logs = {}
+        for backend in backends:
+            if args.only in ('all', 'rankn'):
+                for lane in RANKN_LANES:
+                    path = native(f'{backend}-rankn-{lane}', f'autograd/checks/rankn_{lane}_{backend}.mojo')
+                    text = path.read_text()
+                    lines = [line for line in text.splitlines() if line.startswith(f'RANKN {lane} ')]
+                    if not lines or 'PASS' not in text or 'FAIL' in text:
+                        raise RuntimeError(f'rankn {lane} ({backend}): no RANKN lines, no PASS, or a FAIL')
+                    rankn_logs[(backend, lane)] = sorted(lines)
+        for lane in RANKN_LANES:
+            if ('cpu', lane) in rankn_logs and ('gpu', lane) in rankn_logs:
+                a, b = rankn_logs[('cpu', lane)], rankn_logs[('gpu', lane)]
+                mismatches = sorted(set(a) ^ set(b))
+                report['comparisons'].append({'kind': f'local CPU/GPU rankn {lane} digest comparison',
+                                              'results': len(a), 'mismatches': mismatches})
+                if mismatches:
+                    raise RuntimeError(f'local CPU/GPU rankn {lane} digests differ: {mismatches[:4]}')
         if args.only in ('all', 'example'):
             native('custom-regression', 'autograd/examples/custom_regression.mojo')
         report['status'] = 'passed'
