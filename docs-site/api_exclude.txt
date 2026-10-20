@@ -85,6 +85,7 @@ Session.cos	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pendi
 Session.sign	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
 Session.reciprocal	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
 Session.pow	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
+Session.pow_scalar	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
 Session.minimum	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
 Session.maximum	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
 Session.where	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD

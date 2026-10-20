@@ -153,7 +153,7 @@ def test_pow_minimum_maximum_broadcast():
         with _ops().Session() as s:
             a, b = s.tensor(A), s.tensor(B)
             p = s.numpy(s.pow(a, b))
-            ps = s.numpy(s.pow(a, 2.5))
+            ps = s.numpy(s.pow_scalar(a, 2.5))
             pn = s.numpy(s.pow(s.tensor(N), s.tensor(E)))
             mn = s.numpy(s.minimum(a, b))
             mx = s.numpy(s.maximum(a, b))

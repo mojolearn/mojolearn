@@ -634,12 +634,16 @@ class Session:
         return self._op("reciprocal", (x,))
 
     def pow(self, x, exponent):
-        """``x ** exponent``. ``exponent`` is a number or a tensor that
+        """``x ** exponent`` elementwise, ``exponent`` a tensor that
         broadcasts with ``x`` as in :meth:`add`. A negative ``x`` takes an
-        integer exponent."""
-        if isinstance(exponent, (int, float, np.integer, np.floating)) and not isinstance(exponent, bool):
-            return self._op("pow", (x,), (), [float(exponent)])
+        integer exponent. For a number exponent use :meth:`pow_scalar`."""
         return self._op("pow", (x, exponent))
+
+    def pow_scalar(self, x, exponent):
+        """``x ** exponent`` for a number ``exponent``. A negative ``x``
+        takes an integer exponent."""
+        # a handle is an int too, so the number form is its own method
+        return self._op("pow", (x,), (), [float(exponent)])
 
     def minimum(self, a, b):
         """The smaller of ``a`` and ``b`` elementwise, with the broadcasting
