@@ -81,6 +81,9 @@ source or installed-package versions recorded in their evidence.
   in Mojo. Verify the complete call, including data preparation, worker
   scheduling, callbacks and output handling. Check that model, graph and
   buffer ownership is released correctly when operations finish or fail.
+  Native inner loops do not complete a public method while preparation,
+  checkpoint handling or callbacks still execute in Python. Track supported
+  upstream ownership blockers separately from product defects.
 - **Performance tuning per backend.** The numerical contract fixes results,
   not tiling, thread layout or scheduling, so each backend can be tuned on its
   own. Priorities are fixed per-fit costs in tree learners, synchronization
