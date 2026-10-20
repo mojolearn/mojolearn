@@ -33,6 +33,10 @@ and in the extension
 the words OpsSession.optimizer_state returns; a restore goes through
 OpsSession.load_optimizer_state, the one restore path.
 
+A captured-program checkpoint is CKPT_SECTION_PROGRAM: tensors `p<i>` (the
+program's parameters) in the layout and payload, and in the extension the
+description words of autograd/program.mojo program_words (lane ag-program).
+
 Python passes paths, addresses and the option lists; every byte is written
 and read here, host side (a checkpoint is a host file). No arithmetic on the
 values: they move by memcpy and by their bits.
