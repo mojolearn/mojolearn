@@ -59,6 +59,13 @@ import time
 import urllib.request
 from pathlib import Path
 
+# The repository's own package, for this process and every child it starts (a box run has no PYTHONPATH set,
+# and each model runs in a child process): the checkout this tool lives in, ahead of any installed copy.
+_REPO_PYTHON = str(Path(__file__).resolve().parents[1] / "python")
+if _REPO_PYTHON not in sys.path:
+    sys.path.insert(0, _REPO_PYTHON)
+os.environ["PYTHONPATH"] = _REPO_PYTHON + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
+
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "mojolearn-real-model/1"
 _MB = 1024.0 * 1024.0
