@@ -47,7 +47,7 @@ operations only (no new kernels)."""
 from std.ffi import _Global
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div
 from autograd.tape import Tape, Tensor
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
 from autograd.layers import NeuralRules, layer_norm
@@ -71,6 +71,16 @@ from autograd.rankn_api import (
     RN_CONCAT_MAX, RankNRules, rn_as_shape, rn_axis_mask, rn_check_permutation, rn_dims,
     rn_mask_axes, rn_reduced, rn_resolve, rn_shape, rn_softmax_along,
 )
+# The import elementwise family (lane ag-import-kernels, docs/plans/
+# MODEL_IMPORT.md 3.3): session codes 48..73 below, kernels in
+# autograd/import_ops.mojo, tape calls and ImportRules in autograd/import_api.mojo.
+from autograd.import_ops import (
+    IMP_ERF, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTPLUS, IMP_SILU, IMP_LEAKY_RELU, IMP_ELU,
+    IMP_HARD_SIGMOID, IMP_HARD_SWISH, IMP_CLIP, IMP_ABS, IMP_FLOOR, IMP_CEIL, IMP_ROUND, IMP_SIN,
+    IMP_COS, IMP_SIGN, IMP_RECIPROCAL, IMP_NOT, IMP_POW_SCALAR, IMP_POW, IMP_MINIMUM, IMP_MAXIMUM,
+    IMP_EQ, IMP_AND, IMP_OR,
+)
+from autograd.import_api import ImportRules, imp_unary, imp_binary, imp_where, imp_expand, imp_argmax, imp_pad
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -143,6 +153,37 @@ comptime OPS_MAXPOOL2D = 45      # [kernel, stride]
 comptime OPS_AVGPOOL2D = 46      # [kernel, stride]
 # 47 (OPS_ARGMAX) is reserved for the plan's int32 argmax result; the fold
 # lane's interface names no argmax entry yet.
+# The import family (lane ag-import-kernels, docs/plans/MODEL_IMPORT.md 3.3;
+# 47 stays reserved). Unary maps keep x's shape; the binary kinds, where and
+# the comparisons broadcast as NumPy does.
+comptime OPS_ERF = 48
+comptime OPS_GELU = 49           # [approximate: 0 erf, 1 tanh]
+comptime OPS_SOFTPLUS = 50
+comptime OPS_SILU = 51
+comptime OPS_LEAKY_RELU = 52     # floats [alpha]
+comptime OPS_ELU = 53            # floats [alpha]
+comptime OPS_HARD_SIGMOID = 54   # floats [alpha, beta]
+comptime OPS_HARD_SWISH = 55
+comptime OPS_CLIP = 56           # floats [low, high]
+comptime OPS_ABS = 57
+comptime OPS_FLOOR = 58
+comptime OPS_CEIL = 59
+comptime OPS_ROUND = 60          # half to even
+comptime OPS_SIN = 61
+comptime OPS_COS = 62
+comptime OPS_SIGN = 63
+comptime OPS_RECIPROCAL = 64
+comptime OPS_POW = 65            # two tensors, or one tensor and floats [exponent]
+comptime OPS_MINIMUM = 66
+comptime OPS_MAXIMUM = 67
+comptime OPS_WHERE = 68          # tensors (condition, x, y)
+comptime OPS_COMPARE = 69        # [kind: 0 eq, 1 gt, 2 lt, 3 ge, 4 le, 5 ne]
+comptime OPS_LOGICAL = 70        # [kind: 0 not (one tensor), 1 and, 2 or]
+comptime OPS_EXPAND = 71         # [dims...]
+comptime OPS_ARGMAX = 72         # [axis, keepdims (0, 1), form: 0 int32 words, 1 float values]
+comptime OPS_PAD = 73            # [before 0 .. before n-1, after 0 .. after n-1], floats [value]
+comptime OPS_IMP_FIRST = OPS_ERF
+comptime OPS_IMP_LAST = OPS_PAD
 
 # Metric codes of ops_metric.
 comptime OPS_METRIC_ACCURACY = 1
@@ -440,10 +481,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if not self.tape.is_recording():
             raise Error("ops: backward needs a recording session (Session(record=True))")
         var t = self.tensor(h)
-        # RankNRules: NeuralRules plus the rank-N lanes' custom tags
-        # (autograd/rankn_api.mojo); a graph without rank-N nodes runs as
+        # ImportRules: RankNRules (NeuralRules plus the rank-N lanes' custom
+        # tags, autograd/rankn_api.mojo) plus the import family's tags
+        # (autograd/import_api.mojo); a graph without those nodes runs as
         # with NeuralRules
-        self.tape.backward_scalar_with_rules(self.ex, t, RankNRules(), accumulate)
+        self.tape.backward_scalar_with_rules(self.ex, t, ImportRules(), accumulate)
 
     def gradient_into(mut self, h: Int, dst: FP) raises:
         """The gradient of tensor `h` from the last backward into the caller's memory."""
@@ -1184,6 +1226,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 t = rankn_max_pool2d(self.tape, self.ex, x[0], ints[0], ints[1])
             else:
                 t = rankn_avg_pool2d(self.tape, self.ex, x[0], ints[0], ints[1])
+        elif code >= OPS_IMP_FIRST and code <= OPS_IMP_LAST:
+            # lane ag-import-kernels: the import elementwise family
+            t = self._import_op(code, x, ints, fs)
         else:
             raise Error("ops: unknown operation code " + String(code))
         if n >= 1 and _keeps_shape(code):
@@ -1193,6 +1238,105 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if ks.ndim != 2:
                 t = rn_as_shape(self.tape, self.ex, t, ks)
         return self._add(t, 0, False, 0)
+
+    # ------------------------------------------------------------ the import family
+    def _import_op(mut self, code: Int, x: List[Tensor], ints: List[Int], fs: List[Float32]) raises -> Tensor:
+        """Session codes OPS_ERF .. OPS_PAD (lane ag-import-kernels): the
+        argument checks, then one call of autograd/import_api.mojo."""
+        var n = len(x)
+        var ni = len(ints)
+        var nf = len(fs)
+        if code == OPS_ERF:
+            _need("erf", n, 1, 0, ni, 0, nf)
+            return imp_unary(self.tape, self.ex, x[0], IMP_ERF)
+        if code == OPS_GELU:
+            _need("gelu", n, 1, 1, ni, 0, nf)
+            if ints[0] != 0 and ints[0] != 1:
+                raise Error("ops: gelu approximate must be 0 (erf) or 1 (tanh)")
+            return imp_unary(self.tape, self.ex, x[0], IMP_GELU_TANH if ints[0] == 1 else IMP_GELU_ERF)
+        if code == OPS_SOFTPLUS:
+            _need("softplus", n, 1, 0, ni, 0, nf)
+            return imp_unary(self.tape, self.ex, x[0], IMP_SOFTPLUS)
+        if code == OPS_SILU:
+            _need("silu", n, 1, 0, ni, 0, nf)
+            return imp_unary(self.tape, self.ex, x[0], IMP_SILU)
+        if code == OPS_LEAKY_RELU:
+            _need("leaky_relu", n, 1, 0, ni, 1, nf)
+            return imp_unary(self.tape, self.ex, x[0], IMP_LEAKY_RELU, fs[0])
+        if code == OPS_ELU:
+            _need("elu", n, 1, 0, ni, 1, nf)
+            return imp_unary(self.tape, self.ex, x[0], IMP_ELU, fs[0])
+        if code == OPS_HARD_SIGMOID:
+            _need("hard_sigmoid", n, 1, 0, ni, 2, nf)
+            return imp_unary(self.tape, self.ex, x[0], IMP_HARD_SIGMOID, fs[0], fs[1])
+        if code == OPS_HARD_SWISH:
+            _need("hard_swish", n, 1, 0, ni, 0, nf)
+            # x * hard_sigmoid(x) with alpha = 1/6 and beta = 1/2 (ONNX HardSwish)
+            return imp_unary(self.tape, self.ex, x[0], IMP_HARD_SWISH, identical_div(Float32(1), Float32(6)), Float32(0.5))
+        if code == OPS_CLIP:
+            _need("clip", n, 1, 0, ni, 2, nf)
+            if fs[0] > fs[1]:
+                raise Error("ops: clip needs low <= high")
+            return imp_unary(self.tape, self.ex, x[0], IMP_CLIP, fs[0], fs[1])
+        if code >= OPS_ABS and code <= OPS_RECIPROCAL:
+            _need("elementwise", n, 1, 0, ni, 0, nf)
+            var kind = IMP_ABS
+            if code == OPS_FLOOR:
+                kind = IMP_FLOOR
+            elif code == OPS_CEIL:
+                kind = IMP_CEIL
+            elif code == OPS_ROUND:
+                kind = IMP_ROUND
+            elif code == OPS_SIN:
+                kind = IMP_SIN
+            elif code == OPS_COS:
+                kind = IMP_COS
+            elif code == OPS_SIGN:
+                kind = IMP_SIGN
+            elif code == OPS_RECIPROCAL:
+                kind = IMP_RECIPROCAL
+            return imp_unary(self.tape, self.ex, x[0], kind)
+        if code == OPS_POW:
+            if n == 1:
+                _need("pow", n, 1, 0, ni, 1, nf)
+                return imp_unary(self.tape, self.ex, x[0], IMP_POW_SCALAR, fs[0])
+            _need("pow", n, 2, 0, ni, 0, nf)
+            return imp_binary(self.tape, self.ex, x[0], x[1], IMP_POW)
+        if code == OPS_MINIMUM or code == OPS_MAXIMUM:
+            _need("minimum and maximum", n, 2, 0, ni, 0, nf)
+            return imp_binary(self.tape, self.ex, x[0], x[1], IMP_MINIMUM if code == OPS_MINIMUM else IMP_MAXIMUM)
+        if code == OPS_WHERE:
+            _need("where", n, 3, 0, ni, 0, nf)
+            return imp_where(self.tape, self.ex, x[0], x[1], x[2])
+        if code == OPS_COMPARE:
+            _need("compare", n, 2, 1, ni, 0, nf)
+            if ints[0] < 0 or ints[0] > 5:
+                raise Error("ops: the comparison must be 0 (eq), 1 (gt), 2 (lt), 3 (ge), 4 (le) or 5 (ne)")
+            return imp_binary(self.tape, self.ex, x[0], x[1], IMP_EQ + ints[0])
+        if code == OPS_LOGICAL:
+            if ni < 1:
+                raise Error("ops: logical takes its kind")
+            if ints[0] == 0:
+                _need("logical_not", n, 1, 1, ni, 0, nf)
+                return imp_unary(self.tape, self.ex, x[0], IMP_NOT)
+            if ints[0] != 1 and ints[0] != 2:
+                raise Error("ops: the logical kind must be 0 (not), 1 (and) or 2 (or)")
+            _need("logical_and and logical_or", n, 2, 1, ni, 0, nf)
+            return imp_binary(self.tape, self.ex, x[0], x[1], IMP_AND if ints[0] == 1 else IMP_OR)
+        if code == OPS_EXPAND:
+            if n != 1 or ni < 1:
+                raise Error("ops: expand takes one tensor and a shape")
+            return imp_expand(self.tape, self.ex, x[0], ints)
+        if code == OPS_ARGMAX:
+            _need("argmax", n, 1, 3, ni, 0, nf)
+            if ints[1] != 0 and ints[1] != 1:
+                raise Error("ops: argmax keepdims must be 0 or 1")
+            return imp_argmax(self.tape, self.ex, x[0], ints[0], ints[1] == 1, ints[2])
+        if code == OPS_PAD:
+            if n != 1 or nf < 1:
+                raise Error("ops: pad takes one tensor, its pads and the value")
+            return imp_pad(self.tape, self.ex, x[0], ints, fs[0])
+        raise Error("ops: unknown operation code " + String(code))
 
     # ------------------------------------------------------------ rank-N helpers
     def _binary(mut self, x: Tensor, y: Tensor, op: Int) raises -> Tensor:
