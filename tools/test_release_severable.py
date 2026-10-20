@@ -106,8 +106,8 @@ class Pipelines(Base):
         r, order = self.staged(fail={"linux-wait"})
         self.assertEqual(r.go(), 1)
         self.assertTrue(r.recorded("publish-macos"))
-        for later in ("linux-assemble", "linux-pack", "gpu-column-nvidia", "gpu-column-amd",
-                      "publish-nvidia", "publish-amd", "publish-core-linux"):
+        for later in ("linux-assemble", "linux-pack", "gpu-column-nvidia", "gpu-column-amd", "publish-core-linux",
+                      "publish-nvidia-ptx", "publish-nvidia", "publish-amd", "publish-meta-linux"):
             self.assertIn(later, r.STEPS)
             self.assertNotIn(later, order)
             self.assertFalse(r.recorded(later))
@@ -121,12 +121,12 @@ class Pipelines(Base):
     def test_mac_failing_leaves_the_linux_publish_done(self):
         r, order = self.staged(fail={"macos-smoke"})
         self.assertEqual(r.go(), 1)
-        for step in ("publish-nvidia", "publish-amd", "publish-core-linux"):
+        for step in ("publish-core-linux", "publish-nvidia-ptx", "publish-nvidia", "publish-amd", "publish-meta-linux"):
             self.assertTrue(r.recorded(step), step)
         self.assertFalse(r.recorded("publish-macos"))
         self.assertIn("gpu-column-nvidia", order)
         self.assertIn("gpu-column-amd", order)
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "nvidia", "nvidia-ptx"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "linux-meta", "nvidia", "nvidia-ptx"])
         text = "\n".join(r.lines)
         self.assertIn("macos: FAILED at macos-smoke", text)
         self.assertIn("core-linux: PUBLISHED", text)
@@ -145,7 +145,7 @@ class Pipelines(Base):
         r.step_publish_macos = pub
         self.assertEqual(r.go(), 0)
         self.assertLess(order.index("publish-macos"), order.index("linux-assemble"))
-        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(sorted(r.recorded("finish-line")["platforms"]), ["amd", "linux", "linux-meta", "macos", "nvidia", "nvidia-ptx"])
 
     def test_a_rerun_resumes_only_what_is_not_done(self):
         r, _ = self.staged(fail={"linux-pack"})
@@ -159,21 +159,24 @@ class Pipelines(Base):
         self.assertIn("linux-pack", order)
         # the finish line and the record run again for the newly published platforms
         self.assertIn("finish-line", order)
-        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "macos", "nvidia", "nvidia-ptx"])
+        self.assertEqual(sorted(r2.recorded("record")["platforms"]), ["amd", "linux", "linux-meta", "macos", "nvidia", "nvidia-ptx"])
         self.assertNotIn("linux-pack", r2.state.get("failures", {}))
 
     def test_without_publish_both_pipelines_are_held(self):
         r, order = self.staged(publish=None)
-        for platform in ("nvidia", "amd", "core-linux", "macos"):
+        for platform in ("core-linux", "nvidia-ptx", "nvidia", "amd", "meta-linux", "macos"):
             setattr(r, "step_publish_" + platform.replace("-", "_"),
                     lambda platform=platform: r.publish(platform, None, None))
         self.assertEqual(r.go(), 1)
         text = "\n".join(r.lines)
-        self.assertIn("nvidia: HELD at publish-nvidia", text)
-        self.assertIn("amd: HELD at publish-amd", text)
+        # mojolearn-core publishes first: held, it holds every other Linux package
+        self.assertIn("core-linux: HELD at publish-core-linux", text)
+        self.assertIn("amd: HELD at publish-core-linux", text)
+        self.assertIn("nvidia: BLOCKED at publish-nvidia-ptx, which needs publish-core-linux (held)", text)
         self.assertIn("macos: HELD at publish-macos", text)
-        self.assertTrue(r.state["failures"]["publish-nvidia"]["held"])
-        self.assertFalse(r.recorded("publish-core-linux"), "the core never publishes before both plugins")
+        self.assertTrue(r.state["failures"]["publish-core-linux"]["held"])
+        for step in ("publish-nvidia-ptx", "publish-nvidia", "publish-amd", "publish-meta-linux"):
+            self.assertFalse(r.recorded(step), "no vendor publishes before mojolearn-core")
 
     def test_the_pipelines_are_generic(self):
         for name, p in release.PIPELINES.items():
@@ -382,7 +385,7 @@ class Status(Base):
         text = "\n".join(st.lines)
         self.assertIn("source commit " + Y, text)
         for title in ("-- common", "-- macos pipeline", "-- core-linux pipeline", "-- nvidia pipeline",
-                      "-- amd pipeline", "-- finish"):
+                      "-- amd pipeline", "-- meta-linux pipeline", "-- finish"):
             self.assertIn(title, text)
         self.assertRegex(text, r"macos-smoke +failed +2026-09-25T11:00:00Z: smoke exited 1; log L")
         self.assertIn("rerun: run it again", text)
@@ -390,7 +393,7 @@ class Status(Base):
         self.assertIn("rerun: relaunch it", text)
         self.assertRegex(text, r"hip-gfx942 +running +pid ")
         self.assertRegex(text, r"nvidia +owed +no final Linux wheel yet")
-        self.assertIn("== macos: failed at macos-smoke, core-linux: owed, nvidia: owed, nvidia-ptx: owed, amd: owed", text)
+        self.assertIn("== macos: failed at macos-smoke, core-linux: owed, nvidia: owed, nvidia-ptx: owed, amd: owed, meta-linux: owed", text)
         self.assertIn("a rerun would:", text)
 
     def test_the_flag_parses_alone(self):
@@ -476,7 +479,7 @@ class SourceAndTooling(Base):
         r.state["steps"]["publish-amd"] = dict(done=True, commit=X, at="t", result="pypi")
         self.assertFalse(r.skip_recorded("finish-line", receipt))
         self.assertFalse(r.skip_recorded("record", receipt))
-        for step in ("publish-nvidia", "publish-amd"):
+        for step in ("publish-core-linux", "publish-nvidia", "publish-amd", "publish-meta-linux"):
             self.assertIn(step, release.AFTER["finish-line"])
 
     def test_publish_ships_the_frozen_source_from_the_tooling_checkout(self):
