@@ -49,3 +49,21 @@ def test_comparator_refuses_incomplete_or_different_evidence(damage):
         altered["format"] = "unknown"
     assert graph.compare_reports(original, altered)
     assert graph.compare_reports(altered, original)
+
+
+def test_composition_finite_difference_oracle_has_independent_polynomial_answer():
+    import numpy as np
+    x = np.array([[0.25, -0.5]], np.float32)
+    w = np.array([[0.75, 0.125]], np.float32)
+    seed = np.array([[0.5, -0.25]], np.float32)
+    expected, gradients = graph._composition_oracle(lambda a, b: a * a * b + b, [x, w], seed)
+    np.testing.assert_allclose(expected, x * x * w + w, rtol=0, atol=0)
+    np.testing.assert_allclose(gradients[0], 2 * x * w * seed, rtol=1e-9, atol=1e-9)
+    np.testing.assert_allclose(gradients[1], (x * x + 1) * seed, rtol=1e-9, atol=1e-9)
+    graph._composition_negative_control(gradients[0])
+
+
+def test_composition_oracle_rejects_broadcastable_gradient_shape():
+    import numpy as np
+    with pytest.raises(AssertionError):
+        graph._composition_gradient(np.ones((1, 2), np.float32), np.ones((1, 1, 2)))

@@ -26,8 +26,9 @@ EXPECTED_CASES = (
     "conditional_training", "conditional_training_refusals", "conditional_training_resume",
     "broadcast_relu_words_and_cost", "broadcast_relu_validation", "broadcast_relu_control_and_training",
     "integer_loop_state_refusal",
+    "attention_shared_projection_vjp", "conditional_tied_normalization_checkpoint",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5, 8, 20)))
 
 
 _AUDITS = []
@@ -1340,6 +1341,167 @@ def native_weight_boundary():
             _equal(third, first)
             _equal(fourth, second)
     return [first, second, third, fourth]
+
+
+def _composition_oracle(oracle, values, seed):
+    """Testing-only float64 central differences; no native gradients are reused."""
+    import numpy as np
+    args = [np.asarray(value, dtype=np.float64).copy() for value in values]
+    direction = np.asarray(seed, dtype=np.float64)
+    expected = np.asarray(oracle(*args), dtype=np.float64)
+    assert expected.shape == direction.shape
+    gradients = []
+    delta = 1e-5
+    for argument in args:
+        derivative = np.empty_like(argument)
+        for index in np.ndindex(argument.shape):
+            original = argument[index]
+            argument[index] = original + delta
+            high = np.sum(oracle(*args) * direction, dtype=np.float64)
+            argument[index] = original - delta
+            low = np.sum(oracle(*args) * direction, dtype=np.float64)
+            argument[index] = original
+            derivative[index] = (high - low) / (2 * delta)
+        gradients.append(derivative)
+    return expected, gradients
+
+
+def _composition_gradient(actual, expected):
+    import numpy as np
+    # The oracle differentiates a double-precision mathematical composition;
+    # native execution uses FP32 elementary functions and reductions. Inputs
+    # avoid kinks, predicate boundaries and nearly singular normalizations.
+    assert np.shape(actual) == np.shape(expected), (np.shape(actual), np.shape(expected))
+    np.testing.assert_allclose(actual, expected, rtol=2e-4, atol=3e-6)
+
+
+def _composition_negative_control(expected):
+    import numpy as np
+    # A lost shared-parameter contribution must not fit the oracle tolerance.
+    try:
+        _composition_gradient(np.asarray(expected) * 0.5, expected)
+    except AssertionError:
+        return
+    raise AssertionError("composition oracle admitted a deliberately halved gradient")
+
+
+def attention_shared_projection_vjp():
+    import numpy as np
+    from . import ops
+    a = np.array([[[0.25, -0.5], [0.75, 0.125], [-0.25, 0.5]],
+                  [[-0.375, 0.25], [0.5, -0.125], [0.125, 0.625]]], np.float32)
+    weight = np.array([[0.5, -0.25], [0.375, 0.625]], np.float32)
+    bias = np.array([[[0.125, -0.0625]]], np.float32)
+    seed = np.arange(1, 13, dtype=np.float32).reshape(3, 4) / np.float32(16)
+
+    def oracle(x, w, b):
+        q = x @ w
+        logits = (q @ np.swapaxes(q, -1, -2)) * 0.5
+        probability = np.exp(logits - logits.max(axis=-1, keepdims=True))
+        probability /= probability.sum(axis=-1, keepdims=True)
+        return np.transpose(probability @ q + q + b, (1, 0, 2)).reshape(3, 4)
+
+    expected, gradients = _composition_oracle(oracle, [a, weight, bias], seed)
+    _composition_negative_control(gradients[1])
+
+    def compose(s, x, w, b):
+        projected = _invoke(s.matmul, x, w)
+        keys = _invoke(s.transpose, projected)
+        scores = _invoke(s.matmul, projected, keys)
+        attention = _invoke(s.softmax, _invoke(s.scale, scores, 0.5))
+        value = _invoke(s.matmul, attention, projected)
+        residual = _invoke(s.add, _invoke(s.add, value, projected), b)
+        return _invoke(s.reshape, _invoke(s.permute, residual, (1, 0, 2)), (3, 4))
+
+    with ops.Session(record=True) as s:
+        x = _invoke(s.tensor, a, requires_grad=True)
+        w = _invoke(s.tensor, weight, requires_grad=True)
+        b = _invoke(s.tensor, bias, requires_grad=True)
+        result = compose(s, x, w, b)
+        value = _invoke(s.numpy, result)
+        np.testing.assert_allclose(value, expected, rtol=2e-5, atol=2e-6)
+        wrong_rank = _invoke(s.tensor, seed.reshape(1, 3, 4))
+        _refuses(lambda: _invoke(s.vjp, result, [x, w, b], wrong_rank), "full shape", ValueError)
+        seed_handle = _invoke(s.tensor, seed)
+        handles = _invoke(s.vjp, result, [x, w, b], seed_handle)
+        actual = [_invoke(s.numpy, handle) for handle in handles]
+        for found, wanted in zip(actual, gradients, strict=True):
+            _composition_gradient(found, wanted)
+        outputs = [value, *actual]
+
+    with ops.Session() as s:
+        x, w, b = (_invoke(s.tensor, value) for value in (a, weight, bias))
+        result = compose(s, x, w, b)
+        body = _invoke(s.capture, x, result)
+        condition = _invoke(s.capture, x, _invoke(s.full, (1, 1), 1.0))
+        differentiated = _invoke(body.vjp_if, condition, body, a, seeds=seed, parameters=[w, b])
+        replay = [differentiated["outputs"], differentiated["input_gradients"][0],
+                  differentiated["parameter_gradients"][w], differentiated["parameter_gradients"][b]]
+        for eager, captured in zip(outputs, replay, strict=True):
+            _equal(eager, captured)
+        outputs.extend(replay)
+    return outputs
+
+
+def conditional_tied_normalization_checkpoint():
+    import numpy as np
+    from . import ops
+    a = np.array([[0.8, -0.3, 0.4], [0.1, 0.7, -0.2]], np.float32)
+    weight = np.array([[0.3, -0.2, 0.4, 0.1], [-0.1, 0.5, 0.2, -0.4],
+                       [0.2, 0.3, -0.3, 0.6]], np.float32)
+    gamma = np.array([[1.1, 0.8, 1.2, 0.9]], np.float32)
+    beta = np.array([[0.05, -0.1, 0.15, -0.05]], np.float32)
+    seed = np.array([[0.5, -0.25], [0.125, 0.75], [-0.375, 0.25]], np.float32)
+    epsilon = 1 / 1024
+
+    def oracle(x, w, g, b):
+        hidden = x @ w
+        if x.sum() > 0:
+            centered = hidden - hidden.mean(axis=-1, keepdims=True)
+            hidden = np.tanh(centered / np.sqrt(np.mean(centered * centered, axis=-1, keepdims=True)
+                                                + epsilon) * g + b)
+        return (hidden @ w.T + x).T
+
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-composition-") as directory, ops.Session() as s:
+        x, w, g, b = (_invoke(s.tensor, value) for value in (a, weight, gamma, beta))
+        projected = _invoke(s.matmul, x, w)
+        normalized = _invoke(s.layer_norm, projected, g, b, eps=epsilon)
+        decoded = _invoke(s.matmul, _invoke(s.tanh, normalized), _invoke(s.transpose, w))
+        body = _invoke(s.capture, x, _invoke(s.transpose, _invoke(s.add, decoded, x)))
+        other_value = _invoke(s.matmul, projected, _invoke(s.transpose, w))
+        other = _invoke(s.capture, x, _invoke(s.transpose, _invoke(s.add, other_value, x)))
+        condition = _invoke(s.capture, x, _invoke(s.greater, _invoke(s.sum, x), _invoke(s.full, (1, 1), 0.0)))
+        assert set(body.params).intersection(other.params) == {w}
+        for data in (a, -a):
+            expected, gradients = _composition_oracle(oracle, [data, weight, gamma, beta], seed)
+            _composition_negative_control(gradients[1])
+            differentiated = _invoke(body.vjp_if, condition, other, data, seeds=seed, parameters=[w, g, b])
+            actual = [differentiated["input_gradients"][0],
+                      *(differentiated["parameter_gradients"][handle] for handle in (w, g, b))]
+            np.testing.assert_allclose(differentiated["outputs"], expected, rtol=2e-5, atol=2e-6)
+            for found, wanted in zip(actual, gradients, strict=True):
+                _composition_gradient(found, wanted)
+            if data.sum() < 0:
+                _equal(actual[2], np.zeros_like(gamma))
+                _equal(actual[3], np.zeros_like(beta))
+            outputs.extend((differentiated["outputs"], *actual))
+        path = Path(directory) / "tied-normalization.mjl"
+        _invoke(body.save_control, path, condition=condition, otherwise=other)
+        with ops.Session() as restored:
+            bundle = _invoke(restored.load_control, path)
+            rb, rc, ro = bundle["body"], bundle["condition"], bundle["otherwise"]
+            mapping = dict(zip(body.params, rb.params, strict=True))
+            rw, rg, rbeta = (mapping[handle] for handle in (w, g, b))
+            assert set(rb.params).intersection(ro.params) == {rw}
+            for index, data in enumerate((a, -a)):
+                report = _invoke(rb.vjp_if, rc, ro, data, seeds=seed, parameters=[rw, rg, rbeta])
+                replay = [report["outputs"], report["input_gradients"][0],
+                          *(report["parameter_gradients"][handle] for handle in (rw, rg, rbeta))]
+                for before, after in zip(outputs[index * 5:(index + 1) * 5], replay, strict=True):
+                    _equal(before, after)
+                outputs.extend(replay)
+    return outputs
 
 
 def _digest(a):
