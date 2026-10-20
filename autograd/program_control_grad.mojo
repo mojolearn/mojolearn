@@ -51,8 +51,8 @@ def _replay_handles[E: Exec & Movable & Deinitable](
     for k in range(p.n_nodes()):  # driver-loop: over the executed graph nodes
         var args = List[Int]()
         for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over node references
-            var ref = p.args[j]
-            args.append(params[-ref - 1] if ref < 0 else values[ref])
+            var value_ref = p.args[j]
+            args.append(params[-value_ref - 1] if value_ref < 0 else values[value_ref])
         var ints = List[Int]()
         for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over integer node options
             ints.append(p.ints[j])
@@ -64,8 +64,8 @@ def _replay_handles[E: Exec & Movable & Deinitable](
         values.append(h)
     var outputs = List[Int]()
     for j in range(len(p.outs)):  # driver-loop: over output references
-        var ref = p.outs[j]
-        outputs.append(params[-ref - 1] if ref < 0 else values[ref])
+        var value_ref = p.outs[j]
+        outputs.append(params[-value_ref - 1] if value_ref < 0 else values[value_ref])
     s.tape.record()
     return outputs^
 
@@ -122,9 +122,9 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
             if body.in_kinds[k] == PROGRAM_IN_IDS:
                 raise Error("ValueError: while_loop state inputs must hold floating-point values")
         for k in range(len(body.outs)):  # driver-loop: over loop state output metadata
-            var ref = body.outs[k]
-            if ref >= body.n_in:
-                var node = ref - body.n_in
+            var value_ref = body.outs[k]
+            if value_ref >= body.n_in:
+                var node = value_ref - body.n_in
                 if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
                     raise Error("ValueError: while_loop state outputs must hold floating-point values")
     var prepared = program_inputs(body, arrays, True, True)

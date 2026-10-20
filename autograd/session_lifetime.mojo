@@ -17,12 +17,12 @@ struct SessionLifetime[E: Exec & Movable & Deinitable, KIND: Int](Movable):
         var sid = self.sid
         self.sid = 0
         if sid != 0:
-            ops_session_close[E, KIND](sid)
+            ops_session_close[Self.E, Self.KIND](sid)
 
     def __deinit__(deinit self):
         if self.sid != 0:
             try:
-                ops_session_close[E, KIND](self.sid)
+                ops_session_close[Self.E, Self.KIND](self.sid)
             except:
                 pass
 
