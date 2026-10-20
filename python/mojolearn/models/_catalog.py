@@ -124,7 +124,7 @@ def _source_torchvision(entry, x, report):
         raise ImportError(f"checking {entry['name']} needs torch and torchvision") from None
     _no_tf32(torch)
     src = entry["source"]
-    cls, _, member = src["weights"].partition(".")
+    cls, _, member = src["weights"].partition(".")  # glue: splits the weights enum name string
     weights = getattr(getattr(torchvision.models, cls), member)
     ctor = getattr(torchvision.models, entry["name"])
     model = ctor(weights=weights).eval()
