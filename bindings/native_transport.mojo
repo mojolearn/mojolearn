@@ -9,6 +9,8 @@ work runs here and no architecture identity is inferred from transport.
 """
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
+from std.python.bindings import ExceptionType, raise_python_exception
 from std.math import isfinite
 from bindings.native_json import native_json_parse
 
@@ -80,7 +82,7 @@ def transport_initialize() raises:
 
 
 def transport_clock() raises -> Float64:
-    return Float64(TRANSPORT_BOUNDARY.get_or_create_ptr()[].monotonic())
+    return Float64(py=TRANSPORT_BOUNDARY.get_or_create_ptr()[].monotonic())
 
 
 def transport_sleep(seconds: Float64) raises:
@@ -169,7 +171,7 @@ def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
     if cls is t[].bi.int:
         return String(value)
     if cls is t[].bi.float:
-        if not isfinite(Float64(value)):
+        if not isfinite(Float64(py=value)):
             raise Error("transport: JSON numbers must be finite")
         return String(value)
     var result = String()
@@ -293,11 +295,11 @@ def transport_call(operation: String, args: PythonObject) raises -> PythonObject
     if operation == "initialize":
         transport_initialize()
     elif operation == "listen":
-        return transport_listen(String(args[0]), Int(py=args[1]), Float64(args[2]))
+        return transport_listen(String(args[0]), Int(py=args[1]), Float64(py=args[2]))
     elif operation == "accept":
-        return transport_accept(args[0], Float64(args[1]))
+        return transport_accept(args[0], Float64(py=args[1]))
     elif operation == "connect":
-        return transport_connect(String(args[0]), Int(py=args[1]), Float64(args[2]))
+        return transport_connect(String(args[0]), Int(py=args[1]), Float64(py=args[2]))
     elif operation == "send":
         transport_send(args[0], args[1], args[2])
     elif operation == "receive":
@@ -319,3 +321,12 @@ def transport_call(operation: String, args: PythonObject) raises -> PythonObject
     else:
         raise Error("transport: unknown operation " + operation)
     return PythonObject(None)
+
+
+def transport_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var args = PythonObject(from_borrowed=args_ptr)
+    try:
+        var result = transport_call(String(args[0]), args[1])
+        return result.steal_data()
+    except error:
+        return raise_python_exception(error, ExceptionType.RuntimeError)
