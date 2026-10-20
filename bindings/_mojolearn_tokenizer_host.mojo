@@ -82,6 +82,7 @@ from core.host_parallel import host_parallelize
 
 from bindings.hostptr import i32_ptr
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
+from bindings.causal_model_config import model_config_c
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1839,6 +1840,13 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(_vocab_public_c[7], "vocab_pretokenize_pattern")
         module.def_py_c_function(_vocab_public_c[8], "vocab_pattern_name")
         module.def_py_c_function(_vocab_public_c[9], "native_json_parse")
+        module.def_py_c_function(model_config_c[0], "model_config_init")
+        module.def_py_c_function(model_config_c[1], "model_config_load")
+        module.def_py_c_function(model_config_c[2], "model_config_access")
+        module.def_py_c_function(model_config_c[3], "model_plan_init")
+        module.def_py_c_function(model_config_c[4], "model_layer_weights")
+        module.def_py_c_function(model_config_c[5], "model_checkpoint_names")
+        module.def_py_c_function(model_config_c[6], "model_plan_for")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[generation_initialize_binding]("generation_initialize")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
