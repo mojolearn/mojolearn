@@ -905,7 +905,7 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
         """Session.split by sizes: one narrow per piece, every piece made."""
         var out = List[Int]()
         for k in range(len(sizes)):  # driver-loop: over the pieces of one split
-            var ints = List[Int](axis, k, 0)
+            var ints: List[Int] = [axis, k, 0]
             for j in range(len(sizes)):  # cpu-route: model graph lowered on the host (piece lengths)
                 ints.append(sizes[j])
             out.append(self.opk(OPS_NARROW, x, ints))
@@ -922,10 +922,11 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
         return self.op(OPS_PAD, [x], counts, [Float32(v)])
 
     def conv2d(mut self, x: Int, w: Int, b: Int, stride: Int, padding: Int, groups: Int) raises -> Int:
-        var hs = List[Int](x, w)
+        var hs: List[Int] = [x, w]
         if b != _NO_HANDLE:
             hs.append(b)
-        return self.op(OPS_CONV2D, hs, List[Int](stride, padding, groups), List[Float32]())
+        var conv_ints: List[Int] = [stride, padding, groups]
+        return self.op(OPS_CONV2D, hs, conv_ints, List[Float32]())
 
     def where(mut self, cond: Int, x: Int, y: Int) raises -> Int:
         return self.op(OPS_WHERE, [cond, x, y], List[Int](), List[Float32]())
@@ -1040,7 +1041,7 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
                 size = 2
             else:
                 raise _fatal("tensor '" + self.g[].st.text(t.name) + "' is not a float tensor")
-            var rec = List[Int](h, 0, _WI_LAYOUT_TRANSPOSE if transpose else _WI_LAYOUT_AS_IS, base, 0, code, size, len(src))
+            var rec: List[Int] = [h, 0, _WI_LAYOUT_TRANSPOSE if transpose else _WI_LAYOUT_AS_IS, base, 0, code, size, len(src)]
             for j in range(_WI_MAX_RANK):  # cpu-route: model graph lowered on the host (one per source axis)
                 rec.append(src[j] if j < len(src) else 0)
             rec.append(_WI_STRIDE_C)
@@ -1497,7 +1498,7 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
 
     def _channel_param(mut self, h: Int, ch: Int, rank: Int) raises -> Int:
         """A per-channel constant h as (1, c, 1, ...) for a rank-`rank` input."""
-        var want = List[Int](1, ch)
+        var want: List[Int] = [1, ch]
         for _ in range(rank - 2):  # cpu-route: model graph lowered on the host (one per axis)
             want.append(1)
         if not _same(self.shape_h(h), want):
@@ -1650,7 +1651,7 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
             var hx = self.get(xn)
             var cnt = len(idx)
             # Session.take with an int64 index array: its 7-word input descriptor, then the axis
-            var ints = List[Int](Int(idx.unsafe_ptr()), _NPY_INT64, 8, cnt, 1, 8, 8, _sax(ax, r))
+            var ints: List[Int] = [Int(idx.unsafe_ptr()), _NPY_INT64, 8, cnt, 1, 8, 8, _sax(ax, r)]
             var y = self.opk(OPS_TAKE, hx, ints)
             _ = idx^
             return self.fit(y, n.outputs[0])
