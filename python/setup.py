@@ -100,7 +100,7 @@ class bdist_wheel(_bdist_wheel):
         root = Path(__file__).resolve().parent
         manifest = runpy.run_path(str(root / "mojolearn" / "host_surface.py"))
         allowed = {name + ".so" for name in manifest["wheel_bindings"]()}
-        # A merged host file (bindings/build_merged.sh, mojolearn/_merged.py)
+        # A merged host file (bindings/merged_build.sh, mojolearn/_merged.py)
         # ships when every member its index names is a wheel binding.
         index = root / "mojolearn" / "host" / "_mojolearn_merged.json"
         if index.is_file():

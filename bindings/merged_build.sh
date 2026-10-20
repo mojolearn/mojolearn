@@ -5,9 +5,9 @@
 # code the members share (sequence ops, linalg, common kernels, the Mojo stdlib)
 # is compiled and embedded ONCE instead of once per binding.
 #
-#   MOJOLEARN_NUMERIC_MODE=fast      sh bindings/build_merged.sh gpu    -> python/mojolearn/
-#   MOJOLEARN_NUMERIC_MODE=identical sh bindings/build_merged.sh gpu    -> python/mojolearn/identical/
-#                                    sh bindings/build_merged.sh host   -> python/mojolearn/host/
+#   MOJOLEARN_NUMERIC_MODE=fast      sh bindings/merged_build.sh gpu    -> python/mojolearn/
+#   MOJOLEARN_NUMERIC_MODE=identical sh bindings/merged_build.sh gpu    -> python/mojolearn/identical/
+#                                    sh bindings/merged_build.sh host   -> python/mojolearn/host/
 #
 # Options: --group <stem> builds one file of the plan (to run the files of one
 # directory in parallel); --outdir <dir> writes elsewhere. Each file lands as
@@ -54,7 +54,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$here"
 
 usage() {
-    echo "usage: [MOJOLEARN_NUMERIC_MODE=fast|identical] sh bindings/build_merged.sh gpu|host [--group <stem>] [--outdir <dir>]" >&2
+    echo "usage: [MOJOLEARN_NUMERIC_MODE=fast|identical] sh bindings/merged_build.sh gpu|host [--group <stem>] [--outdir <dir>]" >&2
 }
 kind=gpu
 only=""
@@ -74,11 +74,11 @@ MACOS_FLOOR="11.0"
 mode=${MOJOLEARN_NUMERIC_MODE:-identical}
 case "$mode" in
     fast|identical) ;;
-    *) echo "build_merged: MOJOLEARN_NUMERIC_MODE must be fast or identical, got '$mode'" >&2; exit 2 ;;
+    *) echo "merged_build: MOJOLEARN_NUMERIC_MODE must be fast or identical, got '$mode'" >&2; exit 2 ;;
 esac
 
 refuse_env() {
-    echo "build_merged: $1 is set ('$2'). Only some per-binding scripts read it, and one merged" >&2
+    echo "merged_build: $1 is set ('$2'). Only some per-binding scripts read it, and one merged" >&2
     echo "  compile cannot scope it to one member; run that build with the per-binding scripts." >&2
     exit 2
 }
@@ -97,19 +97,19 @@ system=$(uname -s)
 case "$system" in
     Darwin) plat=darwin; byte_lm_default=1 ;;
     Linux) plat=linux; byte_lm_default=0 ;;
-    *) echo "build_merged: requires Linux or macOS" >&2; exit 2 ;;
+    *) echo "merged_build: requires Linux or macOS" >&2; exit 2 ;;
 esac
 byte_lm=${MOJOLEARN_PACKAGE_BYTE_LM:-$byte_lm_default}
-case "$byte_lm" in 0|1) ;; *) echo 'build_merged: MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
+case "$byte_lm" in 0|1) ;; *) echo 'merged_build: MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 
 # ---------------------------------------------------------------- the flags
 base_flags=""
 link_flags=""
 if [ "$plat" = darwin ]; then
-    [ "$(uname -m)" = arm64 ] || { echo "build_merged: macOS requires Apple silicon" >&2; exit 2; }
+    [ "$(uname -m)" = arm64 ] || { echo "merged_build: macOS requires Apple silicon" >&2; exit 2; }
     # NOT EXPORTED, DELIBERATELY -- see bindings/build_gbdt.sh.
     unset MACOSX_DEPLOYMENT_TARGET
-    [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "build_merged: a macOS build takes no MOJOLEARN_GPU_ARCHS" >&2; exit 2; }
+    [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "merged_build: a macOS build takes no MOJOLEARN_GPU_ARCHS" >&2; exit 2; }
     sdk=$(xcrun --sdk macosx --show-sdk-version)
     link_flags="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $sdk"
     base_flags="--target-cpu apple-m1"
@@ -117,15 +117,15 @@ else
     case "$(uname -m)" in
         x86_64) base_flags="--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}" ;;
         aarch64) base_flags="" ;;
-        *) echo "build_merged: unsupported Linux host architecture" >&2; exit 2 ;;
+        *) echo "merged_build: unsupported Linux host architecture" >&2; exit 2 ;;
     esac
 fi
 
 column_flags=""
 if [ "$kind" = host ]; then
-    [ "$mode" = identical ] || { echo "build_merged: the host set supports only MOJOLEARN_NUMERIC_MODE=identical" >&2; exit 2; }
-    [ "${MOJOLEARN_TARGET_COLUMN:-cpu}" = cpu ] || { echo "build_merged: the host set compiles the CPU column only" >&2; exit 2; }
-    [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "build_merged: a CPU build takes no MOJOLEARN_GPU_ARCHS" >&2; exit 2; }
+    [ "$mode" = identical ] || { echo "merged_build: the host set supports only MOJOLEARN_NUMERIC_MODE=identical" >&2; exit 2; }
+    [ "${MOJOLEARN_TARGET_COLUMN:-cpu}" = cpu ] || { echo "merged_build: the host set compiles the CPU column only" >&2; exit 2; }
+    [ -z "${MOJOLEARN_GPU_ARCHS:-}" ] || { echo "merged_build: a CPU build takes no MOJOLEARN_GPU_ARCHS" >&2; exit 2; }
     dir=host
     mode_flags="-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU"
     extra_flags=${MOJOLEARN_BUILD_EXTRA_DEFINES:-}
@@ -140,8 +140,8 @@ else
     fi
     if [ "$plat" = linux ]; then
         case "${MOJOLEARN_GPU_ARCHS:-}" in
-            '') echo "build_merged: a Linux GPU set needs ONE explicit MOJOLEARN_GPU_ARCHS (sm_NN or gfxNNN)" >&2; exit 2 ;;
-            *[!A-Za-z0-9_]*) echo "build_merged: MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS': the compiler takes EXACTLY ONE architecture" >&2; exit 2 ;;
+            '') echo "merged_build: a Linux GPU set needs ONE explicit MOJOLEARN_GPU_ARCHS (sm_NN or gfxNNN)" >&2; exit 2 ;;
+            *[!A-Za-z0-9_]*) echo "merged_build: MOJOLEARN_GPU_ARCHS='$MOJOLEARN_GPU_ARCHS': the compiler takes EXACTLY ONE architecture" >&2; exit 2 ;;
         esac
         base_flags="$base_flags --target-accelerator $MOJOLEARN_GPU_ARCHS"
     fi
@@ -151,10 +151,10 @@ outdir=${outdir:-$default_outdir}
 mkdir -p "$outdir"
 
 plan=$("$PY" tools/merged_bindings.py plan --dir "$dir" --platform "$plat" --byte-lm "$byte_lm")
-[ -n "$plan" ] || { echo "build_merged: bindings/merged_groups.json plans nothing for $dir" >&2; exit 2; }
+[ -n "$plan" ] || { echo "merged_build: bindings/merged_groups.json plans nothing for $dir" >&2; exit 2; }
 if [ -n "$only" ]; then
     printf '%s\n' "$plan" | awk -v s="$only" '$1==s{f=1} END{exit !f}' \
-        || { echo "build_merged: no group '$only' in the $dir plan:" >&2; printf '%s\n' "$plan" | awk '{print "  " $1}' >&2; exit 2; }
+        || { echo "merged_build: no group '$only' in the $dir plan:" >&2; printf '%s\n' "$plan" | awk '{print "  " $1}' >&2; exit 2; }
 fi
 if [ "$kind" = host ] && printf '%s\n' "$plan" | grep -q '_mojolearn_tokenizer_host'; then
     sh tokenizer/tools/gen_unicode_table.sh < /dev/null
@@ -170,7 +170,7 @@ while read -r stem cls members; do
     case "$cls" in
         default|host) ;;
         metal1) class_flags="--target-accelerator metal:1" ;;
-        *) echo "build_merged: unknown flags class '$cls' for $stem" >&2; exit 2 ;;
+        *) echo "merged_build: unknown flags class '$cls' for $stem" >&2; exit 2 ;;
     esac
     root="$tmpdir/$stem.mojo"
     "$PY" tools/merged_bindings.py root --stem "$stem" --members "$members" --out "$root" < /dev/null
@@ -183,7 +183,7 @@ while read -r stem cls members; do
         "$root" -o "$tmpdir/$stem.so" < /dev/null
     if [ "$plat" = darwin ]; then
         got=$(otool -l "$tmpdir/$stem.so" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-        [ "$got" = "$MACOS_FLOOR" ] || { echo "build_merged: $stem.so minos is '$got', want $MACOS_FLOOR" >&2; exit 1; }
+        [ "$got" = "$MACOS_FLOOR" ] || { echo "merged_build: $stem.so minos is '$got', want $MACOS_FLOOR" >&2; exit 1; }
     fi
     for n in $(printf '%s' "$members" | tr ',' ' '); do
         if [ -e "$outdir/$n.so" ] || [ -L "$outdir/$n.so" ]; then

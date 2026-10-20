@@ -7,7 +7,7 @@
   "dirs.<dir>.optional: member -> platforms where it joins the group when MOJOLEARN_PACKAGE_BYTE_LM=1.",
   "darwin_metal1: members whose per-binding script passes --target-accelerator metal:1 on macOS;",
   "on macOS they compile into <stem>_m1 so every member keeps its own compile flags.",
-  "tools/merged_bindings.py reads this file; bindings/build_merged.sh builds it."
+  "tools/merged_bindings.py reads this file; bindings/merged_build.sh builds it."
  ],
  "index_file": "_mojolearn_merged.json",
  "dirs": {

@@ -1400,7 +1400,7 @@ def host_module_path(basename):
     did.
 
     A release's host/ holds one merged file for every host binding
-    (`_merged.py`, bindings/build_merged.sh); the answer is then that file,
+    (`_merged.py`, bindings/merged_build.sh); the answer is then that file,
     which exports this binding's PyInit under its own name."""
     return _merged.binding_path(host_dir(), basename)
 

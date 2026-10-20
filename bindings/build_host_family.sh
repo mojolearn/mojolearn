@@ -59,7 +59,7 @@ source_file="bindings/_mojolearn_${family}_host.mojo"
 [ -f "$source_file" ] || { echo "$label: no such binding source $source_file" >&2; exit 2; }
 # The module body is build__mojolearn_<family>_host() in $source_file; the
 # per-binding entry exports its PyInit (tools/merged_bindings.py entries).
-# bindings/build_merged.sh host compiles every family into one file instead.
+# bindings/merged_build.sh host compiles every family into one file instead.
 entry_file="bindings/entry/entry__mojolearn_${family}_host.mojo"
 [ -f "$entry_file" ] || { echo "$label: no entry $entry_file; run python3 tools/merged_bindings.py entries" >&2; exit 2; }
 [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || { echo "$label supports only MOJOLEARN_NUMERIC_MODE=identical" >&2; exit 2; }

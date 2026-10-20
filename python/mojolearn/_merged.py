@@ -2,7 +2,7 @@
 
 A release ships one native file per installed directory set (the package
 directory, ``identical/``, ``host/``, and each Linux vendor set) instead of one
-file per binding: ``bindings/build_merged.sh`` compiles every member into
+file per binding: ``bindings/merged_build.sh`` compiles every member into
 ``<stem>.so``, which exports each member's ``PyInit_<name>``, and writes
 ``_mojolearn_merged.json`` (``{"files": {"<stem>.so": [names...]}}``) beside it.
 CPython finds ``PyInit_<last name part>`` in whatever file the loader is given,
