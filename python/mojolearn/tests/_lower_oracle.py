@@ -52,7 +52,7 @@ _DESC_INPUTS = {
     "Reshape": (1,), "Expand": (1,), "Squeeze": (1,), "Unsqueeze": (1,), "Slice": (1, 2, 3, 4),
     "Split": (1,), "ReduceSum": (1,), "ReduceMean": (1,), "ReduceMax": (1,), "ReduceMin": (1,),
     "ReduceL2": (1,), "Pad": (1, 3), "ConstantOfShape": (0,), "Trilu": (1,), "Gather": (1,),
-    "Dropout": (1, 2), "Shape": (0,), "Size": (0,), "Range": (0, 1, 2),
+    "Dropout": (1, 2), "Shape": (0,), "Size": (0,), "Range": (0, 1, 2), "CumSum": (1,),
 }
 
 # the session methods of the one-input elementwise ops
@@ -313,6 +313,15 @@ def _c_reduce(G, n):
 
 def _c_argmax(G, n):
     return [] if not n.attrs.get("select_last_index", 0) else ["select_last_index=1 is not supported"]
+
+
+def _c_cumsum(G, n):
+    axis = G.ints(n.inputs[1])
+    if axis is None:
+        return ["the axis is computed from the model's inputs (a static axis is supported)"]
+    if len(axis) != 1:
+        return ["the axis must be one integer"]
+    return []
 
 
 def _window(G, n):
@@ -902,6 +911,9 @@ def _l_reduce(L, n):
         y = s.sum(h, axis=axes, keepdims=True)  # glue: a sum on the device through the session
     elif n.op == "ReduceMean":
         y = s.mean(h, axis=axes, keepdims=True)  # glue: a mean on the device through the session
+    elif n.op in ("ReduceMax", "ReduceMin") and L.G.res.dtypes.get(n.inputs[0]) == "bool":
+        # a boolean reduction (torch's any / all)
+        y = (s.any if n.op == "ReduceMax" else s.all)(h, axis=axes, keepdims=True)
     elif n.op == "ReduceMax":
         y = s.max(h, axis=axes, keepdims=True)
     elif n.op == "ReduceMin":
@@ -920,6 +932,24 @@ def _l_argmax(L, n):
         L.int32_outputs.add(o)
     y = L.s.argmax(_x(L, n), axis=_sax(n.attrs.get("axis", 0), L.rank(x)), keepdims=True, int32=as_int)  # glue: argmax on the device through the session
     return [L.fit(y, o)]
+
+
+def _l_cumsum(L, n):
+    x = n.inputs[0]
+    (axis,) = L.G.ints(n.inputs[1])
+    y = L.s.cumsum(_x(L, n), axis=_sax(axis, L.rank(x)), exclusive=bool(n.attrs.get("exclusive", 0)),
+                   reverse=bool(n.attrs.get("reverse", 0)))  # glue: the blocked scan on the device through the session
+    return [L.fit(y, n.outputs[0])]
+
+
+def _l_gather_nd(L, n):
+    r = L.rank(n.inputs[0])
+    si = L.G.shape(n.inputs[1])
+    k = si[-1]
+    hi = _x(L, n, 1)
+    pieces = [hi] if k == 1 else L.s.split(hi, [1] * k, axis=len(session_shape(si)) - 1)
+    y = L.s.index(_x(L, n), pieces, axes=[_sax(j, r) for j in range(k)])  # cpu-route: model graph lowered on the host (indexed axes)
+    return [L.fit(y, n.outputs[0])]
 
 
 def _l_global_pool(L, n):
@@ -1082,7 +1112,7 @@ _TABLE.update({
     "GlobalAveragePool": (_c_none, _l_global_pool), "GlobalMaxPool": (_c_none, _l_global_pool),
     "Conv": (_c_conv, _l_conv), "MaxPool": (_c_pool, _l_pool), "AveragePool": (_c_pool, _l_pool),
     "Pad": (_c_pad, _l_pad), "Trilu": (_c_trilu, _l_trilu), "ConstantOfShape": (_c_none, _l_constant_of_shape),
-    "Constant": (_c_none, _l_constant),
+    "Constant": (_c_none, _l_constant), "CumSum": (_c_cumsum, _l_cumsum), "GatherND": (_c_none, _l_gather_nd),
 })
 _LOWER = {op: low for op, (_, low) in _TABLE.items()}  # cpu-route: model graph lowered on the host (op names)
 
