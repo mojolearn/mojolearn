@@ -61,3 +61,15 @@ allocation), independent of `-j`, so two cold builds of one commit are byte-iden
 freeze shipped bytes. `tools/amd_compile_variance.sh` measures whether parallel workers change results or only bytes
 and classifies each pair (`tools/compare_gpu_builds.py`: REORDERED and SAME-KERNELS are layout, CODE-DIFFERS is this
 ask); the AMD worker count follows its verdict. We do not canonicalize or rewrite differing kernel code.
+
+**2026-10-20 result.** The retained [MI325X experiment](../bench/results/amd_compile_variance/2026-10-20/summary.json)
+at `6bf016f25eabf29f44e2cfed160d0d62151ce31a`, Mojo 1.0.0 (`ed45d567`), found
+equal GMM results across two one-worker and three eight-worker cold builds.
+The cross-worker binaries were REORDERED with the same 137 kernels. The
+eight-worker default follows that result; this does not resolve the older
+kernel-code variance above or establish results for other estimators.
+The merged one-worker build also exited 139 after 515.196 seconds, while
+eight workers completed in 794.290 seconds. Its crash log is retained with
+the experiment; a minimized compiler-crash reproducer remains pending.
+The empty merged canonical comparison (zero files on both sides) proves
+neither numerical equality nor a compile-time speedup.
