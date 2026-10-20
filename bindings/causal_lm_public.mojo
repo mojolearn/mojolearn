@@ -523,13 +523,13 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
     return out
 
 
-def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
     var l = Int(py=ids.shape[1])
     _state(model, state, Int(py=ids.shape[0]), l)
     var parallel = model._native_entries.get("parallel_call")
     try:
         if parallel is not None:
-            return parallel("run", Python.list(model, ids, state))
+            return parallel("run", Python.list(model, ids, state, remote_step))
         var x = causal_model_embedding(model, ids)
         for i in range(len(model._blocks)):  # driver-loop: over ordered model layers
             x = causal_layer_run(model, i, x, state.layers[i])
@@ -552,7 +552,7 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
     var out = PythonObject(None)
     var parallel = model._native_entries.get("parallel_call")
     try:
-        out = _run(model, ids, state)
+        out = _run(model, ids, state, one)
     except error:
         if supplied_state is None and parallel is not None:
             try:
@@ -776,7 +776,7 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
     try:
         while wrote < capacity and not s.done():
             var l = Int(py=s.current.shape[1])
-            var logits = _run(s.model, s.current, s.state)
+            var logits = _run(s.model, s.current, s.state, s.produced > 0)
             var raw = f32_ptr(Int(py=logits._addr))
             var next = generation_array([b, 1], "i")
             var dst = i32_ptr(Int(py=next._addr))

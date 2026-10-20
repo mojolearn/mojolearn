@@ -139,13 +139,13 @@ def local_model(root, profile, weight_format='float32'):
     return CausalLM.load(root, device=route, numeric_profile=profile, weight_format=weight_format)
 
 
-def block_reference(model, ids, state=None):
+def block_reference(model, ids, state=None, *, step=False):
     """Independent test driver through retained block primitives, not CausalLM.forward."""
     b, length = ids.shape
     x = model._prims.embedding(model._embed, ids.reshape((b * length,)))
     x = x.reshape((b, length, model.d_model))
     for i, block in enumerate(model.blocks):
-        x = block._call(x, None if state is None else state.layers[i], step=False)
+        x = block._call(x, None if state is None else state.layers[i], step=step)
     x = x.reshape((b * length, model.d_model))
     if model._norm is not None:
         x = model._prims.rms_norm(x, model._norm, model.norm_eps)
@@ -189,7 +189,7 @@ def test_native_owners_match_independent_blocks_and_continue_states(tmp_path, mo
         state = checked(split.allocate_state, 2, 12)
         bits(checked(split.forward, ids, state), block_reference(plain, ids, reference_state))
         token = Array.from_list([[5], [6]], '<i4')
-        bits(checked(split.step, token, state), block_reference(plain, token, reference_state)[:, 0])
+        bits(checked(split.step, token, state), block_reference(plain, token, reference_state, step=True)[:, 0])
         assert state.positions == 4
         assert state_digest(state) == state_digest(reference_state)
         checked(split.reset_state, state)
@@ -203,7 +203,7 @@ def test_native_owners_match_independent_blocks_and_continue_states(tmp_path, mo
             next_ids = logits[:, -1].argmax(axis=1).astype('i4')
             continuations.append(next_ids)
             if i != 3:
-                logits = block_reference(plain, Array.from_buffer(next_ids[:, None]), greedy_state)
+                logits = block_reference(plain, Array.from_buffer(next_ids[:, None]), greedy_state, step=True)
         want = np.concatenate((np.asarray(ids), np.stack(continuations, axis=1)), axis=1)
         bits(checked(split.generate, ids, 4), want)
         actual_params = checked(split.parameters)
