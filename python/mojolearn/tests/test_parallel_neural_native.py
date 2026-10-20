@@ -97,6 +97,9 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
             expected -= cfg['lr'] * gradient / (np.abs(gradient) + cfg['eps'])
             np.testing.assert_allclose(np.asarray(checkpoint['state']['weights'][key]), expected, rtol=6e-6, atol=6e-7)
         replay = checked('restore', ParallelNeuralTrainer, checkpoint, (devices[0],))
+        # The portable checkpoint and both restored/live owners have distinct
+        # parameter storage; changing the saved bytes cannot alter replay.
+        np.asarray(checkpoint['state']['weights']['weight1'])[:] = 99
         checked('train', owner, shards)
         checked('train', replay, shards)
         assert training_state(checked('checkpoint', owner)) == training_state(checked('checkpoint', replay))
@@ -157,6 +160,8 @@ def test_worker_failure_rolls_back_and_retry_restarts_owned_processes():
         before = checked('checkpoint', owner)
         failed = audit_native_call(native, 'train', (owner, [(x, y)]))
         assert isinstance(failed.exception, RuntimeError), failed.report()
+        for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+            assert not failed.report()[key], failed.report()
         assert training_state(checked('checkpoint', owner)) == training_state(before)
         assert owner._pool['workers'] == []
         assert owner._pool['closed'] is False
