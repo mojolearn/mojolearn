@@ -11,6 +11,7 @@ from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops
 from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from autograd.program_save import ops_program_save_native_py
 from bindings.native_json import native_path
+from autograd.weight_frontend import ops_weights_native_py
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -95,8 +96,6 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
     var name = String(operation)
-    if name == "save_program":
-        return ops_program_save_native_py[E, KIND](args[0], args[1])
     if name == "free_program":
         if not _nil(session._id) and not _nil(args[0]._id):
             var owner = ops_session[E, KIND](Int(py=session._id))
@@ -117,6 +116,10 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: this session is closed")
     var sid = session._id
     var s = ops_session[E, KIND](Int(py=sid))
+    if name == "save_program":
+        return ops_program_save_native_py[E, KIND](args[0], args[1])
+    if name == "load_weights":
+        return ops_weights_native_py[E, KIND](sid, args[0], args[1], args[2])
     if name == "tensor" or name == "ids":
         var input = ProgramInput(args[0], name == "ids")
         var handle: Int

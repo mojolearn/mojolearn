@@ -13,12 +13,14 @@ struct _ProgramArrays(Defaultable, Movable):
     var builtins: PythonObject
     var ndarray: PythonObject
     var integer_type: PythonObject
+    var mmap_type: PythonObject
 
     def __init__(out self):
         self.ready = False
         self.builtins = PythonObject(None)
         self.ndarray = PythonObject(None)
         self.integer_type = PythonObject(None)
+        self.mmap_type = PythonObject(None)
 
 
 comptime _PROGRAM_ARRAYS = _Global[
@@ -33,6 +35,7 @@ def initialize_program_arrays() raises:
         var numpy = Python.import_module("numpy")
         state[].ndarray = numpy.ndarray
         state[].integer_type = numpy.integer
+        state[].mmap_type = Python.import_module("mmap").mmap
         state[].ready = True
 
 
@@ -56,3 +59,18 @@ def is_integer_input(value: PythonObject) raises -> Bool:
     var b = state[].builtins
     return not Bool(py=b.isinstance(value, b.bool)) and (
         Bool(py=b.isinstance(value, b.int)) or Bool(py=b.isinstance(value, state[].integer_type)))
+
+
+def mapped_byte_array(path: PythonObject) raises -> PythonObject:
+    # mmap is a native CPython buffer owner. The ndarray C type keeps the
+    # mapping alive, so no Python safetensors reader or ndarray helper runs.
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    var file = state[].builtins.open(path, "rb")
+    var mapping = PythonObject(None)
+    try:
+        mapping = state[].mmap_type(file.fileno(), 0, access=1)
+    finally:
+        file.close()
+    var dims = Python.list()
+    dims.append(len(mapping))
+    return state[].ndarray(dims, dtype="uint8", buffer=mapping)

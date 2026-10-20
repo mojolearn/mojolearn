@@ -19,9 +19,9 @@ EXPECTED_CASES = (
     "native_inputs", "dynamic_shapes_and_recovery", "lazy_conditional",
     "bounded_while", "shape_growing_while", "exact_duplicate_elimination",
     "training_after_optimization", "node_diagnostics_and_profile",
-    "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary",
+    "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4)))
 
 
 _AUDITS = []
@@ -340,6 +340,44 @@ def native_checkpoint_boundary():
             _equal(restored, expected)
             _equal(restored, np.array([[0]], np.float32))
     return [saved, restored]
+
+
+def native_weight_boundary():
+    import numpy as np
+    import struct
+    from . import ops
+    weights = np.arange(6, dtype=np.float16).reshape(3, 2)
+    bias = np.array([0.5, -0.5], np.float64)
+    with ops.Session() as s:
+        w = s.tensor(np.zeros((2, 3), np.float32))
+        b = s.tensor(np.zeros((1, 2), np.float32))
+        mapping = {"weight": weights, "bias": bias}
+        assert _invoke(s.load_weights, mapping, [(w, "weight", "transpose"), (b, "bias")]) == [w, b]
+        first, second = s.numpy(w), s.numpy(b)
+        _equal(first, weights.T.astype(np.float32))
+        _equal(second, bias.astype(np.float32).reshape(1, 2))
+        bad = {"weight": weights + np.float16(10), "bias": np.zeros(7, np.float32)}
+        _refuses(lambda: _invoke(s.load_weights, bad, [(w, "weight", "transpose"), (b, "bias")]), "shape")
+        _equal(s.numpy(w), first)
+        _refuses(lambda: _invoke(s.load_weights, mapping, [(w, "missing")]), "no tensor", ValueError)
+        with tempfile.TemporaryDirectory(prefix="mojolearn-weights-") as d:
+            root = Path(d)
+            _refuses(lambda: _invoke(s.load_weights, root / "missing.safetensors", [(w, "weight")]),
+                     "does not exist", FileNotFoundError)
+            _refuses(lambda: _invoke(s.load_weights, root, [(w, "weight")]),
+                     "checkpoint directory", FileNotFoundError)
+            for filename, name, array, dtype in (("a.safetensors", "weight", weights, "F16"),
+                                                   ("b.safetensors", "bias", bias, "F64")):
+                header = json.dumps({name: {"dtype": dtype, "shape": list(array.shape),
+                                           "data_offsets": [0, array.nbytes]}}).encode()
+                (root / filename).write_bytes(struct.pack("<Q", len(header)) + header + array.tobytes())
+            (root / "model.safetensors.index.json").write_text(json.dumps({"weight_map": {
+                "weight": "a.safetensors", "bias": "b.safetensors"}}))
+            _invoke(s.load_weights, root, [(w, "weight", "transpose"), (b, "bias")])
+            third, fourth = s.numpy(w), s.numpy(b)
+            _equal(third, first)
+            _equal(fourth, second)
+    return [first, second, third, fourth]
 
 
 def _digest(a):

@@ -1229,37 +1229,7 @@ class Session:
         ...     x = s.tensor(rng.standard_normal((8, 4), dtype=np.float32))
         ...     probs = s.numpy(s.linear(x, w, b, activation="softmax"))
         """
-        from ._weight_import import LAYOUT_AS_IS, LAYOUT_TRANSPOSE, WeightSource
-        pairs = list(names)
-        if not pairs:
-            raise ValueError("names must hold at least one (handle, name) pair")
-        entries = []
-        for pair in pairs:  # glue: the (handle, name[, layout]) arguments
-            if not isinstance(pair, (tuple, list)) or len(pair) not in (2, 3):
-                raise ValueError("names takes (handle, name) or (handle, name, 'transpose') pairs")
-            layout = LAYOUT_AS_IS
-            if len(pair) == 3:
-                if pair[2] != "transpose":
-                    raise ValueError("the third item of a names entry must be 'transpose'")
-                layout = LAYOUT_TRANSPOSE
-            if not isinstance(pair[1], str):
-                raise TypeError("a tensor name must be a string")
-            entries.append((_int(pair[0], "handle", 1), pair[1], layout))
-        keys = [k for _, k, _ in entries]  # glue: the requested tensor names
-        sid = self._sid()
-        with WeightSource(path, source, what="load_weights") as src:
-            missing = src.missing(keys)
-            if missing:
-                held = src.names()
-                raise ValueError(f"load_weights: the source has no tensor {missing[0]!r}"
-                                 + (f" ({len(missing)} missing)" if len(missing) > 1 else "")
-                                 + f"; it holds {held[:6]}" + (" ..." if len(held) > 6 else ""))
-            recs = []
-            for h, key, layout in entries:  # glue: one record per source tensor
-                recs += src.record(key, h, 0, layout)
-            # Mojo checks every dtype and shape, then writes every tensor
-            self._b.ops_load_weights(sid, recs, keys)
-        return [h for h, _, _ in entries]  # glue: the handles, in the order given
+        return self._session_native(self, "load_weights", (path, names, source))
 
     def zero_grad(self):
         """Clear the gradient of every tensor made with ``requires_grad=True``.
