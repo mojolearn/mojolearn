@@ -535,6 +535,18 @@ onnx_close; importers/onnx.py only wraps the tables in the GraphIR classes. The 
 below is the test oracle, python/mojolearn/tests/_onnx_reader_oracle.py and
 _onnx_proto_oracle.py. Step 2 moves _lower.py into Mojo against this graph.)
 
+(Lane ag-native-lowering, 2026-10-20, step 2: the lowering runs in Mojo too,
+autograd/import_lower.mojo, through the x_sequence entry onnx_import(handle, session, names, flat,
+buffer addresses, source): shape resolution, the refusal pass (the same texts, in the same order,
+before any upload), the uploads through the cast and weight-import paths, the import-time
+prologue and its persists, one session call per operation in the Python lowering's order, the
+capture and the release of unread uploads. importers.import_model is read + one onnx_import call
++ the ImportedProgram wrapper. A GraphIR built in Python (torch.export) goes to Mojo as onnx_info's
+words through onnx_from_words and takes the same lowering. The Python lowering is the test oracle,
+python/mojolearn/tests/_lower_oracle.py; tests/test_import_lower_native.py asserts both give the
+same refusals, the same saved program bytes and the same run outputs. The op table is
+importers/_table.py.)
+
 - Files: python/mojolearn/importers/__init__.py (the package, `UnsupportedModel`,
   `supported_ops` placeholder reading lane 2's table lazily),
   python/mojolearn/importers/_graph.py (section 7), python/mojolearn/importers/_onnx_proto.py

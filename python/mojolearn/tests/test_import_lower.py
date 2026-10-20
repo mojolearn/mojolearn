@@ -430,12 +430,19 @@ def _refused_model(directory):
 
 
 def test_refusals_list_every_node_before_any_upload(tmp_path, monkeypatch):
+    # the refusal pass runs in the one onnx_import call before any upload
+    # (autograd/import_lower.mojo); the session it was given is closed again
     from mojolearn.importers import _program
 
-    def no_session(*a, **k):
-        raise AssertionError("the import opened a session before refusing the model")
+    opened = []
+    real = _program.Session
 
-    monkeypatch.setattr(_program, "Session", no_session)
+    def tracked(*a, **k):
+        s = real(*a, **k)
+        opened.append(s)
+        return s
+
+    monkeypatch.setattr(_program, "Session", tracked)
     path = _refused_model(str(tmp_path))
     with pytest.raises(UnsupportedModel) as e:
         importers.import_model(path)
@@ -445,6 +452,7 @@ def test_refusals_list_every_node_before_any_upload(tmp_path, monkeypatch):
     msg = str(e.value)
     assert "dilations=(2, 2)" in msg and "no kernel" in msg and "indices" in msg
     assert isinstance(e.value, ValueError)
+    assert all(s._id is None for s in opened), "the refused import left its session open"
 
 
 def test_supported_ops_lists_the_table():
