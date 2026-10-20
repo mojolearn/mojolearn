@@ -56,7 +56,7 @@ def _digest(b, a, name):
     if not a.flags.c_contiguous:
         raise ValueError(f"{name} must be a C-contiguous array")
     # Mojo folds the array's bytes (FNV-1a64, the identity digest)
-    return str(b.verify_digest(a.ctypes.data, a.nbytes))
+    return str(b.verify_digest(a.ctypes.data, a.nbytes))  # cpu-route: verification digest of a host array after the run
 
 
 def _seeded(b, shapes, seed):
@@ -65,7 +65,7 @@ def _seeded(b, shapes, seed):
     for k, shape in enumerate(shapes):  # glue: one buffer per model input
         a = np.empty(tuple(shape), dtype=np.float32)
         # Mojo writes the seeded values (input k is Philox stream k)
-        b.verify_fill(a.ctypes.data, a.size, int(seed), k)
+        b.verify_fill(a.ctypes.data, a.size, int(seed), k)  # cpu-route: verification inputs made before the run
         arrays.append(a)
     return arrays
 
@@ -119,10 +119,11 @@ def _write(rep, path):
         fh.write("\n")
 
 
-def _names(entries, n, stem):
-    if entries and len(entries) == n:
+def _names(entries, items, stem):
+    # the given names when there is one per item, else stem0, stem1, ...
+    if entries and len(entries) == len(items):
         return [str(e) for e in entries]  # glue: the model's input or output names
-    return [f"{stem}{k}" for k in range(n)]  # glue: one label per model input or output
+    return [f"{stem}{k}" for k, _ in enumerate(items)]  # glue: one label per model input or output
 
 
 # ------------------------------------------------------------ at save time
@@ -135,8 +136,8 @@ def record_program(program, path):
     arrays = _seeded(b, program.input_shapes, DEFAULT_SEED)
     outs = s.run(program, *arrays)
     outs = outs if isinstance(outs, tuple) else (outs,)
-    names_in = _names([e[0] for e in getattr(program, "inputs", ())], len(arrays), "input")  # glue: the model's input names
-    names_out = _names([e[0] for e in getattr(program, "outputs", ())], len(outs), "output")  # glue: the model's output names
+    names_in = _names([e[0] for e in getattr(program, "inputs", ())], arrays, "input")  # glue: the model's input names
+    names_out = _names([e[0] for e in getattr(program, "outputs", ())], outs, "output")  # glue: the model's output names
     rep = _report(b, path, s.numeric_mode, names_in, arrays, "seeded", DEFAULT_SEED, names_out, outs)
     _write(rep, sidecar_path(path))
     return rep
@@ -162,7 +163,8 @@ def _load_inputs(path, want_names, n):
         files = list(z.files)
         if len(files) != n:
             raise ValueError(f"{os.fspath(path)} holds {len(files)} arrays; the model takes {n} inputs")
-        order = want_names if want_names and sorted(want_names) == sorted(files) else files
+        # the expected report's input order when the file holds the same names
+        order = want_names if want_names and set(want_names) == set(files) else files  # glue: input names
         return list(order), [z[k] for k in order]  # glue: one array per model input
 
 
@@ -191,13 +193,13 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
             prog = s.load_program(path)
             n = len(prog.input_shapes)
             if inputs is None:
-                arrays, names_in, source = _seeded(s._b, prog.input_shapes, seed), _names(exp_names_in, n, "input"), "seeded"
+                arrays, names_in, source = _seeded(s._b, prog.input_shapes, seed), _names(exp_names_in, prog.input_shapes, "input"), "seeded"
             else:
                 names_in, arrays = _load_inputs(inputs, exp_names_in, n)
                 source = "file"
             outs = prog.run(*arrays)
             outs = outs if isinstance(outs, tuple) else (outs,)
-            names_out = _names(exp_names_out, len(outs), "output")
+            names_out = _names(exp_names_out, outs, "output")
             return _report(s._b, path, numeric_mode, names_in, arrays, source, seed, names_out, outs)
     if kind in _SEQUENTIAL:
         model = Sequential.load(path, numeric_mode=numeric_mode)
