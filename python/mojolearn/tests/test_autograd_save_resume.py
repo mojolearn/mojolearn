@@ -12,9 +12,16 @@ same predictions on either column: the cross-vendor resume claim. On a
 machine with one GPU binding this compares the host column with that GPU;
 the NVIDIA and AMD runs are the same test on those boxes.
 
-Small models (scikit-learn-test sizes)."""
+Small models (scikit-learn-test sizes).
+MOJOLEARN_TEST_INSTALLED=1 requires non-editable installed wheels. Run pytest
+with python -I and --import-mode=importlib against this file; the harness may
+live in the checkout while the package under test comes from site-packages.
+"""
 import hashlib
+import json
 import os
+from pathlib import Path
+import runpy
 import subprocess
 import sys
 import textwrap
@@ -25,12 +32,30 @@ import pytest
 import mojolearn as ml
 from mojolearn import _backend
 
+_REQUIRE_INSTALLED = os.environ.get("MOJOLEARN_TEST_INSTALLED") == "1"
+_PACKAGE_EVIDENCE = Path(__file__).with_name("_package_evidence.py")
+_package_evidence = runpy.run_path(str(_PACKAGE_EVIDENCE))["package_evidence"]
+if _REQUIRE_INSTALLED:
+    _package_evidence(ml, require_installed=True)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _record_package():
+    yield
+    print("PACKAGE_EVIDENCE", json.dumps(_package_evidence(ml, require_installed=_REQUIRE_INSTALLED),
+                                         sort_keys=True))
+
 
 def _has_entries():
     try:
-        return hasattr(_backend.binding("_mojolearn_x_sequence"), "model_save_checkpoint")
+        found = hasattr(_backend.binding("_mojolearn_x_sequence"), "model_save_checkpoint")
     except Exception:
+        if _REQUIRE_INSTALLED:
+            raise
         return False
+    if _REQUIRE_INSTALLED and not found:
+        raise RuntimeError("Installed sequence binding has no model_save_checkpoint entry")
+    return found
 
 
 pytestmark = pytest.mark.skipif(not _has_entries(),
@@ -240,9 +265,20 @@ def test_session_optimizer_resume_word_for_word(tmp_path):
 
 # ---------------------------------------------------------------- across columns
 _CHILD = textwrap.dedent('''
-    import hashlib, sys
+    import hashlib, json, runpy, sys
+    from pathlib import Path
+    mode, path, expected_package, helper, installed = sys.argv[1:]
+    installed = installed == "1"
+    if not installed:
+        # Preserve the parent's actual package, which may itself be installed.
+        # Never derive the package under test from this test file's location.
+        sys.path.insert(0, str(Path(expected_package).parent.parent))
     import numpy as np
     import mojolearn as ml
+    if Path(ml.__file__).resolve() != Path(expected_package):
+        raise RuntimeError("Resume subprocess imported a different mojolearn package")
+    package_evidence = runpy.run_path(helper)["package_evidence"]
+    package_evidence(ml, require_installed=installed)
 
     def h(a):
         return hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest()[:16]
@@ -256,7 +292,6 @@ _CHILD = textwrap.dedent('''
                 .compile(loss="cross_entropy", optimizer="adam", lr=0.02, schedule="step", step_size=1,
                          gamma=0.8))
 
-    mode, path = sys.argv[1], sys.argv[2]
     if mode == "save":
         straight = build().fit(X, y3, epochs=4, batch_size=25, seed=11)
         print("DIGEST straight", h(straight.params_), h(straight._opt_m), h(straight._opt_v))
@@ -270,6 +305,7 @@ _CHILD = textwrap.dedent('''
         served = ml.Sequential.load(path + ".export")
         print("DIGEST predict", h(served.predict_proba(X)), h(served.predict(X)))
     print("COLUMN", ml.vendor())
+    print("PACKAGE_EVIDENCE", json.dumps(package_evidence(ml, require_installed=installed), sort_keys=True))
 ''')
 
 
@@ -278,14 +314,20 @@ def _run(column, mode, path):
     if column == "cpu":
         env["MOJOLEARN_VENDOR"] = "cpu"
     else:
-        env.pop("MOJOLEARN_VENDOR", None)
-    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    env["PYTHONPATH"] = here + os.pathsep + env.get("PYTHONPATH", "")
-    r = subprocess.run([sys.executable, "-c", _CHILD, mode, str(path)], env=env, capture_output=True,
+        env["MOJOLEARN_VENDOR"] = ml.vendor()
+    env.pop("PYTHONPATH", None)
+    env.pop("PYTHONHOME", None)
+    r = subprocess.run([sys.executable, "-I", "-c", _CHILD, mode, str(path),
+                        str(Path(ml.__file__).resolve()), str(_PACKAGE_EVIDENCE),
+                        "1" if _REQUIRE_INSTALLED else "0"], env=env, capture_output=True,
                        text=True, timeout=900)
-    if r.returncode != 0 and column == "cpu" and "No module named" in r.stderr:
+    if r.returncode != 0 and column == "cpu" and "No module named" in r.stderr and not _REQUIRE_INSTALLED:
         pytest.skip("no CPU host binding in this install")
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-4000:]
+    assert f"COLUMN {env['MOJOLEARN_VENDOR']}" in r.stdout.splitlines()
+    for line in r.stdout.splitlines():
+        if line.startswith("PACKAGE_EVIDENCE "):
+            print(line)
     return {line.split()[1]: tuple(line.split()[2:]) for line in r.stdout.splitlines()
             if line.startswith("DIGEST ")}
 

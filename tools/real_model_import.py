@@ -33,8 +33,14 @@ line per model:
 
     python3 tools/real_model_import.py run --out DIR [--models resnet18,squeezenet1_1] [--batch 1]
                                          [--cache DIR] [--seed 0] [--timeout 1800]
-                                         [--imagenet-val DIR]
+                                         [--imagenet-val DIR] [--installed]
     python3 tools/real_model_import.py list
+
+By default the runner tests this source checkout. --installed tests the current
+interpreter's non-editable installation in isolation, including in each model
+child. Each model JSON records the imported package and loaded native bindings.
+Use a virtual environment with the base wheel and the required GPU plugin
+installed from PyPI or local wheel files. This tool never installs packages.
 
 Accuracy (optional, --imagenet-val DIR): the ImageNet classifiers (the three torchvision models and
 resnet50-v1-12) are also scored on a stated public slice, the first 256 images of the ILSVRC2012
@@ -55,20 +61,15 @@ import argparse
 import hashlib
 import json
 import os
+import runpy
 import subprocess
 import sys
 import time
 import urllib.request
 from pathlib import Path
 
-# The repository's own package, for this process and every child it starts (a box run has no PYTHONPATH set,
-# and each model runs in a child process): the checkout this tool lives in, ahead of any installed copy.
-_REPO_PYTHON = str(Path(__file__).resolve().parents[1] / "python")
-if _REPO_PYTHON not in sys.path:
-    sys.path.insert(0, _REPO_PYTHON)
-os.environ["PYTHONPATH"] = _REPO_PYTHON + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
-
 ROOT = Path(__file__).resolve().parents[1]
+_PACKAGE_EVIDENCE = ROOT / "python/mojolearn/tests/_package_evidence.py"
 SCHEMA = "mojolearn-real-model/1"
 _MB = 1024.0 * 1024.0
 ONNX_ZOO = "https://github.com/onnx/models/raw/main/validated/vision/classification"
@@ -508,7 +509,7 @@ def _refusal_kind(problems):
     return "refused"
 
 
-def run_one(name, batch, seed, cache, out_dir, imagenet_val=None):
+def run_one(name, batch, seed, cache, out_dir, imagenet_val=None, *, installed=False):
     spec = MODELS[name]
     doc = {"schema": SCHEMA, "model": name, "kind": spec["kind"], "batch": batch, "seed": seed,
            "gate": False, "status": "failed",
@@ -519,6 +520,8 @@ def run_one(name, batch, seed, cache, out_dir, imagenet_val=None):
     out = Path(out_dir) / ("%s.json" % name)
     try:
         import mojolearn
+        package_evidence = runpy.run_path(str(_PACKAGE_EVIDENCE))["package_evidence"]
+        doc["package"] = package_evidence(mojolearn, require_installed=installed)
         doc["vendor"] = mojolearn.vendor()
         doc["numeric_mode"] = mojolearn.numeric_mode()
         doc["mojolearn_version"] = getattr(mojolearn, "__version__", None)
@@ -542,6 +545,7 @@ def run_one(name, batch, seed, cache, out_dir, imagenet_val=None):
         try:
             prog = mojolearn.import_model(source, shapes=shapes)
         except UnsupportedModel as e:
+            doc["package"] = package_evidence(mojolearn, require_installed=installed)
             doc["status"] = _refusal_kind(e.problems)
             doc["unsupported"] = [{"node": n, "op": op, "reason": why} for n, op, why in e.problems]
             doc["unsupported_ops"] = sorted({p[1] for p in e.problems if p[1] is not None})
@@ -573,6 +577,7 @@ def run_one(name, batch, seed, cache, out_dir, imagenet_val=None):
                 doc["accuracy"] = imagenet_accuracy(spec, prog, imagenet_val)
             except Exception as exc:  # noqa: BLE001  the digest row stands without its accuracy
                 doc["accuracy"] = {"error": repr(exc)[:400]}
+        doc["package"] = package_evidence(mojolearn, require_installed=installed)
         doc["status"] = "ok"
     except Exception as exc:  # noqa: BLE001  a failed row records why; the other models still run
         import traceback
@@ -609,7 +614,7 @@ def _write(doc, out):
 
 def cmd_one(a):
     Path(a.out).mkdir(parents=True, exist_ok=True)
-    doc, out = run_one(a.name, a.batch, a.seed, a.cache, a.out, a.imagenet_val)
+    doc, out = run_one(a.name, a.batch, a.seed, a.cache, a.out, a.imagenet_val, installed=a.installed)
     _write(doc, out)
     print(line(doc), flush=True)
     for text in unsupported_lines(doc):
@@ -637,8 +642,11 @@ def cmd_run(a):
     summary = []
     for name in names:  # one child process per model: its own device memory, its own crash
         log = out_dir / ("%s.log" % name)
-        cmd = [sys.executable, str(Path(__file__).resolve()), "one", name, "--out", str(out_dir),
+        cmd = [sys.executable, *(['-I'] if a.installed else []),
+               str(Path(__file__).resolve()), "one", name, "--out", str(out_dir),
                "--batch", str(a.batch), "--seed", str(a.seed), "--cache", str(a.cache)]
+        if a.installed:
+            cmd += ["--installed"]
         if a.imagenet_val:
             cmd += ["--imagenet-val", str(a.imagenet_val)]
         with open(log, "wb") as fh:
@@ -654,6 +662,10 @@ def cmd_run(a):
                    "error": "timed out after %ss" % a.timeout if rc is None else "exit %s, no JSON" % rc,
                    "tail": _tail(log)}
             _write(doc, path)
+        # A previous JSON cannot turn a crashed or timed-out new child green.
+        if rc != 0:
+            doc["status"] = "failed"
+            doc.setdefault("error", "timed out after %ss" % a.timeout if rc is None else "child exit %s" % rc)
         if doc["status"] == "failed":
             bad += 1
             doc.setdefault("tail", _tail(log))
@@ -662,12 +674,14 @@ def cmd_run(a):
         for text in unsupported_lines(doc):
             print(text, flush=True)
         summary.append({"model": name, "status": doc["status"], "json": str(path), "log": str(log)})
-    _write({"schema": SCHEMA + "-summary", "rows": summary, "batch": a.batch, "seed": a.seed},
+    _write({"schema": SCHEMA + "-summary", "rows": summary, "batch": a.batch, "seed": a.seed,
+            "package_selection": "installed" if a.installed else "checkout"},
            out_dir / "summary.json")
     return 1 if bad else 0
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     default_cache = os.path.expanduser("~/.cache/mojolearn-real-models")
@@ -682,6 +696,8 @@ def main(argv=None):
         p.add_argument("--batch", type=int, default=1)
         p.add_argument("--seed", type=int, default=0)
         p.add_argument("--cache", default=default_cache, help="where the ONNX files are downloaded once")
+        p.add_argument("--installed", action="store_true",
+                       help="test this interpreter's installed wheels in isolation; reject checkout or editable imports")
         p.add_argument("--imagenet-val", default=None,
                        help="an ImageNet-1K validation directory (ImageFolder layout) on this box: score the "
                             "ImageNet classifiers on its first 256 images by file name")
@@ -691,6 +707,16 @@ def main(argv=None):
         for n, s in MODELS.items():
             print("%-20s %-13s %s" % (n, s["kind"], s.get("url") or s.get("repo") or "torchvision." + s["ctor"]))
         return 0
+    if a.installed:
+        if not sys.flags.isolated:
+            # -I ignores PYTHONPATH, the working directory and user-site
+            # packages. Re-enter before importing mojolearn or loading models.
+            os.execv(sys.executable, [sys.executable, "-I", str(Path(__file__).resolve()), *argv])
+    else:
+        repo_python = str(ROOT / "python")
+        sys.path.insert(0, repo_python)
+        os.environ["PYTHONPATH"] = repo_python + (
+            os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
     return cmd_one(a) if a.cmd == "one" else cmd_run(a)
 
 

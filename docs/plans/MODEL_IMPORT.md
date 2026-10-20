@@ -670,6 +670,36 @@ importers/_table.py.)
    lane 5 (pytest on the four, `test_autograd_public.py` block `import`),
    in any order.
 
+## Installed-package evidence
+
+The test harness can live in this checkout while the implementation under
+test comes from a non-editable wheel installed into a virtual environment.
+The wheel may come from PyPI or a local release build. Using a checkout or
+an editable installation does not establish this installed-package result.
+
+With `VENV` naming that environment and `REPO` this checkout:
+
+```sh
+"$VENV/bin/python" "$REPO/tools/real_model_import.py" run \
+  --installed --out /absolute/path/to/new/model-results
+MOJOLEARN_TEST_INSTALLED=1 MOJOLEARN_NUMERIC_MODE=identical \
+  "$VENV/bin/python" -I -m pytest --import-mode=importlib -s \
+  "$REPO/python/mojolearn/tests/test_autograd_save_resume.py"
+```
+
+Install the test dependencies into that environment separately. The import
+runner requires the reference-framework dependencies listed in its module
+documentation; the resume tests require NumPy and pytest. `--installed`
+isolates parent and model-child imports. Resume subprocesses use the same
+package as their parent, never a package inferred from the test file's path.
+The JSON results and `PACKAGE_EVIDENCE` log records identify the package,
+distribution versions and loaded native-library hashes; installed mode
+checks those native files against their wheel RECORD entries.
+
+These commands execute on one machine. Three-vendor comparison and actual
+GPU-to-GPU checkpoint transfer remain separate steps. The retained October 20
+record is unchanged by this tooling repair.
+
 ## 9. Registry
 
 | Range or block | Family | Lane |
