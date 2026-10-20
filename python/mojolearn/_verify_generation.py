@@ -19,6 +19,8 @@ CASES = (("llama", "fp32_v1"), ("mamba", "fp32_v1"),
          ("mamba2", "fp32_v1"), ("llama", "fixed15_v1"))
 PARTS = frozenset(("logits", "greedy", "sampled", "streamed", "resumed", "eos"))
 CHECKS = frozenset(("repeat", "stream", "resume", "eos", "no_python", "corruption_detected"))
+AUDITS = ("forward", "greedy", "sampled", "repeated", "stream_open", "stream_prefix",
+          "snapshot", "stream_tail", "resume_open", "resumed_tail", "eos")
 
 
 def _digest(value):
@@ -47,25 +49,25 @@ def _case(path, family, profile, device):
     ids = np.array([[1, 3, 5], [2, 4, 6]], dtype="i4")
     audits = []
 
-    def native(operation, *args, **kwargs):
+    def native(name, operation, *args, **kwargs):
         audit = _verify_native_runtime.audit_native_call(operation, *args, **kwargs)
-        audits.append(audit.report())
+        audits.append(dict(audit.report(), operation=name))
         return audit.assert_native()
 
-    logits = native(model.forward, ids)
-    greedy = native(model.generate, ids, 5)
+    logits = native("forward", model.forward, ids)
+    greedy = native("greedy", model.generate, ids, 5)
     options = dict(greedy=False, seed=0xFEDCBA9876543210, temperature=0.8, top_k=9, top_p=0.91)
-    sampled = native(model.generate, ids, 5, **options)
-    repeated = native(model.generate, ids, 5, **options)
-    stream = native(model.stream, ids, 5, **options)
-    first = native(stream.read, 2)
-    snapshot = native(stream.state_dict)
-    tail = native(stream.read, 8)
-    resumed = native(model.resume_generation, snapshot)
-    restored_tail = native(resumed.read, 8)
+    sampled = native("sampled", model.generate, ids, 5, **options)
+    repeated = native("repeated", model.generate, ids, 5, **options)
+    stream = native("stream_open", model.stream, ids, 5, **options)
+    first = native("stream_prefix", stream.read, 2)
+    snapshot = native("snapshot", stream.state_dict)
+    tail = native("stream_tail", stream.read, 8)
+    resumed = native("resume_open", model.resume_generation, snapshot)
+    restored_tail = native("resumed_tail", resumed.read, 8)
     streamed = np.concatenate((ids, np.asarray(first), np.asarray(tail)), axis=1)
     restored = np.concatenate((ids, np.asarray(first), np.asarray(restored_tail)), axis=1)
-    eos = native(model.generate, ids, 5, eos_token_id=list(range(model.vocab_size)), **options)
+    eos = native("eos", model.generate, ids, 5, eos_token_id=list(range(model.vocab_size)), **options)
     corrupt = dict(snapshot)
     corrupt["produced"] += 1
     detected = False
@@ -130,7 +132,13 @@ def _cells(report):
             raise ValueError("missing or failed generation checks/outputs")
         if case.get("mode") != 1 or case.get("vendor") not in ({"cpu"} if report["device"] == "cpu" else {"metal", "cuda", "hip"}):
             raise ValueError("native vendor/mode readback differs from requested execution")
-        if len(case.get("audits", [])) != 12 or not all(a.get("passed") for a in case["audits"]):
+        audits = case.get("audits", [])
+        if tuple(a.get("operation") for a in audits) != AUDITS or not all(
+                a.get("schema") == "mojolearn.native-runtime-audit.v1" and a.get("passed") is True
+                and a.get("wrapper_entries") == 1 and a.get("wrapper_work") == []
+                and a.get("python_frames") == [] and a.get("forbidden_native_calls") == []
+                and a.get("unobserved_existing_threads") == [] and a.get("exception") is None
+                for a in audits):
             raise ValueError("missing or failed native execution audits")
         values = [*case["parts"].values(), *case.get("checkpoints", {}).values()]
         if not case.get("checkpoints") or any(not isinstance(v, str) or not re.fullmatch("[0-9a-f]{64}", v) for v in values):
