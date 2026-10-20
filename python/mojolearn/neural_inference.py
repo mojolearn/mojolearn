@@ -562,3 +562,19 @@ class SambaInference:
     def __repr__(self):
         return "SambaInference(layers=%r, d_model=%d, vocab=%d)" % (
             list(self.config.layers), self.config.d_model, self.config.vocab)
+
+
+# Import-time connection metadata for the causal native owner. This helper is
+# never called by a model operation and cannot choose a GPU arithmetic route.
+def _causal_native_connections():
+    entries = {}
+    try:
+        neural = _binding()
+    except (ImportError, RuntimeError, ValueError, OSError) as exc:
+        neural = str(exc)
+    entries.update(transformer=neural, mamba1=neural, mamba2=neural, primitives=neural)
+    try:
+        entries["linalg"] = _backend.load_host_module("_mojolearn_linalg_host")
+    except (ImportError, RuntimeError, ValueError, OSError) as exc:
+        entries["linalg"] = str(exc)
+    return entries

@@ -239,6 +239,14 @@ class CausalLM:
 
     def __init__(self, plan, weights, *, weight_format="float32", max_positions=None, device="auto",
                  numeric_profile=None):
+        return _NATIVE.causal_model_init(self, plan, weights,
+                                        (weight_format, max_positions, device, numeric_profile),
+                                        _NATIVE_CONTEXT)
+
+    # The old owner is retained only for ParallelCausalLM's existing RPC path.
+    # It remains explicit runtime debt until that transport has native ownership.
+    def _initialize_legacy(self, plan, weights, *, weight_format="float32", max_positions=None, device="auto",
+                 numeric_profile=None):
         if weight_format not in _lowbit.FORMATS:
             raise ValueError(f"mojolearn.models.CausalLM: weight_format must be one of {_lowbit.FORMATS}, got {weight_format!r}")
         self.plan = plan
@@ -342,29 +350,6 @@ class CausalLM:
 
         self._initialize_native_runtime()
 
-    def _initialize_native_runtime(self):
-        from ..tokenizer import _binding as _runtime_binding
-        from .._transformer_impl import TransformerState
-        from .._mamba_impl import Mamba1State, Mamba2State
-        self._runtime = _runtime_binding()._module
-        self._runtime.generation_initialize((
-            Array, CausalLMState,
-            {"transformer": TransformerState, "mamba1": Mamba1State, "mamba2": Mamba2State},
-            GenerationStream))
-        if self.device == "gpu":
-            from .._training_impl import _load as _training_binding
-            primitives = _training_binding()
-        else:
-            primitives = self._prims._ext
-        int15_binding = None
-        if self._head_int15 is not None:
-            if self.device == "cpu":
-                int15_binding = _backend.load_host_module("_mojolearn_linalg_host")  # cpu-route: explicit CPU model quantized head binding
-            else:
-                from .._linalg_impl import _int15_binding
-                int15_binding = _int15_binding()
-        self._runtime.causal_lm_admit(self, self._blocks[0]._extension(), primitives, int15_binding)
-
     def _make_blocks(self, cls, layers, kwargs):
         return [cls(w, **kwargs) for w in layers]  # glue: builds one block per model layer
 
@@ -373,72 +358,13 @@ class CausalLM:
     def load(cls, path, *, weight_format="float32", max_positions=None, device="auto", numeric_profile=None):
         """A checkpoint directory (`config.json` plus `model.safetensors` or
         `model.safetensors.index.json` and its shards)."""
-        if weight_format not in _lowbit.FORMATS:
-            raise ValueError(f"mojolearn.models.CausalLM.load: weight_format must be one of {_lowbit.FORMATS}, got {weight_format!r}")
-        # refuse a NAMED profile no model computes under BEFORE reading
-        # gigabytes; None stays None, so the family decides in __init__
-        if numeric_profile is not None:
-            numeric_profile = _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM.load numeric_profile")
-        path = os.fspath(path)
-        if not os.path.isdir(path):
-            raise FileNotFoundError(f"mojolearn.models.CausalLM.load: {path} is not a directory")
-        config = HFConfig.from_json(path)
-        plan = plan_for(config)
-        route = _route(device)
-        # a named profile the family does not compute (a Mamba model) is
-        # refused here too, before the weights are read
-        if numeric_profile is not None:
-            _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM.load numeric_profile",
-                                     family=plan.kind)
-        # refuse an option the live block cannot take BEFORE reading gigabytes
-        if plan.kind == "transformer":
-            _block_kwargs(plan, _block_classes(route)[plan.kind])
-        ckpt = Checkpoint.open(path)
-        try:
-            weights = cls._read_weights(ckpt, plan, weight_format)
-        finally:
-            ckpt.close()
-        return cls(plan, weights, weight_format=weight_format, max_positions=max_positions, device=route,
-                   numeric_profile=numeric_profile)
+        return _NATIVE.causal_model_load(cls, path,
+                                        (weight_format, max_positions, device, numeric_profile),
+                                        _NATIVE_CONTEXT)
 
     @staticmethod
     def _read_weights(ckpt, plan, weight_format):
-        """`{"embed", "norm", "head" (or absent), "layers": [dict...],
-        "unused": [...]}` from the checkpoint, the projections packed when a
-        low-bit format is asked."""
-        need = plan.checkpoint_names()
-        missing = [n for n in need if n not in ckpt]  # glue: checks the checkpoint weight names
-        if missing:
-            raise UnsupportedModel(
-                f"mojolearn.models: model_type {plan.model_type!r}: the checkpoint lacks {len(missing)} of the "
-                f"{len(need)} tensors the plan names; first missing: {missing[:5]}")
-        projections = _PROJECTIONS[plan.kind]
-        out = {"embed": ckpt.read(plan.embed_name)}
-        if plan.norm_name is not None:
-            out["norm"] = ckpt.read(plan.norm_name)
-        if plan.head_name is not None:
-            out["head"] = ckpt.read(plan.head_name)
-        layers = []
-        for i in range(plan.n_layers):  # glue: reads weights per model layer
-            w = {}
-            for key, name, rows in plan.layer_weights(i):  # glue: reads the named weights of one layer
-                info = ckpt.info(name)
-                packed = key in projections and weight_format != "float32"
-                if packed and weight_format == "bfloat16" and info.dtype == "BF16" and rows is None and len(info.shape) == 2:
-                    w[key] = ckpt.read(name, bf16="bits")  # the checkpoint's own bits, no conversion
-                    continue
-                a = _float_weight(ckpt.read(name), name)
-                if rows is not None:
-                    if a.ndim != 2 or rows[1] > a.shape[0]:
-                        raise UnsupportedModel(
-                            f"mojolearn.models: model_type {plan.model_type!r}: {name} has shape {tuple(a.shape)}, "
-                            f"too small for the row slice [{rows[0]}, {rows[1]}) that carries {key}")
-                    a = a[rows[0]:rows[1]]
-                w[key] = _lowbit.pack_one(a, weight_format, key) if packed else a
-            layers.append(w)
-        out["layers"] = layers
-        out["unused"] = [n for n in ckpt.names() if n not in need]  # glue: lists unused checkpoint weight names
-        return out
+        return _NATIVE.causal_model_read_weights(ckpt, plan, weight_format, _NATIVE_CONTEXT)
 
     # ------------------------------------------------------------ surface
     @property
@@ -584,3 +510,58 @@ class GenerationStream:
     def state_dict(self):
         """Return independent state bytes, sampling options and model fingerprint."""
         return self._runtime.causal_lm_snapshot(self)
+
+
+# Package-import connection work only. The native owner reads these plain
+# metadata records; it never calls the package loaders or block constructors.
+def _connect_causal_native():
+    import _thread
+    from ..tokenizer import _binding as runtime_binding
+    from .. import _training_impl as training
+    from .._transformer_impl import TransformerBlock, TransformerState, _OPT_NAMES
+    from .._mamba_impl import Mamba1Block, Mamba2Block, Mamba1State, Mamba2State
+    from ..neural_inference import (TransformerBlockInference, Mamba1BlockInference,
+                                    Mamba2BlockInference, _causal_native_connections)
+    from .config import _NATIVE_CONTEXT as config_context
+    from .safetensors import _NATIVE_CONTEXT as checkpoint_context
+    runtime = runtime_binding()._module
+    _backend.default_mode()
+    bindings = {"cpu:identical": _causal_native_connections()}
+    vendor = _backend.vendor()
+    if vendor not in (None, "cpu"):
+        for mode in ("identical", "fast"):  # glue: connects available compiled modes during package import
+            if mode == "fast" and vendor != "metal":
+                continue
+            entries = {}
+            for name, target in (("transformer", "_mojolearn_transformer"),
+                                 ("mamba1", "_mojolearn_mamba"),
+                                 ("mamba2", "_mojolearn_mamba"),
+                                 ("primitives", "_mojolearn_training"),
+                                 ("linalg", "_mojolearn_linalg")):  # glue: connects compiled sibling modules at package import
+                try:
+                    entries[name] = _backend.binding(target, mode)
+                except (ImportError, RuntimeError, ValueError, OSError) as exc:
+                    entries[name] = str(exc)
+            bindings["gpu:" + mode] = entries
+    return runtime, {
+        "runtime": runtime, "backend": _backend, "selected_vendor": vendor,
+        "bindings": bindings, "profiles": _numeric_profile.PROFILES,
+        "profile_defaults": _numeric_profile._defaults,
+        "rejected_profiles": _numeric_profile.REJECTED,
+        "config_context": config_context, "checkpoint_context": checkpoint_context,
+        "array_class": Array, "bf16_class": _lowbit.BF16Weight,
+        "int8_class": _lowbit.Int8Weight, "projections": _PROJECTIONS,
+        "optional_names": _OPT_NAMES, "rlock": _thread.RLock,
+        "training_module": training,
+        "primitive_classes": {"cpu": _CpuPrimitives, "gpu": _GpuPrimitives},
+        "block_classes": {
+            "cpu": {"transformer": TransformerBlockInference, "mamba1": Mamba1BlockInference,
+                    "mamba2": Mamba2BlockInference},
+            "gpu": {"transformer": TransformerBlock, "mamba1": Mamba1Block, "mamba2": Mamba2Block}},
+        "generation_classes": (Array, CausalLMState,
+                               {"transformer": TransformerState, "mamba1": Mamba1State,
+                                "mamba2": Mamba2State}, GenerationStream),
+    }
+
+
+_NATIVE, _NATIVE_CONTEXT = _connect_causal_native()
