@@ -126,3 +126,37 @@ def test_source_witness_reads_archive_commit_txt_without_git(tmp_path, monkeypat
     (tmp_path / 'commit.txt').unlink()
     with pytest.raises(SystemExit):
         baseline.source_witness(tmp_path)
+
+
+def _merged(directory, members, data):
+    import json
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / '_mojolearn_native.so').write_bytes(data)
+    (directory / '_mojolearn_merged.json').write_text(json.dumps(
+        {'format': 1, 'files': {'_mojolearn_native.so': members}}))
+
+
+def test_merged_files_name_their_members_and_hash_the_index(tmp_path):
+    # x_trees shares the merged file with rf and gbdt: no delegation needed
+    members = ['_mojolearn_x_trees', '_mojolearn_rf', '_mojolearn_gbdt']
+    data, _, _ = patch_bytes(blob())
+    _merged(tmp_path, members, data)
+    _merged(tmp_path / 'identical', members, data)
+    report = baseline.audit_tree(tmp_path, 'a' * 40, 'Mojo')
+    assert report['errors'] == []
+    assert {r['file'] for r in report['files']} == {'_mojolearn_native.so', 'identical/_mojolearn_native.so'}
+    assert all(r['members'] == members and 'delegates' not in r for r in report['files'])
+    assert [i['file'] for i in report['indexes']] == ['_mojolearn_merged.json', 'identical/_mojolearn_merged.json']
+    index = (tmp_path / '_mojolearn_merged.json').read_bytes()
+    assert report['indexes'][0]['sha256'] == hashlib.sha256(index).hexdigest()
+
+
+def test_merged_file_without_ptx_is_refused(tmp_path):
+    _merged(tmp_path, ['_mojolearn_x_trees', '_mojolearn_rf', '_mojolearn_gbdt'], b'no device code')
+    assert any('merged file without PTX modules' in e
+               for e in baseline.audit_tree(tmp_path, 'a' * 40, 'Mojo')['errors'])
+
+
+def test_per_binding_report_has_no_index_field(tmp_path):
+    (tmp_path / 'fast.so').write_bytes(blob())
+    assert 'indexes' not in baseline.audit_tree(tmp_path, 'b' * 40, 'Mojo 1.0.0')
