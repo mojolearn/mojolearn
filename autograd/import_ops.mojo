@@ -224,6 +224,9 @@ def imp_unary_value(kind: Int, x: Float32, f0: Float32, f1: Float32) -> Float32:
         return ftz(identical_clamp(x, f0, f1))
     if kind == IMP_ABS:
         return _abs(x)
+    if (kind == IMP_FLOOR or kind == IMP_CEIL or kind == IMP_ROUND) and x != x:
+        # a NaN passes through as its own word, never a library's NaN
+        return x
     if kind == IMP_FLOOR:
         return floor(x)
     if kind == IMP_CEIL:
