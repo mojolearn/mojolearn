@@ -1791,7 +1791,7 @@ def program_params(shape="full", **readback):
     for k, v in readback.items():
         if k not in out:
             raise KeyError("program_params: %r is not one of the lane's settings" % (k,))
-        out[k] = v
+        out[k] = list(v) if isinstance(v, tuple) else v
     return out
 
 
@@ -1819,6 +1819,7 @@ def program_record(library, implementation, shape="full", **readback):
     if implementation is not None:
         rec["__implementation__"] = implementation
     rec.update(program_params(shape, **readback))
+    return rec
 def gen_record(lane, library, implementation, shape="full", **readback):
     """A causal-lm-generate arm's parameter record for tools/bench_board_params.py."""
     rec = {"__library__": library}
