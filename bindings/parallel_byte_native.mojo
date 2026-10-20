@@ -167,9 +167,20 @@ def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False)
         raise Error("parallel input byte count differs from shape")
     var src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=store.buffer_info()[0]))
     var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-    if own_array and String(value.order) == "F" and len(dims) == 2:
+    if own_array and String(value.order) == "F" and len(dims) > 1:
+        var strides = List[Int]()
+        var stride = 1
+        for axis in range(len(dims)):
+            strides.append(stride)
+            stride *= dims[axis]
         for i in range(n):
-            dst[i] = src[(i // dims[1]) + (i % dims[1]) * dims[0]]
+            var remaining = i
+            var source = 0
+            for reverse in range(len(dims)):
+                var axis = len(dims) - reverse - 1
+                source += (remaining % dims[axis]) * strides[axis]
+                remaining //= dims[axis]
+            dst[i] = src[source]
     else:
         memcpy(dest=dst, src=src, count=n)
     if not integer:
