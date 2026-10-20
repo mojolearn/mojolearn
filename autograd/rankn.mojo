@@ -46,7 +46,6 @@ struct ShapeN(ImplicitlyCopyable, Movable, Writable):
     var d: InlineArray[Int, RN_MAX_RANK]
 
     def __init__(out self, ndim: Int, d: InlineArray[Int, RN_MAX_RANK]):
-        """`ndim` dims from `d` (copied: an InlineArray is not implicitly copyable)."""
         self.ndim = ndim
         self.d = d.copy()
 
@@ -193,12 +192,13 @@ def rn_collapse(mut shape: ShapeN, mut strides: List[InlineArray[Int, RN_MAX_RAN
     broadcast axis, which merges with a broadcast neighbour). A shape with
     no axis left becomes (1,) with stride 0. Every element still maps to the
     same operand words: no word changes, the decode is shorter."""
+    # The collapsed strides are built in a flat List[Int] (operand o, axis k
+    # at o * RN_MAX_RANK + k) and copied into fresh arrays at the end: no
+    # write goes through a nested subscript of a list element.
     var n_ops = len(strides)
     var nd = 0
     var dims = InlineArray[Int, RN_MAX_RANK](fill=1)
-    var out = List[InlineArray[Int, RN_MAX_RANK]]()
-    for _ in range(n_ops):  # small-loop(operands of one launch, at most a few): shape metadata
-        out.append(InlineArray[Int, RN_MAX_RANK](fill=0))
+    var flat = List[Int](length=n_ops * RN_MAX_RANK, fill=0)
     for k in range(shape.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         var e = shape.d[k]
         if e == 1:
@@ -206,20 +206,29 @@ def rn_collapse(mut shape: ShapeN, mut strides: List[InlineArray[Int, RN_MAX_RAN
         var merge = nd > 0
         if merge:
             for o in range(n_ops):  # small-loop(operands of one launch): shape metadata
-                if out[o][nd - 1] != strides[o][k] * e:
+                var inner = strides[o][k]
+                if flat[o * RN_MAX_RANK + nd - 1] != inner * e:
                     merge = False
         if merge:
             dims[nd - 1] = dims[nd - 1] * e
             for o in range(n_ops):  # small-loop(operands of one launch): shape metadata
-                out[o][nd - 1] = strides[o][k]
+                var inner = strides[o][k]
+                flat[o * RN_MAX_RANK + nd - 1] = inner
         else:
             dims[nd] = e
             for o in range(n_ops):  # small-loop(operands of one launch): shape metadata
-                out[o][nd] = strides[o][k]
+                var inner = strides[o][k]
+                flat[o * RN_MAX_RANK + nd] = inner
             nd += 1
     if nd == 0:
         nd = 1
-    shape = ShapeN(nd, dims^)
+    var out = List[InlineArray[Int, RN_MAX_RANK]]()
+    for o in range(n_ops):  # small-loop(operands of one launch): shape metadata
+        var row = InlineArray[Int, RN_MAX_RANK](fill=0)
+        for k in range(RN_MAX_RANK):  # small-loop(RN_MAX_RANK = 8: stride slots)
+            row[k] = flat[o * RN_MAX_RANK + k]
+        out.append(row^)
+    shape = ShapeN(nd, dims)
     strides = out^
 
 
@@ -246,12 +255,18 @@ def rn_desc_view(mut words: List[Int], s: ShapeN, strides: InlineArray[Int, RN_M
     """Append a RN_DESC_VIEW record (a SHAPE record, then a STRIDE record)
     for a strided read of a dense output of shape s, collapsed first
     (rn_collapse: the same words, a shorter decode)."""
-    var shape = s
+    var shape = ShapeN(s.ndim, s.d)
+    var one = InlineArray[Int, RN_MAX_RANK](fill=0)
+    for k in range(RN_MAX_RANK):  # small-loop(RN_MAX_RANK = 8: stride slots)
+        one[k] = strides[k]
     var st = List[InlineArray[Int, RN_MAX_RANK]]()
-    st.append(strides.copy())
+    st.append(one^)
     rn_collapse(shape, st)
     rn_desc_shape(words, shape)
-    rn_desc_strides(words, st[0])
+    var collapsed = InlineArray[Int, RN_MAX_RANK](fill=0)
+    for k in range(RN_MAX_RANK):  # small-loop(RN_MAX_RANK = 8: stride slots)
+        collapsed[k] = st[0][k]
+    rn_desc_strides(words, collapsed)
 
 
 # ---------------------------------------------------------------- tape kinds and tags
