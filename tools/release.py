@@ -1886,7 +1886,7 @@ class Release:
                        final_dir / repaired[0].name, "--receipt", final_dir / f"dir-entry-strip-{package}.json"],
                       what=f"strip_wheel_dir_entries.py {project}")
         if self.dry:
-            return "would pack the core and both plugins, audit and strip each"
+            return "would pack the core, the plugins and the Linux mojolearn, audit and strip each"
         finals = self.split_finals()
         sys.path.insert(0, str(ROOT / "tools"))
         from wheel_api_audit import split_audit
@@ -1925,8 +1925,8 @@ class Release:
 
     def plugin_installed(self, results, package):
         """The receipt installed exactly this release's final plugins beside
-        the core, BOTH of them (the core requires both, so the box installs
-        what `pip install mojolearn` installs), among them `package`'s."""
+        the core, all of them (the box installs what `pip install mojolearn`
+        installs), among them `package`'s."""
         plugins = {k: self.split_final(k) for k in PLUGIN_PACKAGES}
         return (all(plugins.values()) and bool(plugins[package])
                 and receipt_plugins(results) == {w.name: sha256(w) for w in plugins.values()})
@@ -2028,8 +2028,8 @@ class Release:
 
     def plugin_args(self, package):
         """`--plugin <final plugin>` for the column's smoke, the column's own
-        plugin FIRST and then the other one: the core requires both, so the box
-        installs all three, as `pip install mojolearn` does."""
+        plugin FIRST and then the others: the box installs the core and every
+        plugin, as `pip install mojolearn` does."""
         out = []
         for k in (package,) + tuple(k for k in PLUGIN_PACKAGES if k != package):
             plugin = self.split_final(k)
@@ -2350,7 +2350,7 @@ class Release:
         done = [self.finish_macos(venv) if p == "macos" else self.finish_linux(venv, p) for p in published]
         # the Linux package sets, once everything each one requires is published
         done += [self.finish_resolve(venv, k) for k in LINUX_RESOLVES
-                 if k != "linux" and all(d in published for d in LINUX_RESOLVES[k])]
+                 if all(d in published for d in LINUX_RESOLVES[k])]
         pending = [self.PIPELINES[p]["platform"] for p in self.PIPELINES
                    if self.PIPELINES[p]["platform"] not in published]
         return "; ".join(done) + (f"; not yet published: {', '.join(pending)}" if pending else ""), \
@@ -2427,8 +2427,10 @@ class Release:
         """[(platform, wheel, smoke receipt)] of every wheel this release publishes."""
         rows = []
         for platform in SPLIT_PACKAGES:
+            # the Linux mojolearn has no receipt (no smoke installs it): none, not NVIDIA's
             smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") or (
-                self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json")
+                self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json"
+                if platform != "linux-meta" else self.rel / "no-smoke-linux-meta.json")
             rows.append((platform, self.split_final(platform), Path(smoke)))
         return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json" if self.gpu_smoke()
                         else self.macos_self_test())]
@@ -2445,7 +2447,7 @@ class Release:
                 r = {}
             tag = self.recorded(self.publish_step(platform)) or {}
             plat = wheel.name.split("-", 4)[-1][:-4]
-            if wheel.name.split("-")[0] != "mojolearn":
+            if wheel.name.split("-")[0] != "mojolearn" or platform == "linux-meta":
                 plat = wheel.name.split("-")[0].replace("_", "-") + " " + plat
             wheels.append(f"| {plat} | {sha256(wheel)} | {r.get('status', '?' if self.gpu_smoke() else 'preverified')}, {len(r.get('jobs', []))} jobs "
                           f"| {tag.get('result', '?') if platform in published else 'not yet published'} |")
