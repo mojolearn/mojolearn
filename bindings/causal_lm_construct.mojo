@@ -350,7 +350,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         if kind == "mamba1":
             var rank = (dm + 15) // 16
             fields["dt_rank"] = PythonObject(rank)
-            var mamba_shapes = List[List[Int]]([dm], [2 * di, dm], [di, 1, 4], [di], [rank + 32, di], [di, rank], [di], [di, 16], [di], [dm, di])
+            var mamba_shapes = List[List[Int]](List[Int](dm), List[Int](2 * di, dm), List[Int](di, 1, 4), List[Int](di), List[Int](rank + 32, di), List[Int](di, rank), List[Int](di), List[Int](di, 16), List[Int](di), List[Int](dm, di))
             for shape in mamba_shapes:  # driver-loop: over fixed Mamba1 tensor shapes
                 shapes.append(py_ints(shape))
         else:
@@ -368,7 +368,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             pair.append(bi.float(limit[0]))
             pair.append(bi.float(limit[1]))
             fields["dt_limit"] = bi.tuple(pair)
-            var mamba_shapes = List[List[Int]]([dm], [2 * di + 256 + nh, dm], [cd, 1, 4], [cd], [nh], [nh], [nh], [di], [dm, di])
+            var mamba_shapes = List[List[Int]](List[Int](dm), List[Int](2 * di + 256 + nh, dm), List[Int](cd, 1, 4), List[Int](cd), List[Int](nh), List[Int](nh), List[Int](nh), List[Int](di), List[Int](dm, di))
             for shape in mamba_shapes:  # driver-loop: over fixed Mamba2 tensor shapes
                 shapes.append(py_ints(shape))
     for i in range(len(names)):  # driver-loop: over fixed block weight slots
