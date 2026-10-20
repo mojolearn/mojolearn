@@ -30,7 +30,7 @@ struct NativeJSON(Movable):
 
     def literal(mut self, token: String) raises:
         var bytes = PythonObject(token).encode("ascii")
-        for i in range(len(bytes)):  # driver-loop: reads the bytes of one JSON literal
+        for i in range(len(bytes)):  # driver-loop: over the bytes of one JSON literal
             if self.peek() != Int(py=bytes[i]):
                 raise Error("JSON: invalid literal at " + String(self.at))
             self.at += 1
@@ -187,7 +187,7 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
     with open(String(path), "r") as stream:
         bytes = stream.read_bytes()
     var raw = Python.import_module("builtins").bytearray()
-    for i in range(len(bytes)):  # driver-loop: copies serialized JSON file bytes into a native parse buffer
+    for i in range(len(bytes)):  # driver-loop: over serialized JSON file bytes for the native parse buffer
         raw.append(Int(bytes[i]))
     return native_json_parse(raw)
 
@@ -214,7 +214,7 @@ def native_path(value: PythonObject) raises -> PythonObject:
     except:
         parts = bi.object.__getattribute__(value, "_parts")
     var result = PythonObject("")
-    for i in range(len(parts)):  # driver-loop: joins stored filesystem path components
+    for i in range(len(parts)):  # driver-loop: over stored filesystem path components
         var part = parts[i]
         if Bool(py=part.startswith("/")) or len(result) == 0:
             result = part
