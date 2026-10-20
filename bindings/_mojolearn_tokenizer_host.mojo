@@ -86,6 +86,7 @@ from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
+from bindings.neural_prefill_native import neural_prefill_c
 from bindings.samba_config_native import samba_config_c
 from bindings.samba_state_native import samba_state_c
 from bindings.native_transport import transport_c, transport_initialize
@@ -1889,6 +1890,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
+        module.def_py_c_function(neural_prefill_c, "neural_prefill_call")
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
