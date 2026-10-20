@@ -67,64 +67,12 @@ MoEBlock.backward	new tape backward; no NVIDIA+AMD reference records yet (sequen
 Session.embedding	operation session embedding: its tape checks (embedding_check tape case, autograd embedding_gpu/cpu) pending on CPU, Apple, NVIDIA and AMD
 # Rank-N tensors (docs/plans/AUTOGRAD_RANKN.md): remove a line once its checks' digests match on CPU, Apple, NVIDIA and AMD.
 # Captured programs (autograd/program.mojo): remove a line once test_ops_program.py's PROGRAM_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
-ops.Program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
-Program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
-Session.capture	captured program: checks pending on CPU, Apple, NVIDIA and AMD
-Session.run	captured program: checks pending on CPU, Apple, NVIDIA and AMD
-Session.load_program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
-Sequential.load_state_dict	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD
-Session.load_weights	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD
 # Model import (docs/plans/MODEL_IMPORT.md): remove a line once the IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
 # --- lane ag-import-docs: the import entry points (remove with the lines below once the import guide block's
 # PUBLIC_DIGEST lines and test_import_lower.py's IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD) ---
-importers	model import: the lowering and its IMPORT_DIGEST checks are pending on CPU, Apple, NVIDIA and AMD
-import_model	model import: the lowering and its IMPORT_DIGEST checks are pending on CPU, Apple, NVIDIA and AMD
-importers.import_model	model import: the lowering and its IMPORT_DIGEST checks are pending on CPU, Apple, NVIDIA and AMD
 # --- end lane ag-import-docs ---
-importers.UnsupportedModel	model import: the lowering and its IMPORT_DIGEST checks are pending
-importers.supported_ops	model import: the lowering table is pending
-onnx.read	model import: ONNX reader; the lowering and its IMPORT_DIGEST checks are pending
 # >>> lane ag-import-lower: remove a line once test_import_lower.py's IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
-import_model	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-importers.import_model	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-ImportedProgram	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-importers.ImportedProgram	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
 # <<< lane ag-import-lower
 # lane ag-import-torch
-torch_export.read	model import: torch.export reader; the lowering and its IMPORT_DIGEST checks are pending
 # end lane ag-import-torch
 # The import elementwise family (docs/plans/MODEL_IMPORT.md 3.3): remove a line once the IMPORT and OPS_IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
-Session.erf	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.gelu	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.softplus	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.silu	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.leaky_relu	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.elu	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.hard_sigmoid	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.hard_swish	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.clip	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.abs	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.floor	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.ceil	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.round	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.sin	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.cos	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.sign	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.reciprocal	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.pow	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.pow_scalar	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.minimum	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.maximum	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.where	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.equal	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.not_equal	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.greater	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.greater_equal	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.less	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.less_equal	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.logical_not	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.logical_and	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.logical_or	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.expand	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.argmax	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
-Session.pad	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
