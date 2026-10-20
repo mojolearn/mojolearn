@@ -297,7 +297,7 @@ def ops_grad_py[E: Exec & Movable & Deinitable, KIND: Int](
 # session.
 def _param_handles(p: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(p)):  # driver-loop: over the step's parameter handles, argument parsing, no data
+    for i in range(len(p)):  # small-loop(p: the step's parameter handles): argument parsing, no data
         out.append(ival(p, i))
     return out^
 
