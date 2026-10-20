@@ -28,14 +28,9 @@ def supported_ops():
     >>> from mojolearn import importers
     >>> ops = dict(importers.supported_ops())
     """
-    # The table is the lowering's (importers/_lower.py, `SUPPORTED_OPS`: a
-    # sequence of (op, subset) string pairs); read lazily so this package
-    # imports before the lowering module exists.
-    try:
-        from . import _lower
-    except ImportError:  # the lowering lane's module is not in this tree yet (`from pkg import missing` raises ImportError)
-        return []
-    return list(getattr(_lower, "SUPPORTED_OPS", ()))
+    # the table of autograd/import_lower.mojo's ops and checks (importers/_table.py)
+    from ._table import SUPPORTED_OPS
+    return list(SUPPORTED_OPS)
 
 
 def __getattr__(name):

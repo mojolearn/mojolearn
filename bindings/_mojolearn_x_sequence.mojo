@@ -35,6 +35,8 @@ from autograd.ops_api import OPS_DEVICE
 # import_resolve.mojo): host only, the same entries in both bindings
 from autograd.import_reader import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
 from autograd.import_resolve import onnx_resolve_py
+# the lowering onto session operations and the GraphIR-from-words handle (autograd/import_lower.mojo)
+from autograd.import_lower import onnx_import_py, onnx_from_words_py
 from autograd.model_verify import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from autograd.model_checkpoint import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
@@ -583,6 +585,21 @@ def onnx_close_binding(h: PythonObject) raises -> PythonObject:
     return onnx_close_py(h)
 
 
+def onnx_import_binding(
+    h: PythonObject, sid: PythonObject, names: PythonObject, flat: PythonObject, addrs: PythonObject,
+    source: PythonObject,
+) raises -> PythonObject:
+    """importers.import_model: resolve, refuse, lower and capture graph h in session sid."""
+    return onnx_import_py[DeviceExec, OPS_DEVICE](h, sid, names, flat, addrs, source)
+
+
+def onnx_from_words_binding(
+    words: PythonObject, strings: PythonObject, floats: PythonObject, addrs: PythonObject,
+) raises -> PythonObject:
+    """A graph handle from onnx_info's word layout (a torch.export GraphIR)."""
+    return onnx_from_words_py(words, strings, floats, addrs)
+
+
 @export
 def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
     try:
@@ -701,6 +718,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[onnx_copy_blob_binding]("onnx_copy_blob")
         m.def_function[onnx_resolve_binding]("onnx_resolve")
         m.def_function[onnx_close_binding]("onnx_close")
+        m.def_function[onnx_import_binding]("onnx_import")
+        m.def_function[onnx_from_words_binding]("onnx_from_words")
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
         return m.finalize()

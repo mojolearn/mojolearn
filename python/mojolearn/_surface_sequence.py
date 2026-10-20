@@ -81,6 +81,8 @@ FAMILIES = (
             "model_import_params", "ops_load_weights",
             # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)
             "onnx_read", "onnx_info", "onnx_copy_blob", "onnx_resolve", "onnx_close",
+            # the lowering onto session operations (autograd/import_lower.mojo; importers.import_model)
+            "onnx_import", "onnx_from_words",
             # model verification reports (autograd/model_verify.mojo; python -m mojolearn verify-model)
             "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill",
         ),
