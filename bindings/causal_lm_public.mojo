@@ -210,7 +210,7 @@ def _writeback(mut copies: List[PythonObject]) raises:
     for i in range(len(copies)):
         var view = copies[i][0].cast("B")
         var source = g[].bi.memoryview(copies[i][1]).cast("B")
-        view.__setitem__(g[].bi.slice(PythonObject(None)), source)
+        view[g[].bi.slice(PythonObject(None))] = source
     copies.clear()
 
 
