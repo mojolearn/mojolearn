@@ -33,6 +33,9 @@ into a single suite result.
 | Conditional graph training and continuation | `stage31-targeted-control-comparison.json`, `stage31-ordinary-graph.xml` | Five conditional/control/checkpoint cases pass on CPU and Metal with 34 matching digests; 11 ordinary Program tests pass without skips. Installed-wheel and physical NVIDIA/AMD checks remain pending. |
 | Native MLP and Samba state | `stage30-model-state-summary.json` | First run: 18 pass, 14 fail, 2 GPU-only skips. Twelve MLP cases encounter Python attribute interception; two Samba cases encounter NumPy preparation. These are product defects to repair, not audit exemptions. |
 | Native model and public parallel-training integration | `stage32-native-models-summary.json`, `stage32-native-models-tmp/` | After those repairs, 46 of 48 CPU tests pass with no skips. Both remaining failures concern restored Samba attention blocks inheriting the wrong normalization default. The separate default repair retains the original failures and needs an affected-case rerun. Actual MLP child loops, rollback and checkpoint replay pass their strict native audits. |
+| Samba gradient, generator state and process admission repairs | `stage34-repairs-{cpu,metal}-summary.json`, corresponding logs and child audit directories | CPU: 41 pass without skips. Metal: 40 pass and one CPU-only refusal check skips. Repairs cover restored attention normalization, ignored-target buffer lifetime, exhausted RNG stream checkpoint continuation, and worker vendor admission. The earlier stage32/33 failures remain retained. |
+| Complete current graph verifier on CPU and Metal | `stage34-full-graph-{cpu,metal}.json`, `stage34-full-graph-comparison.json` | Each run passes 22 of 23 cases; all 106 output digests from passing cases match. The sole failure on each is the upstream Session ownership issue. Both full runs remain failed qualification reports. Unchanged sequence binding binaries from stage31 are reused. |
+| Native Samba constructor and standard training step | `stage35-constructor-cpu-summary.json`, `freeze-694269a1b2b96ac5561caf24b96fcd634961ffb2/tokenizer-host.log` | Constructor integration initially passes 23 of 34 CPU tests; mixed-model failures expose selection of inference-only Mamba blocks. A separate step build finds an invalid consume of a borrowed argument. Both have source repairs awaiting validation. The private standard-step owner does not remove the public custom-callback contract debt. |
 | Installed AMD graph execution | `retrieved/amd-installed/graph-stage15-tierfix/` | 13 cases and 36 digests match the corresponding CPU reference on this earlier freeze. This does not qualify subsequent graph source. |
 | PTX references and four weighted-tree batch checks | `apple-0855-seven-lanes.json`, `cpu/seven-lanes.json`, `retrieved/{amd,ptx}/` | Current CPU, Apple, AMD and PTX results agree for the selected checks. Independent native NVIDIA evidence is still missing; the four original PTX reference mismatches remain unadmitted. Compatible rental attempts have returned out of stock. |
 
@@ -82,6 +85,11 @@ Accepted binaries excluded from the general archive were retained separately
 with their build provenance. The shared NVIDIA machine was later retired by its
 idle lease; the provider confirms it is gone. This lane did not delete it.
 Its accepted binaries and our required results were retained before retirement.
+
+A second owned AMD lease, `611011332`, started around 22:44 UTC with a
+60-minute deadline at $3.80/hour. Its task is changed-binding compilation and
+installed correctness checks, not performance tuning. State is tracked in
+`amd-state/`; result and binary retention must finish before its teardown.
 
 A snapshot of 653 complete retained logs, reports and controller artifacts is
 also in R2 at
