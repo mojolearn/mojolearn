@@ -107,6 +107,19 @@ class NativeRuntimeAuditTests(unittest.TestCase):
         self.assertTrue(any("__del__" in row["function"]
                             for row in result.report()["python_frames"]))
 
+    def test_constructor_allows_only_the_public_init_wrapper(self):
+        class Public:
+            def __init__(self, values):
+                self.value = sum(values)
+        self.assertEqual(AUDIT.audit_native_call(Public, [2, 3]).assert_native().value, 5)
+        class ExtraNew(Public):
+            def __new__(cls, values):
+                return object.__new__(cls)
+        result = AUDIT.audit_native_call(ExtraNew, [2, 3])
+        self.assertFalse(result.passed)
+        self.assertTrue(any("__new__" in row["function"]
+                            for row in result.report()["python_frames"]))
+
 
 if __name__ == "__main__":
     unittest.main()

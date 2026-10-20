@@ -81,7 +81,9 @@ def audit_native_call(operation, *args, **kwargs):
     # collection enabled inside the operation: its own callbacks still count.
     gc.collect()
     audit = NativeRuntimeAudit()
-    function = getattr(operation, "__func__", operation)
+    # A class call enters its public __init__ wrapper. Custom Python __new__
+    # implementations and metaclass calls remain additional traced frames.
+    function = operation.__init__ if type(operation) is type else getattr(operation, "__func__", operation)
     allowed = getattr(function, "__code__", None)
     if allowed is not None:
         instructions = list(dis.get_instructions(allowed))
