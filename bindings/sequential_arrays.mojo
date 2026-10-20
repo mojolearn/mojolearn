@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential buffer admission and ndarray ABI ownership."""
 from std.python import Python, PythonObject
-from memory import UnsafePointer, MutAnyOrigin
+from std.memory import UnsafePointer, MutAnyOrigin
 
 
 def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
