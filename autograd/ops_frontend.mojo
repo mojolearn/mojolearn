@@ -95,17 +95,28 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
     var name = String(operation)
+    if name == "enter":
+        return session
+    if name == "finalize":
+        # Partially constructed instances and interpreter teardown are
+        # legitimate destructor paths. Keep their handling inside native code.
+        try:
+            if not _nil(session._id):
+                _ = session._session_native(session, "close", Python.import_module("builtins").tuple())
+        except:
+            pass
+        return PythonObject(None)
     if name == "free_program":
         if not _nil(session._id) and not _nil(args[0]._id):
             var owner = ops_session[E, KIND](Int(py=session._id))
             owner[].program_free(Int(py=args[0]._id))
         Python.import_module("builtins").setattr(args[0], "_id", PythonObject(None))
         return PythonObject(None)
-    if name == "close":
+    if name == "close" or name == "exit":
         if not _nil(session._id):
             _ = ops_close_py[E, KIND](session._id)
             Python.import_module("builtins").setattr(session, "_id", PythonObject(None))
-        return PythonObject(None)
+        return PythonObject(False) if name == "exit" else PythonObject(None)
     if name == "profile_reset":
         _ = ops_profile_reset_py()
         return PythonObject(None)

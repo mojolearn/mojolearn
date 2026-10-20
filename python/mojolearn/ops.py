@@ -55,6 +55,7 @@ Example
 ...     probs = s.numpy(p)
 """
 import os
+from types import SimpleNamespace
 
 from ._optional_numpy import require_numpy
 np = require_numpy('mojolearn.ops')
@@ -216,18 +217,7 @@ class Session:
     """
 
     def __init__(self, record=False, numeric_mode=None):
-        self.record = bool(record)
-        self.numeric_mode = numeric_mode
-        self._b = _backend.binding("_mojolearn_x_sequence", numeric_mode)
-        self._id = int(self._b.ops_open(1 if self.record else 0))
-        # Resolve a CPU host proxy once during setup, before any replay.
-        self._program_execute = self._b.ops_program_execute
-        self._program_inspect = self._b.ops_program_inspect
-        self._program_control = self._b.ops_program_control
-        self._program_fit = self._b.ops_program_fit_native
-        self._program_class = Program
-        self._session_native = self._b.ops_session_call
-        self._opt_kind = {}
+        return _SESSION_INITIALIZE(self, record, numeric_mode, _SESSION_CONNECTIONS, _backend, Program)
 
     # ------------------------------------------------------------ lifetime
     def close(self):
@@ -235,17 +225,13 @@ class Session:
         return self._session_native(self, "close", ())
 
     def __enter__(self):
-        return self
+        return self._session_native(self, "enter", ())
 
     def __exit__(self, *exc):
-        self.close()
-        return False
+        return self._session_native(self, "exit", ())
 
     def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
+        return _SESSION_FINALIZE(self, "finalize", ())
 
     def _sid(self):
         if self._id is None:
@@ -1438,3 +1424,45 @@ class Program:
     def free(self):
         """Release the program (its parameters stay session tensors)."""
         return self._session_native(self._s, "free_program", (self,))
+
+
+# Distribution setup: resolve installed extension modules and CPU proxy
+# attributes while importing this connector. Session construction and every
+# later operation use cached native entries; no backend Python is called.
+def _connect_session_mode(mode):
+    module = _backend.binding("_mojolearn_x_sequence", mode)
+    distributed = SimpleNamespace()
+    # Import-time ABI discovery, not product execution or a model walk.
+    for name in ("ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
+                 "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",
+                 "ops_distributed_save", "ops_distributed_close", "ops_partitioned_open",
+                 "ops_partitioned_load", "ops_partitioned_fit", "ops_partitioned_run",
+                 "ops_partitioned_state", "ops_partitioned_residency", "ops_partitioned_save",
+                 "ops_partitioned_close", "ops_partitioned_profile"):
+        setattr(distributed, name, getattr(module, name, None))
+    result = SimpleNamespace(
+        binding=module, initialize=module.ops_session_initialize,
+        numeric_mode=module.x_sequence_numeric_mode, open=module.ops_open,
+        call=module.ops_session_call, execute=module.ops_program_execute,
+        inspect=module.ops_program_inspect, control=module.ops_program_control,
+        fit=module.ops_program_fit_native, distributed=distributed)
+    result.initialize(None, None, None, None, None, None)
+    return result
+
+
+_SESSION_CONNECTIONS = {}
+# Both supported modes connect at import; a missing optional mode retains its
+# exact refusal for the native initializer. The default remains selectable.
+for _session_mode in ("identical", "fast"):
+    try:
+        _SESSION_CONNECTIONS[_session_mode] = _connect_session_mode(_session_mode)
+    except (ImportError, ValueError, AttributeError) as _session_error:
+        _SESSION_CONNECTIONS[_session_mode] = type(_session_error).__name__ + ": " + str(_session_error)
+
+_session_connected = _SESSION_CONNECTIONS["identical"]
+if isinstance(_session_connected, str):
+    _session_connected = _SESSION_CONNECTIONS["fast"]
+if isinstance(_session_connected, str):
+    raise ImportError(_session_connected)
+_SESSION_INITIALIZE = _session_connected.initialize
+_SESSION_FINALIZE = _session_connected.call

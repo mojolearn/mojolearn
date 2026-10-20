@@ -77,7 +77,7 @@ FAMILIES = (
             # captured programs (OpsSession.capture / run_program)
             "ops_capture", "ops_program_info", "ops_program_run", "ops_program_free",
             "ops_save_program", "ops_load_program",
-            "ops_program_dynamic", "ops_program_fit", "ops_program_fit_native", "ops_session_call", "ops_program_execute",
+            "ops_program_dynamic", "ops_program_fit", "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_execute",
             "ops_program_inspect", "ops_program_control",
             "ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
             "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",
