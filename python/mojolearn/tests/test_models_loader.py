@@ -300,6 +300,24 @@ def test_plan_llama_shapes_names_and_options():
     assert plan_for(HFConfig(_llama_config(model_type="mistral", sliding_window=32))).block_options["window"] == 32
 
 
+def test_plan_byte_lm_format_has_no_final_norm():
+    cfg = {"format": "mojolearn.byte-lm", "n_layers": 2, "d_model": 32, "n_heads": 2, "n_kv": 2, "head_dim": 16,
+           "intermediate": 64, "vocab_size": 64, "max_position_embeddings": 128, "rope_theta": 10000.0,
+           "rms_norm_eps": 1e-6, "positional_encoding": "rotary", "rope_pairing": "rotate_half", "norm": "rmsnorm",
+           "norm_placement": "pre-norm, no final norm", "mlp": "swiglu", "bias": False, "tie_word_embeddings": False}
+    plan = plan_for(HFConfig(cfg))
+    assert plan.kind == "transformer" and plan.n_layers == 2 and plan.d_model == 32 and plan.vocab_size == 64
+    assert plan.norm_name is None and plan.embed_name == "embed" and plan.head_name == "lm_head"
+    names = plan.checkpoint_names()
+    assert "embed" in names and "lm_head" in names and None not in names
+    layer = dict((k, n) for k, n, _ in plan.layer_weights(1))
+    assert layer["q_proj.weight"] == "block1.w_q" and layer["down_proj.weight"] == "block1.w_down"
+    assert layer["input_layernorm.weight"] == "block1.norm1_w"
+    assert plan.block_options["norm_eps"] == 1e-6 and plan.max_position_embeddings == 128
+    with pytest.raises(UnsupportedModel, match="rope_pairing"):
+        plan_for(HFConfig(dict(cfg, rope_pairing="interleaved")))
+
+
 def test_plan_qwen_and_phi3_rows():
     q2 = plan_for(HFConfig(_llama_config(model_type="qwen2", rope_theta=1000000.0)))
     assert q2.block_options["qkv_bias"] is True

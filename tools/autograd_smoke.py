@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE AUTOGRAD SMOKE ENTRIES (2026-10-19, lane ag-bench): does the tape start on this vendor.
 
-Seven "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
+Nine "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
 
   autograd-gradients     autograd/checks/gpu.mojo, the gradient suite on the vendor's GPU (every
                          case prints PASS and its digest; the digests equal the CPU column's).
@@ -23,6 +23,17 @@ Seven "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing
                          miniature: one Session(record=True) step (linear, relu, linear, softmax
                          cross-entropy, backward, the SGD update with the session's ops); finite
                          loss and gradients, a SMOKE_DIGEST line (the gradients).
+  causal-lm-generate-smoke
+                         (2026-10-19, lane ag-inference-board) the board's causal-lm-generate lanes
+                         in miniature: a seeded two-layer checkpoint in the byte-LM format (no final
+                         norm, the 162M's layout) written to a temporary directory, CausalLM.load and
+                         greedy generate(prompt, 4); ids in the vocabulary, the prompt echoed, a
+                         SMOKE_DIGEST line (the new ids).
+  sequential-predict-smoke
+                         (2026-10-19, lane ag-inference-board) the board's sequential-predict lane in
+                         miniature: a tiny Sequential fit, then predict_proba inside the board's
+                         untimed memory pass (its NVML / KFD counters); finite probabilities, a
+                         SMOKE_DIGEST line (the probabilities) and the memory figures read.
   autograd-higher        (2026-10-19, lane ag-ho-checks) autograd/checks/higher_gpu.mojo, the
                          higher-order suite (create_graph, second and third backward) on the
                          vendor's GPU; one HIGHER_DIGEST line per case.
@@ -67,6 +78,11 @@ ENTRIES = (
      "what": "a tiny Sequential fit + predict_proba (the sequential-fit board lane) through the installed bindings"},
     {"name": "autograd-session-smoke", "probe": "session",
      "what": "one tiny ops.Session(record=True) step (the ops-session-step board lane) through the installed bindings"},
+    # 2026-10-19 (lane ag-inference-board): the inference board lanes, in miniature
+    {"name": "causal-lm-generate-smoke", "probe": "generate",
+     "what": "CausalLM.load + greedy generate of a tiny byte-LM checkpoint (the causal-lm-generate board lanes)"},
+    {"name": "sequential-predict-smoke", "probe": "predict",
+     "what": "a tiny Sequential predict_proba inside the board's memory pass (the sequential-predict board lane)"},
     # 2026-10-19 (lane ag-ho-checks): higher-order gradients, docs/plans/AUTOGRAD_HIGHER_ORDER.md section 6
     {"name": "autograd-higher", "source": "autograd/checks/higher_gpu.mojo",
      "what": "the higher-order gradient suite (create_graph) on the vendor's GPU, HIGHER_DIGEST lines"},
@@ -129,7 +145,79 @@ def probe_session():
     return 0
 
 
-PROBES = {"sequential": probe_sequential, "session": probe_session}
+def probe_generate():
+    """causal-lm-generate-smoke: does CausalLM load a byte-LM checkpoint (no final norm) and generate greedily."""
+    import json as _json
+    import tempfile
+    import numpy as np
+    import mojolearn
+    from mojolearn.models import CausalLM
+    from mojolearn.models.safetensors import write_safetensors
+    rng = np.random.default_rng(7)
+    L, D, H, F, V = 2, 32, 2, 64, 64
+    cfg = {"format": "mojolearn.byte-lm", "n_layers": L, "d_model": D, "n_heads": H, "n_kv": H, "head_dim": D // H,
+           "intermediate": F, "vocab_size": V, "max_position_embeddings": 64, "rope_theta": 10000.0,
+           "rms_norm_eps": 1e-6, "positional_encoding": "rotary", "rope_pairing": "rotate_half", "norm": "rmsnorm",
+           "norm_placement": "pre-norm, no final norm", "mlp": "swiglu", "bias": False, "tie_word_embeddings": False}
+    shapes = {"embed": (V, D), "lm_head": (V, D)}
+    for i in range(L):              # the fixture's tensor names (no runtime math)
+        shapes.update({"block%d.norm1_w" % i: (D,), "block%d.norm2_w" % i: (D,), "block%d.w_q" % i: (D, D),
+                       "block%d.w_k" % i: (D, D), "block%d.w_v" % i: (D, D), "block%d.w_o" % i: (D, D),
+                       "block%d.w_gate" % i: (F, D), "block%d.w_up" % i: (F, D), "block%d.w_down" % i: (D, F)})
+    tensors = {}
+    for name, shape in shapes.items():
+        a = (np.ones(shape, dtype=np.float32) if name.endswith("_w") and len(shape) == 1
+             else rng.uniform(-0.1, 0.1, shape).astype(np.float32))
+        tensors[name] = ("F32", shape, a.tobytes())
+    prompt = rng.integers(0, V, (1, 8)).astype(np.int32)
+    with tempfile.TemporaryDirectory() as d:
+        with open(os.path.join(d, "config.json"), "w") as fh:
+            _json.dump(cfg, fh)
+        write_safetensors(os.path.join(d, "model.safetensors"), tensors)
+        lm = CausalLM.load(d, weight_format="float32", numeric_profile="fp32_v1")
+        out = np.asarray(lm.generate(prompt, 4))
+    ok = out.shape == (1, 12) and np.array_equal(out[:, :8], prompt) and out.min() >= 0 and out.max() < V
+    if not ok:
+        print("SMOKE_FAIL generate shape %s ids %s" % (out.shape, out.tolist()))
+        return 1
+    print("SMOKE_DIGEST generate ids %s vendor %s mode %s" % (
+        _probe_digest([out[:, 8:].astype(np.float32)]), mojolearn.vendor(), mojolearn.numeric_mode()))
+    return 0
+
+
+def probe_predict():
+    """sequential-predict-smoke: does a Sequential predict_proba run inside the board's untimed memory pass."""
+    import numpy as np
+    import mojolearn
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import bench_board_neural as bbn
+    rng = np.random.default_rng(7)
+    X = rng.standard_normal((256, 8), dtype=np.float32)
+    y = (X[:, 0] - 0.5 * X[:, 2] > 0).astype(np.float32)       # the fixture's labels (no runtime math)
+    dm = bbn.DeviceMemory()
+    before = dm.read()
+    model = mojolearn.Sequential().linear(16).relu().linear(1)
+    model.compile(loss="bce_with_logits", optimizer="adam", lr=1e-2, beta1=0.9, beta2=0.999, eps=1e-8,
+                  weight_decay=0.0, schedule="constant", tol=0.0, n_iter_no_change=0)
+    model.fit(X, y, epochs=1, batch_size=64, shuffle=True, seed=7)
+    resident = bbn._mem_delta(before, dm.read())
+    got = {}
+
+    def predict():
+        got["proba"] = np.asarray(model.predict_proba(X))
+    mem = bbn.memory_pass(dm, resident, predict)
+    proba = got.get("proba")
+    if proba is None or proba.shape != (256, 2) or not np.isfinite(proba).all():
+        print("SMOKE_FAIL predict proba %s" % (None if proba is None else proba.shape,))
+        return 1
+    print("SMOKE_DIGEST predict proba %s peak_bytes %s process_peak_bytes %s vendor %s mode %s" % (
+        _probe_digest([proba]), json.dumps(mem.get("peak_bytes"), sort_keys=True), mem.get("process_peak_bytes"),
+        mojolearn.vendor(), mojolearn.numeric_mode()))
+    return 0
+
+
+PROBES = {"sequential": probe_sequential, "session": probe_session, "generate": probe_generate,
+          "predict": probe_predict}
 
 
 def binary(bin_dir, entry, vendor):

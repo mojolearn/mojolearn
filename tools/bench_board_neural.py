@@ -117,6 +117,34 @@ GPU captured-program lane (2026-10-19, lane ag-program):
                        device before the clock), at every torch setting of the
                        box. Quality: every arm's max error from a float64
                        forward and its difference from ours.
+Inference lanes (2026-10-19, lane ag-inference-board), weights resident before the clock:
+  causal-lm-generate   mojolearn.models.CausalLM.load(<checkpoint dir>,
+                       weight_format='float32', numeric_profile='fp32_v1')
+                       .generate(prompt_ids, N), greedy, on the published
+                       mojolearn-162m checkpoint (huggingface.co/mojolearn-ai/
+                       mojolearn-162m, its byte-LM format: no final norm);
+  causal-lm-generate-smollm2  the same on HuggingFaceTB/SmolLM2-135M (a public
+                       Llama checkpoint the loader supports). The clock is
+                       generate(prompt, N): the prompt ids to the device, the
+                       prefill, N - 1 cached decode steps, the ids back on the
+                       host; prefill_ms is a separate generate(prompt, 1) timed
+                       the same way, decode_ms_per_token their difference over
+                       N - 1. The opponent is transformers' LlamaForCausalLM on
+                       the same checkpoint (model.norm an Identity for the
+                       162M), generate(do_sample=False, num_beams=1, no stop
+                       token), eager fp32 / tf32 / bf16 weights. Quality: the
+                       new ids equal to ours or the first divergence index.
+  sequential-predict   mojolearn.Sequential (the sequential-fit network) fitted
+                       once in the untimed warm-up round, then
+                       predict_proba(X_test) alone in the clock; the opponent
+                       the same torch.nn network fitted the same way, its
+                       held-out sigmoid in the clock. Quality: held-out
+                       accuracy, log loss and AUC of each arm's own fit.
+  Every inference arm also runs one UNTIMED memory pass after each round (the
+  same call): the device bytes the model holds (read around its load) plus the
+  pass's transient peak, sampled in process (KFD per-process VRAM on AMD, NVML
+  per-process or device used on NVIDIA), and torch.cuda.max_memory_allocated
+  for torch.
 The Mamba blocks and TransformerBlock expose a backward (a VJP), not a
 training step; they have no optimizer, so they race forward only.
 
@@ -295,9 +323,13 @@ LANES = ("lm-train-step", "lm-forward", "gemm",
 #: 2026-10-19 (lane ag-bench): whole fits of the tape-trained models on HIGGS (see the docstring)
 FIT_LANES = ("mlp-fit", "lstm-fit", "gru-fit", "rnn-fit", "tape-user-model",
              # 2026-10-19 (lane ag-board-twins): Sequential fit + predict_proba on a synthetic set
-             "sequential-fit")
+             "sequential-fit",
+             # 2026-10-19 (lane ag-inference-board): the same Sequential fitted untimed, predict_proba timed alone
+             "sequential-predict")
+#: fit lanes whose fit is untimed preparation (the warm-up round) and whose clock is the prediction alone
+PREDICT_LANES = ("sequential-predict",)
 #: fit lanes whose data is the conductor's seeded synthetic set (no HIGGS download)
-SYNTH_FIT_LANES = ("sequential-fit",)
+SYNTH_FIT_LANES = ("sequential-fit", "sequential-predict")
 #: fit lanes whose held-out predict_proba runs INSIDE the clock on every arm
 FIT_PREDICT_IN_CLOCK = ("sequential-fit",)
 #: 2026-10-19 (lane ag-board-twins): one recorded training step through mojolearn.ops.Session
@@ -305,6 +337,12 @@ OPS_LANES = ("ops-session-step",)
 #: 2026-10-19 (lane ag-program): one inference forward through a captured mojolearn.ops.Program
 PROGRAM_LANES = ("program-run",)
 LANES = LANES + FIT_LANES + OPS_LANES + PROGRAM_LANES
+#: 2026-10-19 (lane ag-inference-board): greedy generation from a real pretrained checkpoint, lane -> checkpoint
+#: (LM_CHECKPOINTS); the checkpoint is the lane's dataset column
+GEN_LANES = {"causal-lm-generate": "mojolearn-162m", "causal-lm-generate-smollm2": "smollm2-135m"}
+#: the inference lanes: an untimed memory pass after every round (DeviceMemory)
+INFER_LANES = tuple(GEN_LANES) + PREDICT_LANES
+LANES = LANES + FIT_LANES + OPS_LANES + tuple(GEN_LANES)
 #: The model each lane runs.
 MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "transformer-forward": "transformer", "transformer-infer": "transformer",
@@ -320,6 +358,8 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "mlp-fit": "mlpfit", "lstm-fit": "rnnfit", "gru-fit": "rnnfit", "rnn-fit": "rnnfit",
             "tape-user-model": "tapefit", "sequential-fit": "tapefit", "ops-session-step": "opsstep",
             "program-run": "program"}
+            "sequential-predict": "tapefit", "causal-lm-generate": "causallm",
+            "causal-lm-generate-smollm2": "causallm"}
 #: The recurrent cell of each recurrent fit lane.
 FIT_CELL = {"lstm-fit": "lstm", "gru-fit": "gru", "rnn-fit": "rnn"}
 #: GPU incremental-decode lanes: one public step call per token over the
@@ -335,12 +375,13 @@ TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-t
 #: from a fresh seeded initialization; nothing carries over between rounds, so the per-round
 #: digest of an identical arm repeats (digest_stable is meaningful).
 FIT_TASK = {"mlp-fit": "classification", "tape-user-model": "classification", "sequential-fit": "classification",
+            "sequential-predict": "classification",
             "lstm-fit": "regression", "gru-fit": "regression", "rnn-fit": "regression"}
 #: Where OUR class runs: the *Inference classes are the host binding.
 DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") or lane == "lm-host-train-step" else "gpu")
              for lane in LANES}
 #: The data each lane reads (the board's `dataset` column).
-DATA_OF = {lane: ("synthetic" if lane in SYNTH_FIT_LANES else "higgs" if lane in FIT_LANES else "bytes" if MODEL_OF[lane] in ("lm", "samba")
+DATA_OF = {lane: (GEN_LANES[lane] if lane in GEN_LANES else "synthetic" if lane in SYNTH_FIT_LANES else "higgs" if lane in FIT_LANES else "bytes" if MODEL_OF[lane] in ("lm", "samba")
                   else "gaussian") for lane in LANES}
 
 #: torch settings, in tools/torch_lm_step_opponent.py COLUMNS order.
@@ -359,7 +400,9 @@ CPU_SETTINGS = ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")
 NO_COMPILE = ("mamba1-forward", "mamba1-infer",
               # a per-token Python decode loop whose cache length grows every
               # step: torch.compile would recompile per length
-              "transformer-decode")
+              "transformer-decode",
+              # 2026-10-19 (lane ag-inference-board): transformers' generate is the same growing-cache loop
+              "causal-lm-generate", "causal-lm-generate-smollm2")
 VENDORS = ("apple", "nvidia", "amd")
 
 # FAIRNESS FIX (2026-10-13 audit): the Mamba lanes' only opponents on main were the repo's
@@ -428,7 +471,11 @@ NOT_PLANNED = {
        # 2026-10-19 (lane ag-bench): the fit lanes' MLX arm and Apple's tier
        + (["mlx-fp32 on the fit lanes: MLX runs on Apple silicon only"] if v != "apple" else
           ["ours (identical) on the fit lanes: identical is never timed on Apple; the fit lanes race "
-           "ours-fast there"]))
+           "ours-fast there"])
+       # 2026-10-19 (lane ag-inference-board)
+       + ["torch-compile-* on causal-lm-generate*: transformers' generate is a per-token loop over a growing KV "
+          "cache; the generate lanes race the eager arms only",
+          "mlx-fp32 on sequential-predict: no MLX prediction twin is written; it races the torch arms"])
     for v in VENDORS}
 
 #: The board's "Not covered" lines for the neural family.
@@ -461,6 +508,10 @@ NOT_COVERED = [
     "prediction after it is not timed, and multi-epoch fits, early stopping and the classifier "
     "variants of the recurrent models are not raced.",
     # 2026-10-19 (lane ag-board-twins)
+    # 2026-10-19 (lane ag-inference-board)
+    "causal-lm-generate* time greedy generate at one prompt shape (batch 1); batched or sampled decoding, a "
+    "stop token, a tokenizer in the clock and the low-bit weight formats are not raced; the memory figures come "
+    "from an untimed pass after each round.",
     "sequential-fit times the fit and the held-out predict_proba together; ops-session-step times one "
     "recorded step (no multi-step loop, no optimizer state); the session's other operations are timed per "
     "operation by tools/ag_opbench.py, not on the board.",
@@ -620,7 +671,23 @@ FIT_TAPE_HIDDEN = (64, 64)
 SEQFIT_FEATURES = 32
 SEQFIT_HIDDEN = (128, 64)
 #: the hidden widths of every feed-forward fit lane
-FIT_HIDDEN = {"mlp-fit": FIT_MLP_HIDDEN, "tape-user-model": FIT_TAPE_HIDDEN, "sequential-fit": SEQFIT_HIDDEN}
+FIT_HIDDEN = {"mlp-fit": FIT_MLP_HIDDEN, "tape-user-model": FIT_TAPE_HIDDEN, "sequential-fit": SEQFIT_HIDDEN,
+              "sequential-predict": SEQFIT_HIDDEN}
+#: causal-lm-generate (2026-10-19, lane ag-inference-board): prompt rows, prompt tokens and new tokens, `full` the
+#: board and `small` the smoke. One row and a 128-token prompt is a chat-style single request; no rule keys on them.
+GEN_SHAPES = {"full": dict(batch=1, prompt=128, new_tokens=128), "small": dict(batch=1, prompt=8, new_tokens=4)}
+#: the checkpoints, fetched once by the conductor (huggingface_hub) into $MOJOLEARN_BOARD_LM_CHECKPOINTS/<key>
+#: before any clock; the resolved commit is recorded with every race
+LM_CHECKPOINTS = {
+    "mojolearn-162m": dict(repo="mojolearn-ai/mojolearn-162m", revision="arxiv-v1",
+                           files=("config.json", "model.safetensors"), fmt="mojolearn.byte-lm"),
+    "smollm2-135m": dict(repo="HuggingFaceTB/SmolLM2-135M", revision="main",
+                         files=("config.json", "model.safetensors", "generation_config.json"), fmt="llama"),
+}
+LM_CKPT_ENV = "MOJOLEARN_BOARD_LM_CHECKPOINTS"
+LM_CKPT_DEFAULT = "~/mojolearn-data/hf-checkpoints"
+#: the greedy rule both arms name (CausalLM: strict > scan from index 0; torch.argmax: the first maximal index)
+GEN_DECODING = "greedy argmax, ties to the lowest id, KV cache, no stop token (exactly new_tokens per row)"
 #: ops-session-step (2026-10-19, lane ag-board-twins): batch rows, input width, hidden width and classes of
 #: the one step, `full` the board and `small` the smoke; power-of-two sizes of a typical MLP step, no rule keys
 #: on them. SGD on every arm, every value explicit.
@@ -669,6 +736,9 @@ def opponents(vendor, lane):
         return tuple("torch-" + s for s in GPU_SETTINGS[vendor] if s.endswith("bf16"))
     if lane in DECODE_LANES and lane not in DECODE_TORCH_TWIN:
         return ()
+    if lane in PREDICT_LANES:
+        # 2026-10-19 (lane ag-inference-board): torch at every GPU setting of the box (no MLX twin yet)
+        return tuple("torch-" + s for s in GPU_SETTINGS[vendor])
     if lane in FIT_LANES:
         # 2026-10-19 (lane ag-bench): torch at every GPU setting of the box, and MLX on Apple
         return tuple("torch-" + s for s in GPU_SETTINGS[vendor]) + (MLX_ARMS if vendor == "apple" else ())
@@ -726,6 +796,8 @@ def _dims_of(lane, shape):
         d = dict(MLP_SHAPES[shape])
     elif model == "opsstep" or model == "program":
         return dict(OPS_SHAPES[shape])
+    elif model == "causallm":
+        return dict(GEN_SHAPES[shape], checkpoint=GEN_LANES[lane])
     elif lane in FIT_LANES:
         d = dict(FIT_ROWS[shape], batch=FIT_BATCH, epochs=FIT_EPOCHS)
         if lane in FIT_CELL:
@@ -767,7 +839,11 @@ def shape_record(lane, shape):
             net = "%d-%s-1" % (fit_d_in(lane), "-".join(str(h) for h in FIT_HIDDEN[lane]))
         rec["label"] = "%s train %d test %d %s b%d %d epoch adam" % (
             "synthetic" if lane in SYNTH_FIT_LANES else "HIGGS", d["train"], d["test"], net, d["batch"],
-            d["epochs"]) + (" + predict_proba" if lane in FIT_PREDICT_IN_CLOCK else "")
+            d["epochs"]) + (" + predict_proba" if lane in FIT_PREDICT_IN_CLOCK else
+                            ", predict_proba %d rows timed" % d["test"] if lane in PREDICT_LANES else "")
+    elif model == "causallm":
+        rec["label"] = "%s B%d prompt %d + %d greedy tokens" % (d["checkpoint"], d["batch"], d["prompt"],
+                                                                d["new_tokens"])
     elif model == "opsstep":
         rec["label"] = "B%d %d-%d-%d linear relu linear CE sgd" % (d["batch"], d["d_in"], d["hidden"], d["classes"])
     elif model == "program":
@@ -904,7 +980,26 @@ LANE_TEXT = {
                     "X to the device, every captured operation, the probabilities back on the host, one call",
                     "the weights .to(dev) before the clock; under torch.no_grad: X .to(dev), softmax(relu(x @ w1 "
                     "+ b1) @ w2 + b2), .cpu()"),
+    # 2026-10-19 (lane ag-inference-board)
+    "sequential-predict": ("the sequential-fit network and fit (untimed, the warm-up round); then "
+                           "predict_proba(X_test) inside the clock",
+                           "the same torch.nn.Sequential fitted the same way (untimed, the warm-up round); then "
+                           "X_test to the device, sigmoid of the (compiled, on a compile arm) forward under no_grad, "
+                           ".cpu(), inside the clock"),
 }
+_GEN_OURS = ("mojolearn.models.CausalLM.load(dir, weight_format='float32', numeric_profile='fp32_v1', device='gpu') "
+             "once (untimed, the warm-up round); generate(prompt_ids, 1) [prefill] and generate(prompt_ids, N) "
+             "[the clock]: greedy, the prompt ids from the host, the ids back on the host")
+_GEN_TORCH = ("transformers LlamaForCausalLM on the same checkpoint%s, .eval(), .to(dev) once (untimed); "
+              "generate(input_ids, attention_mask, GenerationConfig(max_new_tokens=1 [prefill] or N [the clock], "
+              "do_sample=False, num_beams=1, use_cache=True, eos_token_id=None)) under inference_mode, the ids "
+              "moved to the device and back inside the clock; bf16 arms hold the weights in bfloat16")
+LANE_TEXT.update({
+    "causal-lm-generate": (_GEN_OURS, _GEN_TORCH % (" (the byte-LM tensors renamed to Llama's, loaded strict and "
+                                                    "read back bit for bit; model.norm an Identity: the 162M has no "
+                                                    "final norm)")),
+    "causal-lm-generate-smollm2": (_GEN_OURS, _GEN_TORCH % " (from_pretrained, float32)"),
+})
 
 
 def lane_settings(lane):
@@ -927,6 +1022,17 @@ def lane_settings(lane):
         s["seed_rule"] = ("seed %d: every weight and input of every arm comes from the conductor's "
                           "default_rng(%d) file; torch arms also call torch.manual_seed(%d); nothing in the "
                           "forward draws" % (SEED, SEED, SEED))
+    if lane in GEN_LANES:
+        # 2026-10-19 (lane ag-inference-board): one round = generate(prompt, 1) then generate(prompt, N)
+        s["clock"] = GEN_SPAN["inside_clock"]
+        s["seed_rule"] = ("seed %d: the prompt ids come from the conductor's default_rng(%d) file; greedy decoding "
+                          "draws nothing" % (SEED, SEED))
+        s["quality"] = ("tokens_equal_ours, first_divergence_index (new tokens), prefill_token_equal_ours, "
+                        "new_ids_digest of every arm")
+        s["memory"] = MEMORY_RULE
+        s["torch_settings"] = {a: GEN_PRECISION.get(arm_setting(a)[1], precision_text(arm_setting(a)[1]))
+                               for a in ["torch-" + x for x in TORCH_SETTINGS if x.startswith("eager")]}
+        return s
     if lane in OPS_LANES:
         # 2026-10-19 (lane ag-board-twins): one round = the same one recorded step
         s["clock"] = OPS_SPAN["inside_clock"]
@@ -952,6 +1058,8 @@ def lane_settings(lane):
         s["quality"] = ("held-out accuracy, log_loss, auc" if FIT_TASK[lane] == "classification"
                         else "held-out rmse, auc of the score") + (
             ", train_loss_last_step; *_diff_vs_ours for every other arm")
+        if lane in PREDICT_LANES:
+            s["memory"] = MEMORY_RULE
         return s
     if lane in TRAIN_LANES:
         s["optimizer"] = ("AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01, no "
@@ -1326,6 +1434,8 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
     elif model == "opsstep" or model == "program":
         # program-run reads the same weights and batch (its labels unused)
         arrays.update(ops_arrays(shape, rng, rec))
+    elif model == "causallm":
+        arrays.update(gen_arrays(lane, shape, rng, rec))
     elif lane in FIT_LANES:
         arrays.update(fit_arrays(lane, shape, rec))
     np.savez(path, **arrays)
@@ -1448,6 +1558,71 @@ def synthetic_fit_arrays(shape, rec):
     return out
 
 
+def lm_checkpoint(key):
+    """The local directory of checkpoint `key` (LM_CHECKPOINTS) and its record: $MOJOLEARN_BOARD_LM_CHECKPOINTS/<key>
+    (default ~/mojolearn-data/hf-checkpoints/<key>), fetched once with huggingface_hub.snapshot_download at the
+    pinned revision when a file is missing, the resolved commit kept beside it (.board_revision.json). The
+    conductor does this before any worker starts; no arm downloads."""
+    spec = LM_CHECKPOINTS[key]
+    root = os.path.expanduser(os.environ.get(LM_CKPT_ENV, "").strip() or LM_CKPT_DEFAULT)
+    local = os.path.join(root, key)
+    marker = os.path.join(local, ".board_revision.json")
+    missing = [f for f in spec["files"] if not os.path.exists(os.path.join(local, f))]
+    if missing:
+        try:
+            from huggingface_hub import HfApi, snapshot_download
+        except ImportError as exc:
+            raise SystemExit("bench_board_neural: %s needs %s (%s) at %s; it is missing %s and huggingface_hub "
+                             "does not import (%r)" % (key, spec["repo"], spec["revision"], local, missing, exc))
+        os.makedirs(local, exist_ok=True)
+        snapshot_download(repo_id=spec["repo"], revision=spec["revision"], local_dir=local,
+                          allow_patterns=list(spec["files"]))
+        sha = None
+        try:
+            sha = HfApi().model_info(spec["repo"], revision=spec["revision"]).sha
+        except Exception:  # noqa: BLE001  (recorded as unknown, never guessed)
+            pass
+        with open(marker, "w") as fh:
+            json.dump({"repo": spec["repo"], "revision": spec["revision"], "commit": sha, "fetched": now_utc()}, fh)
+    got = {}
+    try:
+        with open(marker) as fh:
+            got = json.load(fh)
+    except (OSError, ValueError):
+        pass
+    still = [f for f in spec["files"] if not os.path.exists(os.path.join(local, f))]
+    if still:
+        raise SystemExit("bench_board_neural: %s: %s still lacks %s" % (key, local, still))
+    return local, {"checkpoint": key, "repo": spec["repo"], "revision": spec["revision"],
+                   "commit": got.get("commit"), "dir": local, "format": spec["fmt"],
+                   "files_sha256": {f: _file_sha256(os.path.join(local, f)) for f in spec["files"]}}
+
+
+def _file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 22), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def gen_arrays(lane, shape, rng, rec):
+    """causal-lm-generate's inputs (2026-10-19, lane ag-inference-board): the checkpoint directory (fetched here,
+    before any clock) and the prompt ids (batch, prompt) int32 drawn from the race's generator over the
+    checkpoint's whole vocabulary, so every arm reads the same ids; no tokenizer runs."""
+    import numpy as np
+    d = GEN_SHAPES[shape]
+    local, ck = lm_checkpoint(GEN_LANES[lane])
+    with open(os.path.join(local, "config.json")) as fh:
+        vocab = int(json.load(fh)["vocab_size"])
+    ids = rng.integers(0, vocab, (d["batch"], d["prompt"])).astype(np.int32)
+    rec["inputs"] = ("prompt ids default_rng(%d).integers(0, %d) int32, shape (%d, %d); %d new tokens"
+                     % (SEED, vocab, d["batch"], d["prompt"], d["new_tokens"]))
+    rec["checkpoint"] = ck
+    return {"prompt_ids": ids, "new_tokens": np.asarray(d["new_tokens"], dtype=np.int64),
+            "checkpoint_dir": np.asarray(local), "checkpoint_key": np.asarray(GEN_LANES[lane])}
+
+
 def ops_arrays(shape, rng, rec):
     """ops-session-step's inputs (2026-10-19, lane ag-board-twins), from the race's generator: w1 (d_in,
     hidden), b1 (1, hidden), w2 (hidden, classes), b2 (1, classes) uniform(+-1/sqrt(fan_in)); X (batch, d_in)
@@ -1533,6 +1708,8 @@ def _lane_params(lane):
         return ops_params()
     if lane in PROGRAM_LANES:
         return program_params()
+    if lane in GEN_LANES:
+        return gen_params(lane)
     if lane in TRAIN_LANES:
         out.update(lr=ADAMW["lr"], betas=list(ADAMW["betas"]), eps=ADAMW["eps"],
                    weight_decay=ADAMW["weight_decay"], amsgrad=False)
@@ -1614,6 +1791,20 @@ def program_params(shape="full", **readback):
     for k, v in readback.items():
         if k not in out:
             raise KeyError("program_params: %r is not one of the lane's settings" % (k,))
+def gen_params(lane, shape="full", **readback):
+    """causal-lm-generate's work settings (2026-10-19, lane ag-inference-board), the same explicit values on
+    every arm; `readback` overrides a value with what the arm read back from the model it built (its config
+    and plan), so a difference shows as a mismatch. The architecture fields are None here (the checkpoint
+    decides them) and every arm reads them back."""
+    d = GEN_SHAPES[shape]
+    spec = LM_CHECKPOINTS[GEN_LANES[lane]]
+    out = dict(checkpoint=GEN_LANES[lane], checkpoint_repo=spec["repo"], checkpoint_revision=spec["revision"],
+               batch_size=int(d["batch"]), prompt_tokens=int(d["prompt"]), new_tokens=int(d["new_tokens"]),
+               decoding=GEN_DECODING, seed=SEED, n_layers=None, d_model=None, n_heads=None, n_kv_heads=None,
+               vocab_size=None, final_norm=None, tied_head=None, rope_theta=None, norm_eps=None)
+    for k, v in readback.items():
+        if k not in out:
+            raise KeyError("gen_params: %r is not one of the lane's settings" % (k,))
         out[k] = list(v) if isinstance(v, tuple) else v
     return out
 
@@ -1624,6 +1815,12 @@ def program_record(library, implementation, shape="full", **readback):
     if implementation is not None:
         rec["__implementation__"] = implementation
     rec.update(program_params(shape, **readback))
+def gen_record(lane, library, implementation, shape="full", **readback):
+    """A causal-lm-generate arm's parameter record for tools/bench_board_params.py."""
+    rec = {"__library__": library}
+    if implementation is not None:
+        rec["__implementation__"] = implementation
+    rec.update(gen_params(lane, shape, **readback))
     return rec
 
 
@@ -2743,6 +2940,277 @@ class OursProgramRun(Ours):
             self.out = s.numpy(self._forward(self._x))
         else:
             self.out = self.program.run(self.X)
+# The inference lanes (2026-10-19, lane ag-inference-board): device memory, CausalLM generate, Sequential predict
+# ---------------------------------------------------------------------------
+
+class DeviceMemory:
+    """The inference lanes' device-memory counters, read in this process with no subprocess (a fork between
+    rounds made the next timed AMD fit pay ~100 ms, bench_board_probe.MemProbe). AMD: the KFD's per-process VRAM
+    bytes (/sys/class/kfd/kfd/proc/<pid>/vram_*), and the device's used bytes (sum of /sys/class/drm/card*/device/
+    mem_info_vram_used). NVIDIA: NVML through ctypes, the per-process used bytes when NVML lists this pid (inside
+    a container's pid namespace it does not) and the device's used bytes (nvmlDeviceGetMemoryInfo) of the first
+    visible GPU. Apple: no device counter (unified memory). read() -> {"process": bytes or None, "device": bytes
+    or None}."""
+
+    def __init__(self):
+        self.vendor = (os.environ.get("MOJOLEARN_BOARD_VENDOR") or
+                       ("apple" if sys.platform == "darwin" else
+                        "amd" if os.path.isdir("/sys/class/kfd/kfd/proc") else "nvidia"))
+        self._nvml, self._handle, self.error = None, None, None
+        if self.vendor == "nvidia":
+            try:
+                self._open_nvml()
+            except Exception as exc:  # noqa: BLE001  (memory never breaks a timing)
+                self.error = "NVML unavailable: %r" % (exc,)
+
+    def _open_nvml(self):
+        import ctypes
+        lib = ctypes.CDLL("libnvidia-ml.so.1")
+        if lib.nvmlInit_v2() != 0:
+            raise RuntimeError("nvmlInit_v2 failed")
+        handle = ctypes.c_void_p()
+        first = (os.environ.get("CUDA_VISIBLE_DEVICES") or "0").split(",")[0].strip()
+        if first.isdigit():
+            rc = lib.nvmlDeviceGetHandleByIndex_v2(ctypes.c_uint(int(first)), ctypes.byref(handle))
+        else:
+            rc = lib.nvmlDeviceGetHandleByUUID(ctypes.c_char_p(first.encode()), ctypes.byref(handle))
+        if rc != 0:
+            raise RuntimeError("NVML has no device %r (rc %d)" % (first, rc))
+        self._nvml, self._handle = lib, handle
+
+    def method(self):
+        if self.vendor == "amd":
+            return ("KFD /sys/class/kfd/kfd/proc/<pid>/vram_* (this process) and /sys/class/drm/card*/device/"
+                    "mem_info_vram_used (the device)")
+        if self.vendor == "nvidia":
+            return self.error or ("NVML nvmlDeviceGetComputeRunningProcesses usedGpuMemory for this pid (None "
+                                  "inside a container's pid namespace) and nvmlDeviceGetMemoryInfo used (the "
+                                  "device), via ctypes")
+        return "no device counter on Apple (unified memory); see the round's peak_host_mb"
+
+    def _read_nvidia(self):
+        import ctypes
+        out = {"process": None, "device": None}
+        if self._nvml is None:
+            return out
+
+        class _Mem(ctypes.Structure):
+            _fields_ = [("total", ctypes.c_ulonglong), ("free", ctypes.c_ulonglong), ("used", ctypes.c_ulonglong)]
+
+        class _Proc(ctypes.Structure):
+            _fields_ = [("pid", ctypes.c_uint), ("usedGpuMemory", ctypes.c_ulonglong),
+                        ("gpuInstanceId", ctypes.c_uint), ("computeInstanceId", ctypes.c_uint)]
+        m = _Mem()
+        if self._nvml.nvmlDeviceGetMemoryInfo(self._handle, ctypes.byref(m)) == 0:
+            out["device"] = int(m.used)
+        fn = getattr(self._nvml, "nvmlDeviceGetComputeRunningProcesses_v3", None) or \
+            getattr(self._nvml, "nvmlDeviceGetComputeRunningProcesses_v2", None)
+        if fn is not None:
+            count = ctypes.c_uint(64)
+            procs = (_Proc * 64)()
+            if fn(self._handle, ctypes.byref(count), procs) == 0:
+                pid = os.getpid()
+                for i in range(min(int(count.value), 64)):     # driver-loop: over the GPU's compute processes
+                    if procs[i].pid == pid and procs[i].usedGpuMemory < (1 << 63):
+                        out["process"] = int(procs[i].usedGpuMemory)
+        return out
+
+    def _read_amd(self):
+        out = {"process": None, "device": None}
+        kfd = "/sys/class/kfd/kfd/proc/%d" % os.getpid()
+        try:
+            names = [n for n in os.listdir(kfd) if n.startswith("vram_")]
+        except OSError:
+            names = []
+        if names:
+            used = 0
+            for n in names:                                    # driver-loop: over this process's GPUs
+                with open(os.path.join(kfd, n)) as fh:
+                    used += int(fh.read().strip() or 0)
+            out["process"] = used
+        dev = 0
+        found = False
+        for path in glob.glob("/sys/class/drm/card*/device/mem_info_vram_used"):   # driver-loop: over the GPUs
+            try:
+                with open(path) as fh:
+                    dev += int(fh.read().strip() or 0)
+                found = True
+            except (OSError, ValueError):
+                pass
+        out["device"] = dev if found else None
+        return out
+
+    def read(self):
+        try:
+            if self.vendor == "nvidia":
+                return self._read_nvidia()
+            if self.vendor == "amd":
+                return self._read_amd()
+        except Exception:  # noqa: BLE001
+            pass
+        return {"process": None, "device": None}
+
+
+def _mem_delta(before, after):
+    return {k: (after[k] - before[k] if isinstance(after.get(k), int) and isinstance(before.get(k), int) else None)
+            for k in ("process", "device")}
+
+
+def memory_pass(dm, resident, fn, torch=None):
+    """One UNTIMED call of `fn` (the round's call again, its results discarded) with a 1 ms sampler thread on
+    `dm`: {resident_bytes (the load's delta, per counter), before, peak, peak_bytes (resident + the pass's
+    transient, per counter), process_peak_bytes (the absolute per-process peak, context included, where the
+    vendor exposes one), torch allocator figures for a torch arm, method}."""
+    import threading
+    stop = threading.Event()
+    before = dm.read()
+    peak = dict(before)
+
+    def sample():
+        while not stop.is_set():
+            r = dm.read()
+            for k, v in r.items():
+                if isinstance(v, int) and (peak.get(k) is None or v > peak[k]):
+                    peak[k] = v
+            stop.wait(0.001)
+    alloc0 = None
+    if torch is not None:
+        try:
+            torch.cuda.synchronize()
+            torch.cuda.reset_peak_memory_stats()
+            alloc0 = int(torch.cuda.memory_allocated())
+        except Exception:  # noqa: BLE001  (MPS: no allocator peak)
+            torch = None
+    t = threading.Thread(target=sample, daemon=True)
+    t.start()
+    try:
+        fn()
+    finally:
+        stop.set()
+        t.join()
+    last = dm.read()
+    for k, v in last.items():
+        if isinstance(v, int) and (peak.get(k) is None or v > peak[k]):
+            peak[k] = v
+    out = {"method": dm.method(), "resident_bytes": dict(resident or {}), "before": before, "peak": peak,
+           "peak_bytes": {}, "process_peak_bytes": peak.get("process")}
+    for k in ("process", "device"):
+        r, b, p = (resident or {}).get(k), before.get(k), peak.get(k)
+        out["peak_bytes"][k] = (r + (p - b)) if isinstance(r, int) and isinstance(b, int) and isinstance(p, int) \
+            else None
+    if torch is not None:
+        try:
+            out["torch_allocated_before_bytes"] = alloc0
+            out["torch_max_allocated_bytes"] = int(torch.cuda.max_memory_allocated())
+            out["torch_reserved_bytes"] = int(torch.cuda.memory_reserved())
+        except Exception:  # noqa: BLE001
+            pass
+    return out
+
+
+def _gen_inputs(np, data):
+    ids = np.ascontiguousarray(data["prompt_ids"], dtype=np.int32)
+    return ids, int(np.asarray(data["new_tokens"]).ravel()[0]), str(np.asarray(data["checkpoint_dir"])), \
+        str(np.asarray(data["checkpoint_key"]))
+
+
+def _gen_timing(t0, t1, t2, n_new):
+    prefill, gen = (t1 - t0) * 1000.0, (t2 - t1) * 1000.0
+    return {"prefill_ms": prefill, "generate_ms": gen, "new_tokens": n_new,
+            "decode_ms_per_token": ((gen - prefill) / (n_new - 1)) if n_new > 1 else None,
+            "clock_ms": gen}
+
+
+class OursGenerate(Ours):
+    """causal-lm-generate through mojolearn.models.CausalLM: the checkpoint loaded once in the untimed warm-up
+    round (its device bytes read around the load), then every round generate(ids, 1) (prefill_ms) and
+    generate(ids, N) (the clock), both from the host ids, greedy. The architecture is read back from the
+    loader's own plan of the checkpoint's config.json at ready (no device work before the warm-up)."""
+
+    def __init__(self, lane, shape, data):
+        import numpy as np
+        self.np, self.lane, self.shape = np, lane, shape
+        self.dm = DeviceMemory()
+        ml = _ours_module()
+        self.ml = ml
+        try:
+            from mojolearn.models import CausalLM, HFConfig, plan_for
+        except ImportError as exc:
+            raise ImportError("REFUSED: %s races mojolearn.models.CausalLM; this mojolearn (%s) has no models "
+                              "module (%r)" % (lane, getattr(ml, "__version__", "?"), exc))
+        self.CausalLM = CausalLM
+        self.ids, self.n_new, self.ckpt_dir, self.key = _gen_inputs(np, data)
+        plan = plan_for(HFConfig.from_json(self.ckpt_dir))     # refuses an unsupported checkpoint by name
+        self.lm, self.resident, self.first, self.out, self.timing = None, None, None, None, None
+        self.info = _ours_info(ml, getattr(sys.modules[CausalLM.__module__], "__file__", None), ml.numeric_mode(),
+                               "gpu")
+        self.info.update(call=LANE_TEXT[lane][0], checkpoint_dir=self.ckpt_dir, model_type=plan.model_type,
+                         device_memory=self.dm.method(),
+                         load="CausalLM.load in the untimed warm-up round (round 0)")
+        self.record = gen_record(lane, "mojolearn", CausalLM, shape, batch_size=int(self.ids.shape[0]),
+                                 prompt_tokens=int(self.ids.shape[1]), new_tokens=self.n_new,
+                                 n_layers=int(plan.n_layers), d_model=int(plan.d_model), n_heads=int(plan.n_heads),
+                                 n_kv_heads=int(plan.n_kv_heads), vocab_size=int(plan.vocab_size),
+                                 final_norm=plan.norm_name is not None, tied_head=plan.head_name is None,
+                                 rope_theta=float(plan.block_options["rope_theta"]),
+                                 norm_eps=float(plan.block_options["norm_eps"]))
+
+    def _build(self):
+        before = self.dm.read()
+        self.lm = self.CausalLM.load(self.ckpt_dir, weight_format="float32", numeric_profile="fp32_v1", device="gpu")
+        self.resident = _mem_delta(before, self.dm.read())
+        self.info.update(model=repr(self.lm), numeric_profile_used=self.lm.numeric_profile,
+                         weight_format_used=self.lm.weight_format)
+
+    def _gen(self, n):
+        return self.np.asarray(self.lm.generate(self.ids, n), dtype=self.np.int32)
+
+    def call(self):
+        if self.lm is None:
+            self._build()                   # the warm-up round: load + upload, untimed (its ms is warmup_ms)
+        t0 = time.perf_counter()
+        first = self._gen(1)
+        t1 = time.perf_counter()
+        out = self._gen(self.n_new)
+        t2 = time.perf_counter()
+        self.first, self.out = first, out
+        self.timing = _gen_timing(t0, t1, t2, self.n_new)
+
+    def round_extra(self):
+        return dict(self.timing or {})
+
+    def memory_pass(self):
+        return memory_pass(self.dm, self.resident, lambda: self._gen(self.n_new))
+
+    def outputs(self):
+        return {"ids": self.out, "first": self.first}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self.out).tobytes())[:16]
+
+
+class OursPredict(OursFit):
+    """sequential-predict: OursFit's Sequential (the sequential-fit recipe) fitted once in the untimed warm-up
+    round (its device bytes read around the fit), then every round predict_proba(X_test) alone in the clock."""
+
+    def __init__(self, lane, shape, data):
+        self.dm = DeviceMemory()
+        OursFit.__init__(self, lane, shape, data)
+        self._fitted, self.resident = False, None
+        self.info.update(call=LANE_TEXT[lane][0], device_memory=self.dm.method(),
+                         fit="one fit in the untimed warm-up round (round 0); the clock is predict_proba alone")
+
+    def call(self):
+        if not self._fitted:
+            before = self.dm.read()
+            OursFit.call(self)              # the fit only: this lane is not in FIT_PREDICT_IN_CLOCK
+            self.resident = _mem_delta(before, self.dm.read())
+            self._fitted = True
+        self._score = None
+        self._predict()
+
+    def memory_pass(self):
+        return memory_pass(self.dm, self.resident, lambda: self.model.predict_proba(self.Xte))
 
 
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
@@ -3685,6 +4153,35 @@ class TorchProgramArm:
     parameters); a round moves the batch to the device, runs softmax(relu(x @ w1 + b1) @ w2 + b2) under the
     setting's autocast and brings the probabilities back on the host. A compile arm compiles the forward in its
     untimed warm-up round."""
+#: the byte-LM tensor names -> transformers' Llama names (the 162M's export, research/gpt3-small-162m)
+BYTE_LM_HF_NAME = {"norm1_w": "input_layernorm.weight", "w_q": "self_attn.q_proj.weight",
+                   "w_k": "self_attn.k_proj.weight", "w_v": "self_attn.v_proj.weight",
+                   "w_o": "self_attn.o_proj.weight", "norm2_w": "post_attention_layernorm.weight",
+                   "w_gate": "mlp.gate_proj.weight", "w_up": "mlp.up_proj.weight", "w_down": "mlp.down_proj.weight"}
+
+
+def byte_lm_hf_state(state):
+    """{byte-LM name: tensor} -> {transformers LlamaForCausalLM name: tensor} (names only, no arithmetic)."""
+    out = {}
+    for k, v in state.items():
+        if k == "embed":
+            out["model.embed_tokens.weight"] = v
+        elif k == "lm_head":
+            out["lm_head.weight"] = v
+        else:
+            blk, name = k.split(".", 1)
+            out["model.layers.%d.%s" % (int(blk[len("block"):]), BYTE_LM_HF_NAME[name])] = v
+    return out
+
+
+class TorchGenerateArm:
+    """causal-lm-generate's opponent at one eager torch setting (2026-10-19, lane ag-inference-board):
+    transformers' LlamaForCausalLM on the same checkpoint, built on the host at ready and moved to the device in
+    the untimed warm-up round (its device bytes read around the move), then every round generate(ids, 1)
+    (prefill_ms) and generate(ids, N) (the clock) with an explicit GenerationConfig (greedy, KV cache, no stop
+    token), the ids from the host and back. The 162M's byte-LM tensors are renamed to Llama's, loaded
+    strict=True and read back bit for bit, with model.norm an Identity (it has no final norm). bf16 arms hold the
+    weights in bfloat16 (GEN_PRECISION). No compile arm: generate is a growing-cache Python loop."""
 
     def __init__(self, lane, shape, data, arm):
         import numpy as np
@@ -3694,6 +4191,15 @@ class TorchProgramArm:
             raise RuntimeError("REFUSED: %s: program-run races torch on the GPU only" % arm)
         twin = _load("torch_lm_step_opponent")
         col = twin.COLUMNS[setting.replace("-", "_")]
+        self.dm = DeviceMemory()
+        where, setting = arm_setting(arm)
+        if where != "gpu":
+            raise RuntimeError("REFUSED: %s: %s races torch on the GPU only" % (arm, lane))
+        twin = _load("torch_lm_step_opponent")
+        col = twin.COLUMNS[setting.replace("-", "_")]
+        if col["compile"]:
+            raise RuntimeError("REFUSED: %s: transformers' generate is a per-token loop over a growing KV cache; "
+                               "%s races the eager arms only" % (arm, lane))
         torch, dev, kind, name, sync = _torch_device()
         self.torch, self.dev, self.kind, self._sync = torch, dev, kind, sync
         torch.manual_seed(SEED)
@@ -3743,6 +4249,105 @@ class TorchProgramArm:
                 stack.enter_context(torch.autocast(device_type=self.dev.type, dtype=self.autocast))
             y = self.fn(self.X.to(self.dev), *self.ws)
         self.out = y.float().cpu().numpy()
+        self.bf16 = bool(col["autocast"])
+        transformers, LlamaConfig, modeling_llama = _transformers(arm)
+        from transformers import GenerationConfig
+        self.ids_np, self.n_new, self.ckpt_dir, self.key = _gen_inputs(np, data)
+        self.ids = torch.from_numpy(self.ids_np.astype(np.int64))
+        self.mask = torch.ones_like(self.ids)
+        with open(os.path.join(self.ckpt_dir, "config.json")) as fh:
+            raw = json.load(fh)
+        byte_lm = raw.get("format") == LM_CHECKPOINTS["mojolearn-162m"]["fmt"]
+        if byte_lm:
+            _, cfg = hf_llama_config(arm, vocab=raw["vocab_size"], d_model=raw["d_model"], n_heads=raw["n_heads"],
+                                     n_kv=raw["n_kv"], head_dim=raw["head_dim"], intermediate=raw["intermediate"],
+                                     layers=raw["n_layers"], max_pos=raw["max_position_embeddings"],
+                                     eps=raw["rms_norm_eps"], theta=raw["rope_theta"])
+            cfg.use_cache = True
+            model = modeling_llama.LlamaForCausalLM(cfg)
+            model.model.norm = torch.nn.Identity()      # the 162M has no final norm
+            from safetensors.torch import load_file
+            state = byte_lm_hf_state(load_file(os.path.join(self.ckpt_dir, "model.safetensors")))
+            hf_load_exact(torch, model, state, arm)
+            theta, eps, final_norm = float(raw["rope_theta"]), float(raw["rms_norm_eps"]), False
+        else:
+            try:
+                model = modeling_llama.LlamaForCausalLM.from_pretrained(self.ckpt_dir, dtype=torch.float32,
+                                                                        attn_implementation="sdpa")
+            except TypeError:
+                model = modeling_llama.LlamaForCausalLM.from_pretrained(self.ckpt_dir, torch_dtype=torch.float32,
+                                                                        attn_implementation="sdpa")
+            cfg = model.config
+            theta = float(getattr(cfg, "rope_theta", None) or
+                          (getattr(cfg, "rope_parameters", None) or {}).get("rope_theta"))
+            eps, final_norm = float(cfg.rms_norm_eps), True
+        model.eval()
+        rotary = getattr(model.model, "rotary_emb", None)
+        head_dim = int(getattr(cfg, "head_dim", None) or cfg.hidden_size // cfg.num_attention_heads)
+        if rotary is not None:
+            hf_check_rotary(torch, rotary, head_dim, theta, arm)
+        if self.bf16:
+            model = model.to(torch.bfloat16)
+        self.model = model
+        self._on_device = False
+        self.resident = None
+        self.gc = {n: GenerationConfig(max_new_tokens=int(n), do_sample=False, num_beams=1, use_cache=True,
+                                       eos_token_id=None, bos_token_id=None, pad_token_id=0)
+                   for n in (1, self.n_new)}
+        model.generation_config = self.gc[self.n_new]   # no checkpoint default (an eos, a sampler) reaches generate
+        tied = bool(getattr(cfg, "tie_word_embeddings", False))
+        self.record = gen_record(lane, "transformers", modeling_llama.LlamaForCausalLM, shape,
+                                 batch_size=int(self.ids.shape[0]), prompt_tokens=int(self.ids.shape[1]),
+                                 new_tokens=self.n_new, n_layers=int(cfg.num_hidden_layers),
+                                 d_model=int(cfg.hidden_size), n_heads=int(cfg.num_attention_heads),
+                                 n_kv_heads=int(cfg.num_key_value_heads), vocab_size=int(cfg.vocab_size),
+                                 final_norm=final_norm, tied_head=tied, rope_theta=theta, norm_eps=eps)
+        self.first, self.out, self.timing = None, None, None
+        self.info = {"library": "torch", "version": torch.__version__, "transformers_version": transformers.__version__,
+                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
+                     "torch_backend": kind, "device": "gpu", "device_name": name,
+                     "setting": setting, "precision": GEN_PRECISION.get(setting, precision_text(setting)),
+                     "compile": "eager", "mode": "torch eager, %s" % GEN_PRECISION.get(setting, setting),
+                     "precision_readback": precision, "column": setting.replace("-", "_"),
+                     "torch_threads": torch.get_num_threads(), "pre_clock_fit": False, "input_home": "host",
+                     "call": LANE_TEXT[lane][1], "checkpoint_dir": self.ckpt_dir, "device_memory": self.dm.method(),
+                     "attn_implementation": getattr(cfg, "_attn_implementation", None),
+                     "load": "built on the host at ready; .to(device) in the untimed warm-up round (round 0)"}
+
+    def _gen(self, n):
+        torch = self.torch
+        with torch.inference_mode():
+            out = self.model.generate(input_ids=self.ids.to(self.dev), attention_mask=self.mask.to(self.dev),
+                                      generation_config=self.gc[n])
+            got = out.cpu().numpy().astype(self.np.int32)
+        want = (int(self.ids.shape[0]), int(self.ids.shape[1]) + int(n))
+        if tuple(got.shape) != want:
+            raise RuntimeError("REFUSED: %s: generate returned shape %s, not %s (a stop token or a cap ended it)"
+                               % (self.arm, list(got.shape), list(want)))
+        return got
+
+    def call(self):
+        if not self._on_device:
+            self._sync()
+            before = self.dm.read()
+            self.model.to(self.dev)
+            self._sync()
+            self.resident = _mem_delta(before, self.dm.read())
+            self._on_device = True
+        t0 = time.perf_counter()
+        first = self._gen(1)
+        t1 = time.perf_counter()
+        out = self._gen(self.n_new)
+        t2 = time.perf_counter()
+        self.first, self.out = first, out
+        self.timing = _gen_timing(t0, t1, t2, self.n_new)
+
+    def round_extra(self):
+        return dict(self.timing or {})
+
+    def memory_pass(self):
+        return memory_pass(self.dm, self.resident, lambda: self._gen(self.n_new),
+                           torch=self.torch if self.kind == "cuda" else None)
 
     def sync(self):
         self._sync()
@@ -3752,6 +4357,55 @@ class TorchProgramArm:
 
     def digest(self):
         return _sha(self.np.ascontiguousarray(self.np.asarray(self.out)).data)[:16]
+        return {"ids": self.out, "first": self.first}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self.out).tobytes())[:16]
+
+
+class TorchPredictArm(TorchFitArm):
+    """sequential-predict's opponent (2026-10-19, lane ag-inference-board): TorchFitArm's network fitted once in
+    the untimed warm-up round (its device bytes read around the fit), then every round the held-out rows to the
+    device, the forward (the compiled module on a compile arm) under no_grad and the setting's autocast, the
+    sigmoid back on the host, in the clock."""
+
+    def __init__(self, lane, shape, data, arm):
+        self.dm = DeviceMemory()
+        TorchFitArm.__init__(self, lane, shape, data, arm)
+        self._fitted, self.resident = False, None
+        self.info.update(call=LANE_TEXT[lane][1], device_memory=self.dm.method(),
+                         fit="one fit in the untimed warm-up round (round 0); the clock is the prediction alone")
+
+    def _predict(self):
+        torch = self.torch
+        if self._score is None:
+            parts = []
+            with self._ctx(grad=False):
+                X = self.Xte.to(self.dev)
+                for s in range(0, int(X.shape[0]), FIT_PREDICT_CHUNK):     # driver-loop: over row chunks
+                    parts.append(torch.sigmoid(self.fn(X[s:s + FIT_PREDICT_CHUNK]).float()))
+            self._score = self.np.ascontiguousarray(torch.cat(parts).cpu().numpy().astype(self.np.float32))
+        return self._score
+
+    def call(self):
+        if not self._fitted:
+            self._sync()
+            before = self.dm.read()
+            TorchFitArm.call(self)          # the fit only: this lane is not in FIT_PREDICT_IN_CLOCK
+            self._sync()
+            self.resident = _mem_delta(before, self.dm.read())
+            self._fitted = True
+        self._score = None
+        self._predict()
+
+    def memory_pass(self):
+        def again():
+            self._score, keep = None, self._score
+            try:
+                self._predict()
+            finally:
+                self._score = keep
+        return memory_pass(self.dm, self.resident, again, torch=self.torch if self.kind == "cuda" else None)
 
 
 class MlxFitArm:
@@ -4324,6 +4978,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
                                % (arm, OUR_MODE[arm], os.environ.get("MOJOLEARN_NUMERIC_MODE")))
         model = MODEL_OF[lane]
         runtime = (ab_config or {}).get("runtime", {})
+        if lane in GEN_LANES or lane in PREDICT_LANES:   # 2026-10-19 (lane ag-inference-board)
+            if operation != "model_default":
+                raise RuntimeError("REFUSED: the inference lanes have no experimental operation")
+            return OursGenerate(lane, shape, data) if lane in GEN_LANES else OursPredict(lane, shape, data)
         if lane in FIT_LANES:
             if operation != "model_default":
                 raise RuntimeError("REFUSED: the fit lanes have no experimental operation")
@@ -4365,6 +5023,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
         return OURS[model](lane, shape, data)
     if operation != "model_default":
         raise RuntimeError("REFUSED: experimental operation has no matched opponent implementation")
+    if lane in GEN_LANES or lane in PREDICT_LANES:   # 2026-10-19 (lane ag-inference-board): inference
+        if arm in MLX_ARMS or arm in MAMBA_SSM_ARMS:
+            raise RuntimeError("REFUSED: %s does not race %s (torch arms only)" % (arm, lane))
+        return TorchGenerateArm(lane, shape, data, arm) if lane in GEN_LANES else TorchPredictArm(lane, shape, data, arm)
     if lane in FIT_LANES:                # 2026-10-19 (lane ag-bench): whole fits
         if arm in MLX_ARMS:
             return MlxFitArm(lane, shape, data, arm)
@@ -4482,9 +5144,21 @@ def worker(args):
                 operation_ms = (time.perf_counter() - t0) * 1000.0
                 m = mem.stop()
                 digest = runner.digest()
+                # 2026-10-19 (lane ag-inference-board): an inference runner's own sub-clocks (prefill, generate)
+                # and its UNTIMED memory pass, both read after the round's clock
+                extra = runner.round_extra() if hasattr(runner, "round_extra") else None
+                if extra and extra.get("clock_ms") is not None:
+                    ms = float(extra["clock_ms"])     # the lane's clock: generate(prompt, N) alone
+                device_memory = None
+                if hasattr(runner, "memory_pass"):
+                    try:
+                        device_memory = runner.memory_pass()
+                    except Exception as exc:  # noqa: BLE001  (memory never breaks a timing; recorded by name)
+                        device_memory = {"error": "memory pass failed: %r" % (exc,)}
                 from bench_board_state import scored_receipt
                 state_receipt = scored_receipt(outputs, runner) if r > 0 else None
                 round_message = {"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m,
+                    "extra": extra, "device_memory": device_memory,
                     "state_receipt": state_receipt, "compiles": compiles_now,
                     "neural_ab": _neural_ab_receipt(runner, ab_config, executed=True),
                     "operation": {"ms": operation_ms, "preparation_ms": preparation_ms if r == 0 else 0.0,
@@ -4706,6 +5380,8 @@ def scorer_preflight(lane, shape, data_path, arms, operation):
             need += ["X", "y", "y_codes"]
         if lane in PROGRAM_LANES:
             need += ["X"] + ["w:" + n for n in OPS_PARAMS]
+        if lane in GEN_LANES:
+            need += ["prompt_ids", "new_tokens", "checkpoint_dir"]
         absent = [k for k in need if k not in keys]
         receipt["checks"].append({"check": "reference data", "need": need, "absent": absent,
                                   "status": "failed" if absent else "ok"})
@@ -4881,12 +5557,44 @@ def program_quality(data, outs):
         q[arm]["max_abs_diff_vs_ours"] = diff
         q[arm]["max_rel_diff_vs_ours"] = diff / (float(np.abs(r).max()) or 1.0)
         q[arm]["digest_equal_ours"] = q[arm]["output_digest"] == q[ref_arm]["output_digest"]
+def gen_quality(data, outs):
+    """causal-lm-generate's quality (2026-10-19, lane ag-inference-board): every arm's new-ids digest, and every
+    other arm's agreement with ours: tokens_equal_ours (all new ids), first_divergence_index (the first new-token
+    position where any row differs, None when equal), matching_prefix_tokens, prefill_token_equal_ours (the one
+    token of generate(prompt, 1))."""
+    import numpy as np
+    L = int(np.asarray(data["prompt_ids"]).shape[1])
+    q = {}
+    for arm, o in outs.items():
+        ids = np.asarray(o["ids"])
+        q[arm] = {"new_tokens": int(ids.shape[1] - L), "new_ids_digest": _sha(np.ascontiguousarray(
+            ids[:, L:], dtype=np.int32).tobytes())[:16],
+            "prompt_echoed": bool(np.array_equal(ids[:, :L], np.asarray(data["prompt_ids"])))}
+    ref_arm = "ours" if "ours" in outs else ("ours-fast" if "ours-fast" in outs else None)
+    if ref_arm is None:
+        return q
+    ref, ref_first = np.asarray(outs[ref_arm]["ids"])[:, L:], np.asarray(outs[ref_arm]["first"])[:, L:]
+    for arm, o in outs.items():
+        if arm == ref_arm:
+            continue
+        new, first = np.asarray(o["ids"])[:, L:], np.asarray(o["first"])[:, L:]
+        row = q[arm]
+        if new.shape != ref.shape:
+            row["shape_mismatch_vs_ours"] = "%s vs %s" % (list(new.shape), list(ref.shape))
+            continue
+        cols = np.nonzero((new != ref).any(axis=0))[0]
+        row["tokens_equal_ours"] = bool(cols.size == 0)
+        row["first_divergence_index"] = None if cols.size == 0 else int(cols[0])
+        row["matching_prefix_tokens"] = int(new.shape[1] if cols.size == 0 else cols[0])
+        row["prefill_token_equal_ours"] = bool(first.shape == ref_first.shape and np.array_equal(first, ref_first))
     return q
 
 
 def quality(lane, data, outs, *, shape="full"):
     import numpy as np
     q = {}
+    if lane in GEN_LANES:
+        return gen_quality(data, outs)
     if lane in FIT_LANES:
         return fit_quality(lane, data, outs)
     if lane in OPS_LANES:
@@ -4989,8 +5697,34 @@ PROGRAM_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed
                                 "on the device before the clock"}
 
 
+#: sequential-predict's span (2026-10-19, lane ag-inference-board): the fit is untimed, the prediction alone timed
+PREDICT_SPAN = {"input_home": "host", "pre_clock_fit": True, "upload_ms_untimed": None,
+                "inside_clock": "the held-out rows from the host to the device, the forward, the class probabilities "
+                                "back on the host, synchronized; the fit (the sequential-fit recipe) is the untimed "
+                                "warm-up round"}
+#: causal-lm-generate's span (2026-10-19, lane ag-inference-board), the same on every arm
+GEN_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": None,
+            "weights_resident_before_clock": True,
+            "inside_clock": "generate(prompt, N): the prompt ids from the host to the device, the prefill, N - 1 "
+                            "greedy decode steps over the KV cache, the N new ids back on the host, synchronized; "
+                            "prefill_ms is a separate generate(prompt, 1) timed the same way just before; the "
+                            "checkpoint load and weight upload are the untimed warm-up round"}
+#: the torch generate arms' precision (bf16 arms hold the weights in bfloat16, how torch serves in bf16)
+GEN_PRECISION = {"eager-fp32": "float32 weights and math, TF32 off",
+                 "eager-tf32": "float32 weights, matmuls in TF32",
+                 "eager-bf16": "bfloat16 weights and activations (model.to(torch.bfloat16))"}
+MEMORY_RULE = ("one untimed memory pass after every round (the same call): resident_bytes = device bytes added by "
+               "the model's load (or fit), read before and after it in the warm-up round; peak_bytes = "
+               "resident_bytes + the pass's transient peak (sampled every ms in process: KFD per-process VRAM on "
+               "AMD, NVML per-process used bytes or the device's used bytes on NVIDIA; a sampled peak can miss a "
+               "spike shorter than the interval); torch arms also torch.cuda.max_memory_allocated over the pass; "
+               "Apple has no device counter (unified memory: the round's peak_host_mb)")
+
+
 def fit_span(lane):
     """The comparability span of a fit lane."""
+    if lane in PREDICT_LANES:
+        return dict(PREDICT_SPAN)
     return dict(FIT_PREDICT_SPAN if lane in FIT_PREDICT_IN_CLOCK else FIT_SPAN)
 
 
@@ -5089,6 +5823,8 @@ def race(args):
     data_path = os.path.join(args.work, "neural-%s-%s.npz" % (lane, shape))
     if getattr(args, "higgs", None):
         os.environ[HIGGS_ENV] = os.path.abspath(os.path.expanduser(args.higgs))   # fit_arrays reads it
+    if getattr(args, "lm_checkpoints", None):
+        os.environ[LM_CKPT_ENV] = os.path.abspath(os.path.expanduser(args.lm_checkpoints))   # lm_checkpoint reads it
     inputs = make_inputs(lane, shape, args.rounds + 1, data_path)
     srec = shape_record(lane, shape)
     result = {"lane": lane, "dataset": DATA_OF[lane], "shape": srec["label"], "shape_record": srec,
@@ -5239,6 +5975,11 @@ def race(args):
             if msg.get("state_receipt") is not None:
                 result["arms"][arm].setdefault("state_receipts", []).append(msg["state_receipt"])
             result["arms"][arm]["mem"].append(msg.get("mem"))
+            if msg.get("extra") is not None:
+                result["arms"][arm].setdefault("round_extra", []).append(dict(msg["extra"], round=r, warmup=r == 0))
+            if msg.get("device_memory") is not None:
+                result["arms"][arm].setdefault("device_memory", []).append(dict(msg["device_memory"], round=r,
+                                                                               warmup=r == 0))
             print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, arm, r, msg["ms"], msg["digest"]), flush=True)
     outs = {}
@@ -5255,6 +5996,7 @@ def race(args):
                       % (lane, arm, result["arms"][arm]["outputs_digest"]), flush=True)
                 if (getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES
                         or lane in FIT_LANES or lane in OPS_LANES or lane in PROGRAM_LANES):
+                        or lane in FIT_LANES or lane in OPS_LANES or lane in GEN_LANES):
                     # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
@@ -5324,6 +6066,9 @@ def race(args):
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
         a["span"] = (fit_span(lane) if lane in FIT_LANES else dict(OPS_SPAN) if lane in OPS_LANES
                      else dict(PROGRAM_SPAN) if lane in PROGRAM_LANES else dict(SPAN))
+                     else dict(GEN_SPAN) if lane in GEN_LANES else dict(SPAN))
+        if lane in INFER_LANES:
+            a["inference"] = inference_summary(a) if ok else None
         print("NEURAL lane=%s arm=%s status=%s median_ms=%s quality=%s"
               % (lane, arm, a["status"], a["median_ms"],
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True)), flush=True)
@@ -5341,6 +6086,32 @@ def race(args):
     os.replace(out_json + ".tmp", out_json)
     failed = [a for a in arms if result["arms"][a]["status"] != "ok"]
     return 1 if failed and len(failed) == len(arms) else 0
+
+
+def inference_summary(a):
+    """An inference arm's headline figures from its timed rounds (round > 0) and every memory pass: the median
+    prefill_ms, generate_ms and decode_ms_per_token (causal-lm-generate), the largest peak_bytes and
+    process_peak_bytes per counter, the resident bytes and torch's allocator peak."""
+    timed = [x for x in a.get("round_extra", []) if not x.get("warmup")]
+    out = {}
+    for k in ("prefill_ms", "generate_ms", "decode_ms_per_token"):
+        v = [x[k] for x in timed if x.get(k) is not None]
+        out[k] = statistics.median(v) if v else None
+    if timed:
+        out["new_tokens"] = timed[0].get("new_tokens")
+    passes = a.get("device_memory", [])
+
+    def most(get):
+        v = [get(p) for p in passes]
+        v = [x for x in v if isinstance(x, int)]
+        return max(v) if v else None
+    for k in ("process", "device"):
+        out["peak_bytes_" + k] = most(lambda p, k=k: (p.get("peak_bytes") or {}).get(k))
+        out["resident_bytes_" + k] = most(lambda p, k=k: (p.get("resident_bytes") or {}).get(k))
+    out["process_peak_bytes"] = most(lambda p: p.get("process_peak_bytes"))
+    out["torch_max_allocated_bytes"] = most(lambda p: p.get("torch_max_allocated_bytes"))
+    out["memory_method"] = passes[0].get("method") if passes else None
+    return out
 
 
 def build_parser():
@@ -5374,6 +6145,10 @@ def build_parser():
     r.add_argument("--higgs", default=None,
                    help="the HIGGS npz the fit lanes read (default: $%s, else %s)"
                         % (HIGGS_ENV, " or ".join(HIGGS_DEFAULTS)))
+    r.add_argument("--lm-checkpoints", default=None,
+                   help="the directory holding the causal-lm-generate checkpoints, one folder per key (default: "
+                        "$%s, else %s; a missing one is fetched there with huggingface_hub)"
+                        % (LM_CKPT_ENV, LM_CKPT_DEFAULT))
     r.add_argument("--keep-outputs", action="store_true",
                    help="keep every arm's saved outputs as <out>/<lane>-<data>-<arm>.outputs.npz "
                         "(y for a forward lane, losses for a train lane): tools/afn_ab.sh's judge "
