@@ -18,7 +18,7 @@ from autograd.program_pyapi import array_input, output_array
 from autograd.program_arrays import initialize_program_arrays
 from autograd.rankn import ShapeN
 from autograd.cast_ops import upload_cast, upload_cast_i32
-from autograd.optim import optimizer_slots, optimizer_config_packed
+from autograd.optim import OptimizerConfig, optimizer_slots, optimizer_config_packed
 from core.cast_in import CastIn
 from training.checkpoint import read_checkpoint_unchecked
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -162,21 +162,7 @@ def distributed_load[E: Exec & Movable & Deinitable, KIND: Int](
         var data = List[Float32](length=p.param_shapes[j].count(), fill=Float32(0))
         memcpy(dest=data.unsafe_ptr(), src=ck.param.unsafe_ptr() + ck.offsets[j], count=len(data))
         values.append(data^)
-    # The file carries the same three optimizer kinds as OpsSession.
-    # Validate before allocating state or accepting corrupted configuration.
-    if ip[0] != OPT_SGD and ip[0] != OPT_ADAM and ip[0] != OPT_ADAMW:
-        raise Error("distributed checkpoint: unknown optimizer")
-    if ip[1] < 0 or ip[1] > 1 or ip[2] < 0 or ip[2] > 2 or ip[3] < 1:
-        raise Error("distributed checkpoint: invalid optimizer or schedule flags")
-    if not (fp[0] > 0 and fp[1] >= 0 and fp[1] < 1 and fp[2] >= 0 and fp[2] < 1
-            and fp[3] >= 0 and fp[3] < 1 and fp[4] > 0 and fp[5] >= 0):
-        raise Error("distributed checkpoint: invalid optimizer hyperparameters")
-    if ip[2] != 0 and not fp[6] > 0:
-        raise Error("distributed checkpoint: invalid schedule gamma")
-    if ip[1] != 0 and (ip[0] != OPT_SGD or not fp[1] > 0):
-        raise Error("distributed checkpoint: invalid Nesterov configuration")
-    var cfg = optimizer_config_packed(ip[0], ip[1], fp[1] if ip[0] == OPT_SGD else fp[2],
-                                     Float32(0) if ip[0] == OPT_SGD else fp[3], fp[4], fp[5], Float32(0), fp[0])
+    var cfg = distributed_optimizer_config(ip, fp)
     var d = DistributedProgram[E](p, trainable, device_ids, Int(ck.ext_ints[1]), cfg, ip, fp, ck.seed)
     var ex0 = executors.pop(0)
     d.workers.append(ProgramReplica[E](ex0^, p, values, trainable, cfg, 0, len(device_ids)))
@@ -349,3 +335,21 @@ def distributed_close_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
     p.destroy_pointee()
     p.free()
     return PythonObject(0)
+
+
+def distributed_optimizer_config(ip: List[Int], fp: List[Float32]) raises -> OptimizerConfig:
+    # The file carries the same three optimizer kinds as OpsSession.
+    # Validate before allocating state or accepting corrupted configuration.
+    if ip[0] != OPT_SGD and ip[0] != OPT_ADAM and ip[0] != OPT_ADAMW:
+        raise Error("distributed checkpoint: unknown optimizer")
+    if ip[1] < 0 or ip[1] > 1 or ip[2] < 0 or ip[2] > 2 or ip[3] < 1:
+        raise Error("distributed checkpoint: invalid optimizer or schedule flags")
+    if not (fp[0] > 0 and fp[1] >= 0 and fp[1] < 1 and fp[2] >= 0 and fp[2] < 1
+            and fp[3] >= 0 and fp[3] < 1 and fp[4] > 0 and fp[5] >= 0):
+        raise Error("distributed checkpoint: invalid optimizer hyperparameters")
+    if ip[2] != 0 and not fp[6] > 0:
+        raise Error("distributed checkpoint: invalid schedule gamma")
+    if ip[1] != 0 and (ip[0] != OPT_SGD or not fp[1] > 0):
+        raise Error("distributed checkpoint: invalid Nesterov configuration")
+    return optimizer_config_packed(ip[0], ip[1], fp[1] if ip[0] == OPT_SGD else fp[2],
+                                     Float32(0) if ip[0] == OPT_SGD else fp[3], fp[4], fp[5], Float32(0), fp[0])
