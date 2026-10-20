@@ -925,6 +925,18 @@ struct Tape(Movable):
             raise Error("this linear output holds its pre-activation gradient: use preactivation_gradient")
         return n.grad
 
+    def clear_gradient(mut self, x: Tensor) raises:
+        """Forget a differentiable leaf's gradient: `gradient` refuses it
+        until the next backward, and a backward with accumulate=True starts
+        it from zero (its first contribution is written in place, the
+        schedule of a leaf never written before). No launch."""
+        var i = self._check(x)
+        if self._nodes[i].op != LEAF:
+            raise Error("clear_gradient takes a leaf tensor")
+        if self._nodes[i].inferred or not self._nodes[i].requires_grad:
+            return
+        self._nodes[i].grad_ready = False
+
     def preactivation_gradient(self, x: Tensor) raises -> FP:
         """Return the gradient with respect to a linear output's pre-activation.
 
