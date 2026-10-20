@@ -278,15 +278,16 @@ def read(path):
                                     f"model once with onnx.version_converter)"))
     ext = _External(os.path.dirname(os.path.abspath(path)))
     inits = {}
+    dead = set()  # names of refused initializers, inputs and Constants: defined, so users are not reported twice
     for t in g["initializers"]:  # cpu-route: model file parsed on the host (initializers)
         try:
             inits[t["name"]] = _tensor_info(t, ext)
         except _Problem as e:
             problems.append((t["name"], None, str(e)))
+            dead.add(t["name"])
     if g["sparse_initializers"]:
         problems.append((src, None, f"{g['sparse_initializers']} sparse initializers (not supported)"))
     nodes = []
-    dead = set()  # outputs of refused Constant nodes: defined, so users are not reported twice
     for i, nd in enumerate(g["nodes"]):  # cpu-route: model file parsed on the host (graph nodes)
         op, dom = nd["op_type"], nd["domain"]
         name = nd["name"] or f"{op}_{i}"
@@ -316,12 +317,13 @@ def read(path):
         nodes.append(Node(op, "", name, tuple(nd["inputs"]), tuple(nd["outputs"]), attrs))
     inputs = []
     for vi in g["inputs"]:  # cpu-route: model file parsed on the host (graph inputs)
-        if vi["name"] in inits:
+        if vi["name"] in inits or vi["name"] in dead:
             continue  # an initializer listed as an input (IR 3 style) stays a constant
         try:
             inputs.append(_value(vi, "input"))
         except _Problem as e:
             problems.append((vi["name"], None, str(e)))
+            dead.add(vi["name"])
     outputs = []
     for vi in g["outputs"]:  # cpu-route: model file parsed on the host (graph outputs)
         try:
