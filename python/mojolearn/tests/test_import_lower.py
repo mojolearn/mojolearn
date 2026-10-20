@@ -125,6 +125,11 @@ def _ref_shape_fold(s, f, x):
     return s.relu(s.reshape(x, (BATCH, 6)))
 
 
+def _ref_padded_maxpool(s, f, x):
+    # the lowering's own composition: the border filled with the lowest float32, then the unpadded pool
+    return s.relu(s.max_pool2d(s.pad(x, [0, 0, 1, 1, 0, 0, 1, 1], -3.4028234663852886e38), 3, stride=2))
+
+
 CASES = {
     "linear_layernorm_linear": ((BATCH, 6), _ref_linear_ln_linear),
     "external_sharded": ((BATCH, 6), _ref_linear_ln_linear),
@@ -132,6 +137,7 @@ CASES = {
     "attention_two_head_causal": ((BATCH, 5, 8), _ref_attention),
     "batchnorm_relu": ((BATCH, 4, 5, 5), _ref_batchnorm),
     "shape_fold": ((BATCH, 2, 3), _ref_shape_fold),
+    "padded_maxpool": ((BATCH, 3, 7, 7), _ref_padded_maxpool),
 }
 
 

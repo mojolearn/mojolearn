@@ -315,6 +315,15 @@ def shape_fold(directory):
                   [("y", "f32", ("batch", 6))], inits, lambda b: {"y": (b, 6)})
 
 
+def padded_maxpool(directory, c=3, hw=7):
+    """x [batch, c, hw, hw] -> MaxPool 3x3, stride 2, pad 1 (the ResNet stem's pool) -> Relu."""
+    o = (hw + 2 - 3) // 2 + 1
+    nodes = [node("MaxPool", ["x"], ["p"], name="pool", kernel_shape=(3, 3), strides=(2, 2), pads=(1, 1, 1, 1)),
+             node("Relu", ["p"], ["y"], name="relu")]
+    return _write(directory, "padded_maxpool.onnx", nodes, [("x", "f32", ("batch", c, hw, hw))],
+                  [("y", "f32", ("batch", c, o, o))], [], lambda b: {"y": (b, c, o, o)})
+
+
 FIXTURES = {
     "linear_layernorm_linear": linear_layernorm_linear,
     "conv_relu_maxpool_flatten_gemm": conv_relu_maxpool_flatten_gemm,
@@ -322,6 +331,7 @@ FIXTURES = {
     "batchnorm_relu": batchnorm_relu,
     "external_sharded": lambda d: linear_layernorm_linear(d, external=("shard0.bin", "shard1.bin")),
     "shape_fold": shape_fold,
+    "padded_maxpool": padded_maxpool,
 }
 
 
