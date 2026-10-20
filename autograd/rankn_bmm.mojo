@@ -57,7 +57,7 @@ struct _Axis(ImplicitlyCopyable, Movable):
 
 
 @fieldwise_init
-struct _Mat(ImplicitlyCopyable, Movable):
+struct _Mat(Movable):
     """An operand's matrix part and batch axes, from Tape.operand_nd."""
     var buf: FP
     var base: Int
@@ -68,6 +68,9 @@ struct _Mat(ImplicitlyCopyable, Movable):
     var nb: Int     # batch axes (ndim - 2, or 0 for ndim <= 2)
     var be: InlineArray[Int, RN_MAX_RANK]   # batch extents
     var bs: InlineArray[Int, RN_MAX_RANK]   # batch strides
+
+    def copy(self) -> Self:
+        return _Mat(self.buf, self.base, self.rows, self.cols, self.rs, self.cs, self.nb, self.be.copy(), self.bs.copy())
 
 
 def _mat[E: Exec](mut tape: Tape, mut ex: E, x: Tensor) raises -> _Mat:
@@ -80,12 +83,12 @@ def _mat[E: Exec](mut tape: Tape, mut ex: E, x: Tensor) raises -> _Mat:
         raise Error("matmul operands must have at least one dimension")
     if s.ndim == 1:
         # its matrix view: one row of d0
-        return _Mat(o[0], o[1], 1, s.d[0], s.d[0] * st[0], st[0], 0, be, bs)
+        return _Mat(o[0], o[1], 1, s.d[0], s.d[0] * st[0], st[0], 0, be^, bs^)
     var nb = s.ndim - 2
     for k in range(nb):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         be[k] = s.d[k]
         bs[k] = st[k]
-    return _Mat(o[0], o[1], s.d[s.ndim - 2], s.d[s.ndim - 1], st[s.ndim - 2], st[s.ndim - 1], nb, be, bs)
+    return _Mat(o[0], o[1], s.d[s.ndim - 2], s.d[s.ndim - 1], st[s.ndim - 2], st[s.ndim - 1], nb, be^, bs^)
 
 
 @always_inline

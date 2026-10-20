@@ -262,7 +262,7 @@ def _axis_flags(s: ShapeN, axes: List[Int]) raises -> InlineArray[Bool, RN_MAX_R
     if len(axes) == 0:
         for k in range(s.ndim):  # small-loop(ndim <= 8: tensor rank, shape metadata)
             red[k] = True
-        return red
+        return red^
     for k in range(len(axes)):  # small-loop(len(axes) <= 8: axis list, shape metadata)
         var ax = rn_normalize_axis(axes[k], s.ndim)
         if red[ax]:

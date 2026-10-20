@@ -35,7 +35,6 @@ comptime RN_DESC_VIEW_WORDS = RN_DESC_SHAPE_WORDS + RN_DESC_STRIDE_WORDS
 comptime RN_MAX_COUNT = (1 << 60) // 4
 
 
-@fieldwise_init
 struct ShapeN(ImplicitlyCopyable, Movable, Writable):
     """The shape of a tape tensor: `ndim` dims, row-major.
 
