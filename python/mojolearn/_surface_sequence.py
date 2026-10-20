@@ -49,7 +49,8 @@ FAMILIES = (
                       "autograd/pyapi.mojo", "autograd/ops_api.mojo", "autograd/losses.mojo",
                       "autograd/metrics.mojo", "autograd/data.mojo",
                       "autograd/profile.mojo", "autograd/optim.mojo", "autograd/higher.mojo",
-                      "autograd/model_checkpoint.mojo", "training/checkpoint.mojo"),
+                      "autograd/model_checkpoint.mojo", "training/checkpoint.mojo",
+                      "autograd/weight_import.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
@@ -70,6 +71,8 @@ FAMILIES = (
             "ops_optimizer_state", "ops_load_optimizer_state",
             # higher-order gradients (OpsSession.backward_graph ... jvp)
             "ops_backward_graph", "ops_backward_seed", "ops_grad_handle", "ops_vjp", "ops_hvp", "ops_jvp",
+            # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
+            "model_import_params", "ops_load_weights",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

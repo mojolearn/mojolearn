@@ -18,6 +18,7 @@ from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
+from autograd.pyapi import model_import_params_py, ops_load_weights_py
 from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
 from autograd.pyapi import (
@@ -214,6 +215,19 @@ def model_gather_labels_binding(addrs: PythonObject, ip: PythonObject) raises ->
 
 def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> PythonObject:
     return model_n_params_py(prog, ptab)
+
+
+def model_import_params_binding(
+    prog: PythonObject, ptab: PythonObject, recs: PythonObject, names: PythonObject, params_addr: PythonObject,
+) raises -> PythonObject:
+    """Sequential.load_state_dict (autograd/weight_import.mojo)."""
+    var ex = DeviceExec()
+    return model_import_params_py(ex, prog, ptab, recs, names, params_addr)
+
+
+def ops_load_weights_binding(sid: PythonObject, recs: PythonObject, names: PythonObject) raises -> PythonObject:
+    """Session.load_weights (autograd/weight_import.mojo)."""
+    return ops_load_weights_py[DeviceExec, OPS_DEVICE](sid, recs, names)
 
 
 # The operation session (autograd/ops_api.mojo): one DeviceExec and one tape kept
@@ -519,6 +533,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[model_labels_binding]("model_labels")
         m.def_function[model_gather_labels_binding]("model_gather_labels")
+        m.def_function[model_import_params_binding]("model_import_params")
+        m.def_function[ops_load_weights_binding]("ops_load_weights")
         # the operation session (autograd/ops_api.mojo)
         m.def_function[ops_open_binding]("ops_open")
         m.def_function[ops_close_binding]("ops_close")
