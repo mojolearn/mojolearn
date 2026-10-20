@@ -288,6 +288,41 @@ def samba_publish(model: PythonObject, state: PythonObject, context: PythonObjec
     return model
 
 
+def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
+    var bi = Python.import_module("builtins")
+    var config = samba_fields(model)["config"]
+    model._blocks = bi.list()
+    var route = PythonObject("cpu" if context["vendor"] is None or String(context["vendor"]) == "cpu" else "gpu")
+    var nc = context["neural"]
+    for i in range(len(config.layers)):  # driver-loop: over configured model layers
+        var layer_kind = String(config.layers[i])
+        var kind = "mamba3" if layer_kind == "mamba3" else "transformer"
+        var weights = bi.dict()
+        var names = samba_block_shapes(config, layer_kind)
+        for j in range(len(names)):  # driver-loop: over the layer's named parameter views
+            weights[names[j][0]] = model.arrays["layers." + String(i) + "." + String(names[j][0])]
+        var plan = bi.object.__new__(nc["config_context"]["plan_class"])
+        plan.kind = PythonObject(kind)
+        plan.d_model = config.d_model
+        plan.block_options = bi.dict()
+        plan.block_kwargs = bi.dict()
+        if kind == "transformer":
+            plan.n_heads = config.n_heads
+            plan.block_options["n_kv_heads"] = config.n_kv_heads
+            plan.block_options["head_dim"] = config.head_dim
+            # Samba's attention blocks use TransformerBlock's 1e-6 default.
+            # The checkpoint model interface defaults to 1e-5 instead, and
+            # SambaConfig.norm_eps controls only the final stack normalization.
+            plan.block_options["norm_eps"] = PythonObject(1e-6)
+        var bindings = _model_bindings(route, kind, nc, model.numeric_mode)
+        var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, nc)
+        var block_fields = samba_fields(block)
+        block_fields["numeric_mode"] = model.numeric_mode
+        if kind == "mamba3":
+            block_fields["_discard_reports"] = True
+        model._blocks.append(block)
+
+
 def samba_from_state(state: PythonObject, context: PythonObject) raises -> PythonObject:
     var checked = samba_validate_state(state, context)
     var bi = Python.import_module("builtins")
@@ -344,36 +379,7 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
         offset_ptr[i] = Int32(Int(py=model.offsets[i]))
     opt["offsets"] = offsets
     model.optimizer = optimizer
-    model._blocks = bi.list()
-    var route = PythonObject("cpu" if context["vendor"] is None or String(context["vendor"]) == "cpu" else "gpu")
-    var nc = context["neural"]
-    for i in range(len(config.layers)):  # driver-loop: over configured model layers
-        var layer_kind = String(config.layers[i])
-        var kind = "mamba3" if layer_kind == "mamba3" else "transformer"
-        var weights = bi.dict()
-        var names = samba_block_shapes(config, layer_kind)
-        for j in range(len(names)):  # driver-loop: over the layer's named parameter views
-            weights[names[j][0]] = model.arrays["layers." + String(i) + "." + String(names[j][0])]
-        var plan = bi.object.__new__(nc["config_context"]["plan_class"])
-        plan.kind = PythonObject(kind)
-        plan.d_model = config.d_model
-        plan.block_options = bi.dict()
-        plan.block_kwargs = bi.dict()
-        if kind == "transformer":
-            plan.n_heads = config.n_heads
-            plan.block_options["n_kv_heads"] = config.n_kv_heads
-            plan.block_options["head_dim"] = config.head_dim
-            # Samba's attention blocks use TransformerBlock's 1e-6 default.
-            # The checkpoint model interface defaults to 1e-5 instead, and
-            # SambaConfig.norm_eps controls only the final stack normalization.
-            plan.block_options["norm_eps"] = PythonObject(1e-6)
-        var bindings = _model_bindings(route, kind, nc, model.numeric_mode)
-        var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, nc)
-        var block_fields = samba_fields(block)
-        block_fields["numeric_mode"] = model.numeric_mode
-        if kind == "mamba3":
-            block_fields["_discard_reports"] = True
-        model._blocks.append(block)
+    samba_build_blocks(model, context)
     model.last_ = PythonObject(None)
     return samba_publish(model, checked, context)
 

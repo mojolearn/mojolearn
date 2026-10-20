@@ -32,7 +32,7 @@ def connect(config_cls, model_cls, training, neural):
     if not isinstance(exact_schedule, BuiltinFunctionType):
         raise TypeError("Samba schedule requires a compiled exact schedule entry")
     core = {}
-    for name in ("equal_elements", "reduce_stat"):  # glue: connect existing native input-count entries at import
+    for name in ("equal_elements", "reduce_stat", "all_finite_f32"):  # glue: connect existing native input admission entries at import
         entry = _buffer._native(name)
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"Samba input admission requires a compiled {name}")
