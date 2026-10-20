@@ -10401,7 +10401,7 @@
    "key": "linux-64/host/-/host/_mojolearn_byte_lm_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d6859adbfa4481d03ef15ffd60d1844a3c4d23f1a0a1d4bdc7e9aa9a1c91950c",
+   "shipped_sha256": "4572194e0dd0b95651f8b7775f90378eb1d6cc5e0708e0ff0baeabf9304371be",
    "target": "linux-64"
   },
   {
@@ -10457,7 +10457,7 @@
    "key": "linux-64/host/-/host/_mojolearn_forest_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "146aa8bb24852e69cbb217139fb502648311d34166b70311d8e7936c37c70303",
+   "shipped_sha256": "03211921617cef26075a1c08f9c569814f94d7356af683f219eb4877fdb02455",
    "target": "linux-64"
   },
   {
@@ -10513,7 +10513,7 @@
    "key": "linux-64/host/-/host/_mojolearn_tokenizer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "ef05efe6ff70c413f5b5a3d86c64fe495b6a29ae98feb62e9cd314e04787da1d",
+   "shipped_sha256": "5739dc89cdc0afec3cf592fd65a6714259a688b4a3a34f063830416f30095ff7",
    "target": "linux-64"
   },
   {
@@ -10569,7 +10569,7 @@
    "key": "linux-64/host/-/host/_mojolearn_neural_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "203286445bf833ffbfa087aa83a9d660936ae787f1eb4e2869806e3bc17ef69e",
+   "shipped_sha256": "50a3b46b3d13e97369528a43c73dc1615374d006f639f8e9aeb0cd01f9d262d0",
    "target": "linux-64"
   },
   {
@@ -10625,7 +10625,7 @@
    "key": "linux-64/host/-/host/_mojolearn_core_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "3060335008d17ffaf1a4d19fecb455c71b6a8c9e8a4bb5fab1b7b77c6fafbf82",
+   "shipped_sha256": "e5af44cd63705bca93902de23b19b3653bbe736b04cdd2ad8f34a640d5a56dee",
    "target": "linux-64"
   },
   {
@@ -10681,7 +10681,7 @@
    "key": "linux-64/host/-/host/_mojolearn_linalg_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "459ae8c70c7446fa474ea78147847b0c4a378b3bb12ebf87ad120adc8a50b466",
+   "shipped_sha256": "abd9f2fcd46aa89303b4d404b1b58f7d404dc8f5f55435b616b951c23e667382",
    "target": "linux-64"
   },
   {
@@ -10737,7 +10737,7 @@
    "key": "linux-64/host/-/host/_mojolearn_estimators_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "a263e97ff39e692b0b56c5738009806d57cc5d8ccb2fb0fb6ca38d93b61e86dc",
+   "shipped_sha256": "9472e6d8a7acae88a2ba2b621304364b7e1390e427b09d6a509bb63dd606d3eb",
    "target": "linux-64"
   },
   {
@@ -10793,7 +10793,7 @@
    "key": "linux-64/host/-/host/_mojolearn_metrics_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "376a92a45efeff90b004d0bc3feafd9d748c7c177a9061c6f0fb5ddc7f17e17a",
+   "shipped_sha256": "968a14159a27906ee8336dff4101a8f3881db081c48e1064cdd5121e7eb2dc1b",
    "target": "linux-64"
   },
   {
@@ -10849,7 +10849,7 @@
    "key": "linux-64/host/-/host/_mojolearn_preprocessing_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "2a59b95d80686d72389b7b6968cd3a8d81edfb8b8e5072872f860a44a854bf33",
+   "shipped_sha256": "04c936dab09fb8a3844f9d27d5a8598f15915498a237a26c520d3ea33a4b5eae",
    "target": "linux-64"
   },
   {
@@ -10905,7 +10905,7 @@
    "key": "linux-64/host/-/host/_mojolearn_tsa_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "4bd4909b83387e3e8eb3e973a197ee6853cea6d0de0b028532a634bc88451667",
+   "shipped_sha256": "e1f202bf8c7b513b8ec9ffc1555cab7ee5f0abdbbbacd38938115749668f04a3",
    "target": "linux-64"
   },
   {
@@ -10961,7 +10961,7 @@
    "key": "linux-64/host/-/host/_mojolearn_solver_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d233d2b0fb9cbe95a1d12374b33f4a2741eda3f0ef27604d321743ff65c03dc8",
+   "shipped_sha256": "9dcad9c35cb24cbb27137df9fc460badafddc9f602d40212a8c9f148b11d87d1",
    "target": "linux-64"
   },
   {
@@ -11017,7 +11017,7 @@
    "key": "linux-64/host/-/host/_mojolearn_svm_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "1bc53cde8a962c206919b78d7cb04986af372d956bdf01da1dcc877e387502f1",
+   "shipped_sha256": "442c3fa5ea6c79715ea811a56dbef4d487ee388b02854418c312c0d186f835da",
    "target": "linux-64"
   },
   {
@@ -11073,7 +11073,7 @@
    "key": "linux-64/host/-/host/_mojolearn_trees_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "6649868d77a5d0351bd44100f03c7b1df66ef5b01392f51b40445ccce150757f",
+   "shipped_sha256": "8c454b7583d479302c2c488a0960c55397cf3f8b463476d1dd9bb64a404aadee",
    "target": "linux-64"
   },
   {
@@ -11129,7 +11129,7 @@
    "key": "linux-64/host/-/host/_mojolearn_rf_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "87317249fbc751659d2c19251a1d76bc9f1adf2e2bb0ffeb75de9f244deb6097",
+   "shipped_sha256": "33d4617491489ed18f386dfd29ae717f08d58a8556eeac43f3f69fa7c609128d",
    "target": "linux-64"
   },
   {
@@ -11185,7 +11185,7 @@
    "key": "linux-64/host/-/host/_mojolearn_gp_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "ec51dd98652cc278726b93dd6040d5112bf1ba1a1ca2a16fcbc581002a5f89b1",
+   "shipped_sha256": "add59355ec414c3ed76a5245d6e99e33d0e6e2929b81b3de258ae085b23fbfd9",
    "target": "linux-64"
   },
   {
@@ -11241,7 +11241,7 @@
    "key": "linux-64/host/-/host/_mojolearn_kernel_methods_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "fbde70dd7b64fab9a602cbbf6fc21895ba23375d34b2001783374523a062ab75",
+   "shipped_sha256": "c1383e1ebb0ae31a1810c0a632a7a5cf0f7f1b4a6d1a4d1958f18a4cb8d177eb",
    "target": "linux-64"
   },
   {
@@ -11297,7 +11297,7 @@
    "key": "linux-64/host/-/host/_mojolearn_mixture_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "3bd3a34834c85b2b23c94b8ae425a371431678b50d3be6963305f5bd2d04024f",
+   "shipped_sha256": "1319b97630d5894eecf6a7970e44677024f9f86f7489e2f18d66e87031cfd786",
    "target": "linux-64"
   },
   {
@@ -11353,7 +11353,7 @@
    "key": "linux-64/host/-/host/_mojolearn_mixture_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d0e65f5734d886b696775ad9f5af3f5a7c6aa7b14d9123bee89aa88ff0dbca01",
+   "shipped_sha256": "d2141d57193f104511d402b435f2838517b85ed7992bbae3facd73e5d553c25b",
    "target": "linux-64"
   },
   {
@@ -11409,7 +11409,7 @@
    "key": "linux-64/host/-/host/_mojolearn_hdbscan_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "4aef16587c78e6a0b9d879fb99dc544280851d74ee595bec8aaa79cc11db1ade",
+   "shipped_sha256": "b98f7b68c0aba92c8cd5a42e3585c9b8934d251edc006adeab01235383c45537",
    "target": "linux-64"
   },
   {
@@ -11465,7 +11465,7 @@
    "key": "linux-64/host/-/host/_mojolearn_gp_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "a5d44e91dfe2a93baf419f574305ac4408c23421f62cd305efce152f4d8a3400",
+   "shipped_sha256": "fcc1c187f460c2765685629671cb76cf81afa36b2540713c9412fd24b3d354e0",
    "target": "linux-64"
   },
   {
@@ -11521,7 +11521,7 @@
    "key": "linux-64/host/-/host/_mojolearn_hdbscan_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "333310febe0716890f9cc6ba3e64bde474ca9e53c76c301de02e4fc474019c5b",
+   "shipped_sha256": "738665f8c879cbd7431c224aa0b6b1125ca1be9ac3ad0bb137e5072132e3af36",
    "target": "linux-64"
   },
   {
@@ -11577,7 +11577,7 @@
    "key": "linux-64/host/-/host/_mojolearn_gbdt_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "1d2f9d95d6119abb86904f17008ebe40bc06b424aa543400e548610c0c796cee",
+   "shipped_sha256": "17dba7f1ba3a764949afba8d0b9ad481bd5999462277fec431611a311af86ccf",
    "target": "linux-64"
   },
   {
@@ -11633,7 +11633,7 @@
    "key": "linux-64/host/-/host/_mojolearn_training_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "ae973f375a0c46abd9cdb99d144523b7789f181d156b680a3c1940f1aa4fb4f2",
+   "shipped_sha256": "77aaefa16b7c5abc873aa9d8ac0cfbd48d9bf46578dd838b85a5bccc30f44035",
    "target": "linux-64"
   },
   {
@@ -11689,7 +11689,7 @@
    "key": "linux-64/host/-/host/_mojolearn_resample_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "5921c0b9e3c33fa204c105a5fa6231a2e83a37dbf0c55dd517144f6e4b4b505a",
+   "shipped_sha256": "70d7ada95d2250ad403b0e8aebd7c78def5218629122c3065944e0be1770c6db",
    "target": "linux-64"
   },
   {
@@ -11745,7 +11745,7 @@
    "key": "linux-64/host/-/host/_mojolearn_mamba_host",
    "reason": "changed: closure (bindings/_mojolearn_mamba_host.mojo, core/six_lane_experiment_guards.mojo, mamba/host/gen/mamba1_prefill_chain.mojo, mamba/host/gen/mamba2_prefill_backward.mojo, mamba/host/gen/mamba2_prefill_chain.mojo, mamba/host/gen/modeling_mamba_prefill_backward.mojo)",
    "reuse_from": null,
-   "shipped_sha256": "42db098106ba338b109c37ce23f484548699a78477546de32cae368fcdecdfcb",
+   "shipped_sha256": "2f8e6d24ad118686a6f42a3f74f3304a0009a06094ee540a980616a9b62b8d06",
    "target": "linux-64"
   },
   {
@@ -11801,7 +11801,7 @@
    "key": "linux-64/host/-/host/_mojolearn_arima_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "46065c1fefde856ad7497fd3402e9982633e013c6db7c86bca24c5dad5e67b99",
+   "shipped_sha256": "ed8166de0b4c8b9828bd7087d9c54ca49c41bca79fd317646450b5e01cd0b402",
    "target": "linux-64"
   },
   {
@@ -11857,7 +11857,7 @@
    "key": "linux-64/host/-/host/_mojolearn_embedding_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "c5c30269676600ac16bcd29da6eecf9f17f4a412ce8880c06ba44cd03e3a0d1d",
+   "shipped_sha256": "e1cbd750f16a8932d2eea4a025e0c89c404d2b7711ec4ceeec8205de47453229",
    "target": "linux-64"
   },
   {
@@ -11913,7 +11913,7 @@
    "key": "linux-64/host/-/host/_mojolearn_embedding_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "626d7e93d1343b4bca71268dd7ef6db2367e0b8f033580d66fd2b43ac817e152",
+   "shipped_sha256": "b1fa656edcd458b456c0ceae0679ffa5c5cf853c04e1a58d3804378da4010dc3",
    "target": "linux-64"
   },
   {
@@ -11969,7 +11969,7 @@
    "key": "linux-64/host/-/host/_mojolearn_ivf_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "7f053a10b7a0440385592bd2d8e080dcee98c6564ae1a1bba78459078bbbd348",
+   "shipped_sha256": "5decdea8346fc5a689fa8ad24396d49109244b44463e0c722649619da6da3292",
    "target": "linux-64"
   },
   {
@@ -12025,7 +12025,7 @@
    "key": "linux-64/host/-/host/_mojolearn_ivf_search_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "5d0d7d84de01c14c3b5a9dd144d19608f319e3fb17abf32ae1136155dbc6c0d8",
+   "shipped_sha256": "d85b616be23d4371721dda343e16004159a9e0a8508283c35abe73369ddbad31",
    "target": "linux-64"
   },
   {
@@ -12081,7 +12081,7 @@
    "key": "linux-64/host/-/host/_mojolearn_forecast_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "31c200c344b6185d86aa3c1be0014f5d00d65cdc5568212b9e1e9e34553314d0",
+   "shipped_sha256": "023242b504333bc6292456e13f142e72ce05629e60ab5cc455c9d536f0c860e4",
    "target": "linux-64"
   },
   {
@@ -12137,7 +12137,7 @@
    "key": "linux-64/host/-/host/_mojolearn_transformer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "6ac9ec1b9bf9d8754e4220f5b4fe1e9a68d38162bb0bf7e8cf00c53c5f50e0e6",
+   "shipped_sha256": "9ce407875956b639ff9333f55e834d032bcf5c4528ce41dc5611617271dc6cfe",
    "target": "linux-64"
   },
   {
@@ -12193,7 +12193,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_linear_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "0b1899fd6dfcbe45b7c627be16ecc0dd2b3b777bf26b21dfbf8415fbe5e87b2b",
+   "shipped_sha256": "23d41cc1045ce2127fb8c400796ecc74243db29d2307f8f4b89b1ff509227635",
    "target": "linux-64"
   },
   {
@@ -12249,7 +12249,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_cluster_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "f13c3f54cb73bc54d9884a8810e8593d2740664dd76aac24276eeabbdc062acb",
+   "shipped_sha256": "2c665e5d019bdc82a5ef345e33179670bedc28cfb8c219fd6ed26a6ccba1786b",
    "target": "linux-64"
   },
   {
@@ -12305,7 +12305,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_neighbors_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "917e4e32cdbaa1436da5e9168143e0a5eab325598d31afb757953138440bda6f",
+   "shipped_sha256": "5a55ff9b4f03b4ea2168a5b8edb3e26b788987997943df135bef1022762bd23c",
    "target": "linux-64"
   },
   {
@@ -12361,7 +12361,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_decomp_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "f6e4f87f96266851c72f77f8a6d2542644e489a08090b3393a87cc371fe5cbea",
+   "shipped_sha256": "5ff2af1bfd872a8396674543f8bf68598b7fb19faf9c930c856286adccf31735",
    "target": "linux-64"
   },
   {
@@ -12417,7 +12417,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_prep_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d0e0b2d3f2099c41cf5142543a078ba776a383c5186c0a419575ecb13336e076",
+   "shipped_sha256": "24170c1b1910ef8ea100c0fc9527cc44a75629d79ec65b43a0b2efdfd19f43de",
    "target": "linux-64"
   },
   {
@@ -12473,7 +12473,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_sequence_host",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo)",
    "reuse_from": null,
-   "shipped_sha256": "707532584aa3c33d3a6c5049805c206d1a3ac070ae780215cee80f6c739e2bb3",
+   "shipped_sha256": "2ee32123a458a5fd5b006d9b9e55d67c0b17fdf3d96d015bd39d30e28b33a811",
    "target": "linux-64"
   },
   {
@@ -12529,7 +12529,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_trees_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "282b9bdd01a3851f4bd512172ccf912683ca7d26c734da80d89f571a51527cca",
+   "shipped_sha256": "933ad0ca44aa13bc5a13b3e804de9b1633d3e2866a6cef8c80d1d297b41351db",
    "target": "linux-64"
   },
   {
@@ -12585,7 +12585,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_cnn_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "1412c4e5f6d3b99d01cf739710a35472481da612d9627d51a96129304c6f57e7",
+   "shipped_sha256": "ef2a43f528b0e24c1079166f8559c6d933b09ab1a6ac9f1c07add9b8b3aa538f",
    "target": "linux-64"
   },
   {
@@ -12641,7 +12641,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_ann_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "89592fedda521202935e7fdd03764801e7e041c6d59105bf42aa2b0664af3f56",
+   "shipped_sha256": "6dbb9f359608cc8317f6ac1e6b1c2b39dd47ca671f2736cc507db4d65abecb7c",
    "target": "linux-64"
   },
   {
@@ -12697,7 +12697,7 @@
    "key": "linux-64/host/-/host/_mojolearn_x_metrics_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "df902da1faf7e276b862b59ecf0339c58eeef7c050a9747b955bbbd5720458fe",
+   "shipped_sha256": "b4db592cd245e3a6af1e17a2348040619c08ac8a0052d882d078388bfb7d19fb",
    "target": "linux-64"
   },
   {
@@ -12752,7 +12752,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_gbdt",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "1bbf63c3f887485bd6419cab8488ee1a8a82a909794d56a0cf69cd12961a0ae1",
    "target": "osx-arm64"
   },
   {
@@ -12807,7 +12807,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_rf",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "45f085c815e48139f60a26d8354a6470bc3bf4ca7cd368c7a84c440d0d91206e",
    "target": "osx-arm64"
   },
   {
@@ -12862,7 +12862,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_trees",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "b0c253c043bcd66811f295333c690c2dd5e184e4a47396de39dd9e15731fe175",
    "target": "osx-arm64"
   },
   {
@@ -12917,7 +12917,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "3763240e7d574d05cda7720a7d6778c708de187e496b7342f1e74b2432590c03",
    "target": "osx-arm64"
   },
   {
@@ -12972,7 +12972,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_estimators",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "34de64ef6a1e9d50a5f4a181652fedafa4a53c175c41ae5321d767eb87b317e3",
    "target": "osx-arm64"
   },
   {
@@ -13027,7 +13027,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_svm",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "da6086490a63ca4b02def9a551964f5d3f11cd6a7cdb0ac96272fc296b2a7180",
    "target": "osx-arm64"
   },
   {
@@ -13082,7 +13082,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_solver",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "c8fa14d28f1857d3fc28c0f2014b9cf65499b579ea7fe74e7f8a7284133abc1c",
    "target": "osx-arm64"
   },
   {
@@ -13137,7 +13137,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_metrics",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "57bcdcb2521cbab806c28196610445a7d0a46d6f8055d250a263f47fd9f8bf6e",
    "target": "osx-arm64"
   },
   {
@@ -13192,7 +13192,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_preprocessing",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "fff5676b9fe427555776be904af9d3d8847f7b7b9cb5a0ddf0b3f439b000257f",
    "target": "osx-arm64"
   },
   {
@@ -13247,7 +13247,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_tsa",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "a0fb12434784512c5a7afcc5f77d6adec31d509d55366cc90e3782cfe69ff55d",
    "target": "osx-arm64"
   },
   {
@@ -13302,7 +13302,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_linalg",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "a6af69b6339c3d5a3a68b2ad3104ac0b3ca7981f2c833f01cd42bd2e61e9014b",
    "target": "osx-arm64"
   },
   {
@@ -13357,7 +13357,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_arima",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "45a95eb73659a76de19b70ac979042d23c85e5b01f4d6c9affeb49d596c503ac",
    "target": "osx-arm64"
   },
   {
@@ -13412,7 +13412,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_gp",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "bc78df3bb1bc33251673aba95d215518dfe9d94a6f464b8a9766296bd0956b1d",
    "target": "osx-arm64"
   },
   {
@@ -13467,7 +13467,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_kernel_methods",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "14ae7f84f3b273cd58cdafc96ad0d4f79cd6003d58ffbf3e7abf539c4c240a0f",
    "target": "osx-arm64"
   },
   {
@@ -13522,7 +13522,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_mixture",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "d7e0b26f8f829e74bbd8d218d5ca13d082b100521d89f537743803343d570dac",
    "target": "osx-arm64"
   },
   {
@@ -13577,7 +13577,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_hdbscan",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "908ae73e3bd51613707f6dbb07cbe76883e291300671a37f71591a6069f50338",
    "target": "osx-arm64"
   },
   {
@@ -13632,7 +13632,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_resample",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "1f9d4a69b13ce1c6afc29b1e4f6d27aaafe5282f6c6113cb61dec035cdea45cf",
    "target": "osx-arm64"
   },
   {
@@ -13687,7 +13687,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_ivf",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "35c82f46c7fcc1d4046d1a90987a6a292f2f2a5fc92a697de309138cfdfda2dc",
    "target": "osx-arm64"
   },
   {
@@ -13742,7 +13742,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_training",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "37b1926b7dcfa19845acc663ae89225078514432373ebca1aa7cd55c0b563a10",
    "target": "osx-arm64"
   },
   {
@@ -13797,7 +13797,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_mamba",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "d9bcb06443b7ce2a9a0af4feaf1ffa5dfe2c084d04cf144d3a0e65678dd697c8",
    "target": "osx-arm64"
   },
   {
@@ -13852,7 +13852,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_transformer",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "bdfdf5a8f666e28b96ee8548f951576a7b582aa9a2e4f0f777e04547f4871e0d",
    "target": "osx-arm64"
   },
   {
@@ -13907,7 +13907,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_embedding",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "2d41912457ace26c73f00fc17a5bbea4e5f430b76ddb9bed1cf09cfe0440c599",
    "target": "osx-arm64"
   },
   {
@@ -13962,7 +13962,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_linear",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "257b1284e6261858eda710a8a356b54a7742877e13994e5c973a85ba7d84d0d3",
    "target": "osx-arm64"
   },
   {
@@ -14017,7 +14017,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_cluster",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "3f606e77fc41eb218cbae4012d3b9d99179ace3bfea62680535a04655289a5dd",
    "target": "osx-arm64"
   },
   {
@@ -14072,7 +14072,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_neighbors",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "7672c417489f269630833a9f258d81209e2d991f501be4a14e5a7b5d520b0bc6",
    "target": "osx-arm64"
   },
   {
@@ -14127,7 +14127,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_decomp",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "f3e46f933ae68ccf686d9a43d2de68bf0b8c1cb4f52668fce998359d82cb57e8",
    "target": "osx-arm64"
   },
   {
@@ -14182,7 +14182,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_prep",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "2063cc7f0e21a8c0e0fe8747bea3a38c2433db44dd63497529ac813c45224f23",
    "target": "osx-arm64"
   },
   {
@@ -14237,7 +14237,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_sequence",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "b6f880d5c755ae41858a41e9913c56209ae8b5ca9d907e6aba0c6d7e56637176",
    "target": "osx-arm64"
   },
   {
@@ -14292,7 +14292,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_trees",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "cf942b0b15319ec8696223594ac6bcae68d304ae1b05a86755a1540383c23166",
    "target": "osx-arm64"
   },
   {
@@ -14347,7 +14347,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_cnn",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "ed927f52317583e556519f5bb232278c7b55900e78d4ebcce7e3cf1bdd146ce1",
    "target": "osx-arm64"
   },
   {
@@ -14402,7 +14402,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_ann",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "d9d684d12ff7f82aa8544147e53ccc179c58fcfd8877bebd6dfef8748a685561",
    "target": "osx-arm64"
   },
   {
@@ -14457,7 +14457,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_x_metrics",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "bb519cbb174937b9da0cd5e0d02316818a035a6a22fa590dd96e2f7f60aefb86",
    "target": "osx-arm64"
   },
   {
@@ -14512,7 +14512,7 @@
    "key": "osx-arm64/metal/apple/fast/_mojolearn_byte_lm",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "38f1d74964e73048fa67cfa0ff2faa6b09a414560f9c54846e0869ae58801f07",
    "target": "osx-arm64"
   },
   {
@@ -14567,7 +14567,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_gbdt",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "9b55a87ac19b72015bb009927e30f9c0cfa0a8e4b88adcbe44ea5853e5c83444",
    "target": "osx-arm64"
   },
   {
@@ -14622,7 +14622,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_rf",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "375903d6eed92dbb8543113a4afd95e24ef266f1e595bc8d56d7f8016430365e",
    "target": "osx-arm64"
   },
   {
@@ -14677,7 +14677,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_trees",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "d3acad7268e443df8a35544d21cec7041168e48753c0f14dce715c7ade4736ff",
    "target": "osx-arm64"
   },
   {
@@ -14732,7 +14732,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "755aa34d5d69a1c00493c6b0e3e50c0efcdfefd5692320a192d6f95a7b739cac",
    "target": "osx-arm64"
   },
   {
@@ -14787,7 +14787,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_estimators",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "1ea8d7eb39d90a45f1b02c49eaec43b0c0c40b4e879162000e0d5d098cc1d446",
    "target": "osx-arm64"
   },
   {
@@ -14842,7 +14842,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_svm",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "b774705a44917b4f7c3be20ab061ab325586eda598be42e9a18debbd7fa1b283",
    "target": "osx-arm64"
   },
   {
@@ -14897,7 +14897,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_solver",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "269bd55216a5398a7dfd2f5db54de6d8c9ac7957262cee935a0302822abee68a",
    "target": "osx-arm64"
   },
   {
@@ -14952,7 +14952,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_metrics",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "75c3a9e12c06ddb035b0727f0bd5bafbf8a3c1ed1dc8e0b56fe5f4e204f85a9a",
    "target": "osx-arm64"
   },
   {
@@ -15007,7 +15007,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_preprocessing",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "14b5b4e2cc2ae96de79213de17111923587dd54f6930315dd8bf1046370349e4",
    "target": "osx-arm64"
   },
   {
@@ -15062,7 +15062,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_tsa",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "e39a2800590b1b5200f4033804b6f9f8969a7d9a6d4c5f3e5a0536d837667c6c",
    "target": "osx-arm64"
   },
   {
@@ -15117,7 +15117,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_linalg",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "263385591eb20687a38af84d4a178b690ce504d790093529b0a81a864905c44b",
    "target": "osx-arm64"
   },
   {
@@ -15172,7 +15172,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_arima",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "545c51c5bd5aae1132ae9670d765b37dc7bf7f06850e993eed02a71f2cad1bdb",
    "target": "osx-arm64"
   },
   {
@@ -15227,7 +15227,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_gp",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "2d20560702d2242e95518697541fea57b8293c83b6242de07ef2c3b2a01d854a",
    "target": "osx-arm64"
   },
   {
@@ -15282,7 +15282,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_kernel_methods",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "1788a3bbe9f474a1e8233ced5fb89f062cc0d102612bfeadcb4cc2c838480afd",
    "target": "osx-arm64"
   },
   {
@@ -15337,7 +15337,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_mixture",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "654b1b047b900332b5f1798b5d44a814394eb2b2112ea2c25cc50fb1598f9105",
    "target": "osx-arm64"
   },
   {
@@ -15392,7 +15392,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_hdbscan",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "cbaa0e982468c79ef405515dfbe339658670031d8f85a1d4604021485b5e39c5",
    "target": "osx-arm64"
   },
   {
@@ -15447,7 +15447,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_resample",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "86b58ccf1606b1953278dbc645dcd48b5bae250faf832fb2d730af58e6da32bd",
    "target": "osx-arm64"
   },
   {
@@ -15502,7 +15502,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_ivf",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "1e4b9a01e4399b951307c26d379a389c42793a9c7a4b95e620b7076ff484ddee",
    "target": "osx-arm64"
   },
   {
@@ -15557,7 +15557,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_training",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "2e2c678c202a1d92dea4078f217d4aaebbb3ffb4b6253573f626ba268601d019",
    "target": "osx-arm64"
   },
   {
@@ -15612,7 +15612,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_mamba",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "a2be4647f432bae6ca016439e5d231261eee04a6af1df82a41976b1c32566cc5",
    "target": "osx-arm64"
   },
   {
@@ -15667,7 +15667,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_transformer",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "ab9a888a725c999c99d4f07c02ed533c8bc73d87c17bccaa922c86f8a190cb4a",
    "target": "osx-arm64"
   },
   {
@@ -15722,7 +15722,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_embedding",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "f8c91c1881c55c8383e277e3236b9b1e36a42236f47f4097a64aae1e4721ee93",
    "target": "osx-arm64"
   },
   {
@@ -15777,7 +15777,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_linear",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "dfe9c320e2a36b3f5baa1ef74e925af5e7083114987e2e2a8f5fd5fe7dafbeea",
    "target": "osx-arm64"
   },
   {
@@ -15832,7 +15832,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_cluster",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "eb68c724941ce3f6fac157aeb034661e6acb618f57a3d1fd0765568191cc26d7",
    "target": "osx-arm64"
   },
   {
@@ -15887,7 +15887,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_neighbors",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "b0e8ecee502a75fec490a9a040a0a8b6588bb5744f7282741c8c8eace38ce475",
    "target": "osx-arm64"
   },
   {
@@ -15942,7 +15942,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_decomp",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "61ef29d71b1580a663528ab850ddcb58f10f7f005fd532124588e1a1e6fd36e2",
    "target": "osx-arm64"
   },
   {
@@ -15997,7 +15997,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_prep",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "1cffbc6bf31b557295ab659be8fd7c7dcd7393d9c3c9b3b234c50ba77170f004",
    "target": "osx-arm64"
   },
   {
@@ -16052,7 +16052,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_sequence",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "2d9a5f906938483f692ec5ea05bfc9fde2346e7f3fa3f95fc720955fb0a084ae",
    "target": "osx-arm64"
   },
   {
@@ -16107,7 +16107,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_trees",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "0200e560c7844c7a5e6e2e664d140ba40529bc6434a6f77b7c6946c7b39bed7a",
    "target": "osx-arm64"
   },
   {
@@ -16162,7 +16162,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_cnn",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "120ec20379740a2a35014597943e788a329c9e94daa7bce5667cf3aaaa12122e",
    "target": "osx-arm64"
   },
   {
@@ -16217,7 +16217,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_ann",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "25ade3dd6e8daba755c56a8dde03ebf777db50bfe14a43901aec4526b26c19c4",
    "target": "osx-arm64"
   },
   {
@@ -16272,7 +16272,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_x_metrics",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "c0dc5b63a3cb928cac8943caeddb0c2493b408db8b95a8e8f9a6d86b5b17db91",
    "target": "osx-arm64"
   },
   {
@@ -16327,7 +16327,7 @@
    "key": "osx-arm64/metal/apple/identical/_mojolearn_byte_lm",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo, autograd/fold_kernels.mojo)",
    "reuse_from": null,
-   "shipped_sha256": null,
+   "shipped_sha256": "38e2863378e68c2ea0e4ba61a3a74b5d799c9e2f389fd76e4194e57953776d93",
    "target": "osx-arm64"
   },
   {
@@ -16383,7 +16383,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_byte_lm_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d6859adbfa4481d03ef15ffd60d1844a3c4d23f1a0a1d4bdc7e9aa9a1c91950c",
+   "shipped_sha256": "4572194e0dd0b95651f8b7775f90378eb1d6cc5e0708e0ff0baeabf9304371be",
    "target": "osx-arm64"
   },
   {
@@ -16439,7 +16439,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_forest_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "146aa8bb24852e69cbb217139fb502648311d34166b70311d8e7936c37c70303",
+   "shipped_sha256": "03211921617cef26075a1c08f9c569814f94d7356af683f219eb4877fdb02455",
    "target": "osx-arm64"
   },
   {
@@ -16495,7 +16495,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_tokenizer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "ef05efe6ff70c413f5b5a3d86c64fe495b6a29ae98feb62e9cd314e04787da1d",
+   "shipped_sha256": "5739dc89cdc0afec3cf592fd65a6714259a688b4a3a34f063830416f30095ff7",
    "target": "osx-arm64"
   },
   {
@@ -16551,7 +16551,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_neural_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "203286445bf833ffbfa087aa83a9d660936ae787f1eb4e2869806e3bc17ef69e",
+   "shipped_sha256": "50a3b46b3d13e97369528a43c73dc1615374d006f639f8e9aeb0cd01f9d262d0",
    "target": "osx-arm64"
   },
   {
@@ -16607,7 +16607,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_core_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "3060335008d17ffaf1a4d19fecb455c71b6a8c9e8a4bb5fab1b7b77c6fafbf82",
+   "shipped_sha256": "e5af44cd63705bca93902de23b19b3653bbe736b04cdd2ad8f34a640d5a56dee",
    "target": "osx-arm64"
   },
   {
@@ -16663,7 +16663,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_linalg_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "459ae8c70c7446fa474ea78147847b0c4a378b3bb12ebf87ad120adc8a50b466",
+   "shipped_sha256": "abd9f2fcd46aa89303b4d404b1b58f7d404dc8f5f55435b616b951c23e667382",
    "target": "osx-arm64"
   },
   {
@@ -16719,7 +16719,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_estimators_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "a263e97ff39e692b0b56c5738009806d57cc5d8ccb2fb0fb6ca38d93b61e86dc",
+   "shipped_sha256": "9472e6d8a7acae88a2ba2b621304364b7e1390e427b09d6a509bb63dd606d3eb",
    "target": "osx-arm64"
   },
   {
@@ -16775,7 +16775,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_metrics_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "376a92a45efeff90b004d0bc3feafd9d748c7c177a9061c6f0fb5ddc7f17e17a",
+   "shipped_sha256": "968a14159a27906ee8336dff4101a8f3881db081c48e1064cdd5121e7eb2dc1b",
    "target": "osx-arm64"
   },
   {
@@ -16831,7 +16831,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_preprocessing_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "2a59b95d80686d72389b7b6968cd3a8d81edfb8b8e5072872f860a44a854bf33",
+   "shipped_sha256": "04c936dab09fb8a3844f9d27d5a8598f15915498a237a26c520d3ea33a4b5eae",
    "target": "osx-arm64"
   },
   {
@@ -16887,7 +16887,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_tsa_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "4bd4909b83387e3e8eb3e973a197ee6853cea6d0de0b028532a634bc88451667",
+   "shipped_sha256": "e1f202bf8c7b513b8ec9ffc1555cab7ee5f0abdbbbacd38938115749668f04a3",
    "target": "osx-arm64"
   },
   {
@@ -16943,7 +16943,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_solver_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d233d2b0fb9cbe95a1d12374b33f4a2741eda3f0ef27604d321743ff65c03dc8",
+   "shipped_sha256": "9dcad9c35cb24cbb27137df9fc460badafddc9f602d40212a8c9f148b11d87d1",
    "target": "osx-arm64"
   },
   {
@@ -16999,7 +16999,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_svm_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "1bc53cde8a962c206919b78d7cb04986af372d956bdf01da1dcc877e387502f1",
+   "shipped_sha256": "442c3fa5ea6c79715ea811a56dbef4d487ee388b02854418c312c0d186f835da",
    "target": "osx-arm64"
   },
   {
@@ -17055,7 +17055,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_trees_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "6649868d77a5d0351bd44100f03c7b1df66ef5b01392f51b40445ccce150757f",
+   "shipped_sha256": "8c454b7583d479302c2c488a0960c55397cf3f8b463476d1dd9bb64a404aadee",
    "target": "osx-arm64"
   },
   {
@@ -17111,7 +17111,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_rf_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "87317249fbc751659d2c19251a1d76bc9f1adf2e2bb0ffeb75de9f244deb6097",
+   "shipped_sha256": "33d4617491489ed18f386dfd29ae717f08d58a8556eeac43f3f69fa7c609128d",
    "target": "osx-arm64"
   },
   {
@@ -17167,7 +17167,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_gp_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "ec51dd98652cc278726b93dd6040d5112bf1ba1a1ca2a16fcbc581002a5f89b1",
+   "shipped_sha256": "add59355ec414c3ed76a5245d6e99e33d0e6e2929b81b3de258ae085b23fbfd9",
    "target": "osx-arm64"
   },
   {
@@ -17223,7 +17223,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_kernel_methods_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "fbde70dd7b64fab9a602cbbf6fc21895ba23375d34b2001783374523a062ab75",
+   "shipped_sha256": "c1383e1ebb0ae31a1810c0a632a7a5cf0f7f1b4a6d1a4d1958f18a4cb8d177eb",
    "target": "osx-arm64"
   },
   {
@@ -17279,7 +17279,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_mixture_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "3bd3a34834c85b2b23c94b8ae425a371431678b50d3be6963305f5bd2d04024f",
+   "shipped_sha256": "1319b97630d5894eecf6a7970e44677024f9f86f7489e2f18d66e87031cfd786",
    "target": "osx-arm64"
   },
   {
@@ -17335,7 +17335,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_mixture_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d0e65f5734d886b696775ad9f5af3f5a7c6aa7b14d9123bee89aa88ff0dbca01",
+   "shipped_sha256": "d2141d57193f104511d402b435f2838517b85ed7992bbae3facd73e5d553c25b",
    "target": "osx-arm64"
   },
   {
@@ -17391,7 +17391,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_hdbscan_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "4aef16587c78e6a0b9d879fb99dc544280851d74ee595bec8aaa79cc11db1ade",
+   "shipped_sha256": "b98f7b68c0aba92c8cd5a42e3585c9b8934d251edc006adeab01235383c45537",
    "target": "osx-arm64"
   },
   {
@@ -17447,7 +17447,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_gp_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "a5d44e91dfe2a93baf419f574305ac4408c23421f62cd305efce152f4d8a3400",
+   "shipped_sha256": "fcc1c187f460c2765685629671cb76cf81afa36b2540713c9412fd24b3d354e0",
    "target": "osx-arm64"
   },
   {
@@ -17503,7 +17503,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_hdbscan_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "333310febe0716890f9cc6ba3e64bde474ca9e53c76c301de02e4fc474019c5b",
+   "shipped_sha256": "738665f8c879cbd7431c224aa0b6b1125ca1be9ac3ad0bb137e5072132e3af36",
    "target": "osx-arm64"
   },
   {
@@ -17559,7 +17559,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_gbdt_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "1d2f9d95d6119abb86904f17008ebe40bc06b424aa543400e548610c0c796cee",
+   "shipped_sha256": "17dba7f1ba3a764949afba8d0b9ad481bd5999462277fec431611a311af86ccf",
    "target": "osx-arm64"
   },
   {
@@ -17615,7 +17615,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_training_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "ae973f375a0c46abd9cdb99d144523b7789f181d156b680a3c1940f1aa4fb4f2",
+   "shipped_sha256": "77aaefa16b7c5abc873aa9d8ac0cfbd48d9bf46578dd838b85a5bccc30f44035",
    "target": "osx-arm64"
   },
   {
@@ -17671,7 +17671,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_resample_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "5921c0b9e3c33fa204c105a5fa6231a2e83a37dbf0c55dd517144f6e4b4b505a",
+   "shipped_sha256": "70d7ada95d2250ad403b0e8aebd7c78def5218629122c3065944e0be1770c6db",
    "target": "osx-arm64"
   },
   {
@@ -17727,7 +17727,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_mamba_host",
    "reason": "changed: closure (bindings/_mojolearn_mamba_host.mojo, core/six_lane_experiment_guards.mojo, mamba/host/gen/mamba1_prefill_chain.mojo, mamba/host/gen/mamba2_prefill_backward.mojo, mamba/host/gen/mamba2_prefill_chain.mojo, mamba/host/gen/modeling_mamba_prefill_backward.mojo)",
    "reuse_from": null,
-   "shipped_sha256": "42db098106ba338b109c37ce23f484548699a78477546de32cae368fcdecdfcb",
+   "shipped_sha256": "2f8e6d24ad118686a6f42a3f74f3304a0009a06094ee540a980616a9b62b8d06",
    "target": "osx-arm64"
   },
   {
@@ -17783,7 +17783,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_arima_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "46065c1fefde856ad7497fd3402e9982633e013c6db7c86bca24c5dad5e67b99",
+   "shipped_sha256": "ed8166de0b4c8b9828bd7087d9c54ca49c41bca79fd317646450b5e01cd0b402",
    "target": "osx-arm64"
   },
   {
@@ -17839,7 +17839,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_embedding_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "c5c30269676600ac16bcd29da6eecf9f17f4a412ce8880c06ba44cd03e3a0d1d",
+   "shipped_sha256": "e1cbd750f16a8932d2eea4a025e0c89c404d2b7711ec4ceeec8205de47453229",
    "target": "osx-arm64"
   },
   {
@@ -17895,7 +17895,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_embedding_infer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "626d7e93d1343b4bca71268dd7ef6db2367e0b8f033580d66fd2b43ac817e152",
+   "shipped_sha256": "b1fa656edcd458b456c0ceae0679ffa5c5cf853c04e1a58d3804378da4010dc3",
    "target": "osx-arm64"
   },
   {
@@ -17951,7 +17951,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_ivf_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "7f053a10b7a0440385592bd2d8e080dcee98c6564ae1a1bba78459078bbbd348",
+   "shipped_sha256": "5decdea8346fc5a689fa8ad24396d49109244b44463e0c722649619da6da3292",
    "target": "osx-arm64"
   },
   {
@@ -18007,7 +18007,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_ivf_search_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "5d0d7d84de01c14c3b5a9dd144d19608f319e3fb17abf32ae1136155dbc6c0d8",
+   "shipped_sha256": "d85b616be23d4371721dda343e16004159a9e0a8508283c35abe73369ddbad31",
    "target": "osx-arm64"
   },
   {
@@ -18063,7 +18063,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_forecast_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "31c200c344b6185d86aa3c1be0014f5d00d65cdc5568212b9e1e9e34553314d0",
+   "shipped_sha256": "023242b504333bc6292456e13f142e72ce05629e60ab5cc455c9d536f0c860e4",
    "target": "osx-arm64"
   },
   {
@@ -18119,7 +18119,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_transformer_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "6ac9ec1b9bf9d8754e4220f5b4fe1e9a68d38162bb0bf7e8cf00c53c5f50e0e6",
+   "shipped_sha256": "9ce407875956b639ff9333f55e834d032bcf5c4528ce41dc5611617271dc6cfe",
    "target": "osx-arm64"
   },
   {
@@ -18175,7 +18175,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_linear_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "0b1899fd6dfcbe45b7c627be16ecc0dd2b3b777bf26b21dfbf8415fbe5e87b2b",
+   "shipped_sha256": "23d41cc1045ce2127fb8c400796ecc74243db29d2307f8f4b89b1ff509227635",
    "target": "osx-arm64"
   },
   {
@@ -18231,7 +18231,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_cluster_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "f13c3f54cb73bc54d9884a8810e8593d2740664dd76aac24276eeabbdc062acb",
+   "shipped_sha256": "2c665e5d019bdc82a5ef345e33179670bedc28cfb8c219fd6ed26a6ccba1786b",
    "target": "osx-arm64"
   },
   {
@@ -18287,7 +18287,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_neighbors_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "917e4e32cdbaa1436da5e9168143e0a5eab325598d31afb757953138440bda6f",
+   "shipped_sha256": "5a55ff9b4f03b4ea2168a5b8edb3e26b788987997943df135bef1022762bd23c",
    "target": "osx-arm64"
   },
   {
@@ -18343,7 +18343,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_decomp_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "f6e4f87f96266851c72f77f8a6d2542644e489a08090b3393a87cc371fe5cbea",
+   "shipped_sha256": "5ff2af1bfd872a8396674543f8bf68598b7fb19faf9c930c856286adccf31735",
    "target": "osx-arm64"
   },
   {
@@ -18399,7 +18399,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_prep_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "d0e0b2d3f2099c41cf5142543a078ba776a383c5186c0a419575ecb13336e076",
+   "shipped_sha256": "24170c1b1910ef8ea100c0fc9527cc44a75629d79ec65b43a0b2efdfd19f43de",
    "target": "osx-arm64"
   },
   {
@@ -18455,7 +18455,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_sequence_host",
    "reason": "changed: closure (autograd/cast_ops.mojo, autograd/composed_ops.mojo, autograd/data.mojo, autograd/data_ops.mojo, autograd/embedding_ops.mojo, autograd/fold.mojo)",
    "reuse_from": null,
-   "shipped_sha256": "707532584aa3c33d3a6c5049805c206d1a3ac070ae780215cee80f6c739e2bb3",
+   "shipped_sha256": "2ee32123a458a5fd5b006d9b9e55d67c0b17fdf3d96d015bd39d30e28b33a811",
    "target": "osx-arm64"
   },
   {
@@ -18511,7 +18511,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_trees_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "282b9bdd01a3851f4bd512172ccf912683ca7d26c734da80d89f571a51527cca",
+   "shipped_sha256": "933ad0ca44aa13bc5a13b3e804de9b1633d3e2866a6cef8c80d1d297b41351db",
    "target": "osx-arm64"
   },
   {
@@ -18567,7 +18567,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_cnn_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "1412c4e5f6d3b99d01cf739710a35472481da612d9627d51a96129304c6f57e7",
+   "shipped_sha256": "ef2a43f528b0e24c1079166f8559c6d933b09ab1a6ac9f1c07add9b8b3aa538f",
    "target": "osx-arm64"
   },
   {
@@ -18623,7 +18623,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_ann_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "89592fedda521202935e7fdd03764801e7e041c6d59105bf42aa2b0664af3f56",
+   "shipped_sha256": "6dbb9f359608cc8317f6ac1e6b1c2b39dd47ca671f2736cc507db4d65abecb7c",
    "target": "osx-arm64"
   },
   {
@@ -18679,7 +18679,7 @@
    "key": "osx-arm64/host/-/host/_mojolearn_x_metrics_host",
    "reason": "changed: closure (core/six_lane_experiment_guards.mojo, pixi.toml)",
    "reuse_from": null,
-   "shipped_sha256": "df902da1faf7e276b862b59ecf0339c58eeef7c050a9747b955bbbd5720458fe",
+   "shipped_sha256": "b4db592cd245e3a6af1e17a2348040619c08ac8a0052d882d078388bfb7d19fb",
    "target": "osx-arm64"
   }
  ],

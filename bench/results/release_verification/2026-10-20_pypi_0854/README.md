@@ -1,6 +1,6 @@
 # mojolearn 0.8.54
 
-Source commit 486ac1cde0f59fa05eeceeebf2985846704e60e2; release tooling at ef7ba546c210e2176512152d1ba28efae61e1285. Published 2026-10-20. See CHANGELOG.md.
+Source commit 486ac1cde0f59fa05eeceeebf2985846704e60e2; release tooling at 5a271dec315835ea50dec424e239aa48fa04742f. Published 2026-10-20. See CHANGELOG.md.
 
 ## Identity
 
@@ -14,7 +14,8 @@ One identity check per release: the admitted reference table (python/mojolearn/v
 | mojolearn-nvidia manylinux_2_35_x86_64 | 224694df10f92a8ddb1ba749fda37d347880e0494e6996870c5dee1afebf104b | preverified, 0 jobs | pypi via alpha-api-0.8.54-nvidia-20261020 (source 486ac1cde0f5, tooling ef7ba546c210) |
 | mojolearn-amd manylinux_2_35_x86_64 | 8a076430320257a552b1bbd3815d9a7c550216f05dafda1c2e3ae6191af8d708 | preverified, 0 jobs | pypi via alpha-api-0.8.54-amd-20261020 (source 486ac1cde0f5, tooling ef7ba546c210) |
 | mojolearn-nvidia-ptx manylinux_2_35_x86_64 | 8b87d8736e14b7c4cd0bc19e0e79c076eef35aefdba64405c39ed1c30bd221f5 | preverified, 0 jobs | pypi via alpha-api-0.8.54-nvidia-ptx-20261020 (source 486ac1cde0f5, tooling ef7ba546c210) |
+| macosx_11_0_arm64 | b68f4d620794fe1db69f71070342d5f373e037332ae8ef44f43865d51b877b92 | PASSED, 0 jobs | pypi via alpha-api-0.8.54-macos-20261020 (source 486ac1cde0f5, tooling 5a271dec3158) |
 
-Finish line: Linux: pip resolves mojolearn==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-nvidia: pip resolves mojolearn-nvidia==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-nvidia-ptx: pip resolves mojolearn-nvidia-ptx==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-amd: pip resolves mojolearn-amd==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's; not yet published: macos.
+Finish line: macOS: pip install mojolearn==0.8.54 on this Mac: OK; Linux: pip resolves mojolearn==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-nvidia: pip resolves mojolearn-nvidia==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-nvidia-ptx: pip resolves mojolearn-nvidia-ptx==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-amd: pip resolves mojolearn-amd==0.8.54 for manylinux_2_35_x86_64; bytes are the published wheel's.
 
 Provenance of every leg and column (built, or taken and why): release-provenance.json.
