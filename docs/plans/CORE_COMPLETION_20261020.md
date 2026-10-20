@@ -94,10 +94,17 @@ with their build provenance. The shared NVIDIA machine was later retired by its
 idle lease; the provider confirms it is gone. This lane did not delete it.
 Its accepted binaries and our required results were retained before retirement.
 
-A second owned AMD lease, `611011332`, started around 22:44 UTC with a
-60-minute deadline at $3.80/hour. Its task is changed-binding compilation and
-installed correctness checks, not performance tuning. State is tracked in
-`amd-state/`; result and binary retention must finish before its teardown.
+The second owned AMD lease, `611011332`, was deleted before the requested
+23:44 UTC deadline: DELETE returned HTTP 204 and a subsequent GET returned
+404. It performed changed-binding compilation and installed correctness
+checks, with no performance tuning or lease extension.
+`amd-stage41-teardown-retention-proof.json` and `amd-stage41-down.log` record
+the ownership check, no-active-work confirmation and deletion. The verified
+23:26 full archive, final 33-file incremental archive, and separately retained
+source/binary/wheel/result bundles cover 128,181 files with actual bytes on
+the Mac and in R2. A redundant full rearchive was cancelled in favor of that verified
+incremental composition; deletion waited for complete coverage and R2 byte
+verification. The partial rearchive log is retained.
 
 A snapshot of 653 complete retained logs, reports and controller artifacts is
 also in R2 at
