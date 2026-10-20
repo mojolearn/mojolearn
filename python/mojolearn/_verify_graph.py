@@ -22,8 +22,9 @@ EXPECTED_CASES = (
     "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
     "variable_rank_replay",
     "executed_control_vjp", "executor_accounting", "control_checkpoint", "gradient_diagnostics",
+    "structural_view_optimization", "structural_control_and_derivatives", "optimizer_validation_preservation",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2)))
 
 
 _AUDITS = []
@@ -331,7 +332,8 @@ def training_after_optimization():
         with ops.Session() as s:
             x = s.tensor(a)
             w = s.tensor(np.zeros((3, 1), np.float32))
-            p = s.capture(x, s.add(s.matmul(x, w), s.matmul(x, w)))
+            layout = s.transpose(s.transpose(x))
+            p = s.capture(x, s.add(s.matmul(layout, w), s.matmul(layout, w)))
             _invoke(p.run, a, optimize=optimize_first)
             opt = s.optimizer("adam", lr=0.01)
             _invoke(p.fit, a, targets=target, optimizer=opt, epochs=3, batch_size=2, shuffle=False, seed=2**63 + 9)
@@ -342,6 +344,163 @@ def training_after_optimization():
     for a, b in zip(*states):
         _equal(a, b)
     return states[0]
+
+
+def structural_view_optimization():
+    import numpy as np
+    from . import ops
+    # Quiet NaNs with distinct payload/sign, signed zeros, infinities and
+    # subnormals must survive layout-only rewrites without arithmetic.
+    words = np.array([0, 0x80000000, 0x7FC00123, 0xFFC00456, 0x7F800000,
+                      0xFF800000, 1, 0x80000001] * 3, np.uint32)
+    a = words.view(np.float32).reshape(2, 3, 4)
+    outputs = []
+    with ops.Session() as s:
+        x = s.tensor(a)
+        first = s.permute(x, (2, 0, 1))
+        second = s.permute(first, (1, 2, 0))
+        permuted = s.capture(x, second)
+        report = _invoke(permuted.inspect, optimize=True)
+        assert report["nodes_removed"] == 1 and len(report["nodes"]) == 1
+        assert report["nodes"][0]["integers"] == [0, 0, 1, 2]
+        assert report["nodes"][0]["source_node"] == 1
+        passes = {row["name"]: row for row in report["pass_report"]["passes"]}
+        assert passes["permutation_composition"]["rewrites"] == 1
+        assert passes["dead_intermediates"]["nodes_before"] == 2
+        assert passes["dead_intermediates"]["nodes_after"] == 1
+        assert report["pass_report"]["storage_reuse"] is False
+        result = _invoke(permuted.run, a, optimize=True)
+        _equal(result, a)
+        _equal(result, _invoke(permuted.run, a))
+        outputs.append(result)
+
+        middle = s.reshape(second, (4, 6))
+        final = s.reshape(middle, (2, 3, 4))
+        reshaped = s.capture(x, final)
+        before = _invoke(reshaped.inspect)
+        optimized = _invoke(reshaped.inspect, optimize=True)
+        assert optimized["nodes_removed"] == 2
+        result = _invoke(reshaped.run, a, optimize=True)
+        _equal(result, a)
+        outputs.append(result)
+        assert _invoke(reshaped.inspect) == before
+
+        # The inner permutation is also an output. Dead-node pruning must
+        # retain it, and repeated/aliased outputs still have independent ABI buffers.
+        aliases = s.capture(x, [first, final, x, final])
+        alias_report = _invoke(aliases.inspect, optimize=True)
+        assert alias_report["nodes_removed"] == 1
+        alias_values = _invoke(aliases.run, a, optimize=True)
+        for actual, expected in zip(alias_values, (a.transpose(2, 0, 1), a, a, a)):
+            _equal(actual, expected)
+        expected_last = len(alias_report["nodes"])
+        for ref in alias_report["outputs"]:
+            assert alias_report["pass_report"]["liveness"][ref]["last_use"] == expected_last
+        saved_last = alias_values[-1].copy()
+        alias_values[1].flat[0] = 9
+        _equal(alias_values[-1], saved_last)
+        # Return the immutable expected snapshots, not the deliberately changed output.
+        outputs.extend((alias_values[0], result, alias_values[2], alias_values[-1]))
+
+        swapped = s.capture(x, s.transpose(s.transpose(x)))
+        assert _invoke(swapped.inspect, optimize=True)["nodes_removed"] == 1
+        for fixture in (a.reshape(6, 4), a):
+            value = _invoke(swapped.run_dynamic, fixture, optimize=True)
+            _equal(value, fixture)
+            _equal(value, _invoke(swapped.run_dynamic, fixture))
+            outputs.append(value)
+    return outputs
+
+
+def structural_control_and_derivatives():
+    import numpy as np
+    from . import ops
+    a = np.arange(6, dtype=np.float32).reshape(2, 3) / np.float32(8)
+    wv = np.array([[0.5], [-0.25], [1.0]], np.float32)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-pass-checkpoint-") as d, ops.Session() as s:
+        x, w = s.tensor(a), s.tensor(wv)
+        layout = s.reshape(s.reshape(s.transpose(s.transpose(x)), (3, 2)), (2, 3))
+        p = s.capture(x, s.sum(s.matmul(layout, w)))
+        condition = s.capture(x, s.full((1, 1), 1))
+        original = _invoke(p.inspect)
+        dead = s.tensor(np.ones((3, 1), np.float32))
+        other = s.capture(x, s.sum(s.matmul(x, dead)))
+        s.free(dead)
+        result = _invoke(p.run_if, condition, other, a, optimize=True)
+        _equal(result, _invoke(p.run, a))
+        vjp = _invoke(p.vjp_if, condition, p, a, seeds=np.ones((1, 1), np.float32), parameters=[w])
+        dx, dw = vjp["input_gradients"][0], vjp["parameter_gradients"][w]
+        _equal(dx, np.broadcast_to(wv.T, a.shape).copy())
+        _equal(dw, a.sum(axis=0).reshape(3, 1))
+        # The derivative of optimized inference agrees with the unchanged
+        # native tape. Binary-exact fixture/step avoid a loose error allowance.
+        delta = np.float32(1 / 128)
+        finite_dx = np.empty_like(a)
+        for index in np.ndindex(a.shape):
+            plus, minus = a.copy(), a.copy()
+            plus[index] += delta
+            minus[index] -= delta
+            high = _invoke(p.run, plus, optimize=True)
+            low = _invoke(p.run, minus, optimize=True)
+            finite_dx[index] = (high.item() - low.item()) / (2 * delta)
+        _equal(finite_dx, dx)
+        outputs.extend((result, dx, dw))
+        assert _invoke(p.inspect) == original
+
+        body = s.capture(x, s.add(s.transpose(s.transpose(x)), s.full((1, 1), 1)))
+        loop_condition = s.capture(x, s.less(s.sum(x), s.full((1, 1), 20)))
+        loop = _invoke(body.while_loop, np.ones((2, 3), np.float32),
+                       condition=loop_condition, max_iterations=5, optimize=True)
+        assert loop["iterations"] == 3 and loop["stopped"] is True
+        _equal(loop["outputs"], np.full((2, 3), 4, np.float32))
+        outputs.append(loop["outputs"])
+
+        plain, control = Path(d) / "program.mjl", Path(d) / "control.mjl"
+        _invoke(p.save, plain)
+        _invoke(p.save_control, control, condition=condition, otherwise=p)
+        with ops.Session() as restored:
+            rp = _invoke(restored.load_program, plain)
+            loaded = _invoke(restored.load_control, control)
+            assert _invoke(rp.inspect)["nodes"] == original["nodes"]
+            replay = _invoke(rp.run, a, optimize=True)
+            branch = _invoke(loaded["body"].run_if, loaded["condition"], loaded["otherwise"], a, optimize=True)
+            _equal(replay, result)
+            _equal(branch, result)
+            outputs.extend((replay, branch))
+    return outputs
+
+
+def optimizer_validation_preservation():
+    import numpy as np
+    from . import ops
+    a = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        p = s.capture(x, s.permute(s.permute(x, (2, 0, 1)), (1, 2, 0)))
+        r = s.capture(x, s.reshape(s.reshape(x, (4, 6)), (2, 3, 4)))
+        for optimize in (False, True):
+            _refuses(lambda: _invoke(p.run_dynamic, a.reshape(6, 4), optimize=optimize), "permute")
+            _refuses(lambda: _invoke(r.run_dynamic, np.ones((2, 3, 5), np.float32), optimize=optimize), "reshape")
+        z = s.tensor(np.ones((1, 2, 3), np.float32))
+        squeezed = s.squeeze(z, axis=0)
+        rank_guard = s.capture(z, s.transpose(s.transpose(squeezed)))
+        for optimize in (False, True):
+            _refuses(lambda: _invoke(rank_guard.run_dynamic, np.ones((1, 6), np.float32), optimize=optimize),
+                     "at least 2")
+        # A copy/detach between views is a semantic boundary, not a rewrite target.
+        copied = s.capture(x, s.transpose(s.copy(s.transpose(x))))
+        detached = s.capture(x, s.transpose(s.detach(s.transpose(x))))
+        for barrier in (copied, detached):
+            assert _invoke(barrier.inspect, optimize=True)["nodes_removed"] == 0
+            _equal(_invoke(barrier.run, a, optimize=True), a)
+        # Imported operation names retain their actual numeric opcode mapping.
+        diagnostics = s.capture(x, [s.abs(x), s.cumsum(x, axis=1)])
+        assert [n["op"] for n in _invoke(diagnostics.inspect)["nodes"]] == ["abs", "cumsum"]
+        left, right = _invoke(p.run, a, optimize=True), _invoke(r.run, a, optimize=True)
+        _equal(left, a)
+        _equal(right, a)
+        return [left, right]
 
 
 def node_diagnostics_and_profile():

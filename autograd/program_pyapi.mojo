@@ -14,7 +14,8 @@ from autograd.tape import Tape
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
-from autograd.program_tools import ProgramTrace, program_cse, program_op_name
+from autograd.program_tools import ProgramTrace, program_op_name
+from autograd.program_optimize import ProgramOptimization, program_optimize
 from autograd.program_runtime import replay_values, parameter_buffers, train_program
 from autograd.pyapi import _input_handles, _seed, ival, fval, _dims_out
 
@@ -141,6 +142,36 @@ def _result(arrays: PythonObject) raises -> PythonObject:
     return Python.import_module("builtins").tuple(arrays)
 
 
+def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
+    var out = _dict()
+    out["schema"] = "mojolearn-graph-passes/1"
+    out["scope"] = "inference only; original graph and derivative order unchanged"
+    out["storage_reuse"] = False
+    out["liveness_scope"] = "logical values only; tape owns aliases and storage"
+    var passes = Python.list()
+    for k in range(len(plan.pass_names)):  # driver-loop: graph transformation report
+        var row = _dict()
+        row["name"] = plan.pass_names[k]
+        row["nodes_before"] = plan.before[k]
+        row["nodes_after"] = plan.after[k]
+        row["rewrites"] = plan.rewrites[k]
+        passes.append(row)
+    out["passes"] = passes
+    var origins = Python.list()
+    for k in range(len(plan.source_nodes)):  # driver-loop: source node provenance
+        origins.append(PythonObject(plan.source_nodes[k]))
+    out["source_nodes"] = origins
+    var liveness = Python.list()
+    for k in range(len(plan.last_use)):  # driver-loop: logical reference use metadata
+        var row = _dict()
+        row["value"] = k
+        row["last_use"] = plan.last_use[k]
+        row["uses"] = plan.uses[k]
+        liveness.append(row)
+    out["liveness"] = liveness
+    return out
+
+
 def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, pid: PythonObject, owner_sid: PythonObject, arrays: PythonObject,
     dynamic_shapes: PythonObject, optimize: PythonObject, profile: PythonObject,
@@ -152,8 +183,10 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     if s[].tape.is_recording():
         raise Error("program execution requires an inference session")
     var original_nodes = p.n_nodes()
-    if Bool(py=optimize):
-        p = program_cse(p)
+    var optimization = ProgramOptimization(OpsProgram())
+    if Bool(py=optimize) or Bool(py=profile):
+        optimization = program_optimize(p, Bool(py=optimize))
+        p = optimization.program.copy()
     # Native ABI shape policy: bool preserves the existing fixed-rank
     # dynamic contract; integer 2 selects compatibility checked at each node.
     # Every operation still validates its own rank/axes/parameter constraints.
@@ -243,6 +276,7 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     var executor_profile = s[].ex.execution_profile_end()
     var report = _dict()
     report["executor"] = execution_profile_object(executor_profile)
+    report["optimization"] = _optimization_object(optimization)
     report["timing"] = "host enqueue and synchronized wait; profiling serializes the queue"
     report["original_nodes"] = original_nodes
     report["executed_nodes"] = p.n_nodes()
@@ -259,6 +293,7 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     for j in range(len(s[].program_trace.nodes)):  # driver-loop: over diagnostic rows
         var row = _dict()
         row["node"] = s[].program_trace.nodes[j]
+        row["source_node"] = optimization.source_nodes[s[].program_trace.nodes[j]]
         row["op"] = program_op_name(s[].program_trace.codes[j])
         row["shape"] = s[].program_trace.shapes[j]
         row["output_bytes"] = s[].program_trace.output_bytes[j]
@@ -285,19 +320,21 @@ def ops_program_inspect_py[E: Exec & Movable & Deinitable, KIND: Int](
     var s = ops_session[E, KIND](Int(py=sid))
     var p = s[].program(Int(py=pid))
     var original_nodes = p.n_nodes()
-    if Bool(py=optimize):
-        p = program_cse(p)
+    var optimization = program_optimize(p, Bool(py=optimize))
+    p = optimization.program.copy()
     var report = _dict()
     report["original_nodes"] = original_nodes
     report["nodes_removed"] = original_nodes - p.n_nodes()
     report["input_shapes"] = _dims_out(p.in_shapes)
     report["output_shapes"] = _dims_out(p.out_shapes)
     report["parameter_shapes"] = _dims_out(p.param_shapes)
-    report["optimization"] = "exact_duplicate_elimination" if Bool(py=optimize) else "none"
+    report["optimization"] = "structural_pass_pipeline" if Bool(py=optimize) else "none"
+    report["pass_report"] = _optimization_object(optimization)
     var rows = Python.list()
     for k in range(p.n_nodes()):  # driver-loop: over graph node metadata
         var row = _dict()
         row["node"] = k
+        row["source_node"] = optimization.source_nodes[k]
         row["value"] = p.n_in + k
         row["op"] = program_op_name(p.code[k])
         row["code"] = p.code[k]
