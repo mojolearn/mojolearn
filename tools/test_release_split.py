@@ -340,6 +340,39 @@ class ColumnsAndPublish(SplitBase):
                                      ("mojolearn_amd", "column-amd"), ("mojolearn", "--preverified")])
         self.assertIn("alpha-api-0.8.99-linux-meta-", calls[-1][3])
 
+    def test_finish_resolves_each_linux_install_to_its_package_set(self):
+        """pip install mojolearn installs everything; mojolearn-nvidia the core,
+        NVIDIA and its PTX package; mojolearn-amd the core and AMD; each at the
+        published bytes (Release.finish_resolve, 2026-10-20)."""
+        r = self.release(publish="pypi")
+        self.finals(r)
+        finals = r.split_finals()
+        by_project = {project: k for k, (project, _) in release.SPLIT_PACKAGES.items()}
+        served = {}
+
+        def runner(cmd, env, log, detach=False):
+            cmd = [str(c) for c in cmd]
+            dest = pathlib.Path(cmd[cmd.index("-d") + 1])
+            dest.mkdir(parents=True, exist_ok=True)
+            project = cmd[-1].split("==")[0]
+            for k in served.get(project, release.LINUX_RESOLVES[by_project[project]]):
+                shutil.copy2(finals[k], dest / finals[k].name)
+            return 0
+        r.runner = runner
+        venv = self.tmp / "venv"
+        self.assertIn("resolves mojolearn-core, mojolearn-nvidia, mojolearn-nvidia-ptx", r.finish_resolve(venv, "nvidia"))
+        self.assertIn("resolves mojolearn-core, mojolearn-amd", r.finish_resolve(venv, "amd"))
+        self.assertIn("resolves mojolearn-core, mojolearn-nvidia, mojolearn-amd, mojolearn-nvidia-ptx, mojolearn",
+                      r.finish_resolve(venv, "linux-meta"))
+        # a resolution without a vendor, or with other bytes, is refused
+        served["mojolearn"] = ("linux-meta", "linux", "nvidia", "nvidia-ptx")
+        with self.assertRaisesRegex(release.StepFailed, "does not resolve exactly"):
+            r.finish_resolve(venv, "linux-meta")
+        served.clear()
+        finals["amd"] = fake_wheel(self.tmp / "other" / finals["amd"].name, data=b"other bytes")
+        with self.assertRaisesRegex(release.StepFailed, "mojolearn-amd==0.8.99 .* does not resolve exactly"):
+            r.finish_resolve(venv, "amd")
+
     def test_a_plugin_is_not_published_on_a_receipt_that_did_not_install_it(self):
         r = self.release(publish="testpypi")
         r.runner = lambda cmd, env, log, detach=False: 0
