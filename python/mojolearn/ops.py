@@ -1347,19 +1347,7 @@ class Program:
     """
 
     def __init__(self, session, info):
-        self._s = session
-        self._session_native = session._session_native
-        self._execute_native = session._b.ops_program_execute
-        self._inspect_native = session._b.ops_program_inspect
-        self._control_native = session._b.ops_program_control
-        self._fit_native = session._b.ops_program_fit_native
-        self._id = int(info[0])
-        self.input_shapes = tuple(tuple(int(d) for d in sh) for sh in info[1])  # glue: at most eight dimensions per input
-        self.output_shapes = tuple(tuple(int(d) for d in sh) for sh in info[2])  # glue: at most eight dimensions per output
-        self.params = tuple(int(h) for h in info[3])  # glue: the parameter handles
-        # a binding built before the input kinds returns four entries: every input holds values
-        kinds = info[4] if len(info) > 4 else [0] * len(self.input_shapes)
-        self.input_kinds = tuple(int(k) for k in kinds)  # glue: one kind per program input
+        return session._session_native(session, "program_init", (self, info))
 
     def run(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
