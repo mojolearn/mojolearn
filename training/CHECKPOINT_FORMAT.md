@@ -779,3 +779,47 @@ vendors writing the same state write the same bytes; `save_checkpoint`
 returns the file's sha256 and `from_checkpoint` refuses a payload whose
 sha256 does not match. The byte-LM's own schema and bytes are unchanged.
 The native binary format above is still unrun.
+
+## 12. Section kinds: Sequential and operation-session checkpoints (2026-10-19, lane ag-save-resume)
+
+The header words at offsets 52 and 56 (reserved0 and reserved1 in section
+2.1) are the **section kind** and the **extension bytes**. Kind 0 is the
+training-loop state above: both words stay 0 and its files are byte for byte
+what they were. Every other kind writes one extension section between the
+payload and the trailer:
+
+    [ header 64 ][ descriptor 64 ][ layout 32*J ][ payload 12*n ][ extension E ][ trailer 16 ]
+    extension = u32 n_ints, u32 n_floats, n_ints x i64 (LE), n_floats x f32 bits (LE)
+    E = 8 + 8*n_ints + 4*n_floats      file_bytes = 64 + 64 + 32*J + 12*n + E + 16
+
+`h_file` covers the extension; `h_all` stays the payload's fold. The reader
+refuses (`CKPT_REFUSE_HEADER`) an unknown kind, kind 0 with E != 0, a kind
+other than 0 with E < 8 or E not a multiple of 4, and an extension whose
+counts do not add up to E. The record's meaning belongs to the kind:
+
+- **1, Sequential** (`autograd/model_checkpoint.mojo`): layout `l<i>.weight`
+  / `l<i>.bias` per parameterized layer; payload param, the optimizer's first
+  buffer (momentum or Adam m), its second (Adam v); `t` = optimizer steps
+  completed; descriptor seed and hyperparameters. Ints: record version 1,
+  export flag, the description words, the 9 option words, n_features,
+  n_outputs, y_1d, tol (f64 bits), the 12 fit-state words
+  (`autograd/model.mojo` FS_*: epoch, step, early-stopping counters, the
+  bias-correction products, optimizer kind, parameter count, seed), epochs
+  run, class count, class kind and item size, the class values. Floats: the 8
+  option floats, the per-layer table, the loss curve. An inference export
+  (`Sequential.export`) is the same kind with the export flag set, zero
+  optimizer buffers, zero state words and no curve.
+- **2, operation session**: layout `p<i>`; payload the parameters and, per
+  parameter, the optimizer's first and second state buffers (`exp_avg` /
+  `exp_avg_sq`, or `momentum_buffer` and zeros; all zeros without an
+  optimizer). Ints: record version 1, K, (rows, cols) per parameter, has
+  optimizer, then per parameter (step count, has first buffer, has second
+  buffer), seed low, seed high, epoch, step. Floats: per parameter
+  (beta1^t, beta2^t, NAdam's mu product) by their bits. These are the words
+  `OpsSession.optimizer_state` returns, and `Session.load_state` restores
+  them through `OpsSession.load_optimizer_state`, the session's one restore
+  path, so the next `step` continues word for word. The header `t` is the
+  first parameter's step count.
+
+`training/checks/checkpoint_check.mojo` arm 7 (a nonzero byte at offset 52)
+is still refused: kind 1 with E = 0.

@@ -15,6 +15,7 @@ arrays and need the `mojolearn[numpy]` extra (see [Install](../install.md)).
 
 ## Sequential quickstart
 
+<!-- block: seq-quickstart -->
 ```python
 import numpy as np
 import mojolearn
@@ -43,6 +44,7 @@ The parameters are initialized from `seed`, the rows are shuffled from `seed` ev
 A session keeps tensors on the device and runs one native operation per call. Each call returns an
 integer handle; values come back to Python only when you ask for them.
 
+<!-- block: sess-setup -->
 ```python
 import numpy as np
 from mojolearn import ops
@@ -65,6 +67,7 @@ device.
 With `Session(record=True)` the same composition is differentiable. Mark the trainable inputs with
 `requires_grad=True`, compute a `(1, 1)` loss, call `backward`, and read each gradient with `grad`:
 
+<!-- block: sess-loss -->
 ```python
 Y = rng.standard_normal((64, 3), dtype=np.float32)
 
@@ -79,6 +82,7 @@ To train, make an optimizer with `optimizer` and call `step` after each `backwar
 updated in place on the device, and the optimizer's state (momentum, moment estimates, step count) stays
 there too, so the loop reads nothing back:
 
+<!-- block: sess-train -->
 ```python
 with ops.Session(record=True) as s:
     x, y = s.tensor(X), s.tensor(Y)
@@ -114,6 +118,7 @@ This example builds a model mojolearn does not ship: two linear experts and a so
 them per row. It is trained with a recording session, then used two ways: the soft mixture, and a hard
 route that sends the whole batch to the expert the gate prefers on average.
 
+<!-- block: mixture -->
 ```python
 import hashlib
 import numpy as np
@@ -182,6 +187,7 @@ array.
 
 A Hessian-vector product by hand, then the same in one call:
 
+<!-- block: ho-setup -->
 ```python
 rng = np.random.default_rng(0)
 X = rng.standard_normal((64, 4), dtype=np.float32)
@@ -212,6 +218,7 @@ the loss has no curvature (a parameter it depends on linearly) the result is zer
 per input; `create_graph=True` makes the results differentiable. `jvp(output, inputs, u)` gives `J u`,
 the derivative of `output` along one direction per input, as a handle of `output`'s shape.
 
+<!-- block: ho-hvp -->
 ```python
 with ops.Session(record=True) as s:
     x = s.tensor(X, requires_grad=True)
@@ -228,6 +235,7 @@ satisfy a differential equation. Here `u(x)` is a small network of one input, fi
 `u''(x) = -sin(x)`. The rows are independent, so the gradient of `sum(u)` with respect to `x` holds
 `du/dx` row by row, and the gradient of `sum(du/dx)` holds `d2u/dx2`:
 
+<!-- block: ho-physics -->
 ```python
 Xc = np.linspace(-3, 3, 128, dtype=np.float32).reshape(-1, 1)   # collocation points
 F = np.sin(Xc)
@@ -253,6 +261,21 @@ with ops.Session(record=True) as s:
 Each recorded backward keeps its intermediate tensors until `reset`, and takes a few operations per
 recorded operation, so use `create_graph=True` only where you differentiate again. `layer_norm` has a
 first-order gradient only: a backward with `create_graph=True` through it raises an error that says so.
+
+## Save a trained model for inference
+
+`model.export("model.ckpt")` writes the layers and the trained parameters (and a classifier's classes),
+without the optimizer state. `mojolearn.Sequential.load("model.ckpt")` reads it back on any install, a
+GPU install or the CPU-only install, and `predict` and `predict_proba` return the same values there as
+on the machine that trained it. To keep training later, save with `save_checkpoint` instead and see
+[Moving training between vendors](cross_vendor_training.md).
+
+<!-- block: export -->
+```python
+clf.export("model.ckpt")
+served = mojolearn.Sequential.load("model.ckpt")
+labels_served = served.predict(X)
+```
 
 ## Numeric modes
 

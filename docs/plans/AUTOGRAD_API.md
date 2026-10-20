@@ -220,6 +220,18 @@ guide: `docs-site/user_guide/autograd.md`; API page: the `autograd` family of
 `python/mojolearn/tests/test_autograd_public.py` (`PUBLIC_DIGEST` lines,
 smoke entry `autograd-public`).
 
+Save, load and resume (lane ag-save-resume): `model_fit_state` keeps the
+optimizer's two buffers and the 12 fit-state words (`FS_*`) in caller
+memory, and `fit(..., resume=True)` continues from them at the saved epoch
+and step (the shuffle key, schedule, dropout counter and bias correction
+carry on). `save_checkpoint` / `from_checkpoint` and `export` / `load`
+write and read section kind 1 of training/checkpoint.mojo's container
+(`autograd/model_checkpoint.mojo`; training/CHECKPOINT_FORMAT.md section
+12); `Session.save_state` / `load_state` write kind 2, reaching the
+optimizer's state in Mojo through `OpsSession.optimizer_state` and
+restoring it through `OpsSession.load_optimizer_state` (one restore path).
+Checks: `python/mojolearn/tests/test_autograd_save_resume.py`.
+
 Description, shared by every entry (validated by `parse_model`, which raises
 naming the first bad layer):
 
