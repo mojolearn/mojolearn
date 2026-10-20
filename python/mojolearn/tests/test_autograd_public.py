@@ -93,18 +93,18 @@ def test_guide_session_quickstart():
 
 def test_guide_session_training_loop():
     blocks = _blocks()
-    ns = _run(blocks[1], blocks[3])
+    ns = _run(blocks[1], blocks[2], blocks[3])
     trained = ns["trained"]
     assert trained.shape == ns["W"].shape and np.isfinite(trained).all()
     assert not np.array_equal(trained, ns["W"])
-    ns2 = _run(blocks[1], blocks[3])
+    ns2 = _run(blocks[1], blocks[2], blocks[3])
     assert _digest(trained) == _digest(ns2["trained"])
     _emit("guide_session_trained", _digest(trained))
 
 
 def test_guide_mixture_classifier(capsys):
     b = _blocks()
-    ns = _run(b[3])
+    ns = _run(b[4])
     proba, hard, params, accuracy = ns["proba"], ns["hard"], ns["params"], ns["accuracy"]
     assert proba.shape == (128, 2) and hard.shape == (128, 2)
     assert np.isfinite(proba).all() and np.isfinite(hard).all()
@@ -114,7 +114,7 @@ def test_guide_mixture_classifier(capsys):
     printed = capsys.readouterr().out
     assert hashlib.sha256(proba.tobytes()).hexdigest()[:16] in printed
     flat = [params[k] for k in sorted(params)]
-    ns2 = _run(b[3])
+    ns2 = _run(b[4])
     capsys.readouterr()
     assert _digest(proba, hard, *flat) == _digest(ns2["proba"], ns2["hard"],
                                                   *[ns2["params"][k] for k in sorted(ns2["params"])])
