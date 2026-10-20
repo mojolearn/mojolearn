@@ -140,18 +140,14 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
         for family, cls in ((2, Mamba2Block), (3, Mamba3Block)):
             weights, x = host_fixture(family)
             block = cls(weights, numeric_mode="identical")
-            if family == 2:
-                from mojolearn import _native_neural_bridge
-                selected = _native_neural_bridge.CONTEXT["training_bindings"][block._native_route + ":identical"]
-                stale = SimpleNamespace(**vars(selected["mamba"]))
-                delattr(stale, "mamba2_backward")
-                with patch.dict(selected, mamba=stale):
-                    with self.assertRaisesRegex(RuntimeError, "lacks mamba2_backward"):
-                        block.backward(x, cotangent(x))
-            else:
-                with patch.object(block, "_extension", return_value=SimpleNamespace()):
-                    with self.assertRaisesRegex(RuntimeError, "lacks mamba3_backward"):
-                        block.backward(x, cotangent(x))
+            from mojolearn import _native_neural_bridge
+            selected = _native_neural_bridge.CONTEXT["training_bindings"][block._native_route + ":identical"]
+            stale = SimpleNamespace(**vars(selected["mamba"]))
+            delattr(stale, f"mamba{family}_backward")
+            with patch.dict(selected, mamba=stale):
+                with self.assertRaisesRegex(RuntimeError, f"lacks mamba{family}_backward"):
+                    block.backward(x, cotangent(x))
+
 
 
 @unittest.skipUnless(os.environ.get("MOJOLEARN_MAMBA23_BACKWARD_NVIDIA") == "1",

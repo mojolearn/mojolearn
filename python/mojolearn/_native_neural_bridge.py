@@ -23,7 +23,12 @@ def connect_training(backend, vendor, inference_bindings):
         "mamba": ("_mojolearn_mamba", (
             "mamba_vendor", "mamba_numeric_mode", "mamba1_backward", "mamba2_backward",
             "mamba3_backward", "mamba3_prefill_session_create",
-            "mamba3_prefill_session_backward", "mamba3_prefill_session_backward_owned")),
+            "mamba3_prefill_session_backward", "mamba3_prefill_session_backward_owned",
+            "mamba3_prefill_session_forward", "mamba3_prefill_session_forward_owned",
+            "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_close",
+            "mamba3_prefill_session_install_weights", "mamba3_owned_weights_enabled",
+            "mamba3_forward_fresh", "mamba3_forward_tape_enabled", "mamba3_forward_tape",
+            "mamba3_backward_tape", "mamba3_close_tape")),
     }
     result = {}
     validator = _buffer._native("all_finite_f32")

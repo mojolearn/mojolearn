@@ -85,3 +85,24 @@ def test_backward_preserves_extended_transformer_refusal(tmp_path):
     result = audit_native_call(block.backward, inputs, np.ones_like(inputs))
     assert isinstance(result.exception, NotImplementedError), result.report()
     assert "default float32 block options" in str(result.exception)
+
+
+def test_mamba3_backward_is_native_and_matches_raw_abi(monkeypatch):
+    from mojolearn import Mamba3Block
+    from mojolearn.tests.test_mamba23_backward_surface import host_fixture
+    weights, inputs = host_fixture(3)
+    block = Mamba3Block(weights)
+    gradient = np.random.default_rng(724).normal(size=inputs.shape).astype("f4")
+    outputs = [np.empty_like(inputs)] + [np.empty_like(weights[name]) for name in block._W_NAMES]
+    addresses = [inputs.ctypes.data] + [weights[name].ctypes.data for name in block._W_NAMES]
+    addresses += [gradient.ctypes.data] + [value.ctypes.data for value in outputs]
+    block._extension().mamba3_backward(addresses, list(inputs.shape))
+    expected = {name: value.tobytes() for name, value in zip(("x",) + block._W_NAMES, outputs)}
+    with monkeypatch.context() as patch:
+        _poison(patch)
+        patch.setattr(Mamba3Block, "_extension", lambda *a: pytest.fail("Python binding selection"))
+        patch.setattr(Mamba3Block, "_prefill_backward", lambda *a: pytest.fail("Python backward loop"))
+        actual = audit_native_call(block.backward, inputs, gradient).assert_native()
+    assert set(actual) == set(expected)
+    for name in expected:
+        assert actual[name].tobytes() == expected[name], name
