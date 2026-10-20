@@ -10,7 +10,11 @@ them and runs the whole fit or prediction. Nothing is retained after a call.
 
 Description (both entries): prog = [1, input features, layer count, then per
 layer (code, arg0, arg1, 0)], one float per layer in ptab
-(autograd/model.mojo LAYER_*; docs/plans/AUTOGRAD_API.md)."""
+(autograd/model.mojo LAYER_*; docs/plans/AUTOGRAD_API.md). Version 2
+(docs/plans/AUTOGRAD_RANKN.md section 5): prog = [2, ndim, d0 .. d7, layer
+count, then per layer (code, arg0 .. arg5, 0)], the per-sample input shape
+of any rank; X arrives as its (N, product of the sample dims) row-major
+matrix view."""
 from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
 from sequence.pyapi import fptr, fval, ival
