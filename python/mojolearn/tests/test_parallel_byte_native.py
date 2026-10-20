@@ -39,9 +39,16 @@ def state_fixture():
                              dampening=0., nesterov=False, max_norm=0.),
                  data_schedule={'name': 'parallel-native-independent',
                                 'offsets': [0, 4], 'seed': 21})
-    # With all norm/lm-head weights zero, every gradient is analytically zero,
-    # including this nonzero embedding; only decoupled weight decay changes it.
-    state['parameters'][0] = .25
+    # The batches below use token IDs 0..4. Put the sole nonzero weight in
+    # the unused final embedding row: all consumed embeddings/hidden states
+    # are zero, so the zero head has zero parameter gradients. Residual paths
+    # would carry a nonzero USED embedding to the head, invalidating this
+    # decay-only oracle even when every block weight is zero.
+    assert shape.parameter_names[0] == 'embed'
+    assert shape.parameter_shapes[0] == (shape.vocab_size, shape.d_model)
+    assert shape.vocab_size - 1 > 4
+    decay_index = shape.offsets[0] + (shape.vocab_size - 1) * shape.d_model
+    state['parameters'][decay_index] = .25
     return state, shape
 
 
@@ -68,9 +75,10 @@ def test_constructor_owns_arrays_schedule_and_accepts_portable_registry():
         assert owner._shape.to_dict() == shape.to_dict()
         assert owner._state['numeric_mode'] == _backend.default_mode()
         assert owner._state['parameter_offsets'] == list(shape.offsets)
-        state['parameters'][0] = 11
+        decay_index = shape.offsets[0] + (shape.vocab_size - 1) * shape.d_model
+        state['parameters'][decay_index] = 11
         state['data_schedule']['offsets'][0] = 99
-        assert np.asarray(owner._state['parameters'])[0] == .25
+        assert np.asarray(owner._state['parameters'])[decay_index] == .25
         assert owner._state['data_schedule']['offsets'][0] == 0
         assert audit_native_call(type(owner).step_.fget, owner).assert_native() == 0
         rate = audit_native_call(owner.set_lr, .1).assert_native()
