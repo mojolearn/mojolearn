@@ -381,7 +381,8 @@ class Session:
         """Rows of ``table`` picked by integer ``ids``: ``table[ids]``.
 
         ``table`` is a ``(num_embeddings, embedding_dim)`` tensor and ``ids``
-        an array of integers in ``[0, num_embeddings)``, flattened in order;
+        an array of integers (any integer dtype) in ``[0, num_embeddings)``,
+        flattened in row-major order;
         the result has one row per id. An id outside that range raises an
         error. In a recording session the gradient of ``table`` sums, for
         each row, the gradients of every position that picked it, in
@@ -396,16 +397,22 @@ class Session:
         ...     s.backward(s.sum(x))
         ...     g = s.grad(w)
         """
-        from ._buffer import _materialize, as_i32_c
-        raw, _ = _materialize(ids, "ids")
-        if raw.dtype[1] not in "iu":
-            raise TypeError(f"ids must be integers, got dtype {raw.dtype!r}")
-        flat = np.ascontiguousarray(np.asarray(as_i32_c(raw, ndim=None, name="ids")[0])).reshape(-1)
-        if flat.size == 0:
+        from ._cast_in import as_input, describe
+        a = as_input(ids)
+        if a.dtype.kind not in "iu":
+            raise TypeError(f"ids must be integers, got dtype {a.dtype}")
+        if a.size == 0:
             raise ValueError("ids must not be empty")
+        if a.ndim > 2:
+            # a C-contiguous array flattens to a view of the same memory
+            if not a.flags.c_contiguous:
+                raise ValueError("ids with more than two dimensions must be C-contiguous; "
+                                 "pass numpy.ascontiguousarray(ids)")
+            a = a.reshape(-1)
         pad = -1 if padding_idx is None else _int(padding_idx, "padding_idx", 0)
-        # the binding copies the ids before it returns; `flat` lives until then
-        return self._op("embedding", (table,), [flat.ctypes.data, int(flat.size), pad])
+        # `a` as it is (Mojo casts it to int32 on the executor, row-major);
+        # it stays referenced until the binding has copied it
+        return self._op("embedding", (table,), describe(a, "ids") + [pad])
 
     # ------------------------------------------------------------ losses (differentiable)
     def mse(self, prediction, target, reduction="mean"):
