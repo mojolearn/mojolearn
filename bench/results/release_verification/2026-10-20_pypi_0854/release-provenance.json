@@ -1,0 +1,44 @@
+{
+ "columns": {
+  "amd": null,
+  "nvidia": null,
+  "nvidia-hopper": null
+ },
+ "earlier_commits": [],
+ "legs": {
+  "cuda-sm_80": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "6fd197bbadbc8b383492f57f212ba1529ddc86dff806c541369d89453889a739",
+   "source_commit": "486ac1cde0f59fa05eeceeebf2985846704e60e2",
+   "tooling_commit": "4d6c6a5a1e08aaa0fbbf42ae3a74956531feeee7",
+   "tooling_digest": "9c00c2cdbd05985b84bcab46092d4e20f6e8c80e4c159ab113e9aeca77f1edc2"
+  },
+  "cuda-sm_89": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "ae8278ef10372f854a90f1446ec88155b9ec084c247206b6c46cdcac6dfb5b78",
+   "source_commit": "486ac1cde0f59fa05eeceeebf2985846704e60e2",
+   "tooling_commit": "4d6c6a5a1e08aaa0fbbf42ae3a74956531feeee7",
+   "tooling_digest": "9c00c2cdbd05985b84bcab46092d4e20f6e8c80e4c159ab113e9aeca77f1edc2"
+  },
+  "hip-gfx942": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "89d5493e35fa303527e1a5dbee9db9512ffa8b36953e822f7bf9ee8effc2ecbc",
+   "source_commit": "486ac1cde0f59fa05eeceeebf2985846704e60e2",
+   "tooling_commit": "4d6c6a5a1e08aaa0fbbf42ae3a74956531feeee7",
+   "tooling_digest": "9c00c2cdbd05985b84bcab46092d4e20f6e8c80e4c159ab113e9aeca77f1edc2"
+  }
+ },
+ "published": [
+  "linux",
+  "nvidia",
+  "nvidia-ptx",
+  "amd"
+ ],
+ "schema": "mojolearn.release-provenance.v1",
+ "source_commit": "486ac1cde0f59fa05eeceeebf2985846704e60e2",
+ "tooling_commit": "ef7ba546c210e2176512152d1ba28efae61e1285",
+ "version": "0.8.54"
+}
