@@ -37,8 +37,29 @@ def connect(config_cls, model_cls, training, neural):
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"Samba input admission requires a compiled {name}")
         core[name] = entry
+    # Reuse connected modules, without loading a second type-owning tier.
+    # These records let Generator preserve its per-instance numeric mode.
+    import _operator
+    generator_bindings = {mode: {name: getattr(binding, name) for name in
+                               ("training_vendor", "training_numeric_mode", "neural_rng")}}
+    if _backend.vendor() not in (None, "cpu"):
+        for route, connected in neural.CONTEXT["bindings"].items():  # glue: ABI connection records only
+            if not route.startswith("gpu:"):
+                continue
+            selected = connected["primitives"]
+            key = route.split(":", 1)[1]
+            if isinstance(selected, str):
+                generator_bindings[key] = selected
+                continue
+            symbols = {name: getattr(selected, name) for name in
+                       ("training_vendor", "training_numeric_mode", "neural_rng")}
+            if not all(isinstance(value, BuiltinFunctionType) for value in symbols.values()):
+                raise TypeError("Generator execution requires compiled native RNG entries")
+            generator_bindings[key] = symbols
     return {
         **core,
+        "generator_bindings": generator_bindings, "generator_backend": _backend,
+        "generator_index": _operator.index,
         "neural": neural.CONTEXT, "entries": SimpleNamespace(**entries),
         "mode": mode, "vendor": _backend.vendor(), "config_class": config_cls,
         "model_class": model_cls, "optimizer_class": training.AdamW,
