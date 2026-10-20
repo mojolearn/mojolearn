@@ -277,7 +277,8 @@ host_extension_hashes = {}
 wheel_indexes = {}
 sys.path.insert(0, str(root / 'tools'))
 from verify_linux_surface_qualification import (MERGED_INDEX, MODES, expected_bindings, expected_set_files,
-                                                 one_layout, set_layout, wheel_host_bindings)
+                                                 one_layout, set_layout, wheel_host_bindings,
+                                                 wheel_host_members)
 proof_path = pathlib.Path(provenance)
 proof = json.loads(proof_path.read_text())
 # THE MERGED BINDINGS: the proof's layout decides which files a set ships
@@ -357,7 +358,9 @@ with zipfile.ZipFile(wheel) as z:
                 assert (proven or {}).get('sha256') == (wheel_indexes.get(prefix + MERGED_INDEX) or {}).get('sha256'), ('Built/wheel index differs', prefix)
     host_files = {m.rsplit('/', 1)[1] for m in host_extension_hashes}
     if host_files:
-        layouts.append(set_layout('host/', host_files, wheel_indexes, wheel_host_bindings())[0])
+        # the host list is the manifest's, read as wheel member paths (packaging/check_ext_lists.py holds this token)
+        host_names = [m.rsplit('/', 1)[1][:-len('.so')] for m in wheel_host_members()]
+        layouts.append(set_layout('host/', host_files, wheel_indexes, host_names)[0])
         checked.add('host/' + MERGED_INDEX)
         if 'host/' + MERGED_INDEX in wheel_indexes:
             proven = next((r for k, r in proven_indexes.items() if k.endswith('/host/' + MERGED_INDEX)), {})
