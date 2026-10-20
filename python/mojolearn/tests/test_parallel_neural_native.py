@@ -234,18 +234,21 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
         pids = [row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']]
     finally:
         primary = sys.exception()
+        cleanup_errors = []
         for active in (owner, replay):
             if active is not None:
                 try:
                     audit_native_call(active.close).assert_native()
                 except BaseException as error:
-                    if primary is None:
-                        raise
-                    primary.add_note('Child cleanup also failed: ' + repr(error))
+                    cleanup_errors.append(error)
         if primary is not None:
             primary.add_note('Full Samba worker diagnostics and audit reports: ' + str(tmp_path))
             for path in sorted(tmp_path.glob('*.stderr.log')):
                 primary.add_note(str(path) + '\n' + '\n'.join(path.read_text().splitlines()[-12:]))
+            for error in cleanup_errors:
+                primary.add_note('Child cleanup also failed: ' + repr(error))
+        elif cleanup_errors:
+            raise ExceptionGroup('Samba child cleanup failures; evidence: ' + str(tmp_path), cleanup_errors)
     assert len(pids) == 2
     for pid in pids:
         path = tmp_path / (str(pid) + '.json')
