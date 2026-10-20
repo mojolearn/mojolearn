@@ -173,6 +173,87 @@ print("digest", hashlib.sha256(proba.tobytes()).hexdigest()[:16])
 The last line prints a digest of the predicted probabilities. Run the script on an Apple, an NVIDIA and
 an AMD GPU: in `identical` mode the three digests are the same.
 
+## Second derivatives
+
+`backward(loss, create_graph=True)` records the gradient computation itself. Each gradient is then a
+tensor: `grad_tensor(h)` returns its handle, you can keep computing with it, and a second `backward` from
+a scalar built on it gives second derivatives. `grad(h)` still returns the last backward's gradient as an
+array.
+
+A Hessian-vector product by hand, then the same in one call:
+
+```python
+rng = np.random.default_rng(0)
+X = rng.standard_normal((64, 4), dtype=np.float32)
+Y = rng.standard_normal((64, 1), dtype=np.float32)
+W0 = rng.standard_normal((4, 1), dtype=np.float32)
+V = rng.standard_normal((4, 1), dtype=np.float32)
+
+with ops.Session(record=True) as s:
+    x, y = s.tensor(X), s.tensor(Y)
+    w = s.tensor(W0, requires_grad=True)
+    loss = s.mse(s.linear(x, w, activation="tanh"), y)
+
+    s.backward(loss, create_graph=True)   # the gradients are tensors now
+    g = s.grad_tensor(w)                  # dL/dw, differentiable
+    v = s.tensor(V)                       # the direction
+    s.backward(s.sum(s.mul(g, v)))        # a second backward
+    hv = s.grad(w)                        # H v, (4, 1)
+
+    (hv_handle,) = s.hvp(loss, [w], [v])  # the same product in one call
+    hv2 = s.numpy(hv_handle)
+```
+
+`hvp(loss, params, v)` takes one direction per parameter and returns one handle per parameter: the
+Hessian of the loss with respect to all the parameters together, times the stacked directions. Where
+the loss has no curvature (a parameter it depends on linearly) the result is zeros.
+
+`vjp(output, inputs, v)` gives `J^T v` for an output of any shape and a seed `v` of its shape, one handle
+per input; `create_graph=True` makes the results differentiable. `jvp(output, inputs, u)` gives `J u`,
+the derivative of `output` along one direction per input, as a handle of `output`'s shape.
+
+```python
+with ops.Session(record=True) as s:
+    x = s.tensor(X, requires_grad=True)
+    w = s.tensor(W0)
+    out = s.tanh(s.matmul(x, w))                       # (64, 1)
+    (jt_v,) = s.vjp(out, [x], s.full((64, 1), 1.0))   # (64, 4)
+    j_u = s.jvp(out, [x], [s.tensor(np.ones((64, 4), dtype=np.float32))])  # (64, 1)
+```
+
+### A physics-informed loss
+
+Derivatives of a network's output with respect to its input, differentiated again, train a network to
+satisfy a differential equation. Here `u(x)` is a small network of one input, fitted so that
+`u''(x) = -sin(x)`. The rows are independent, so the gradient of `sum(u)` with respect to `x` holds
+`du/dx` row by row, and the gradient of `sum(du/dx)` holds `d2u/dx2`:
+
+```python
+Xc = np.linspace(-3, 3, 128, dtype=np.float32).reshape(-1, 1)   # collocation points
+F = np.sin(Xc)
+
+with ops.Session(record=True) as s:
+    w1 = s.tensor(0.5 * rng.standard_normal((1, 16), dtype=np.float32), requires_grad=True)
+    b1 = s.tensor(np.zeros((1, 16), dtype=np.float32), requires_grad=True)
+    w2 = s.tensor(0.5 * rng.standard_normal((16, 1), dtype=np.float32), requires_grad=True)
+    x, f = s.tensor(Xc, requires_grad=True), s.tensor(F)
+    opt = s.optimizer("adam", lr=0.01)
+    for epoch in range(200):
+        u = s.matmul(s.linear(x, w1, b1, activation="tanh"), w2)   # (128, 1)
+        s.backward(s.sum(u), create_graph=True)
+        du = s.grad_tensor(x)                                        # du/dx per row
+        s.backward(s.sum(du), create_graph=True)
+        d2u = s.grad_tensor(x)                                       # d2u/dx2 per row
+        r = s.add(d2u, f)                                            # the residual u'' + sin(x)
+        s.backward(s.mean(s.mul(r, r)))                              # a third backward
+        s.step(opt, [w1, b1, w2])
+        s.reset()
+```
+
+Each recorded backward keeps its intermediate tensors until `reset`, and takes a few operations per
+recorded operation, so use `create_graph=True` only where you differentiate again. `layer_norm` has a
+first-order gradient only: a backward with `create_graph=True` through it raises an error that says so.
+
 ## Numeric modes
 
 Both entry points take `numeric_mode`: `Sequential(numeric_mode=...)` and
