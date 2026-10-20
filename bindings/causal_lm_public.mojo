@@ -33,10 +33,31 @@ def causal_lm_admit_binding(
 ) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entries = g[].bi.dict()
+    var requested_gpu = String(model.device) == "gpu"
+    var kind = String(model.kind)
+    var block_prefix = ("transformer" if kind == "transformer" else "mamba") if requested_gpu else "neural_host"
+    var primitive_prefix = "training" if requested_gpu else "neural_host"
+    var vendor = String(_native_function(block_binding, block_prefix + "_vendor")())
+    var primitive_vendor = String(_native_function(primitives, primitive_prefix + "_vendor")())
+    var mode = Int(py=_native_function(block_binding, block_prefix + "_numeric_mode")())
+    var primitive_mode = Int(py=_native_function(primitives, primitive_prefix + "_numeric_mode")())
+    if requested_gpu:
+        if vendor != "metal" and vendor != "cuda" and vendor != "hip":
+            raise Error("CausalLM: requested GPU execution but native block reports " + vendor)
+    elif vendor != "cpu":
+        raise Error("CausalLM: requested CPU execution but native block reports " + vendor)
+    if primitive_vendor != vendor or primitive_mode != mode:
+        raise Error("CausalLM: native block and model primitives differ in vendor or numeric mode")
+    if int15_binding is not None:
+        var packed_vendor = String(_native_function(int15_binding, "linalg_vendor")())
+        var packed_mode = Int(py=_native_function(int15_binding, "linalg_numeric_mode")())
+        if packed_vendor != vendor or packed_mode != mode:
+            raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
+    model._native_vendor = PythonObject(vendor)
+    model._native_numeric_mode = PythonObject(mode)
     entries["weight_names"] = g[].bi.object.__getattribute__(model._blocks[0], "_W_NAMES")
     for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:
         entries[name] = _native_function(primitives, name)
-    var kind = String(model.kind)
     if kind == "transformer":
         entries["forward"] = _native_function(block_binding, "transformer_forward")
         if Bool(py=g[].bi.hasattr(block_binding, "transformer_session_forward")):
