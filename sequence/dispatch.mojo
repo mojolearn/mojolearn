@@ -154,26 +154,17 @@ from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_spli
 from sequence.moe_backward import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
 from autograd.embedding_ops import OP_EMB_FIRST, OP_EMB_LAST, apply_embedding
 from autograd.cast_ops import OP_CAST_FIRST, OP_CAST_LAST, apply_cast
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 # lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo OP_RNC_*, 4100..4109)
 from autograd.rankn_ops import OP_RNC_FIRST, OP_RNC_LAST, apply_rankn_core
 # >>> lane ag-rankn-fold: rank-N broadcasts, axis reductions, max (4200..4219)
 from autograd.rankn_fold_ops import OP_RNF_FIRST, OP_RNF_LAST, apply_rankn_fold
 # <<< lane ag-rankn-fold
-=======
 # lane ag-rankn-bmm: the batched matrix product (docs/plans/AUTOGRAD_RANKN.md 2.3)
 from autograd.rankn_bmm_ops import OP_RNB_FIRST, OP_RNB_LAST, apply_rn_bmm
->>>>>>> origin/lane/ag-rankn-bmm
-=======
 # rank-N layout (lane ag-rankn-layout): the slab copy family, 4400..4409
 from autograd.rankn_layout_ops import OP_RNL_FIRST, OP_RNL_LAST, apply_rankn_layout
->>>>>>> origin/lane/ag-rankn-layout
-=======
 # ---- lane ag-rankn-conv (AUTOGRAD_RANKN.md 2.8): rank-4 conv2d and pools, 4500..4519
 from autograd.rankn_conv_ops import OP_RNV_FIRST, OP_RNV_LAST, apply_rankn_conv
->>>>>>> origin/lane/ag-rankn-conv
 
 
 @always_inline
@@ -378,9 +369,6 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_CAST_FIRST or OP_CELL_FWD_SCAN > OP_CAST_LAST) and (
         OP_CELL_BWD_SCAN < OP_CAST_FIRST or OP_CELL_BWD_SCAN > OP_CAST_LAST
     ), "cast opcode collides with recurrent scan"
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
     # ---- lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo
     # OP_RNC_*, 4100..4109; docs/plans/AUTOGRAD_RANKN.md section 7), above the
     # cast family and the higher-order plan's 3600..3619.
@@ -401,7 +389,6 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNF_FIRST or OP_CELL_BWD_SCAN > OP_RNF_LAST
     ), "rank-N fold opcode collides with recurrent scan"
     # <<< lane ag-rankn-fold
-=======
     # lane ag-rankn-bmm: the batched matrix product (autograd/rankn_bmm_ops.mojo
     # OP_RNB_*, 4300..4309), above every other autograd range.
     comptime assert OP_RNB_FIRST <= OP_RNB_LAST, "rank-N bmm opcode range is empty"
@@ -410,8 +397,6 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_RNB_FIRST or OP_CELL_FWD_SCAN > OP_RNB_LAST) and (
         OP_CELL_BWD_SCAN < OP_RNB_FIRST or OP_CELL_BWD_SCAN > OP_RNB_LAST
     ), "rank-N bmm opcode collides with recurrent scan"
->>>>>>> origin/lane/ag-rankn-bmm
-=======
     # ---- rank-N layout (lane ag-rankn-layout; autograd/rankn_layout_ops.mojo
     # OP_RNL_*, 4400..4409, docs/plans/AUTOGRAD_RANKN.md section 7) ----
     comptime assert OP_RNL_FIRST <= OP_RNL_LAST, "rank-N layout opcode range is empty"
@@ -421,8 +406,6 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNL_FIRST or OP_CELL_BWD_SCAN > OP_RNL_LAST
     ), "rank-N layout opcode collides with recurrent scan"
     # ---- end rank-N layout ----
->>>>>>> origin/lane/ag-rankn-layout
-=======
     # ---- lane ag-rankn-conv: the rank-4 conv2d / pool family (autograd/
     # rankn_conv_ops.mojo OP_RNV_*, 4500..4519), above every lower family.
     comptime assert OP_RNV_FIRST <= OP_RNV_LAST, "rank-N conv opcode range is empty"
@@ -432,7 +415,6 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNV_FIRST or OP_CELL_BWD_SCAN > OP_RNV_LAST
     ), "rank-N conv opcode collides with recurrent scan"
     # ---- end lane ag-rankn-conv
->>>>>>> origin/lane/ag-rankn-conv
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -475,9 +457,6 @@ def apply[OP: Int](t: Int, a: Args):
         apply_embedding[OP](t, a)
     elif OP >= OP_CAST_FIRST and OP <= OP_CAST_LAST:
         apply_cast[OP](t, a)
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
     elif OP >= OP_RNC_FIRST and OP <= OP_RNC_LAST:
         # lane ag-rankn-core: the rank-N view copy
         apply_rankn_core[OP](t, a)
@@ -485,21 +464,15 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP >= OP_RNF_FIRST and OP <= OP_RNF_LAST:
         apply_rankn_fold[OP](t, a)
     # <<< lane ag-rankn-fold
-=======
     elif OP >= OP_RNB_FIRST and OP <= OP_RNB_LAST:
         # lane ag-rankn-bmm: the batched matrix product
         apply_rn_bmm[OP](t, a)
->>>>>>> origin/lane/ag-rankn-bmm
-=======
     elif OP >= OP_RNL_FIRST and OP <= OP_RNL_LAST:
         # rank-N layout (lane ag-rankn-layout)
         apply_rankn_layout[OP](t, a)
->>>>>>> origin/lane/ag-rankn-layout
-=======
     elif OP >= OP_RNV_FIRST and OP <= OP_RNV_LAST:
         # lane ag-rankn-conv: rank-4 conv2d and pools
         apply_rankn_conv[OP](t, a)
->>>>>>> origin/lane/ag-rankn-conv
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
