@@ -1414,6 +1414,12 @@ def assemble_macos(plan, whl, dest, say=print):
         for r in plan_rows(plan, MACOS, "REUSE"):
             want = record.get(r["archive_path"])
             if want is None:
+                # A merged wheel (MOJOLEARN_MERGED_BINDINGS=1) ships one file per
+                # group, so no member has published bytes of its own to reuse.
+                if any(n.endswith("/_mojolearn_merged.json") for n in record):
+                    raise SystemExit(f"release_reuse: the published macOS wheel {Path(whl).name} ships merged "
+                                     f"bindings, so {r['archive_path']} has no bytes of its own to reuse; build "
+                                     "the macOS wheel in the merged layout (the default) or without a reuse plan")
                 raise SystemExit(f"release_reuse: {r['archive_path']} is not in the published macOS wheel's RECORD")
             # a plan row carries archive_path, not package_rel (Binding.package_rel
             # is "python/" + archive_path, where build_release_wheel.sh writes it);
