@@ -15,6 +15,7 @@ from std.python._cpython import PyObjectPtr
 from autograd.python_errors import graph_python_error
 from autograd.ops_frontend import ops_session_call_py
 from autograd.session_frontend import ops_session_initialize_py
+from autograd.session_lifetime import SessionLifetime, ops_session_create_py
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -180,6 +181,10 @@ def ops_load_weights_binding(sid: PythonObject, recs: PythonObject, names: Pytho
 # between calls, tensors by handle.
 def ops_open_binding(record: PythonObject) raises -> PythonObject:
     return ops_open_py[HostExec, OPS_HOST](HostExec(), record)
+
+
+def ops_session_create_binding(record: PythonObject) raises -> PythonObject:
+    return ops_session_create_py[HostExec, OPS_HOST](HostExec(), record)
 
 
 def ops_close_binding(sid: PythonObject) raises -> PythonObject:
@@ -716,6 +721,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[model_import_params_binding]("model_import_params")
         m.def_function[ops_load_weights_binding]("ops_load_weights")
         # the operation session (autograd/ops_api.mojo)
+        _ = m.add_type[SessionLifetime[HostExec, OPS_HOST]]("_OpsSessionLifetime")
+        m.def_function[ops_session_create_binding]("ops_session_create")
         m.def_function[ops_open_binding]("ops_open")
         m.def_function[ops_close_binding]("ops_close")
         m.def_function[ops_upload_binding]("ops_upload")

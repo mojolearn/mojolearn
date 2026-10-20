@@ -392,9 +392,16 @@ def saved_component_roundtrip():
 
 def native_session_boundary():
     import numpy as np
+    import operator
     from . import ops
     a = np.arange(6, dtype=np.float32).reshape(2, 3)
     _refuses(lambda: _invoke(ops.Session, numeric_mode="invalid"), "numeric_mode", ValueError)
+    held = [_invoke(ops.Session)]
+    released_sid = held[0]._id
+    released_tensor = held[0].tensor([[1.0]])
+    native_shape = held[0]._b.ops_shape
+    _invoke(operator.delitem, held, 0)
+    _refuses(lambda: _invoke(native_shape, released_sid, released_tensor), "session")
     with _invoke(ops.Session, numeric_mode=" IDENTICAL ") as s:
         assert _invoke(s.__enter__) is s
         x = _invoke(s.tensor, a.tolist())
