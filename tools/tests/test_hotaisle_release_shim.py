@@ -246,7 +246,8 @@ BOXBIN = {
 
 
 def make_wheel(directory, commit=COMMIT_W):
-    path = Path(directory) / "mojolearn-0.0.0-py3-none-manylinux_2_35_x86_64.whl"
+    # the Linux core, mojolearn-core (2026-10-20): release_wheel_smoke.sh smokes mojolearn_core-* only
+    path = Path(directory) / "mojolearn_core-0.0.0-py3-none-manylinux_2_35_x86_64.whl"
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("mojolearn/identity_columns/COMMIT", commit + "\n")
         z.writestr("mojolearn/verify_reference/models/models.json", '{"models": []}')
@@ -391,8 +392,8 @@ def test_column_on_a_1x_vm(world):
     box = str(world.tmp / "box" / "wheel-smoke")
     assert all(x == "true" or x.startswith("sudo -n -H bash -c '") for x in cmds), cmds
     flat = "\n".join(cmds)
-    order = ["rm -rf %s && mkdir -p %s" % (box, box), "cat > %s/mojolearn-0.0.0-py3-none-manylinux_2_35_x86_64.whl" % box,
-             "cat > %s/qualify_verifier_wheel.py" % box, "cat > %s/box.sh" % box, "sha256sum mojolearn-0.0.0",
+    order = ["rm -rf %s && mkdir -p %s" % (box, box), "cat > %s/mojolearn_core-0.0.0-py3-none-manylinux_2_35_x86_64.whl" % box,
+             "cat > %s/qualify_verifier_wheel.py" % box, "cat > %s/box.sh" % box, "sha256sum mojolearn_core-0.0.0",
              "nohup bash %s/box.sh" % box, "cat %s/box.done" % box, "tar czf - box.txt"]
     pos = [flat.index(o) for o in order]
     assert pos == sorted(pos), order

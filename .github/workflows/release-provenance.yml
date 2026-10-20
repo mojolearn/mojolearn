@@ -56,10 +56,13 @@
 # `pull_request`: a pull request must never reach a job holding
 # `id-token: write`.
 
-# GPU projects come from python/mojolearn/gpu_plugins.py. Ordinary installs
-# retain both vendor names as aggregates and install all native payloads.
-# Publish native payloads FIRST, vendor aggregates SECOND, the core LAST.
-# The aggregate/core jobs also check their exact dependencies on the index,
+# GPU projects come from python/mojolearn/gpu_plugins.py. On Linux (2026-10-20)
+# mojolearn-core requires no vendor, each vendor requires mojolearn-core, and
+# the file-free Linux `mojolearn` requires the core and both vendors.
+# Publish mojolearn-core FIRST (environment pypi-core / testpypi-core), native
+# payloads SECOND, vendor packages THIRD, the `mojolearn` project LAST (the
+# `pypi` / `testpypi` environment: the macOS wheel and the Linux meta wheel).
+# Every job after the core checks its exact dependencies on the index,
 # including when the release uploads each project in a separate dispatch.
 # The NVIDIA PTX dependency is a regular payload and publishes before NVIDIA.
 # Every project uses its own Trusted Publisher environment: pypi[-<profile>]
@@ -193,6 +196,8 @@ jobs:
       # The split Linux plugins staged with the core, as a JSON list of
       # plugin names ("amd", "nvidia"); [] for a combined wheel or none.
       linux_plugins: ${{ steps.linux.outputs.plugins || '[]' }}
+      # 'true' when a mojolearn-core wheel is staged (it publishes first).
+      linux_core: ${{ steps.linux.outputs.core || 'false' }}
       linux_payloads: ${{ steps.linux.outputs.payloads || '[]' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -432,6 +437,7 @@ jobs:
           if [ ! -d "$DIR" ] || [ -z "$(ls -A "$DIR"/*.whl 2>/dev/null || true)" ]; then
             echo "no Linux wheel staged at $DIR; this is a macOS-only release"
             echo "staged=none" >> "$GITHUB_OUTPUT"
+            echo "core=false" >> "$GITHUB_OUTPUT"
             echo "plugins=[]" >> "$GITHUB_OUTPUT"
             echo "payloads=[]" >> "$GITHUB_OUTPUT"
             exit 0
@@ -451,7 +457,7 @@ jobs:
             esac
             staged="$staged $base"
           done
-          CORE=$(ls -1 "$DIR"/mojolearn-"$v_toml"-*.whl)
+          CORE=$(ls -1 "$DIR"/mojolearn_core-"$v_toml"-*.whl)
           split=1
           python3 - "$DIR" <<'PY'
           import pathlib, sys
@@ -623,13 +629,15 @@ jobs:
 
   publish:
     name: Publish to ${{ inputs.publish }}
-    # AFTER the plugins (the split core requires both): only when every plugin
-    # upload succeeded, or the build staged no plugin at all.
-    needs: [build, cpu_certification, publish_payloads, publish_plugins]
+    # LAST (the Linux `mojolearn` wheel requires the core and both vendors):
+    # only when every core and plugin upload succeeded, or the build staged none.
+    needs: [build, cpu_certification, publish_core, publish_payloads, publish_plugins]
     if: >-
       always() && !cancelled() &&
       inputs.publish != 'none' && inputs.alpha_candidate_tag == '' && inputs.validation_profile == 'full' &&
       needs.build.result == 'success' && needs.cpu_certification.result == 'success' &&
+      (needs.publish_core.result == 'success' ||
+       (needs.publish_core.result == 'skipped' && needs.build.outputs.linux_core != 'true')) &&
       (needs.publish_payloads.result == 'success' ||
        (needs.publish_payloads.result == 'skipped' && needs.build.outputs.linux_payloads == '[]')) &&
       (needs.publish_plugins.result == 'success' ||
@@ -709,8 +717,8 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only dist/*.whl
 
       # THIS JOB UPLOADS THE `mojolearn` PROJECT ONLY: the macOS wheel and the
-      # Linux core (or the combined wheel). A split plugin belongs to its own
-      # project and is uploaded by `publish_plugins`, BEFORE this job.
+      # file-free Linux `mojolearn`. mojolearn-core and each split plugin
+      # belong to their own projects and are uploaded BEFORE this job.
       - name: Keep only the mojolearn project's wheels
         run: |
           set -euo pipefail
@@ -718,7 +726,7 @@ jobs:
           mv dist/mojolearn-*.whl upload/
           ls -la upload
 
-      - name: The split core publishes last, after both plugins are on the index
+      - name: The mojolearn project publishes last, after its dependencies are on the index
         env:
           TARGET: ${{ inputs.publish }}
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
@@ -734,11 +742,68 @@ jobs:
           # up believed to be the same one.
           skip-existing: false
 
+  publish_core:
+    name: Publish mojolearn-core to ${{ inputs.publish }}
+    # FIRST: every vendor package requires mojolearn-core at its version.
+    needs: [build, cpu_certification]
+    if: inputs.publish != 'none' && needs.build.outputs.linux_core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # ITS OWN TRUSTED PUBLISHER ENVIRONMENT: `pypi-core` (`testpypi-core`).
+    environment:
+      name: ${{ inputs.publish }}-core
+      url: ${{ inputs.publish == 'pypi' && 'https://pypi.org/p/mojolearn-core' || 'https://test.pypi.org/project/mojolearn-core/' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Download the wheels that were built
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mojolearn-wheel
+          path: dist
+      - name: The core's wheel, exactly as the build job recorded it
+        env:
+          EXPECTED_MANIFEST: ${{ needs.build.outputs.wheel_manifest }}
+        run: |
+          set -euo pipefail
+          python3 tools/gpu_release_projects.py dist
+          WHEEL_PREFIX=$(python3 tools/gpu_release_projects.py --wheel-prefix core)
+          printf '%s\n' "$EXPECTED_MANIFEST" | sed '/^$/d' | grep -E "  ${WHEEL_PREFIX}-[^ ]+\.whl$" > manifest.txt
+          test "$(wc -l < manifest.txt | tr -d ' ')" = 1 || {
+            echo "::error::the build job recorded no single ${WHEEL_PREFIX} wheel"; exit 1; }
+          mkdir -p upload
+          mv dist/"${WHEEL_PREFIX}"-*.whl upload/
+          test "$(find upload -name '*.whl' | wc -l | tr -d ' ')" = 1 || {
+            echo "::error::the artifact holds other than one ${WHEEL_PREFIX} wheel"; exit 1; }
+          ( cd upload && sha256sum -c ../manifest.txt ) || {
+            echo "::error::${WHEEL_PREFIX} does not match the digest the build job recorded"; exit 1; }
+          rm -f manifest.txt
+      - name: Reject platform math in final wheel bytes
+        run: |
+          python3 -m venv "$RUNNER_TEMP/math-audit"
+          "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
+          "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          packages-dir: upload/
+          print-hash: true
+          skip-existing: false
+
   publish_payloads:
     name: Publish mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
-    # FIRST: vendor aggregates and core wait for native payload uploads.
-    needs: [build, cpu_certification]
-    if: inputs.publish != 'none' && needs.build.outputs.linux_payloads != '[]'
+    # SECOND: after mojolearn-core; vendor packages wait for native payload uploads.
+    needs: [build, cpu_certification, publish_core]
+    if: >-
+      always() && !cancelled() && inputs.publish != 'none' &&
+      needs.build.result == 'success' && needs.build.outputs.linux_payloads != '[]' &&
+      (needs.publish_core.result == 'success' ||
+       (needs.publish_core.result == 'skipped' && needs.build.outputs.linux_core != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -798,12 +863,14 @@ jobs:
 
   publish_plugins:
     name: Publish mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
-    # SECOND: native payload uploads finish before vendor aggregates.
-    needs: [build, cpu_certification, publish_payloads]
+    # THIRD: mojolearn-core and native payload uploads finish before vendor packages.
+    needs: [build, cpu_certification, publish_core, publish_payloads]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' &&
       needs.build.result == 'success' && needs.cpu_certification.result == 'success' &&
       needs.build.outputs.linux_plugins != '[]' &&
+      (needs.publish_core.result == 'success' ||
+       (needs.publish_core.result == 'skipped' && needs.build.outputs.linux_core != 'true')) &&
       (needs.publish_payloads.result == 'success' ||
        (needs.publish_payloads.result == 'skipped' && needs.build.outputs.linux_payloads == '[]'))
     runs-on: ubuntu-latest
@@ -872,9 +939,11 @@ jobs:
     needs: validate_inputs
     outputs:
       linux_qualification: ${{ steps.linux_qualification.outputs.required }}
-      # Which PyPI projects this candidate carries: `core` is true when a
-      # mojolearn-*.whl (macOS, the combined Linux wheel or the split core)
-      # is in it; `plugins` is the JSON list of split plugins ("amd", "nvidia").
+      # Which PyPI projects this candidate carries: `mojolearn` is true when a
+      # mojolearn-*.whl (macOS, or the file-free Linux wheel) is in it, `core`
+      # when a mojolearn_core-*.whl is; `plugins` is the JSON list of split
+      # plugins ("amd", "nvidia").
+      mojolearn: ${{ steps.projects.outputs.mojolearn }}
       core: ${{ steps.projects.outputs.core }}
       plugins: ${{ steps.projects.outputs.plugins }}
       payloads: ${{ steps.projects.outputs.payloads }}
@@ -998,12 +1067,14 @@ jobs:
 
   publish_alpha:
     name: Publish alpha API artifacts to ${{ inputs.publish }}
-    # AFTER the candidate's plugins, if it carries any (the split core
-    # requires both); a failed plugin upload holds the core.
-    needs: [alpha_stage, cpu_certification, publish_alpha_payloads, publish_alpha_plugins]
+    # LAST: after the candidate's core and plugins, if it carries any (the
+    # Linux `mojolearn` requires them); a failed upload holds it.
+    needs: [alpha_stage, cpu_certification, publish_alpha_core, publish_alpha_payloads, publish_alpha_plugins]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
-      needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.core == 'true' &&
+      needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.mojolearn == 'true' &&
+      (needs.publish_alpha_core.result == 'success' ||
+       (needs.publish_alpha_core.result == 'skipped' && needs.alpha_stage.outputs.core != 'true')) &&
       (needs.publish_alpha_payloads.result == 'success' ||
        (needs.publish_alpha_payloads.result == 'skipped' && needs.alpha_stage.outputs.payloads == '[]')) &&
       (needs.publish_alpha_plugins.result == 'success' ||
@@ -1066,8 +1137,8 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only dist/*.whl
 
-      # The mojolearn project's wheels only; a split plugin in the same
-      # candidate was uploaded by publish_alpha_plugins, BEFORE this job.
+      # The mojolearn project's wheels only; mojolearn-core and a split plugin
+      # in the same candidate were uploaded BEFORE this job.
       - name: Keep only the mojolearn project's wheels
         run: |
           set -euo pipefail
@@ -1075,7 +1146,7 @@ jobs:
           mv dist/mojolearn-*.whl upload/
           ls -la upload
 
-      - name: The split core publishes last, after both plugins are on the index
+      - name: The mojolearn project publishes last, after its dependencies are on the index
         env:
           TARGET: ${{ inputs.publish }}
         run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
@@ -1088,13 +1159,97 @@ jobs:
           print-hash: true
           skip-existing: false
 
-  publish_alpha_payloads:
-    name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
-    # FIRST: vendor aggregates and core wait for native payload uploads.
+  publish_alpha_core:
+    name: Publish alpha mojolearn-core to ${{ inputs.publish }}
+    # FIRST: every vendor package (and the Linux mojolearn) requires mojolearn-core.
     needs: [alpha_stage, cpu_certification]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
+      needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.core == 'true' &&
+      ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
+       (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # ITS OWN TRUSTED PUBLISHER ENVIRONMENT: `pypi-core` (`testpypi-core`).
+    environment:
+      name: ${{ inputs.publish }}-core
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mojolearn-alpha-wheel
+          path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: needs.alpha_stage.outputs.linux_qualification == 'true'
+        with:
+          name: mojolearn-alpha-linux-qualification
+          path: qualification
+      - name: Recheck exact alpha bytes immediately before publishing
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+          VALIDATION_PROFILE: ${{ inputs.validation_profile }}
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
+          LIGHT_PLATFORM: ${{ inputs.light_platform }}
+        run: |
+          set -euo pipefail
+          cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+          qualification_args=()
+          if [ "${VALIDATION_PROFILE:-}" = preverified ]; then
+            test -n "$ARTIFACT_SOURCE_COMMIT"
+            qualification_args+=(--preverified-source "$ARTIFACT_SOURCE_COMMIT")
+          fi
+          if [ -f qualification/linux-qualification.tar.gz ]; then
+            qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
+          fi
+          if [ "$VALIDATION_PROFILE" = verifier-patch ] || [ "$VALIDATION_PROFILE" = python-patch ]; then
+            python3 packaging/verifier_patch.py dist ${{ inputs.validation_profile == 'python-patch' && '--allow-label-inverse-fix' || '' }} --cache "$RUNNER_TEMP/verifier-base" \
+              --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" \
+              --manifest-sha256 "$EXPECTED_MANIFEST_SHA"
+          else
+            timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+              dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          fi
+          if [ "$VALIDATION_PROFILE" = light ]; then
+            python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
+          fi
+          rm dist/alpha-manifest.json
+          rm -f dist/light-smoke-*.json
+      - name: Keep only the core's wheel
+        run: |
+          set -euo pipefail
+          python3 tools/gpu_release_projects.py dist
+          WHEEL_PREFIX=$(python3 tools/gpu_release_projects.py --wheel-prefix core)
+          mkdir -p upload
+          mv dist/"${WHEEL_PREFIX}"-*.whl upload/
+          test "$(find upload -name '*.whl' | wc -l | tr -d ' ')" = 1 || {
+            echo "::error::the candidate holds other than one ${WHEEL_PREFIX} wheel"; exit 1; }
+      - name: Reject platform math in final wheel bytes
+        run: |
+          python3 -m venv "$RUNNER_TEMP/math-audit"
+          "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
+          "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Publish exact alpha core wheel bytes with their scoped admission
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          packages-dir: upload/
+          print-hash: true
+          skip-existing: false
+
+  publish_alpha_payloads:
+    name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
+    # SECOND: after mojolearn-core; vendor packages wait for native payload uploads.
+    needs: [alpha_stage, cpu_certification, publish_alpha_core]
+    if: >-
+      always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.payloads != '[]' &&
+      (needs.publish_alpha_core.result == 'success' ||
+       (needs.publish_alpha_core.result == 'skipped' && needs.alpha_stage.outputs.core != 'true')) &&
       ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
     runs-on: ubuntu-latest
@@ -1178,12 +1333,15 @@ jobs:
           skip-existing: false
   publish_alpha_plugins:
     name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
-    # Native vendor packages publish before the core. Architecture sets stay
-    # together in each vendor wheel; the PTX dependency has already published.
-    needs: [alpha_stage, cpu_certification, publish_alpha_payloads]
+    # THIRD: vendor packages publish after mojolearn-core and the PTX
+    # dependency, and before the Linux mojolearn. Architecture sets stay
+    # together in each vendor wheel.
+    needs: [alpha_stage, cpu_certification, publish_alpha_core, publish_alpha_payloads]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.plugins != '[]' &&
+      (needs.publish_alpha_core.result == 'success' ||
+       (needs.publish_alpha_core.result == 'skipped' && needs.alpha_stage.outputs.core != 'true')) &&
       (needs.publish_alpha_payloads.result == 'success' ||
        (needs.publish_alpha_payloads.result == 'skipped' && needs.alpha_stage.outputs.payloads == '[]')) &&
       ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||

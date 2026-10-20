@@ -291,6 +291,16 @@ class CandidateWheelTests(unittest.TestCase):
             rr.published_wheel(self.prev, "linux", self.ev)
         self.assertIn("does not match", str(cm.exception))
 
+    def test_a_mojolearn_core_wheel_downloads_from_the_mojolearn_core_project(self):
+        # 2026-10-20: the Linux core is the mojolearn-core project (mojolearn_core-* wheels)
+        self.name = "mojolearn_core-0.8.56-py3-none-manylinux_2_35_x86_64.whl"
+        prev = dict(self.prev, version="0.8.56", build_dir=None, linux=dict(wheel=self.name, sha256=sha(self.data)))
+        urlopen, calls = self.fake_index(self.data)
+        with mock.patch.object(rr.urllib.request, "urlopen", urlopen):
+            got = rr.published_wheel(prev, "linux", self.ev)
+        self.assertEqual(calls[0], "https://test.pypi.org/pypi/mojolearn-core/0.8.56/json")
+        self.assertEqual(got.name, self.name)
+
     def test_a_pypi_record_still_downloads_from_pypi(self):
         urlopen, calls = self.fake_index(self.data)
         prev = dict(self.prev, channel="pypi", build_dir=None)

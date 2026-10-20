@@ -52,6 +52,7 @@ PRESENCE_ONLY_ENVIRONMENT_KEYS = (
 NUMERIC_TIERS = ("fast", "identical")
 NATIVE_DISTRIBUTIONS = (
     "mojolearn",
+    "mojolearn-core",
     "mojolearn-nvidia",
     "mojolearn-amd",
 )
@@ -397,6 +398,7 @@ def _summary(report: dict[str, Any]) -> str:
         "platform: {system} {release} {machine}".format(**report["platform"]),
         f"python: {report['platform']['python_version']}",
         f"mojolearn: {versions.get('mojolearn') or 'not installed'}",
+        f"mojolearn-core: {versions.get('mojolearn-core') or 'not installed'}",
         f"mojolearn-nvidia: {versions.get('mojolearn-nvidia') or 'not installed'}",
         f"mojolearn-amd: {versions.get('mojolearn-amd') or 'not installed'}",
         "GPU architecture sets installed: {}".format(

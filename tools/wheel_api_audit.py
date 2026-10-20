@@ -199,6 +199,19 @@ def split_audit(wheels):
             if sorted(pins) != sorted(plugins.core_requirements(version)):
                 problems.append(f'{wheel.name}: core GPU dependency pins disagree with the package registry')
             marker_name, expected = plugins.CORE_MARKER, plugins.core_marker(version)
+        elif name == plugins.META_DISTRIBUTION:
+            # THE LINUX `mojolearn` WHEEL (2026-10-20): metadata only, requiring
+            # exactly the core and both vendors at its version.
+            row['role'] = plugins.META_PROFILE
+            if not wheel.name.startswith(f"{plugins.META_WHEEL_NAME}-{version}-"):
+                problems.append(f'{wheel.name}: filename differs from package metadata')
+            if payload:
+                problems.append(f'{wheel.name}: the mojolearn meta wheel carries files, e.g. {payload[0]}')
+            if requires != plugins.meta_requirements(version):
+                problems.append(f'{wheel.name}: Requires-Dist differs from the core and both vendors at {version}')
+            if metadata.get_all('Provides-Extra', []):
+                problems.append(f'{wheel.name}: the mojolearn meta wheel must not declare extras')
+            marker_name, expected = plugins.PLUGIN_MARKER, plugins.meta_marker(version)
         elif name in packages:
             package = packages[name]
             profile = package['profile']
@@ -320,13 +333,13 @@ def _index_files(index, project, version, timeout=20):
 
 
 def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
-    """THE CORE PUBLISHES LAST (2026-09-26). The split Linux core requires
-    mojolearn-nvidia==<v> and mojolearn-amd==<v>, so an index serving the core
-    before both plugins would hand every `pip install mojolearn` an
-    unresolvable requirement. For each split core among `wheels` (one whose
-    .dist-info carries gpu_plugins.json), every plugin at the core's version
-    must already be on `index` ('pypi' or 'testpypi'). Returns the problems;
-    empty is the pass. Wheels other than a split core need nothing.
+    """DEPENDENCIES PUBLISH FIRST (2026-10-20). mojolearn-core requires no
+    vendor; each vendor requires mojolearn-core (and mojolearn-nvidia its PTX
+    package); the Linux `mojolearn` wheel requires the core and both vendors.
+    For each such wheel among `wheels`, every one of its mojolearn
+    requirements at its version must already be on `index` ('pypi' or
+    'testpypi'), so the index never serves an unresolvable requirement.
+    Returns the problems; empty is the pass.
     `files(index, project, version)` stands in for the index in tests; the
     lookup is retried `attempts` times, the index may still be propagating an
     upload made minutes earlier."""
@@ -347,15 +360,17 @@ def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
         packages = {r['distribution']: r for r in plugins.distribution_rows()}
         if name == plugins.CORE_DISTRIBUTION and dist + '/' + plugins.CORE_MARKER in read:
             required = plugins.core_requirements(version)
+        elif name == plugins.META_DISTRIBUTION and dist + '/' + plugins.PLUGIN_MARKER in read:
+            required = plugins.meta_requirements(version)
         elif name in packages:
             required = plugins.package_requirements(packages[name]['profile'], version)
         else:
             continue
+        wheel_names = {r['distribution']: r['wheel_name'] for r in packages.values()}
+        wheel_names[plugins.CORE_DISTRIBUTION] = plugins.CORE_WHEEL_NAME
         for requirement in required:
             dependency = requirement.split('==', 1)[0]
-            if dependency == plugins.CORE_DISTRIBUTION:
-                continue  # Payloads/aggregates precede the core that pins them.
-            row = packages[dependency]
+            row = dict(distribution=dependency, wheel_name=wheel_names[dependency])
             prefix = f'{row["wheel_name"]}-{version}-'
             for attempt in range(attempts):
                 if any(n.startswith(prefix) and n.endswith('.whl') for n in files(index, row['distribution'], version)):
@@ -364,7 +379,7 @@ def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
                     sleep(30)
             else:
                 problems.append(f'{wheel.name}: {row["distribution"]}=={version} is not on {index}; the package '
-                                f'requires it and publishes only after its GPU dependencies')
+                                f'requires it and publishes only after its dependencies')
     return problems
 
 
@@ -378,14 +393,14 @@ def main():
                         help='the wheels are split Linux core, vendor bundles, or experimental payloads: '
                              'run split_audit over all and the API audit over the core alone')
     parser.add_argument('--plugins-on-index', choices=sorted(INDEX_JSON),
-                        help='require each core exact vendor dependencies on the selected index')
+                        help="require each wheel's exact mojolearn dependencies on the selected index")
     args = parser.parse_args()
     if args.plugins_on_index:
         problems = plugins_on_index(args.wheels, args.plugins_on_index)
         for problem in problems:
             print('::error::' + problem)
         if not problems:
-            print(f'GPU dependencies of the core are available on {args.plugins_on_index}')
+            print(f'the mojolearn dependencies of every wheel are available on {args.plugins_on_index}')
         return int(bool(problems))
     if args.split:
         split = split_audit(args.wheels)

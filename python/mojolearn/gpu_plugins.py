@@ -2,7 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Linux vendor distributions and architecture file ownership.
 
-The core pins mojolearn-nvidia and mojolearn-amd automatically. Each vendor
+Linux ships `mojolearn-core` (the Python package, host bindings and runtime;
+no vendor dependency), `mojolearn-nvidia` and `mojolearn-amd` (each requires
+mojolearn-core at its version), and `mojolearn`, a file-free wheel that
+requires all three, so `pip install mojolearn` installs everything and
+`pip install mojolearn-nvidia` installs the core plus NVIDIA only (Andrew
+2026-10-20). macOS keeps the one complete `mojolearn` wheel. Each vendor
 wheel contains its registered architecture sets; architecture selection
 happens in the loader. mojolearn-nvidia requires mojolearn-nvidia-ptx at
 the same version. The PTX package owns cuda_ptx/sm_80, and the NVIDIA
@@ -133,9 +138,35 @@ def installed_member(arcname):
     return "/".join(parts)
 
 
-#: The core distribution, and the name of the profile that packs it.
-CORE_DISTRIBUTION = "mojolearn"
+#: The core distribution, and the name of the profile that packs it. Since
+#: 2026-10-20 the Linux core is its own PyPI project, `mojolearn-core`; the
+#: import name stays `mojolearn`. It requires no vendor package.
+CORE_DISTRIBUTION = "mojolearn-core"
+CORE_WHEEL_NAME = "mojolearn_core"
 CORE_PROFILE = "core-linux"
+#: The Linux `mojolearn` wheel: no files, only requirements on the core and
+#: both vendors at its version, so `pip install mojolearn` installs all.
+#: macOS keeps `mojolearn` as its one complete wheel.
+META_DISTRIBUTION = "mojolearn"
+META_WHEEL_NAME = "mojolearn"
+META_PROFILE = "meta-linux"
+#: Every distribution that can own the installed `mojolearn` package files:
+#: the Linux core, else the macOS (or source) `mojolearn`.
+PACKAGE_DISTRIBUTIONS = (CORE_DISTRIBUTION, META_DISTRIBUTION)
+
+
+def package_distribution():
+    """The installed distribution that owns the `mojolearn` package files
+    (mojolearn-core on Linux, mojolearn on macOS), or None."""
+    from importlib import metadata
+    for name in PACKAGE_DISTRIBUTIONS:  # glue: two candidate distribution names
+        try:
+            dist = metadata.distribution(name)
+        except metadata.PackageNotFoundError:
+            continue
+        if name != META_DISTRIBUTION or not dist.read_text(PLUGIN_MARKER):  # the Linux meta wheel owns no files
+            return dist
+    return None
 
 #: A file in the core's .dist-info that says "this install is the split
 #: core; its GPU sets come from plugins". Its absence means the old combined
@@ -183,19 +214,33 @@ def member_vendor(arcname):
 
 
 def core_requirements(version):
-    """The Linux core's Requires-Dist values on its GPU plugins, in table
-    order: every plugin, at the core's own version exactly. No environment
-    marker: the split core is a manylinux x86_64 wheel only, and a
-    `sys_platform` marker is evaluated against the RESOLVING interpreter, so
-    `pip download --platform manylinux...` from a Mac would skip both."""
-    return [f"{row['distribution']}=={version}" for row in PLUGINS.values()]  # glue: one row per GPU vendor
+    """The Linux core's Requires-Dist values on GPU packages: none. Each
+    vendor package requires the core; the core requires no vendor, so the
+    core alone, core + NVIDIA, core + AMD and all of them are each a valid
+    install (2026-10-20)."""
+    return []
 
 
-def reinstall_command(version=None):
-    """The pip command that repairs an incomplete split install: the core at
-    this version, which brings both plugins through its exact requirements."""
+def meta_requirements(version):
+    """The Linux `mojolearn` wheel's Requires-Dist values: the core and every
+    vendor, at this version exactly. No environment marker: the meta wheel is
+    a manylinux x86_64 wheel only, and a `sys_platform` marker is evaluated
+    against the RESOLVING interpreter, so `pip download --platform
+    manylinux...` from a Mac would skip them."""
+    return [f"{CORE_DISTRIBUTION}=={version}"] + [
+        f"{row['distribution']}=={version}" for row in PLUGINS.values()]  # glue: one row per GPU vendor
+
+
+def install_command(distribution, version=None, reinstall=False):
+    """The pip command that installs `distribution` at `version`."""
     pin = f"=={version}" if version else ""
-    return f'pip install --force-reinstall "{CORE_DISTRIBUTION}{pin}"'
+    return f'pip install {"--force-reinstall " if reinstall else ""}"{distribution}{pin}"'
+
+
+def reinstall_command(version=None, distribution=CORE_DISTRIBUTION):
+    """The pip command that repairs a broken install of `distribution`
+    (the core by default) at this version."""
+    return install_command(distribution, version, reinstall=True)
 
 
 def core_marker(version):
@@ -229,6 +274,8 @@ def plugin_marker(vendor, version, arches, bundled_ptx=None):
 def package_requirements(profile, version):
     if profile == CORE_PROFILE:
         return core_requirements(version)
+    if profile == META_PROFILE:
+        return meta_requirements(version)
     row = package(profile)
     dependencies = [f"{CORE_DISTRIBUTION}=={version}"]
     if row["role"] == "vendor":
@@ -236,7 +283,19 @@ def package_requirements(profile, version):
     return dependencies
 
 
+def meta_marker(version):
+    """The Linux `mojolearn` wheel's gpu_plugin.json: an aggregate (no files,
+    only requirements), the role packaging/linux/audit.sh and
+    packaging/portable_math/wheel.py admit without an ELF."""
+    return dict(schema=PLUGIN_SCHEMA, role="aggregate", distribution=META_DISTRIBUTION,
+                version=version, requires=meta_requirements(version))
+
+
 def package_marker(profile, version, arches=(), bundled_ptx=None):
+    if profile == META_PROFILE:
+        if bundled_ptx is not None or arches:
+            raise ValueError("the mojolearn meta wheel carries no files")
+        return meta_marker(version)
     if profile == CORE_PROFILE:
         if bundled_ptx is not None:
             raise ValueError("only the NVIDIA vendor package carries a PTX slot")

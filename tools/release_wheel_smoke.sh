@@ -88,13 +88,12 @@
 #                        release, and the CPU column too when it ran one.
 #   --cpu-column FILE    the same as --ref-column FILE (kept for old command lines).
 #   --plugin WHEEL       THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py):
-#                        <wheel> is then the core `mojolearn` and WHEEL a plugin of
+#                        <wheel> is then the core `mojolearn_core-*` and WHEEL a plugin of
 #                        the same version (mojolearn_nvidia-* or mojolearn_amd-*).
 #                        REPEATABLE, one per plugin, and one of them must be the
-#                        plugin of this --vendor. The core REQUIRES both plugins at
-#                        its version (`pip install mojolearn` installs all three),
-#                        so tools/release.py passes both: the box installs exactly
-#                        what a user gets. All are shipped, sha256-checked on the
+#                        plugin of this --vendor. `pip install mojolearn` installs
+#                        the core and every plugin, so tools/release.py passes them
+#                        all: the box installs exactly what a user gets. All are shipped, sha256-checked on the
 #                        box and installed together, by the smoke and by the
 #                        column; the receipt names every plugin and its sha256.
 #                        With a plugin the expanded smoke runs on hip too, so each
@@ -319,7 +318,7 @@ else
 [ -z "$IDX_VERSION" ] || die "--version goes with --from-index (a local wheel carries its own version)"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "no wheel file given ($WHEEL)"
 WHEEL=$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")
-case "$(basename "$WHEEL")" in mojolearn-*-manylinux*_x86_64.whl) ;; *) die "$(basename "$WHEEL") is not a final manylinux x86_64 mojolearn wheel (smoke the repaired, stripped one)" ;; esac
+case "$(basename "$WHEEL")" in mojolearn_core-*-manylinux*_x86_64.whl) ;; *) die "$(basename "$WHEEL") is not a final manylinux x86_64 mojolearn wheel (smoke the repaired, stripped one)" ;; esac
 printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$' || die "--expected-source-commit must be the full 40-hex commit"
 fi
 for _n in "$LEASE" "$SMOKE_SECONDS"; do printf '%s' "$_n" | grep -Eq '^[0-9]+$' || die "'$_n' is not a number"; done

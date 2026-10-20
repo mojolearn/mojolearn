@@ -9,7 +9,7 @@ for your platform and GPU. This page has the details.
 |---|---|
 | Python | CPython 3.10, 3.11, 3.12, 3.13 and 3.14 |
 | macOS | Apple silicon (arm64). One wheel with Apple Metal GPU support and CPU support. |
-| Linux | x86-64. The core wheel plus the `mojolearn-nvidia` and `mojolearn-amd` GPU packages, installed automatically. |
+| Linux | x86-64. `mojolearn-core` plus the `mojolearn-nvidia` and `mojolearn-amd` GPU packages. |
 
 ## pip
 
@@ -17,9 +17,16 @@ for your platform and GPU. This page has the details.
 pip install mojolearn
 ```
 
-On Linux x86-64, pip also installs `mojolearn-nvidia` and `mojolearn-amd`, and mojolearn selects the
-backend for the GPU it finds. Both platforms also train and predict on the CPU
-(see [Devices and the CPU](user_guide/devices.md)).
+On Linux x86-64, this installs `mojolearn-core` with `mojolearn-nvidia` and `mojolearn-amd`, and
+mojolearn selects the backend for the GPU it finds. To install one vendor only:
+
+```sh
+pip install mojolearn-nvidia   # mojolearn-core + NVIDIA
+pip install mojolearn-amd      # mojolearn-core + AMD
+```
+
+`mojolearn-core` has no macOS wheel; on a Mac, `pip install mojolearn`. Both platforms also train and
+predict on the CPU (see [Devices and the CPU](user_guide/devices.md)).
 
 Optional extras add NumPy without changing any numerical implementation:
 

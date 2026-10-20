@@ -675,7 +675,8 @@ PYPI = _load_tool("pypi_wheel_install")
 def pypi_wheel_record(manifest):
     """The box's mojolearn.wheel from a PyPI wheel manifest: the core file's name, sha256 and bytes
     (what box_key and the race data hash read) plus the whole manifest under `pypi`."""
-    core = next((f for f in manifest.get("files") or [] if f.get("distribution") == "mojolearn"), {})
+    # the package's distribution: mojolearn-core on Linux (0.8.56+), mojolearn on Apple and before
+    core = next((f for f in manifest.get("files") or [] if f.get("distribution") in ("mojolearn-core", "mojolearn")), {})
     return {"file": core.get("file"), "sha256": core.get("sha256"), "bytes": core.get("bytes"),
             "source": "pypi", "index_url": manifest.get("index_url"),
             "requested": manifest.get("requested"), "pypi": manifest}

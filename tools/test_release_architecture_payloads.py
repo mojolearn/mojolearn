@@ -15,7 +15,13 @@ import qualify_verifier_wheel as qualifier
 def test_registry_parity_and_no_experimental_publication():
     registry = runpy.run_path(str(release.ROOT / 'python/mojolearn/gpu_plugins.py'))
     rows = registry['distribution_rows']()
-    assert set(index.PROJECTS) == {'mojolearn', *(r['distribution'] for r in rows)}
+    # 2026-10-20: mojolearn-core (no vendor pin), the vendors, and the
+    # file-free Linux mojolearn requiring the core and both vendors
+    assert set(index.PROJECTS) == {'mojolearn', 'mojolearn-core', *(r['distribution'] for r in rows)}
+    assert index.REQUIRES['mojolearn-core'] == ()
+    assert registry['core_requirements']('1.2.3') == []
+    assert index.REQUIRES['mojolearn'] == tuple(r.split('==')[0] for r in registry['meta_requirements']('1.2.3'))
+    assert index.REQUIRES['mojolearn'] == ('mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd')
     assert qualifier.PLUGIN_DISTRIBUTIONS == {r['wheel_name']: r['distribution'] for r in rows}
     assert 'nvidia-ptx80' not in release.SPLIT_PACKAGES
     assert 'nvidia-ptx80' not in registry['PAYLOADS']
@@ -23,6 +29,7 @@ def test_registry_parity_and_no_experimental_publication():
     for row in rows:
         expected = registry['package_requirements'](row['profile'], '1.2.3')
         assert index.REQUIRES[row['distribution']] == tuple(r.split('==')[0] for r in expected)
+        assert expected[0] == 'mojolearn-core==1.2.3'
 
 
 def test_payloads_cannot_publish_before_own_architecture_checks():
@@ -35,7 +42,16 @@ def test_payloads_cannot_publish_before_own_architecture_checks():
                 continue
             assert 'gpu-column-' + column in release.NEEDS['publish-' + vendor]
         assert 'linux-joint-diff' not in release.NEEDS['publish-' + vendor]   # deleted 2026-10-10: identity runs ONCE
-    assert {'publish-nvidia', 'publish-amd'} <= set(release.NEEDS['publish-core-linux'])
+    # 2026-10-20 order: mojolearn-core FIRST (after both GPU columns settle),
+    # then PTX and AMD, then NVIDIA, then the Linux mojolearn LAST
+    assert release.NEEDS['publish-core-linux'] == ['linux-pack']
+    assert {'gpu-column-nvidia', 'gpu-column-amd'} <= set(release.AFTER['publish-core-linux'])
+    assert 'publish-core-linux' in release.NEEDS['publish-nvidia-ptx']
+    assert 'publish-core-linux' in release.NEEDS['publish-amd']
+    assert 'publish-nvidia-ptx' in release.NEEDS['publish-nvidia']
+    assert set(release.NEEDS['publish-meta-linux']) == {'publish-core-linux', 'publish-nvidia', 'publish-amd'}
+    assert not any(s in release.NEEDS['publish-core-linux']
+                   for s in ('publish-nvidia', 'publish-nvidia-ptx', 'publish-amd', 'publish-meta-linux'))
     assert 'linux-joint-diff' not in release.AFTER
 
 
@@ -49,19 +65,21 @@ def test_target_admission_requires_actual_installed_arch(tmp_path):
     assert not runner.column_arch_ok(tmp_path, ('sm_89',))
 
 
-def test_synthetic_reuse_normalizes_roots_without_changing_bytes(tmp_path):
-    core = tmp_path / 'mojolearn-1-py3-none-manylinux.whl'
+# the core published as mojolearn_core-* since 2026-10-20, as mojolearn-* before
+@pytest.mark.parametrize('core_name', ['mojolearn_core', 'mojolearn'])
+def test_synthetic_reuse_normalizes_roots_without_changing_bytes(tmp_path, core_name):
+    core = tmp_path / f'{core_name}-1-py3-none-manylinux.whl'
     payload = tmp_path / 'mojolearn_nvidia-1-py3-none-manylinux.whl'
     with zipfile.ZipFile(core, 'w') as z:
         z.writestr('mojolearn/__init__.py', b'core')
-        z.writestr('mojolearn-1.dist-info/LINUX_PAYLOAD.json', json.dumps({
+        z.writestr(f'{core_name}-1.dist-info/LINUX_PAYLOAD.json', json.dumps({
             'extensions': {'mojolearn/cuda_native/sm_89/identical/kernel.so': 'hash'}, 'split': {}}))
     with zipfile.ZipFile(payload, 'w') as z:
         z.writestr('mojolearn/cuda_native/sm_89/identical/kernel.so', b'exact bytes')
-    merged = release.merge_split([core, payload], tmp_path / 'merged.whl')
+    merged = release.merge_split([payload, core], tmp_path / 'merged.whl')
     with zipfile.ZipFile(merged) as z:
         assert z.read('mojolearn/cuda/sm_89/identical/kernel.so') == b'exact bytes'
-        metadata = json.loads(z.read('mojolearn-1.dist-info/LINUX_PAYLOAD.json'))
+        metadata = json.loads(z.read(f'{core_name}-1.dist-info/LINUX_PAYLOAD.json'))
         assert metadata['extensions'] == {'mojolearn/cuda/sm_89/identical/kernel.so': 'hash'}
     # the PTX slot's installed root maps back to its set path, like cuda_native
     assert release_reuse.legacy_archive_path('mojolearn/cuda_ptx/sm_80/kernel.so') == 'mojolearn/cuda/sm_80/kernel.so'

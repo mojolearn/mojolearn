@@ -33,17 +33,18 @@ if TOOLS not in sys.path:
 from verify_linux_surface_qualification import (  # noqa: E402
     RELEASE_PROFILE, RELEASE_PROFILES, load_gpu_plugins, release_version)
 
-# THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py, 2026-09-25): the
-# core `mojolearn` (no GPU set, no extras, and exactly one requirement per
-# plugin at its own version, `mojolearn-nvidia==<v>` and `mojolearn-amd==<v>`,
-# so `pip install mojolearn` works for everyone, 2026-09-26) and
-# one plugin per vendor, `mojolearn-nvidia` and `mojolearn-amd` (only
-# mojolearn/<vendor>/..., requiring exactly `mojolearn==<version>`). Their
-# payload records the split packer profile.
+# THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py, 2026-10-20): the
+# core `mojolearn-core` (no GPU set, no extras, no vendor requirement), one
+# plugin per vendor, `mojolearn-nvidia` and `mojolearn-amd` (only
+# mojolearn/<vendor>/..., requiring exactly `mojolearn-core==<version>`), and
+# the file-free Linux `mojolearn` (requiring the core and both vendors, so
+# `pip install mojolearn` installs everything). Their payload records the
+# split packer profile.
 GPU_PLUGINS = load_gpu_plugins()
 SPLIT_PROFILE = 'release-split'
 #: wheel-name prefix -> (distribution, vendor directory or None for the core)
 DISTRIBUTIONS = {'mojolearn': ('mojolearn', None),
+                 GPU_PLUGINS.CORE_WHEEL_NAME: (GPU_PLUGINS.CORE_DISTRIBUTION, None),
                  **{row['wheel_name']: (row['distribution'], row['profile'])
                     for row in GPU_PLUGINS.distribution_rows(include_experimental=True)}}
 
@@ -136,7 +137,12 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
                     for value in metadata.get_all('Summary', [])),
                 'package Summary must be a single line')
         released = released_version(source_root)  # DEVIATION 2290: never a literal
-        split_core = plugin_vendor is None and dist + GPU_PLUGINS.CORE_MARKER in files
+        split_core = parts[0] == GPU_PLUGINS.CORE_WHEEL_NAME
+        if split_core:
+            require(dist + GPU_PLUGINS.CORE_MARKER in files, 'mojolearn-core lacks its split marker')
+        if (parts[0] == GPU_PLUGINS.META_WHEEL_NAME and 'linux' in parts[-1]
+                and dist + GPU_PLUGINS.PLUGIN_MARKER in files):
+            plugin_vendor = GPU_PLUGINS.META_PROFILE  # the file-free Linux `mojolearn`
         if plugin_vendor is not None or split_core:
             verify_split_wheel(path, version, released, release_profile, qualification_root, plugin_vendor,
                                distribution, dist, files, metadata, small, macos_smoke_source)
@@ -284,7 +290,9 @@ def verify_split_wheel(path, version, released, release_profile, qualification_r
             and path.name.endswith('_x86_64.whl'),
             'a split Linux wheel requires the released alpha version and manylinux tag')
     require(qualification_root is None, 'split qualification must cover the complete installed set')
-    if profile is not None:
+    if profile == GPU_PLUGINS.META_PROFILE:
+        require(all(n.startswith(dist) for n in files), 'the Linux mojolearn wheel carries files')
+    elif profile is not None:
         require(GPU_PLUGINS.package(profile)['release_enabled'],
                 'experimental PTX payload is not admitted for publication')
     require(dist + 'ALPHA_PROVENANCE.json' not in files and dist + 'LINUX_PAYLOAD.json' in files,

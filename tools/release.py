@@ -19,15 +19,17 @@ manifest, no receipt), and the rehearsal skips python-tests and the GPU-box
 leg dry-runs. --gpu-smoke restores the GPU route the step table below
 describes (wheel smokes, light-smoke receipts, any build backend).
 
-SEVERABLE PIPELINES (2026-09-25). After the common steps a release is five
+SEVERABLE PIPELINES (2026-09-25). After the common steps a release is six
 pipelines that run at once in one invocation, each publishing as soon as ITS
 OWN gates pass; a failure in one never blocks or undoes another:
   macos       macos-build -> macos-smoke -> publish-macos
   core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
-              -> publish-core-linux (after publish-nvidia AND publish-amd)
-  nvidia-ptx  gpu-column-nvidia -> publish-nvidia-ptx
+              -> publish-core-linux (mojolearn-core; FIRST on Linux)
+  nvidia-ptx  gpu-column-nvidia -> publish-nvidia-ptx (after publish-core-linux)
   nvidia      gpu-column-nvidia -> publish-nvidia (after publish-nvidia-ptx)
-  amd         gpu-column-amd -> publish-amd
+  amd         gpu-column-amd -> publish-amd (after publish-core-linux)
+  meta-linux  publish-meta-linux (the file-free Linux `mojolearn`; LAST, after
+              publish-core-linux, publish-nvidia AND publish-amd)
 ONE IDENTITY CHECK PER RELEASE (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun).
 The admitted reference table (tools/record_identity_column.sh on NVIDIA and AMD,
 tools/admit_identity_columns.sh: NVIDIA == AMD) IS the release's identity check,
@@ -118,38 +120,42 @@ THE STEPS
   linux-assemble     the set directories the packer packs: a leg's set, a taken
                      leg's set, or one synthesized from the published wheel
   linux-pack         pixi run -e pkg pack-linux-wheel --profile release-split
-                     (the core and both plugins), audit.sh, strip, split_audit
+                     (the core, the plugins and the Linux mojolearn), audit.sh,
+                     strip, split_audit
   gpu-column-nvidia  } SKIPPED by default; with --gpu-smoke the NVIDIA and AMD wheel smokes AT ONCE (detached
   gpu-column-amd     } tools/release_wheel_smoke.sh, the core and both plugins
                        installed, verified against the admitted table; no
                        second identity pass of the changed lanes)
-  publish-nvidia     }
-  publish-amd        } tools/release_linux_publish.sh ... --preverified|--light-smoke, only
-  publish-core-linux }   with --publish (--preverified by default); the plugins first, the core last
+  publish-core-linux }
+  publish-nvidia     } tools/release_linux_publish.sh ... --preverified|--light-smoke, only
+  publish-amd        }   with --publish (--preverified by default); the core first,
+  publish-meta-linux }   the vendors next, the Linux mojolearn last
   publish-macos      }
   finish-line        per published platform: pip install on this Mac (macOS);
-                     pip download of the Linux file, sha256 compared (Linux)
+                     pip download of the Linux file, sha256 compared (Linux), and
+                     the package set pip resolves for `mojolearn`,
+                     `mojolearn-nvidia` and `mojolearn-amd` (Linux)
   record             bench/results/release_verification/<date>_pypi_<v>/, committed
 
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
 
 THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py). Linux ships as
-four PyPI projects, mojolearn (the core), mojolearn-nvidia, mojolearn-amd
-and mojolearn-nvidia-ptx,
-the only Linux layout since 0.8.22 (2026-09-26: the combined wheel is
-removed; 0.8.20 and earlier stay installable). `pip install mojolearn` WORKS FOR EVERYONE (since 2026-09-26): the Linux
-core requires BOTH plugins at its own version exactly, so pip can resolve
-`mojolearn==<v>` only once mojolearn-nvidia and mojolearn-amd <v> are both on
-the index. NVIDIA also requires the matching PTX version. PTX PUBLISHES
-FIRST, then the VENDORS, and the CORE LAST. Each column gates its
-own plugin (its wheel smoke against the admitted reference table); the core publishes only after BOTH plugins did, so only when both
-vendors' columns passed (on the NVIDIA receipt). A failed vendor holds the
-core; the other plugin may still upload, harmless and unresolvable alone
-(it requires the core). Each package is its own GitHub
-release and workflow dispatch (the workflow uploads it to its own PyPI
-project); column and ledger entries stay keyed to one wheel's sha256 (the
-plugin's, with the core's recorded beside it).
+five PyPI projects (Andrew 2026-10-20): mojolearn-core (the Python package,
+host bindings and runtime; no vendor requirement), mojolearn-nvidia,
+mojolearn-nvidia-ptx and mojolearn-amd (each requires mojolearn-core at its
+version; NVIDIA also requires the matching PTX version), and mojolearn, a
+file-free Linux wheel requiring the core and both vendors. `pip install
+mojolearn` installs everything; `pip install mojolearn-nvidia` or
+`mojolearn-amd` installs the core and that vendor. THE CORE PUBLISHES FIRST,
+then PTX, then the VENDORS, and the Linux mojolearn LAST (it resolves only
+once all of them are on the index). Each column gates its own plugin (its
+wheel smoke against the admitted reference table); a failed vendor holds
+the Linux mojolearn, never the core or the other vendor. Each package is its
+own GitHub release and workflow dispatch (the workflow uploads it to its own
+PyPI project); column and ledger entries stay keyed to one wheel's sha256
+(the plugin's, with the core's recorded beside it). macOS is unchanged: the
+one complete `mojolearn` wheel.
 """
 import os
 import argparse
@@ -783,18 +789,24 @@ STEP_TABLE = [
     # linux-joint-diff is deleted (Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a reason to rerun):
     # it re-diffed a second identity pass of the changed lanes against the Apple
     # re-fit; NVIDIA == AMD is decided once, by the admitted table.
-    # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins at its
-    # version, so it is resolvable only once both are on the index
-    ("publish-nvidia-ptx", "nvidia-ptx", ["gpu-column-nvidia"], "dispatch"),
+    # THE CORE FIRST, THE LINUX `mojolearn` LAST (2026-10-20): each vendor
+    # requires mojolearn-core at its version, and the file-free mojolearn
+    # requires the core and both vendors, so each is resolvable only once
+    # what it requires is on the index
+    ("publish-core-linux", "core-linux", ["linux-pack"], "dispatch"),
+    ("publish-nvidia-ptx", "nvidia-ptx", ["gpu-column-nvidia", "publish-core-linux"], "dispatch"),
     ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "publish-nvidia-ptx"], "dispatch"),
-    ("publish-amd", "amd", ["gpu-column-amd"], "dispatch"),
-    ("publish-core-linux", "core-linux", ["publish-nvidia", "publish-amd"], "dispatch"),
+    ("publish-amd", "amd", ["gpu-column-amd", "publish-core-linux"], "dispatch"),
+    ("publish-meta-linux", "meta-linux", ["publish-core-linux", "publish-nvidia", "publish-amd"], "dispatch"),
     ("publish-macos", "macos", ["macos-smoke"], "dispatch"),
     ("finish-line", "finish", ["freeze-commit"], None),
     ("record", "finish", ["finish-line"], None),
 ]
 #: Steps that wait for others to SETTLE (done, failed or blocked), not succeed.
-AFTER = {"finish-line": ["publish-core-linux", "publish-nvidia", "publish-nvidia-ptx", "publish-amd", "publish-macos"]}
+AFTER = {"finish-line": ["publish-core-linux", "publish-nvidia", "publish-nvidia-ptx", "publish-amd",
+                         "publish-meta-linux", "publish-macos"],
+         # with --gpu-smoke the core publishes on a column receipt: wait for both columns to settle
+         "publish-core-linux": ["gpu-column-nvidia", "gpu-column-amd"]}
 #: A PIPELINE: named builds, named checks, one publish, and the platform it
 #: ships (what published_platforms() says: `linux` is the core's).
 PIPELINES = {
@@ -806,11 +818,21 @@ PIPELINES = {
     "nvidia": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia", platform="nvidia"),
     "nvidia-ptx": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia-ptx", platform="nvidia-ptx"),
     "amd": dict(builds=[], checks=["gpu-column-amd"], publish="publish-amd", platform="amd"),
+    "meta-linux": dict(builds=[], checks=[], publish="publish-meta-linux", platform="linux-meta"),
 }
-#: split package -> (PyPI project, wheel-name prefix); python/mojolearn/gpu_plugins.py
-SPLIT_PACKAGES = {"linux": ("mojolearn", "mojolearn"), **{
+#: split package -> (PyPI project, wheel-name prefix); python/mojolearn/gpu_plugins.py.
+#: "linux" is mojolearn-core, "linux-meta" the file-free Linux mojolearn.
+SPLIT_PACKAGES = {"linux": (GPU_PACKAGES["CORE_DISTRIBUTION"], GPU_PACKAGES["CORE_WHEEL_NAME"]), **{
     row["profile"]: (row["distribution"], row["wheel_name"])
-    for row in GPU_PACKAGES["distribution_rows"]()}}
+    for row in GPU_PACKAGES["distribution_rows"]()},
+    "linux-meta": (GPU_PACKAGES["META_DISTRIBUTION"], GPU_PACKAGES["META_WHEEL_NAME"])}
+#: the split packages that carry GPU sets (every one but the core and the meta wheel)
+PLUGIN_PACKAGES = tuple(k for k in SPLIT_PACKAGES if k not in ("linux", "linux-meta"))
+#: what `pip install <project>` must resolve on Linux: package -> the split packages it installs
+LINUX_RESOLVES = {"linux": ("linux",),
+                  "linux-meta": tuple(SPLIT_PACKAGES),
+                  **{k: ("linux", k) + (("nvidia-ptx",) if k == "nvidia" else ()) for k in PLUGIN_PACKAGES
+                     if GPU_PACKAGES["PAYLOADS"][k]["role"] == "vendor"}}
 # Vendor wheels retain separate native execution columns for every hardware slot.
 NATIVE_COLUMNS = {"nvidia": ("nvidia", "nvidia-hopper"), "amd": ("amd",)}
 if set(NATIVE_COLUMNS) != {r["profile"] for r in GPU_PACKAGES["distribution_rows"]() if r["role"] == "vendor"}:
@@ -853,7 +875,9 @@ def merge_split(wheels, out):
     payload member of every wheel, and the core's .dist-info with its
     LINUX_PAYLOAD.json's `split` role dropped. A plugin that was not
     published leaves its members out; assembly then refuses to take them."""
-    core = next(w for w in wheels if Path(w).name.startswith("mojolearn-"))
+    # the core: mojolearn_core-* since 2026-10-20, mojolearn-* (with files) before
+    core = next((w for w in wheels if Path(w).name.startswith(GPU_PACKAGES["CORE_WHEEL_NAME"] + "-")), None) \
+        or next(w for w in wheels if Path(w).name.startswith("mojolearn-"))
     members = {}
     for w in wheels:
         with zipfile.ZipFile(w) as z:
@@ -1414,7 +1438,7 @@ class Release:
             info = prev.get(platform) or {}
             return Path("<published %s wheel %s>" % (platform, info.get("wheel", "?")))
         whl = release_reuse.published_wheel(prev, platform, self.evidence)
-        plugins = [k for k in SPLIT_PACKAGES if k != "linux" and prev.get(k)] if platform == "linux" else []
+        plugins = [k for k in PLUGIN_PACKAGES if prev.get(k)] if platform == "linux" else []
         if plugins:
             # a split release: its Linux bytes are the core and its plugins
             wheels = [whl] + [release_reuse.published_wheel(prev, k, self.evidence) for k in plugins]
@@ -1742,12 +1766,12 @@ class Release:
             evidence=dict(release_build=str(leg.release_build), proof_sha256=proof_sha, log=str(leg.log))))
 
     def linux_final(self):
-        """The final Linux core wheel (mojolearn-*, beside its two plugins)."""
-        found = sorted((self.rel / "linux" / "final").glob("mojolearn-*-manylinux*.whl"))
-        return found[-1] if found else None
+        """The final Linux core wheel (mojolearn_core-*, beside its plugins)."""
+        return self.split_final("linux")
 
     def split_final(self, package):
-        """A final split wheel: package 'linux' (the core), 'nvidia' or 'amd'."""
+        """A final split wheel: package 'linux' (mojolearn-core), a plugin
+        ('nvidia', 'nvidia-ptx', 'amd') or 'linux-meta' (the Linux mojolearn)."""
         prefix = SPLIT_PACKAGES[package][1]
         found = sorted((self.rel / "linux" / "final").glob(f"{prefix}-*-manylinux*.whl"))
         return found[-1] if found else None
@@ -1873,7 +1897,7 @@ class Release:
                        final_dir / repaired[0].name, "--receipt", final_dir / f"dir-entry-strip-{package}.json"],
                       what=f"strip_wheel_dir_entries.py {project}")
         if self.dry:
-            return "would pack the core and both plugins, audit and strip each"
+            return "would pack the core, the plugins and the Linux mojolearn, audit and strip each"
         finals = self.split_finals()
         sys.path.insert(0, str(ROOT / "tools"))
         from wheel_api_audit import split_audit
@@ -1912,9 +1936,9 @@ class Release:
 
     def plugin_installed(self, results, package):
         """The receipt installed exactly this release's final plugins beside
-        the core, BOTH of them (the core requires both, so the box installs
-        what `pip install mojolearn` installs), among them `package`'s."""
-        plugins = {k: self.split_final(k) for k in SPLIT_PACKAGES if k != "linux"}
+        the core, all of them (the box installs what `pip install mojolearn`
+        installs), among them `package`'s."""
+        plugins = {k: self.split_final(k) for k in PLUGIN_PACKAGES}
         return (all(plugins.values()) and bool(plugins[package])
                 and receipt_plugins(results) == {w.name: sha256(w) for w in plugins.values()})
 
@@ -2015,10 +2039,10 @@ class Release:
 
     def plugin_args(self, package):
         """`--plugin <final plugin>` for the column's smoke, the column's own
-        plugin FIRST and then the other one: the core requires both, so the box
-        installs all three, as `pip install mojolearn` does."""
+        plugin FIRST and then the others: the box installs the core and every
+        plugin, as `pip install mojolearn` does."""
         out = []
-        for k in (package,) + tuple(k for k in SPLIT_PACKAGES if k not in (package, "linux")):
+        for k in (package,) + tuple(k for k in PLUGIN_PACKAGES if k != package):
             plugin = self.split_final(k)
             out += ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[k][1]} wheel>"]
         return out
@@ -2158,7 +2182,7 @@ class Release:
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
-        if not self.dry and self.gpu_smoke() and platform in SPLIT_PACKAGES and platform != "linux" \
+        if not self.dry and self.gpu_smoke() and platform in PLUGIN_PACKAGES \
                 and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
             raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         if not self.dry and wheel and self.on_pypi(wheel):
@@ -2182,7 +2206,8 @@ class Release:
         if notes:
             env["MOJOLEARN_ALPHA_SMOKE_NOTES"] = json.dumps(notes, sort_keys=True)
         # without --gpu-smoke: the checklist's preverified route (qualification_reuse, no receipt attached)
-        route = ["--light-smoke", smoke] if self.gpu_smoke() else ["--preverified"]
+        # (the Linux mojolearn has no receipt of its own: it carries no files)
+        route = ["--light-smoke", smoke] if self.gpu_smoke() and smoke is not None else ["--preverified"]
         self.must(["bash", "tools/release_linux_publish.sh", wheel or f"<{platform} wheel>", tag, target, work,
                    *route], env=env,
                   log=self.rel / f"publish-{platform}.log", what=f"publish {platform}")
@@ -2196,19 +2221,22 @@ class Release:
         return {}
 
     def core_receipt(self):
-        """The receipt the split core publishes on, NVIDIA's. The core
-        requires BOTH plugins, so it publishes only when BOTH vendors'
-        columns PASSED (and after both plugins published, STEP_TABLE)."""
+        """The receipt mojolearn-core publishes on: a PASSED column that
+        installed it (NVIDIA's, else AMD's). The core requires no vendor
+        (2026-10-20), so one passing vendor is enough; a failed vendor holds
+        only its own package and the Linux mojolearn."""
         if self.dry or not self.gpu_smoke():
             return self.rel / "smoke-linux" / "results.json"
-        failed = [label for label, ok in (("NVIDIA Ada", self.nvidia_column_ok()),
-                                          ("NVIDIA Hopper", self.hopper_column_ok() or not self.hopper_required()),
-                                          ("AMD", self.amd_column_ok()))
-                  if not ok]
-        if failed:
-            raise StepFailed("the core requires both GPU plugins and publishes only when both columns PASSED; "
-                             "not PASSED: " + ", ".join(failed))
-        return self.rel / "smoke-linux" / "results.json"
+        if self.nvidia_column_ok():
+            return self.rel / "smoke-linux" / "results.json"
+        if self.amd_column_ok():
+            return self.rel / "column-amd" / "results.json"
+        raise StepFailed("mojolearn-core publishes on a PASSED GPU column; neither NVIDIA nor AMD PASSED")
+
+    def step_publish_meta_linux(self):
+        """The file-free Linux `mojolearn`: no smoke installs it (it carries no
+        files); it publishes after the core and both vendors (STEP_TABLE)."""
+        return self.publish("linux-meta", self.split_final("linux-meta"), None), dict(smoke=None)
 
     def step_publish_core_linux(self):
         smoke = self.core_receipt()
@@ -2273,12 +2301,12 @@ class Release:
     def finish_linux(self, venv, package="linux"):
         """The Linux wheel cannot install on this Mac: pip resolves and
         downloads it for its platform, and its bytes must be the published ones.
-        `package` is linux (the core), nvidia or amd."""
+        `package` is linux (mojolearn-core), a plugin or linux-meta (mojolearn)."""
         project, prefix = SPLIT_PACKAGES[package]
         final = self.split_final(package)
         plat = final.name[:-4].split("-")[-1] if final else "manylinux_2_35_x86_64"
         dest = self.rel / ("finish-linux" if package == "linux" else f"finish-{package}")
-        label = "Linux" if package == "linux" else project
+        label = project
         for attempt in range(1, 7):
             if dest.exists() and not self.dry:
                 shutil.rmtree(dest)
@@ -2292,6 +2320,34 @@ class Release:
             self.sleep(30)
         raise StepFailed(f"pip download {project}=={self.version} for {plat} failed or differs six times")
 
+    def finish_resolve(self, venv, package):
+        """`pip install <project>==<v>` on Linux resolves exactly the split
+        packages LINUX_RESOLVES names, each the published bytes: `mojolearn`
+        all of them, `mojolearn-nvidia` the core, NVIDIA and its PTX package,
+        `mojolearn-amd` the core and AMD (2026-10-20). Resolved from this Mac
+        with pip download for the Linux platform (the core requires nothing
+        else, so only mojolearn wheels are fetched)."""
+        project, _ = SPLIT_PACKAGES[package]
+        final = self.split_final(package)
+        plat = final.name[:-4].split("-")[-1] if final else "manylinux_2_35_x86_64"
+        want = {SPLIT_PACKAGES[k][1]: self.split_final(k) for k in LINUX_RESOLVES[package]}
+        dest = self.rel / f"finish-resolve-{package}"
+        for attempt in range(1, 7):
+            if dest.exists() and not self.dry:
+                shutil.rmtree(dest)
+            rc = self.run([venv / "bin" / "pip", "download", "--no-cache-dir", "--only-binary=:all:",
+                           "--platform", plat, "--python-version", "3.12", "-d", dest,
+                           f"{project}=={self.version}"], log=self.rel / f"finish-resolve-{package}-{attempt}.log")
+            got = {w.name.split("-")[0]: w for w in sorted(dest.glob("*.whl"))} if not self.dry else {}
+            if self.dry or (rc == 0 and set(got) == set(want) and all(
+                    want[k] and sha256(got[k]) == sha256(want[k]) for k in want)):
+                return (f"pip install {project}=={self.version} on {plat} resolves "
+                        + ", ".join(SPLIT_PACKAGES[k][0] for k in LINUX_RESOLVES[package]))
+            self.say(f"  {project}: pip resolved {sorted(got)}, want {sorted(want)} (attempt {attempt}/6)")
+            self.sleep(30)
+        raise StepFailed(f"pip install {project}=={self.version} for {plat} does not resolve exactly "
+                         f"{', '.join(SPLIT_PACKAGES[k][0] for k in LINUX_RESOLVES[package])} at the published bytes")
+
     def step_finish_line(self):
         if self.args.publish != "pypi":
             return "skipped (not published to PyPI)"
@@ -2303,6 +2359,9 @@ class Release:
             shutil.rmtree(venv)
         self.must([self.smoke_python() if not self.dry else "python3.12", "-m", "venv", venv], what="venv")
         done = [self.finish_macos(venv) if p == "macos" else self.finish_linux(venv, p) for p in published]
+        # the Linux package sets, once everything each one requires is published
+        done += [self.finish_resolve(venv, k) for k in LINUX_RESOLVES
+                 if all(d in published for d in LINUX_RESOLVES[k])]
         pending = [self.PIPELINES[p]["platform"] for p in self.PIPELINES
                    if self.PIPELINES[p]["platform"] not in published]
         return "; ".join(done) + (f"; not yet published: {', '.join(pending)}" if pending else ""), \
@@ -2379,8 +2438,10 @@ class Release:
         """[(platform, wheel, smoke receipt)] of every wheel this release publishes."""
         rows = []
         for platform in SPLIT_PACKAGES:
+            # the Linux mojolearn has no receipt (no smoke installs it): none, not NVIDIA's
             smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") or (
-                self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json")
+                self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json"
+                if platform != "linux-meta" else self.rel / "no-smoke-linux-meta.json")
             rows.append((platform, self.split_final(platform), Path(smoke)))
         return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json" if self.gpu_smoke()
                         else self.macos_self_test())]
@@ -2397,7 +2458,7 @@ class Release:
                 r = {}
             tag = self.recorded(self.publish_step(platform)) or {}
             plat = wheel.name.split("-", 4)[-1][:-4]
-            if wheel.name.split("-")[0] != "mojolearn":
+            if wheel.name.split("-")[0] != "mojolearn" or platform == "linux-meta":
                 plat = wheel.name.split("-")[0].replace("_", "-") + " " + plat
             wheels.append(f"| {plat} | {sha256(wheel)} | {r.get('status', '?' if self.gpu_smoke() else 'preverified')}, {len(r.get('jobs', []))} jobs "
                           f"| {tag.get('result', '?') if platform in published else 'not yet published'} |")

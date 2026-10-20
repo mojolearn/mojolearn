@@ -335,7 +335,7 @@ class RunTests(unittest.TestCase):
         # by default a release builds, checks artifact integrity and publishes, and every
         # gpu-column-* step is SKIPPED: nothing rented, no lq.
         out = self.dry_run()
-        gpu = out.stdout.split("-- gpu-column-nvidia", 1)[1].split("-- publish-nvidia", 1)[0]
+        gpu = out.stdout.split("-- gpu-column-nvidia", 1)[1].split("-- publish-core-linux", 1)[0]
         columns = [step for step in release.Release.STEPS if step.startswith("gpu-column-")]
         self.assertTrue(columns)
         self.assertEqual(gpu.count(release.Release.NO_GPU_SKIP), len(columns))
@@ -350,17 +350,17 @@ class RunTests(unittest.TestCase):
         self.assertIn("== binding reuse plan for", out.stdout)
         self.assertIn("legs to launch:", out.stdout)
         legs = out.stdout.split("legs to launch:", 1)[1].splitlines()[0]
-        # one column step per vendor, each installing the core and both
-        # plugins; the smoke only (Andrew 2026-10-10: identity runs ONCE; the
+        # one column step per vendor, each installing mojolearn-core and every
+        # vendor and payload package (PLUGIN_PACKAGES); the smoke only (Andrew 2026-10-10: identity runs ONCE; the
         # admitted table is the identity check, no Apple column, no joint diff)
-        gpu = out.stdout.split("-- gpu-column-nvidia", 1)[1].split("-- publish-nvidia", 1)[0]
+        gpu = out.stdout.split("-- gpu-column-nvidia", 1)[1].split("-- publish-core-linux", 1)[0]
         self.assertIn("nvidia: ", gpu)
         self.assertIn("amd: ", gpu)
         self.assertIn("would launch nvidia", gpu)
         self.assertIn("would launch amd", gpu)
         # releases rent nothing (2026-10-08): the Ada and AMD columns go through
         # lq to the boxes we hold; the Hopper column is skipped with no Hopper box
-        self.assertEqual(gpu.count("--plugin"), 2 * (len(release.SPLIT_PACKAGES) - 1))
+        self.assertEqual(gpu.count("--plugin"), 2 * len(release.PLUGIN_PACKAGES))
         self.assertEqual(gpu.count("tools/release_lq_smoke.py"), 2)
         self.assertNotIn("--rent", gpu)
         self.assertIn("--box nv", gpu)

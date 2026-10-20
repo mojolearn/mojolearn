@@ -56,9 +56,10 @@ def source_identity(root=None):
 
 
 def distribution_identity(package):
-    try:
-        dist = metadata.distribution('mojolearn')
-    except metadata.PackageNotFoundError:
+    from mojolearn import gpu_plugins
+    # the package's files: mojolearn-core on Linux, mojolearn on macOS
+    dist = gpu_plugins.package_distribution()
+    if dist is None:
         return None, None
     direct = dist.read_text('direct_url.json')
     info = {'version': dist.version, 'root': str(Path(dist.locate_file('')).resolve()),

@@ -5,14 +5,15 @@
         --python <venv>/bin/python --dir <cache>/pypi-wheels --manifest <out>/wheel-manifest.json
     python3 tools/pypi_wheel_install.py verify --manifest <out>/wheel-manifest.json --python <venv>/bin/python
 
-install: `pip download mojolearn==V mojolearn-<vendor>==V --no-deps` from https://pypi.org/simple into
+install: `pip download mojolearn-core==V mojolearn-<vendor>==V --no-deps` (NVIDIA adds
+mojolearn-nvidia-ptx; Apple is `mojolearn==V`) from https://pypi.org/simple into
 an empty directory, hash every file (SHA-256), check each hash against PyPI's JSON API digest
 (https://pypi.org/pypi/<name>/<V>/json), then `pip install` those exact files (a dependency pass, then a
 `--force-reinstall --no-deps` pass so an older install of the same version cannot stand in for them).
 Writes the manifest: requested specs, index URL, file names, sha256, the PyPI digest and whether it matched.
 
-verify: refuses (exit 2, reason on stderr) unless, in the given interpreter, mojolearn and the vendor
-plugin import from site-packages, their installed versions equal V, and pip's PEP 610 direct_url.json
+verify: refuses (exit 2, reason on stderr) unless, in the given interpreter, mojolearn imports from
+site-packages, the core and the vendor plugin are installed there, their installed versions equal V, and pip's PEP 610 direct_url.json
 for each names the manifest's file (and its hash when pip recorded one). bench_board.py runs the same
 check before any timing.
 """
@@ -36,15 +37,23 @@ if os.environ.get("MOJOLEARN_WHEEL_INDEX", "pypi") == "testpypi":
     JSON_API = "https://test.pypi.org/pypi/%s/%s/json"
     EXTRA_INDEX = ["--extra-index-url", INDEX_URL]
 SCHEMA = "mojolearn-pypi-wheel-manifest/1"
-#: Apple has no plugin package: the macOS core wheel carries the Metal bindings (Andrew 2026-10-14: the
-#: M4 smoke runs against `pip install mojolearn==<version>`; core only).
-PLUGIN = {"nvidia": "mojolearn-nvidia", "amd": "mojolearn-amd", "apple": None}
+#: Apple has no plugin package: the macOS `mojolearn` wheel carries the Metal bindings (Andrew 2026-10-14:
+#: the M4 smoke runs against `pip install mojolearn==<version>`). On Linux (2026-10-20) a vendor box
+#: installs mojolearn-core and its own vendor only, what `pip install mojolearn-<vendor>` installs.
+PLUGIN = {"nvidia": ("mojolearn-nvidia", "mojolearn-nvidia-ptx"), "amd": ("mojolearn-amd",), "apple": ()}
+#: the Linux core distribution (python/mojolearn/gpu_plugins.py CORE_DISTRIBUTION)
+CORE = "mojolearn-core"
 
 
-def distributions(vendor):
+def distributions(vendor, legacy=False):
+    """The distributions a box installs: mojolearn-core and the vendor's packages on Linux,
+    mojolearn on Apple. `legacy`: a release from before mojolearn-core (0.8.55 and older),
+    whose Linux core was `mojolearn` itself."""
     if vendor not in PLUGIN:
         raise ValueError("vendor must be nvidia, amd or apple, not %r" % vendor)
-    return ["mojolearn"] + ([PLUGIN[vendor]] if PLUGIN[vendor] else [])
+    if not PLUGIN[vendor]:
+        return ["mojolearn"]
+    return (["mojolearn", PLUGIN[vendor][0]] if legacy else [CORE, *PLUGIN[vendor]])
 
 
 def wheel_prefix(name, version):
@@ -87,10 +96,10 @@ def pick_file(directory, name, version):
     return os.path.join(directory, got[0])
 
 
-def build_manifest(version, vendor, directory, fetch=fetch_json, index_url=INDEX_URL):
+def build_manifest(version, vendor, directory, fetch=fetch_json, index_url=INDEX_URL, legacy=False):
     """The manifest for the files already downloaded into `directory`."""
     files = []
-    for name in distributions(vendor):
+    for name in distributions(vendor, legacy):
         path = pick_file(directory, name, version)
         fname = os.path.basename(path)
         digest = sha256_file(path)
@@ -111,12 +120,22 @@ def install(args):
         raise SystemExit("pypi_wheel_install: %s already holds wheels (%s); use an empty directory"
                          % (args.dir, ", ".join(stale)))
     log = args.log or os.path.join(args.dir, "pypi-wheel-install.log")
-    specs = ["%s==%s" % (n, args.version) for n in distributions(args.vendor)]
     pip = [args.python, "-m", "pip"]
     common = ["--no-input", "--disable-pip-version-check"]
+    legacy = False
+    specs = ["%s==%s" % (n, args.version) for n in distributions(args.vendor)]
     if run(pip + ["download"] + common + ["--no-deps", "--index-url", INDEX_URL, "-d", args.dir] + specs, log):
-        raise SystemExit("pypi_wheel_install: pip download failed; see " + log)
-    manifest = build_manifest(args.version, args.vendor, args.dir)
+        # a release from before mojolearn-core: its Linux core is `mojolearn`
+        if args.vendor == "apple":
+            raise SystemExit("pypi_wheel_install: pip download failed; see " + log)
+        for f in os.listdir(args.dir):
+            if f.endswith(".whl"):
+                os.remove(os.path.join(args.dir, f))
+        legacy = True
+        specs = ["%s==%s" % (n, args.version) for n in distributions(args.vendor, legacy)]
+        if run(pip + ["download"] + common + ["--no-deps", "--index-url", INDEX_URL, "-d", args.dir] + specs, log):
+            raise SystemExit("pypi_wheel_install: pip download failed; see " + log)
+    manifest = build_manifest(args.version, args.vendor, args.dir, legacy=legacy)
     bad = [f["file"] for f in manifest["files"] if not f["pypi_digest_match"]]
     if bad:
         _write(args.manifest, manifest)
@@ -153,11 +172,12 @@ for name in names:
     except Exception as e:
         rec["error"] = "%s: %s" % (type(e).__name__, e)
     out[name] = rec
+out["import mojolearn"] = {}
 try:
     import mojolearn
-    out["mojolearn"]["module_file"] = os.path.realpath(mojolearn.__file__)
+    out["import mojolearn"]["module_file"] = os.path.realpath(mojolearn.__file__)
 except Exception as e:
-    out["mojolearn"]["import_error"] = "%s: %s" % (type(e).__name__, e)
+    out["import mojolearn"]["import_error"] = "%s: %s" % (type(e).__name__, e)
 print(json.dumps(out))
 """
 
@@ -187,7 +207,7 @@ def refusal(manifest, loaded):
     if not loaded or loaded.get("error"):
         return "could not read the installed distributions: %s" % (loaded or {}).get("error")
     version = manifest["version"]
-    core = loaded.get("mojolearn") or {}
+    core = loaded.get("import mojolearn") or {}
     if core.get("import_error"):
         return "mojolearn does not import: " + core["import_error"]
     if not _in_site_packages(core.get("module_file")):

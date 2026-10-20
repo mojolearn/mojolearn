@@ -27,8 +27,10 @@ def normalize(name):
 
 
 def wheel_prefix(profile):
-    if profile == gpu_plugins.CORE_PROFILE:
-        return "mojolearn"
+    if profile in (gpu_plugins.CORE_PROFILE, "core"):
+        return gpu_plugins.CORE_WHEEL_NAME
+    if profile == gpu_plugins.META_PROFILE:
+        return gpu_plugins.META_WHEEL_NAME
     try:
         row = gpu_plugins.package(profile)
     except (KeyError, StopIteration) as exc:
@@ -41,7 +43,7 @@ def wheel_prefix(profile):
 def classify(wheels, *, version=None, require_complete=False):
     rows = {r["wheel_name"]: r for r in gpu_plugins.distribution_rows(include_experimental=True)}
     roles = {"vendor": set(), "payload": set()}
-    profiles, versions, core_wheels = set(), set(), []
+    profiles, versions, core_wheels, mojolearn_wheels, linux_meta = set(), set(), [], [], []
     paths = sorted(map(Path, wheels))
     if not paths:
         raise ValueError("no wheels to classify")
@@ -50,8 +52,12 @@ def classify(wheels, *, version=None, require_complete=False):
         if len(parts) not in (5, 6) or not path.name.endswith(".whl"):
             raise ValueError(f"invalid wheel filename: {path.name}")
         prefix, wheel_version = parts[:2]
-        if prefix == "mojolearn":
-            distribution = "mojolearn"
+        if prefix == gpu_plugins.META_WHEEL_NAME:
+            # the macOS wheel, or the file-free Linux `mojolearn` (2026-10-20)
+            distribution = gpu_plugins.META_DISTRIBUTION
+            mojolearn_wheels.append(path.name)
+        elif prefix == gpu_plugins.CORE_WHEEL_NAME:
+            distribution = gpu_plugins.CORE_DISTRIBUTION
             core_wheels.append(path.name)
         else:
             row = rows.get(prefix)
@@ -71,7 +77,22 @@ def classify(wheels, *, version=None, require_complete=False):
             message = email.parser.BytesParser().parsebytes(archive.read(metadata[0]))
             platform_tags = parts[-1][:-4].split(".")
             linux = any(tag.startswith(("linux_", "manylinux", "musllinux")) for tag in platform_tags)
-            if prefix == "mojolearn" and linux:
+            if prefix == gpu_plugins.CORE_WHEEL_NAME and not linux:
+                raise ValueError(f"mojolearn-core ships Linux wheels only: {path.name}")
+            if prefix == gpu_plugins.META_WHEEL_NAME and linux:
+                linux_meta.append(path.name)
+                marker_name = f"{prefix}-{wheel_version}.dist-info/{gpu_plugins.PLUGIN_MARKER}"
+                try:
+                    marker = json.loads(archive.read(marker_name))
+                except (KeyError, ValueError):
+                    marker = None
+                if marker != gpu_plugins.meta_marker(wheel_version):
+                    raise ValueError(f"the Linux mojolearn wheel requires the current aggregate marker: {path.name}")
+                files = [m for m in archive.namelist()
+                         if not m.endswith("/") and not m.startswith(f"{prefix}-{wheel_version}.dist-info/")]
+                if files:
+                    raise ValueError(f"the Linux mojolearn wheel carries files: {files[0]}")
+            if prefix == gpu_plugins.CORE_WHEEL_NAME:
                 marker_name = f"{prefix}-{wheel_version}.dist-info/{gpu_plugins.CORE_MARKER}"
                 try:
                     marker = json.loads(archive.read(marker_name))
@@ -100,15 +121,17 @@ def classify(wheels, *, version=None, require_complete=False):
         raise ValueError("candidate wheel versions disagree")
     if require_complete:
         expected = {r["profile"] for r in gpu_plugins.distribution_rows()}
-        if profiles != expected or len(core_wheels) != 1:
-            raise ValueError("complete Linux release requires one core and every registered vendor and payload package")
-    return dict(core=bool(core_wheels), plugins=sorted(roles["vendor"]),
+        if profiles != expected or len(core_wheels) != 1 or len(linux_meta) != 1:
+            raise ValueError("complete Linux release requires one core, one Linux mojolearn wheel and every "
+                             "registered vendor and payload package")
+    # core: a mojolearn-core wheel; mojolearn: a wheel of the mojolearn project (macOS or the Linux meta wheel)
+    return dict(core=bool(core_wheels), mojolearn=bool(mojolearn_wheels), plugins=sorted(roles["vendor"]),
                 payloads=sorted(roles["payload"]), version=next(iter(versions)))
 
 
 def github_outputs(result):
     return "".join(f"{key}={json.dumps(result[key], separators=(',', ':'))}\n"
-                   for key in ("core", "plugins", "payloads"))
+                   for key in ("core", "mojolearn", "plugins", "payloads"))
 
 
 def main(argv=None):

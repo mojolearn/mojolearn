@@ -201,11 +201,11 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
 
 
 #: Run by the installed interpreter: where its mojolearn lives (without
-#: importing it) and the installed versions of the three split projects.
+#: importing it) and the installed versions of the split projects.
 LOCATE_INSTALLED = """import importlib.metadata as md,importlib.util,json
 spec=importlib.util.find_spec('mojolearn')
 dists={}
-for n in ('mojolearn','mojolearn-nvidia','mojolearn-amd','mojolearn-nvidia-ptx'):
+for n in ('mojolearn','mojolearn-core','mojolearn-nvidia','mojolearn-amd','mojolearn-nvidia-ptx'):
     try: dists[n]=md.version(n)
     except md.PackageNotFoundError: dists[n]=None
 print(json.dumps(dict(package=list(spec.submodule_search_locations)[0] if spec else None,distributions=dists)))
@@ -269,7 +269,7 @@ def main():
     parser.add_argument("--python", default="python3.12")
     parser.add_argument("--wheelhouse", type=Path)
     # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): the positional
-    # wheel is the core `mojolearn`, and each --plugin (mojolearn_nvidia-*.whl,
+    # wheel is the core `mojolearn_core-*`, and each --plugin (mojolearn_nvidia-*.whl,
     # mojolearn_amd-*.whl of the same version) is installed beside it in the
     # same pip command. The receipt names every plugin by name and sha256, so
     # tools/check_light_release.py can tie it to the plugin a release publishes.
