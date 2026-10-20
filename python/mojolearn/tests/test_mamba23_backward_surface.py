@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Root-only Mamba2/3 backward qualification.
 
-Default execution is host-only ABI/refusal validation with a fake extension.
+Default execution validates the selected native ABI and refusals with tiny inputs.
 Set MOJOLEARN_MAMBA23_BACKWARD_NVIDIA=1 only on a RunPod NVIDIA host to run
 actual tiny VJPs against float64 autograd, and optionally exact native dumps.
-Host ABI tests use deterministic arrays and run from an installed wheel.
+ABI tests use deterministic arrays and run from an installed wheel; numerical
+autograd qualification remains separate below.
 NVIDIA fixture dependency: x.f32 and the nine constructor weight files in
 mamba/corpus/mamba{2,3}/m{2,3}_base_b2_l4_d32; no ref32/ref64 files or full
 corpus generation is required. The NVIDIA oracle additionally imports the
@@ -81,24 +82,17 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
                 dy = cotangent(x)[:, ::-1, :]
                 expected_inputs = [x] + list(weights.values()) + [dy]
                 output_templates = [x] + list(weights.values())
-                calls = []
-
-                def native(addresses, params):
-                    self.assertEqual(len(addresses), 21)
-                    self.assertEqual(params, [2, 4, 32] + ([0.01, 0.2] if family == 2 else []))
-                    for address, expected in zip(addresses[:11], expected_inputs):
-                        observed = np.ctypeslib.as_array((ctypes.c_float * expected.size).from_address(address))
-                        np.testing.assert_array_equal(observed.view(np.uint32), expected.reshape(-1).view(np.uint32))
-                    for index, (address, template) in enumerate(zip(addresses[11:], output_templates)):
-                        target = np.ctypeslib.as_array((ctypes.c_float * template.size).from_address(address))
-                        target[:] = index + 0.25
-                    calls.append(params)
-
-                extension = SimpleNamespace(**{f"mamba{family}_backward": native})
-                with patch.object(block, "_extension", return_value=extension):
-                    got = block.backward(x, dy)
-                    again = block.backward(x, dy)
-                self.assertEqual(len(calls), 2)
+                # Independent test controller for the existing raw ABI. The
+                # package now caches C entries at import, so injecting a Python
+                # callback through _extension is no longer an execution oracle.
+                packed = [np.ascontiguousarray(value) for value in expected_inputs]
+                reference = [np.empty_like(value) for value in output_templates]
+                addresses = [value.ctypes.data for value in packed + reference]
+                params = [2, 4, 32] + ([0.01, 0.2] if family == 2 else [])
+                native = getattr(block._extension(), f"mamba{family}_backward")
+                native(addresses, params)
+                got = block.backward(x, dy)
+                again = block.backward(x, dy)
                 self.assertEqual(tuple(got), ("x",) + block._W_NAMES)
                 buffers = expected_inputs + list(again.values())
                 for index, (name, value) in enumerate(got.items()):
@@ -108,7 +102,8 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
                     self.assertEqual(value.shape, output_templates[index].shape)
                     self.assertEqual(value.dtype, np.float32)
                     self.assertTrue(value.flags['C_CONTIGUOUS'])
-                    self.assertTrue(np.all(value == index + 0.25))
+                    np.testing.assert_array_equal(value.view(np.uint32), reference[index].view(np.uint32))
+                    self.assertEqual(value.tobytes(), again[name].tobytes())
                     for other in buffers:
                         self.assertFalse(np.shares_memory(value, np.asarray(other)), name)
                     buffers.append(value)
@@ -145,9 +140,18 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
         for family, cls in ((2, Mamba2Block), (3, Mamba3Block)):
             weights, x = host_fixture(family)
             block = cls(weights, numeric_mode="identical")
-            with patch.object(block, "_extension", return_value=SimpleNamespace()):
-                with self.assertRaisesRegex(RuntimeError, f"lacks mamba{family}_backward"):
-                    block.backward(x, cotangent(x))
+            if family == 2:
+                from mojolearn import _native_neural_bridge
+                selected = _native_neural_bridge.CONTEXT["training_bindings"][block._native_route + ":identical"]
+                stale = SimpleNamespace(**vars(selected["mamba"]))
+                delattr(stale, "mamba2_backward")
+                with patch.dict(selected, mamba=stale):
+                    with self.assertRaisesRegex(RuntimeError, "lacks mamba2_backward"):
+                        block.backward(x, cotangent(x))
+            else:
+                with patch.object(block, "_extension", return_value=SimpleNamespace()):
+                    with self.assertRaisesRegex(RuntimeError, "lacks mamba3_backward"):
+                        block.backward(x, cotangent(x))
 
 
 @unittest.skipUnless(os.environ.get("MOJOLEARN_MAMBA23_BACKWARD_NVIDIA") == "1",
