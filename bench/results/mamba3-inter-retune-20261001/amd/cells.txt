@@ -1,2 +1,0 @@
-main mamba3-infer median_ms=8.210694999434054 
-branch mamba3-infer median_ms=7.009656997979619 
