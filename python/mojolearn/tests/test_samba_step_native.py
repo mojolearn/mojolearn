@@ -108,3 +108,70 @@ def test_public_native_step_never_invokes_custom_schedule():
                 "unobserved_existing_threads"):
         assert not result.report()[key], result.report()
     assert (model.flat.tobytes(), model.generator.state_dict(), model.optimizer.t) == before
+
+
+def _owner_models():
+    config = SambaConfig(13, 8, ["attention"], n_heads=2,
+                         intermediate=11, dropout=0.125)
+    rng = np.random.default_rng(919)
+    weights = {name: rng.uniform(-0.04, 0.04, shape).astype("f4")
+               for name, shape in config.registry()}
+    for name in weights:
+        if "norm" in name:
+            weights[name].fill(1)
+    return [SambaStack(config, weights=weights, lr=0.002,
+                       max_norm=0.3, weight_decay=0.02) for _ in range(2)]
+
+
+@pytest.mark.parametrize("resident", [False, True])
+def test_native_step_preserves_rebound_optimizer_parameter_owners(monkeypatch, resident):
+    monkeypatch.setenv("MOJOLEARN_OPTIMIZER_RESIDENT", "1" if resident else "0")
+    expected, actual = _owner_models()
+    for model in (expected, actual):
+        # These are separate writable buffers. The model still reads its
+        # original flat weights, as the established public API does.
+        model.optimizer.params = [np.asarray(value).copy() + np.float32(0.1)
+                                  for value in model.optimizer.params]
+    aliases = tuple(actual.optimizer.params)
+    original_flat = actual.flat.tobytes()
+    inputs = np.array([[1, 2, 4], [3, 5, 6]], dtype="i4")
+    targets = np.array([[2, -100, 6], [5, 6, 7]], dtype="i4")
+    for _ in range(2):
+        metrics = _reference_step(expected, inputs, targets)
+        with monkeypatch.context() as patch:
+            _poison(patch)
+            patch.setattr(training.AdamW, "step", lambda *a, **k: pytest.fail("Python optimizer"))
+            assert _step(actual, inputs, targets) == metrics
+        assert actual.flat.tobytes() == original_flat
+        assert all(a is b for a, b in zip(actual.optimizer.params, aliases))
+        for a, b in zip(actual.optimizer.params, expected.optimizer.params):
+            assert a.tobytes() == b.tobytes()
+        assert actual.optimizer.exp_avg.tobytes() == expected.optimizer.exp_avg.tobytes()
+        assert actual.optimizer.exp_avg_sq.tobytes() == expected.optimizer.exp_avg_sq.tobytes()
+        assert actual.generator.state_dict() == expected.generator.state_dict()
+
+
+@pytest.mark.parametrize("clipping", [None, 0.3])
+def test_native_step_preserves_device_parameter_owner(monkeypatch, clipping):
+    expected, actual = _owner_models()
+    if not expected.optimizer.params_resident_available():
+        pytest.skip("native optimizer device-parameter entry is unavailable")
+    for model in (expected, actual):
+        model.max_norm = clipping
+        model.optimizer.params_to_device()
+    inputs = np.array([[1, 2, 4], [3, 5, 6]], dtype="i4")
+    targets = np.array([[2, -100, 6], [5, 6, 7]], dtype="i4")
+    for _ in range(2):
+        stale = actual.flat.tobytes()
+        metrics = _reference_step(expected, inputs, targets)
+        with monkeypatch.context() as patch:
+            _poison(patch)
+            patch.setattr(training.AdamW, "step_device", lambda *a, **k: pytest.fail("Python device optimizer"))
+            assert _step(actual, inputs, targets) == metrics
+        assert actual.flat.tobytes() == stale
+        assert actual.optimizer._p_dev and actual.optimizer._g_dev
+        actual.optimizer.params_to_host()
+        expected.optimizer.params_to_host()
+        assert actual.flat.tobytes() == expected.flat.tobytes()
+        assert actual.optimizer.exp_avg.tobytes() == expected.optimizer.exp_avg.tobytes()
+        assert actual.optimizer.exp_avg_sq.tobytes() == expected.optimizer.exp_avg_sq.tobytes()
