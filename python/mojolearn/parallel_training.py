@@ -364,11 +364,10 @@ def _connect_parallel_byte_native():
     runtime = _tokenizer_binding()._module.parallel_byte_call
     _backend.default_mode()
     vendor = _backend.vendor()
-    if vendor == "cpu":
-        # cpu-route: only the explicitly selected CPU installation reads host profile metadata
-        modes = {"identical": _backend.load_host_module("_mojolearn_byte_lm_host")}
-    else:
-        modes = {"identical": _backend.binding("_mojolearn_byte_lm", "identical")}
+    selected = _backend.binding("_mojolearn_byte_lm", "identical")
+    # The registry validates the installed CPU owner before constructing its
+    # legacy adapter. Cache its stored native module, never adapter methods.
+    modes = {"identical": selected._host if vendor == "cpu" else selected}
     if vendor == "metal":
         modes["fast"] = _backend.binding("_mojolearn_byte_lm", "fast")
     runtime("initialize", (Array, ByteLanguageModelConfig, modes, vendor))
