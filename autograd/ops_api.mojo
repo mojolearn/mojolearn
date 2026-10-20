@@ -156,7 +156,7 @@ comptime OPS_NARROW = 40         # [axis, piece, mode, ...]: mode 0 sizes..., mo
 comptime OPS_TAKE = 41           # [ids descriptor (7 words), axis]
 comptime OPS_SOFTMAX_N = 42      # [axis]
 comptime OPS_LOG_SOFTMAX_N = 43  # [axis]
-comptime OPS_CONV2D = 44         # [stride, padding]; x, weight, optional bias
+comptime OPS_CONV2D = 44         # [stride, padding, groups (optional, 1)]; x, weight, optional bias
 comptime OPS_MAXPOOL2D = 45      # [kernel, stride]
 comptime OPS_AVGPOOL2D = 46      # [kernel, stride]
 # 47 stays reserved (the rank-N plan held it for an argmax result; argmax is
@@ -1255,6 +1255,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: conv2d takes x (N, C, H, W) and weight (out_channels, C, kh, kw)")
             if ints[0] < 1 or ints[1] < 0:
                 raise Error("ops: conv2d needs stride >= 1 and padding >= 0")
+            # the optional third integer: groups (1 when absent)
+            var cg = ints[2] if ni > 2 else 1
+            if cg < 1:
+                raise Error("ops: conv2d needs groups >= 1")
             if n == 3:
                 var oc = self.tape.dim(x[1], 0)
                 if self.tape.shape_of(x[2]).count() != oc:
@@ -1262,9 +1266,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var oc_dims = List[Int]()
                 oc_dims.append(oc)
                 var cb = rn_as_shape(self.tape, self.ex, x[2], rn_shape(oc_dims, "ops: conv2d"))
-                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], Optional[Tensor](cb), ints[0], ints[1])
+                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], Optional[Tensor](cb), ints[0], ints[1], cg)
             else:
-                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], None, ints[0], ints[1])
+                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], None, ints[0], ints[1], cg)
         elif code == OPS_MAXPOOL2D or code == OPS_AVGPOOL2D:
             _need("pool2d", n, 1, 2, ni, 0, nf)
             if self.tape.ndim(x[0]) != 4:
