@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """The ONNX reader and the import graph (docs/plans/MODEL_IMPORT.md lane 1).
 
-Pure Python, no binding, no ``onnx`` and no ``torch``: every model is written
-by tests/_onnx_fixture.py. Checks the round trip of every shared fixture
+No ``onnx`` and no ``torch``: every model is written by
+tests/_onnx_fixture.py, and read by the Mojo reader through the x_sequence
+binding (tests/test_import_onnx_native.py compares it with the Python
+oracle). Checks the round trip of every shared fixture
 (ops, attributes, initializer bytes, inputs and outputs), static shape
 resolution on a dynamic batch, the folding of a Shape/Gather/Concat target,
 external data views, the topological sort, and the refusals by version,
@@ -17,6 +19,17 @@ from mojolearn.importers import UnsupportedModel
 from mojolearn.importers import onnx as onnx_reader
 from mojolearn.importers._graph import (GraphIR, Node, TensorInfo, int_values, resolve, resolve_shapes)
 from mojolearn.tests import _onnx_fixture as fx
+
+
+def _has_reader():
+    from mojolearn import _backend
+    try:
+        return hasattr(_backend.binding("_mojolearn_x_sequence"), "onnx_read")
+    except Exception:  # noqa: BLE001  no binding in this install
+        return False
+
+
+pytestmark = pytest.mark.skipif(not _has_reader(), reason="the x_sequence binding has no ONNX reader")
 
 ROUND_TRIP = ["linear_layernorm_linear", "conv_relu_maxpool_flatten_gemm", "attention_two_head_causal",
               "batchnorm_relu", "external_sharded", "shape_fold"]

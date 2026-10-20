@@ -1,34 +1,44 @@
 # SPDX-License-Identifier: Apache-2.0
 """Read an ONNX model file into the import graph.
 
-:func:`read` parses the file with a protobuf reader of mojolearn's own (no
-``onnx`` package needed), checks that the model is opset 13 or later in the
-default ONNX domain with tensor types the import supports, and returns the
-graph with its nodes in topological order. The weights are not copied: each
+:func:`read` reads the file with a reader of mojolearn's own (no ``onnx``
+package needed), checks that the model is opset 13 or later in the default
+ONNX domain with tensor types the import supports, and returns the graph
+with its nodes in topological order. The weights are not copied: each
 initializer's bytes are a view into the file (or into its external data
 file) until they are uploaded to the device.
 """
-# cpu-route: model file parsed on the host. This module is the explicit
-# input step before the runtime: it reads names, shapes, attributes and byte
-# ranges from a file and never computes on tensor element values.
+# Engineering note: the file is read, decoded and checked in Mojo
+# (autograd/import_reader.mojo, autograd/import_resolve.mojo) through the
+# x_sequence binding; this module only maps the files for the weight views
+# and wraps the reader's tables in the GraphIR classes. The former Python
+# reader is the test oracle in tests/_onnx_reader_oracle.py.
 from __future__ import annotations
 
-import heapq
+import ctypes
 import mmap
 import os
-import struct
+import weakref
 
-from . import _onnx_proto as _pb
-from ._graph import (FLOAT_DTYPES, ITEMSIZE, ONNX_DTYPE, GraphIR, Node, TensorInfo, UnsupportedModel,
-                     onnx_dtype_name)
+from ._graph import GraphIR, Node, Resolved, TensorInfo, UnsupportedModel
 
 OPSET_MIN = 13
-_DEFAULT_DOMAINS = ("", "ai.onnx")
-_SUPPORTED_TYPES = "float32, float16, bfloat16, float64, int64, int32 and bool"
+
+# the reader's word layout (autograd/import_reader.mojo docstring)
+_MAGIC, _VERSION = 0x4F4E5852, 1
+_OK, _NOT_A_MODEL, _CANNOT_OPEN, _BAD_TEXT, _BAD_VALUE, _PROBLEMS = 0, 1, 2, 3, 4, 5
+_DTYPES = ("f32", "f16", "bf16", "f64", "i64", "i32", "bool")
+_BUF_MODEL, _BUF_BLOB, _BUF_EXTERNAL = 0, 1, 2
+_A_FLOAT, _A_INT, _A_STRING, _A_TENSOR, _A_FLOATS, _A_INTS, _A_STRINGS, _A_TENSORS = 1, 2, 3, 4, 6, 7, 8, 9
 
 
-class _Problem(Exception):
-    pass
+def _binding():
+    from .. import _backend
+    b = _backend.binding("_mojolearn_x_sequence")
+    if not hasattr(b, "onnx_read"):  # cpu-route: model file parsing in Mojo (the reader entry)
+        raise RuntimeError("mojolearn: this install's x_sequence binding has no ONNX reader (onnx_read); "
+                           "rebuild the x_sequence bindings")
+    return b
 
 
 def _map_file(path):
@@ -40,208 +50,131 @@ def _map_file(path):
             return memoryview(f.read())
 
 
-class _External:
-    """External data files beside the model, mapped once each."""
+class _Words:
+    """A cursor over the reader's words."""
 
-    def __init__(self, base):
-        self.base = os.path.realpath(base)
-        self.maps = {}
+    __slots__ = ("w", "i")
 
-    def slice(self, entries, nbytes):
-        loc = entries.get("location", "")
-        if not loc:
-            raise _Problem("external data without a location")
-        if os.path.isabs(loc):
-            raise _Problem(f"external data location '{loc}' is an absolute path (it must sit beside the model)")
-        full = os.path.realpath(os.path.join(self.base, loc))
-        if os.path.commonpath([full, self.base]) != self.base:
-            raise _Problem(f"external data location '{loc}' is outside the model's directory")
-        if full not in self.maps:
-            if not os.path.isfile(full):
-                raise _Problem(f"external data file '{loc}' not found beside the model")
-            self.maps[full] = _map_file(full)
-        buf = self.maps[full]
-        try:
-            off = int(entries.get("offset", "0") or 0)
-            length = int(entries["length"]) if entries.get("length") else nbytes
-        except ValueError:
-            raise _Problem(f"external data offset/length of '{loc}' are not integers") from None
-        if off < 0 or length != nbytes or off + length > len(buf):
-            raise _Problem(f"external data '{loc}' [offset {off}, length {length}] does not hold the "
-                           f"{nbytes} bytes the tensor needs (file size {len(buf)})")
-        return buf[off:off + length]
+    def __init__(self, words):
+        self.w, self.i = words, 0
+
+    def take(self):
+        v = self.w[self.i]
+        self.i += 1
+        return v
 
 
-def _join(chunks):
-    return chunks[0] if len(chunks) == 1 else memoryview(b"".join(bytes(c) for c in chunks))  # cpu-route: model file parsed on the host (field occurrences)
+def _header(words, strings, path):
+    """The status word after the magic and version; raises for a file the reader refused outright."""
+    if len(words) < 3 or words[0] != _MAGIC or words[1] != _VERSION:
+        raise RuntimeError("mojolearn: the x_sequence binding's ONNX reader has another word layout; "
+                           "rebuild the x_sequence bindings")
+    status = words[2]
+    if status == _NOT_A_MODEL:
+        raise ValueError(f"{path} is not an ONNX model: {strings[words[3]]}")
+    if status == _CANNOT_OPEN:
+        if not os.path.exists(path):
+            raise FileNotFoundError(2, "No such file or directory", path)
+        raise OSError(f"{path}: {strings[words[3]]}")
+    if status in (_BAD_TEXT, _BAD_VALUE):
+        raise ValueError(f"{path}: {strings[words[3]]}")
+    return status
 
 
-def _typed_bytes(t, dtype):
-    """The raw bytes of a tensor whose data sits in a typed repeated field.
-    Exporters write weights as raw_data; the typed fields carry small
-    constants, re-encoded here to the raw layout without arithmetic."""
-    typed = t["typed"]
-    if dtype in ("f32",) and 4 in typed:
-        return _join([v for wt, v in typed[4]])  # cpu-route: model file parsed on the host (field occurrences)
-    if dtype == "f64" and 10 in typed:
-        return _join([v for wt, v in typed[10]])  # cpu-route: model file parsed on the host (field occurrences)
-    if dtype in ("f16", "bf16", "i32", "bool") and 5 in typed:
-        vals = []
-        for wt, v in typed[5]:  # cpu-route: model file parsed on the host (field occurrences)
-            vals.extend(_pb._packed_varints(v, wt))
-        fmt = {"f16": "H", "bf16": "H", "i32": "i", "bool": "B"}[dtype]
-        if fmt == "H":
-            vals = [v & 0xFFFF for v in vals]  # cpu-route: model file parsed on the host (bit patterns re-encoded, no arithmetic on values)
-        return memoryview(struct.pack(f"<{len(vals)}{fmt}", *vals))
-    if dtype == "i64" and 7 in typed:
-        vals = []
-        for wt, v in typed[7]:  # cpu-route: model file parsed on the host (field occurrences)
-            vals.extend(_pb._packed_varints(v, wt))
-        return memoryview(struct.pack(f"<{len(vals)}q", *vals))
-    return None
+def _problems(c, strings):
+    out = []
+    for _ in range(c.take()):  # glue: one record per problem the reader found
+        name, op, reason = c.take(), c.take(), c.take()
+        out.append((strings[name], None if op < 0 else strings[op], strings[reason]))
+    return out
 
 
-def _tensor_info(t, ext, name=None):
-    """A TensorProto dict as a TensorInfo; raises _Problem with the reason."""
-    name = name or t["name"]
-    code = t["data_type"]
-    dtype = ONNX_DTYPE.get(code)
-    if dtype is None:
-        raise _Problem(f"{onnx_dtype_name(code)} tensors are not supported ({_SUPPORTED_TYPES} are)")
-    if t["segment"]:
-        raise _Problem("segmented tensors are not supported")
-    dims = tuple(t["dims"])
-    if any(d < 0 for d in dims):  # cpu-route: model file parsed on the host (one per axis)
-        raise _Problem(f"negative dimension in {dims}")
-    numel = 1
-    for d in dims:  # cpu-route: model file parsed on the host (one per axis)
-        numel *= d
-    nbytes = numel * ITEMSIZE[dtype]
-    if t["data_location"] == 1:
-        data = ext.slice(t["external"], nbytes)
-    elif t["raw"] is not None:
-        data = t["raw"]
-    else:
-        data = _typed_bytes(t, dtype)
-        if data is None:
-            if numel:
-                raise _Problem("has no data")
-            data = memoryview(b"")
-    if len(data) != nbytes:
-        raise _Problem(f"holds {len(data)} bytes, its shape {dims} of {dtype} needs {nbytes}")
-    return TensorInfo(name, dtype, dims, data)
+def _value(c, strings):
+    name, dtype, rank = strings[c.take()], _DTYPES[c.take()], c.take()
+    dims = []
+    for _ in range(rank):  # glue: one record per axis of a graph value
+        is_str, v = c.take(), c.take()
+        dims.append(strings[v] if is_str else v)
+    return name, dtype, tuple(dims)
 
 
-def _attr(a, ext):
-    """An AttributeProto dict as an IR attribute value; raises _Problem."""
-    if a["ref_attr_name"]:
-        raise _Problem(f"attribute '{a['name']}' refers to a function attribute")
-    if a["has_graph"]:
-        raise _Problem(f"attribute '{a['name']}' holds a subgraph (control flow is not supported)")
-    if a["has_sparse"]:
-        raise _Problem(f"attribute '{a['name']}' holds a sparse tensor")
-    if a["has_type_proto"]:
-        raise _Problem(f"attribute '{a['name']}' holds a type")
-    ty = a["type"]
-    if ty == 0:  # writers older than IR 3 leave the type out: infer it from the field present
-        ty = (_pb.ATTR_FLOAT if "f" in a else _pb.ATTR_INT if "i" in a else _pb.ATTR_STRING if "s" in a
-              else _pb.ATTR_TENSOR if "t" in a else _pb.ATTR_FLOATS if a["floats"] else _pb.ATTR_INTS
-              if a["ints"] else _pb.ATTR_STRINGS if a["strings"] else _pb.ATTR_TENSORS if a["tensors"] else 0)
-    if ty == _pb.ATTR_FLOAT:
-        return float(a.get("f", 0.0))
-    if ty == _pb.ATTR_INT:
-        return int(a.get("i", 0))
-    if ty == _pb.ATTR_STRING:
-        return a.get("s", b"").decode("utf-8", "replace")
-    if ty == _pb.ATTR_TENSOR:
-        if "t" not in a:
-            raise _Problem(f"attribute '{a['name']}' has no tensor")
-        return _tensor_info(a["t"], ext, a["t"]["name"] or a["name"])
-    if ty == _pb.ATTR_FLOATS:
-        return tuple(float(x) for x in a["floats"])  # cpu-route: model file parsed on the host (attribute list)
-    if ty == _pb.ATTR_INTS:
-        return tuple(int(x) for x in a["ints"])  # cpu-route: model file parsed on the host (attribute list)
-    if ty == _pb.ATTR_STRINGS:
-        return tuple(s.decode("utf-8", "replace") for s in a["strings"])  # cpu-route: model file parsed on the host (attribute list)
-    if ty == _pb.ATTR_TENSORS:
-        return tuple(_tensor_info(t, ext, t["name"] or a["name"]) for t in a["tensors"])  # cpu-route: model file parsed on the host (attribute list)
-    raise _Problem(f"attribute '{a['name']}' has an unsupported type {ty}")
+def _tensor(c, strings, views):
+    name, dtype, rank = strings[c.take()], _DTYPES[c.take()], c.take()
+    shape = tuple([c.take() for _ in range(rank)])  # glue: one word per axis of a tensor record
+    buf, start, end = c.take(), c.take(), c.take()
+    return TensorInfo(name, dtype, shape, views[buf][start:end])
 
 
-def _constant_tensor(name, attrs):
-    """The tensor a Constant node holds, from whichever value attribute it sets."""
-    if "value" in attrs and isinstance(attrs["value"], TensorInfo):
-        t = attrs["value"]
-        return TensorInfo(name, t.dtype, t.shape, t.data)
-    if "value_float" in attrs:
-        return TensorInfo(name, "f32", (), memoryview(struct.pack("<f", attrs["value_float"])))
-    if "value_floats" in attrs:
-        v = attrs["value_floats"]
-        return TensorInfo(name, "f32", (len(v),), memoryview(struct.pack(f"<{len(v)}f", *v)))
-    if "value_int" in attrs:
-        return TensorInfo(name, "i64", (), memoryview(struct.pack("<q", attrs["value_int"])))
-    if "value_ints" in attrs:
-        v = attrs["value_ints"]
-        return TensorInfo(name, "i64", (len(v),), memoryview(struct.pack(f"<{len(v)}q", *v)))
-    raise _Problem("a Constant without a numeric value (string and sparse constants are not supported)")
+def _attr(c, strings, floats, views):
+    kind = c.take()
+    if kind == _A_FLOAT:
+        return floats[c.take()]
+    if kind == _A_INT:
+        return c.take()
+    if kind == _A_STRING:
+        return strings[c.take()]
+    if kind == _A_TENSOR:
+        return _tensor(c, strings, views)
+    if kind == _A_FLOATS:
+        first, end = c.take(), c.take()
+        return tuple(floats[first:end])
+    count = c.take()
+    if kind == _A_INTS:
+        return tuple([c.take() for _ in range(count)])  # glue: one word per entry of an ints attribute record
+    if kind == _A_STRINGS:
+        return tuple([strings[c.take()] for _ in range(count)])  # glue: one word per entry of a strings attribute record
+    return tuple([_tensor(c, strings, views) for _ in range(count)])  # glue: one record per tensors attribute entry
 
 
-def _value(vi, what):
-    """(name, dtype, dims) of a graph input or output; raises _Problem."""
-    ty = vi["type"]
-    if ty is None or ty["kind"] != "tensor":
-        kind = "no type" if ty is None else f"a {ty['kind']} type"
-        raise _Problem(f"{what} has {kind} (only tensors are supported)")
-    dtype = ONNX_DTYPE.get(ty["elem_type"])
-    if dtype is None:
-        raise _Problem(f"{what} is {onnx_dtype_name(ty['elem_type'])} ({_SUPPORTED_TYPES} are supported)")
-    if ty["shape"] is None:
-        raise _Problem(f"{what} has no shape (its rank must be known)")
-    dims = tuple(f"?{i}" if d is None else d for i, d in enumerate(ty["shape"]))  # cpu-route: model file parsed on the host (one per axis)
-    return vi["name"], dtype, dims
+def _views(b, h, c, strings):
+    """One memoryview per buffer the tables point into: the model file and its
+    external data files mapped here, the reader's own bytes copied once."""
+    views = []
+    for _ in range(c.take()):  # glue: one record per file of the model
+        kind, path, nbytes = c.take(), c.take(), c.take()
+        if kind == _BUF_BLOB:
+            blob = bytearray(nbytes)
+            if nbytes:
+                b.onnx_copy_blob(h, ctypes.addressof((ctypes.c_char * nbytes).from_buffer(blob)))
+            views.append(memoryview(blob))
+            continue
+        v = _map_file(strings[path])
+        if len(v) != nbytes:
+            raise ValueError(f"{strings[path]} changed while it was read")
+        views.append(v)
+    return views
 
 
-def _toposort(nodes, available, problems):
-    """Nodes in a topological order, stable for a graph already sorted."""
-    producer = {}
-    for i, n in enumerate(nodes):  # cpu-route: model file parsed on the host (graph nodes)
-        for o in n.outputs:  # cpu-route: model file parsed on the host (node outputs)
-            if not o:
-                continue
-            if o in producer or o in available:
-                problems.append((n.name, n.op, f"output '{o}' is already defined"))
-            producer.setdefault(o, i)
-    deps = []
-    users = [[] for _ in nodes]  # cpu-route: model file parsed on the host (graph nodes)
-    for i, n in enumerate(nodes):  # cpu-route: model file parsed on the host (graph nodes)
-        d = set()
-        for x in n.inputs:  # cpu-route: model file parsed on the host (node inputs)
-            if not x or x in available:
-                continue
-            p = producer.get(x)
-            if p is None:
-                problems.append((n.name, n.op, f"input '{x}' is not produced by any node, initializer or input"))
-            elif p != i:
-                d.add(p)
-        deps.append(len(d))
-        for p in d:  # cpu-route: model file parsed on the host (node inputs)
-            users[p].append(i)
-    ready = [i for i, k in enumerate(deps) if k == 0]  # cpu-route: model file parsed on the host (graph nodes)
-    heapq.heapify(ready)
-    order = []
-    while ready:  # cpu-route: model file parsed on the host (graph nodes)
-        i = heapq.heappop(ready)
-        order.append(nodes[i])
-        for u in users[i]:  # cpu-route: model file parsed on the host (node users)
-            deps[u] -= 1
-            if deps[u] == 0:
-                heapq.heappush(ready, u)
-    if len(order) != len(nodes):
-        placed = {id(n) for n in order}  # cpu-route: model file parsed on the host (graph nodes)
-        for n in nodes:  # cpu-route: model file parsed on the host (graph nodes)
-            if id(n) not in placed:
-                problems.append((n.name, n.op, "is part of a cycle or depends on a node that is"))
-    return tuple(order)
+class _Native:
+    """The Mojo reader's handle of one graph, released with its GraphIR."""
+
+    def __init__(self, b, h):
+        self.b, self.h = b, h
+
+    def resolve(self, shapes=None):
+        """importers._graph.resolve of this graph, by the Mojo rules."""
+        given = dict(shapes or {})
+        names, flat = [], []
+        for name, dims in given.items():  # glue: the shapes argument, one entry per named input
+            dims = tuple([int(d) for d in dims])  # glue: one argument check per axis of a given shape
+            names.append(str(name))
+            flat.append(len(dims))
+            flat.extend(dims)
+        words, strings = self.b.onnx_resolve(self.h, names, flat)  # cpu-route: model file parsing in Mojo
+        _header(words, strings, "the model graph")
+        c = _Words(words)
+        c.i = 3
+        shapes_out, dtypes = {}, {}
+        for _ in range(c.take()):  # glue: one record per resolved value
+            name, dt, rank = strings[c.take()], _DTYPES[c.take()], c.take()
+            shapes_out[name] = tuple([c.take() for _ in range(rank)])  # glue: one word per axis of a resolved shape
+            dtypes[name] = dt
+        folded = {}
+        for _ in range(c.take()):  # glue: one record per folded value
+            name, count = strings[c.take()], c.take()
+            folded[name] = tuple([c.take() for _ in range(count)])  # glue: the folded words the reader returned
+        no_rule = tuple([strings[c.take()] for _ in range(c.take())])  # glue: one word per node without a rule
+        return Resolved(shapes_out, dtypes, folded, no_rule, tuple(_problems(c, strings)))
 
 
 def read(path):
@@ -255,88 +188,38 @@ def read(path):
     input or output of an unsupported type, a subgraph attribute; raises
     ``ValueError`` when the file is not an ONNX model.
     """
-    path = os.fspath(path)  # cpu-route: model file parsed on the host
-    buf = _map_file(path)
+    path = os.fspath(path)
+    b = _binding()
+    h = int(b.onnx_read(os.fsdecode(path)))  # cpu-route: model file parsing in Mojo
     try:
-        m = _pb.model(buf)
-    except _pb.ProtoError as e:
-        raise ValueError(f"{path} is not an ONNX model: {e}") from None
-    g = m["graph"]
-    if g is None:
-        raise ValueError(f"{path} is not an ONNX model: it has no graph")
-    src = os.path.basename(path)
-    problems = []
-    opset = None
-    for o in m["opset_import"]:  # cpu-route: model file parsed on the host (opset entries)
-        if o["domain"] in _DEFAULT_DOMAINS:
-            opset = o["version"]
-    if opset is None:
-        problems.append((src, None, "declares no opset for the default ONNX domain"))
-        opset = 0
-    elif opset < OPSET_MIN:
-        problems.append((src, None, f"opset {opset} (opset {OPSET_MIN} or later is needed; convert the "
-                                    f"model once with onnx.version_converter)"))
-    ext = _External(os.path.dirname(os.path.abspath(path)))
-    inits = {}
-    dead = set()  # names of refused initializers, inputs and Constants: defined, so users are not reported twice
-    for t in g["initializers"]:  # cpu-route: model file parsed on the host (initializers)
-        try:
-            inits[t["name"]] = _tensor_info(t, ext)
-        except _Problem as e:
-            problems.append((t["name"], None, str(e)))
-            dead.add(t["name"])
-    if g["sparse_initializers"]:
-        problems.append((src, None, f"{g['sparse_initializers']} sparse initializers (not supported)"))
-    nodes = []
-    for i, nd in enumerate(g["nodes"]):  # cpu-route: model file parsed on the host (graph nodes)
-        op, dom = nd["op_type"], nd["domain"]
-        name = nd["name"] or f"{op}_{i}"
-        if dom not in _DEFAULT_DOMAINS:
-            problems.append((name, op, f"domain '{dom}' is not supported (only the default ONNX domain is)"))
-            nodes.append(Node(op, dom, name, tuple(nd["inputs"]), tuple(nd["outputs"]), {}))
-            continue
-        attrs, bad = {}, False
-        for a in nd["attributes"]:  # cpu-route: model file parsed on the host (node attributes)
-            try:
-                attrs[a["name"]] = _attr(a, ext)
-            except _Problem as e:
-                problems.append((name, op, str(e)))
-                bad = True
-        if op == "Constant":
-            if len(nd["outputs"]) != 1 or not nd["outputs"][0]:
-                problems.append((name, op, "a Constant needs one output"))
-                continue
-            try:
-                if bad:
-                    raise _Problem("its value cannot be read")
-                inits[nd["outputs"][0]] = _constant_tensor(nd["outputs"][0], attrs)
-            except _Problem as e:
-                problems.append((name, op, str(e)))
-                dead.add(nd["outputs"][0])
-            continue
-        nodes.append(Node(op, "", name, tuple(nd["inputs"]), tuple(nd["outputs"]), attrs))
-    inputs = []
-    for vi in g["inputs"]:  # cpu-route: model file parsed on the host (graph inputs)
-        if vi["name"] in inits or vi["name"] in dead:
-            continue  # an initializer listed as an input (IR 3 style) stays a constant
-        try:
-            inputs.append(_value(vi, "input"))
-        except _Problem as e:
-            problems.append((vi["name"], None, str(e)))
-            dead.add(vi["name"])
-    outputs = []
-    for vi in g["outputs"]:  # cpu-route: model file parsed on the host (graph outputs)
-        try:
-            outputs.append(_value(vi, "output"))
-        except _Problem as e:
-            problems.append((vi["name"], None, str(e)))
-    available = set(inits) | dead | {x[0] for x in inputs}  # cpu-route: model file parsed on the host (graph inputs)
-    ordered = _toposort(nodes, available, problems)
-    produced = available | {o for n in nodes for o in n.outputs}  # cpu-route: model file parsed on the host (node outputs)
-    for name, _, _ in outputs:  # cpu-route: model file parsed on the host (graph outputs)
-        if name not in produced:
-            problems.append((name, None, "output is not produced by any node"))
-    if problems:
-        raise UnsupportedModel(path, problems)
-    return GraphIR(opset=opset, inputs=tuple(inputs), outputs=tuple(outputs), nodes=ordered,
-                   initializers=inits, source=path)
+        words, strings, floats = b.onnx_info(h)  # cpu-route: model file parsing in Mojo
+        status = _header(words, strings, path)
+        c = _Words(words)
+        c.i = 3
+        if status == _PROBLEMS:
+            raise UnsupportedModel(path, _problems(c, strings))
+        opset = c.take()
+        views = _views(b, h, c, strings)
+        inputs = tuple([_value(c, strings) for _ in range(c.take())])  # glue: one record per graph input
+        outputs = tuple([_value(c, strings) for _ in range(c.take())])  # glue: one record per graph output
+        nodes = []
+        for _ in range(c.take()):  # glue: one record per graph node
+            op, domain, name = strings[c.take()], strings[c.take()], strings[c.take()]
+            ins = tuple([strings[c.take()] for _ in range(c.take())])  # glue: one word per node input name
+            outs = tuple([strings[c.take()] for _ in range(c.take())])  # glue: one word per node output name
+            attrs = {}
+            for _ in range(c.take()):  # glue: one record per node attribute
+                key = strings[c.take()]
+                attrs[key] = _attr(c, strings, floats, views)
+            nodes.append(Node(op, domain, name, ins, outs, attrs))
+        inits = {}
+        for _ in range(c.take()):  # glue: one record per initializer
+            t = _tensor(c, strings, views)
+            inits[t.name] = t
+    except BaseException:
+        b.onnx_close(h)
+        raise
+    g = GraphIR(opset=opset, inputs=inputs, outputs=outputs, nodes=tuple(nodes), initializers=inits, source=path)
+    g._native = _Native(b, h)
+    weakref.finalize(g, b.onnx_close, h)
+    return g

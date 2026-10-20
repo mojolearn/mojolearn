@@ -737,6 +737,11 @@ def resolve(g, shapes=None):
     depends on tensor values, inconsistent shapes) are in ``problems`` and
     the nodes with no shape rule in ``no_rule``, so the lowering can report
     them together with its own refusals in one error."""
+    native = getattr(g, "_native", None)
+    if native is not None:
+        # a graph the Mojo reader read (importers/onnx.py): resolved by the
+        # same rules in Mojo (autograd/import_resolve.mojo)
+        return native.resolve(shapes)
     given = dict(shapes or {})
     problems = []
     S, D = {}, {}

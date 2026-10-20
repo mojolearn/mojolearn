@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A minimal protobuf wire reader for the ONNX messages an inference import
+"""The test oracle's protobuf wire reader (the runtime reads ONNX files in
+Mojo: autograd/import_proto.mojo). A minimal protobuf wire reader for the ONNX messages an inference import
 needs (ModelProto, GraphProto, NodeProto, AttributeProto, TensorProto with
 external data, ValueInfoProto, TypeProto, TensorShapeProto,
 OperatorSetIdProto, StringStringEntryProto).

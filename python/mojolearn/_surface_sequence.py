@@ -79,6 +79,8 @@ FAMILIES = (
             "ops_save_program", "ops_load_program",
             # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
             "model_import_params", "ops_load_weights",
+            # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)
+            "onnx_read", "onnx_info", "onnx_copy_blob", "onnx_resolve", "onnx_close",
             # model verification reports (autograd/model_verify.mojo; python -m mojolearn verify-model)
             "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill",
         ),

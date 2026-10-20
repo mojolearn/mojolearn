@@ -32,6 +32,10 @@ from autograd.pyapi import (
     ops_capture_py, ops_program_info_py, ops_program_run_py, ops_program_free_py,
 )
 from autograd.ops_api import OPS_HOST
+# the ONNX model reader and shape resolution (autograd/import_reader.mojo,
+# import_resolve.mojo): host only, the same entries in both bindings
+from autograd.import_reader import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
+from autograd.import_resolve import onnx_resolve_py
 from autograd.model_verify import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from autograd.model_checkpoint import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
@@ -423,6 +427,29 @@ def moe_backward_binding(addrs: PythonObject, ip: PythonObject) raises -> Python
     return moe_backward_py(ex, addrs, ip)
 
 
+
+def onnx_read_binding(path: PythonObject) raises -> PythonObject:
+    """importers.onnx.read: read and check the model file; returns its handle."""
+    return onnx_read_py(path)
+
+
+def onnx_info_binding(h: PythonObject) raises -> PythonObject:
+    return onnx_info_py(h)
+
+
+def onnx_copy_blob_binding(h: PythonObject, addr: PythonObject) raises -> PythonObject:
+    return onnx_copy_blob_py(h, addr)
+
+
+def onnx_resolve_binding(h: PythonObject, names: PythonObject, flat: PythonObject) raises -> PythonObject:
+    """importers._graph.resolve of a graph read by onnx_read."""
+    return onnx_resolve_py(h, names, flat)
+
+
+def onnx_close_binding(h: PythonObject) raises -> PythonObject:
+    return onnx_close_py(h)
+
+
 @export
 def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
     try:
@@ -510,6 +537,12 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[prophet_predict_binding]("prophet_predict")
         m.def_function[moe_forward_binding]("moe_forward")
         m.def_function[moe_backward_binding]("moe_backward")
+        # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
+        m.def_function[onnx_read_binding]("onnx_read")
+        m.def_function[onnx_info_binding]("onnx_info")
+        m.def_function[onnx_copy_blob_binding]("onnx_copy_blob")
+        m.def_function[onnx_resolve_binding]("onnx_resolve")
+        m.def_function[onnx_close_binding]("onnx_close")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))
