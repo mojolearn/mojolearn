@@ -33,6 +33,7 @@ facts PEP 621 has no field for.
    run it.
 """
 
+import json
 import os
 import platform
 import runpy
@@ -99,6 +100,14 @@ class bdist_wheel(_bdist_wheel):
         root = Path(__file__).resolve().parent
         manifest = runpy.run_path(str(root / "mojolearn" / "host_surface.py"))
         allowed = {name + ".so" for name in manifest["wheel_bindings"]()}
+        # A merged host file (bindings/build_merged.sh, mojolearn/_merged.py)
+        # ships when every member its index names is a wheel binding.
+        index = root / "mojolearn" / "host" / "_mojolearn_merged.json"
+        if index.is_file():
+            wheel_names = set(manifest["wheel_bindings"]())
+            for fname, members in json.loads(index.read_text()).get("files", {}).items():
+                if set(members) <= wheel_names:
+                    allowed.add(fname)
         extra = {p.name for p in (root / "mojolearn" / "host").glob("*.so")} - allowed
         if extra:
             raise SystemExit("reference-only host bindings cannot ship: " + ", ".join(sorted(extra)))

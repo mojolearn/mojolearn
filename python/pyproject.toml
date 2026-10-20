@@ -233,6 +233,13 @@ mojolearn = [
     # family marked ships_in_wheel in host_surface.py is built and read back.
     # Training-only reference families are excluded and rejected by setup.py.
     "host/*.so",
+    # The merged-bindings index (python/mojolearn/_merged.py): beside each
+    # merged native file, which member bindings it serves.
+    "_mojolearn_merged.json", "identical/_mojolearn_merged.json", "host/_mojolearn_merged.json",
+    "cuda/_mojolearn_merged.json", "cuda/identical/_mojolearn_merged.json",
+    "cuda/sm_*/_mojolearn_merged.json", "cuda/sm_*/identical/_mojolearn_merged.json",
+    "hip/_mojolearn_merged.json", "hip/identical/_mojolearn_merged.json",
+    "hip/gfx*/_mojolearn_merged.json", "hip/gfx*/identical/_mojolearn_merged.json",
     # THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14). The reference
     # card directory `python -m mojolearn verify` compares against (tracked;
     # the placeholder is deliberate and refused by token, docs/VERIFY.md),

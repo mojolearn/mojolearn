@@ -167,7 +167,7 @@ import re
 import sys
 import threading
 
-from . import gpu_plugins, host_surface
+from . import _merged, gpu_plugins, host_surface
 from ._version import __version__ as _CORE_VERSION
 
 
@@ -1397,8 +1397,12 @@ def host_module_path(basename):
     MOJOLEARN_HOST_DIR the training door opened while the inference door
     looked in the package directory: it refused there when the package had
     no host set, and silently served the package's own binding when it
-    did."""
-    return os.path.join(host_dir(), basename + ".so")
+    did.
+
+    A release's host/ holds one merged file for every host binding
+    (`_merged.py`, bindings/build_merged.sh); the answer is then that file,
+    which exports this binding's PyInit under its own name."""
+    return _merged.binding_path(host_dir(), basename)
 
 
 # THE BYTE LM AND FOREST INFERENCE DOORS' BINARY LOADERS (lane/lazy-imports,
@@ -1480,10 +1484,11 @@ def host_families_built():
     d = host_dir()
     if not os.path.isdir(d):
         return []
-    return sorted(
-        f[:-3] for f in os.listdir(d)
-        if f.startswith("_mojolearn_") and f.endswith("_host.so")
-    )
+    own = {f[:-3] for f in os.listdir(d)
+           if f.startswith("_mojolearn_") and f.endswith("_host.so")}
+    # and every member of a merged host file (`_merged.py`)
+    own.update(n for n in _merged.merged_members(d) if n.endswith("_host"))
+    return sorted(own)
 
 
 #: `_MODULES` name -> the basename of the host binding under mojolearn/host/
@@ -1971,6 +1976,19 @@ def select():
                 continue
             if full in sys.modules:
                 continue
+            merged = _merged.merged_file(pkg_dir, name)
+            if merged is not None:
+                # The release layout: no own file, the member is served by the
+                # directory's merged file (`_merged.py`). Loaded here under the
+                # canonical name, exactly as `from . import <name>` would load
+                # its own file; the vendor is read back lazily as above.
+                loader = importlib.machinery.ExtensionFileLoader(full, merged)
+                spec = importlib.util.spec_from_loader(full, loader, origin=merged)
+                module = importlib.util.module_from_spec(spec)
+                _exec_binding(loader, module)
+                sys.modules[full] = module
+                setattr(pkg, name, module)
+                continue
             module = _MissingUpperTier(
                 full, os.path.join(pkg_dir, name + ".so"),
                 _build_script(name), "fast",
@@ -1992,7 +2010,8 @@ def select():
             sys.modules[full] = module
             setattr(pkg, name, module)
             continue
-        path = os.path.join(ident_dir, name + ".so")
+        # its own file, else the directory's merged file (`_merged.py`)
+        path = _merged.binding_path(ident_dir, name)
         if not os.path.exists(path):
             # NEVER fall back to the FAST binary under an upper-tier name,
             # and NEVER fall back to the OTHER VENDOR'S binary under this
@@ -2196,7 +2215,7 @@ def load_set(mode):
         # _ModeSet error message says it means.
         if not _offers(name, mode):
             continue
-        path = os.path.join(tier_dir_, name + ".so")
+        path = _merged.binding_path(tier_dir_, name)  # own file, else the merged one
         if not os.path.exists(path):
             missing.append(name)
             continue
