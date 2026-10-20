@@ -47,6 +47,26 @@ def test_direct_program_constructor_preserves_integer_input_metadata():
         np.testing.assert_array_equal(actual, weights[inputs])
 
 
+@pytest.mark.parametrize("legacy", [False, True])
+def test_direct_program_constructor_accepts_builtin_metadata_iterators(legacy):
+    inputs = np.array([[-2, 1], [3, -4]], dtype="f4")
+    with ops.Session() as session:
+        x = session.tensor(inputs)
+        output = session.relu(x)
+        captured = session.capture(inputs=[x], outputs=[output])
+        info = [captured._id, iter([iter([2, 2])]),
+                iter([iter([2, 2])]), iter(())]
+        if not legacy:
+            info.append(iter([0]))
+        program = ops.Program.__new__(ops.Program)
+        audit_native_call(program.__init__, session, info).assert_native()
+        assert program.input_shapes == program.output_shapes == ((2, 2),)
+        assert program.input_kinds == (0,)
+        assert program.params == ()
+        actual = audit_native_call(program.run, inputs).assert_native()
+        np.testing.assert_array_equal(actual, np.maximum(inputs, np.float32(0)))
+
+
 def test_direct_program_constructor_invalid_metadata_has_no_python_runtime():
     with ops.Session() as session:
         value = ops.Program.__new__(ops.Program)

@@ -84,29 +84,36 @@ def _program_initialize(mut out: PythonObject, session: PythonObject, info: Pyth
     out._control_native = session._program_control
     out._fit_native = session._program_fit
     out._session_native = session._session_native
-    var params = Python.list()
-    for k in range(len(info[3])):  # driver-loop: over parameter handle metadata
-        params.append(b.int(info[3][k]))
-    out.params = b.tuple(params)
-    var kinds = Python.list()
-    if len(info) > 4:
-        for k in range(len(info[4])):  # driver-loop: over input kind metadata
-            kinds.append(b.int(info[4][k]))
-    else:
-        for k in range(len(info[1])):  # driver-loop: over legacy value-only input descriptors
-            kinds.append(0)
-    out.input_kinds = b.tuple(kinds)
     for k in range(2):  # small-loop(2: input/output shape descriptors): metadata only
+        # The original constructor accepts iterable metadata, including
+        # builtin tuple/list iterators. Materialize with the native C tuple
+        # constructor before the Mojo metadata walk.
+        var shapes = b.tuple(info[k + 1])
         var dims = Python.list()
-        for j in range(len(info[k + 1])):  # driver-loop: over graph input/output shapes
+        for j in range(len(shapes)):  # driver-loop: over graph input/output shapes
+            var source = b.tuple(shapes[j])
             var shape = Python.list()
-            for axis in range(len(info[k + 1][j])):  # driver-loop: over tensor rank metadata
-                shape.append(b.int(info[k + 1][j][axis]))
+            for axis in range(len(source)):  # driver-loop: over tensor rank metadata
+                shape.append(b.int(source[axis]))
             dims.append(b.tuple(shape))
         if k == 0:
             out.input_shapes = b.tuple(dims)
         else:
             out.output_shapes = b.tuple(dims)
+    var parameter_source = b.tuple(info[3])
+    var params = Python.list()
+    for k in range(len(parameter_source)):  # driver-loop: over parameter handle metadata
+        params.append(b.int(parameter_source[k]))
+    out.params = b.tuple(params)
+    var kinds = Python.list()
+    if len(info) > 4:
+        var kind_source = b.tuple(info[4])
+        for k in range(len(kind_source)):  # driver-loop: over input kind metadata
+            kinds.append(b.int(kind_source[k]))
+    else:
+        for k in range(len(out.input_shapes)):  # driver-loop: over legacy value-only input descriptors
+            kinds.append(0)
+    out.input_kinds = b.tuple(kinds)
 
 
 def _program_object(session: PythonObject, info: PythonObject) raises -> PythonObject:
