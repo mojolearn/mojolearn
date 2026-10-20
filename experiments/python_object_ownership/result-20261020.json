@@ -1,0 +1,239 @@
+{
+  "schema": "mojolearn.stdlib-ownership-evidence.v1",
+  "date": "2026-10-20",
+  "status": "UPSTREAM_OWNERSHIP_BLOCKER_CONFIRMED",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "build_exit_code": 0,
+  "probe_exit_code": 1,
+  "initial_environment_build_exit_code": 1,
+  "initial_environment_build_failure": "Compiler invoked without its pixi environment could not locate std; retained separately, no source workaround.",
+  "evidence_directory": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stdlib-ownership",
+  "source_commit": "f11e71aac",
+  "probe": {
+    "python": "3.14.7 | packaged by conda-forge | (main, Sep  2 2026, 21:04:32) [Clang 20.1.8 ]",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "extension": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stdlib-ownership/_mojo_python_ownership.so",
+    "cases": [
+      {
+        "name": "no_op",
+        "before": 1,
+        "after_call": 1,
+        "expected_call": 1,
+        "after_release": 1,
+        "expected_release": 1,
+        "receiver_before": 1,
+        "receiver_after": 1,
+        "value_collected": true,
+        "passed": true
+      },
+      {
+        "name": "assign_attribute",
+        "before": 1,
+        "after_call": 3,
+        "expected_call": 2,
+        "after_release": 2,
+        "expected_release": 1,
+        "receiver_before": 1,
+        "receiver_after": 1,
+        "value_collected": false,
+        "passed": false
+      },
+      {
+        "name": "read_attribute",
+        "before": 1,
+        "after_call": 3,
+        "expected_call": 3,
+        "after_release": 1,
+        "expected_release": 1,
+        "receiver_before": 1,
+        "receiver_after": 1,
+        "value_collected": true,
+        "passed": true
+      },
+      {
+        "name": "builtin_type",
+        "before": 1,
+        "after_call": 2,
+        "expected_call": 1,
+        "after_release": 2,
+        "expected_release": 1,
+        "receiver_before": 1,
+        "receiver_after": 1,
+        "value_collected": false,
+        "passed": false
+      },
+      {
+        "name": "builtin_list",
+        "before": 1,
+        "after_call": 2,
+        "expected_call": 1,
+        "after_release": 2,
+        "expected_release": 1,
+        "receiver_before": 1,
+        "receiver_after": 1,
+        "value_collected": null,
+        "passed": false
+      },
+      {
+        "name": "append_value",
+        "before": 1,
+        "after_call": 3,
+        "expected_call": 2,
+        "after_release": 2,
+        "expected_release": 1,
+        "receiver_before": 1,
+        "receiver_after": 1,
+        "value_collected": false,
+        "passed": false
+      }
+    ],
+    "passed": false
+  },
+  "files": {
+    "_mojo_python_ownership.mojo": {
+      "sha256": "6ff38d679daf49c2ee91ff38348dab259cbb3d4f1fba0c099e4a56773337f600",
+      "bytes": 1504
+    },
+    "probe.py": {
+      "sha256": "03e17f867cd334590b46ffda5fe18f4cd6ce7a189431eaf72cf8d8aab767f87a",
+      "bytes": 2712
+    },
+    "_mojo_python_ownership.so": {
+      "sha256": "489d2f4ed102658ed66e95c23283e4a314a70868652953bfb8b9fd539312a72b",
+      "bytes": 173304
+    },
+    "probe.json": {
+      "sha256": "a741f6ea7651e0a0fe50519207eeab93dc3c10468c31c9e6c5b9a9b46d7033fd",
+      "bytes": 1957
+    },
+    "probe.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build-pixi.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "build.log": {
+      "sha256": "cc194c52a821a9e9b9608194b8a90872ee1b1ccc0f2f3276500fa7da13dde901",
+      "bytes": 5687
+    },
+    "compiler-version.txt": {
+      "sha256": "b514f4583371fc0e5f7b9061bdbebbf2a27825cd860e188b47384f4519786725",
+      "bytes": 22
+    },
+    "build-exit-code": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "build-pixi-exit-code": {
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    "probe-exit-code": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    },
+    "probe-python312.json": {
+      "sha256": "3d20dde04ed10c896c1c84d8580f5f38d4c22b3405185433f0714411cd690906",
+      "bytes": 1942
+    },
+    "probe-python312.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "probe-python312-exit-code": {
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "bytes": 2
+    }
+  },
+  "scope": "Ordinary supported shared-library build; no mojolearn import, patched standard library, reference-count compensation or unsupported build mode.",
+  "qualification": "Generation arithmetic/native-call test passes remain valid; object lifetime and completion of native ownership are blocked. No upstream issue has been posted.",
+  "independent_python312_probe": {
+    "python": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "extension": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stdlib-ownership/_mojo_python_ownership.so",
+    "cases": [
+      {
+        "name": "no_op",
+        "before": 2,
+        "after_call": 2,
+        "expected_call": 2,
+        "after_release": 2,
+        "expected_release": 2,
+        "receiver_before": 2,
+        "receiver_after": 2,
+        "value_collected": true,
+        "passed": true
+      },
+      {
+        "name": "assign_attribute",
+        "before": 2,
+        "after_call": 4,
+        "expected_call": 3,
+        "after_release": 3,
+        "expected_release": 2,
+        "receiver_before": 2,
+        "receiver_after": 2,
+        "value_collected": false,
+        "passed": false
+      },
+      {
+        "name": "read_attribute",
+        "before": 2,
+        "after_call": 4,
+        "expected_call": 4,
+        "after_release": 2,
+        "expected_release": 2,
+        "receiver_before": 2,
+        "receiver_after": 2,
+        "value_collected": true,
+        "passed": true
+      },
+      {
+        "name": "builtin_type",
+        "before": 2,
+        "after_call": 3,
+        "expected_call": 2,
+        "after_release": 3,
+        "expected_release": 2,
+        "receiver_before": 2,
+        "receiver_after": 2,
+        "value_collected": false,
+        "passed": false
+      },
+      {
+        "name": "builtin_list",
+        "before": 2,
+        "after_call": 3,
+        "expected_call": 2,
+        "after_release": 3,
+        "expected_release": 2,
+        "receiver_before": 2,
+        "receiver_after": 2,
+        "value_collected": null,
+        "passed": false
+      },
+      {
+        "name": "append_value",
+        "before": 2,
+        "after_call": 4,
+        "expected_call": 3,
+        "after_release": 3,
+        "expected_release": 2,
+        "receiver_before": 2,
+        "receiver_after": 2,
+        "value_collected": false,
+        "passed": false
+      }
+    ],
+    "passed": false
+  },
+  "commands": {
+    "build_cwd": "/Users/andrewhendel/mojolearn-wt/core-completion",
+    "build": "pixi run mojo build --emit shared-lib /Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stdlib-ownership/_mojo_python_ownership.mojo -o /Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stdlib-ownership/_mojo_python_ownership.so",
+    "probe_cwd": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stdlib-ownership",
+    "probe": "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python probe.py",
+    "independent_probe": "3.12.11 (main, Jun  3 2025, 15:41:47) [Clang 17.0.0 (clang-1700.0.13.3)]; retained release 0.8.55/a8255828597a/self-test-macos/venv/bin/python probe.py; same extension bytes"
+  }
+}
