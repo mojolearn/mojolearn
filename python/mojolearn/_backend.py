@@ -612,7 +612,7 @@ def _split_core():
         raise GpuPluginError(
             f"mojolearn: the {gpu_plugins.CORE_MARKER} in this install's .dist-info "
             f"({_site_dir()}) is not a {gpu_plugins.CORE_SCHEMA} document; "
-            "reinstall mojolearn")
+            f"{gpu_plugins.reinstall_command(_CORE_VERSION)}")
     _SPLIT = doc
     return doc
 
