@@ -31,6 +31,10 @@ from autograd.pyapi import (
     ops_capture_py, ops_program_info_py, ops_program_run_py, ops_program_free_py,
 )
 from autograd.ops_api import OPS_DEVICE
+# the ONNX model reader and shape resolution (autograd/import_reader.mojo,
+# import_resolve.mojo): host only, the same entries in both bindings
+from autograd.import_reader import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
+from autograd.import_resolve import onnx_resolve_py
 from autograd.model_checkpoint import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
     ops_save_state_py, ops_load_program_py, ops_save_program_py,
@@ -537,6 +541,29 @@ def moe_weights_free_binding(h: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
+
+def onnx_read_binding(path: PythonObject) raises -> PythonObject:
+    """importers.onnx.read: read and check the model file; returns its handle."""
+    return onnx_read_py(path)
+
+
+def onnx_info_binding(h: PythonObject) raises -> PythonObject:
+    return onnx_info_py(h)
+
+
+def onnx_copy_blob_binding(h: PythonObject, addr: PythonObject) raises -> PythonObject:
+    return onnx_copy_blob_py(h, addr)
+
+
+def onnx_resolve_binding(h: PythonObject, names: PythonObject, flat: PythonObject) raises -> PythonObject:
+    """importers._graph.resolve of a graph read by onnx_read."""
+    return onnx_resolve_py(h, names, flat)
+
+
+def onnx_close_binding(h: PythonObject) raises -> PythonObject:
+    return onnx_close_py(h)
+
+
 @export
 def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
     try:
@@ -645,6 +672,12 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[moe_backward_binding]("moe_backward")
         m.def_function[moe_weights_put_binding]("moe_weights_put")
         m.def_function[moe_weights_free_binding]("moe_weights_free")
+        # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
+        m.def_function[onnx_read_binding]("onnx_read")
+        m.def_function[onnx_info_binding]("onnx_info")
+        m.def_function[onnx_copy_blob_binding]("onnx_copy_blob")
+        m.def_function[onnx_resolve_binding]("onnx_resolve")
+        m.def_function[onnx_close_binding]("onnx_close")
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
         return m.finalize()
