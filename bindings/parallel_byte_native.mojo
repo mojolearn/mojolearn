@@ -451,9 +451,9 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
     owner._state = admitted
     owner._native_shape = shape
     var shape_object = p[].bi.object.__new__(p[].shape_cls)
-    var fields = p[].bi.list(shape["model_shape"])
-    for i in range(len(fields)):
-        p[].bi.object.__setattr__(shape_object, fields[i], shape["model_shape"][fields[i]])
+    # Initialize frozen dataclass storage directly, without invoking the
+    # Python-generated __setattr__ or colliding with PythonObject's setter.
+    shape_object.__dict__.update(shape["model_shape"])
     owner._shape = shape_object
     owner._session = PythonObject(None)
     owner._binding = PythonObject(None)
@@ -751,5 +751,5 @@ def parallel_byte_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         if message.startswith("NotImplementedError:"):
             return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
         if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType.RuntimeError)
+            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error, ExceptionType.ValueError)

@@ -329,4 +329,4 @@ def transport_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var result = transport_call(String(args[0]), args[1])
         return result.steal_data()
     except error:
-        return raise_python_exception(error, ExceptionType.RuntimeError)
+        return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
