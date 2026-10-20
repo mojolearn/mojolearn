@@ -40,14 +40,15 @@ SUPPORTED_OPS = (
     ("Add", "inputs that broadcast"),
     ("And", "inputs that broadcast; nonzero is true"),
     ("ArgMax", "select_last_index=0; the positions come back as int32"),
-    ("AveragePool", "2-D, square kernel_shape, equal strides, zero pads, dilations 1"),
+    ("AveragePool", "2-D, square kernel_shape, equal strides, dilations 1; any pads or auto_pad, "
+                    "count_include_pad 0 or 1"),
     ("BatchNormalization", "inference (training_mode=0) with constant scale, bias, mean and variance"),
     ("Cast", "to any float type; between integer and bool types; not from float to integer or bool"),
     ("Ceil", "any input"),
     ("Clip", "constant or computed min and max"),
     ("Concat", "any axis"),
     ("ConstantOfShape", "a static shape"),
-    ("Conv", "1-D and 2-D, group=1, dilations 1, equal strides, the same pad on every side"),
+    ("Conv", "1-D and 2-D, any group, dilations 1, equal strides; any pads or auto_pad"),
     ("Cos", "any input"),
     ("Div", "inputs that broadcast; floating-point values"),
     ("Dropout", "inference: the input passes through; the mask output unused"),
@@ -78,7 +79,8 @@ SUPPORTED_OPS = (
     ("LogSoftmax", "any axis"),
     ("MatMul", "any ranks that broadcast as NumPy's matmul"),
     ("Max", "inputs that broadcast"),
-    ("MaxPool", "2-D, square kernel_shape, equal strides, zero pads, dilations 1; the Indices output unused"),
+    ("MaxPool", "2-D, square kernel_shape, equal strides, dilations 1; any pads or auto_pad; "
+                "the Indices output unused"),
     ("Min", "inputs that broadcast"),
     ("Mul", "inputs that broadcast"),
     ("Neg", "any input"),
@@ -372,15 +374,41 @@ def _c_argmax(G, n):
     return [] if not n.attrs.get("select_last_index", 0) else ["select_last_index=1 is not supported"]
 
 
-def _window(n, spatial):
-    """(kernel, strides, pads, dilations) of a Conv or pool node over ``spatial`` axes."""
-    k = tuple(n.attrs.get("kernel_shape", ()))
+def _window(G, n):
+    """(kernel, strides, pads, dilations) of a Conv or pool node, the pads
+    explicit: ONNX order (every spatial axis's count before, then every
+    axis's count after). ``auto_pad`` resolves from the static shapes as
+    ONNX defines it: VALID is no padding; SAME_UPPER and SAME_LOWER pad each
+    axis to ``ceil(size / stride)`` outputs, the odd count at the end
+    (UPPER) or at the start (LOWER). Shape arithmetic only."""
+    s = tuple(G.shape(n.inputs[0]))
+    spatial = len(s) - 2
+    if "kernel_shape" in n.attrs:
+        k = tuple(n.attrs["kernel_shape"])
+    else:
+        k = tuple(G.shape(n.inputs[1])[2:]) if n.op == "Conv" else ()
     st = tuple(n.attrs.get("strides", (1,) * spatial))
     pads = tuple(n.attrs.get("pads", (0,) * (2 * spatial)))
     dil = tuple(n.attrs.get("dilations", (1,) * spatial))
-    if n.attrs.get("auto_pad", "NOTSET") == "VALID":
+    auto = n.attrs.get("auto_pad", "NOTSET")
+    if auto == "VALID":
         pads = (0,) * (2 * spatial)
+    elif auto in ("SAME_UPPER", "SAME_LOWER") and len(k) == spatial and len(st) == spatial:
+        before, after = [], []
+        for i in range(spatial):  # cpu-route: model graph lowered on the host (one per spatial axis)
+            d = s[2 + i]
+            total = max((-(-d // st[i]) - 1) * st[i] + (k[i] - 1) * dil[i] + 1 - d, 0)
+            first = total // 2 if auto == "SAME_UPPER" else total - total // 2
+            before.append(first)
+            after.append(total - first)
+        pads = tuple(before + after)
     return k, st, pads, dil
+
+
+def _pad_counts(pads):
+    """Session.pad counts of a rank-4 (N, C, H, W) value from 2-D ONNX
+    window pads (top, left, bottom, right)."""
+    return [0, 0, pads[0], pads[1], 0, 0, pads[2], pads[3]]
 
 
 def _c_conv(G, n):
@@ -388,18 +416,17 @@ def _c_conv(G, n):
     out = []
     if len(s) not in (3, 4):
         return [f"input {tuple(s)}: only 1-D and 2-D convolutions are supported"]
-    sp = len(s) - 2
-    _, st, pads, dil = _window(n, sp)
-    if n.attrs.get("group", 1) != 1:
-        out.append(f"group={n.attrs.get('group')} (only group=1 is supported)")
+    _, st, pads, dil = _window(G, n)
+    group = n.attrs.get("group", 1)
+    oc = G.shape(n.inputs[1])[0]
+    if group < 1 or s[1] % group or oc % group:
+        out.append(f"group={group} does not divide {s[1]} input and {oc} output channels")
     if any(d != 1 for d in dil):  # cpu-route: model graph lowered on the host (one per spatial axis)
         out.append(f"dilations={dil} (only 1 is supported)")
     if len(set(st)) != 1:
         out.append(f"strides={st} (only equal strides are supported)")
-    if n.attrs.get("auto_pad", "NOTSET") not in ("NOTSET", "VALID"):
-        out.append(f"auto_pad={n.attrs.get('auto_pad')} (only NOTSET and VALID are supported)")
-    elif len(set(pads)) != 1:
-        out.append(f"pads={pads} (only the same pad on every side is supported)")
+    if any(p < 0 for p in pads):  # cpu-route: model graph lowered on the host (one per side)
+        out.append(f"pads={pads} (negative pads are not supported)")
     return out
 
 
@@ -408,20 +435,21 @@ def _c_pool(G, n):
     s = G.shape(n.inputs[0])
     if len(s) != 4:
         return out + [f"input {tuple(s)}: only 2-D pooling is supported"]
-    k, st, pads, dil = _window(n, 2)
+    k, st, pads, dil = _window(G, n)
     if len(set(k)) != 1:
         out.append(f"kernel_shape={k} (only a square kernel is supported)")
     if len(set(st)) != 1:
         out.append(f"strides={st} (only equal strides are supported)")
-    if any(p != 0 for p in pads) or n.attrs.get("auto_pad", "NOTSET") not in ("NOTSET", "VALID"):  # cpu-route: model graph lowered on the host (one per side)
-        out.append(f"pads={pads} (only zero pads are supported)")
+    if k and any(p < 0 or p >= k[0] for p in pads):  # cpu-route: model graph lowered on the host (one per side)
+        # a pad of the kernel's size or more makes windows of padding only
+        out.append(f"pads={pads} (each pad must be between 0 and kernel_shape - 1)")
     if any(d != 1 for d in dil):  # cpu-route: model graph lowered on the host (one per spatial axis)
         out.append(f"dilations={dil} (only 1 is supported)")
     if n.attrs.get("storage_order", 0):
         out.append("storage_order=1 is not supported")
     if n.attrs.get("ceil_mode", 0) and k and st:
         # ceil_mode changes nothing when every window fits exactly
-        floor = tuple((s[2 + i] - k[i]) // st[i] + 1 for i in range(2))  # cpu-route: model graph lowered on the host (two spatial axes)
+        floor = tuple((s[2 + i] + pads[i] + pads[2 + i] - k[i]) // st[i] + 1 for i in range(2))  # cpu-route: model graph lowered on the host (two spatial axes)
         if tuple(G.shape(n.outputs[0])[2:]) != floor:
             out.append("ceil_mode=1 with a partial last window is not supported")
     return out
@@ -955,28 +983,61 @@ def _l_conv(L, n):
     x, w = n.inputs[0], n.inputs[1]
     b = n.inputs[2] if len(n.inputs) > 2 and n.inputs[2] else ""
     sh = G.shape(x)
-    _, st, pads, _ = _window(n, len(sh) - 2)
-    stride, pad = st[0], pads[0]
+    _, st, pads, _ = _window(G, n)
+    stride = st[0]
+    group = n.attrs.get("group", 1)
     hb = None
     if b:
         hb = _row_param(L, b, G.shape(w)[0])
     if len(sh) == 4:
-        return [s.conv2d(_x(L, n), L.get(w), hb, stride=stride, padding=pad)]
+        if len(set(pads)) == 1:
+            return [s.conv2d(_x(L, n), L.get(w), hb, stride=stride, padding=pads[0], groups=group)]
+        # unequal pads (explicit, or SAME with an odd total): the zeros
+        # placed first, then the unpadded convolution reads the same words
+        hx = s.pad(_x(L, n), _pad_counts(pads))
+        return [s.conv2d(hx, L.get(w), hb, stride=stride, padding=0, groups=group)]
     # 1-D: (N, C, L) as (N, C, 1, L), padded on the length axis only
     nb, c, ln = sh
     ws = G.shape(w)
     hx = s.reshape(_x(L, n), (nb, c, 1, ln))
-    if pad:
-        hx = s.pad(hx, [0, 0, 0, pad, 0, 0, 0, pad])
+    if pads[0] or pads[1]:
+        hx = s.pad(hx, [0, 0, 0, pads[0], 0, 0, 0, pads[1]])
     hw = s.reshape(L.get(w), (ws[0], ws[1], 1, ws[2]))
     hw = L.k(hw) if w in G.const and not L.cur_const else hw
-    return [L.fit(s.conv2d(hx, hw, hb, stride=stride, padding=0), n.outputs[0])]
+    return [L.fit(s.conv2d(hx, hw, hb, stride=stride, padding=0, groups=group), n.outputs[0])]
 
 
 def _l_pool(L, n):
-    k, st, _, _ = _window(n, 2)
-    f = L.s.max_pool2d if n.op == "MaxPool" else L.s.avg_pool2d
-    return [f(_x(L, n), k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
+    s = L.s
+    k, st, pads, _ = _window(L.G, n)
+    kk, stride = k[0], st[0]
+    rest = [None] * (len(n.outputs) - 1)
+    if not any(pads):  # cpu-route: model graph lowered on the host (four pads)
+        f = s.max_pool2d if n.op == "MaxPool" else s.avg_pool2d
+        return [f(_x(L, n), kk, stride=stride)] + rest
+    counts = _pad_counts(pads)
+    if n.op == "MaxPool":
+        # ONNX pads a max pool with values that never win: -inf, and every
+        # window holds an input value (each pad below the kernel size)
+        return [s.max_pool2d(s.pad(_x(L, n), counts, float("-inf")), kk, stride=stride)] + rest
+    if n.attrs.get("count_include_pad", 0):
+        # the padding counts in every window: zeros placed, then the mean of
+        # kernel_shape^2 values per window
+        return [s.avg_pool2d(s.pad(_x(L, n), counts, 0.0), kk, stride=stride)] + rest
+    # count_include_pad=0: each window's sum over the zero-padded input (a
+    # depthwise convolution with ones: the taps added in (kh, kw) order)
+    # divided by the window's number of input values, a count map from the
+    # same convolution over a ones image padded with zeros (exact small
+    # integers, built on the device once, a parameter of the program)
+    sh = L.G.shape(n.inputs[0])
+    c, h, w = sh[1], sh[2], sh[3]
+    ones_w = s.full((c, 1, kk, kk), 1.0)
+    ones_w = ones_w if L.cur_const else L.persist(ones_w)
+    total = s.conv2d(s.pad(_x(L, n), counts, 0.0), ones_w, None, stride=stride, padding=0, groups=c)
+    image = s.pad(s.full((1, 1, h, w), 1.0), counts, 0.0)
+    count = s.conv2d(image, s.full((1, 1, kk, kk), 1.0), None, stride=stride, padding=0)
+    count = count if L.cur_const else L.persist(count)
+    return [s.div(total, count)] + rest
 
 
 def _l_pad(L, n):
