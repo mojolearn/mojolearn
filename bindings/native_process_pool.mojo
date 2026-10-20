@@ -251,7 +251,12 @@ def process_pool_start(pool: PythonObject) raises:
                 group.append(devices[i])
             var env = _process_environment(devices, group)
             var token = String(p[].random(32).hex())
-            var argv = [String(p[].executable), String("-m"), String(pool["module"]), String(port), String(token)]
+            var argv = List[String]()
+            argv.append(String(p[].executable))
+            argv.append(String("-m"))
+            argv.append(String(pool["module"]))
+            argv.append(String(port))
+            argv.append(String(token))
             var pid = transport_spawn(p[].executable, argv, env)
             var worker = bi.dict()
             worker["pid"] = pid
