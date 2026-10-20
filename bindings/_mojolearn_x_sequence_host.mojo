@@ -209,19 +209,17 @@ def ops_program_inspect_binding(sid: PythonObject, pid: PythonObject, optimize: 
     return ops_program_inspect_py[HostExec, OPS_HOST](sid, pid, optimize)
 
 
-def ops_program_control_binding(sid: PythonObject, pid: PythonObject, condition: PythonObject,
-                                other: PythonObject, condition_sid: PythonObject, other_sid: PythonObject,
-                                arrays: PythonObject, limit: PythonObject,
-                                optimize: PythonObject) raises -> PythonObject:
-    return ops_program_control_py[HostExec, OPS_HOST](sid, pid, condition, other, condition_sid, other_sid, arrays, limit, optimize)
+def ops_program_control_binding(sid: PythonObject, pid: PythonObject, programs: PythonObject,
+                                arrays: PythonObject, limit: PythonObject, optimize: PythonObject) raises -> PythonObject:
+    return ops_program_control_py[HostExec, OPS_HOST](sid, pid, programs[1], programs[3],
+                                               programs[0], programs[2], arrays, limit, optimize)
 
 
 def ops_program_fit_native_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject,
-                                   targets: PythonObject, optimizer: PythonObject, parameters: PythonObject,
-                                   loss: PythonObject, epochs: PythonObject, batch_size: PythonObject,
-                                   shuffle: PythonObject, seed: PythonObject, delta: PythonObject) raises -> PythonObject:
-    return ops_program_fit_native_py[HostExec, OPS_HOST](sid, pid, arrays, targets, optimizer,
-                                                        parameters, loss, epochs, batch_size, shuffle, seed, delta)
+                                   targets: PythonObject, options: PythonObject) raises -> PythonObject:
+    return ops_program_fit_native_py[HostExec, OPS_HOST](sid, pid, arrays, targets, options[0],
+                                                  options[1], options[2], options[3], options[4],
+                                                  options[5], options[6], options[7])
 
 
 def ops_program_fit_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,

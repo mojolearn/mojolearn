@@ -158,7 +158,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
                 iterations += 1
             for k in range(len(buffers)):  # driver-loop: over final state download
                 var a = output_array(shapes[k])
-                s[].ex.download(FP(unsafe_from_address=Int(py=a.ctypes.data)), buffers[k], shapes[k].count())
+                s[].ex.download(FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])), buffers[k], shapes[k].count())
                 result.append(a)
         else:
             var take_body = _predicate(s[], condition, buffers, shapes, temps)
@@ -166,7 +166,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
             var outputs = _execute(s[], chosen, buffers, shapes, temps)
             for k in range(len(outputs)):  # driver-loop: over selected branch outputs
                 var a = output_array(s[].shapes[s[]._slot(outputs[k])])
-                s[].download(outputs[k], FP(unsafe_from_address=Int(py=a.ctypes.data)))
+                s[].download(outputs[k], FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])))
                 result.append(a)
     except err:
         s[]._drop_temps(temps)

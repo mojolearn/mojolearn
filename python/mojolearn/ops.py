@@ -1604,15 +1604,16 @@ class Program:
 
     def run_if(self, condition, otherwise, *arrays, optimize=False):
         """Evaluate a scalar condition graph and execute its selected branch."""
-        return self._s._b.ops_program_control(self._s._id, self._id, condition._id,
-                                             otherwise._id, condition._s._id, otherwise._s._id,
-                                             arrays, 0, optimize)
+        return self._s._b.ops_program_control(
+            self._s._id, self._id,
+            (condition._s._id, condition._id, otherwise._s._id, otherwise._id),
+            arrays, 0, optimize)
 
     def while_loop(self, *arrays, condition, max_iterations, optimize=False):
         """Apply this state graph while the scalar condition holds, up to a limit."""
-        return self._s._b.ops_program_control(self._s._id, self._id, condition._id,
-                                             0, condition._s._id, self._s._id,
-                                             arrays, max_iterations, optimize)
+        return self._s._b.ops_program_control(
+            self._s._id, self._id, (condition._s._id, condition._id, self._s._id, 0),
+            arrays, max_iterations, optimize)
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
@@ -1656,8 +1657,8 @@ class Program:
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
         self.loss_curve_, self.n_iter_ = self._s._b.ops_program_fit_native(
-            self._s._id, self._id, arrays, targets, optimizer, parameters,
-            loss, epochs, batch_size, shuffle, seed, huber_delta)
+            self._s._id, self._id, arrays, targets,
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta))
         return self
 
     def save(self, path):
