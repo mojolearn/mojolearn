@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A feed-forward model you assemble layer by layer and train on the GPU."""
 # Native model descriptions and numerical execution retain the existing
-# Sequential ABI. Remaining fit/import/checkpoint shells are migrated in
-# separate source freezes; one migrated method delegates one native call.
+# Sequential ABI. Each public operation delegates one native call.
 import os
 
 from ._optional_numpy import require_numpy
@@ -387,15 +386,7 @@ class Sequential:
     # ------------------------------------------------------------ weight import
     def _param_layers(self):
         # (layer index, has bias) of every layer that holds parameters
-        out = []
-        for i, (code, a0, a1, _, args) in enumerate(self._layers):  # glue: one entry per parameter layer
-            if code == _LAYER["linear"]:
-                out.append((i, a1 == 1))
-            elif code == _LAYER["layer_norm"]:
-                out.append((i, True))
-            elif code == _LAYER["conv2d"]:
-                out.append((i, args[4] == 1))
-        return out
+        return _SEQUENTIAL_ENTRY(self, "parameter_layers", (), _SEQUENTIAL_CONTEXT)
 
     def load_state_dict(self, state, *, source=None, names=None, prefix="", strict=True):
         """Load trained weights from PyTorch or a safetensors checkpoint.
@@ -457,57 +448,7 @@ class Sequential:
         >>> model = model.load_state_dict(state)
         >>> pred = model.predict(rng.random((16, 4), dtype=np.float32))
         """
-        from ._weight_import import LAYOUT_TORCH, SLOT_BIAS, SLOT_WEIGHT, WeightSource
-        if not self._layers:
-            raise ValueError("add at least one layer before load_state_dict")
-        if not isinstance(prefix, str):
-            raise TypeError("prefix must be a string")
-        if names is not None and not hasattr(names, "get"):
-            raise TypeError("names must be a dict of layer index to name")
-        layers = self._param_layers()
-        if not layers:
-            raise ValueError("the model has no layers with parameters")
-        entries = []  # (key, layer, slot)
-        for i, bias in layers:  # glue: one name per layer parameter
-            stem = prefix + str(i if names is None else names.get(i, i))
-            entries.append((stem + ".weight", i, SLOT_WEIGHT))
-            if bias:
-                entries.append((stem + ".bias", i, SLOT_BIAS))
-        keys = [k for k, _, _ in entries]  # glue: the requested tensor names
-        with WeightSource(state, source) as src:
-            missing = src.missing(keys)
-            if missing:
-                held = src.names()
-                raise ValueError(f"load_state_dict: the source has no tensor {missing[0]!r}"
-                                 + (f" ({len(missing)} missing)" if len(missing) > 1 else "")
-                                 + f"; it holds {held[:6]}" + (" ..." if len(held) > 6 else ""))
-            if strict:
-                unused = src.unused(keys)
-                if unused:
-                    raise ValueError(f"load_state_dict: the model does not use {unused[:6]}"
-                                     + (" ..." if len(unused) > 6 else "")
-                                     + "; pass strict=False to skip them")
-            sample, d = self._import_shape(src, layers, entries)
-            prog = self._program(d, sample)
-            table = self._table()
-            b = self._binding()
-            n_params, _ = (int(v) for v in b.model_n_params(prog, table))  # glue: two counts returned by Mojo
-            recs = []
-            for key, i, slot in entries:  # glue: one record per source tensor
-                recs += src.record(key, i, slot, LAYOUT_TORCH)
-            params = np.empty(n_params, dtype=np.float32)
-            # Mojo checks every dtype and shape, then writes every parameter
-            counts = b.model_import_params(prog, table, recs, keys, params.ctypes.data)
-            n_params, n_out, n_in = (int(v) for v in counts)  # glue: three counts returned by Mojo
-        self.params_ = params
-        self.n_features_in_ = n_in
-        self.n_outputs_ = n_out
-        self._sample_shape = sample
-        self.n_iter_ = 0
-        self.loss_curve_ = []
-        self._fit_state = None
-        self._imported = True
-        return self
+        return _SEQUENTIAL_ENTRY(self, "load_weights", (state, source, names, prefix, strict), _SEQUENTIAL_CONTEXT)
 
     def _import_shape(self, src, layers, entries):
         # the per-sample shape (None: a version-1 description) and the input
@@ -538,41 +479,7 @@ class Sequential:
 
     # ------------------------------------------------------------ checkpoints
     def _save(self, path, export):
-        if not hasattr(self, "params_"):
-            raise ValueError("call fit before saving the model")
-        if not hasattr(self, "_target"):
-            # weights from load_state_dict without a fit: no loss or training options to save
-            raise ValueError("call fit before saving the model")
-        if not export and getattr(self, "_fit_state", None) is None:
-            raise ValueError("this model holds no training state (it was loaded from an export); use export")
-        if getattr(self, "_sample_shape", None) is not None:
-            # the checkpoint format holds version-1 descriptions only
-            # (training/checkpoint.mojo); a shape-layer model is refused by name
-            raise ValueError("save_checkpoint and export take models of 2-D inputs without reshape, "
-                             "permute, flatten, conv2d or pooling layers")
-        o = self._options
-        classes = getattr(self, "classes_", None)
-        k = 0 if classes is None else int(classes.shape[0])
-        ip = [1 if export else 0, _LOSS[o["loss"]], self._target, o["opt"], o["flags"], o["sched"],
-              o["step_size"], o["n_iter_no_change"], self._fit_batch, int(self._fit_shuffle),
-              self.n_features_in_, self.n_outputs_, int(getattr(self, "_y_1d", False)),
-              0 if export else self.n_iter_, k]
-        fp = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0.0, o["tol"], o["gamma"],
-              o["huber_delta"]] + self._table()
-        if export:
-            addrs = [self.params_.ctypes.data, 0, 0, 0, 0]
-        else:
-            addrs = [self.params_.ctypes.data, self._opt_m.ctypes.data, self._opt_v.ctypes.data,
-                     self._fit_state.ctypes.data, self._curve.ctypes.data]
-        desc = None
-        if k:
-            # classes_ as it is (Mojo refuses a non-contiguous one)
-            desc = describe(classes, "classes")
-        prog = self._program(self.n_features_in_)
-        self._binding().model_save_checkpoint(os.fspath(path), addrs, prog, ip, fp, desc)  # cpu-route: checkpoint file written on the host
-        # this install's verification report beside the file (<path>.verify.json)
-        from ._verify_model import record_sequential
-        record_sequential(self, path)
+        return _SEQUENTIAL_ENTRY(self, "save", (path, export), _SEQUENTIAL_CONTEXT)
 
     def save_checkpoint(self, path):
         """Save the model and its full training state to ``path``.
@@ -607,7 +514,7 @@ class Sequential:
         >>> again = mojolearn.Sequential.from_checkpoint("model.ckpt")  # doctest: +SKIP
         >>> again = again.fit(X, y, epochs=2, resume=True)  # doctest: +SKIP
         """
-        self._save(path, export=False)
+        return _SEQUENTIAL_ENTRY(self, "save", (path, False), _SEQUENTIAL_CONTEXT)
 
     def export(self, path):
         """Save the trained model for inference only.
@@ -638,7 +545,7 @@ class Sequential:
         >>> served = mojolearn.Sequential.load("classifier.ckpt")  # doctest: +SKIP
         >>> proba = served.predict_proba(X)  # doctest: +SKIP
         """
-        self._save(path, export=True)
+        return _SEQUENTIAL_ENTRY(self, "save", (path, True), _SEQUENTIAL_CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, numeric_mode=None):
@@ -665,51 +572,7 @@ class Sequential:
             The file is not a complete model checkpoint (wrong format,
             truncated or damaged).
         """
-        model = cls(numeric_mode=numeric_mode)
-        b = model._binding()
-        path = os.fspath(path)
-        export, layers, ints, floats = b.model_checkpoint_info(path)  # cpu-route: checkpoint file read on the host
-        for c, a0, a1, f in layers:  # glue: one description record per layer
-            model._append(int(c), int(a0), int(a1), float(f))
-        model._sample_shape = None
-        (loss, target, opt, flags, sched, step_size, patience, batch, shuffle, d, n_out, y_1d,
-         n_run, k, class_kind, class_size, n_params) = (int(v) for v in ints)  # glue: counts returned by Mojo
-        lr, f1, f2, eps, wd, _, tol, gamma, huber = (float(v) for v in floats)  # glue: options returned by Mojo
-        loss_name = {v: name for name, v in _LOSS.items()}[loss]  # glue: inverts the loss name table
-        model._options = dict(loss=loss_name, opt=opt, flags=flags, lr=lr, f1=f1, f2=f2, eps=eps,
-                              weight_decay=wd, sched=sched, step_size=step_size, gamma=gamma,
-                              huber_delta=huber, tol=tol, n_iter_no_change=patience)
-        params = np.zeros(n_params, dtype=np.float32)
-        classes = None
-        if k:
-            classes = np.empty(k, dtype=np.dtype(_CLASS_DTYPE[(class_kind, class_size)]))
-        addrs = [params.ctypes.data, 0, 0, 0, 0, 0 if classes is None else classes.ctypes.data]
-        if not int(export):
-            m = np.zeros(n_params, dtype=np.float32)
-            v = np.zeros(n_params, dtype=np.float32)
-            state = np.zeros(_FIT_STATE_WORDS, dtype=np.int64)
-            curve = np.zeros(n_run, dtype=np.float32)
-            addrs[1:5] = [m.ctypes.data, v.ctypes.data, state.ctypes.data, curve.ctypes.data]
-        b.model_load_checkpoint(path, addrs)  # cpu-route: checkpoint file read on the host
-        model.params_ = params
-        model.n_features_in_ = d
-        model.n_outputs_ = n_out
-        model._fit_loss = loss_name
-        model._target = target
-        model._fit_batch = batch
-        model._fit_shuffle = bool(shuffle)
-        model._y_1d = bool(y_1d)
-        if classes is not None:
-            model.classes_ = classes
-        if int(export):
-            model.n_iter_ = 0
-            model.loss_curve_ = []
-            model._fit_state = None
-        else:
-            model.n_iter_ = n_run
-            model.loss_curve_ = curve[:n_run].tolist()
-            model._opt_m, model._opt_v, model._fit_state, model._curve = m, v, state, curve
-        return model
+        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode), _SEQUENTIAL_CONTEXT)
 
     @classmethod
     def load(cls, path, numeric_mode=None):
@@ -722,7 +585,7 @@ class Sequential:
         >>> import mojolearn
         >>> model = mojolearn.Sequential.load("classifier.ckpt")  # doctest: +SKIP
         """
-        return cls.from_checkpoint(path, numeric_mode=numeric_mode)
+        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode), _SEQUENTIAL_CONTEXT)
 
     def _targets(self, y, n, n_out, loss):
         return _SEQUENTIAL_ENTRY(self, "targets", (y, n, n_out, loss), _SEQUENTIAL_CONTEXT)
@@ -785,6 +648,7 @@ def _connect_sequential_bindings():
     from types import BuiltinFunctionType
     from array import array
     from ._array import Array
+    from ._version import __version__
     selected = _backend.default_mode()
     entries = {}
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: connect native modes at package import
@@ -799,7 +663,10 @@ def _connect_sequential_bindings():
             entries[mode] = symbols
         except (ImportError, AttributeError, ValueError, RuntimeError) as error:
             entries[mode] = type(error).__name__ + ": " + str(error)
+    class_dtypes = {key: np.dtype(value) for key, value in _CLASS_DTYPE.items()}  # glue: connect checkpoint dtype classes once at package import
     return {
+        "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
+        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),
         "bindings": entries, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
         "ndarray": np.ndarray, "array_type": array, "array_class": Array,
         "float_types": (float, np.floating), "int_types": (int, np.integer),
@@ -812,3 +679,4 @@ def _connect_sequential_bindings():
 
 
 _SEQUENTIAL_CONTEXT.update(_connect_sequential_bindings())
+_SEQUENTIAL_ENTRY(None, "initialize", (), _SEQUENTIAL_CONTEXT)

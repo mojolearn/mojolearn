@@ -7,6 +7,9 @@ from std.python.bindings import ExceptionType, raise_python_exception
 
 from bindings.sequential_description import sequential_fields, sequential_append, sequential_add, sequential_compile, sequential_program, sequential_table, sequential_layers, sequential_sample, _shape
 from bindings.sequential_execution import sequential_entries, sequential_fit, sequential_forward, sequential_predict, sequential_targets
+from bindings.sequential_weights import sequential_parameter_layers, sequential_load_weights
+from bindings.sequential_checkpoint import sequential_save, sequential_load_checkpoint
+from autograd.program_arrays import initialize_program_arrays
 
 
 def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -17,7 +20,9 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var args = call[2]
         var context = call[3]
         var result = PythonObject(None)
-        if operation == "construct":
+        if operation == "initialize":
+            initialize_program_arrays()
+        elif operation == "construct":
             var b = Python.import_module("builtins")
             var fields = sequential_fields(model)
             fields["numeric_mode"] = args[0]
@@ -46,10 +51,20 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = sequential_forward(model, args[0], Int(py=args[1]), args[2], sequential_entries(model, context), context)
         elif operation == "targets":
             result = sequential_targets(model, args[0], Int(py=args[1]), Int(py=args[2]), String(args[3]), sequential_entries(model, context), context)
+        elif operation == "parameter_layers":
+            result = sequential_parameter_layers(model)
+        elif operation == "load_weights":
+            result = sequential_load_weights(model, args, context)
+        elif operation == "save":
+            result = sequential_save(model, args[0], Bool(py=args[1]), context)
+        elif operation == "load_checkpoint":
+            result = sequential_load_checkpoint(model, args[0], args[1], context)
         else:
             raise Error("Sequential: unknown native operation")
         return result.steal_data()
     except error:
+        if String(error).startswith("FileNotFoundError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
         if String(error).startswith("ImportError:"):
