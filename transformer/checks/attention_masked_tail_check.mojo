@@ -11,7 +11,7 @@ from transformer.impl.llama.modeling_llama import _upload, _download
 from transformer.impl.llama.fused_attention import (
     ATTN_REPAIR_MASKED_TAIL, fused_bwd_zdot_estash_kernel, fused_bwd_dq_tiled_pf_kernel,
 )
-from transformer.checks.transformer_backward import bwd_softmax_zdot_kernel, bwd_dq_kernel
+from autograd.kernels.transformer import bwd_softmax_zdot_kernel, bwd_dq_kernel
 from transformer.checks.attention_tail_guard_check import filled
 from transformer.checks.transformer_fused_check import hexbits
 

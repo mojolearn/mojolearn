@@ -4,7 +4,7 @@
 """The Mamba-3 S16 q/k/v backward on the host, at CPU speed (lane neural-cpu,
 2026-09-28).
 
-`mamba/impl/modules/mamba3_backward.mojo::mamba3_s16_qkv_backward_kernel` is
+`autograd/kernels/mamba3.mojo::mamba3_s16_qkv_backward_kernel` is
 one GPU thread per output cell: a `d_q`/`d_k` cell (row, n) walks p over
 HEADDIM and, inside, the chunk's earlier (for dq) or later (for dk) tokens; a
 `d_v` cell (row, p) walks the later tokens, each through a serial dot product

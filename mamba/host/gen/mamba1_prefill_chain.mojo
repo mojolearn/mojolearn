@@ -8,7 +8,7 @@ the host (`mamba/host/gen/mamba1_prefill_chain.mojo`, served by
 binding assembles the same VJP on the tape (autograd/rules_mamba.mojo), whose
 rules launch these same kernels in this same order. No device module imports
 this file (lane del-mamba, 2026-10-19: the device copy of this walk is
-tombstoned in mamba/impl/modeling/modeling_mamba_prefill_backward.mojo).
+tombstoned in autograd/kernels/mamba1_prefill.mojo).
 """
 from mamba.host.device_shim import host_launch, launch_count
 from std.memory import bitcast

@@ -123,7 +123,7 @@ from training.checks.loss_contract import (
     ce_refuse_targets,
 )
 from training.estimator import identical_ce_admit_call, identical_ce_loss_resident
-from transformer.checks.transformer_backward import bwd_rms_norm
+from autograd.kernels.transformer import bwd_rms_norm
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 
 

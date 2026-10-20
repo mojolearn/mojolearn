@@ -105,7 +105,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDeviceWeights,
     llama_key_span,
 )
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import (
     TF_RMS_NORM_INPUT,
     TF_RESIDUAL,

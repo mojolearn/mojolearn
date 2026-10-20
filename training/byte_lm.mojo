@@ -101,7 +101,7 @@ from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConf
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
 from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages,
 )
 # The step's backward (loss, head, every layer, embedding) runs on one

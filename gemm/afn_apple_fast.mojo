@@ -189,7 +189,7 @@ comptime AFN_EPI_RESID = 5
 #:     aux[i, j] = d_up   = a * s
 #:     dsi                = a * u
 #:     c[i, j]   = d_gate = dsi * (sg * (1 + g * (1 - sg)))
-#: the VJP of transformer/checks/transformer_backward.mojo's
+#: the VJP of autograd/kernels/transformer.mojo's
 #: bwd_mul2_silu_backward_kernel (S21 products) + bwd_silu_backward_kernel
 #: (S20: r1 = 1 - sg, r2 = g r1, r3 = 1 + r2, r4 = sg r3, dg = dsi r4, the
 #: sigmoid recomputed from `g`, never from silu), in f32, same operation

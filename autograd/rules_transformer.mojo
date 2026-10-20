@@ -3,7 +3,7 @@
 # 2026-10-19). docs/plans/AUTOGRAD_API.md section (c) item 2.
 #
 # ---------------------------------------------------------------- launch inventory
-# The hand path (transformer/checks/transformer_backward.mojo::
+# The hand path (autograd/kernels/transformer.mojo::
 # llama_decoder_layer_backward_device, deleted 2026-10-19, docs/TOMBSTONES.md
 # #llama_decoder_layer_backward_hand_walk), for ONE LlamaDecoderLayer.forward call
 # (IDENTICAL, trace off, materialize off, fused attention, default options),
@@ -135,7 +135,7 @@ from transformer.impl.llama.modeling_llama import (
     llama_key_lo,
     llama_key_span,
 )
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     BWD_FUSE_GATED_SILU,
     BWD_FUSE_NORM2_RESIDUAL,
     BWD_TPB,

@@ -6,7 +6,7 @@
 moved it 1 to 3%, so the time is in the ~40 backward stages themselves. The
 binding already prints a wall per stage under MOJOLEARN_MAMBA_TIMING=1
 (`timing m3bwd.<stage> <ms> ms`, a synchronize around each; see
-mamba/impl/modules/mamba3_prefill_backward.mojo `_mtick`). This runs one
+autograd/kernels/mamba3_prefill.mojo `_mtick`). This runs one
 Mamba3Block forward + backward at the Samba shape in a child process with
 that env set, parses the lines, and prints the stages sorted by time with
 their share, plus the session's reuse counters.

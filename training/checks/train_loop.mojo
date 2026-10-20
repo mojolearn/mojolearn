@@ -33,7 +33,7 @@ differ at `t = 7`. A per-op gate cannot see any of the three.
 
 WHAT IS OWED, and the first two are not optional
 -------------------------------------------------
-  1. **`transformer/checks/transformer_backward.mojo` HAS NO GATE** and it
+  1. **`autograd/kernels/transformer.mojo` HAS NO GATE** and it
      is stage 8 of twelve. Nothing has ever compared it to its oracle.
   2. **`embedding/checks/embedding_identical.mojo` HAS NO GATE** and it is
      stages 2 and 9. Its `PLAN_SORT` is additionally not written, so the one
@@ -174,7 +174,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaRopeTable,
     llama_decoder_layer_forward,
 )
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward
 
 
@@ -1925,7 +1925,7 @@ def main() raises:
     )
     print(
         "=== TWO OF THE TWELVE STAGES HAVE NO GATE:"
-        " transformer/checks/transformer_backward.mojo and"
+        " autograd/kernels/transformer.mojo and"
         " embedding/checks/embedding_identical.mojo. Three matching"
         " digests would show those two AGREE across vendors. They would NOT"
         " show either is CORRECT. Run train_step_check clause (a) first."

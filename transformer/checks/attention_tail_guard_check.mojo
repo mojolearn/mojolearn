@@ -11,7 +11,7 @@ from transformer.impl.llama.modeling_llama import _upload, _download
 from transformer.impl.llama.fused_attention import (
     ATTN_EXACT_TAIL_GUARD, fused_bwd_dkdv_r2_kernel, _key_query_range,
 )
-from transformer.checks.transformer_backward import bwd_dk_kernel, bwd_dv_kernel
+from autograd.kernels.transformer import bwd_dk_kernel, bwd_dv_kernel
 from transformer.checks.transformer_fused_check import hexbits
 
 

@@ -80,7 +80,7 @@ from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import TARGET_COLUMN, column_name
 from checks.numerics import numeric_mode_name
 from transformer.checks.transformer_fixture import bits32_hex, fixture_tensor
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     LlamaBackwardStages,
     bwd_attention_eager_stages,
 )

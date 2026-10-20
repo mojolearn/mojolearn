@@ -6,7 +6,7 @@
 lists as owed item (2).
 
 NO REFERENCE FILE. It runs the device backward
-(`transformer/checks/transformer_backward.mojo`) against the host oracle
+(`autograd/kernels/transformer.mojo`) against the host oracle
 (`transformer/checks/transformer_backward_oracle.mojo`) and compares all
 THIRTY-SEVEN recorded stages BY BITS.
 
@@ -368,7 +368,7 @@ from transformer.impl.llama.modeling_llama import (
     llama_block_sabotage_name,
     llama_decoder_layer_forward_planted,
 )
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
     llama_backward_sabotage_name,

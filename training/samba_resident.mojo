@@ -112,7 +112,7 @@ from training.samba_ops import (
     samba_tree_status_kernel,
 )
 from transformer.block_options import BlockOptions
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from transformer.checks.transformer_fixture import RMS_EPS
 from autograd.rules_transformer import (
     AUTOGRAD_REFUSE_DEFER,
