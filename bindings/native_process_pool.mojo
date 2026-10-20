@@ -171,14 +171,21 @@ def _process_reap(pid: Int) raises:
     var status = transport_wait(pid, True)
     if status != -1:
         return
+    # Completed native workers return before forced shutdown. Verification
+    # children also flush their complete-operation audit after that return.
+    var deadline = transport_clock() + 1.0
+    while transport_clock() < deadline:  # driver-loop: over graceful native child completion status
+        if transport_wait(pid, True) != -1:
+            return
+        transport_sleep(0.01)
     try:
         transport_terminate(pid)
     except:
         if transport_wait(pid, True) != -1:
             return
         raise
-    var deadline = transport_clock() + 5.0
-    while transport_clock() < deadline:  # driver-loop: over child termination status until the existing five-second grace deadline
+    deadline = transport_clock() + 4.0
+    while transport_clock() < deadline:  # driver-loop: over termination status within the existing total five-second grace interval
         if transport_wait(pid, True) != -1:
             return
         transport_sleep(0.01)
@@ -199,6 +206,13 @@ def process_pool_close(pool: PythonObject) raises:
     var failure = String()
     for i in range(len(workers)):  # driver-loop: over owned worker sockets and process IDs
         var worker = workers[i]
+        if worker["socket"] is not None:
+            try:
+                process_send(worker["socket"], "close", -1, PythonObject(None))
+            except:
+                # Failed workers can already have closed their socket. Their
+                # process is still reaped below; no owner is abandoned.
+                pass
         try:
             transport_close(worker["socket"])
         except error:
@@ -326,14 +340,25 @@ def process_echo_worker(argv: PythonObject) raises:
     var socket = process_worker_connect(argv)
     try:
         while True:  # driver-loop: over authenticated local protocol-verifier requests
-            var request = process_receive(socket)
+            var request = process_worker_next(socket)
+            if request is None:
+                break
             var sequence = Int(py=request[0].get("sequence", -1))
-            if String(request[0].get("kind", "")) != "request":
-                raise Error("process: worker received an invalid request kind")
             process_send(socket, "result", sequence, request[1])
     except:
         transport_close(socket)
         raise
+    transport_close(socket)
+
+
+def process_worker_next(socket: PythonObject) raises -> PythonObject:
+    var request = process_receive(socket)
+    var kind = String(request[0].get("kind", ""))
+    if kind == "close":
+        return PythonObject(None)
+    if kind != "request":
+        raise Error("process: worker received an invalid request kind")
+    return request
 
 
 def process_call(operation: String, args: PythonObject) raises -> PythonObject:
