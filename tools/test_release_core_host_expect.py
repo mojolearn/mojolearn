@@ -63,6 +63,19 @@ class ExpectFromTests(unittest.TestCase):
         self.assertNotIn('--expect-from', r.stdout + r.stderr)
         self.assertIn('REFUSING: commit', r.stdout + r.stderr)
 
+    def test_merged_host_set_refuses_the_probe(self):
+        # a merged host set ships the core host inside the merged host file,
+        # which a one-binding probe cannot reproduce: the derivation refuses
+        nvidia_leg(self.root)
+        host = self.root / 'remote/release-build/build/sets/cuda/sm_89/host'
+        (host / '_mojolearn_core_host.so').unlink()
+        (host / '_mojolearn_native_host.so').write_bytes(b'merged host')
+        (host / '_mojolearn_merged.json').write_text(json.dumps(
+            {'format': 1, 'files': {'_mojolearn_native_host.so': ['_mojolearn_core_host']}}))
+        r = run(COMMIT, '/dev/null', '--expect-from', str(self.root))
+        self.assertEqual(r.returncode, 2)
+        self.assertIn('host set is merged', r.stdout + r.stderr)
+
     def test_other_commit_refused(self):
         nvidia_leg(self.root, commit='b' * 40)
         r = run(COMMIT, '/dev/null', '--expect-from', str(self.root))
