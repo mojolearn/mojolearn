@@ -157,6 +157,7 @@ from autograd.cast_ops import OP_CAST_FIRST, OP_CAST_LAST, apply_cast
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 # lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo OP_RNC_*, 4100..4109)
 from autograd.rankn_ops import OP_RNC_FIRST, OP_RNC_LAST, apply_rankn_core
 =======
@@ -172,6 +173,10 @@ from autograd.rankn_bmm_ops import OP_RNB_FIRST, OP_RNB_LAST, apply_rn_bmm
 # rank-N layout (lane ag-rankn-layout): the slab copy family, 4400..4409
 from autograd.rankn_layout_ops import OP_RNL_FIRST, OP_RNL_LAST, apply_rankn_layout
 >>>>>>> origin/lane/ag-rankn-layout
+=======
+# ---- lane ag-rankn-conv (AUTOGRAD_RANKN.md 2.8): rank-4 conv2d and pools, 4500..4519
+from autograd.rankn_conv_ops import OP_RNV_FIRST, OP_RNV_LAST, apply_rankn_conv
+>>>>>>> origin/lane/ag-rankn-conv
 
 
 @always_inline
@@ -379,6 +384,7 @@ def apply[OP: Int](t: Int, a: Args):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     # ---- lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo
     # OP_RNC_*, 4100..4109; docs/plans/AUTOGRAD_RANKN.md section 7), above the
     # cast family and the higher-order plan's 3600..3619.
@@ -422,6 +428,17 @@ def apply[OP: Int](t: Int, a: Args):
     ), "rank-N layout opcode collides with recurrent scan"
     # ---- end rank-N layout ----
 >>>>>>> origin/lane/ag-rankn-layout
+=======
+    # ---- lane ag-rankn-conv: the rank-4 conv2d / pool family (autograd/
+    # rankn_conv_ops.mojo OP_RNV_*, 4500..4519), above every lower family.
+    comptime assert OP_RNV_FIRST <= OP_RNV_LAST, "rank-N conv opcode range is empty"
+    comptime assert OP_RNV_FIRST > OP_CAST_LAST and OP_RNV_FIRST > OP_EMB_LAST and OP_RNV_FIRST > OP_MOEB_LAST and OP_RNV_FIRST > OP_AGH_LAST and OP_RNV_FIRST > OP_AGS_LAST and OP_RNV_FIRST > OP_ROW_LAST and OP_RNV_FIRST > OP_GK_LAST and OP_RNV_FIRST > OP_AGC_LAST, "rank-N conv opcodes overlap a lower family"
+    comptime assert OP_RNV_FIRST > OP_AG_LAST and OP_RNV_FIRST > OP_AGD_LAST and OP_RNV_FIRST > OP_AGO_LAST and OP_RNV_FIRST > OP_LS_LAST and OP_RNV_FIRST > OP_AGM_LAST and OP_RNV_FIRST > OP_AGK_LAST and OP_RNV_FIRST > OP_P1_LAST and OP_RNV_FIRST > OP_AGF_LAST and OP_RNV_FIRST > OP_MLP_LB_LAST, "rank-N conv opcodes overlap an autograd family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_RNV_FIRST or OP_CELL_FWD_SCAN > OP_RNV_LAST) and (
+        OP_CELL_BWD_SCAN < OP_RNV_FIRST or OP_CELL_BWD_SCAN > OP_RNV_LAST
+    ), "rank-N conv opcode collides with recurrent scan"
+    # ---- end lane ag-rankn-conv
+>>>>>>> origin/lane/ag-rankn-conv
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -467,6 +484,7 @@ def apply[OP: Int](t: Int, a: Args):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     elif OP >= OP_RNC_FIRST and OP <= OP_RNC_LAST:
         # lane ag-rankn-core: the rank-N view copy
         apply_rankn_core[OP](t, a)
@@ -486,6 +504,11 @@ def apply[OP: Int](t: Int, a: Args):
         # rank-N layout (lane ag-rankn-layout)
         apply_rankn_layout[OP](t, a)
 >>>>>>> origin/lane/ag-rankn-layout
+=======
+    elif OP >= OP_RNV_FIRST and OP <= OP_RNV_LAST:
+        # lane ag-rankn-conv: rank-4 conv2d and pools
+        apply_rankn_conv[OP](t, a)
+>>>>>>> origin/lane/ag-rankn-conv
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
