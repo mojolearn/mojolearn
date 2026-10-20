@@ -23,7 +23,7 @@ SMOKE = ROOT / 'tools/release_wheel_smoke.sh'
 COMMIT = 'c' * 40
 
 
-def make_wheel(directory, commit=COMMIT, name='mojolearn-0.0.0-py3-none-manylinux_2_35_x86_64.whl'):
+def make_wheel(directory, commit=COMMIT, name='mojolearn_core-0.0.0-py3-none-manylinux_2_35_x86_64.whl'):
     path = pathlib.Path(directory) / name
     with zipfile.ZipFile(path, 'w') as z:
         z.writestr('mojolearn/identity_columns/COMMIT', commit + '\n')
@@ -196,8 +196,13 @@ class SmokeTests(unittest.TestCase):
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', 'd' * 40)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn('records source commit ' + COMMIT, r.stderr)
-        raw = make_wheel(self.dir, name='mojolearn-0.0.0-py3-none-linux_x86_64.whl')
+        raw = make_wheel(self.dir, name='mojolearn_core-0.0.0-py3-none-linux_x86_64.whl')
         r = self.run_smoke(str(raw), '--expected-source-commit', COMMIT)
+        self.assertIn('not a final manylinux', r.stderr)
+        # the core is mojolearn_core-*; the pre-split mojolearn-* name is refused
+        old_core = make_wheel(self.dir, name='mojolearn-0.0.0-py3-none-manylinux_2_35_x86_64.whl')
+        r = self.run_smoke(str(old_core), '--expected-source-commit', COMMIT)
+        self.assertNotEqual(r.returncode, 0)
         self.assertIn('not a final manylinux', r.stderr)
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--rent', '--ssh', 'x')
         self.assertIn('exclusive', r.stderr)
@@ -570,12 +575,15 @@ runpy.run_path(str(pathlib.Path(__file__).with_name('timeout.real')), run_name='
 # ---------------------------------------------------------------- --from-index
 IV = '0.9.0'
 PROJECTS = {name: name.replace('-', '_') for name in (
-    'mojolearn', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')}
+    'mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')}
+# mojolearn (the Linux meta wheel) -> core + both vendors; the core requires
+# no vendor; each vendor requires the core (2026-10-20)
 PROJECT_REQUIRES = {
-    'mojolearn': ('mojolearn-nvidia', 'mojolearn-amd'),
-    'mojolearn-nvidia': ('mojolearn', 'mojolearn-nvidia-ptx'),
-    'mojolearn-amd': ('mojolearn',),
-    'mojolearn-nvidia-ptx': ('mojolearn',),
+    'mojolearn': ('mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd'),
+    'mojolearn-core': (),
+    'mojolearn-nvidia': ('mojolearn-core', 'mojolearn-nvidia-ptx'),
+    'mojolearn-amd': ('mojolearn-core',),
+    'mojolearn-nvidia-ptx': ('mojolearn-core',),
 }
 
 
@@ -622,7 +630,7 @@ FAKE_BOX = r'''import json, os, pathlib
 d = pathlib.Path(os.environ['FAKE_BOX_DIR']); v = os.environ['FAKE_VERSION']
 vendor = os.environ.get('FAKE_VENDOR', 'cuda'); index = os.environ.get('FAKE_INDEX', 'testpypi')
 (d / 'install.exit').write_text('0\n'); (d / 'box.txt').write_text('fake box\n')
-projects = ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')
+projects = ('mojolearn', 'mojolearn-core', 'mojolearn-nvidia', 'mojolearn-amd', 'mojolearn-nvidia-ptx')
 (d / 'install.log').write_text('Successfully installed ' + ' '.join(projects) + ' numpy\n')
 (d / 'pip_report.json').write_text(json.dumps({'install': []}))
 (d / 'dists.txt').write_text(''.join(n + '==' + v + '\n' for n in projects))
