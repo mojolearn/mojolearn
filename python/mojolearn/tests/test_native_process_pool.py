@@ -36,6 +36,7 @@ def reset_vendor():
     ("hip", "ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"),
 ])
 def test_visibility_mapping_and_cooperative_count(monkeypatch, vendor, key, other):
+    monkeypatch.setenv("MOJOLEARN_VENDOR", "cpu")
     monkeypatch.setenv(key, "GPU-a,GPU-b,GPU-c")
     if other:
         monkeypatch.setenv(other, "discard-this-second-mask")
@@ -44,6 +45,7 @@ def test_visibility_mapping_and_cooperative_count(monkeypatch, vendor, key, othe
     assert env[key] == "GPU-a"
     assert env["MOJOLEARN_OPTIMIZER_DEVICE_COUNT"] == "1"
     assert env["MOJOLEARN_NUMERIC_MODE"] == "identical"
+    assert env["MOJOLEARN_VENDOR"] == vendor
     if other:
         assert other not in env
     env = dict(row.split("=", 1) for row in checked("environment", ((2, 0), (2, 0))))
@@ -52,6 +54,77 @@ def test_visibility_mapping_and_cooperative_count(monkeypatch, vendor, key, othe
     monkeypatch.setenv(key, "GPU-a,GPU-a")
     with pytest.raises(ValueError, match="repeat"):
         call("environment", ((0, 1), (0,)))
+
+
+@pytest.mark.parametrize("vendor", ["cpu", "metal"])
+def test_environment_keeps_connected_cpu_or_metal_route(monkeypatch, vendor):
+    _native_process("initialize", (sys.executable, os.environ._data, vendor))
+    monkeypatch.setenv("MOJOLEARN_VENDOR", "metal" if vendor == "cpu" else "cpu")
+    monkeypatch.setenv("MOJOLEARN_NUMERIC_MODE", "fast")
+    env = dict(row.split("=", 1) for row in checked("environment", ((0,), (0,))))
+    assert env["MOJOLEARN_VENDOR"] == vendor
+    assert env["MOJOLEARN_NUMERIC_MODE"] == "identical"
+
+
+def test_real_worker_keeps_imported_vendor_after_environment_changes(monkeypatch):
+    vendor = _backend.vendor()
+    _native_process("initialize", (sys.executable, os.environ._data, vendor))
+    # A CPU run exercises the reverse change without needing a GPU install;
+    # each GPU run proves that its parent cannot silently spawn CPU workers.
+    monkeypatch.setenv("MOJOLEARN_VENDOR", "metal" if vendor == "cpu" else "cpu")
+    pool = checked("create", ((0,), False, "mojolearn._native_process"))
+    try:
+        assert checked("map", (pool, ["vendor-pinned"])) == ["vendor-pinned"]
+        assert pool["workers"][0]["identity"]["vendor"] == vendor
+    finally:
+        checked("close", (pool,))
+    assert pool["workers"] == []
+
+
+@pytest.mark.parametrize("missing_vendor", [False, True])
+def test_authenticated_wrong_or_missing_vendor_is_refused_and_reaped(tmp_path, monkeypatch, missing_vendor):
+    # Independent protocol fixture: authenticate with the real PID/token but
+    # supply contradictory or absent backend metadata. No model work runs.
+    (tmp_path / "native_pool_wrong_vendor.py").write_text('''
+import json, os, socket, struct, sys
+from pathlib import Path
+record = Path(os.environ["NATIVE_POOL_VENDOR_RECORD"])
+hello = {"kind": "hello", "token": sys.argv[2], "pid": os.getpid(), "nbytes": 0}
+if os.environ["NATIVE_POOL_OMIT_VENDOR"] != "1":
+    hello["vendor"] = os.environ["NATIVE_POOL_WRONG_VENDOR"]
+record.write_text(json.dumps({"pid": os.getpid(), "hello": hello}))
+with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=10) as sock:
+    raw = json.dumps(hello).encode("ascii")
+    sock.sendall(struct.pack("!I", len(raw)) + raw)
+    with sock.makefile("rb") as reader:
+        prefix = reader.read(4)
+        received = json.loads(reader.read(struct.unpack("!I", prefix)[0])) if len(prefix) == 4 else {}
+    record.write_text(json.dumps({"pid": os.getpid(), "hello": hello, "received_kind": received.get("kind")}))
+''')
+    record = tmp_path / "child.json"
+    monkeypatch.setenv("NATIVE_POOL_VENDOR_RECORD", str(record))
+    monkeypatch.setenv("NATIVE_POOL_OMIT_VENDOR", "1" if missing_vendor else "0")
+    monkeypatch.setenv("NATIVE_POOL_WRONG_VENDOR", "metal" if _backend.vendor() == "cpu" else "cpu")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    pool = checked("create", ((0,), False, "native_pool_wrong_vendor"))
+    try:
+        audit = audit_native_call(call, "map", (pool, ["must-not-run"]))
+        assert isinstance(audit.exception, ValueError), audit.report()
+        assert "child vendor differs" in str(audit.exception)
+        for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+            assert not audit.report()[key], audit.report()
+        assert pool["workers"] == [] and pool["closed"] is False
+        child = json.loads(record.read_text())
+        assert child["received_kind"] in (None, "close"), child
+        with pytest.raises(ChildProcessError):
+            os.waitpid(child["pid"], os.WNOHANG)
+        # A rejected handshake cannot leave the pool poisoned or old replies
+        # queued; its ordinary installed child can start and serve fresh work.
+        pool["module"] = "mojolearn._native_process"
+        assert checked("map", (pool, ["recovered"])) == ["recovered"]
+        assert pool["workers"][0]["identity"]["vendor"] == _backend.vendor()
+    finally:
+        checked("close", (pool,))
 
 
 def test_real_children_preserve_order_bits_and_are_reaped(tmp_path, monkeypatch):

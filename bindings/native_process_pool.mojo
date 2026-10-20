@@ -72,6 +72,10 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
     for i in range(len(keys)):  # driver-loop: over process environment records
         env[keys[i].decode("utf-8", "surrogateescape")] = p[].environ[keys[i]].decode("utf-8", "surrogateescape")
     env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+    # The parent selected its installed route at connection time. Later
+    # visibility-mask edits still apply, but a changed process environment
+    # must not silently move an existing GPU owner onto CPU workers.
+    env["MOJOLEARN_VENDOR"] = p[].vendor
     var mask = String()
     if p[].vendor == "cuda":
         mask = "CUDA_VISIBLE_DEVICES"
@@ -270,6 +274,8 @@ def process_pool_start(pool: PythonObject) raises:
             var hello = transport_receive(connection, 0)[0]
             if String(hello.get("kind", "")) != "hello" or String(hello.get("token", "")) != token or Int(py=hello.get("pid", -1)) != pid:
                 raise Error("process: child authentication or process identity mismatch")
+            if String(hello.get("vendor", "")) != p[].vendor:
+                raise Error("process: child vendor differs from the parent native route")
             # Existing local model workers have no training-operation timeout.
             # Keep only the connection handshake bounded; large supported
             # model steps must not acquire a new two-minute runtime limit.
