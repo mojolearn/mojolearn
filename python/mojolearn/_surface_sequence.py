@@ -76,6 +76,8 @@ FAMILIES = (
             "ops_save_program", "ops_load_program",
             # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
             "model_import_params", "ops_load_weights",
+            # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)
+            "onnx_read", "onnx_info", "onnx_copy_blob", "onnx_resolve", "onnx_close",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(
