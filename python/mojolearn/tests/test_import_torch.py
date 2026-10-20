@@ -238,13 +238,13 @@ def test_unsupported_ops_listed_together():
             self.up = torch.nn.ConvTranspose2d(2, 2, 2, stride=2)
 
         def forward(self, x):
-            return torch.cumsum(self.up(x), dim=1)
+            return torch.cumprod(self.up(x), dim=1)
 
     ep = torch.export.export(M().eval(), (torch.zeros(1, 2, 3, 3),))
     with pytest.raises(UnsupportedModel) as e:
         torch_export.read(ep)
     reasons = [(op, why) for _, op, why in e.value.problems]
-    assert any(op == "aten.cumsum" for op, _ in reasons), reasons
+    assert any(op == "aten.cumprod" for op, _ in reasons), reasons
     assert any("transposed convolution" in why for _, why in reasons), reasons
     assert "cannot be imported" in str(e.value) and isinstance(e.value, ValueError)
 
