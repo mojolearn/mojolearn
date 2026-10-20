@@ -227,28 +227,6 @@ REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 #: dict(files={set-relative path: record}, origin={version, source_commit,
 #: wheel, wheel_sha256}).
 SetDir = collections.namedtuple("SetDir", "vendor arch files libs manifest hosts reuse")
-# The combined three-architecture set. The name keeps the number the profile was
-# authored under; the profile itself is RELEASE_PROFILE (`release-linux3`) and
-# ships whatever version python/mojolearn/_version.py says. DEVIATION 2290.
-RELEASE_061_SETS = {("cuda", "sm_89"), ("cuda", "sm_90"), ("hip", "gfx942")}
-# DEVIATION 2293: the Hopper slot accepts sm_90 OR sm_90a, because the
-# compiler decides which one it emits and it does not emit sm_90 on an H100.
-# Asked for sm_90 with --target-accelerator, `mojo` produced 46 binaries all
-# carrying sm_90a, and build_sets.sh refused the set rather than ship it under
-# a name it was not verified to carry -- correctly, and that refusal is the
-# only reason this was noticed rather than shipped.
-#
-# sm_90a is not a downgrade and not a workaround. `_backend.py` already treats
-# it as the PREFERRED layout for this case: a device reporting sm_90 takes a
-# carried sm_90a as "architecture-specific build for this exact device",
-# ahead of any family fallback, because the `a` restricts WHICH DEVICES the
-# code runs on and a Hopper device is the one it restricts to. Every sm_90
-# device is Hopper, so no device loses the set by this name.
-#
-# What is NOT relaxed: exactly three sets, one per architecture slot, each
-# still verified by reading the architecture back out of the binaries on the
-# box. A set whose read-back disagrees with its directory is still refused.
-RELEASE_HOPPER_ALTS = {("cuda", "sm_90"), ("cuda", "sm_90a")}
 # DEVIATION 2290. ONE reader for the release version and ONE spelling of the
 # profile name, owned by tools/verify_linux_surface_qualification.py and shared
 # with the qualification checker and the alpha artifact verifier. This packer
@@ -256,7 +234,8 @@ RELEASE_HOPPER_ALTS = {("cuda", "sm_90"), ("cuda", "sm_90a")}
 # 'release-0.6.1'; the version was never published under that number.
 sys.path.append(str(REPO / "tools"))
 from verify_linux_surface_qualification import (  # noqa: E402
-    RELEASE_PROFILE, RELEASE_PROFILES, load_gpu_plugins, release_version, wheel_host_bindings)
+    OPTIONAL_ARCHES, PLUGIN_ARCHES, RELEASE_PROFILE, RELEASE_PROFILES, REGISTERED_ARCHES, load_gpu_plugins,
+    normalise_arch, release_contract, release_version, wheel_host_bindings)
 # THE SPLIT (2026-09-25): which plugin ships which vendor directory, read from
 # python/mojolearn/gpu_plugins.py by path, the table the loader reads too.
 gpu_plugins = load_gpu_plugins()
@@ -317,6 +296,14 @@ def split_release_slots(vendors):
 
 #: Every set a split release can be packed from (the core alone takes any of them).
 RELEASE_SPLIT_SETS = {k for v in gpu_plugins.vendors() for k in gpu_plugins.required_sets(v)}  # glue: registry slot union
+#: The sets the combined release-linux3 wheel must carry: the registry's
+#: required sets of both vendors (gpu_plugins.required_sets; the admission side
+#: reads the same, verify_linux_surface_qualification.RELEASE_ARCHES). The name
+#: keeps the number the profile was authored under (DEVIATION 2290).
+RELEASE_061_SETS = set(RELEASE_SPLIT_SETS)
+#: Every set a release may carry: required plus registered-but-optional
+#: (Hopper, Blackwell), as (vendor, arch).
+RELEASE_REGISTERED_SETS = {tuple(k.split("/")) for k in REGISTERED_ARCHES}  # glue: registry key spelling
 
 
 def release_inventory(sets, proof_paths, version, source_root=REPO, required=None,
@@ -328,34 +315,29 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     `version` must be the version SOURCE_ROOT's _version.py declares
     (DEVIATION 2290); a literal never decides it.
 
-    `required` is the exact set of architecture slots (Hopper normalised to
-    ('cuda', 'sm_90')) the sets must fill: RELEASE_061_SETS for the combined
-    wheel, a vendor's share of it for the split profile, which packs a
-    plugin from its own vendor's legs alone (NVIDIA and AMD release
-    independently). `profile` names the assembly profile recorded.
+    `required` is the set of architecture sets the sets must carry:
+    RELEASE_061_SETS for the combined wheel, a package's share of it for the
+    split profile, which packs a plugin from its own vendor's legs alone
+    (NVIDIA and AMD release independently). A vendor whose required plugin
+    sets are all in `required` may also carry its registered optional sets
+    (Hopper, Blackwell; verify_linux_surface_qualification.OPTIONAL_ARCHES),
+    each hardware slot once (sm_N or sm_Na, DEVIATION 2293). `profile` names
+    the assembly profile recorded.
     """
     profile = profile or RELEASE_PROFILE
     required = RELEASE_061_SETS if required is None else set(required)
     keys = [(s.vendor, s.arch) for s in sets]
     keyset = set(keys)
-    # DEVIATION 2293: normalise the Hopper slot before comparing, so sm_90 and
-    # sm_90a are the same slot and neither can appear twice.
-    hopper = keyset & RELEASE_HOPPER_ALTS
-    normalised = (keyset - RELEASE_HOPPER_ALTS) | ({("cuda", "sm_90")} if hopper else set())
-    # 0.8.38: the Hopper slot is optional while gpu_plugins registers no Hopper slot for CUDA (sm_89-only wheel,
-    # PyPI's 100 MiB file limit); a set that carries one still packs as before.
-    hopper_optional = (("cuda", "sm_90") in required and not any(
-        {"sm_90", "sm_90a"} & set(slot) for slot in gpu_plugins.PLUGINS["cuda"]["slots"]))  # glue: slot registry lookup
-    fills = normalised == required or (hopper_optional and not hopper
-                                       and normalised == required - {("cuda", "sm_90")})
-    if (version != read_version(source_root) or len(keys) != len(normalised)
-            or len(hopper) > 1 or not fills):
-        if required == RELEASE_061_SETS:
-            raise SystemExit(profile + ' requires exactly CUDA sm_89, CUDA sm_90'
-                             ' or sm_90a, and HIP gfx942')
-        raise SystemExit(profile + ' requires exactly the sets '
-                         + ', '.join('/'.join(k) for k in sorted(required))
-                         + ' (the Hopper slot spelled sm_90 or sm_90a); given '
+    extra = keyset - required
+    full_vendors = {v for v in PLUGIN_ARCHES if {tuple(k.split("/")) for k in PLUGIN_ARCHES[v]} <= required}  # glue: registry key spelling
+    optional = {tuple(k.split("/")) for v in full_vendors for k in OPTIONAL_ARCHES[v]}  # glue: registry key spelling
+    fills = (required <= keyset and extra <= optional
+             and len({normalise_arch("/".join(k)) for k in keyset}) == len(keyset))  # glue: one set per hardware slot
+    if version != read_version(source_root) or len(keys) != len(keyset) or not fills:
+        raise SystemExit(profile + ' requires the sets '
+                         + (release_contract(sorted({v for v, _ in required})) if required == RELEASE_061_SETS
+                            else ', '.join('/'.join(k) for k in sorted(required)))
+                         + ' (optional registered sets of a complete vendor allowed, each slot once); given '
                          + (', '.join('/'.join(k) for k in sorted(keys)) or 'none'))
     # A SET A LEG BUILT NEEDS ITS PROOF; a set whose every binding was taken
     # from the published wheel has none (its witnesses are the previous
@@ -1105,8 +1087,7 @@ def main(argv=None, _gates=True):
             else:
                 package_slots.update((package["vendor"], slot[0]) for slot in package["slots"])
         required = (package_slots if plugin_vendors
-                    else {("cuda", "sm_90") if k in RELEASE_HOPPER_ALTS else k for k in keys}
-                    & (RELEASE_061_SETS | RELEASE_SPLIT_SETS))
+                    else set(keys) & RELEASE_REGISTERED_SETS)
         inventory = release_inventory(sets, a.build_proof, version, required=required,
                                       profile=RELEASE_SPLIT_PROFILE)
     else:

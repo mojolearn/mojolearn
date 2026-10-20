@@ -523,7 +523,7 @@ class SplitWheels(unittest.TestCase):
             with self.assertRaises(SystemExit) as ctx:
                 pw.release_inventory([hip], [], self.version, required=pw.split_release_slots({"cuda"}),
                                      profile=pw.RELEASE_SPLIT_PROFILE)
-            self.assertIn("release-split requires exactly the sets cuda/sm_80, cuda/sm_89", str(ctx.exception))
+            self.assertIn("release-split requires the sets cuda/sm_80, cuda/sm_89", str(ctx.exception))
             # the PTX set is proved like any set: a release-split nvidia pack with the
             # sm_89 proof alone is short one proof
             sm89 = pw.SetDir("cuda", "sm_89", {"cuda/sm_89/a.so": Path(__file__)}, {}, {}, {}, None)
