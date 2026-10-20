@@ -39968,7 +39968,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_NN50_OWNED_RUNS": [
-              "embedding/owned_runs.mojo"
+              "autograd/kernels/embedding_runs.mojo"
             ]
           },
           "id": "I.N.NN50:default",
@@ -40009,7 +40009,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
@@ -40019,7 +40019,7 @@
       "original_id": "NN50",
       "prerequisites": [],
       "production_callers": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
@@ -53469,7 +53469,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "embedding/checks/embedding_sort.mojo",
+        "autograd/kernels/embedding_sort.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],

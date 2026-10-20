@@ -69,15 +69,20 @@ from gemm.neural_backward import (
 )
 from gemm.contract import OP_NT, OP_NN
 from embedding.checks.embedding_identical import (
-    ANY_EMB_SABOTAGE, EMB_AUTO_SORT_MIN_CELLS, emb_run_scratch_ints,
-    identical_embedding_forward_into, identical_embedding_backward_into,
+    ANY_EMB_SABOTAGE,
+    EMB_AUTO_SORT_MIN_CELLS,
+    identical_embedding_forward_into,
     identical_embedding_forward_prerefused_into,
+)
+from autograd.kernels.embedding import (
+    emb_run_scratch_ints,
+    identical_embedding_backward_into,
     identical_embedding_backward_prerefused_into,
 )
-from embedding.owned_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
+from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
 from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena, NeuralLiveRange
 from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
-from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE, identical_ce_forward_into, identical_ce_backward_into,
     identical_ce_ones_floats, identical_ce_workspace_max_floats,

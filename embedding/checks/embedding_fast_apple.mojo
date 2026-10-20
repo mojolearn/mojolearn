@@ -28,13 +28,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from embedding.checks.embedding_identical import (
-    EMB_TPB,
-    _grid_for,
-    emb_gather_kernel,
-    emb_pad_row_kernel,
-    emb_seed_kernel,
-)
+from embedding.checks.embedding_identical import EMB_TPB, _grid_for, emb_gather_kernel
+from autograd.kernels.embedding import emb_pad_row_kernel, emb_seed_kernel
 from embedding.checks.embedding_oracle import EmbConfig
 
 comptime EMB_FAST_APPLE = (

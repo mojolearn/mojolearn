@@ -361,14 +361,14 @@ card(48, "Neural graph aggregation tile reuse", "GCN; GraphSAGE neural layers",
      "Reject neighbor sampling, graph sparsification or including classical PageRank in this lane.", priority="P1")
 
 card(49, "Stable embedding grouping with touched-row gradients", "Embedding backward; LM; transformer; neural sequence",
-     "embedding/checks/embedding_identical.mojo; embedding/checks/embedding_sort.mojo",
+     "embedding/checks/embedding_identical.mojo; autograd/kernels/embedding_sort.mojo",
      "Use existing stable radix grouping and process touched rows; separately vary group task geometry and dense zero initialization.",
      "Incumbent row scan/bitonic grouping path.",
      "Token/original-position order, padding, duplicate multiplicity and accumulation semantics fixed; no floating atomics.",
      "Dense gradient words and full neural step, all-same/unique/skew IDs and repeated calls.",
      "Reject sort cost or excluding required dense output allocation/zeroing from timing.", "Reuse I11 actual candidates; new experiments must identify distinct geometry or caller coverage.", priority="P0")
 card(50, "Reuse immutable token grouping across backward uses", "Tied embeddings; repeated embedding backward; microbatch replay",
-     "embedding/checks/embedding_sort.mojo; training/byte_lm.mojo",
+     "autograd/kernels/embedding_sort.mojo; training/byte_lm.mojo",
      "Retain canonical sorted IDs, position map and segments for an explicitly owned unchanged token batch.",
      "Rebuild the same grouping for each backward consumer.",
      "Token owner/version, padding and vocabulary are cache keys; position order not inferred from a pointer or shape.",

@@ -289,15 +289,17 @@ from embedding.checks.embedding_identical import (
     EMB_TPB,
     SAB_FOLD_VIA_GEMM_ONEHOT,
     SAB_SORT_KEY_ID_ONLY_UNSTABLE,
-    emb_run_scratch_ints,
     emb_sabotage_name,
-    identical_embedding_backward_into,
-    identical_embedding_backward_refusing_into,
     identical_embedding_forward_into,
     identical_embedding_forward_refusing_into,
 )
+from autograd.kernels.embedding import (
+    emb_run_scratch_ints,
+    identical_embedding_backward_into,
+    identical_embedding_backward_refusing_into,
+)
 from gemm.checks.gemm_oracle import OP_TN, gemm_oracle
-from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP
 from autograd.tape import Tape

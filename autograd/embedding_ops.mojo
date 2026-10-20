@@ -64,7 +64,7 @@ comptime OP_EMB_LAST = OP_EMB_FOLD
 # apart from the kinds there (0..31) and DROPOUT (35).
 comptime EMBEDDING = 36
 
-# Run plans; the codes are embedding/checks/embedding_sort.mojo's PLAN_SCAN
+# Run plans; the codes are autograd/kernels/embedding_sort.mojo's PLAN_SCAN
 # and PLAN_SORT and embedding_identical.mojo's PLAN_AUTO.
 comptime AG_EMB_PLAN_SCAN = 0
 comptime AG_EMB_PLAN_SORT = 1

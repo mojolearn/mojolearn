@@ -453,7 +453,7 @@
         "A\tdocs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md",
         "A\tdocs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md",
         "M\tembedding/checks/embedding_identical.mojo",
-        "A\tembedding/owned_runs.mojo",
+        "A\tautograd/kernels/embedding_runs.mojo",
         "A\texperiments/neural_identical_ab/IMPLEMENTATION_STATUS.md",
         "A\texperiments/neural_identical_ab/MODEL_INTEGRATION.md",
         "A\texperiments/neural_identical_ab/NN34_AFFINE_PREFIX_CONTRACT.md",

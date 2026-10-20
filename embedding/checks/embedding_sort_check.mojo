@@ -2,8 +2,9 @@
 """Focused PLAN_SORT edge cases and actual device negative-control gate."""
 from max.gpu.host import DeviceContext
 from embedding.checks.embedding_check import _upload_i32, _upload_f32, _download_i32, _download_f32, _zeros_i32_list, compare_i32, compare_f32
-from embedding.checks.embedding_identical import identical_embedding_backward_into, emb_sabotage_name
-from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+from embedding.checks.embedding_identical import emb_sabotage_name
+from autograd.kernels.embedding import identical_embedding_backward_into
+from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from embedding.checks.embedding_oracle import EmbConfig, emb_counts, emb_run_begin, emb_perm_by_scan
 
 

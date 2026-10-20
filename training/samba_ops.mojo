@@ -23,10 +23,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from core.device_scan import device_first_nonfinite
-from embedding.checks.embedding_identical import (
-    identical_embedding_backward_into,
-    identical_embedding_forward_into,
-)
+from embedding.checks.embedding_identical import identical_embedding_forward_into
+from autograd.kernels.embedding import identical_embedding_backward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.neural_backward import (
     identical_gemm_backward_a_into,

@@ -86,7 +86,7 @@ from autograd.refuse_scan import DeferredNonfiniteScan
 from gemm.contract import OP_NT
 from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.neural_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
-from embedding.checks.embedding_identical import identical_embedding_backward_into
+from autograd.kernels.embedding import identical_embedding_backward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from transformer.impl.llama.modeling_llama import LlamaDeviceStages, LlamaDeviceWeights
 from autograd.kernels.transformer import LlamaBackwardStages, bwd_rms_norm

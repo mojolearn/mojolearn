@@ -91,12 +91,12 @@ from autograd.refuse_scan import DeferredNonfiniteScan
 from gemm.contract import OP_NT
 from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.neural_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
-from embedding.checks.embedding_identical import (
+from autograd.kernels.embedding import (
     identical_embedding_backward_into,
     identical_embedding_backward_prerefused_into,
 )
 from embedding.checks.embedding_oracle import EmbConfig
-from embedding.owned_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
+from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
 from training.checks.loss import identical_ce_backward_into
 from training.checks.loss_contract import CeConfig
 from training.chunked_lm_head_v2 import chunked_lm_head_v2_gemm_backward_into

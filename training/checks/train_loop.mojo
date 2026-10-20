@@ -145,11 +145,8 @@ from gemm.neural_backward import (
 )
 from gemm.contract import OP_NT
 
-from embedding.checks.embedding_identical import (
-    emb_run_scratch_ints,
-    identical_embedding_backward_into,
-    identical_embedding_forward_into,
-)
+from embedding.checks.embedding_identical import identical_embedding_forward_into
+from autograd.kernels.embedding import emb_run_scratch_ints, identical_embedding_backward_into
 from embedding.checks.embedding_oracle import EmbConfig
 
 from training.checks.loss import (

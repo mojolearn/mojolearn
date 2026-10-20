@@ -131,7 +131,7 @@ def test_bindings_register_the_gpu_names():
 
 
 def test_host_modules_are_host_only():
-    for rel, forbidden in ((EMB_HOST, ("embedding.checks.embedding_identical", "embedding.checks.embedding_sort")),
+    for rel, forbidden in ((EMB_HOST, ("embedding.checks.embedding_identical", "autograd.kernels.embedding_sort")),
                            (IVF_HOST, ("ivf.estimator", "ivf.impl.neighbors.ivf_flat.ivf_flat_build",
                                        "ivf.impl.neighbors.ivf_flat.ivf_flat_search",
                                        "neighbors.checks", "core.row_norms"))):
@@ -160,7 +160,7 @@ def test_ivf_select_limit_is_the_device_literal():
 
 def test_embedding_plan_codes_are_the_device_literals():
     host = _read(EMB_HOST)
-    dev = _read("embedding/checks/embedding_sort.mojo")
+    dev = _read("autograd/kernels/embedding_sort.mojo")
     for name, value in (("PLAN_SCAN", "0"), ("PLAN_SORT", "1")):
         assert re.search(rf"^comptime {name} = {value}$", dev, re.M), name
         assert re.search(rf"^comptime HOST_{name} = {value}$", host, re.M), name

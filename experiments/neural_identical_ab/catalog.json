@@ -1311,7 +1311,7 @@
       ],
       "source_anchors": [
         "embedding/checks/embedding_identical.mojo",
-        "embedding/checks/embedding_sort.mojo"
+        "autograd/kernels/embedding_sort.mojo"
       ],
       "arm_a": "Use existing stable radix grouping and process touched rows; separately vary group task geometry and dense zero initialization.",
       "arm_b": "Incumbent row scan/bitonic grouping path.",
@@ -1338,7 +1338,7 @@
         "microbatch replay"
       ],
       "source_anchors": [
-        "embedding/checks/embedding_sort.mojo",
+        "autograd/kernels/embedding_sort.mojo",
         "training/byte_lm.mojo"
       ],
       "arm_a": "Retain canonical sorted IDs, position map and segments for an explicitly owned unchanged token batch.",

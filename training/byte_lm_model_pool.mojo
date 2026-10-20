@@ -22,7 +22,8 @@ from training.checks.train_loop import _zeros, _upload, _copy_into, download_f32
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.checks.optimizer_contract import OptimizerConfig
 from embedding.checks.embedding_oracle import EmbConfig
-from embedding.checks.embedding_identical import identical_embedding_forward_into, identical_embedding_backward_into
+from embedding.checks.embedding_identical import identical_embedding_forward_into
+from autograd.kernels.embedding import identical_embedding_backward_into
 from gemm.contract import OP_NT
 from gemm.neural_dispatch import identical_gemm_into
 from gemm.experiments.neural_switches import ROLE_HEAD

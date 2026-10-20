@@ -388,7 +388,7 @@
       "title": "Stable segmented embedding gradients",
       "status": "existing_candidate_unverified",
       "implementation_paths": [
-        "embedding/checks/embedding_sort.mojo",
+        "autograd/kernels/embedding_sort.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
