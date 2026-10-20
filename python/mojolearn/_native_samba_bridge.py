@@ -40,7 +40,7 @@ def connect(config_cls, model_cls, training, neural):
     # Reuse connected modules, without loading a second type-owning tier.
     # These records let Generator preserve its per-instance numeric mode.
     import _operator
-    generator_bindings = {mode: {name: getattr(binding, name) for name in
+    generator_bindings = {mode: {name: getattr(binding, name) for name in  # glue: import-time ABI symbols
                                ("training_vendor", "training_numeric_mode", "neural_rng")}}
     if _backend.vendor() not in (None, "cpu"):
         for route, connected in neural.CONTEXT["bindings"].items():  # glue: ABI connection records only
@@ -51,9 +51,9 @@ def connect(config_cls, model_cls, training, neural):
             if isinstance(selected, str):
                 generator_bindings[key] = selected
                 continue
-            symbols = {name: getattr(selected, name) for name in
+            symbols = {name: getattr(selected, name) for name in  # glue: import-time ABI symbols
                        ("training_vendor", "training_numeric_mode", "neural_rng")}
-            if not all(isinstance(value, BuiltinFunctionType) for value in symbols.values()):
+            if not all(isinstance(value, BuiltinFunctionType) for value in symbols.values()):  # glue: validate connection entries at import
                 raise TypeError("Generator execution requires compiled native RNG entries")
             generator_bindings[key] = symbols
     return {
