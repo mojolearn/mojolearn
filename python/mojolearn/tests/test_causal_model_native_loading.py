@@ -108,11 +108,11 @@ def test_direct_native_constructor_preserves_weights_and_fixed15(tmp_path, monke
     binding = context["bindings"][f"{DEVICE}:{mode}"]["linalg"]
     source = weights["embed"]
     rows, cols = source.shape
-    hi = Array.empty((rows, cols), "<i1")
-    lo = Array.empty((rows, cols), "<i1")
-    exponents = Array.empty((rows,), "<i4")
-    binding.quantize_int15([_buffer.addr(hi), _buffer.addr(lo), _buffer.addr(exponents),
-                           _buffer.addr_ro(source)], [rows, cols])
+    hi = _buffer.empty((rows, cols), "<i1")
+    lo = _buffer.empty((rows, cols), "<i1")
+    exponents = _buffer.empty((rows,), "<i4")
+    binding.quantize_int15([_buffer.addr(hi, name="hi"), _buffer.addr(lo, name="lo"), _buffer.addr(exponents, name="exponents"),
+                           _buffer.addr_ro(source, name="source")], [rows, cols])
     model = CausalLM.__new__(CausalLM)
     with monkeypatch.context() as patch:
         _poison(patch)
