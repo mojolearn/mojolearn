@@ -661,6 +661,8 @@ echo "identity payload: $(ls "$PKG/identity_columns/$RECORD" | wc -l | tr -d ' '
 cd "$here/python"
 rm -rf dist build ./*.egg-info
 pixi run -e pkg python -m build --wheel --no-isolation
+# PyPI refuses a file over 100 MiB: strip local symbols, re-sign, deflate 9, and fail here if still over.
+python3 "$here/packaging/macos/shrink_wheel.py" "$here/python/dist/"*.whl || exit 1
 python3 "$here/tools/wheel_api_audit.py" --require-complete \
     --output "$here/python/dist/API-macos.json" "$here/python/dist/"*.whl
 
