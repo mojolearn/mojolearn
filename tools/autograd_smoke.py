@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE AUTOGRAD SMOKE ENTRIES (2026-10-19, lane ag-bench): does the tape start on this vendor.
 
-Nine "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
+Ten "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
 
   autograd-gradients     autograd/checks/gpu.mojo, the gradient suite on the vendor's GPU (every
                          case prints PASS and its digest; the digests equal the CPU column's).
@@ -37,6 +37,10 @@ Nine "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing 
   autograd-higher        (2026-10-19, lane ag-ho-checks) autograd/checks/higher_gpu.mojo, the
                          higher-order suite (create_graph, second and third backward) on the
                          vendor's GPU; one HIGHER_DIGEST line per case.
+  import-model-smoke     (2026-10-20, lane ag-import-docs) mojolearn.import_model of the tests' tiny
+                         Conv/Relu/MaxPool/Flatten/Gemm ONNX fixture, written in process to a
+                         temporary directory, then one Program.run; finite logits of the
+                         expected shape, a SMOKE_DIGEST line (the logits).
 
 A check binary is built ONCE per vendor by the orchestrator (`build-commands` prints the lines; this
 tool never builds), then `run` starts each entry with a 5 s timer:
@@ -86,6 +90,9 @@ ENTRIES = (
     # 2026-10-19 (lane ag-ho-checks): higher-order gradients, docs/plans/AUTOGRAD_HIGHER_ORDER.md section 6
     {"name": "autograd-higher", "source": "autograd/checks/higher_gpu.mojo",
      "what": "the higher-order gradient suite (create_graph) on the vendor's GPU, HIGHER_DIGEST lines"},
+    # 2026-10-20 (lane ag-import-docs): model import, docs/plans/MODEL_IMPORT.md
+    {"name": "import-model-smoke", "probe": "import",
+     "what": "mojolearn.import_model of a tiny ONNX file written in process, then one Program.run"},
 )
 
 
@@ -216,8 +223,35 @@ def probe_predict():
     return 0
 
 
+
+def probe_import():
+    """import-model-smoke: does an ONNX import start and its Program run. The fixture (Conv, Relu,
+    MaxPool, Flatten, Gemm) is written by the tests' own encoder, loaded by path because the wheel ships
+    no tests, into a temporary directory; no onnx or torch."""
+    import importlib.util
+    import tempfile
+    import numpy as np
+    import mojolearn
+    spec = importlib.util.spec_from_file_location(
+        "smoke_onnx_fixture", ROOT / "python" / "mojolearn" / "tests" / "_onnx_fixture.py")
+    fx = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = fx      # its dataclasses resolve their module by name
+    spec.loader.exec_module(fx)
+    with tempfile.TemporaryDirectory() as tmp:
+        fixture = fx.write_fixture("conv_relu_maxpool_flatten_gemm", tmp)
+        model = mojolearn.import_model(fixture.path, shapes={"x": (4, 3, 8, 8)})
+        x = np.random.default_rng(7).standard_normal((4, 3, 8, 8), dtype=np.float32)
+        y = np.asarray(model.run(x))
+    if y.shape != (4, 10) or not np.isfinite(y).all():
+        print("SMOKE_FAIL import output %s finite %s" % (y.shape, bool(np.isfinite(y).all())))
+        return 1
+    print("SMOKE_DIGEST import logits %s vendor %s mode %s"
+          % (_probe_digest([y]), mojolearn.vendor(), mojolearn.numeric_mode()))
+    return 0
+
+
 PROBES = {"sequential": probe_sequential, "session": probe_session, "generate": probe_generate,
-          "predict": probe_predict}
+          "predict": probe_predict, "import": probe_import}
 
 
 def binary(bin_dir, entry, vendor):
