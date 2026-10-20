@@ -588,6 +588,9 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
             s.produced += 1
             wrote += 1
         var out = generation_array([b, wrote], "i")
+        if wrote == 0:
+            s.busy = False
+            return out
         var dst = i32_ptr(Int(py=out._addr))
         for r in range(b):
             for t in range(wrote):
@@ -604,7 +607,7 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var n = Int(py=ids.shape[1])
     var values = g[].bi.list()
-    var raw = i32_ptr(Int(py=ids._addr))
+    var raw = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
     for i in range(n):
         var special = False
         for j in range(len(s.eos)):
@@ -674,10 +677,11 @@ def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum
     var result = generation_array([b, l + n], "i")
     var dest = i32_ptr(Int(py=result._addr))
     var prompt = i32_ptr(Int(py=s[].prompt._addr))
-    var tail = i32_ptr(Int(py=continuation._addr))
+    var tail = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=continuation._addr))
     for r in range(b):
         memcpy(dest=dest + r * (l + n), src=prompt + r * l, count=l)
-        memcpy(dest=dest + r * (l + n) + l, src=tail + r * n, count=n)
+        if n > 0:
+            memcpy(dest=dest + r * (l + n) + l, src=tail + r * n, count=n)
     return result
 
 
