@@ -51,29 +51,43 @@ class PrecheckTests(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn(f"mojolearn-amd=={V} is not on testpypi (HTTP 404)", problems[0])
 
-    def test_a_combined_core_is_refused(self):
-        req = {"mojolearn": ["numpy>=1.24"], "mojolearn-nvidia": [f"mojolearn=={V}"],
-               "mojolearn-amd": [f"mojolearn=={V}"]}
-        _, problems = run(requires=req)
-        self.assertTrue(any("not the split core" in p for p in problems), problems)
+    def test_the_dependency_graph(self):
+        # mojolearn (meta) -> core + both vendors; core -> nothing; vendors -> core (NVIDIA also ptx).
+        self.assertEqual(PROJECTS[:2], ("mojolearn", "mojolearn-core"))
+        self.assertEqual(set(REQUIRES["mojolearn"]), {"mojolearn-core", "mojolearn-nvidia", "mojolearn-amd"})
+        self.assertEqual(REQUIRES["mojolearn-core"], ())
+        self.assertEqual(set(REQUIRES["mojolearn-nvidia"]), {"mojolearn-core", "mojolearn-nvidia-ptx"})
+        self.assertEqual(REQUIRES["mojolearn-amd"], ("mojolearn-core",))
+        self.assertEqual(REQUIRES["mojolearn-nvidia-ptx"], ("mojolearn-core",))
+
+    def test_a_core_pinning_a_vendor_is_refused(self):
+        # The pre-2026-10-20 graph: the core required both vendors.
+        _, problems = run(requires={"mojolearn-core": [f"mojolearn-nvidia=={V}", f"mojolearn-amd=={V}"]})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(f"mojolearn-core=={V} on testpypi has invalid release requirements", problems[0])
+
+    def test_a_vendor_pinning_the_meta_is_refused(self):
+        # The old graph's vendors pinned mojolearn, which is now the meta package.
+        _, problems = run(requires={"mojolearn-amd": [f"mojolearn=={V}"]})
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(f"mojolearn-amd=={V} on testpypi has invalid release requirements", problems[0])
 
     def test_loose_or_marked_pins_are_refused(self):
-        for core in ([f"mojolearn-nvidia>={V}", f"mojolearn-amd=={V}"],
-                     [f"mojolearn-nvidia=={V}; sys_platform == 'linux'", f"mojolearn-amd=={V}"],
-                     [f"mojolearn-nvidia[x]=={V}", f"mojolearn-amd=={V}"]):
-            with self.subTest(core=core):
-                req = {"mojolearn": core, "mojolearn-nvidia": [f"mojolearn=={V}"], "mojolearn-amd": [f"mojolearn=={V}"]}
-                _, problems = run(requires=req)
-                self.assertTrue(any("not the split core" in p for p in problems), problems)
-        req = {"mojolearn": [f"mojolearn-nvidia=={V}", f"mojolearn-amd=={V}"],
-               "mojolearn-nvidia": ["mojolearn==0.8.0"], "mojolearn-amd": [f"mojolearn=={V}"]}
-        _, problems = run(requires=req)
+        for meta in ([f"mojolearn-core=={V}", f"mojolearn-nvidia>={V}", f"mojolearn-amd=={V}"],
+                     [f"mojolearn-core=={V}", f"mojolearn-nvidia=={V}; sys_platform == 'linux'", f"mojolearn-amd=={V}"],
+                     [f"mojolearn-core=={V}", f"mojolearn-nvidia[x]=={V}", f"mojolearn-amd=={V}"],
+                     [f"mojolearn-nvidia=={V}", f"mojolearn-amd=={V}"]):
+            with self.subTest(meta=meta):
+                _, problems = run(requires={"mojolearn": meta})
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(f"mojolearn=={V} on testpypi has invalid release requirements", problems[0])
+        _, problems = run(requires={"mojolearn-nvidia": ["mojolearn-core==0.8.0", f"mojolearn-nvidia-ptx=={V}"]})
         self.assertTrue(any("invalid release requirements" in p for p in problems))
 
     def test_no_linux_wheel_and_yanked_are_refused(self):
         _, problems = run(linux=False)
         self.assertEqual(sum("no manylinux x86_64 wheel" in p for p in problems), len(PROJECTS))
-        _, problems = run(yanked=("mojolearn",))
+        _, problems = run(yanked=("mojolearn-core",))
         self.assertTrue(any("yanked" in p for p in problems), problems)
 
     def test_pins_parser(self):
@@ -120,6 +134,8 @@ class ReportTests(unittest.TestCase):
     def test_missing_wrong_version_and_direct_fail(self):
         _, problems = judge_report(report(mojolearn_amd=None), "pypi", V)
         self.assertTrue(any("mojolearn-amd is not in pip's report" in p for p in problems), problems)
+        _, problems = judge_report(report(**{"mojolearn-core": None}), "pypi", V)
+        self.assertTrue(any("mojolearn-core is not in pip's report" in p for p in problems), problems)
         _, problems = judge_report(report("pypi", **{"mojolearn-nvidia": item("mojolearn-nvidia", "0.8.0",
                                                                               "files.pythonhosted.org")}), "pypi", V)
         self.assertTrue(any("pip installed mojolearn-nvidia 0.8.0, not 0.9.0" in p for p in problems), problems)
