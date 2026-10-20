@@ -169,10 +169,14 @@ class SplitLinuxTests(unittest.TestCase):
     def members(self, kind):
         v, P = self.version, self.plugins
         tag = 'py3-none-manylinux_2_35_x86_64'
+        # 2026-10-20: the core is mojolearn-core (mojolearn_core-<v>), the
+        # Linux mojolearn is file-free and requires the core and both vendors
         if kind == 'core':
-            wheel_name, distribution, vendor = 'mojolearn', 'mojolearn', None
+            wheel_name, distribution, vendor, role = P.CORE_WHEEL_NAME, P.CORE_DISTRIBUTION, None, P.CORE_PROFILE
+        elif kind == 'meta':
+            wheel_name, distribution, vendor, role = P.META_WHEEL_NAME, P.META_DISTRIBUTION, None, P.META_PROFILE
         else:
-            vendor = P.by_profile(kind)
+            vendor, role = P.by_profile(kind), kind
             package = P.package(kind)
             wheel_name, distribution = package['wheel_name'], package['distribution']
         prefix = wheel_name + '-' + v + '.dist-info/'
@@ -180,18 +184,22 @@ class SplitLinuxTests(unittest.TestCase):
                 'Classifier: Development Status :: 3 - Alpha']
         payload = dict(schema='mojolearn.linux-payload.v1', version=v, release_profile='alpha-api',
                        assembly_profile='release-split', source_commit='a' * 40,
-                       split=dict(role=P.CORE_PROFILE if vendor is None else kind, distribution=distribution))
+                       split=dict(role=role, distribution=distribution))
         members = {prefix + 'WHEEL': ('Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: ' + tag + '\n').encode(),
                    prefix + 'LINUX_PAYLOAD.json': json.dumps(payload).encode()}
-        if vendor is None:
-            # the core declares no extras and requires BOTH plugins at its
-            # own version exactly (`pip install mojolearn` works for everyone)
+        if kind == 'core':
+            # the core declares no extras and requires NO vendor package
+            # (core_requirements is empty; each vendor requires the core)
             meta.append('Requires-Dist: numpy>=1.24')
             meta.extend('Requires-Dist: ' + r for r in P.core_requirements(v))
             members[prefix + P.CORE_MARKER] = json.dumps(P.core_marker(v)).encode()
             members['mojolearn/__init__.py'] = b'# fixture\n'
             members['mojolearn/identity_columns/COMMIT'] = b'a' * 40 + b'\n'
             members['mojolearn/.libs/libfixture.so'] = b'FAKE BYTES, NEVER EXECUTE'
+        elif kind == 'meta':
+            # metadata only: the core and both vendors at this version exactly
+            meta.extend('Requires-Dist: ' + r for r in P.meta_requirements(v))
+            members[prefix + P.PLUGIN_MARKER] = json.dumps(P.meta_marker(v)).encode()
         else:
             meta.extend('Requires-Dist: ' + r for r in P.package_requirements(kind, v))
             arches = [slot[-1] for slot in package['slots']]
@@ -242,10 +250,49 @@ class SplitLinuxTests(unittest.TestCase):
         return hashlib.sha256(raw).hexdigest()
 
     def test_each_split_wheel_admits_alone(self):
-        for kind in ('core', 'nvidia', 'amd', 'nvidia-ptx'):
+        for kind in ('core', 'nvidia', 'amd', 'nvidia-ptx', 'meta'):
             with self.subTest(kind=kind):
                 result = gate.verify(self.dist, self.stage(kind), None, self.root)
                 self.assertTrue(result['passed'])
+
+    def test_split_wheel_names_follow_the_new_graph(self):
+        v = self.version
+        self.assertEqual(self.members('core')[0], 'mojolearn_core-' + v + '-py3-none-manylinux_2_35_x86_64.whl')
+        self.assertEqual(self.members('meta')[0], 'mojolearn-' + v + '-py3-none-manylinux_2_35_x86_64.whl')
+        self.assertEqual(self.plugins.core_requirements(v), [])
+        self.assertEqual(self.plugins.package_requirements('amd', v), ['mojolearn-core==' + v])
+        self.assertEqual(self.plugins.package_requirements('nvidia', v),
+                         ['mojolearn-core==' + v, 'mojolearn-nvidia-ptx==' + v])
+        self.assertEqual(self.plugins.meta_requirements(v),
+                         ['mojolearn-core==' + v, 'mojolearn-nvidia==' + v, 'mojolearn-amd==' + v])
+
+    def test_meta_wheel_requirements_and_emptiness_are_checked(self):
+        v = self.version.encode()
+
+        def edit(old, new):
+            def mutate(prefix, members):
+                raw = members[prefix + 'METADATA']
+                assert old in raw, old
+                members[prefix + 'METADATA'] = raw.replace(old, new, 1)
+            return mutate
+
+        def carries_a_file(prefix, members):
+            members['mojolearn/__init__.py'] = b'# the meta wheel owns no files\n'
+
+        def wrong_role(prefix, members):
+            doc = json.loads(members[prefix + 'LINUX_PAYLOAD.json'])
+            doc['split']['role'] = self.plugins.CORE_PROFILE
+            members[prefix + 'LINUX_PAYLOAD.json'] = json.dumps(doc).encode()
+        for mutate, why in ((carries_a_file, 'carries files'),
+                            (edit(b'Requires-Dist: mojolearn-amd==' + v + b'\n', b''), 'core and both vendors'),
+                            (edit(b'Requires-Dist: mojolearn-core==' + v + b'\n', b''), 'core and both vendors'),
+                            (edit(b'mojolearn-nvidia==' + v, b'mojolearn-nvidia>=' + v), 'core and both vendors'),
+                            (edit(b'\n\nFixture only', b'\nProvides-Extra: nvidia\n\nFixture only'),
+                             'must not declare extras'),
+                            (wrong_role, 'profile/role')):
+            with self.subTest(why=why):
+                with self.assertRaisesRegex(ValueError, why):
+                    gate.verify(self.dist, self.stage('meta', mutate), None, self.root)
 
     def test_core_allows_optional_verification_dependencies(self):
         def add_verify(prefix, members):
@@ -265,7 +312,9 @@ class SplitLinuxTests(unittest.TestCase):
 
     def test_plugin_pin_and_ownership_are_checked(self):
         def loose_pin(prefix, members):
-            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(b'mojolearn==9.9.9', b'mojolearn>=9.9.9')
+            raw = members[prefix + 'METADATA']
+            assert b'mojolearn-core==9.9.9' in raw
+            members[prefix + 'METADATA'] = raw.replace(b'mojolearn-core==9.9.9', b'mojolearn-core>=9.9.9')
 
         def python_in_plugin(prefix, members):
             members['mojolearn/cuda_native/sm_89/helper.py'] = b'# no Python in a plugin\n'
@@ -297,24 +346,25 @@ class SplitLinuxTests(unittest.TestCase):
                 assert old in raw, old
                 members[prefix + 'METADATA'] = raw.replace(old, new, 1)
             return mutate
-        amd = b'Requires-Dist: mojolearn-amd==9.9.9\n'
-        nvidia = b'Requires-Dist: mojolearn-nvidia==9.9.9\n'
+        # 2026-10-20: the core pins NO vendor; any vendor pin is the old graph
+        numpy = b'Requires-Dist: numpy>=1.24\n'
         gpu_extra = edit(b'\n\nFixture only', b'\nProvides-Extra: nvidia\n\nFixture only')
-        missing_amd = edit(amd, b'')
-        missing_nvidia = edit(nvidia, b'')
-        missing_both = edit(nvidia + amd, b'')
-        loose_pin = edit(amd, b'Requires-Dist: mojolearn-amd>=9.9.9\n')
-        other_version = edit(nvidia, b'Requires-Dist: mojolearn-nvidia==9.9.8\n')
-        extra_marker = edit(amd, b'Requires-Dist: mojolearn-amd==9.9.9; extra == "amd"\n')
-        doubled = edit(amd, amd + amd)
+        pins_amd = edit(numpy, numpy + b'Requires-Dist: mojolearn-amd==9.9.9\n')
+        pins_nvidia = edit(numpy, numpy + b'Requires-Dist: mojolearn-nvidia==9.9.9\n')
+        pins_both = edit(numpy, numpy + b'Requires-Dist: mojolearn-nvidia==9.9.9\nRequires-Dist: mojolearn-amd==9.9.9\n')
+        loose_pin = edit(numpy, numpy + b'Requires-Dist: mojolearn-amd>=9.9.9\n')
+        extra_marker = edit(numpy, numpy + b'Requires-Dist: mojolearn-amd==9.9.9; extra == "amd"\n')
 
         def gpu_set_in_core(prefix, members):
             members['mojolearn/cuda/sm_89/_mojolearn_knn.so'] = b'FAKE'
-        for mutate, why in ((gpu_extra, 'only numpy and verify'), (missing_amd, 'dependency pins'),
-                            (missing_nvidia, 'dependency pins'), (missing_both, 'dependency pins'),
-                            (loose_pin, 'dependency pins'), (other_version, 'dependency pins'),
-                            (extra_marker, 'dependency pins'), (doubled, 'dependency pins'),
-                            (gpu_set_in_core, 'core carries GPU members')):
+
+        def no_marker(prefix, members):
+            members.pop(prefix + self.plugins.CORE_MARKER)
+        for mutate, why in ((gpu_extra, 'only numpy and verify'), (pins_amd, 'dependency pins'),
+                            (pins_nvidia, 'dependency pins'), (pins_both, 'dependency pins'),
+                            (loose_pin, 'dependency pins'), (extra_marker, 'dependency pins'),
+                            (gpu_set_in_core, 'core carries GPU members'),
+                            (no_marker, 'lacks its split marker')):
             with self.subTest(mutate=mutate.__name__):
                 digest = self.stage('core', mutate)
                 with self.assertRaisesRegex(ValueError, why):
@@ -322,10 +372,15 @@ class SplitLinuxTests(unittest.TestCase):
 
     def test_vendor_requires_core_and_cannot_own_unknown_architecture(self):
         def loose_pin(prefix, members):
-            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(b'mojolearn==', b'mojolearn>=')
+            assert b'mojolearn-core==' in members[prefix + 'METADATA']
+            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(b'mojolearn-core==', b'mojolearn-core>=')
+
+        def old_core_name(prefix, members):
+            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(b'mojolearn-core==', b'mojolearn==')
         def unknown_arch(prefix, members):
             members['mojolearn/cuda_native/sm_75/identical/_mojolearn_knn.so'] = b'FAKE'  # sm_100 is registered (Blackwell)
-        for mutate, why in ((loose_pin, 'exact package dependencies'), (unknown_arch, 'outside its architecture payload')):
+        for mutate, why in ((loose_pin, 'exact package dependencies'), (old_core_name, 'exact package dependencies'),
+                            (unknown_arch, 'outside its architecture payload')):
             with self.subTest(mutate=mutate.__name__):
                 with self.assertRaisesRegex(ValueError, why):
                     gate.verify(self.dist, self.stage('nvidia', mutate), None, self.root)
@@ -335,7 +390,7 @@ class SplitLinuxTests(unittest.TestCase):
             payload = json.loads(members[prefix + 'LINUX_PAYLOAD.json'])
             payload.pop('source_commit')
             members[prefix + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
-        for kind in ('core', 'nvidia', 'amd'):
+        for kind in ('core', 'nvidia', 'amd', 'meta'):
             with self.subTest(kind=kind):
                 with self.assertRaisesRegex(ValueError, 'full source commit'):
                     gate.verify(self.dist, self.stage(kind, absent_source), None, self.root)
