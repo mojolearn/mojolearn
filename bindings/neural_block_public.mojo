@@ -281,6 +281,24 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
     return entries
 
 
+def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
+    var bi = Python.import_module("builtins")
+    if Bool(py=fields.get("_owned_restore_pending", PythonObject(False))):
+        if not Bool(py=bi.hasattr(entries, "mamba3_owned_weights_enabled")) or not Bool(py=_native_function(entries, "mamba3_owned_weights_enabled")()):
+            raise Error("RuntimeError: Mamba3 owned weights require the compiled owned-weight entry")
+        if fields.get("_prefill_session") is None or fields.get("_prefill_binding") is not entries.canonical:
+            fields["_prefill_session"] = _native_function(entries, "mamba3_prefill_session_create")()
+            fields["_prefill_binding"] = entries.canonical
+        var addresses = bi.list()
+        for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
+            addresses.append(weights[i]._addr)
+        fields["_owned_generation"] = _native_function(entries, "mamba3_prefill_session_install_weights")(fields["_prefill_session"], addresses, fields["d_model"])
+        fields["_owned_restore_pending"] = False
+    if fields.get("_owned_generation") is not None:
+        if fields.get("_prefill_binding") is not entries.canonical or getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":
+            raise Error("RuntimeError: Mamba3 owned snapshot requires its installed binding/setup")
+
+
 def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
     var bi = Python.import_module("builtins")
@@ -364,7 +382,25 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
     else:
         if kind == "mamba2":
             params.extend(fields["dt_limit"])
-        _native_function(entries, name)(addresses, params)
+        if kind == "mamba3":
+            neural_mamba3_restore(fields, entries, weights)
+            var generation = fields.get("_owned_generation")
+            var session = Bool(py=bi.hasattr(entries, "mamba3_prefill_session_backward")) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+            if generation is not None:
+                var owned_addresses = py_ints([Int(py=addresses[0])])
+                for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots
+                    owned_addresses.append(addresses[i])
+                params.append(generation)
+                _native_function(entries, "mamba3_prefill_session_backward_owned")(fields["_prefill_session"], owned_addresses, params)
+            elif session:
+                if fields.get("_prefill_session") is None or fields.get("_prefill_binding") is not entries.canonical:
+                    fields["_prefill_session"] = _native_function(entries, "mamba3_prefill_session_create")()
+                    fields["_prefill_binding"] = entries.canonical
+                _native_function(entries, "mamba3_prefill_session_backward")(fields["_prefill_session"], addresses, params)
+            else:
+                _native_function(entries, name)(addresses, params)
+        else:
+            _native_function(entries, name)(addresses, params)
     var result = bi.dict()
     result["x"] = gradients[0]
     var names = block._W_NAMES

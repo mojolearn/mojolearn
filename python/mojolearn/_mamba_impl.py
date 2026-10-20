@@ -1897,7 +1897,8 @@ class Mamba3Block(_MambaBase):
         grads : dict of str to mojolearn.Array
             ``'x'`` plus one entry per constructor weight, under the same names.
         """
-        return self._prefill_backward(x, grad_output, "mamba3_backward")
+        return _native_neural_bridge.RUNTIME.neural_block_backward(
+            self, x, grad_output, _native_neural_bridge.CONTEXT)
 
     def step(self, x, state):
         """Run one decode token.
