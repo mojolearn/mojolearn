@@ -362,14 +362,14 @@ def _connect_parallel_byte_native():
     from ._byte_lm_config import ByteLanguageModelConfig
     from .tokenizer import _binding as _tokenizer_binding
     runtime = _tokenizer_binding()._module.parallel_byte_call
-    _backend.default_mode()
+    mode = _backend.default_mode()
     vendor = _backend.vendor()
-    selected = _backend.binding("_mojolearn_byte_lm", "identical")
+    selected = _backend.binding("_mojolearn_byte_lm", mode)
     # The registry validates the installed CPU owner before constructing its
     # legacy adapter. Cache its stored native module, never adapter methods.
-    modes = {"identical": selected._host if vendor == "cpu" else selected}
-    if vendor == "metal":
-        modes["fast"] = _backend.binding("_mojolearn_byte_lm", "fast")
+    # Byte-LM owns registered Mojo types: preserve the one-mode-per-process
+    # contract, including a fresh process selected as Apple fast at import.
+    modes = {mode: selected._host if vendor == "cpu" else selected}
     runtime("initialize", (Array, ByteLanguageModelConfig, modes, vendor))
     return runtime
 
