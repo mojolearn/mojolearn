@@ -46,7 +46,7 @@ def _widen_kernel(raw: FP, n_: Int32, kind: Int32, isz: Int32, s0: Int32, dst: _
     dst.unsafe_store(i, cast_w64_bits(cast_raw_bits(raw, i * Int(s0), size), Int(kind), size))
 
 
-def _narrow_kernel(cls: _U64, k_: Int32, kind: Int32, isz: Int32, out: FP, words_: Int32):
+def _narrow_kernel(cls: _U64, k_: Int32, kind: Int32, isz: Int32, dst: FP, words_: Int32):
     var t = _tid()
     if t >= Int(words_):
         return
@@ -61,7 +61,7 @@ def _narrow_kernel(cls: _U64, k_: Int32, kind: Int32, isz: Int32, out: FP, words
             var i = t * per + j
             if i < Int(k_):
                 acc |= narrow_w64(cls.unsafe_load(i), Int(kind), size) << UInt64(j * size * 8)
-    out.unsafe_store(t, bitcast[DType.float32](UInt32(acc & UInt64(0xFFFFFFFF))))
+    dst.unsafe_store(t, bitcast[DType.float32](UInt32(acc & UInt64(0xFFFFFFFF))))
 
 
 def device_unique_inverse_cast(
