@@ -664,7 +664,10 @@ def _connect_sequential_bindings():
         except (ImportError, AttributeError, ValueError, RuntimeError) as error:
             entries[mode] = type(error).__name__ + ": " + str(error)
     class_dtypes = {key: np.dtype(value) for key, value in _CLASS_DTYPE.items()}  # glue: connect checkpoint dtype classes once at package import
+    numeric_dtypes = {("uifb"[kind], size): dtype for (kind, size), dtype in class_dtypes.items()}  # glue: connect native numeric dtype metadata once at package import
+    buffer_codes = {("b", 1): "b", ("i", 1): "b", ("i", 2): "h", ("i", 4): "i", ("i", 8): "q", ("u", 1): "B", ("u", 2): "H", ("u", 4): "I", ("u", 8): "Q", ("f", 2): "H", ("f", 4): "f", ("f", 8): "d"}
     return {
+        "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
         "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),
         "bindings": entries, "backend_fields": vars(_backend), "vendor": _backend.vendor(),

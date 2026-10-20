@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential buffer admission and ndarray ABI ownership."""
 from std.python import Python, PythonObject
+from bindings.sequential_inputs import sequential_input
 
 
 def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -14,82 +15,6 @@ def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonOb
 
 def sequential_address(value: PythonObject) raises -> PythonObject:
     return value.__array_interface__["data"][0]
-
-
-def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int],
-                     mut values: PythonObject, mut floating: Bool, mut integral: Bool,
-                     mut signed_range: Bool, mut unsigned_range: Bool,
-                     mut leaf_depth: Int, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
-    if Bool(py=b.isinstance(value, b.list)) or Bool(py=b.isinstance(value, b.tuple)):
-        var n = len(value)
-        if depth >= 8 or n == 0:
-            raise Error("input sequences must be nonempty and have rank at most eight")
-        if leaf_depth >= 0 and depth >= leaf_depth:
-            raise Error("input sequences must be rectangular")
-        if depth == len(dims):
-            dims.append(n)
-        elif dims[depth] != n:
-            raise Error("input sequences must be rectangular")
-        for k in range(n):  # native input marshaling: Python scalar/container values become a native C buffer
-            _sequence_values(value[k], depth + 1, dims, values, floating, integral,
-                             signed_range, unsigned_range, leaf_depth, context)
-    else:
-        if leaf_depth < 0:
-            leaf_depth = depth
-        if depth != len(dims) or depth != leaf_depth:
-            raise Error("input sequences must be rectangular")
-        if Bool(py=b.isinstance(value, context["bool_types"])):
-            values.append(value)
-            return
-        elif Bool(py=b.isinstance(value, context["float_types"])):
-            floating = True
-        elif Bool(py=b.isinstance(value, context["int_types"])):
-            integral = True
-            signed_range = signed_range and Bool(py=value >= context["int64_min"]) and Bool(py=value <= context["int64_max"])
-            unsigned_range = unsigned_range and Bool(py=value >= PythonObject(0)) and Bool(py=value <= context["uint64_max"])
-        else:
-            raise Error("TypeError: inputs must contain numeric scalars")
-        values.append(value)
-
-
-def sequential_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
-    if Bool(py=b.isinstance(value, context["ndarray"])):
-        return value
-    if b.type(value) is context["array_class"]:
-        # Array stores these as C slot descriptors. Never call its Python
-        # __array_interface__, __buffer__, reshape or conversion helpers.
-        var view = b.object.__getattribute__(value, "_mv")
-        var shape = b.object.__getattribute__(value, "shape")
-        var dtype = b.object.__getattribute__(value, "dtype")
-        var order = b.object.__getattribute__(value, "order")
-        return context["ndarray"](shape, dtype=dtype, buffer=view, order=order)
-    if b.type(value) is context["array_type"]:
-        var view = b.memoryview(value)
-        return context["ndarray"](view.shape, dtype=view.format, buffer=view)
-    var dims = List[Int]()
-    var values = Python.list()
-    var floating = False
-    var integral = False
-    var signed_range = True
-    var unsigned_range = True
-    var leaf_depth = -1
-    _sequence_values(value, 0, dims, values, floating, integral, signed_range, unsigned_range, leaf_depth, context)
-    var shape = Python.list()
-    for k in range(len(dims)):  # driver-loop: over sequence input rank metadata
-        shape.append(dims[k])
-    var code = "d" if floating else ("q" if integral else "b")
-    var dtype = context["float64"] if floating else (context["int64"] if integral else context["bool"])
-    if not floating and integral and not signed_range:
-        if not unsigned_range:
-            raise Error("TypeError: input integers exceed the supported numeric array range")
-        code = "Q"
-        dtype = context["uint64"]
-    var storage = context["array_type"](code, values)
-    # The ndarray C type exposes the C array buffer without NumPy casting or
-    # a Python ndarray helper; its base retains the storage through dispatch.
-    return context["ndarray"](shape, dtype=dtype, buffer=storage)
 
 
 def sequential_descriptor(value: PythonObject, name: String, samples: Bool = False) raises -> PythonObject:
@@ -127,7 +52,7 @@ def sequential_descriptor(value: PythonObject, name: String, samples: Bool = Fal
 
 
 def sequential_x(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var owned = sequential_input(value, context)
+    var owned = sequential_input(value, context, True)
     if Int(py=owned.ndim) < 2 or Int(py=owned.ndim) > 8:
         raise Error(name + " must have shape (n_samples, ...) with 2 to 8 dimensions")
     _ = sequential_descriptor(owned, name, True)
