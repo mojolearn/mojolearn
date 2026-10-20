@@ -153,6 +153,8 @@ from autograd.fold_ops import OP_AGS_FIRST, OP_AGS_LAST, apply_fold_ops
 from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_split
 from sequence.moe_backward import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
 from autograd.embedding_ops import OP_EMB_FIRST, OP_EMB_LAST, apply_embedding
+# lane ag-ho-fused (H2): the recorded loss VJPs' one-hot constant
+from autograd.higher_loss_ops import OP_HL_FIRST, OP_HL_LAST, apply_higher_loss
 from autograd.cast_ops import OP_CAST_FIRST, OP_CAST_LAST, apply_cast
 # lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the higher-order bodies
 from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST, apply_higher
@@ -352,6 +354,15 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_EMB_FIRST or OP_CELL_FWD_SCAN > OP_EMB_LAST) and (
         OP_CELL_BWD_SCAN < OP_EMB_FIRST or OP_CELL_BWD_SCAN > OP_EMB_LAST
     ), "embedding opcode collides with recurrent scan"
+    # The recorded loss VJPs' constants (autograd/higher_loss_ops.mojo
+    # OP_HL_*, 3610..3619; lane ag-ho-fused, H2 of AUTOGRAD_HIGHER_ORDER.md),
+    # above the cast range (itself above every other autograd range); the
+    # fence against H1's OP_HO_* range (3600..3609) is in apply_higher_loss.
+    comptime assert OP_HL_FIRST <= OP_HL_LAST, "recorded-loss opcode range is empty"
+    comptime assert OP_HL_FIRST > OP_CAST_LAST and OP_HL_FIRST > OP_EMB_LAST, "recorded-loss opcodes overlap a lower family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_HL_FIRST or OP_CELL_FWD_SCAN > OP_HL_LAST) and (
+        OP_CELL_BWD_SCAN < OP_HL_FIRST or OP_CELL_BWD_SCAN > OP_HL_LAST
+    ), "recorded-loss opcode collides with recurrent scan"
     # The input cast and label gather (autograd/cast_ops.mojo OP_CAST_*,
     # 3500..; lane ag-thin-glue), above every other autograd range.
     comptime assert OP_CAST_FIRST <= OP_CAST_LAST, "cast opcode range is empty"
@@ -408,6 +419,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_moe_backward[OP](t, a)
     elif OP >= OP_EMB_FIRST and OP <= OP_EMB_LAST:
         apply_embedding[OP](t, a)
+    elif OP >= OP_HL_FIRST and OP <= OP_HL_LAST:
+        apply_higher_loss[OP](t, a)
     elif OP >= OP_CAST_FIRST and OP <= OP_CAST_LAST:
         apply_cast[OP](t, a)
     elif OP >= OP_HO_FIRST and OP <= OP_HO_LAST:
