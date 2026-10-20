@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Admit a bounded release smoke, without claiming full numerical certification."""
 import argparse
+from email.parser import Parser
 import hashlib
 import importlib.util
 import json
@@ -54,8 +55,56 @@ def wheel_kind(path):
     if 'macosx' in name:
         return 'macos', 'wheel', {'metal'}
     with zipfile.ZipFile(path) as archive:
-        split_core = any(n.endswith('.dist-info/' + CORE_MARKER) for n in archive.namelist())
+        names = archive.namelist()
+        markers = [n for n in names if n.endswith('.dist-info/' + _GPU_PACKAGES.PLUGIN_MARKER)]
+        if markers and json.loads(archive.read(markers[0])).get('role') == 'aggregate':
+            return 'linux', 'aggregate', {'cuda', 'hip'}
+        split_core = any(n.endswith('.dist-info/' + CORE_MARKER) for n in names)
     return 'linux', 'wheel', ({'cuda', 'hip'} if split_core else {'cuda'})
+
+
+def check_aggregate(path, report, source_commit):
+    """A file-free meta wheel is admitted through its exact dependency closure.
+
+    The smoke installed the core and plugins directly. It did not install this
+    meta wheel: validate its complete metadata and state that narrower scope.
+    """
+    version = path.name.split('-')[1]
+    dist = f'{_GPU_PACKAGES.META_WHEEL_NAME}-{version}.dist-info/'
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        allowed = {'METADATA', 'WHEEL', 'RECORD', 'LINUX_PAYLOAD.json',
+                   _GPU_PACKAGES.PLUGIN_MARKER}
+        require(path.name.startswith(_GPU_PACKAGES.META_WHEEL_NAME + '-') and
+                len(names) == len(set(names)) and
+                all(n.startswith(dist) and
+                    (n[len(dist):] in allowed or n[len(dist):].startswith('licenses/'))
+                    and '..' not in Path(n).parts for n in names),
+                'aggregate wheel must contain metadata only')
+        marker = json.loads(archive.read(dist + _GPU_PACKAGES.PLUGIN_MARKER))
+        require(marker == _GPU_PACKAGES.meta_marker(version), 'aggregate marker mismatch')
+        metadata = Parser().parsestr(archive.read(dist + 'METADATA').decode())
+        require(metadata['Name'] == _GPU_PACKAGES.META_DISTRIBUTION and
+                metadata['Version'] == version and
+                sorted(metadata.get_all('Requires-Dist', [])) ==
+                sorted(_GPU_PACKAGES.meta_requirements(version)),
+                'aggregate dependency metadata mismatch')
+        payload = json.loads(archive.read(dist + 'LINUX_PAYLOAD.json'))
+        require(payload.get('source_commit') == source_commit, 'aggregate packaged source mismatch')
+    core = Path(report.get('wheel', '')).name
+    require(core.split('-')[:2] == [_GPU_PACKAGES.CORE_WHEEL_NAME, version] and
+            re.fullmatch('[0-9a-f]{64}', report.get('wheel_sha256', '') or ''),
+            'aggregate receipt needs the exact-version core')
+    plugins = report.get('plugins') or []
+    # Include transitive PTX: NVIDIA's dependency must also have been installed
+    # by this smoke's recorded command, not merely be available from an index.
+    for row in _GPU_PACKAGES.distribution_rows():
+        matches = [p for p in plugins if isinstance(p, dict) and
+                   Path(p.get('wheel', '')).name.split('-')[:2] ==
+                   [row['wheel_name'], version]]
+        require(len(matches) == 1 and
+                re.fullmatch('[0-9a-f]{64}', matches[0].get('wheel_sha256', '') or ''),
+                'aggregate receipt missing exact-version dependency ' + row['distribution'])
 
 
 def check(directory, source_commit, platform="all"):
@@ -74,7 +123,7 @@ def check(directory, source_commit, platform="all"):
         require('/' not in wheel and (directory / wheel).is_file(), 'missing wheel ' + wheel)
         kinds[wheel] = wheel_kind(directory / wheel)
     require({k[0] for k in kinds.values()} == platforms, 'exactly one wheel per selected platform required')
-    seen_vendors, seen_wheels = set(), set()
+    seen_vendors, seen_wheels, aggregates = set(), set(), []
     for name, expected in receipts.items():
         require(re.fullmatch(r'light-smoke-[a-z0-9-]+\.json', name), 'unsafe smoke filename')
         path = directory / name
@@ -93,14 +142,19 @@ def check(directory, source_commit, platform="all"):
         # The receipt covers the one manifest wheel it installed: its core
         # wheel, or (for a split plugin) a plugin it installed beside the core.
         covered = [w for w in wheels if (kinds[w][1] == 'wheel' and w == core)
-                   or (kinds[w][1] == 'plugin' and w in plugins)]
+                   or (kinds[w][1] == 'plugin' and w in plugins)
+                   or kinds[w][1] == 'aggregate']
         require(len(covered) == 1, 'unlisted or duplicate wheel')
         wheel = covered[0]
         require(wheel not in seen_wheels, 'unlisted or duplicate wheel')
         _, role, allowed = kinds[wheel]
         require(vendor in allowed and vendor not in seen_vendors, 'wrong or duplicate vendor')
         require(('macosx' in wheel) if vendor == 'metal' else ('manylinux' in wheel), 'vendor/platform mismatch')
-        if role == 'plugin':
+        if role == 'aggregate':
+            require(wheels[wheel] == digest(directory / wheel), 'wheel digest mismatch')
+            check_aggregate(directory / wheel, report, source_commit)
+            aggregates.append(wheel)
+        elif role == 'plugin':
             require(plugins[wheel] == wheels[wheel] == digest(directory / wheel), 'wheel digest mismatch')
             # Bind every package to its exact source and installed bytes. A
             # payload also needs a smoke of the architecture it contains.
@@ -130,8 +184,9 @@ def check(directory, source_commit, platform="all"):
     require(seen_wheels == set(wheels), 'incomplete artifact smoke')
     return {'status': 'PASSED_LIGHT_RELEASE', 'source_commit': source_commit,
             'wheels': wheels, 'runtime_vendors': sorted(seen_vendors),
+            'aggregate_dependency_smokes': aggregates,
             'full_numerical_certification': False,
-            'scope': 'Exact installed smoke for the published platforms; other architectures and experimental contracts are not newly certified'}
+            'scope': 'Installed core/plugin smoke; file-free aggregates have validated metadata and a smoked dependency closure. Other architectures and experimental contracts are not newly certified'}
 
 
 def main():

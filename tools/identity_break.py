@@ -9400,6 +9400,14 @@ def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
     return spec
 
 
+# The 2026-10-20 installed PTX run exposed four missing batch declarations.
+# Weighting affects fitting; the fitted trees still promise row-wise prediction.
+# Revise only their batch evidence: existing train/infer/model hashes remain valid.
+_batch_decl(_rows_calls("predict", "predict_proba"),
+            "et-clf-weighted", "gbdt-class-weights", "gbdt-multiclass-offgrid",
+            revision="weighted-trees-batch-2026-10-20-v1")
+_batch_decl(_rows_calls("predict"), "et-reg-weighted",
+            revision="weighted-trees-batch-2026-10-20-v1")
 _batch_decl(_rows_calls("predict", "predict_proba"),
             "gbdt-ordered",
             "rf-clf", "et-clf", "gbdt-symmetric", "gbdt-symmetric-eval",

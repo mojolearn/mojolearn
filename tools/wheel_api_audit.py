@@ -250,8 +250,8 @@ def split_audit(wheels):
                         manifest_bytes = archive.read(manifest_member)
                         # the merged-file indexes (bindings/merged_build.sh) are bound too
                         indexes = {m[len(prefix):]: hashlib.sha256(archive.read(m)).hexdigest()
-                                   for m in payload if m.startswith(prefix) and m.endswith('/_mojolearn_merged.json')
-                                   or m == prefix + '_mojolearn_merged.json'}
+                                   for m in payload if m.startswith(prefix)
+                                   and m.rsplit('/', 1)[-1] == plugins.MERGED_INDEX}
                         plugins.validate_bundled_ptx(bundle, manifest_bytes, files, indexes)
                         ptx_source = json.loads(manifest_bytes)['source_commit']
                         inventory_member = dist + '/LINUX_PAYLOAD.json'
@@ -262,7 +262,8 @@ def split_audit(wheels):
                             for name, digest in files.items():
                                 if inventory.get('extensions', {}).get(prefix + name) != digest:
                                     raise ValueError('PTX set bytes differ from the release inventory')
-                    allowed = {prefix + name for name in files} | {manifest_member}
+                    # the set's .so files, its merged indexes and its manifest; nothing else
+                    allowed = {prefix + name for name in files} | {prefix + name for name in indexes} | {manifest_member}
                     if {m for m in payload if m.startswith(prefix)} != allowed:
                         raise ValueError('undeclared PTX set files')
                     row['ptx'] = dict(bundle, source_commit=ptx_source, arch=plugins.PTX_ARCH)
