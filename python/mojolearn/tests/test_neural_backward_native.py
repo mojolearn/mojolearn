@@ -77,7 +77,11 @@ def test_backward_refuses_bad_inputs_inside_native_boundary(tmp_path, monkeypatc
 
 def test_backward_preserves_extended_transformer_refusal(tmp_path):
     _, weights, options, inputs = block_inputs(tmp_path, "llama")
+    # The shared Llama fixture uses every default option. Make the refusal
+    # trigger explicit: its RMSNorm epsilon differs from the backward profile.
+    options["norm_eps"] = 1e-5
     block = TransformerBlock(weights, **options)
+    assert block._extended is True
     result = audit_native_call(block.backward, inputs, np.ones_like(inputs))
     assert isinstance(result.exception, NotImplementedError), result.report()
     assert "default float32 block options" in str(result.exception)
