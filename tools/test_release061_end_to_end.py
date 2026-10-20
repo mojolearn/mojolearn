@@ -115,7 +115,7 @@ def split_fixture(wheel, version):
     # pack_wheel.write_split: every GPU member moves to its vendor package's
     # equal-depth directory (gpu_plugins.installed_member: mojolearn/cuda/sm_89/...
     # -> mojolearn/cuda_native/sm_89/...), and the payload's member maps follow.
-    for mapping in ('extensions', 'binding_origin'):
+    for mapping in ('extensions', 'binding_origin', 'merged_indexes'):
         if mapping in payload:
             payload[mapping] = {plugins.installed_member(k): v for k, v in payload[mapping].items()}
     tag = 'py3-none-manylinux_2_35_x86_64'
@@ -161,7 +161,26 @@ def split_fixture(wheel, version):
     return out
 
 
-def fixture(root, split=False):
+def index_bytes(files):
+    """A set directory's _mojolearn_merged.json for {'<stem>.so': [members]}."""
+    return json.dumps({'format': 1, 'files': files}, sort_keys=True).encode()
+
+
+def fixture(root, split=False, merged=False):
+    """The release-linux3 fixture in the per-binding layout, or with `merged`
+    in the merged layout: each set directory (and host/) ships the plan's
+    merged files plus its index, the build proofs and the payload carry
+    `merged_indexes` and `binding_layout`, and every installed member names
+    the merged file its directory's index lists it in."""
+    layout = 'merged' if merged else 'per-binding'
+    indexes = {}  # 'mojolearn/<dir>/_mojolearn_merged.json' -> {'sha256', 'files'}
+
+    def add_index(files, prefix, plan):
+        member = prefix + gate.surface.MERGED_INDEX
+        files[member] = index_bytes(plan)
+        indexes[member] = dict(sha256=hashlib.sha256(files[member]).hexdigest(), files=plan)
+        return member
+
     wrapper = root / 'python/mojolearn/__init__.py'
     wrapper.parent.mkdir(parents=True)
     wrapper.write_bytes(b'# inert wrapper fixture\n')
@@ -184,8 +203,12 @@ def fixture(root, split=False):
     # the whole wheel, outside every architecture tree, so they are excluded
     # from the payload's `extensions` map below and recorded under
     # `host_native` (keyed by basename since 0.8.6) instead.
-    for member in gate.HOST_MEMBERS:
+    host_plan = gate.surface.expected_set_files('host', True, layout)
+    for stem in host_plan:
+        member = 'mojolearn/host/' + stem
         files[member] = b'inert native ' + member.encode()
+    if merged:
+        add_index(files, 'mojolearn/host/', host_plan)
     qualification_root = root / 'qualification'
     proof_root = qualification_root / 'build-proofs'
     proof_root.mkdir(parents=True)
@@ -194,31 +217,43 @@ def fixture(root, split=False):
         extensions = {}
         for mode in gate.surface.MODES:
             prefix = 'mojolearn/' + key + '/' + ('' if mode == 'fast' else mode + '/')
-            for name in sorted(gate.surface.expected_bindings(mode, True)):
-                member = prefix + name + '.so'
+            plan = gate.surface.expected_set_files(mode, True, layout)
+            for stem in sorted(plan):
+                member = prefix + stem
                 files[member] = ('inert native ' + member).encode()
                 extensions[member] = hashlib.sha256(files[member]).hexdigest()
-        proof_path = proof_root / (key.replace('/', '-') + '.json')
-        write_json(proof_path, dict(schema='mojolearn.linux.build-provenance.v1',
+            if merged:
+                add_index(files, prefix, plan)
+        proof = dict(schema='mojolearn.linux.build-provenance.v1',
             complete=True, build_exit=0, action='build', source_commit='a' * 40,
-            source_inventory=inventory, source_sha256=source_sha, extensions=extensions))
+            source_inventory=inventory, source_sha256=source_sha, extensions=extensions)
+        if merged:
+            # the leg's indexes at the build layout, its host index included
+            proof.update(binding_layout='merged', merged_indexes=dict(
+                {k: v for k, v in indexes.items() if k.startswith('mojolearn/' + key + '/')},
+                **{'mojolearn/' + key + '/host/' + gate.surface.MERGED_INDEX: indexes['mojolearn/host/' + gate.surface.MERGED_INDEX]}))
+        proof_path = proof_root / (key.replace('/', '-') + '.json')
+        write_json(proof_path, proof)
         proof_sets[key] = dict(sha256=gate.digest_file(proof_path), source_sha256=source_sha)
     payload = dict(schema='mojolearn.linux-payload.v1', version=version,
         assembly_profile=gate.SPLIT_PROFILE if split else gate.surface.RELEASE_PROFILE, release_profile='alpha-api', source_commit='a' * 40,
         source_inventory=inventory, sets=proof_sets,
         extensions={n: hashlib.sha256(b).hexdigest() for n, b in files.items()
-                    if '/_mojolearn' in n and n not in gate.HOST_MEMBERS},
+                    if '/_mojolearn' in n and n.endswith('.so') and not n.startswith('mojolearn/host/')},
         host_native={name: dict(archive_path=member,
                                 sha256=hashlib.sha256(files[member]).hexdigest(),
                                 vendor='cpu', supported_modes=['identical'],
                                 unsupported_modes=['fast'])
-                     for name, member in zip(gate.HOST_NAMES, gate.HOST_MEMBERS)},
+                     for name in gate.HOST_NAMES
+                     for member in (gate.surface.member_file('mojolearn/host/', name, indexes),)},
         python_sha256={'mojolearn/__init__.py': gate.digest_file(wrapper),
                        'mojolearn/_version.py': gate.digest_file(version_file)},
         runtime_sha256={'mojolearn/.libs/libfixture.so': hashlib.sha256(b'inert runtime').hexdigest()},
         optional_native={n: {'included': True, 'supported_modes': ['identical'],
                              'unsupported_modes': ['fast']}
                          for n in ('_mojolearn_byte_lm',) + tuple(gate.HOST_NAMES)})
+    if merged:
+        payload.update(binding_layout='merged', merged_indexes=indexes)
     dist = 'mojolearn-' + version + '.dist-info/'
     files[dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
     files[dist + 'METADATA'] = ('Metadata-Version: 2.4\nName: mojolearn\nVersion: ' + version + '\n').encode()
@@ -256,13 +291,15 @@ def fixture(root, split=False):
                 if split:  # a split install holds the set at its vendor package's directory
                     prefix = gate.surface.load_gpu_plugins().installed_member('mojolearn/' + prefix + 'x.so')[
                         len('mojolearn/'):-len('x.so')]
-                bindings = {binding: dict(path=package + '/' + prefix + binding + '.so',
-                    sha256=audit['extension_hashes'][prefix + binding + '.so'], mode_code=code)
+                # each member loads from its own file or its directory's merged file
+                served = audit.get('merged_indexes') or {}
+                bindings = {binding: dict(path=package + '/' + gate.surface.member_file(prefix, binding, served),
+                    sha256=audit['extension_hashes'][gate.surface.member_file(prefix, binding, served)], mode_code=code)
                     for binding in gate.surface.expected_bindings(mode, True)}
                 # DEVIATION 2680: the CPU TRAINING binding, under its own key.
                 # It is NOT in installed_bindings, whose every row is asserted
                 # to read back this leg's GPU vendor; this one reads back 'cpu'.
-                host_member = gate.HOST_MEMBER.removeprefix('mojolearn/')
+                host_member = gate.surface.member_file('host/', gate.HOST_NAME, served)
                 write_json(out / (name + '.installed.json'), dict(vendor=vendor, mode=mode,
                     wheel_sha256=audit['sha256'], package=package + '/__init__.py',
                     installed_bindings=bindings, device_architecture=arch,
@@ -272,10 +309,11 @@ def fixture(root, split=False):
                         sha256=audit['host_extension_hashes'][host_member],
                         numeric_mode=1, vendor='cpu'),
                     installed_host_bindings={name: dict(
-                        path=package + '/' + member.removeprefix('mojolearn/'),
-                        sha256=audit['host_extension_hashes'][member.removeprefix('mojolearn/')],
+                        path=package + '/' + member,
+                        sha256=audit['host_extension_hashes'][member],
                         numeric_mode=1, vendor='cpu', column='cpu')
-                        for name, member in zip(gate.HOST_NAMES, gate.HOST_MEMBERS)}))
+                        for name in gate.HOST_NAMES
+                        for member in (gate.surface.member_file('host/', name, served),)}))
                 (out / (name + '.log')).write_text('inert fixture; no numerical execution\n')
                 status.append(f'{surface}\t{mode}\t0\n')
                 if surface == 'byte-lm':
@@ -364,6 +402,79 @@ class EndToEndRelease061(unittest.TestCase):
             with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}), \
                     self.assertRaises((ValueError, OSError, KeyError)):
                 gate.check_release061(wheel, qualification, root)
+
+
+class MergedLayout(unittest.TestCase):
+    """The merged bindings (lane merged-bindings, 2026-10-20): every set ships
+    its plan's merged files and an index, and the same admission holds."""
+
+    def admit(self, wheel, qualification, root, split=False):
+        with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}):
+            if split:
+                return gate.check_release_split(wheel, qualification, root)
+            return gate.check_release061(wheel, qualification, root)
+
+    def test_merged_combined_wheel_admits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root, merged=True)
+            result = self.admit(wheel, qualification, root)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES)
+            audit = json.loads((qualification / 'hip/gfx942/wheel-audit.json').read_text())
+            self.assertEqual(audit['binding_layout'], 'merged')
+            self.assertEqual(len(audit['merged_indexes']), 2 * len(gate.RELEASE_ARCHES) + 1)  # two tiers per set, host/
+            self.assertTrue(all(p.endswith('.so') for p in audit['extension_hashes']))
+
+    def test_merged_split_set_admits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheels, qualification = fixture(root, split=True, merged=True)
+            result = self.admit(wheels, qualification, root, split=True)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['assembly_profile'], gate.SPLIT_PROFILE)
+
+    def test_merged_defects_refuse(self):
+        for defect in ('proof_per_binding', 'proof_index_changed', 'installed_own_file'):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                wheel, qualification = fixture(root, merged=True)
+                out = qualification / 'cuda/sm_90'
+                if defect.startswith('proof_'):
+                    path = qualification / 'build-proofs/cuda-sm_90.json'
+                    proof = json.loads(path.read_text())
+                    if defect == 'proof_per_binding':
+                        proof.pop('binding_layout')
+                        proof.pop('merged_indexes')
+                    else:
+                        row = next(r for k, r in proof['merged_indexes'].items() if '/identical/' in k)
+                        row['sha256'] = '0' * 64
+                    write_json(path, proof)
+                else:
+                    path = out / 'smoke-fast.installed.json'
+                    row = json.loads(path.read_text())
+                    b = row['installed_bindings']['_mojolearn_gbdt']
+                    b['path'] = b['path'].rsplit('/', 1)[0] + '/_mojolearn_gbdt.so'
+                    write_json(path, row)
+                    seal_evidence(out)
+                with self.assertRaises((ValueError, OSError, KeyError)):
+                    self.admit(wheel, qualification, root)
+
+
+    def test_merged_host_bindings_resolve_to_the_merged_host_file(self):
+        # The on-box verifier's host read-back (verify -> check_byte_lm_host,
+        # check_host_bindings) looks each host binding up in the merged host file.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheel, qualification = fixture(root, merged=True)
+            out = qualification / 'hip/gfx942'
+            audit = json.loads((out / 'wheel-audit.json').read_text())
+            record = json.loads((out / 'byte-lm-identical.installed.json').read_text())
+            gate.surface.check_byte_lm_host(record, audit)
+            gate.surface.check_host_bindings(record, audit)
+            record['installed_host_bindings'][gate.HOST_NAME]['sha256'] = '0' * 64
+            with self.assertRaises(ValueError):
+                gate.surface.check_host_bindings(record, audit)
 
 
 class SplitSet(unittest.TestCase):
