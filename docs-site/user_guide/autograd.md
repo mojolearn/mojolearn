@@ -462,6 +462,49 @@ with ops.Session() as s:
     logits_session = s.numpy(s.linear(hidden, w2, b2))
 ```
 
+## Import a model
+
+`mojolearn.import_model` loads a whole trained model for inference: its operations and its weights.
+Pass the path of an ONNX file (opset 13 or later), such as one written by `torch.onnx.export`, or a
+`torch.export.ExportedProgram`. The import returns a `Program`: `run` takes new input arrays, runs every
+operation of the model on the device in one call and returns the outputs, with the same results on
+Apple, NVIDIA and AMD GPUs and on the CPU. The weights are copied to the device once, when the model is
+imported. `save` writes the program and its weights, and `load_program` reads the file back on any
+install, a GPU install or the CPU-only install.
+
+A program runs arrays of one fixed shape. `shapes` sets every input axis the model leaves open, such as
+the batch, by input name; `inputs` and `outputs` list each input and output as its name, shape and
+dtype. float16, bfloat16 and float32 weights are used exactly; float64 weights are rounded to float32
+once.
+
+<!-- block: import -->
+```python
+import numpy as np
+import mojolearn
+from mojolearn import ops
+
+# cnn.onnx: Conv(3 -> 4, 3 x 3, padding 1), Relu, MaxPool(2), Flatten, Gemm(64 -> 10),
+# with the input named "x" and an open batch axis
+model = mojolearn.import_model("cnn.onnx", shapes={"x": (8, 3, 8, 8)})
+print(model.inputs)    # [('x', (8, 3, 8, 8), 'float32')]
+print(model.outputs)   # [('y', (8, 10), 'float32')]
+
+rng = np.random.default_rng(0)
+images = rng.standard_normal((8, 3, 8, 8), dtype=np.float32)
+logits = model.run(images)            # (8, 10)
+model.save("cnn.program")
+
+with ops.Session() as s:
+    served = s.load_program("cnn.program")
+    logits_served = served.run(images)  # equal to logits, bit for bit
+```
+
+An import supports the operations `mojolearn.importers.supported_ops()` lists, each with the attribute
+values it accepts. A model that uses anything else raises `mojolearn.importers.UnsupportedModel`, which
+names every node the import cannot run, so one attempt shows every change the model needs.
+Imported models run inference only; to train, build the model with `Sequential` or a session and load
+its weights as in [Import weights](#import-weights).
+
 ## Numeric modes
 
 Both entry points take `numeric_mode`: `Sequential(numeric_mode=...)` and
