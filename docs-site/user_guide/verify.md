@@ -128,6 +128,19 @@ and says whether the machines were genuinely different. A cell present in only o
 `INCOMPARABLE`, never a match. Run the same scope on both machines. To prevent either side from
 tailoring its document after seeing the other, use `--commitment` first (see `python -m mojolearn verify --help`).
 
+## Verify your own model
+
+The checks above use the library's own fixtures. To check a model you trained or imported, save it
+with `Program.save`, `Sequential.save_checkpoint` or `Sequential.export`, copy the model file and the
+`<file>.verify.json` written beside it to the other machine, and run:
+
+```sh
+python -m mojolearn verify-model model.ckpt
+```
+
+Every output is reported as `MATCH` or `DIFFER`. See
+[Verify a model on another GPU](autograd.md#verify-a-model-on-another-gpu).
+
 ## Sharing a report
 
 ```sh

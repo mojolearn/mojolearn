@@ -571,10 +571,10 @@ python -m mojolearn verify-model classifier.ckpt
 ```text
 model    classifier.ckpt  kind=sequential-export  sha256=3f1c...
          description=9a0e...  bytes=1204
-install  mojolearn 0.8.52  numeric_mode=identical  vendor=cuda  device=NVIDIA L40S, 570.86
+install  mojolearn <version>  numeric_mode=identical  vendor=cuda  device=NVIDIA L40S, <driver>
 input    X  shape=16x4  dtype=float32  digest=5b2d...  (seeded, seed 0)
 output   output  shape=16x2  digest=c47a...  MATCH
-expected classifier.ckpt.verify.json: mojolearn 0.8.52  vendor=metal  device=Apple M4 Max
+expected classifier.ckpt.verify.json: mojolearn <version>  vendor=metal  device=Apple M4 Max
 verdict  MATCH
 ```
 
