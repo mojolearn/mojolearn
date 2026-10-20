@@ -718,6 +718,9 @@ class Sequential:
             desc = describe(classes, "classes")
         prog = self._program(self.n_features_in_)
         self._binding().model_save_checkpoint(os.fspath(path), addrs, prog, ip, fp, desc)  # cpu-route: checkpoint file written on the host
+        # this install's verification report beside the file (<path>.verify.json)
+        from ._verify_model import record_sequential
+        record_sequential(self, path)
 
     def save_checkpoint(self, path):
         """Save the model and its full training state to ``path``.
@@ -729,6 +732,10 @@ class Sequential:
         ``fit(..., resume=True)`` then continues training exactly where it
         stopped, on any install: a checkpoint written on one GPU vendor (or
         on the CPU) resumes to the same parameters on another.
+
+        Beside it, ``<path>.verify.json`` records this install's report (the
+        model's outputs on seeded inputs, by digest), for
+        ``python -m mojolearn verify-model <path>`` on another install.
 
         Parameters
         ----------
@@ -757,7 +764,9 @@ class Sequential:
         classes of a classifier), without the optimizer state.
         :meth:`load` reads it back on any install, GPU or CPU, and
         :meth:`predict` and :meth:`predict_proba` give the same values
-        there as here.
+        there as here. Beside it, ``<path>.verify.json`` records this
+        install's report, for ``python -m mojolearn verify-model <path>`` on
+        another install.
 
         Parameters
         ----------

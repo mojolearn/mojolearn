@@ -1482,8 +1482,17 @@ class Program:
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,
-        for :meth:`Session.load_program` on any install."""
+        for :meth:`Session.load_program` on any install.
+
+        Beside it, ``<path>.verify.json`` records this install's report: the
+        program run once on seeded inputs, with the digest of every input and
+        output. On another install, ``python -m mojolearn verify-model
+        <path>`` runs the saved program on the same inputs and checks that
+        every output has the same bits.
+        """
         self._s._b.ops_save_program(self._s._sid(), self._id, os.fspath(path))  # cpu-route: program file written on the host
+        from ._verify_model import record_program
+        record_program(self, path)
 
     def free(self):
         """Release the program (its parameters stay session tensors)."""
