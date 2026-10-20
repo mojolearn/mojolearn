@@ -73,7 +73,8 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
 from x_cnn.ops import FP as XFP, IP as XIP
 from x_cnn.ops import CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_N, PP_C, PP_OH, PP_OW
-from x_cnn.device import cnn_ctx, conv_block_backward_into, linear_backward_into
+from x_cnn.device import cnn_ctx
+from autograd.kernels.cnn import conv_block_backward_into, linear_backward_into
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the AUTOGRAD_CNN switch and the hand walk;

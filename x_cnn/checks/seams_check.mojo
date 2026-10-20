@@ -22,6 +22,7 @@ from x_cnn.checks.oracle import (
     o_pad_bwd, o_adapt_avg_bwd, o_adapt_max_fwd, o_sage_max_bwd, o_l2norm, o_adam,
 )
 import x_cnn.device as D
+import autograd.kernels.cnn as DB
 import x_cnn.host.ops_host as Hh
 
 
