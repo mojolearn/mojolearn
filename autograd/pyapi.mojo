@@ -19,7 +19,7 @@ from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
 from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
-from autograd.model import FitConfig, ModelSpec, model_fit, model_predict, parse_model
+from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
 from autograd.rankn_api import rn_dims, rn_shape
 from autograd.profile import ag_profile_report, ag_profile_reset
@@ -30,6 +30,10 @@ from autograd.cast_ops import gather_labels
 # Training options ahead of the per-layer float table in model_fit's fp.
 comptime FIT_INTS = 14
 comptime FIT_FLOATS = 9
+# model_fit with the resumable state: four more addresses and the resume flag.
+comptime FIT_ADDRS = 4
+comptime FIT_ADDRS_STATE = 8
+comptime FIT_INTS_STATE = 15
 
 
 def _ints(p: PythonObject) raises -> List[Int]:
@@ -79,9 +83,19 @@ def model_fit_py[E: Exec](
     n_iter_no_change, init];
     fp = [lr, f1 (momentum / beta1), f2 (beta2), eps, weight_decay,
     f7 (dampening), tol, schedule gamma, huber delta] + one float per layer.
-    Returns the number of epochs run."""
-    if len(addrs) != 4 or len(ip) != FIT_INTS or len(fp) < FIT_FLOATS + 1:
-        raise Error("model_fit: requires 4 addresses, 14 integer parameters and 9 floats plus one per layer")
+    Returns the number of epochs run.
+
+    The resumable form (autograd/model.mojo model_fit_state) adds four
+    addresses, [m (n_params float32, in/out), v (n_params float32, in/out),
+    state (FIT_STATE_WORDS int64, in/out), the earlier loss curve (float32,
+    state[FS_EPOCH] values, read when resuming)], and ip[14] = resume (0/1);
+    loss_curve then holds state[FS_EPOCH] + epochs values. Returns the epochs
+    completed in all (the earlier ones included)."""
+    var stateful = len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE
+    var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
+    if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:
+        raise Error("model_fit: requires 4 addresses and 14 integer parameters (or 8 and 15 with the "
+                    + "training state) and 9 floats plus one per layer")
     var spec = parse_model(_ints(prog), _floats(fp, FIT_FLOATS))
     var N = ival(ip, 0)
     var opt = OptConfig(ival(ip, 3), ival(ip, 4), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4), fval(fp, 5))
@@ -95,7 +109,22 @@ def model_fit_py[E: Exec](
     var profile = ag_profile_on()
     if profile:
         ag_profile_reset()
-    var n_iter = model_fit(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
+    var n_iter: Int
+    if stateful:
+        var sa = Int(py=addrs[6])
+        if sa == 0:
+            raise Error("model_fit: null training-state buffer")
+        var state = IP64(unsafe_from_address=sa)
+        var resume = ival(ip, 14) != 0
+        var prev = fptr(addrs[3], "loss_curve")
+        if resume and Int(state[FS_EPOCH]) > 0:
+            prev = fptr(addrs[7], "earlier loss_curve")
+        _ = model_fit_state(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
+                            fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"),
+                            fptr(addrs[4], "m"), fptr(addrs[5], "v"), state, prev, resume)
+        n_iter = Int(state[FS_EPOCH])
+    else:
+        n_iter = model_fit(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
                            fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"))
     if profile:
         print("AG_PROFILE fit=model_fit")

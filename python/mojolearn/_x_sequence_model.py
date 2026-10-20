@@ -6,9 +6,10 @@
 # arguments, and makes one call into Mojo per fit or prediction.
 # Initialisation, shuffling, batching, the forward and backward passes, the
 # optimizer and the loss curve all run in Mojo on the executor.
+import os
+
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_model')
-
 from . import _backend
 from ._cast_in import as_input, describe, matrix_view
 
@@ -31,8 +32,13 @@ _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD =
 # sequence/ops.mojo OPT_*: "momentum" is SGD with a momentum buffer.
 _OPT = {"sgd": 0, "momentum": 0, "adam": 1, "adamw": 2}
 _PREDICT_CHUNK = 4096
-
-
+# autograd/model.mojo FIT_STATE_WORDS: the fit's resumable counters
+_FIT_STATE_WORDS = 12
+# core/cast_in.mojo CAST_KIND_* and item size -> the classes_ dtype of a
+# loaded checkpoint
+_CLASS_DTYPE = {(0, 1): "u1", (0, 2): "u2", (0, 4): "u4", (0, 8): "u8",
+                (1, 1): "i1", (1, 2): "i2", (1, 4): "i4", (1, 8): "i8",
+                (2, 2): "f2", (2, 4): "f4", (2, 8): "f8", (3, 1): "?"}
 def _x_2d(X, name):
     # the user's array as it is and its descriptor: Mojo casts it to float32
     # on the executor (_cast_in.py); the caller keeps the array alive
@@ -415,7 +421,7 @@ class Sequential:
         return self.input_shape
 
     # ------------------------------------------------------------ training
-    def fit(self, X, y, *, epochs=10, batch_size=32, shuffle=True, seed=0):
+    def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False):
         """Train the model.
 
         Parameters
@@ -431,13 +437,24 @@ class Sequential:
             of classes, one model output per class) and ``bce_with_logits``
             (two classes, one model output).
         epochs : int, default 10
-            Passes over the data.
-        batch_size : int, default 32
-            Rows per optimizer step.
-        shuffle : bool, default True
-            Visit the rows in a new random order every epoch.
+            Passes over the data (with ``resume=True``, passes added to
+            the ones already run).
+        batch_size : int or None, default None
+            Rows per optimizer step. None uses 32, or the previous fit's
+            batch size when resuming.
+        shuffle : bool or None, default None
+            Visit the rows in a new random order every epoch. None uses
+            True, or the previous fit's choice when resuming.
         seed : int, default 0
-            Seed of the parameter initialization and the row order.
+            Seed of the parameter initialization and the row order. A
+            resumed fit keeps the seed of the fit it continues.
+        resume : bool, default False
+            Continue the previous fit (or the training state loaded with
+            :meth:`from_checkpoint`) instead of starting over: the
+            parameters, the optimizer state, the epoch and step counters
+            and the row order carry on, so ``fit(epochs=2)`` followed by
+            ``fit(epochs=2, resume=True)`` gives the same parameters as
+            ``fit(epochs=4)``. Pass the same training data.
 
         Returns
         -------
@@ -451,28 +468,51 @@ class Sequential:
             raise ValueError("call compile before fit")
         if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or not 0 <= seed < 2 ** 64:
             raise ValueError("seed must be an integer in [0, 2**64)")
+        resume = bool(resume)
+        if resume and getattr(self, "_fit_state", None) is None:
+            raise ValueError("resume=True continues an earlier fit: call fit (or from_checkpoint) first")
+        if batch_size is None:
+            batch_size = self._fit_batch if resume else 32
+        if shuffle is None:
+            shuffle = self._fit_shuffle if resume else True
         if int(epochs) < 1 or int(batch_size) < 1:
             raise ValueError("epochs and batch_size must be >= 1")
         o = self._options
         X, M, xd = _x_nd(X, "X")
         n, d = M.shape
+        if resume and d != self.n_features_in_:
+            raise ValueError(f"X has {d} features, the model was fitted on {self.n_features_in_}")
         sample = self._sample_of(X)
+        if resume and sample != getattr(self, "_sample_shape", None):
+            raise ValueError("resume=True takes inputs of the shape the model was fitted on")
         prog = self._program(d, sample)
         table = self._table()
         b = self._binding()
         n_params, n_out = (int(v) for v in b.model_n_params(prog, table))  # glue: two counts returned by Mojo
         Y, yd, target = self._targets(y, n, n_out, o["loss"])
-        params = np.zeros(n_params, dtype=np.float32)
-        curve = np.zeros(int(epochs), dtype=np.float32)
+        if resume:
+            # the training state continues in place; Mojo checks it belongs
+            # to this model and optimizer
+            params, m, v, state, prev = self.params_, self._opt_m, self._opt_v, self._fit_state, self._curve
+            curve = np.zeros(self.n_iter_ + int(epochs), dtype=np.float32)
+        else:
+            params = np.zeros(n_params, dtype=np.float32)
+            m = np.zeros(n_params, dtype=np.float32)
+            v = np.zeros(n_params, dtype=np.float32)
+            state = np.zeros(_FIT_STATE_WORDS, dtype=np.int64)
+            prev = None
+            curve = np.zeros(int(epochs), dtype=np.float32)
         seed = int(seed)
         ip = [n, _LOSS[o["loss"]], target, o["opt"], o["flags"], o["sched"], o["step_size"],
               int(batch_size), int(epochs), int(bool(shuffle)), seed & 0xFFFFFFFF, seed >> 32,
-              o["n_iter_no_change"], 1]
+              o["n_iter_no_change"], 0 if resume else 1, 1 if resume else 0]
         fp = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0.0, o["tol"], o["gamma"],
               o["huber_delta"]] + table
-        # X and Y stay referenced until the call returns (their descriptors
-        # carry the addresses)
-        n_iter = int(b.model_fit([xd, yd, params.ctypes.data, curve.ctypes.data], prog, ip, fp))
+        addrs = [xd, yd, params.ctypes.data, curve.ctypes.data, m.ctypes.data, v.ctypes.data,
+                 state.ctypes.data, 0 if prev is None else prev.ctypes.data]
+        # X, Y and the state arrays stay referenced until the call returns
+        # (the descriptors and addresses point into them)
+        n_iter = int(b.model_fit(addrs, prog, ip, fp))
         self.params_ = params
         self.n_iter_ = n_iter
         self.loss_curve_ = curve[:n_iter].tolist()
@@ -480,7 +520,187 @@ class Sequential:
         self._sample_shape = sample
         self.n_outputs_ = n_out
         self._fit_loss = o["loss"]
+        self._target = target
+        self._fit_batch = int(batch_size)
+        self._fit_shuffle = bool(shuffle)
+        self._opt_m, self._opt_v, self._fit_state, self._curve = m, v, state, curve
         return self
+
+    # ------------------------------------------------------------ checkpoints
+    def _save(self, path, export):
+        if not hasattr(self, "params_"):
+            raise ValueError("call fit before saving the model")
+        if not export and getattr(self, "_fit_state", None) is None:
+            raise ValueError("this model holds no training state (it was loaded from an export); use export")
+        if getattr(self, "_sample_shape", None) is not None:
+            # the checkpoint format holds version-1 descriptions only
+            # (training/checkpoint.mojo); a shape-layer model is refused by name
+            raise ValueError("save_checkpoint and export take models of 2-D inputs without reshape, "
+                             "permute, flatten, conv2d or pooling layers")
+        o = self._options
+        classes = getattr(self, "classes_", None)
+        k = 0 if classes is None else int(classes.shape[0])
+        ip = [1 if export else 0, _LOSS[o["loss"]], self._target, o["opt"], o["flags"], o["sched"],
+              o["step_size"], o["n_iter_no_change"], self._fit_batch, int(self._fit_shuffle),
+              self.n_features_in_, self.n_outputs_, int(getattr(self, "_y_1d", False)),
+              0 if export else self.n_iter_, k]
+        fp = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0.0, o["tol"], o["gamma"],
+              o["huber_delta"]] + self._table()
+        if export:
+            addrs = [self.params_.ctypes.data, 0, 0, 0, 0]
+        else:
+            addrs = [self.params_.ctypes.data, self._opt_m.ctypes.data, self._opt_v.ctypes.data,
+                     self._fit_state.ctypes.data, self._curve.ctypes.data]
+        desc = None
+        if k:
+            # classes_ as it is (Mojo refuses a non-contiguous one)
+            desc = describe(classes, "classes")
+        prog = self._program(self.n_features_in_)
+        self._binding().model_save_checkpoint(os.fspath(path), addrs, prog, ip, fp, desc)  # cpu-route: checkpoint file written on the host
+
+    def save_checkpoint(self, path):
+        """Save the model and its full training state to ``path``.
+
+        The file holds the layers, the loss, optimizer and schedule chosen
+        with :meth:`compile`, the trained parameters, the optimizer state,
+        the loss curve and the epoch and step counters of the row order and
+        the optimizer. :meth:`from_checkpoint` restores all of it, and
+        ``fit(..., resume=True)`` then continues training exactly where it
+        stopped, on any install: a checkpoint written on one GPU vendor (or
+        on the CPU) resumes to the same parameters on another.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.random((256, 4), dtype=np.float32)
+        >>> y = X @ np.array([1.0, -2.0, 0.5, 3.0], dtype=np.float32)
+        >>> model = mojolearn.Sequential().linear(16).relu().linear(1)
+        >>> model = model.compile(loss="mse", optimizer="adam", lr=0.01)
+        >>> model = model.fit(X, y, epochs=2, batch_size=32, seed=0)
+        >>> model.save_checkpoint("model.ckpt")  # doctest: +SKIP
+        >>> again = mojolearn.Sequential.from_checkpoint("model.ckpt")  # doctest: +SKIP
+        >>> again = again.fit(X, y, epochs=2, resume=True)  # doctest: +SKIP
+        """
+        self._save(path, export=False)
+
+    def export(self, path):
+        """Save the trained model for inference only.
+
+        The file holds the layers and the trained parameters (and the
+        classes of a classifier), without the optimizer state.
+        :meth:`load` reads it back on any install, GPU or CPU, and
+        :meth:`predict` and :meth:`predict_proba` give the same values
+        there as here.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> rng = np.random.default_rng(0)
+        >>> X = rng.random((256, 4), dtype=np.float32)
+        >>> labels = (X[:, 0] > X[:, 1]).astype(np.int64)
+        >>> clf = mojolearn.Sequential().linear(16).relu().linear(2)
+        >>> clf = clf.compile(loss="cross_entropy", optimizer="adam", lr=0.01)
+        >>> clf = clf.fit(X, labels, epochs=5, batch_size=32, seed=0)
+        >>> clf.export("classifier.ckpt")  # doctest: +SKIP
+        >>> served = mojolearn.Sequential.load("classifier.ckpt")  # doctest: +SKIP
+        >>> proba = served.predict_proba(X)  # doctest: +SKIP
+        """
+        self._save(path, export=True)
+
+    @classmethod
+    def from_checkpoint(cls, path, numeric_mode=None):
+        """Load a model saved with :meth:`save_checkpoint` or :meth:`export`.
+
+        Parameters
+        ----------
+        path : str or path-like
+            A file written by :meth:`save_checkpoint` or :meth:`export`.
+        numeric_mode : {'identical', 'fast'} or None, default None
+            Numeric mode of the loaded model. None uses the library default.
+            ``'fast'`` is available on Apple GPUs only.
+
+        Returns
+        -------
+        Sequential
+            The model, ready for :meth:`predict`; from a
+            :meth:`save_checkpoint` file also ready for
+            ``fit(..., resume=True)``.
+
+        Raises
+        ------
+        ValueError
+            The file is not a complete model checkpoint (wrong format,
+            truncated or damaged).
+        """
+        model = cls(numeric_mode=numeric_mode)
+        b = model._binding()
+        path = os.fspath(path)
+        export, layers, ints, floats = b.model_checkpoint_info(path)  # cpu-route: checkpoint file read on the host
+        for c, a0, a1, f in layers:  # glue: one description record per layer
+            model._append(int(c), int(a0), int(a1), float(f))
+        model._sample_shape = None
+        (loss, target, opt, flags, sched, step_size, patience, batch, shuffle, d, n_out, y_1d,
+         n_run, k, class_kind, class_size, n_params) = (int(v) for v in ints)  # glue: counts returned by Mojo
+        lr, f1, f2, eps, wd, _, tol, gamma, huber = (float(v) for v in floats)  # glue: options returned by Mojo
+        loss_name = {v: name for name, v in _LOSS.items()}[loss]  # glue: inverts the loss name table
+        model._options = dict(loss=loss_name, opt=opt, flags=flags, lr=lr, f1=f1, f2=f2, eps=eps,
+                              weight_decay=wd, sched=sched, step_size=step_size, gamma=gamma,
+                              huber_delta=huber, tol=tol, n_iter_no_change=patience)
+        params = np.zeros(n_params, dtype=np.float32)
+        classes = None
+        if k:
+            classes = np.empty(k, dtype=np.dtype(_CLASS_DTYPE[(class_kind, class_size)]))
+        addrs = [params.ctypes.data, 0, 0, 0, 0, 0 if classes is None else classes.ctypes.data]
+        if not int(export):
+            m = np.zeros(n_params, dtype=np.float32)
+            v = np.zeros(n_params, dtype=np.float32)
+            state = np.zeros(_FIT_STATE_WORDS, dtype=np.int64)
+            curve = np.zeros(n_run, dtype=np.float32)
+            addrs[1:5] = [m.ctypes.data, v.ctypes.data, state.ctypes.data, curve.ctypes.data]
+        b.model_load_checkpoint(path, addrs)  # cpu-route: checkpoint file read on the host
+        model.params_ = params
+        model.n_features_in_ = d
+        model.n_outputs_ = n_out
+        model._fit_loss = loss_name
+        model._target = target
+        model._fit_batch = batch
+        model._fit_shuffle = bool(shuffle)
+        model._y_1d = bool(y_1d)
+        if classes is not None:
+            model.classes_ = classes
+        if int(export):
+            model.n_iter_ = 0
+            model.loss_curve_ = []
+            model._fit_state = None
+        else:
+            model.n_iter_ = n_run
+            model.loss_curve_ = curve[:n_run].tolist()
+            model._opt_m, model._opt_v, model._fit_state, model._curve = m, v, state, curve
+        return model
+
+    @classmethod
+    def load(cls, path, numeric_mode=None):
+        """Load a model saved with :meth:`export` (or :meth:`save_checkpoint`).
+
+        The same as :meth:`from_checkpoint`.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> model = mojolearn.Sequential.load("classifier.ckpt")  # doctest: +SKIP
+        """
+        return cls.from_checkpoint(path, numeric_mode=numeric_mode)
 
     def _targets(self, y, n, n_out, loss):
         if loss in ("cross_entropy", "bce_with_logits"):

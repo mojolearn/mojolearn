@@ -28,6 +28,10 @@ from autograd.pyapi import (
     ops_optimizer_state_py, ops_load_optimizer_state_py,
 )
 from autograd.ops_api import OPS_DEVICE
+from autograd.model_checkpoint import (
+    model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
+    ops_save_state_py,
+)
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.pyapi import moe_backward_py, moe_backward_run
 from sequence.opt_resident import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
@@ -303,6 +307,35 @@ def ops_profile_report_binding() raises -> PythonObject:
     return ops_profile_report_py()
 
 
+# Checkpoints (autograd/model_checkpoint.mojo, training/checkpoint.mojo's
+# container): host files, the same bytes from every binding.
+def model_save_checkpoint_binding(
+    path: PythonObject, addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject,
+    classes: PythonObject,
+) raises -> PythonObject:
+    return model_save_checkpoint_py(path, addrs, prog, ip, fp, classes)
+
+
+def model_checkpoint_info_binding(path: PythonObject) raises -> PythonObject:
+    return model_checkpoint_info_py(path)
+
+
+def model_load_checkpoint_binding(path: PythonObject, addrs: PythonObject) raises -> PythonObject:
+    return model_load_checkpoint_py(path, addrs)
+
+
+def ops_save_state_binding(
+    sid: PythonObject, path: PythonObject, params: PythonObject, optimizer: PythonObject, counters: PythonObject,
+) raises -> PythonObject:
+    return ops_save_state_py[DeviceExec, OPS_DEVICE](sid, path, params, optimizer, counters)
+
+
+def ops_load_state_binding(
+    sid: PythonObject, path: PythonObject, requires_grad: PythonObject, optimizer: PythonObject,
+) raises -> PythonObject:
+    return ops_load_state_py[DeviceExec, OPS_DEVICE](sid, path, requires_grad, optimizer)
+
+
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return adafactor_step_py(ex, addrs, ip, fp)
@@ -479,6 +512,11 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[ops_load_optimizer_state_binding]("ops_load_optimizer_state")
         m.def_function[ops_profile_reset_binding]("ops_profile_reset")
         m.def_function[ops_profile_report_binding]("ops_profile_report")
+        m.def_function[model_save_checkpoint_binding]("model_save_checkpoint")
+        m.def_function[model_checkpoint_info_binding]("model_checkpoint_info")
+        m.def_function[model_load_checkpoint_binding]("model_load_checkpoint")
+        m.def_function[ops_save_state_binding]("ops_save_state")
+        m.def_function[ops_load_state_binding]("ops_load_state")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         # the resident optimizer state (sequence/opt_resident.mojo)

@@ -145,6 +145,34 @@ bytes of it with room to spare. The WRITER and the READER share this one
 definition, so a name that can be written can be read."""
 
 
+# ---- the section kinds (header word at offset 52, formerly reserved0).
+# Kind 0 is the training-loop state of sections 1-2 of CHECKPOINT_FORMAT.md
+# and carries no extension: its bytes are unchanged. Every other kind adds
+# one EXTENSION section between the payload and the trailer, its size in
+# the header word at offset 56 (formerly reserved1):
+#     u32 n_ints, u32 n_floats, n_ints x i64 (two's complement, LE),
+#     n_floats x f32 bits (LE)
+# covered by h_file, not by h_all (h_all stays the payload's fold). What
+# the integers and floats mean is the kind's own record, defined by the
+# module that writes it (autograd/model_checkpoint.mojo).
+comptime CKPT_SECTION_TRAIN = 0
+comptime CKPT_SECTION_SEQUENTIAL = 1
+"""A `Sequential` model: its description, training options, the optimizer
+state of `Sequential.fit` and the data layer's seed, epoch and step."""
+comptime CKPT_SECTION_SESSION = 2
+"""Parameters and optimizer state saved from an operation session."""
+comptime CKPT_SECTION_MAX = 2
+comptime CKPT_EXT_HEAD_BYTES = 8
+
+
+def checkpoint_extension_bytes(kind: Int, n_ints: Int, n_floats: Int) -> Int:
+    """Bytes of a kind's extension section: 0 for kind 0, else
+    `8 + 8 * n_ints + 4 * n_floats`."""
+    if kind == CKPT_SECTION_TRAIN:
+        return 0
+    return CKPT_EXT_HEAD_BYTES + 8 * n_ints + 4 * n_floats
+
+
 # ---- the refusal tags. A gate asserts on THESE and not on "something
 # ---- raised", because a refusal for the wrong reason is not a pass.
 
@@ -470,6 +498,11 @@ struct Checkpoint(Movable):
     var param: List[Float32]
     var m_state: List[Float32]
     var v_state: List[Float32]
+    var section_kind: Int
+    """CKPT_SECTION_*; 0 (the training-loop state) writes no extension."""
+    var ext_ints: List[Int64]
+    var ext_floats: List[Float32]
+    """The extension section's record (kinds other than 0)."""
 
     def __init__(out self):
         self.t = 0
@@ -492,9 +525,15 @@ struct Checkpoint(Movable):
         self.param = List[Float32]()
         self.m_state = List[Float32]()
         self.v_state = List[Float32]()
+        self.section_kind = CKPT_SECTION_TRAIN
+        self.ext_ints = List[Int64]()
+        self.ext_floats = List[Float32]()
 
     def n_total(self) -> Int:
         return len(self.param)
+
+    def extension_bytes(self) -> Int:
+        return checkpoint_extension_bytes(self.section_kind, len(self.ext_ints), len(self.ext_floats))
 
     def j_count(self) -> Int:
         return len(self.names)
@@ -595,6 +634,19 @@ struct Checkpoint(Movable):
             raise Error(
                 String(CKPT_REFUSE_STATE) + ": opt_kind is non-negative."
             )
+        if self.section_kind < 0 or self.section_kind > CKPT_SECTION_MAX:
+            raise Error(
+                String(CKPT_REFUSE_STATE)
+                + ": unknown section kind "
+                + String(self.section_kind)
+            )
+        if self.section_kind == CKPT_SECTION_TRAIN and (
+            len(self.ext_ints) != 0 or len(self.ext_floats) != 0
+        ):
+            raise Error(
+                String(CKPT_REFUSE_STATE)
+                + ": the training-loop kind carries no extension record."
+            )
 
 
 @fieldwise_init
@@ -670,8 +722,9 @@ def save_checkpoint(path: String, ck: Checkpoint) raises -> CheckpointHashes:
     _put_u32(body, CKPT_N_ARRAYS)
     _put_u32(body, CKPT_ELEM_BITS)
     _put_u32(body, UInt32(ck.t))
-    _put_u32(body, UInt32(0))  # reserved0
-    _put_u32(body, UInt32(0))  # reserved1
+    var ext_b = ck.extension_bytes()
+    _put_u32(body, UInt32(ck.section_kind))  # section kind (was reserved0)
+    _put_u32(body, UInt32(ext_b))  # extension bytes (was reserved1)
     _put_u32(body, UInt32(0))  # reserved2
 
     # ---- descriptor, 64 bytes -------------------------------------------
@@ -732,6 +785,15 @@ def save_checkpoint(path: String, ck: Checkpoint) raises -> CheckpointHashes:
     for i in range(n):
         _put_f32(body, ck.v_state[i])
 
+    # ---- extension (kinds other than 0) ---------------------------------
+    if ck.section_kind != CKPT_SECTION_TRAIN:
+        _put_u32(body, UInt32(len(ck.ext_ints)))
+        _put_u32(body, UInt32(len(ck.ext_floats)))
+        for i in range(len(ck.ext_ints)):
+            _put_u64(body, bitcast[DType.uint64](ck.ext_ints[i]))
+        for i in range(len(ck.ext_floats)):
+            _put_f32(body, ck.ext_floats[i])
+
     # ---- trailer ---------------------------------------------------------
     # `h_all` is ONE continuous fold over the payload, which is the same
     # number as `h(h(h(FNV_OFFSET, param, n), m, n), v, n)` because the three
@@ -742,7 +804,7 @@ def save_checkpoint(path: String, ck: Checkpoint) raises -> CheckpointHashes:
     var h_file = _fold_bytes(body, 0, len(body), FNV_OFFSET)
     _put_u64(body, h_file)
 
-    var want = checkpoint_file_bytes(j, n)
+    var want = checkpoint_file_bytes(j, n) + ext_b
     if len(body) != want:
         raise Error(
             String("checkpoint: the writer produced ")
@@ -954,7 +1016,14 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
             + " and n_arrays * n_total * 4 is "
             + String(Int(CKPT_N_ARRAYS) * n * 4)
         )
-    if res0 != 0 or res1 != 0 or res2 != 0:
+    # res0 is the section kind and res1 its extension's bytes; kind 0 keeps
+    # both zero, so a v1 training-loop file reads exactly as before.
+    var kind_bad = res0 < 0 or res0 > CKPT_SECTION_MAX
+    if res0 == CKPT_SECTION_TRAIN and res1 != 0:
+        kind_bad = True
+    if res0 != CKPT_SECTION_TRAIN and (res1 < CKPT_EXT_HEAD_BYTES or res1 % 4 != 0):
+        kind_bad = True
+    if kind_bad or res2 != 0:
         raise Error(
             String(CKPT_REFUSE_HEADER)
             + ": a reserved header field is nonzero ("
@@ -980,7 +1049,8 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
         )
 
     # ---- 5. the length, now that the shape is known ----------------------
-    var want = checkpoint_file_bytes(j, n)
+    var ext_bytes = res1
+    var want = checkpoint_file_bytes(j, n) + ext_bytes
     if size < want:
         raise Error(
             String(CKPT_REFUSE_TRUNCATED)
@@ -1156,6 +1226,29 @@ def read_checkpoint_unchecked(path: String) raises -> Checkpoint:
     for _ in range(n):
         ck.v_state.append(_get_f32(raw, p))
         p += 4
+    # ---- 8b. the extension record (kinds other than 0) ------------------
+    ck.section_kind = res0
+    if res0 != CKPT_SECTION_TRAIN:
+        var n_ints = Int(_get_u32(raw, p))
+        var n_floats = Int(_get_u32(raw, p + 4))
+        if checkpoint_extension_bytes(res0, n_ints, n_floats) != ext_bytes:
+            raise Error(
+                String(CKPT_REFUSE_HEADER)
+                + ": the extension section holds "
+                + String(n_ints)
+                + " integers and "
+                + String(n_floats)
+                + " floats, which is not the "
+                + String(ext_bytes)
+                + " bytes the header records."
+            )
+        p += CKPT_EXT_HEAD_BYTES
+        for _ in range(n_ints):
+            ck.ext_ints.append(bitcast[DType.int64](_get_u64(raw, p)))
+            p += 8
+        for _ in range(n_floats):
+            ck.ext_floats.append(_get_f32(raw, p))
+            p += 4
 
     # ---- 9. the CONTENT hash ---------------------------------------------
     # Reached only by an edit that repaired `h_file`, which is exactly why
@@ -1287,7 +1380,7 @@ def load_checkpoint(
 # A bare `cmp -l a.bin b.bin` is the same verdict with less of an address.
 
 
-def _section_of(offset: Int, j: Int, n: Int) -> String:
+def _section_of(offset: Int, j: Int, n: Int, ext: Int = 0) -> String:
     """Which part of the format a byte offset lands in.
 
     A difference in the DESCRIPTOR (two legs launched with different
@@ -1326,7 +1419,9 @@ def _section_of(offset: Int, j: Int, n: Int) -> String:
             + String((offset - payload_at - 2 * n * 4) // 4)
             + "] -- the Adam second moment"
         )
-    if offset < payload_at + 3 * n * 4 + 8:
+    if offset < payload_at + 3 * n * 4 + ext:
+        return String("EXTENSION record (the section kind's description and counters)")
+    if offset < payload_at + 3 * n * 4 + ext + 8:
         return String("trailer h_all")
     return String("trailer h_file")
 
@@ -1369,9 +1464,11 @@ def compare_checkpoint_files(path_a: String, path_b: String) raises -> String:
     # one; a length mismatch is reported either way.
     var j = 0
     var n = 0
+    var ext = 0
     if na >= CKPT_HEADER_BYTES:
         j = Int(_get_u32(a, 32))
         n = Int(_get_u32(a, 36))
+        ext = Int(_get_u32(a, 56))
 
     if na != nb:
         return (
@@ -1411,7 +1508,7 @@ def compare_checkpoint_files(path_a: String, path_b: String) raises -> String:
         + " vs "
         + String(bv)
         + "\n  section: "
-        + _section_of(first, j, n)
+        + _section_of(first, j, n, ext)
     )
     if na >= CKPT_HEADER_BYTES + 16:
         report += (

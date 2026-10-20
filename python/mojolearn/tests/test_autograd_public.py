@@ -36,8 +36,8 @@ def _blocks():
         pytest.skip(f"no guide at {GUIDE} (run from the repository tree)")
     blocks = re.findall(r"```python\n(.*?)```", GUIDE.read_text(), flags=re.S)
     # 0 Sequential quickstart; 1-2 session quickstart (2 continues 1); 3 session training loop (continues 1);
-    # 4 mixture classifier
-    assert len(blocks) == 5, f"expected 5 python blocks in {GUIDE.name}, found {len(blocks)}"
+    # 4 mixture classifier; 5 export + load for inference (continues 0)
+    assert len(blocks) == 6, f"expected 6 python blocks in {GUIDE.name}, found {len(blocks)}"
     return blocks
 
 
@@ -100,6 +100,15 @@ def test_guide_session_training_loop():
     ns2 = _run(blocks[1], blocks[2], blocks[3])
     assert _digest(trained) == _digest(ns2["trained"])
     _emit("guide_session_trained", _digest(trained))
+
+
+def test_guide_export_and_load(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    blocks = _blocks()
+    ns = _run(blocks[0], blocks[5])
+    assert np.array_equal(ns["labels_served"], ns["clf"].predict(ns["X"]))
+    assert np.array_equal(ns["served"].predict_proba(ns["X"]), ns["clf"].predict_proba(ns["X"]))
+    _emit("guide_export_labels", _digest(ns["labels_served"].astype(np.float32)))
 
 
 def test_guide_mixture_classifier(capsys):
