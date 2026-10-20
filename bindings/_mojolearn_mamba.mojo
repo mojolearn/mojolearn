@@ -219,13 +219,15 @@ from mamba.impl.modules.mamba3 import (
 
 
 from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
-from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward, mamba3_prefill_backward_on
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the hand Mamba-3 prefill backward walk; superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch
 from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
 # The Mamba-1 / Mamba-2 backward entries assemble the VJP on the tape
 # (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
 from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
+from autograd.rules_mamba3 import mamba3_tape_backward, mamba3_tape_backward_on
 from mamba.impl.modeling.modeling_mamba_prefill_backward import Mamba1PrefillGradients
 from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
 from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
@@ -2406,7 +2408,7 @@ def _m3_x_same_bits(mut s: Mamba3PrefillSession, addr: Int, n: Int) raises -> Bo
 
 def _m3_prefill_backward_forward(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
                                  dims: Mamba3Dims) raises:
-    """The forward `mamba3_prefill_backward` runs before its VJP, on the
+    """The forward `mamba3_tape_backward` runs before its VJP, on the
     session: x uploaded into the retained `dx`, a fresh zero state and
     fresh stages (the same constructions as the entry's), the block
     forward on the retained weights; the stages then held for the VJP."""
@@ -2480,8 +2482,7 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     ref stages = s.stages.value()
     ref dx = s.dx.value()
     var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
-    var tk = Int(perf_counter_ns())
-    var g = mamba3_prefill_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton, tk)
+    var g = mamba3_tape_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton)
     _m3_download_addr[False](ctx, g.x, n_x, a[11])
     _m3_download_addr[False](ctx, g.block_norm_weight, dm, a[12])
     _m3_download_addr[False](ctx, g.in_proj_weight, dims.d_in_proj() * dm, a[13])
@@ -2695,8 +2696,7 @@ def _m3_backward_tape_run(mut s: Mamba3PrefillSession, a: List[Int]) raises:
     ref stages = s.stages.value()
     ref dx = s.dx.value()
     var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
-    var tk = Int(perf_counter_ns())
-    var g = mamba3_prefill_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton, tk)
+    var g = mamba3_tape_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton)
     _m3_download_addr[False](ctx, g.x, n_x, a[1])
     _m3_download_addr[False](ctx, g.block_norm_weight, dm, a[2])
     _m3_download_addr[False](ctx, g.in_proj_weight, dims.d_in_proj() * dm, a[3])
@@ -3048,7 +3048,7 @@ def _mamba3_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     w.c_bias = _read_f32(a[7], nh * M3_D_STATE)
     w.d_skip = _read_f32(a[8], nh)
     w.w_out = _read_f32(a[9], dm * di)
-    var gradients = mamba3_prefill_backward(
+    var gradients = mamba3_tape_backward(
         w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l,
         neural_ctx[_NEURAL_CTX](),
     )
