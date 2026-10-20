@@ -304,7 +304,7 @@ def _input_handles(p: PythonObject) raises -> List[Int]:
 
 def _handles_out(hs: List[Int]) raises -> PythonObject:
     var res = Python.list()
-    for i in range(len(hs)):  # small-loop(hs: one result handle per input of vjp or hvp): no data
+    for i in range(len(hs)):  # small-loop(hs: one result handle per input of vjp or hvp): handle list building, no data
         res.append(PythonObject(hs[i]))
     return res
 
