@@ -7,6 +7,7 @@ from bindings.samba_state_native import samba_snapshot, samba_validate_state, sa
 from bindings.samba_training_native import samba_gradients, samba_gradients_from_state
 from bindings.generator_state_native import generator_init, generator_snapshot, generator_restore, generator_next
 from bindings.samba_construct_native import samba_construct, samba_load_weights, samba_parameters
+from bindings.samba_step_native import samba_train_step
 
 
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -16,7 +17,9 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var values = args[1]
         var context = args[2]
         var result = PythonObject(None)
-        if operation == "construct":
+        if operation == "model_train_step":
+            result = samba_train_step(values[0], values[1], values[2], context)
+        elif operation == "construct":
             result = samba_construct(values[0], values[1], context)
         elif operation == "load_weights":
             result = samba_load_weights(values[0], values[1], context)
