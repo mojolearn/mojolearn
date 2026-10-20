@@ -73,6 +73,15 @@ class FreshMacosTests(unittest.TestCase):
         result = gate.verify(self.dist, self.stage(), None, self.root)
         self.assertTrue(result['passed'])
 
+    def test_fresh_merged_build_is_admitted(self):
+        # the merged layout (bindings/merged_build.sh): one file per directory and its index
+        del self.members['mojolearn/identical/_mojolearn.so']
+        self.members['mojolearn/identical/_mojolearn_native.so'] = b'FAKE MERGED BYTES, NEVER EXECUTE'
+        self.members['mojolearn/identical/_mojolearn_merged.json'] = (
+            b'{"files": {"_mojolearn_native.so": ["_mojolearn"]}, "format": 1}\n')
+        result = gate.verify(self.dist, self.stage(), None, self.root)
+        self.assertTrue(result['passed'])
+
     def test_without_a_macos_smoke_receipt_it_is_refused(self):
         self.refused(self.stage(smoke=False), 'light-smoke-macos.json')
 

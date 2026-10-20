@@ -71,6 +71,21 @@ class AlphaOverlayTests(unittest.TestCase):
                     raw = archive.read(name)
                     self.assertEqual((digest, size), (overlay.record_hash(hashlib.sha256(raw).digest()), str(len(raw))))
 
+    def test_merged_layout_members_are_not_missing(self):
+        # bindings/merged_build.sh: one file serves both modules through the index
+        del self.files['mojolearn/hip/identical/_mojolearn.so']
+        self.files['mojolearn/hip/identical/_mojolearn_native.so'] = b'FAKE MERGED BYTES; NEVER EXECUTE'
+        self.files['mojolearn/hip/identical/_mojolearn_merged.json'] = json.dumps(
+            {'format': 1, 'files': {'_mojolearn_native.so': ['_mojolearn', '_mojolearn_byte_lm']}}).encode()
+        self.write()
+        result = overlay.assemble(self.wheel, self.python, '0.6.0a1', self.root / 'out')
+        with zipfile.ZipFile(result) as archive:
+            provenance = json.loads(archive.read('mojolearn-0.6.0a1.dist-info/ALPHA_PROVENANCE.json'))
+            self.assertEqual(provenance['missing_optional_native_modules_by_present_directory'],
+                             {'mojolearn/hip/identical': []})
+            self.assertEqual(archive.read('mojolearn/hip/identical/_mojolearn_merged.json'),
+                             self.files['mojolearn/hip/identical/_mojolearn_merged.json'])
+
     def test_long_summary_is_not_email_folded(self):
         from email.parser import BytesParser
         from email import policy
