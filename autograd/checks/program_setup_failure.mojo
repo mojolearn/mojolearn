@@ -85,7 +85,7 @@ def one(value: Int) -> List[Int]:
 
 
 def check_training_fault(kind: Int, at: Int, conditional: Bool) raises:
-    var s = OpsSession(FaultExec(), False)
+    var s = OpsSession[FaultExec](FaultExec(), False)
     var input = List[Float32](length=2, fill=1.0)
     input[1] = 2.0
     var weight = List[Float32](length=1, fill=2.0)
