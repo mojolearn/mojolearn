@@ -108,26 +108,43 @@ def _probe(cuda=False, hip=False):
     }
 
 
+def _mkset(d, merged):
+    """One set directory's binaries: `_mojolearn.so` (per-binding), or the
+    merged layout's one native file plus its index `_mojolearn_merged.json`
+    (bindings/merged_groups.json, packaging/linux/merged_layout.py)."""
+    if not merged:
+        open(os.path.join(d, "_mojolearn.so"), "w").close()
+        return
+    open(os.path.join(d, "_mojolearn_native.so"), "w").close()
+    with open(os.path.join(d, "_mojolearn_merged.json"), "w") as f:
+        f.write('{"format": 1, "files": {"_mojolearn_native.so": ["_mojolearn"]}}\n')
+
+
 def _mkinstall(root, vendors_with_binaries=(), empty_vendor_dirs=(),
-               flat_binaries=False, vendor_archs=None):
+               flat_binaries=False, vendor_archs=None, merged=False):
     """A package directory shaped like one of the real layouts.
 
     `vendors_with_binaries` builds the ARCH-LESS (legacy) vendor layout;
     `vendor_archs` ({vendor: (arch, ...)}) builds the architecture layout,
-    one set per named architecture."""
+    one set per named architecture. `merged` writes each set (and its
+    identical/ tier) in the merged-bindings layout instead of per-binding."""
     pkg = os.path.join(root, "mojolearn")
     os.makedirs(pkg, exist_ok=True)
     if flat_binaries:
-        open(os.path.join(pkg, "_mojolearn.so"), "w").close()
+        _mkset(pkg, merged)
     for v in vendors_with_binaries:
         d = os.path.join(pkg, v)
         os.makedirs(os.path.join(d, "identical"), exist_ok=True)
-        open(os.path.join(d, "_mojolearn.so"), "w").close()
+        _mkset(d, merged)
+        if merged:
+            _mkset(os.path.join(d, "identical"), merged)
     for v, archs in (vendor_archs or {}).items():
         for arch in archs:
             d = os.path.join(pkg, v, arch)
             os.makedirs(os.path.join(d, "identical"), exist_ok=True)
-            open(os.path.join(d, "_mojolearn.so"), "w").close()
+            _mkset(d, merged)
+            if merged:
+                _mkset(os.path.join(d, "identical"), merged)
     for v in empty_vendor_dirs:
         os.makedirs(os.path.join(pkg, v), exist_ok=True)
     return pkg
@@ -533,6 +550,38 @@ def run_all(root):
         assert (kind, os.path.basename(base)) == ("vendor", "cuda"), (kind, base)
         assert B.gpu_arch() is None, B.gpu_arch()
         assert "arch-less" in B.gpu_arch_how(), B.gpu_arch_how()
+
+    @case("merged layout: one native file plus its index is a set, per arch")
+    def _():
+        # The merged bindings ship `_mojolearn_native.so` and
+        # `_mojolearn_merged.json` in each set directory instead of one .so
+        # per binding. The selector must see that directory as a set exactly
+        # as it sees a per-binding one.
+        pkg = _mkinstall(os.path.join(root, "y"),
+                         vendor_archs={"cuda": ("sm_80", "sm_86")}, merged=True)
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+        kind, base = B._layout()
+        assert kind == "vendor" and base == os.path.join(pkg, "cuda", "sm_86"), (kind, base)
+        assert B.tier_dir("identical") == os.path.join(pkg, "cuda", "sm_86", "identical")
+
+        # SABOTAGE: an index with no merged file beside it is not a set, so
+        # the device's architecture is no longer carried and must refuse.
+        os.remove(os.path.join(pkg, "cuda", "sm_86", "_mojolearn_native.so"))
+        _reset(pkg, _probe(cuda=True), device=("sm_86", "test probe"))
+        try:
+            _, base2 = B._layout()
+        except ImportError:
+            base2 = None
+        assert base2 != os.path.join(pkg, "cuda", "sm_86"), (
+            "a directory holding only the index was taken as a set, so the "
+            "first assertion proved nothing")
+
+        # And the arch-less merged vendor set keeps working.
+        pkg2 = _mkinstall(os.path.join(root, "y2"),
+                          vendors_with_binaries=("hip",), merged=True)
+        _reset(pkg2, _probe(hip=True))
+        kind3, base3 = B._layout()
+        assert (kind3, os.path.basename(base3)) == ("vendor", "hip"), (kind3, base3)
 
     # ------------------------------------------------------------- caching
     @case("the layout is decided ONCE per process")
