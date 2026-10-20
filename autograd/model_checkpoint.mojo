@@ -138,7 +138,7 @@ def model_save_checkpoint_py(
     var words = _ints(prog)
     var table = _floats(fp, SEQ_FIT_FLOATS)
     var spec = parse_model(words, table)
-    var export = ival(ip, 0) != 0
+    var is_export = ival(ip, 0) != 0
     var n_run = ival(ip, 1 + SEQ_OPT_INTS + SEQ_MODEL_INTS)
     var k = ival(ip, 2 + SEQ_OPT_INTS + SEQ_MODEL_INTS)
     var np_ = spec.n_params
@@ -149,7 +149,7 @@ def model_save_checkpoint_py(
         ck.buf_initialized.append(False)
     ck.param = _floats_of(fptr(addrs[0], "params"), np_)
     var state = List[Int64](length=FIT_STATE_WORDS, fill=Int64(0))
-    if export:
+    if is_export:
         ck.m_state = List[Float32](length=np_, fill=Float32(0))
         ck.v_state = List[Float32](length=np_, fill=Float32(0))
         n_run = 0
@@ -178,7 +178,7 @@ def model_save_checkpoint_py(
     # the extension record
     var xi = List[Int64]()
     xi.append(Int64(SEQ_RECORD_VERSION))
-    xi.append(Int64(1) if export else Int64(0))
+    xi.append(Int64(1) if is_export else Int64(0))
     xi.append(Int64(len(words)))
     for i in range(len(words)):  # driver-loop: over description words
         xi.append(Int64(words[i]))
@@ -223,7 +223,7 @@ def model_save_checkpoint_py(
 
 # ---------------------------------------------------------------- Sequential load
 struct _SeqRecord(Movable):
-    var export: Bool
+    var is_export: Bool
     var prog: List[Int]
     var opts: List[Int]       # option words then model words
     var tol_bits: Int64
@@ -238,7 +238,7 @@ struct _SeqRecord(Movable):
     var curve_at: Int         # index of the first curve value in ext_floats
 
     def __init__(out self):
-        self.export = False
+        self.is_export = False
         self.prog = List[Int]()
         self.opts = List[Int]()
         self.tol_bits = Int64(0)
@@ -267,7 +267,7 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
     if len(xi) < 3 or Int(xi[0]) != SEQ_RECORD_VERSION:
         raise Error("mojolearn: '" + path + "' holds an unknown Sequential record version")
     var r = _SeqRecord()
-    r.export = xi[1] != 0
+    r.is_export = xi[1] != 0
     var P = Int(xi[2])
     var fixed = SEQ_OPT_INTS + SEQ_MODEL_INTS + 1 + FIT_STATE_WORDS + 4
     if P < 3 or len(xi) < 3 + P + fixed:
@@ -303,7 +303,9 @@ def _seq_record(ck: Checkpoint, path: String) raises -> _SeqRecord:
     return r^
 
 
-def _read_sequential(path: String) raises -> Tuple[Checkpoint, ModelSpec]:
+def _read_sequential(path: String) raises -> Checkpoint:
+    """A Sequential checkpoint, its layout checked against the description
+    it carries."""
     var ck = read_checkpoint_unchecked(path)
     var r = _seq_record(ck, path)
     var spec = parse_model(r.prog, r.table)
@@ -311,7 +313,7 @@ def _read_sequential(path: String) raises -> Tuple[Checkpoint, ModelSpec]:
     var names = List[String]()
     model_layout(spec, offsets, names)
     _check_layout(ck, offsets, names, path)
-    return (ck^, spec^)
+    return ck^
 
 
 def model_checkpoint_info_py(path: PythonObject) raises -> PythonObject:
@@ -322,11 +324,11 @@ def model_checkpoint_info_py(path: PythonObject) raises -> PythonObject:
     item size, n_params], floats = [lr, f1, f2, eps, weight_decay, f7, tol,
     schedule gamma, huber delta] (model_fit's fp head)."""
     var file = String(py=path)
-    var both = _read_sequential(file)
-    var r = _seq_record(both[0], file)
+    var ck = _read_sequential(file)
+    var r = _seq_record(ck, file)
+    var spec = parse_model(r.prog, r.table)
     var out = Python.list()
-    out.append(PythonObject(1 if r.export else 0))
-    var spec = both[1].copy()
+    out.append(PythonObject(1 if r.is_export else 0))
     var layers = Python.list()
     for i in range(spec.n_layers()):  # driver-loop: over layers
         var rec = Python.list()
@@ -343,7 +345,7 @@ def model_checkpoint_info_py(path: PythonObject) raises -> PythonObject:
     ints.append(PythonObject(r.k))
     ints.append(PythonObject(r.class_kind))
     ints.append(PythonObject(r.class_size))
-    ints.append(PythonObject(both[1].n_params))
+    ints.append(PythonObject(spec.n_params))
     out.append(ints)
     var floats = Python.list()
     for i in range(6):  # driver-loop: over option floats (lr .. f7)
@@ -364,25 +366,25 @@ def model_load_checkpoint_py(path: PythonObject, addrs: PythonObject) raises -> 
     if len(addrs) != 6:
         raise Error("model_load_checkpoint: requires 6 addresses")
     var file = String(py=path)
-    var both = _read_sequential(file)
-    var r = _seq_record(both[0], file)
-    _put_floats(fptr(addrs[0], "params"), both[0].param)
+    var ck = _read_sequential(file)
+    var r = _seq_record(ck, file)
+    _put_floats(fptr(addrs[0], "params"), ck.param)
     if _addr(addrs, 1) != 0:
-        _put_floats(fptr(addrs[1], "m"), both[0].m_state)
+        _put_floats(fptr(addrs[1], "m"), ck.m_state)
     if _addr(addrs, 2) != 0:
-        _put_floats(fptr(addrs[2], "v"), both[0].v_state)
+        _put_floats(fptr(addrs[2], "v"), ck.v_state)
     if _addr(addrs, 3) != 0:
         memcpy(dest=IP64(unsafe_from_address=_addr(addrs, 3)), src=r.state.unsafe_ptr(), count=FIT_STATE_WORDS)
     if _addr(addrs, 4) != 0 and r.n_run > 0:
         var curve = fptr(addrs[4], "loss_curve")
-        memcpy(dest=curve, src=both[0].ext_floats.unsafe_ptr() + r.curve_at, count=r.n_run)
+        memcpy(dest=curve, src=ck.ext_floats.unsafe_ptr() + r.curve_at, count=r.n_run)
     if _addr(addrs, 5) != 0 and r.k > 0:
         var bp = BP(unsafe_from_address=_addr(addrs, 5))
         for j in range(r.k):  # driver-loop: over classes
-            var w = bitcast[DType.uint64](both[0].ext_ints[r.class_at + j])
+            var w = bitcast[DType.uint64](ck.ext_ints[r.class_at + j])
             for b in range(r.class_size):  # driver-loop: over the value's bytes
                 bp[j * r.class_size + b] = UInt8((w >> UInt64(8 * b)) & UInt64(0xFF))
-    return PythonObject(both[1].n_params)
+    return PythonObject(ck.n_total())
 
 
 # ---------------------------------------------------------------- operation sessions
