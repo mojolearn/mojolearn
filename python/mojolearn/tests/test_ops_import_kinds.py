@@ -290,3 +290,99 @@ def test_refusals():
             s.pad(x, (1, 1))
         with pytest.raises(Exception):
             s.clip(x, 1.0, -1.0)
+
+
+# ------------------------------------------------- the attention-mask ops (lane ag-import-lm-ops) --
+
+def _mask_data(shape, seed):
+    X = np.round(_x(shape, seed) * 2) / 2  # many exact zeros
+    X.reshape(-1)[::17] = np.nan  # a NaN counts as nonzero
+    return X
+
+
+def test_any_all():
+    X = _mask_data((4, 5, 6), 21)
+    X[2, :, 1] = 0.75  # one column that is all nonzero
+
+    def run():
+        with _ops().Session() as s:
+            x = s.tensor(X)
+            return (s.numpy(s.any(x, axis=1)), s.numpy(s.all(x, axis=1)),
+                    s.numpy(s.any(x, axis=(0, 2), keepdims=True)), s.numpy(s.all(x, axis=-1, keepdims=True)),
+                    s.numpy(s.any(x)), s.numpy(s.all(x)))
+
+    a1, l1, a02, l2, aa, la = _twice("lm/any-all", run)
+    nz = X != 0
+    np.testing.assert_array_equal(a1, np.any(nz, axis=1).astype(np.float32))
+    np.testing.assert_array_equal(l1, np.all(nz, axis=1).astype(np.float32))
+    np.testing.assert_array_equal(a02, np.any(nz, axis=(0, 2), keepdims=True).astype(np.float32))
+    np.testing.assert_array_equal(l2, np.all(nz, axis=-1, keepdims=True).astype(np.float32))
+    assert float(aa.reshape(-1)[0]) == 1.0 and float(la.reshape(-1)[0]) == 0.0
+
+
+def _np_cumsum(X, axis, exclusive, reverse):
+    X = X.astype(np.float64)
+    if reverse:
+        X = np.flip(X, axis)
+    y = np.cumsum(X, axis=axis)
+    if exclusive:
+        y = y - X
+    return np.flip(y, axis) if reverse else y
+
+
+@pytest.mark.parametrize("shape,axis", [((3, 7, 5), 1), ((3, 150, 2), 1), ((2, 4500), -1), ((70, 3), 0)])
+@pytest.mark.parametrize("exclusive,reverse", [(False, False), (True, False), (False, True), (True, True)])
+def test_cumsum(shape, axis, exclusive, reverse):
+    X = _x(shape, 22)
+    W = _x(shape, 23)
+
+    def run():
+        with _ops().Session(record=True) as s:
+            x = s.tensor(X, requires_grad=True)
+            y = s.cumsum(x, axis=axis, exclusive=exclusive, reverse=reverse)
+            s.backward(s.sum(s.mul(y, s.tensor(W))))
+            return s.numpy(y), s.grad(x)
+
+    tag = f"lm/cumsum-{'x'.join(map(str, shape))}-axis{axis}-{int(exclusive)}{int(reverse)}"
+    y, g = _twice(tag, run)
+    assert y.shape == X.shape
+    np.testing.assert_allclose(y, _np_cumsum(X, axis, exclusive, reverse), rtol=1e-5, atol=1e-4)
+    # the gradient of sum(W * cumsum(x)) is W summed the other way
+    np.testing.assert_allclose(g, _np_cumsum(W, axis, exclusive, not reverse), rtol=1e-5, atol=1e-4)
+
+
+@pytest.mark.parametrize("axes", [(0, 1), (1, 2), (0, 2)])
+def test_index_several_tensors(axes):
+    X = _x((4, 5, 6), 24)
+    I = np.array([[1], [-1], [1]], dtype=np.int64)  # a negative and a repeated position
+    J = np.array([[2, 0]], dtype=np.int64)
+    key = [slice(None)] * 3
+    key[axes[0]], key[axes[1]] = I, J
+    want = X[tuple(key)]  # NumPy's placement equals torch's
+    W = _x(want.shape, 25)
+
+    def run():
+        with _ops().Session(record=True) as s:
+            x = s.tensor(X, requires_grad=True)
+            y = s.index(x, (s.tensor(I.astype(np.float32)), s.tensor(J.astype(np.float32))), axes=axes)
+            s.backward(s.sum(s.mul(y, s.tensor(W))))
+            return s.numpy(y), s.grad(x)
+
+    y, g = _twice(f"lm/index-axes{axes[0]}{axes[1]}", run)
+    assert y.shape == want.shape
+    np.testing.assert_array_equal(y, want)
+    gw = np.zeros(X.shape, dtype=np.float64)
+    np.add.at(gw, tuple(key), W.astype(np.float64))
+    np.testing.assert_allclose(g, gw, rtol=1e-6, atol=1e-6)
+
+
+def test_index_refusals():
+    with _ops().Session() as s:
+        x = s.tensor(_x((4, 5), 26))
+        far = s.tensor(np.array([[0, 4]], dtype=np.float32))
+        with pytest.raises(Exception):
+            s.numpy(s.index(x, (far, far)))  # 4 is outside axis 1 (length 5 is fine) -> axis 0 has 4 rows
+        with pytest.raises(Exception):
+            s.index(x, (far, far), axes=(1, 0))  # the axes must ascend
+        with pytest.raises(ValueError):
+            s.index(x, (far,), axes=(0, 1))
