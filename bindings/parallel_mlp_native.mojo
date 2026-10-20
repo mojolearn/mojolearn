@@ -174,10 +174,14 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
 def mlp_snapshot(model: PythonObject) raises -> PythonObject:
     _mlp_mode()
     var bi = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    var opt = model._opt
+    # AdamW inherits the Python public-output attribute adapter. These are
+    # internal stored fields, so read their native instance dictionary through
+    # object.__getattribute__, preserving the Array owners without that adapter.
+    var fields = bi.object.__getattribute__(model, "__dict__")
+    var opt = bi.object.__getattribute__(fields["_opt"], "__dict__")
     # The supported identical MLP explicitly constructs AdamW resident=False;
     # its only model session is an Apple fast numerical path.
-    if model._session is not None or opt._res is not None:
+    if fields["_session"] is not None or opt["_res"] is not None:
         raise Error("parallel MLP: unexpected resident owner under identical admission")
     var result = bi.dict()
     result["schema"] = "mojolearn.small-mlp-trainer.v1"
@@ -187,19 +191,19 @@ def mlp_snapshot(model: PythonObject) raises -> PythonObject:
     var weights = bi.dict()
     var order = bi.list()
     for i in range(4):  # driver-loop: over fixed MLP snapshot parameter owners
-        weights[names[i]] = opt.params[i]
+        weights[names[i]] = opt["params"][i]
         order.append(names[i])
     result["parameter_order"] = order
     result["weights"] = weights
     var optimizer = bi.dict()
     optimizer["kind"] = "AdamW"
-    optimizer["step"] = opt.t
-    optimizer["m"] = generation_array([195]) if opt._m is None else opt._m
-    optimizer["v"] = generation_array([195]) if opt._v is None else opt._v
-    optimizer["flags"] = opt.buf_initialized
+    optimizer["step"] = opt["t"]
+    optimizer["m"] = generation_array([195]) if opt["_m"] is None else opt["_m"]
+    optimizer["v"] = generation_array([195]) if opt["_v"] is None else opt["_v"]
+    optimizer["flags"] = opt["buf_initialized"]
     result["optimizer"] = optimizer
-    result["config"] = model._config
-    result["data_schedule"] = model._schedule
+    result["config"] = fields["_config"]
+    result["data_schedule"] = fields["_schedule"]
     return mlp_validate_state(result)
 
 
