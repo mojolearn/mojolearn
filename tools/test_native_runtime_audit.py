@@ -86,6 +86,40 @@ class NativeRuntimeAuditTests(unittest.TestCase):
         self.assertTrue(any("lambda" in row["function"]
                             for row in result.report()["python_frames"]))
 
+    def test_old_controller_cycles_are_collected_before_operation(self):
+        finalized = []
+        class Controller:
+            def __del__(self):
+                finalized.append(True)
+        value = Controller()
+        value.cycle = value
+        del value
+        self.assertEqual(AUDIT.audit_native_call(sum, [1, 2]).assert_native(), 3)
+        self.assertEqual(finalized, [True])
+
+    def test_finalizer_invoked_by_operation_remains_visible(self):
+        class Value:
+            def __del__(self):
+                pass
+        values = [Value()]
+        result = AUDIT.audit_native_call(values.clear)
+        self.assertFalse(result.passed)
+        self.assertTrue(any("__del__" in row["function"]
+                            for row in result.report()["python_frames"]))
+
+    def test_constructor_allows_only_the_public_init_wrapper(self):
+        class Public:
+            def __init__(self, values):
+                self.value = sum(values)
+        self.assertEqual(AUDIT.audit_native_call(Public, [2, 3]).assert_native().value, 5)
+        class ExtraNew(Public):
+            def __new__(cls, values):
+                return object.__new__(cls)
+        result = AUDIT.audit_native_call(ExtraNew, [2, 3])
+        self.assertFalse(result.passed)
+        self.assertTrue(any("__new__" in row["function"]
+                            for row in result.report()["python_frames"]))
+
 
 if __name__ == "__main__":
     unittest.main()

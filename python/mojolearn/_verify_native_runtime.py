@@ -8,6 +8,7 @@ Native calls into NumPy/SciPy/scikit-learn are separately rejected. A clean
 trace proves only the exercised call, not every possible route through an API.
 """
 import dis
+import gc
 import sys
 import threading
 from collections import Counter
@@ -74,8 +75,15 @@ def audit_native_call(operation, *args, **kwargs):
     probes in an isolated process: pre-existing other threads make the result
     incomplete, since their Python profiles cannot be installed portably.
     """
+    # Drain unreachable testing-controller objects before tracing. Otherwise
+    # an allocation inside a native call can close an unrelated pytest parser
+    # generator and report that old finalizer as product orchestration. Keep
+    # collection enabled inside the operation: its own callbacks still count.
+    gc.collect()
     audit = NativeRuntimeAudit()
-    function = getattr(operation, "__func__", operation)
+    # A class call enters its public __init__ wrapper. Custom Python __new__
+    # implementations and metaclass calls remain additional traced frames.
+    function = operation.__init__ if type(operation) is type else getattr(operation, "__func__", operation)
     allowed = getattr(function, "__code__", None)
     if allowed is not None:
         instructions = list(dis.get_instructions(allowed))
