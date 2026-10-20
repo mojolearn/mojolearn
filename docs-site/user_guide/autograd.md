@@ -75,6 +75,28 @@ with ops.Session(record=True) as s:
     grad_w = s.grad(w)               # (4, 3), the gradient of the loss with respect to W
 ```
 
+To train, make an optimizer with `optimizer` and call `step` after each `backward`. The parameters are
+updated in place on the device, and the optimizer's state (momentum, moment estimates, step count) stays
+there too, so the loop reads nothing back:
+
+```python
+with ops.Session(record=True) as s:
+    x, y = s.tensor(X), s.tensor(Y)
+    w = s.tensor(W, requires_grad=True)
+    opt = s.optimizer("adam", lr=0.01, schedule="step", step_size=10, gamma=0.5)
+    for epoch in range(30):
+        s.backward(s.mse(s.matmul(x, w), y))
+        s.step(opt, [w])             # w updated on the device
+        s.scheduler_step(opt)        # one epoch of the learning-rate schedule
+        s.reset()                    # drop this pass's graph; w and its optimizer state stay
+    trained = s.numpy(w)
+```
+
+The optimizers and schedules are the ones `Sequential` uses: the same model, data, starting weights and
+options give the same weights, bit for bit. `optimizer_state` returns a parameter's state for a
+checkpoint and `load_optimizer_state` restores it. To sum the gradients of several losses before one
+step, call `zero_grad`, then `backward(loss, accumulate=True)` for each loss.
+
 ## What is available
 
 | Group | `Sequential` | `ops.Session` |
@@ -82,8 +104,8 @@ with ops.Session(record=True) as s:
 | Layers and operations | `linear`, `relu`, `sigmoid`, `tanh`, `softmax`, `layer_norm`, `residual` | `matmul`, `add`, `sub`, `mul`, `div` (with row, column and scalar broadcasting), `relu`, `sigmoid`, `tanh`, `exp`, `log`, `sqrt`, `scale`, `transpose`, `reshape`, `sum`, `mean`, `softmax`, `log_softmax`, `linear`, `layer_norm`, `dropout`, `full`, `copy`, `detach` |
 | Losses | `mse`, `huber`, `cross_entropy`, `bce_with_logits` | `mse`, `mae`, `huber`, `bce_with_logits`, `cross_entropy` (mean or sum) |
 | Metrics | `loss_curve_` | `accuracy`, `log_loss`, `roc_auc` |
-| Optimizers | `sgd`, `momentum` (optionally Nesterov), `adam`, `adamw`, with weight decay | gradients from `backward` and `grad`; apply your own update with the session's operations |
-| Schedules and stopping | `constant`, `step`, `exponential`; stop after `n_iter_no_change` epochs without improvement | your own loop |
+| Optimizers | `sgd`, `momentum` (optionally Nesterov), `adam`, `adamw`, with weight decay | `optimizer` (`sgd` with optional momentum and Nesterov, `adam`, `adamw`, with weight decay) and `step`, in place on the device; `zero_grad`; `optimizer_state` and `load_optimizer_state` for checkpoints |
+| Schedules and stopping | `constant`, `step`, `exponential`; stop after `n_iter_no_change` epochs without improvement | `constant`, `step`, `exponential`, advanced by `scheduler_step`; your own stopping rule |
 | Data | shuffling and batching from `seed` | `permutation` (a seeded row order), `gather_rows` (a batch of rows), `dropout` (a seeded mask) |
 
 ## Example: a two-expert mixture classifier
@@ -120,20 +142,17 @@ def mixture(s, x, p, first, second):
 
 
 # Train: full-batch gradient descent, every step on the device.
-lr = 0.5
 with ops.Session(record=True) as s:
     x, codes = s.tensor(X), s.tensor(y)
     first, second = s.tensor(FIRST), s.tensor(SECOND)
+    h = {k: s.tensor(v, requires_grad=True) for k, v in params.items()}
+    opt = s.optimizer("sgd", lr=0.5)
     for step in range(60):
-        h = {k: s.tensor(v, requires_grad=True) for k, v in params.items()}
         logits, _ = mixture(s, x, h, first, second)
         s.backward(s.cross_entropy(logits, codes))
-        for k, hk in h.items():
-            g = s.tensor(s.grad(hk))
-            params[k] = s.numpy(s.sub(hk, s.scale(g, lr)))   # p - lr * grad
-            s.free(g)
-            s.free(hk)
+        s.step(opt, list(h.values()))   # p - lr * grad, in place on the device
         s.reset()
+    params = {k: s.numpy(hk) for k, hk in h.items()}
 
 # Predict: the soft mixture, and a hard route chosen from one value read back.
 with ops.Session() as s:

@@ -91,9 +91,9 @@ GPU composition lane (2026-10-19, lane ag-board-twins):
   ops-session-step     one training step composed with the public operation
                        session, mojolearn.ops.Session(record=True): linear,
                        relu, linear, softmax cross-entropy, backward, every
-                       gradient read back with grad(), the SGD update with the
-                       session's own ops (sub, scale) and the updated
-                       parameters back on the host. Every round is the same
+                       gradient read back with grad(), the SGD update in place
+                       on the device with the session's optimizer (step) and
+                       the updated parameters back on the host. Every round is the same
                        step from the same fixture weights (nothing carries
                        over), so an identical arm's digest repeats. The
                        opponent is the same step in torch autograd (leaf
@@ -869,10 +869,9 @@ LANE_TEXT = {
                        "rows to the device, sigmoid of the logits, .cpu(), inside the clock"),
     "ops-session-step": ("mojolearn.ops.Session(record=True): tensor(X), tensor(y_codes), tensor(w1, b1, w2, b2, "
                          "requires_grad=True); relu(linear(x, w1, b1)); linear(h, w2, b2); cross_entropy(logits, "
-                         "codes); backward(loss); scalar(loss); grad(p) for each parameter; numpy(sub(p, "
-                         "scale(tensor(grad_p), lr))) for each parameter: the SGD update p - lr * grad with the "
-                         "session's ops, each updated parameter back on the host (the session exposes gradients as host arrays, so ours "
-                         "re-uploads each gradient for the update)",
+                         "codes); backward(loss); scalar(loss); grad(p) for each parameter; step(optimizer('sgd', "
+                         "lr), [w1, b1, w2, b2]): the SGD update p - lr * grad in place on the device from the "
+                         "backward's gradients (no gradient re-upload); numpy(p) for each updated parameter",
                          "the same tensors .to(dev) as leaves with requires_grad; relu(x @ w1 + b1) @ w2 + b2; "
                          "F.cross_entropy(logits, y); backward; loss.item(); each .grad .cpu(); "
                          "torch.optim.SGD(lr, momentum=0, weight_decay=0).step(); each updated parameter .cpu()"),
@@ -2540,11 +2539,12 @@ def _ops_digest(np, grads):
 class OursOpsStep(Ours):
     """ops-session-step through the public operation session, mojolearn.ops.Session(record=True): the batch,
     the codes and the four parameters (requires_grad=True) uploaded, relu(linear(x, w1, b1)), linear(h, w2,
-    b2), cross_entropy, backward, the loss and every gradient read back, then the SGD update p - lr * grad with
-    the session's own ops (detach, scale, sub) and every updated parameter read back. The session exposes a
-    gradient as a host array only (Session.grad), so ours re-uploads each gradient for the update; that copy
-    is inside ours' clock. One session per worker: each round frees the previous round's uploads and resets the
-    session first (inside the clock), so every round is the same step from the same fixture weights."""
+    b2), cross_entropy, backward, the loss and every gradient read back, then the SGD update p - lr * grad in
+    place on the device by the session's optimizer (Session.step: one update launch per parameter from the
+    backward's own gradients, no re-upload) and every updated parameter read back. One session and one
+    optimizer per worker: each round frees the previous round's uploads (their optimizer state goes with them)
+    and resets the session first (inside the clock), so every round is the same step from the same fixture
+    weights."""
 
     def __init__(self, lane, shape, data):
         import importlib
@@ -2567,6 +2567,12 @@ class OursOpsStep(Ours):
         if not self.s.record:
             raise RuntimeError("REFUSED: ops-session-step: Session(record=True) reads back record=%r"
                                % (self.s.record,))
+        if not hasattr(self.s, "step"):
+            raise ImportError("REFUSED: ops-session-step updates with Session.step; this mojolearn (%s) has "
+                              "no session optimizer" % (getattr(ml, "__version__", "?"),))
+        # torch.optim.SGD(lr, momentum=0, weight_decay=0): the same rule (OPS_SGD)
+        self.opt = self.s.optimizer("sgd", lr=self.lr, momentum=float(OPS_SGD["momentum"]),
+                                    weight_decay=float(OPS_SGD["weight_decay"]))
         self._uploads = []
         self.loss, self.grads, self.updated = None, None, None
         d_in, hidden = (int(v) for v in self.p0[0].shape)
@@ -2575,7 +2581,7 @@ class OursOpsStep(Ours):
                                ml.numeric_mode(), "gpu")
         self.info.update(call=LANE_TEXT[lane][0], session="one Session(record=True) per worker; free + reset "
                          "at the start of every round, inside the clock",
-                         update="SGD with the session's ops: sub(detach(p), scale(tensor(grad), lr))")
+                         update="SGD in place on the device: Session.step(optimizer('sgd', lr), params)")
         self.record = ops_record("mojolearn", ops.Session, shape, batch_size=int(self.X.shape[0]),
                                  layers=ops_layers(d_in, hidden, classes))
 
@@ -2594,12 +2600,8 @@ class OursOpsStep(Ours):
         s.backward(loss)
         self.loss = s.scalar(loss)
         self.grads = [s.grad(p) for p in ps]                       # driver-loop: over the four parameters
-        updated = []
-        for p, g in zip(ps, self.grads):                           # driver-loop: over the four parameters
-            gh = s.tensor(g)
-            uploads.append(gh)
-            updated.append(s.numpy(s.sub(s.detach(p), s.scale(gh, self.lr))))
-        self.updated = updated
+        s.step(self.opt, ps)                                       # in place on the device, no re-upload
+        self.updated = [s.numpy(p) for p in ps]                    # driver-loop: over the four parameters
         self._uploads = uploads
 
     def outputs(self):

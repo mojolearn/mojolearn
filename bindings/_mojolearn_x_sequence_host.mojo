@@ -25,10 +25,12 @@ from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
     ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
     ops_profile_reset_py, ops_profile_report_py, ops_op_packed_py,
+    ops_optimizer_py, ops_step_py, ops_scheduler_step_py, ops_learning_rate_py, ops_zero_grad_py,
+    ops_optimizer_state_py, ops_load_optimizer_state_py,
 )
 from autograd.ops_api import OPS_HOST
 from autograd.model_checkpoint import (
-    model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_optimizer_state_py,
+    model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_optimizer_file_py,
     ops_load_state_py, ops_save_state_py,
 )
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
@@ -187,6 +189,36 @@ def ops_grad_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) rai
     return ops_grad_py[HostExec, OPS_HOST](sid, h, addr)
 
 
+def ops_optimizer_binding(sid: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    return ops_optimizer_py[HostExec, OPS_HOST](sid, ip, fp)
+
+
+def ops_step_binding(sid: PythonObject, opt: PythonObject, hs: PythonObject) raises -> PythonObject:
+    return ops_step_py[HostExec, OPS_HOST](sid, opt, hs)
+
+
+def ops_scheduler_step_binding(sid: PythonObject, opt: PythonObject) raises -> PythonObject:
+    return ops_scheduler_step_py[HostExec, OPS_HOST](sid, opt)
+
+
+def ops_learning_rate_binding(sid: PythonObject, opt: PythonObject) raises -> PythonObject:
+    return ops_learning_rate_py[HostExec, OPS_HOST](sid, opt)
+
+
+def ops_zero_grad_binding(sid: PythonObject) raises -> PythonObject:
+    return ops_zero_grad_py[HostExec, OPS_HOST](sid)
+
+
+def ops_optimizer_state_binding(sid: PythonObject, opt: PythonObject, h: PythonObject) raises -> PythonObject:
+    return ops_optimizer_state_py[HostExec, OPS_HOST](sid, opt, h)
+
+
+def ops_load_optimizer_state_binding(
+    sid: PythonObject, opt: PythonObject, h: PythonObject, ip: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    return ops_load_optimizer_state_py[HostExec, OPS_HOST](sid, opt, h, ip, fp)
+
+
 def ops_profile_reset_binding() raises -> PythonObject:
     return ops_profile_reset_py()
 
@@ -223,10 +255,10 @@ def ops_load_state_binding(sid: PythonObject, path: PythonObject, requires_grad:
     return ops_load_state_py[HostExec, OPS_HOST](sid, path, requires_grad)
 
 
-def ops_load_optimizer_state_binding(
+def ops_load_optimizer_file_binding(
     sid: PythonObject, path: PythonObject, ms: PythonObject, vs: PythonObject, steps: PythonObject,
 ) raises -> PythonObject:
-    return ops_load_optimizer_state_py[HostExec, OPS_HOST](sid, path, ms, vs, steps)
+    return ops_load_optimizer_file_py[HostExec, OPS_HOST](sid, path, ms, vs, steps)
 
 
 def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -345,6 +377,13 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[ops_metric_binding]("ops_metric")
         m.def_function[ops_backward_binding]("ops_backward")
         m.def_function[ops_grad_binding]("ops_grad")
+        m.def_function[ops_optimizer_binding]("ops_optimizer")
+        m.def_function[ops_step_binding]("ops_step")
+        m.def_function[ops_scheduler_step_binding]("ops_scheduler_step")
+        m.def_function[ops_learning_rate_binding]("ops_learning_rate")
+        m.def_function[ops_zero_grad_binding]("ops_zero_grad")
+        m.def_function[ops_optimizer_state_binding]("ops_optimizer_state")
+        m.def_function[ops_load_optimizer_state_binding]("ops_load_optimizer_state")
         m.def_function[ops_profile_reset_binding]("ops_profile_reset")
         m.def_function[ops_profile_report_binding]("ops_profile_report")
         m.def_function[model_save_checkpoint_binding]("model_save_checkpoint")
@@ -352,7 +391,7 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[model_load_checkpoint_binding]("model_load_checkpoint")
         m.def_function[ops_save_state_binding]("ops_save_state")
         m.def_function[ops_load_state_binding]("ops_load_state")
-        m.def_function[ops_load_optimizer_state_binding]("ops_load_optimizer_state")
+        m.def_function[ops_load_optimizer_file_binding]("ops_load_optimizer_file")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         m.def_function[layer_norm_binding]("layer_norm")

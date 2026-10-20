@@ -524,7 +524,7 @@ def ops_load_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     return out
 
 
-def ops_load_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
+def ops_load_optimizer_file_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, path: PythonObject, ms: PythonObject, vs: PythonObject, steps: PythonObject,
 ) raises -> PythonObject:
     """Write a session checkpoint's optimizer state in place into the
@@ -538,7 +538,7 @@ def ops_load_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     var hv = _handles(vs)
     var ht = _handles(steps)
     if len(hm) != K or len(hv) != K or len(ht) != K:
-        raise Error("ops_load_optimizer_state: one optimizer handle (or 0) per saved parameter")
+        raise Error("ops_load_optimizer_file: one optimizer handle (or 0) per saved parameter")
     var p = ops_session[E, KIND](Int(py=sid))
     var tw = List[Float32](length=1, fill=Float32(0))
     var at = 2 + 2 * K + 2
@@ -547,11 +547,11 @@ def ops_load_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
         var size = ck.offsets[i + 1] - off
         if hm[i] != 0:
             if p[].shape(hm[i])[0] * p[].shape(hm[i])[1] != size:
-                raise Error("ops_load_optimizer_state: an optimizer buffer is not the shape of its parameter")
+                raise Error("ops_load_optimizer_file: an optimizer buffer is not the shape of its parameter")
             p[].assign(hm[i], FP(unsafe_from_address=Int(ck.m_state.unsafe_ptr())) + off)
         if hv[i] != 0:
             if p[].shape(hv[i])[0] * p[].shape(hv[i])[1] != size:
-                raise Error("ops_load_optimizer_state: an optimizer buffer is not the shape of its parameter")
+                raise Error("ops_load_optimizer_file: an optimizer buffer is not the shape of its parameter")
             p[].assign(hv[i], FP(unsafe_from_address=Int(ck.v_state.unsafe_ptr())) + off)
         if ht[i] != 0:
             tw[0] = Float32(Int(xi[at + i]))

@@ -22,6 +22,10 @@ else on the device.
 With ``Session(record=True)`` the same composition is differentiable: create
 the trainable inputs with ``requires_grad=True``, compute a scalar loss, call
 :meth:`Session.backward` and read each gradient with :meth:`Session.grad`.
+To train, make an optimizer with :meth:`Session.optimizer` and call
+:meth:`Session.step` after each backward: the parameters are updated in
+place on the device, with the optimizer's state kept there too, so a
+training loop reads nothing back unless you ask for it.
 
 Example
 -------
@@ -57,6 +61,12 @@ _METRIC = {"accuracy": 1, "log_loss": 2, "roc_auc": 3}
 _ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
 _REDUCTION = {"mean": 0, "sum": 1}
 _AXIS = {None: -1, 0: 0, 1: 1}
+# sequence/ops.mojo OPT_* and autograd/model.mojo SCHED_* (Sequential.compile's codes)
+_OPTIMIZER = {"sgd": 0, "adam": 1, "adamw": 2}
+_SCHEDULE = {"constant": 0, "step": 1, "exponential": 2}
+# the state buffers autograd/ops_api.mojo optimizer_state returns, by kind
+_STATE_NAMES = {"sgd": ("momentum_buffer", None, None), "adam": ("exp_avg", "exp_avg_sq", None),
+                "adamw": ("exp_avg", "exp_avg_sq", None)}
 # autograd/ops_api.mojo OPS_PACK_*: the packed argument block of one call
 _PACK_H, _PACK_I, _PACK_F = 3, 7, 15
 _PACK_HANDLES, _PACK_INTS, _PACK_FLOATS = 4, 8, 4
@@ -124,6 +134,21 @@ class Session:
     ...     h = s.linear(x, w, activation="tanh")
     ...     total = s.scalar(s.sum(h))
 
+    Train a linear model with Adam, the parameters staying on the device:
+
+    >>> X = rng.standard_normal((64, 4), dtype=np.float32)
+    >>> Y = rng.standard_normal((64, 1), dtype=np.float32)
+    >>> with ops.Session(record=True) as s:
+    ...     w = s.tensor(np.zeros((4, 1), dtype=np.float32), requires_grad=True)
+    ...     b = s.tensor(np.zeros((1, 1), dtype=np.float32), requires_grad=True)
+    ...     x, y = s.tensor(X), s.tensor(Y)
+    ...     opt = s.optimizer("adam", lr=0.01)
+    ...     for epoch in range(20):
+    ...         s.backward(s.mse(s.linear(x, w, b), y))
+    ...         s.step(opt, [w, b])
+    ...         s.reset()
+    ...     weights = s.numpy(w)
+
     Record the same composition and differentiate a loss:
 
     >>> y = rng.standard_normal((32, 2), dtype=np.float32)
@@ -147,6 +172,7 @@ class Session:
         self._args = np.zeros(_PACK_WORDS, dtype=np.int64)
         self._argf = self._args[_PACK_F:].view(np.float32)
         self._args_addr = self._args.ctypes.data
+        self._opt_kind = {}
 
     # ------------------------------------------------------------ lifetime
     def close(self):
@@ -576,5 +602,139 @@ class Session:
             if not int(has_opt):
                 raise ValueError("this file holds no optimizer state")
             ms, vs, ts = self._optimizer_handles(optimizer, hs)
-            self._b.ops_load_optimizer_state(self._sid(), path, ms, vs, ts)  # cpu-route: checkpoint file read on the host
+            self._b.ops_load_optimizer_file(self._sid(), path, ms, vs, ts)  # cpu-route: checkpoint file read on the host
         return dict(params=hs, seed=(int(hi) << 32) | int(lo), epoch=int(epoch), step=int(step))
+    def zero_grad(self):
+        """Clear the gradient of every tensor made with ``requires_grad=True``.
+
+        The next ``backward(loss, accumulate=True)`` then starts each
+        gradient from zero. Use it to sum the gradients of several losses
+        before one :meth:`step`; a plain :meth:`backward` already replaces
+        the previous gradients.
+        """
+        self._b.ops_zero_grad(self._sid())
+
+    # ------------------------------------------------------------ optimizers
+    def optimizer(self, kind="adam", lr=1e-3, *, momentum=0.0, nesterov=False, beta1=0.9, beta2=0.999,
+                  eps=1e-8, weight_decay=0.0, schedule="constant", step_size=1, gamma=0.1):
+        """Create an optimizer for :meth:`step`; returns its integer handle.
+
+        Parameters
+        ----------
+        kind : {'sgd', 'adam', 'adamw'}, default 'adam'
+            The update rule, as in PyTorch's ``torch.optim``.
+        lr : float, default 1e-3
+            Learning rate (> 0).
+        momentum : float, default 0.0
+            Momentum of ``'sgd'``, in ``[0, 1)``.
+        nesterov : bool, default False
+            Nesterov momentum for ``'sgd'`` (needs ``momentum > 0``).
+        beta1, beta2, eps : float
+            Moment decays and denominator term of ``'adam'`` and ``'adamw'``.
+        weight_decay : float, default 0.0
+            L2 penalty added to the gradient (``'sgd'``, ``'adam'``) or
+            decoupled decay (``'adamw'``).
+        schedule : {'constant', 'step', 'exponential'}, default 'constant'
+            Learning-rate schedule over epochs: ``'step'`` multiplies the
+            rate by ``gamma`` every ``step_size`` epochs, ``'exponential'``
+            by ``gamma`` every epoch. Advance it with :meth:`scheduler_step`.
+        step_size : int, default 1
+            Epochs per decay of the ``'step'`` schedule.
+        gamma : float, default 0.1
+            Decay factor of the ``'step'`` and ``'exponential'`` schedules.
+
+        The options mean what they mean in :meth:`mojolearn.Sequential.compile`,
+        and the update is the one :meth:`mojolearn.Sequential.fit` runs:
+        the same model, data, starting weights and options give the same
+        weights, bit for bit.
+
+        Example
+        -------
+        >>> with ops.Session(record=True) as s:
+        ...     opt = s.optimizer("sgd", lr=0.1, momentum=0.9, nesterov=True)
+        """
+        if kind not in _OPTIMIZER:
+            raise ValueError(f"kind must be one of {sorted(_OPTIMIZER)}")
+        if schedule not in _SCHEDULE:
+            raise ValueError(f"schedule must be one of {sorted(_SCHEDULE)}")
+        ip = [_OPTIMIZER[kind], 1 if nesterov else 0, _SCHEDULE[schedule], _int(step_size, "step_size", 1)]
+        fp = [float(lr), float(momentum), float(beta1), float(beta2), float(eps), float(weight_decay),
+              float(gamma)]
+        opt = int(self._b.ops_optimizer(self._sid(), ip, fp))
+        self._opt_kind[opt] = kind
+        return opt
+
+    def _kind_of(self, optimizer):
+        optimizer = _int(optimizer, "optimizer", 1)
+        if optimizer not in self._opt_kind:
+            raise ValueError(f"{optimizer} is not an optimizer of this session")
+        return optimizer, self._opt_kind[optimizer]
+
+    def step(self, optimizer, params):
+        """Update the parameters in place from the last :meth:`backward`.
+
+        ``params`` lists tensors made with ``requires_grad=True`` (or is one
+        such handle). Each is updated on the device by ``optimizer``; its
+        optimizer state (momentum or moment estimates and the step count)
+        stays on the device in the session, separately for every parameter.
+        Nothing is read back. Call :meth:`reset` before recording the next
+        forward pass.
+        """
+        optimizer, _ = self._kind_of(optimizer)
+        if isinstance(params, (int, np.integer)) and not isinstance(params, bool):
+            params = [params]
+        hs = [_int(p, "handle", 1) for p in params]  # glue: the step's parameter handles
+        self._b.ops_step(self._sid(), optimizer, hs)
+
+    def scheduler_step(self, optimizer):
+        """Advance ``optimizer``'s learning-rate schedule by one epoch."""
+        optimizer, _ = self._kind_of(optimizer)
+        self._b.ops_scheduler_step(self._sid(), optimizer)
+
+    def learning_rate(self, optimizer):
+        """``optimizer``'s current learning rate, as a float."""
+        optimizer, _ = self._kind_of(optimizer)
+        return float(self._b.ops_learning_rate(self._sid(), optimizer))
+
+    def optimizer_state(self, optimizer, param):
+        """The optimizer's state for one parameter, as a dict.
+
+        ``'step'`` is the number of updates applied to ``param``. ``'adam'``
+        and ``'adamw'`` add ``'beta1_power'`` and ``'beta2_power'`` (the
+        bias-correction products) and the tensor handles ``'exp_avg'`` and
+        ``'exp_avg_sq'``; ``'sgd'`` with momentum adds
+        ``'momentum_buffer'``. The tensors are copies, valid until
+        :meth:`reset`: read them with :meth:`numpy` to save a checkpoint,
+        and restore it with :meth:`load_optimizer_state`.
+        """
+        optimizer, kind = self._kind_of(optimizer)
+        w = self._b.ops_optimizer_state(self._sid(), optimizer, _int(param, "param", 1))
+        state = {"step": int(w[0])}
+        if kind in ("adam", "adamw"):
+            state["beta1_power"] = float(w[1])
+            state["beta2_power"] = float(w[2])
+        for name, h in zip(_STATE_NAMES[kind], w[4:7]):  # glue: three named state buffers
+            if name is not None and int(h) != 0:
+                state[name] = int(h)
+        return state
+
+    def load_optimizer_state(self, optimizer, param, state):
+        """Restore the state :meth:`optimizer_state` returned.
+
+        ``state`` holds the same keys, with each buffer a tensor handle of
+        ``param``'s shape (for example ``s.tensor(saved_array)``). The
+        values are copied on the device; the next :meth:`step` continues
+        exactly where the saved run stopped.
+        """
+        optimizer, kind = self._kind_of(optimizer)
+        if "step" not in state:
+            raise KeyError("state needs 'step'")
+        names = _STATE_NAMES[kind]
+        hs = [_int(state[n], n, 1) if n is not None and n in state else 0 for n in names]  # glue: three named state buffers
+        fp = [1.0, 1.0, 1.0]
+        if kind in ("adam", "adamw"):
+            if "beta1_power" not in state or "beta2_power" not in state:
+                raise KeyError("an adam state needs 'beta1_power' and 'beta2_power'")
+            fp = [float(state["beta1_power"]), float(state["beta2_power"]), 1.0]
+        ip = [_int(state["step"], "step", 0)] + hs
+        self._b.ops_load_optimizer_state(self._sid(), optimizer, _int(param, "param", 1), ip, fp)
