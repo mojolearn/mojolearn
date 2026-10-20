@@ -39,7 +39,6 @@ def ops_session_create_py[E: Exec & Movable & Deinitable, KIND: Int](
     initialize_program_arrays()
     var sid = ops_session_open[E, KIND](ex^, Bool(py=record))
     var owner = SessionLifetime[E, KIND](sid)
-    var result = Python.list()
-    result.append(sid)
-    result.append(PythonObject(alloc=owner^))
-    return result
+    # Construct the fixed ABI result directly with the supported native
+    # list constructor, transferring the native owner exactly once.
+    return Python.list(PythonObject(sid), PythonObject(alloc=owner^))

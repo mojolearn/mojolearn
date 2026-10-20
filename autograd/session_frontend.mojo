@@ -30,19 +30,20 @@ def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode:
     # Set the finalizer's ownership fields before the first allocation. A
     # failure leaves an empty shell that can be safely destroyed.
     var recording = Bool(py=record)
-    b.setattr(session, "_id", PythonObject(None))
-    b.setattr(session, "_session_native", entry.call)
-    b.setattr(session, "record", recording)
-    b.setattr(session, "numeric_mode", mode)
-    b.setattr(session, "_b", entry.binding)
-    b.setattr(session, "_program_execute", entry.execute)
-    b.setattr(session, "_program_inspect", entry.inspect)
-    b.setattr(session, "_program_control", entry.control)
-    b.setattr(session, "_program_fit", entry.fit)
-    b.setattr(session, "_program_class", program_class)
-    b.setattr(session, "_distributed_binding", entry.distributed)
-    b.setattr(session, "_opt_kind", b.dict())
+    var target = session
+    target._id = PythonObject(None)
+    target._session_native = entry.call
+    target.record = PythonObject(recording)
+    target.numeric_mode = mode
+    target._b = entry.binding
+    target._program_execute = entry.execute
+    target._program_inspect = entry.inspect
+    target._program_control = entry.control
+    target._program_fit = entry.fit
+    target._program_class = program_class
+    target._distributed_binding = entry.distributed
+    target._opt_kind = b.dict()
     var created = entry.open(Int(recording))
-    b.setattr(session, "_lifetime", created[1])
-    b.setattr(session, "_id", created[0])
+    target._lifetime = created[1]
+    target._id = created[0]
     return PythonObject(None)
