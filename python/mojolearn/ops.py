@@ -1224,20 +1224,8 @@ class Session:
         natively. A captured reshape should use ``-1`` for an inferred
         dimension when its element count can change.
         """
-        if not isinstance(program, Program) or program._s is not self:
-            raise ValueError("program must be a Program of this session")
-        try:
-            return self._b.ops_program_execute(self._sid(), program._id, arrays,
-                                               dynamic_shapes, optimize, False)
-        except Exception as error:
-            # Preserve Python-facing argument error categories; native Mojo
-            # owns all validation and array preparation before graph replay.
-            message = str(error)
-            if message.startswith("ValueError: "):
-                raise ValueError(message[12:]) from error
-            if message.startswith("TypeError: "):
-                raise TypeError(message[11:]) from error
-            raise
+        return self._b.ops_program_execute(self._id, program._id, program._s._id,
+                                           arrays, dynamic_shapes, optimize, False)
 
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
@@ -1602,30 +1590,29 @@ class Program:
 
     def run(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
-        return self._s.run(self, *arrays, dynamic_shapes=dynamic_shapes, optimize=optimize)
+        return self._s._b.ops_program_execute(self._s._id, self._id, self._s._id,
+                                             arrays, dynamic_shapes, optimize, False)
 
     def inspect(self, *, optimize=False):
         """Return the graph's operations, references, attributes and shapes."""
-        return self._s._b.ops_program_inspect(self._s._sid(), self._id, optimize)
+        return self._s._b.ops_program_inspect(self._s._id, self._id, optimize)
 
     def profile(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run and return outputs with per-node timing and storage accounting."""
-        return self._s._b.ops_program_execute(self._s._sid(), self._id, arrays,
-                                             dynamic_shapes, optimize, True)
+        return self._s._b.ops_program_execute(self._s._id, self._id, self._s._id,
+                                             arrays, dynamic_shapes, optimize, True)
 
     def run_if(self, condition, otherwise, *arrays, optimize=False):
         """Evaluate a scalar condition graph and execute its selected branch."""
-        if condition._s is not self._s or otherwise._s is not self._s:
-            raise ValueError("control-flow programs must belong to the same session")
-        return self._s._b.ops_program_control(self._s._sid(), self._id, condition._id,
-                                             otherwise._id, arrays, 0, optimize)
+        return self._s._b.ops_program_control(self._s._id, self._id, condition._id,
+                                             otherwise._id, condition._s._id, otherwise._s._id,
+                                             arrays, 0, optimize)
 
     def while_loop(self, *arrays, condition, max_iterations, optimize=False):
         """Apply this state graph while the scalar condition holds, up to a limit."""
-        if condition._s is not self._s:
-            raise ValueError("control-flow programs must belong to the same session")
-        return self._s._b.ops_program_control(self._s._sid(), self._id, condition._id,
-                                             0, arrays, max_iterations, optimize)
+        return self._s._b.ops_program_control(self._s._id, self._id, condition._id,
+                                             0, condition._s._id, self._s._id,
+                                             arrays, max_iterations, optimize)
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
@@ -1668,19 +1655,9 @@ class Program:
         >>> opt = session.optimizer("adam", lr=0.01)
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
-        kinds = {"output": 0, "mse": 1, "mae": 2, "huber": 3,
-                 "bce_with_logits": 4, "cross_entropy": 5}
-        if loss not in kinds:
-            raise ValueError(f"unknown loss {loss!r}")
-        if (loss == "output") != (targets is None):
-            raise ValueError("omit targets only when loss='output'")
-        lo, hi = _seed_words(seed)
-        params = self.params if parameters is None else self._s._handles(parameters)
-        ip = [_int(optimizer, "optimizer", 1), kinds[loss], _int(epochs, "epochs", 1),
-              _int(batch_size, "batch_size", 1), int(bool(shuffle)), lo, hi]
-        self.loss_curve_ = self._s._b.ops_program_fit(
-            self._s._sid(), self._id, arrays, targets, params, ip, [float(huber_delta)])
-        self.n_iter_ = int(epochs)
+        self.loss_curve_, self.n_iter_ = self._s._b.ops_program_fit_native(
+            self._s._id, self._id, arrays, targets, optimizer, parameters,
+            loss, epochs, batch_size, shuffle, seed, huber_delta)
         return self
 
     def save(self, path):

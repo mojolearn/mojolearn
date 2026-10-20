@@ -1476,7 +1476,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: the kind must be 0 (any) or 1 (all)")
             var tests = imp_unary(self.tape, self.ex, x[0], IMP_BOOL if ints[0] == 0 else IMP_NOT)
             var rest = List[Int]()
-            for k in range(1, ni):  # small-loop(ints: keepdims and at most 8 axes): argument parsing, no data
+            for k in range(1, ni):  # small-loop(ni: keepdims and at most 8 axes): argument parsing, no data
                 rest.append(ints[k])
             var m = self._reduce_n(tests, rest, False, True)
             if ints[0] == 1:
@@ -1491,7 +1491,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if n < 2 or ni != n - 1:
                 raise Error("ops: index takes a tensor, its index tensors and one axis for each")
             var idx = List[Tensor]()
-            for k in range(1, n):  # small-loop(x: the index tensors, at most 8): handle lists, no data
+            for k in range(1, n):  # small-loop(n: the index tensors, at most 8): handle lists, no data
                 idx.append(x[k])
             return imp_gather_nd(self.tape, self.ex, x[0], idx, ints)
         raise Error("ops: unknown operation code " + String(code))
@@ -1747,21 +1747,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if outputs[k] not in value_of:
                 need[outputs[k]] = 1
         # back from the outputs: keep the logged operations they depend on
-        var n = self.oplog.count()
-        var keep = List[Bool](length=n, fill=False)
-        var back = n - 1
+        var node_count = self.oplog.count()
+        var keep = List[Bool](length=node_count, fill=False)
+        var back = node_count - 1
         while back >= 0:  # driver-loop: over logged operations, last to first
             var r = self.oplog.res[back]
             if r in need:
                 _ = need.pop(r)
                 keep[back] = True
-                for j in range(self.oplog.h_at[back], self.oplog.h_at[back + 1]):  # small-loop(hs: an op's input handles): graph walk, no data
+                for j in range(self.oplog.h_at[back], self.oplog.h_at[back + 1]):  # driver-loop: over a logged operation input references
                     var h = self.oplog.hs[j]
                     if h not in value_of:
                         need[h] = 1
             back -= 1
         # forward: number the kept operations, in their order
-        for i in range(n):  # driver-loop: over logged operations
+        for i in range(node_count):  # driver-loop: over logged operations
             if not keep[i]:
                 continue
             var code = self.oplog.code[i]
@@ -1769,7 +1769,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: capture: embedding and take read the caller's index array, "
                             + "which a program cannot hold; pass the ids as a tensor (ids) instead")
             p.code.append(code)
-            for j in range(self.oplog.h_at[i], self.oplog.h_at[i + 1]):  # small-loop(hs: an op's input handles): description words, no data
+            for j in range(self.oplog.h_at[i], self.oplog.h_at[i + 1]):  # driver-loop: over logged operation input references
                 var h = self.oplog.hs[j]
                 if h in value_of:
                     p.args.append(value_of[h])
@@ -1777,9 +1777,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     var pr = self._capture_param(h, p)
                     value_of[h] = pr
                     p.args.append(pr)
-            for j in range(self.oplog.i_at[i], self.oplog.i_at[i + 1]):  # small-loop(ints: an op's integer arguments): description words, no data
+            for j in range(self.oplog.i_at[i], self.oplog.i_at[i + 1]):  # driver-loop: over logged operation integer arguments
                 p.ints.append(self.oplog.ints[j])
-            for j in range(self.oplog.f_at[i], self.oplog.f_at[i + 1]):  # small-loop(fs: an op's float arguments): description words, no data
+            for j in range(self.oplog.f_at[i], self.oplog.f_at[i + 1]):  # driver-loop: over logged operation float arguments
                 p.fs.append(self.oplog.fs[j])
             p.end_node()
             value_of[self.oplog.res[i]] = p.n_in + p.n_nodes() - 1
@@ -1843,7 +1843,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             h = self._op_run(code, hs, ints, fs)
         except err:
             var context = String("program node ") + String(node) + " (" + program_op_name(code) + ") inputs=["
-            for j in range(len(hs)):  # driver-loop: failed node's input shapes
+            for j in range(len(hs)):  # driver-loop: over failed node's input shapes
                 if j > 0:
                     context += ", "
                 context += shape_text(self.shapes[self._slot(hs[j])])
@@ -1862,7 +1862,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.program_trace.shapes.append(shape_text(shape))
             self.program_trace.output_bytes.append(shape.count() * 4)
             var reserved = 0
-            for j in range(len(self.tape._capacities)):  # driver-loop: scratch allocation slots, profiling only
+            for j in range(len(self.tape._capacities)):  # driver-loop: over scratch allocation slots, profiling only
                 reserved += self.tape._capacities[j] * 4
             self.program_trace.peak_tape_bytes = max(self.program_trace.peak_tape_bytes, reserved)
         return h

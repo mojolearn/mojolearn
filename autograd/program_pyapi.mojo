@@ -111,7 +111,7 @@ def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool) raises ->
     if len(arrays) != p.n_in:
         raise Error("ValueError: this program takes " + String(p.n_in) + " input arrays, got " + String(len(arrays)))
     var out = List[ProgramInput]()
-    for k in range(p.n_in):  # driver-loop: input descriptors, owners retained through replay
+    for k in range(p.n_in):  # driver-loop: over input descriptors, owners retained through replay
         var item = ProgramInput(arrays[k], p.in_kinds[k] == PROGRAM_IN_IDS)
         if (dynamic and item.shape.ndim != p.in_shapes[k].ndim) or (not dynamic and not same_shape(item.shape, p.in_shapes[k])):
             raise Error("ValueError: input " + String(k) + " must keep its captured "
@@ -140,9 +140,11 @@ def _result(arrays: PythonObject) raises -> PythonObject:
 
 
 def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
-    sid: PythonObject, pid: PythonObject, arrays: PythonObject,
+    sid: PythonObject, pid: PythonObject, owner_sid: PythonObject, arrays: PythonObject,
     dynamic_shapes: PythonObject, optimize: PythonObject, profile: PythonObject,
 ) raises -> PythonObject:
+    if Int(py=owner_sid) != Int(py=sid):
+        raise Error("program must be a Program of this session")
     var s = ops_session[E, KIND](Int(py=sid))
     var p = s[].program(Int(py=pid))
     if s[].tape.is_recording():
@@ -160,13 +162,13 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     var upload_bytes = 0
     var input_bytes = 0
     var parameter_bytes = 0
-    for j in range(len(p.param_shapes)):  # driver-loop: parameter storage accounting
+    for j in range(len(p.param_shapes)):  # driver-loop: over parameter storage accounting
         parameter_bytes += p.param_shapes[j].count() * 4
     s[].program_trace = ProgramTrace()
     s[].program_trace.enabled = Bool(py=profile)
     var started = Int(perf_counter_ns())
     try:
-        for k in range(len(inputs)):  # driver-loop: native uploads
+        for k in range(len(inputs)):  # driver-loop: over native uploads
             var sh = inputs[k].shape
             var buf = s[].ex.alloc(sh.count())
             buffers.append(buf)
@@ -181,7 +183,7 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             s[].ex.sync()
     except err:
         s[].program_trace.enabled = False
-        for k in range(len(buffers)):  # driver-loop: owners acquired before a failed upload
+        for k in range(len(buffers)):  # driver-loop: over owners acquired before a failed upload
             s[].ex.free(buffers[k])
         raise err
     var upload_ns = Int(perf_counter_ns()) - started
@@ -198,7 +200,7 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[].tape.reset()
         var outs = replay_values(s[], p, buffers, shapes, params, trainable, temps, phs)
         started = Int(perf_counter_ns())
-        for k in range(len(outs)):  # driver-loop: returned arrays
+        for k in range(len(outs)):  # driver-loop: over returned arrays
             var sh = s[].shapes[s[]._slot(outs[k])]
             var a = output_array(sh)
             s[].download(outs[k], FP(unsafe_from_address=Int(py=a.ctypes.data)))
@@ -210,44 +212,44 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[]._drop_temps(temps)
         swap(held, s[].tape)
         swap(held, s[].prog_tape)
-        for k in range(len(buffers)):  # driver-loop: input owners
+        for k in range(len(buffers)):  # driver-loop: over input owners
             s[].ex.free(buffers[k])
         raise err
     s[].program_trace.enabled = False
     s[]._drop_temps(temps)
     swap(held, s[].tape)
     swap(held, s[].prog_tape)
-    for k in range(len(buffers)):  # driver-loop: input owners
+    for k in range(len(buffers)):  # driver-loop: over input owners
         s[].ex.free(buffers[k])
     if not Bool(py=profile):
         return _result(result)
     var report = _dict()
-    report.__setitem__("timing", "host enqueue and synchronized wait; profiling serializes the queue")
-    report.__setitem__("original_nodes", original_nodes)
-    report.__setitem__("executed_nodes", p.n_nodes())
-    report.__setitem__("input_logical_bytes", upload_bytes)
-    report.__setitem__("input_device_bytes", input_bytes)
-    report.__setitem__("output_bytes", download_bytes)
-    report.__setitem__("parameter_bytes", parameter_bytes)
-    report.__setitem__("peak_tape_reserved_bytes", s[].program_trace.peak_tape_bytes)
-    report.__setitem__("upload_and_cast_ns", upload_ns)
-    report.__setitem__("download_and_allocate_ns", download_ns)
-    report.__setitem__("node_sync_count", s[].program_trace.sync_count)
-    report.__setitem__("node_sync_ns", s[].program_trace.sync_ns)
+    report["timing"] = "host enqueue and synchronized wait; profiling serializes the queue"
+    report["original_nodes"] = original_nodes
+    report["executed_nodes"] = p.n_nodes()
+    report["input_logical_bytes"] = upload_bytes
+    report["input_device_bytes"] = input_bytes
+    report["output_bytes"] = download_bytes
+    report["parameter_bytes"] = parameter_bytes
+    report["peak_tape_reserved_bytes"] = s[].program_trace.peak_tape_bytes
+    report["upload_and_cast_ns"] = upload_ns
+    report["download_and_allocate_ns"] = download_ns
+    report["node_sync_count"] = s[].program_trace.sync_count
+    report["node_sync_ns"] = s[].program_trace.sync_ns
     var rows = Python.list()
-    for j in range(len(s[].program_trace.nodes)):  # driver-loop: diagnostic rows
+    for j in range(len(s[].program_trace.nodes)):  # driver-loop: over diagnostic rows
         var row = _dict()
-        row.__setitem__("node", s[].program_trace.nodes[j])
-        row.__setitem__("op", program_op_name(s[].program_trace.codes[j]))
-        row.__setitem__("shape", s[].program_trace.shapes[j])
-        row.__setitem__("output_bytes", s[].program_trace.output_bytes[j])
-        row.__setitem__("enqueue_ns", s[].program_trace.enqueue_ns[j])
-        row.__setitem__("wait_ns", s[].program_trace.wait_ns[j])
+        row["node"] = s[].program_trace.nodes[j]
+        row["op"] = program_op_name(s[].program_trace.codes[j])
+        row["shape"] = s[].program_trace.shapes[j]
+        row["output_bytes"] = s[].program_trace.output_bytes[j]
+        row["enqueue_ns"] = s[].program_trace.enqueue_ns[j]
+        row["wait_ns"] = s[].program_trace.wait_ns[j]
         rows.append(row)
-    report.__setitem__("nodes", rows)
+    report["nodes"] = rows
     var out = _dict()
-    out.__setitem__("outputs", _result(result))
-    out.__setitem__("profile", report)
+    out["outputs"] = _result(result)
+    out["profile"] = report
     return out
 
 
@@ -255,7 +257,7 @@ def ops_program_dynamic_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, pid: PythonObject, arrays: PythonObject,
 ) raises -> PythonObject:
     # Keep the previously exported entry ABI stable.
-    return ops_program_execute_py[E, KIND](sid, pid, arrays, PythonObject(True), PythonObject(False), PythonObject(False))
+    return ops_program_execute_py[E, KIND](sid, pid, sid, arrays, PythonObject(True), PythonObject(False), PythonObject(False))
 
 
 def ops_program_inspect_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -267,37 +269,37 @@ def ops_program_inspect_py[E: Exec & Movable & Deinitable, KIND: Int](
     if Bool(py=optimize):
         p = program_cse(p)
     var report = _dict()
-    report.__setitem__("original_nodes", original_nodes)
-    report.__setitem__("nodes_removed", original_nodes - p.n_nodes())
-    report.__setitem__("input_shapes", _dims_out(p.in_shapes))
-    report.__setitem__("output_shapes", _dims_out(p.out_shapes))
-    report.__setitem__("parameter_shapes", _dims_out(p.param_shapes))
-    report.__setitem__("optimization", "exact_duplicate_elimination" if Bool(py=optimize) else "none")
+    report["original_nodes"] = original_nodes
+    report["nodes_removed"] = original_nodes - p.n_nodes()
+    report["input_shapes"] = _dims_out(p.in_shapes)
+    report["output_shapes"] = _dims_out(p.out_shapes)
+    report["parameter_shapes"] = _dims_out(p.param_shapes)
+    report["optimization"] = "exact_duplicate_elimination" if Bool(py=optimize) else "none"
     var rows = Python.list()
-    for k in range(p.n_nodes()):  # driver-loop: graph node metadata
+    for k in range(p.n_nodes()):  # driver-loop: over graph node metadata
         var row = _dict()
-        row.__setitem__("node", k)
-        row.__setitem__("value", p.n_in + k)
-        row.__setitem__("op", program_op_name(p.code[k]))
-        row.__setitem__("code", p.code[k])
+        row["node"] = k
+        row["value"] = p.n_in + k
+        row["op"] = program_op_name(p.code[k])
+        row["code"] = p.code[k]
         var args = Python.list()
         var ints = Python.list()
         var floats = Python.list()
-        for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: input refs
+        for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over input refs
             args.append(PythonObject(p.args[j]))
-        for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: integer attributes
+        for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over integer attributes
             ints.append(PythonObject(p.ints[j]))
-        for j in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: float attributes
+        for j in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over float attributes
             floats.append(PythonObject(p.fs[j]))
-        row.__setitem__("inputs", args)
-        row.__setitem__("integers", ints)
-        row.__setitem__("floats", floats)
+        row["inputs"] = args
+        row["integers"] = ints
+        row["floats"] = floats
         rows.append(row)
-    report.__setitem__("nodes", rows)
+    report["nodes"] = rows
     var outputs = Python.list()
-    for k in range(len(p.outs)):  # driver-loop: output refs
+    for k in range(len(p.outs)):  # driver-loop: over output refs
         outputs.append(PythonObject(p.outs[k]))
-    report.__setitem__("outputs", outputs)
+    report["outputs"] = outputs
     return report
 
 
@@ -326,3 +328,76 @@ def ops_program_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
                   ival(ip, 0), _input_handles(parameters), epochs, ival(ip, 3), ival(ip, 4) != 0,
                   _seed(ip, 5), FP(unsafe_from_address=Int(py=curve.ctypes.data)))
     return curve
+
+
+def _integer(v: PythonObject, what: String, low: Int) raises -> Int:
+    var b = Python.import_module("builtins")
+    if Bool(py=b.isinstance(v, b.bool)) or not Bool(py=b.hasattr(v, "__index__")):
+        raise Error("TypeError: " + what + " must be an integer")
+    var value = Int(py=v)
+    if value < low:
+        raise Error("ValueError: " + what + " must be >= " + String(low))
+    return value
+
+
+def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
+    optimizer: PythonObject, parameters: PythonObject, loss: PythonObject,
+    epochs: PythonObject, batch_size: PythonObject, shuffle: PythonObject,
+    seed: PythonObject, delta: PythonObject,
+) raises -> PythonObject:
+    # One public binding call owns option parsing as well as the entire
+    # upload/shuffle/batch/backward/update path. Old packed ABI stays usable.
+    var s = ops_session[E, KIND](Int(py=sid))
+    var p = s[].program(Int(py=pid))
+    var name = String(py=loss)
+    var kind = -1
+    if name == "output":
+        kind = 0
+    elif name == "mse":
+        kind = 1
+    elif name == "mae":
+        kind = 2
+    elif name == "huber":
+        kind = 3
+    elif name == "bce_with_logits":
+        kind = 4
+    elif name == "cross_entropy":
+        kind = 5
+    if kind < 0:
+        raise Error("ValueError: unknown loss " + name)
+    var b = Python.import_module("builtins")
+    var no_target = String(py=b.type(targets).__name__) == "NoneType"
+    if (kind == 0) != no_target:
+        raise Error("ValueError: omit targets only when loss='output'")
+    var count = _integer(epochs, "epochs", 1)
+    var batch = _integer(batch_size, "batch_size", 1)
+    var opt = _integer(optimizer, "optimizer", 1)
+    if Bool(py=b.isinstance(seed, b.bool)) or not Bool(py=b.hasattr(seed, "__index__")):
+        raise Error("TypeError: seed must be an integer")
+    var seed_word = UInt64(py=seed)
+    var params = p.params.copy()
+    if String(py=b.type(parameters).__name__) != "NoneType":
+        if Bool(py=b.hasattr(parameters, "__index__")):
+            params = List[Int](_integer(parameters, "parameter", 1))
+        else:
+            params = _input_handles(parameters)
+    var owners = program_inputs(p, arrays, True)
+    var srcs = List[CastIn]()
+    var shapes = List[ShapeN]()
+    for k in range(len(owners)):  # driver-loop: over borrowed input descriptors
+        srcs.append(owners[k].src)
+        shapes.append(owners[k].shape)
+    var target = CastIn.f32_c(0, 1, 1)
+    var target_owners = List[ProgramInput]()
+    if kind != 0:
+        target_owners.append(ProgramInput(targets, False))
+        target = target_owners[0].src
+    var curve = output_array(ShapeN.of([count]))
+    train_program(s[], Int(py=pid), srcs, shapes, target, kind, Float32(py=delta),
+                  opt, params, count, batch, Bool(py=shuffle), seed_word,
+                  FP(unsafe_from_address=Int(py=curve.ctypes.data)))
+    var out = Python.list()
+    out.append(curve)
+    out.append(PythonObject(count))
+    return out

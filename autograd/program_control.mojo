@@ -19,7 +19,7 @@ from autograd.tape import Tape
 def _signature(base: OpsProgram, other: OpsProgram) raises:
     if other.n_in != base.n_in:
         raise Error("control-flow programs must have the same input count")
-    for k in range(base.n_in):  # driver-loop: input metadata
+    for k in range(base.n_in):  # driver-loop: over input metadata
         if other.in_kinds[k] != base.in_kinds[k] or other.in_shapes[k].ndim != base.in_shapes[k].ndim:
             raise Error("control-flow programs must have the same input ranks and kinds")
 
@@ -54,7 +54,7 @@ def _copy_state[E: Exec & Movable & Deinitable](
     var buffers = List[FP]()
     var shapes = List[ShapeN]()
     try:
-        for k in range(len(outputs)):  # driver-loop: loop-carried state tensors
+        for k in range(len(outputs)):  # driver-loop: over loop-carried state tensors
             var slot = s._slot(outputs[k])
             var sh = s.shapes[slot]
             if sh.ndim != body.in_shapes[k].ndim:
@@ -71,7 +71,7 @@ def _copy_state[E: Exec & Movable & Deinitable](
         # Reusing scratch after this point cannot overwrite a state copy.
         s.ex.sync()
     except err:
-        for k in range(len(buffers)):  # driver-loop: acquired state owners
+        for k in range(len(buffers)):  # driver-loop: over acquired state owners
             s.ex.free(buffers[k])
         raise err
     return (buffers^, shapes^)
@@ -79,9 +79,11 @@ def _copy_state[E: Exec & Movable & Deinitable](
 
 def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, body_id: PythonObject, condition_id: PythonObject,
-    other_id: PythonObject, arrays: PythonObject, limit: PythonObject, optimize: PythonObject,
+    other_id: PythonObject, condition_sid: PythonObject, other_sid: PythonObject, arrays: PythonObject, limit: PythonObject, optimize: PythonObject,
 ) raises -> PythonObject:
     # other_id >= 1 selects if/else; other_id == 0 selects a bounded while.
+    if Int(py=condition_sid) != Int(py=sid) or Int(py=other_sid) != Int(py=sid):
+        raise Error("control-flow programs must belong to the same session")
     var s = ops_session[E, KIND](Int(py=sid))
     if s[].tape.is_recording():
         raise Error("control flow requires an inference session")
@@ -101,13 +103,13 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
     if is_loop:
         if len(body.outs) != body.n_in:
             raise Error("while_loop body must return one tensor per input")
-        for k in range(body.n_in):  # driver-loop: state input kinds
+        for k in range(body.n_in):  # driver-loop: over state input kinds
             if body.in_kinds[k] == PROGRAM_IN_IDS:
                 raise Error("while_loop state inputs must hold floating-point values")
-        for k in range(len(body.outs)):  # driver-loop: int32-word outputs cannot become float state
-            var ref = body.outs[k]
-            if ref >= body.n_in:
-                var node = ref - body.n_in
+        for k in range(len(body.outs)):  # driver-loop: over int32-word outputs cannot become float state
+            var value_ref = body.outs[k]
+            if value_ref >= body.n_in:
+                var node = value_ref - body.n_in
                 if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
                     raise Error("while_loop state outputs must hold floating-point values")
     if Bool(py=optimize):
@@ -118,7 +120,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
     var buffers = List[FP]()
     var shapes = List[ShapeN]()
     try:
-        for k in range(len(inputs)):  # driver-loop: initial state upload
+        for k in range(len(inputs)):  # driver-loop: over initial state upload
             var sh = inputs[k].shape
             var buf = s[].ex.alloc(sh.count())
             buffers.append(buf)
@@ -128,7 +130,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
             else:
                 upload_cast(s[].ex, buf, inputs[k].src)
     except err:
-        for k in range(len(buffers)):  # driver-loop: input owners
+        for k in range(len(buffers)):  # driver-loop: over input owners
             s[].ex.free(buffers[k])
         raise err
     var held = Tape()
@@ -149,12 +151,12 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
                     break
                 var outputs = _execute(s[], body, buffers, shapes, temps)
                 var next_state = _copy_state(s[], body, outputs)
-                for k in range(len(buffers)):  # driver-loop: previous state owners
+                for k in range(len(buffers)):  # driver-loop: over previous state owners
                     s[].ex.free(buffers[k])
                 buffers = next_state[0].copy()
                 shapes = next_state[1].copy()
                 iterations += 1
-            for k in range(len(buffers)):  # driver-loop: final state download
+            for k in range(len(buffers)):  # driver-loop: over final state download
                 var a = output_array(shapes[k])
                 s[].ex.download(FP(unsafe_from_address=Int(py=a.ctypes.data)), buffers[k], shapes[k].count())
                 result.append(a)
@@ -162,7 +164,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
             var take_body = _predicate(s[], condition, buffers, shapes, temps)
             var chosen = body.copy() if take_body else other.copy()
             var outputs = _execute(s[], chosen, buffers, shapes, temps)
-            for k in range(len(outputs)):  # driver-loop: selected branch outputs
+            for k in range(len(outputs)):  # driver-loop: over selected branch outputs
                 var a = output_array(s[].shapes[s[]._slot(outputs[k])])
                 s[].download(outputs[k], FP(unsafe_from_address=Int(py=a.ctypes.data)))
                 result.append(a)
@@ -170,18 +172,18 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
         s[]._drop_temps(temps)
         swap(held, s[].tape)
         swap(held, s[].prog_tape)
-        for k in range(len(buffers)):  # driver-loop: current state owners
+        for k in range(len(buffers)):  # driver-loop: over current state owners
             s[].ex.free(buffers[k])
         raise Error("program control flow after " + String(iterations) + " iterations: " + String(err))
     s[]._drop_temps(temps)
     swap(held, s[].tape)
     swap(held, s[].prog_tape)
-    for k in range(len(buffers)):  # driver-loop: current state owners
+    for k in range(len(buffers)):  # driver-loop: over current state owners
         s[].ex.free(buffers[k])
     if not is_loop:
         return _result(result)
     var report = _dict()
-    report.__setitem__("outputs", _result(result))
-    report.__setitem__("iterations", iterations)
-    report.__setitem__("stopped", stopped)
+    report["outputs"] = _result(result)
+    report["iterations"] = iterations
+    report["stopped"] = stopped
     return report
