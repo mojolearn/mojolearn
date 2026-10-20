@@ -175,7 +175,10 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
     from .ops import Session
     from ._x_sequence_model import Sequential
     b = _binding(numeric_mode)
-    kind, _ = b.verify_model_info(os.fspath(path))  # cpu-route: model file read on the host
+    try:
+        kind, _ = b.verify_model_info(os.fspath(path))  # cpu-route: model file read on the host
+    except Exception as exc:  # the binding's refusal names what is wrong with the file
+        raise ValueError(f"{os.fspath(path)} is not a saved model: {exc}") from None
     kind = str(kind)
     exp_in = (expect or {}).get("inputs") or []
     exp_names_in = [e.get("name") for e in exp_in]  # glue: the expected report's input names
