@@ -152,14 +152,14 @@ def _ai(g: OnnxGraph, n: GNode, name: String, default: Int) raises -> Int:
     return n.attrs[k].i
 
 
-def _ail(g: OnnxGraph, n: GNode, name: String, mut out: List[Int]) raises -> Bool:
-    """The ints attribute `name` into out; False when absent."""
+def _ail(g: OnnxGraph, n: GNode, name: String, mut dst: List[Int]) raises -> Bool:
+    """The ints attribute `name` into dst; False when absent."""
     var k = _attr_ix(g, n, name)
     if k < 0:
         return False
     if n.attrs[k].kind != AK_INTS:
         raise _fatal("attribute '" + name + "' of " + g.st.text(n.name) + " is not a list of ints")
-    out = n.attrs[k].ints.copy()
+    dst = n.attrs[k].ints.copy()
     return True
 
 
@@ -1253,7 +1253,7 @@ struct _RProblem(Copyable, Movable):
     var reason: String
 
 
-def _resolve(mut g: OnnxGraph, gnames: List[Int], gdims: List[List[Int]], mut c: RCtx,
+def _resolve(g: OnnxGraph, gnames: List[Int], gdims: List[List[Int]], mut c: RCtx,
              mut no_rule: List[Int], mut problems: List[_RProblem]) raises:
     """importers/_graph.py resolve over the handle's graph."""
     var given = Dict[Int, Int]()

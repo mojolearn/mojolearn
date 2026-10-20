@@ -422,7 +422,8 @@ struct OnnxGraph(Movable):
         self.problems = List[Problem]()
 
     def problem(mut self, name: Int, op: Int, reason: String):
-        self.problems.append(Problem(name, op, self.st.intern(reason)))
+        var k = self.st.intern(reason)
+        self.problems.append(Problem(name, op, k))
 
     def set_init(mut self, var t: TRec):
         """inits[t.name] = t: a repeated name keeps its first place and takes the new value."""
@@ -928,6 +929,9 @@ struct _Reader(Movable):
         self.ext_bufs = List[Int]()
         self.g = OnnxGraph()
 
+    def take_graph(deinit self) -> OnnxGraph:
+        return self.g^
+
     def ext_slice(mut self, t: RawTensor, nbytes: Int, mut buf: Int, mut off: Int) raises:
         """The external data range of `t` (importers' former _External.slice)."""
         var found = False
@@ -953,7 +957,8 @@ struct _Reader(Movable):
             self.ext_paths.append(full)
             self.ext_bufs.append(len(self.g.buf_kind))
             self.g.buf_kind.append(2)
-            self.g.buf_path.append(self.g.st.intern(full))
+            var pk = self.g.st.intern(full)
+            self.g.buf_path.append(pk)
             self.g.buf_size.append(len(body))
             self.ext_data.append(body^)
         var size = len(self.ext_data[k])
@@ -1043,7 +1048,8 @@ struct _Reader(Movable):
             for i in range(len(t.typed)):  # cpu-route: model file parsing (field occurrences)
                 if t.typed[i].num == num:
                     for k in range(t.typed[i].n):  # cpu-route: model file parsing (bytes of one typed field)
-                        self.g.blob.append(self.model[t.typed[i].off + k])
+                        var byte = self.model[t.typed[i].off + k]
+                        self.g.blob.append(byte)
             n = len(self.g.blob) - off
             return True
         var inum = -1
@@ -1449,14 +1455,16 @@ def _read_graph(mut r: _Reader, path: String, m: RawModel) raises:
         if r.g.init_of(nm) >= 0 or nm in dead:
             continue  # an initializer listed as an input (IR 3 style) stays a constant
         try:
-            r.g.inputs.append(r.value(gr.inputs[i], "input"))
+            var v = r.value(gr.inputs[i], "input")
+            r.g.inputs.append(v^)
             inames[nm] = True
         except e:
             r.g.problem(nm, -1, String(e))
             dead[nm] = True
     for i in range(len(gr.outputs)):  # cpu-route: model file parsing (graph outputs)
         try:
-            r.g.outputs.append(r.value(gr.outputs[i], "output"))
+            var v = r.value(gr.outputs[i], "output")
+            r.g.outputs.append(v^)
         except e:
             r.g.problem(r.g.st.intern(gr.outputs[i].name), -1, String(e))
     var available = Dict[Int, Bool]()
@@ -1503,7 +1511,8 @@ def onnx_read_file(path: String) -> OnnxGraph:
         return g^
     var r = _Reader(body^, base)
     r.g.buf_kind.append(0)
-    r.g.buf_path.append(r.g.st.intern(path))
+    var pk = r.g.st.intern(path)
+    r.g.buf_path.append(pk)
     r.g.buf_size.append(size)
     r.g.buf_kind.append(1)
     r.g.buf_path.append(-1)
@@ -1533,8 +1542,8 @@ def onnx_read_file(path: String) -> OnnxGraph:
         g.message = fatal_text(String(e)) if is_fatal(String(e)) else String(e)
         return g^
     r.g.buf_size[BUF_BLOB] = len(r.g.blob)
-    # the model and external file bytes go here; Python maps the files itself
-    return r.g^
+    # the model and external file bytes are freed here; Python maps the files itself
+    return r^.take_graph()
 
 
 # ------------------------------------------------------------- the handles --

@@ -72,9 +72,10 @@ struct PbFields(Movable):
 
     def next(mut self, buf: List[UInt8], mut f: PbField) raises -> Bool:
         """The next field into `f`; False at the end of the message."""
-        if self.pos >= self.end:
+        var end = self.end
+        if self.pos >= end:
             return False
-        var key = pb_varint(buf, self.pos, self.end)
+        var key = pb_varint(buf, self.pos, end)
         var num = Int(key >> UInt64(3))
         var wt = Int(key & UInt64(7))
         if num == 0:
@@ -85,22 +86,22 @@ struct PbFields(Movable):
         f.off = 0
         f.n = 0
         if wt == PB_VARINT:
-            f.v = pb_varint(buf, self.pos, self.end)
+            f.v = pb_varint(buf, self.pos, end)
         elif wt == PB_LEN:
-            var n = pb_varint(buf, self.pos, self.end)
-            if n > UInt64(self.end - self.pos):
+            var n = pb_varint(buf, self.pos, end)
+            if n > UInt64(end - self.pos):
                 raise Error("truncated length-delimited field")
             f.off = self.pos
             f.n = Int(n)
             self.pos += Int(n)
         elif wt == PB_FIXED32:
-            if self.pos + 4 > self.end:
+            if self.pos + 4 > end:
                 raise Error("truncated fixed32")
             f.off = self.pos
             f.n = 4
             self.pos += 4
         elif wt == PB_FIXED64:
-            if self.pos + 8 > self.end:
+            if self.pos + 8 > end:
                 raise Error("truncated fixed64")
             f.off = self.pos
             f.n = 8
@@ -110,10 +111,10 @@ struct PbFields(Movable):
         return True
 
 
-def pb_packed_ints(buf: List[UInt8], f: PbField, mut out: List[Int]) raises:
+def pb_packed_ints(buf: List[UInt8], f: PbField, mut dst: List[Int]) raises:
     """Every int64 of one occurrence of a repeated integer field (packed or not)."""
     if f.wt == PB_VARINT:
-        out.append(f.ival())
+        dst.append(f.ival())
         return
     if f.wt != PB_LEN:
         raise Error("repeated integer field with a fixed wire type")
@@ -121,7 +122,7 @@ def pb_packed_ints(buf: List[UInt8], f: PbField, mut out: List[Int]) raises:
     var end = f.off + f.n
     while pos < end:  # cpu-route: model file parsing (dims, axes and small integer lists)
         var x = pb_varint(buf, pos, end)
-        out.append(Int(bitcast[DType.int64](x)))
+        dst.append(Int(bitcast[DType.int64](x)))
 
 
 def pb_u32(buf: List[UInt8], off: Int) -> UInt32:
