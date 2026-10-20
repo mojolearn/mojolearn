@@ -524,11 +524,15 @@ def _connect_causal_native():
     from .._native_neural_bridge import connect_training
     runtime = runtime_binding()._module
     runtime.native_codec_call("initialize", (Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
-    _backend.default_mode()
+    selected_mode = _backend.default_mode()
     bindings = {"cpu:identical": _causal_native_connections()}
     vendor = _backend.vendor()
     if vendor not in (None, "cpu"):
-        for mode in ("identical", "fast"):  # glue: connects available compiled modes during package import
+        # Mojo-owned block types permit one tier per process. Connect the
+        # user's selected tier first; other tiers retain their normal admission
+        # refusal instead of claiming the default before a fast constructor.
+        modes = (selected_mode, "identical" if selected_mode == "fast" else "fast")
+        for mode in modes:  # glue: connects available compiled modes during package import
             if mode == "fast" and vendor != "metal":
                 continue
             entries = {}
