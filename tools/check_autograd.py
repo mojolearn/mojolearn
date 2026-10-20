@@ -4,6 +4,7 @@
 Run inside the repository's activated Mojo environment. This is a test
 controller, never a product execution path. It does not publish or measure
 performance, and a local GPU pass is not cross-vendor identity evidence.
+The orchestrator invokes it through ~/mojolearn-evidence/compile_slot.sh.
 """
 import argparse
 import json
@@ -77,7 +78,7 @@ def main():
 
     def native(name, source, defines=()):
         binary = out / name
-        command = ['bash', str(ROOT / 'tools/with_build_lock.sh'), mojo, 'build', '-j', '2',
+        command = ['bash', str(ROOT / 'tools/with_build_lock.sh'), mojo, 'build', '-j', '1',
                    '-D', 'MOJOLEARN_NUMERIC_IDENTICAL=1', '-I', str(ROOT)]
         for define in defines:
             command += ['-D', define]
@@ -178,7 +179,7 @@ def main():
                                           'results': len(a), 'mismatches': mismatches})
             if mismatches:
                 raise RuntimeError(f'local CPU/GPU fixture bits differ: {mismatches}')
-        if args.only == 'higher':
+        if args.only in ('all', 'higher'):
             # Higher-order gradients (create_graph): the generated suite on each
             # backend; HIGHER_DIGEST <case> <digest> lines are kept per backend
             # for the cross-vendor diff (CPU, Metal, NVIDIA, AMD: 0 differing).
