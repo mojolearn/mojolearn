@@ -18,6 +18,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verify_alpha_artifacts as gate
+from verify_linux_surface_qualification import RELEASE_ARCHES  # the registry's release sets
 
 
 class CombinedLinuxTests(unittest.TestCase):
@@ -81,7 +82,7 @@ class CombinedLinuxTests(unittest.TestCase):
     def test_full_checker_required_and_exact_wheel_passed(self):
         digest = self.stage()
         checker = Mock(return_value=dict(status='PASSED', wheel_sha256=gate.wheel_digest(self.wheel),
-                       runtime_coverage={key: 'fixture' for key in ('cuda/sm_89', 'cuda/sm_90', 'hip/gfx942')}))
+                       runtime_coverage={key: 'fixture' for key in RELEASE_ARCHES}))
         result = self.check_with_mock(digest, checker)
         self.assertTrue(result['passed'])
         self.assertEqual(checker.call_count, 1)
@@ -100,7 +101,7 @@ class CombinedLinuxTests(unittest.TestCase):
                 self.members[self.prefix + 'LINUX_PAYLOAD.json'] = self.payload(profile)
                 digest = self.stage()
                 checker = Mock(return_value=dict(status='PASSED', wheel_sha256=gate.wheel_digest(self.wheel),
-                               runtime_coverage={key: 'fixture' for key in ('cuda/sm_89', 'cuda/sm_90', 'hip/gfx942')}))
+                               runtime_coverage={key: 'fixture' for key in RELEASE_ARCHES}))
                 result = self.check_with_mock(digest, checker)
                 self.assertTrue(result['passed'])
                 self.assertEqual(result['version'], self.version)
@@ -120,7 +121,7 @@ class CombinedLinuxTests(unittest.TestCase):
     def test_wrong_final_wheel_digest_refused(self):
         digest = self.stage()
         checker = Mock(return_value=dict(status='PASSED', wheel_sha256='0' * 64,
-                       runtime_coverage={key: 'fixture' for key in ('cuda/sm_89', 'cuda/sm_90', 'hip/gfx942')}))
+                       runtime_coverage={key: 'fixture' for key in RELEASE_ARCHES}))
         with self.assertRaises(Exception):
             self.check_with_mock(digest, checker)
 

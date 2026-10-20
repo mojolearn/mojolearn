@@ -86,13 +86,11 @@ HOST_NAME = next(n for n in HOST_NAMES if n.endswith('_byte_lm_host'))
 HOST_MEMBER = 'mojolearn/host/' + HOST_NAME + '.so'
 MODE_READBACK = surface.BINDINGS - {'_mojolearn_estimators', '_mojolearn_rf',
                                  '_mojolearn_trees', '_mojolearn_solver', '_mojolearn_tsa'}
-# The three SLOTS a release wheel must fill. DEVIATION 2293: this stays the
-# canonical triple, because it is what says WHICH slots exist. Which spelling
-# the Hopper slot actually carries is a property of the built wheel, read off
-# the wheel, never assumed from here -- widening this constant instead made a
-# test fixture build four architectures and fill Hopper twice.
-RELEASE_ARCHES = frozenset(surface.RELEASE_ARCHES)
-RELEASE_ARCHES_ACCEPTED = RELEASE_ARCHES | {'cuda/sm_90a'}
+# The sets a release must carry, and every set it may carry, are the
+# registry's (python/mojolearn/gpu_plugins.py through surface.RELEASE_ARCHES,
+# surface.REGISTERED_ARCHES): never spelled here. Which optional sets and which
+# spelling of a slot a release carries is read off the built wheel.
+RELEASE_ARCHES = surface.RELEASE_ARCHES
 #: Both GPU vendors: what the combined release-linux3 wheel must carry.
 BOTH_VENDORS = ('cuda', 'hip')
 #: THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): the packer
@@ -102,12 +100,10 @@ SPLIT_PROFILE = 'release-split'
 
 
 def carried_ok(carried, vendors):
-    """The architecture keys a wheel (or a split set) carries are exactly the
-    release slots of `vendors`: the release triple for both vendors, each
-    vendor's share of it otherwise, the Hopper slot spelled either way."""
+    """The architecture keys a wheel (or a split set) carries are a complete
+    release set of each of `vendors` (surface.plugin_arch_set_ok: every
+    required set, optional registered sets, no slot twice) and nothing else."""
     vendors = tuple(sorted(vendors))
-    if vendors == BOTH_VENDORS and surface.arch_set_ok(carried):
-        return True
     return bool(vendors) and {k.split('/')[0] for k in carried} == set(vendors) and all(
         surface.plugin_arch_set_ok(v, [k for k in carried if k.startswith(v + '/')]) for v in vendors)
 # DEVIATION 2290. No version literal on this path: the version is whatever the
@@ -403,13 +399,13 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
 
 
 def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, vendors=BOTH_VENDORS):
-    """File-only three-architecture preflight, also recomputed at final admission.
+    """File-only release-set preflight, also recomputed at final admission.
 
     `wheel_sha` and `vendors` are the split set's (split_release_audit): the
     set digest stands for the wheel digest and the vendors are the ones the
     split core was packed with."""
     wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
-    require(runtime_key in RELEASE_ARCHES_ACCEPTED, 'Unknown runtime architecture')
+    require(runtime_key in surface.REGISTERED_ARCHES, 'Unknown runtime architecture')
     host_extensions, indexes = {}, {}
     extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True,
                                      host_out=host_extensions, vendors=vendors, index_out=indexes)
@@ -417,8 +413,8 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
     version = surface.release_version(source_root)  # DEVIATION 2290: the source root's, never a literal
     carried = {'/'.join(k.split('/')[:2]) for k in sets}
     require(carried_ok(carried, vendors),
-            version + ' requires exactly the release slots of ' + '+'.join(sorted(vendors))
-            + ' (sm_89, sm_90 or sm_90a, gfx942)')
+            version + ' requires the release sets of ' + surface.release_contract(vendors)
+            + '; carried ' + (', '.join(sorted(carried)) or 'none'))
     require(runtime_key in carried, 'Qualified architecture is not one this wheel carries')
     inventory = tracked_native_inventory(source_root)
     source_sha = inventory_digest(inventory)
@@ -526,14 +522,14 @@ def check_release061(wheel, qualification_root, source_root, wheel_sha=None, ven
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     proof_root = qualification_root / 'build-proofs'
     inventory = tracked_native_inventory(source_root)
-    # DEVIATION 2293: the architectures are the ones the WHEEL carries, with
-    # the Hopper slot spelled however it was built. arch_set_ok still requires
-    # exactly the three slots, filled once each.
+    # DEVIATION 2293: the architectures are the ones the WHEEL carries, a slot
+    # spelled however it was built: every required set of the registry, any
+    # optional registered set, each slot filled once.
     carried = {'/'.join(k.split('/')[:2])
                for k in inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True, vendors=vendors)[1]}
     require(carried_ok(carried, vendors),
-            surface.release_version(source_root)
-            + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
+            surface.release_version(source_root) + ' requires the release sets of '
+            + surface.release_contract(vendors) + '; carried ' + (', '.join(sorted(carried)) or 'none'))
     directories = {}
     tiers = {}
     observed_failures = {}
@@ -594,17 +590,20 @@ def check_release061(wheel, qualification_root, source_root, wheel_sha=None, ven
                 'No full 25-job qualification for any ' + vendor + ' architecture')
     require(set(tiers) == carried, 'An architecture the wheel carries has no qualification at all')
     comparisons = {}
-    # DEVIATION 2293: whichever Hopper spelling this wheel actually carries.
+    # Every CUDA set the wheel carries (native, PTX, an optional Hopper or
+    # Blackwell set, spelled however it was built) against the HIP set(s).
     # A one-vendor split set (the core and one plugin) has no second vendor
     # to compare against; its identity across vendors is the release
     # columns' (tools/release.py gpu-columns), not this file check's.
-    for cuda in sorted(k for k in directories if k.startswith('cuda/') and 'hip/gfx942' in directories):
-        umap = surface.compare(directories['hip/gfx942'], directories[cuda],
-                               allowances.get('hip/gfx942', frozenset()),
-                               allowances.get(cuda, frozenset()))
-        ordered = compare_ordered_python.compare(directories['hip/gfx942'], directories[cuda])
-        require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
-        comparisons[cuda] = dict(umap=umap, ordered=ordered)
+    hips = sorted(k for k in directories if k.startswith('hip/'))
+    for hip in hips:
+        for cuda in sorted(k for k in directories if k.startswith('cuda/')):
+            umap = surface.compare(directories[hip], directories[cuda],
+                                   allowances.get(hip, frozenset()),
+                                   allowances.get(cuda, frozenset()))
+            ordered = compare_ordered_python.compare(directories[hip], directories[cuda])
+            require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
+            comparisons[cuda if len(hips) == 1 else cuda + ' vs ' + hip] = dict(umap=umap, ordered=ordered)
     return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
                 assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=wheel_sha or digest_file(wheel),
                 source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=len(surface.expected_jobs({'assembly_profile': surface.RELEASE_PROFILE})),
