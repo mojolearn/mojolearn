@@ -2383,13 +2383,8 @@ class Generator(object):
         """
         return _native_samba_bridge.RUNTIME.generator_draw("normal", (self, shape, mean, std), _native_samba_bridge.CONTEXT)
 
-    # `a=None` means sqrt(5) and is not a behavior change (2026-09-20). The default used to read
-    # `a=math.sqrt(5.0)`, evaluated at class definition time; `math` here is `_portable_math`, whose sqrt
-    # dlopens .libs/libMojolearnMath.so, so `import mojolearn` failed on a fresh Linux box without that
-    # library. The sentinel defers the same native call to call time rather than replacing it with a
-    # literal: a literal would be a second answer to the question `_portable_math` answers, and proving
-    # it equal would mean proving the native sqrt correctly rounded on every platform. Deferring keeps
-    # bit-identity by construction.
+    # None defaults are evaluated by the native owner through the same
+    # portable-math ABI as before; no precomputed square-root literals.
     def kaiming_uniform(self, shape, fan_in, a=None):
         """Kaiming-uniform initialization, as `torch.nn.init.kaiming_uniform_`.
 
@@ -2405,31 +2400,19 @@ class Generator(object):
         a : float or None, default None
             Negative slope; None means sqrt(5).
         """
-        if a is None:
-            a = math.sqrt(5.0)
-        gain = math.sqrt(2.0 / (1.0 + float(a) * float(a)))
-        bound = gain * math.sqrt(3.0 / float(int(fan_in)))
-        return self.uniform(shape, -bound, bound)
+        return _native_samba_bridge.RUNTIME.generator_draw("kaiming_uniform", (self, shape, fan_in, a), _native_samba_bridge.CONTEXT)
 
     def xavier_uniform(self, shape, fan_in, fan_out, gain=1.0):
         """Xavier-uniform initialization with bound ``gain * sqrt(6 / (fan_in + fan_out))``."""
-        bound = float(gain) * math.sqrt(
-            6.0 / float(int(fan_in) + int(fan_out)))
-        return self.uniform(shape, -bound, bound)
+        return _native_samba_bridge.RUNTIME.generator_draw("xavier_uniform", (self, shape, fan_in, fan_out, gain), _native_samba_bridge.CONTEXT)
 
     def kaiming_normal(self, shape, fan_in, gain=None):
         """Kaiming-normal initialization with std ``gain / sqrt(fan_in)``; `gain` None means sqrt(2)."""
-        # `gain=None` means sqrt(2), deferred for the reason spelled out on
-        # kaiming_uniform above: the same native call, one frame later.
-        if gain is None:
-            gain = math.sqrt(2.0)
-        return self.normal(
-            shape, 0.0, float(gain) / math.sqrt(float(int(fan_in))))
+        return _native_samba_bridge.RUNTIME.generator_draw("kaiming_normal", (self, shape, fan_in, gain), _native_samba_bridge.CONTEXT)
 
     def xavier_normal(self, shape, fan_in, fan_out, gain=1.0):
         """Xavier-normal initialization with std ``gain * sqrt(2 / (fan_in + fan_out))``."""
-        return self.normal(shape, 0.0, float(gain) * math.sqrt(
-            2.0 / float(int(fan_in) + int(fan_out))))
+        return _native_samba_bridge.RUNTIME.generator_draw("xavier_normal", (self, shape, fan_in, fan_out, gain), _native_samba_bridge.CONTEXT)
 
     def dropout(self, x, p, offset=0, stream=None):
         """Inverted dropout of a float32 array.

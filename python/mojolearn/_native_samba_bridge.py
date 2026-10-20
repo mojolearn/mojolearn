@@ -59,10 +59,21 @@ def connect(config_cls, model_cls, training, neural):
             if not all(isinstance(value, BuiltinFunctionType) for value in symbols.values()):  # glue: validate connection entries at import
                 raise TypeError("Generator execution requires compiled native RNG entries")
             generator_bindings[key] = symbols
+    from . import _portable_math
+    try:
+        # cpu-route: connect the existing portable binary64 scalar sqrt ABI;
+        # native initializer preparation calls this C function directly.
+        generator_sqrt = _portable_math._load().mojolearn_sqrt
+        generator_sqrt_type = type(generator_sqrt)
+    except OSError as exc:
+        # Preserve import without the optional scalar library. Only an
+        # initializer requiring sqrt refuses, before consuming a stream.
+        generator_sqrt, generator_sqrt_type = str(exc), None
     return {
         **core,
         "generator_bindings": generator_bindings, "generator_backend": _backend,
         "generator_index": _operator.index,
+        "generator_sqrt": generator_sqrt, "generator_sqrt_type": generator_sqrt_type,
         "neural": neural.CONTEXT, "entries": SimpleNamespace(**entries),
         "mode": mode, "vendor": _backend.vendor(), "config_class": config_cls,
         "model_class": model_cls, "optimizer_class": training.AdamW,
