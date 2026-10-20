@@ -70,3 +70,4 @@ Session.execution_profile_begin	native execution counters; installed-release qua
 Session.execution_profile_end	native execution counters; installed-release qualification pending
 Program.save_control	control checkpoint; installed-release qualification pending
 Session.load_control	control checkpoint; installed-release qualification pending
+Session.gradient_report	native gradient diagnostics; installed-release qualification pending

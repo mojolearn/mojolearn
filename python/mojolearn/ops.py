@@ -245,6 +245,10 @@ class Session:
         """Release tensor ``h``; its memory is reused after :meth:`reset`."""
         return self._session_native(self, "free", (h,))
 
+    def gradient_report(self, handles, *, values=True):
+        """Explain gradient availability and report nonfinite or zero values for tensors."""
+        return self._session_native(self, "gradient_report", (handles, values))
+
     def execution_profile_begin(self):
         """Begin executor allocation, transfer, synchronization and operation accounting."""
         return self._session_native(self, "execution_profile_begin", ())

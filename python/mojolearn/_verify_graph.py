@@ -21,9 +21,9 @@ EXPECTED_CASES = (
     "training_after_optimization", "node_diagnostics_and_profile",
     "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
     "variable_rank_replay",
-    "executed_control_vjp", "executor_accounting", "control_checkpoint",
+    "executed_control_vjp", "executor_accounting", "control_checkpoint", "gradient_diagnostics",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4)))
 
 
 _AUDITS = []
@@ -378,6 +378,50 @@ def node_diagnostics_and_profile():
                  "program node 0 (matmul) inputs=[(2, 5), (3, 2)]")
         _equal(_invoke(p.run, a), out)
         return [out]
+
+
+def gradient_diagnostics():
+    import numpy as np
+    from . import ops
+    a = np.array([[0, -2], [3, -4]], np.float32)
+    with ops.Session(record=True) as s:
+        x = s.tensor(a, requires_grad=True)
+        unrelated = s.tensor([[7]], requires_grad=True)
+        constant = s.tensor([[5]])
+        square = s.mul(x, x)
+        loss = s.sum(square)
+        before = _invoke(s.gradient_report, [x, square, constant], values=False)
+        assert all(row["value"] is None and not row["available"] for row in before)
+        assert before[0]["requires_grad"] and before[1]["parents"]
+        assert not before[2]["requires_grad"]
+        _invoke(s.backward, loss)
+        expected = _invoke(s.grad, x)
+        rows = _invoke(s.gradient_report, [x, square, unrelated, constant])
+        assert rows[0]["shape"] == (2, 2) and rows[0]["available"]
+        assert rows[0]["gradient"] == {"has_nan": False, "has_infinity": False,
+                                       "has_zero": True, "all_zero": False, "squared_l2_float32": 116.0}
+        assert rows[0]["value"]["squared_l2_float32"] == 29.0
+        assert rows[1]["gradient"]["squared_l2_float32"] == 4.0
+        assert rows[2]["gradient"]["all_zero"] and rows[2]["gradient"]["squared_l2_float32"] == 0.0
+        assert not rows[3]["available"] and "does not require" in rows[3]["reason"]
+        after = _invoke(s.grad, x)
+        _equal(after, expected)
+        _invoke(s.backward, loss, accumulate=True)
+        twice = _invoke(s.grad, x)
+        _equal(twice, expected * np.float32(2))
+        poisoned = s.tensor(np.array([[np.nan, np.inf, -np.inf, 0]], np.float32), requires_grad=True)
+        poison_loss = s.sum(s.mul(poisoned, poisoned))
+        _invoke(s.backward, poison_loss)
+        poison = _invoke(s.gradient_report, poisoned)[0]
+        assert poison["gradient"]["has_nan"] and poison["gradient"]["has_infinity"]
+        assert poison["gradient"]["has_zero"] and not poison["gradient"]["all_zero"]
+        assert poison["value"]["has_nan"] and poison["value"]["has_infinity"]
+        flags = np.array([[poison["gradient"]["has_nan"], poison["gradient"]["has_infinity"],
+                           poison["gradient"]["has_zero"], poison["gradient"]["all_zero"]]], np.float32)
+        s.free(constant)
+        _refuses(lambda: _invoke(s.gradient_report, [x, constant]), "not a live", ValueError)
+        assert _invoke(s.gradient_report, x, values=False)[0]["available"]
+    return [expected, after, twice, flags]
 
 
 def control_checkpoint():
