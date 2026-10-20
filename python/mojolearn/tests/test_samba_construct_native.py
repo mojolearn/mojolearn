@@ -6,6 +6,9 @@ import pytest
 from mojolearn import SambaConfig, SambaStack
 from mojolearn import _samba_impl as samba
 from mojolearn import _training_impl as training
+from mojolearn import _native_samba_bridge as bridge
+from mojolearn._mamba_impl import Mamba3Block
+from mojolearn._transformer_impl import TransformerBlock
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_causal_model_native_loading import _poison
 
@@ -63,8 +66,11 @@ def test_native_constructor_preserves_seeded_initialization_and_views(
         assert value._base is model.flat
         assert value._addr == model.flat._addr + 4 * model.offsets[i]
         assert value.shape == shape
-    for block in model._blocks:
-        assert block.numeric_profile == "fp32_v1"
+    for kind, block in zip(layers, model._blocks):
+        assert type(block) is (Mamba3Block if kind == "mamba3" else TransformerBlock)
+        assert block._native_route == ("cpu" if bridge.CONTEXT["vendor"] in (None, "cpu") else "gpu")
+        if kind == "attention":
+            assert block.numeric_profile == "fp32_v1"
 
 
 def test_native_explicit_weight_constructor_and_load_preserve_aliases(monkeypatch):

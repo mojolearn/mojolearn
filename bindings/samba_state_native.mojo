@@ -294,6 +294,13 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
     model._blocks = bi.list()
     var route = PythonObject("cpu" if context["vendor"] is None or String(context["vendor"]) == "cpu" else "gpu")
     var nc = context["neural"]
+    # Samba preserves its training block interfaces on CPU-only installs too.
+    # The execution route still selects the installed native CPU kernels; only
+    # the Python-facing class differs from checkpoint inference construction.
+    var block_context = bi.dict(nc)
+    var classes = bi.dict(nc["block_classes"])
+    classes[route] = nc["block_classes"]["gpu"]
+    block_context["block_classes"] = classes
     for i in range(len(config.layers)):  # driver-loop: over configured model layers
         var layer_kind = String(config.layers[i])
         var kind = "mamba3" if layer_kind == "mamba3" else "transformer"
@@ -315,7 +322,7 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
             # SambaConfig.norm_eps controls only the final stack normalization.
             plan.block_options["norm_eps"] = PythonObject(1e-6)
         var bindings = _model_bindings(route, kind, nc, model.numeric_mode)
-        var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, nc)
+        var block = _model_block(weights, plan, PythonObject("fp32_v1"), route, bindings, block_context)
         var block_fields = samba_fields(block)
         block_fields["numeric_mode"] = model.numeric_mode
         if kind == "mamba3":
