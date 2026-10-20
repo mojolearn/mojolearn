@@ -123,7 +123,7 @@ from tokenizer.train.bpe_train import (
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
 from bindings.causal_lm_public import (
-    GenerationHandle, causal_lm_admit_binding, causal_lm_allocate_binding,
+    GenerationHandle, causal_public_c, causal_lm_admit_binding, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
     causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
@@ -1872,21 +1872,22 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         module.def_function[generation_initialize_binding]("generation_initialize")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
-        module.def_function[causal_lm_admit_binding]("causal_lm_admit")
-        module.def_function[causal_lm_allocate_binding]("causal_lm_allocate")
-        module.def_function[causal_lm_reset_binding]("causal_lm_reset")
-        module.def_function[causal_lm_forward_binding]("causal_lm_forward")
-        module.def_function[causal_lm_stream_binding]("causal_lm_stream")
-        module.def_function[causal_lm_read_binding]("causal_lm_read")
-        module.def_function[causal_lm_info_binding]("causal_lm_info")
-        module.def_function[causal_lm_generate_binding]("causal_lm_generate")
-        module.def_function[causal_lm_text_stream_binding]("causal_lm_text_stream")
-        module.def_function[causal_lm_generate_text_binding]("causal_lm_generate_text")
-        module.def_function[causal_lm_resident_binding]("causal_lm_resident")
-        module.def_function[causal_lm_snapshot_binding]("causal_lm_snapshot")
-        module.def_function[causal_lm_resume_binding]("causal_lm_resume")
-        module.def_function[causal_lm_parameters_binding]("causal_lm_parameters")
-        module.def_function[causal_lm_blocks_binding]("causal_lm_blocks")
+        module.def_py_c_function(causal_public_c[0], "causal_lm_admit")
+        module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
+        module.def_py_c_function(causal_public_c[2], "causal_lm_reset")
+        module.def_py_c_function(causal_public_c[3], "causal_lm_forward")
+        module.def_py_c_function(causal_public_c[4], "causal_lm_stream")
+        module.def_py_c_function(causal_public_c[5], "causal_lm_read")
+        module.def_py_c_function(causal_public_c[6], "causal_lm_info")
+        module.def_py_c_function(causal_public_c[7], "causal_lm_generate")
+        module.def_py_c_function(causal_public_c[8], "causal_lm_text_stream")
+        module.def_py_c_function(causal_public_c[9], "causal_lm_generate_text")
+        module.def_py_c_function(causal_public_c[10], "causal_lm_resident")
+        module.def_py_c_function(causal_public_c[11], "causal_lm_snapshot")
+        module.def_py_c_function(causal_public_c[12], "causal_lm_resume")
+        module.def_py_c_function(causal_public_c[13], "causal_lm_parameters")
+        module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
+        module.def_py_c_function(causal_public_c[15], "causal_state_init")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))
