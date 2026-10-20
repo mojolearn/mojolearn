@@ -42,8 +42,11 @@ from autograd.rankn_api import rn_dims, rn_shape
 
 # The description's record version (the first extension word of a saved program).
 comptime PROGRAM_RECORD_VERSION = 1
-# The largest operation code a program may hold (autograd/ops_api.mojo OPS_*).
-comptime PROGRAM_MAX_CODE = 46
+# The largest operation code a program may hold (autograd/ops_api.mojo OPS_*):
+# OPS_PAD 73, the last of the import family (lane ag-import-kernels), so a
+# saved imported model that uses those operations loads again. Code 47 is
+# reserved and refused below.
+comptime PROGRAM_MAX_CODE = 73
 
 
 struct OpsLog(Movable):
@@ -175,8 +178,8 @@ def shape_text(s: ShapeN) -> String:
 def program_refuses_code(code: Int) -> Bool:
     """Operations a program cannot hold: their integer arguments carry the
     address of a caller array (autograd/ops_api.mojo OPS_EMBEDDING = 32,
-    OPS_TAKE = 41)."""
-    return code == 32 or code == 41
+    OPS_TAKE = 41), and the reserved code 47, which names no operation."""
+    return code == 32 or code == 41 or code == 47
 
 
 # ---------------------------------------------------------------- words
