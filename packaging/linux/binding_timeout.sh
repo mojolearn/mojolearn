@@ -27,6 +27,24 @@ binding_timeout_seconds() {
   printf '%s' "$t"
 }
 
+# ONE MERGED BUILD, BOUNDED (the merged bindings, 2026-10-20). In the merged
+# layout (MOJOLEARN_MERGED_BINDINGS=1, bindings/merged_build.sh) one compile
+# builds every member of a directory set at once, so one binding's bound is far
+# too short for it. RELEASE_MERGED_TIMEOUT_SECONDS, default 3 x the binding
+# bound (3600 s at the default): the per-binding legs built 75 bindings in 11
+# to 13 minutes over four jobs (about 45 to 50 minutes of serial compile), and
+# a merged directory compiles its ~32 members' shared code once; the bound is
+# NOT yet measured on a merged leg, so read the first leg's build_logs/*_merged.log
+# durations and set it from them. It stays inside the 2-hour rental dead-man.
+# Not MOJOLEARN_* for the same reason as the binding bound (bincache key).
+merged_timeout_seconds() {
+  local b t
+  b=$(binding_timeout_seconds) || return 2
+  t="${RELEASE_MERGED_TIMEOUT_SECONDS:-$((3 * b))}"
+  [[ "$t" =~ ^[1-9][0-9]*$ ]] || { echo 'RELEASE_MERGED_TIMEOUT_SECONDS must be a positive integer' >&2; return 2; }
+  printf '%s' "$t"
+}
+
 # kill_tree SIG PID: SIG to PID's descendants (deepest first), then PID.
 kill_tree() {
   local sig="$1" pid="$2" child
