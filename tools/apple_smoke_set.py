@@ -38,7 +38,9 @@ THE AUTOGRAD ENTRIES (2026-10-19, lane ag-bench) are pinned beside the derived s
 under every neural trainer, so a broken tape must stop a release even when no derived lane lands
 on its files first. They are tools/autograd_smoke.py's ENTRIES (the gradient suite, the MLP
 identity check, the tiny fit test, the public examples, and since 2026-10-19 (lane ag-board-twins)
-the Sequential and ops.Session probes of the board's sequential-fit and ops-session-step lanes),
+the Sequential and ops.Session probes of the board's sequential-fit and ops-session-step lanes, and
+since 2026-10-20 the importer probes import-model-smoke and import-torch-smoke, the latter `SKIPPED`
+without torch),
 each a 5 s "does it start" row on the vendor (`metal` here),
 listed by `--autograd` and run by `tools/autograd_smoke.py run --vendor metal`.
 """

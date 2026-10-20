@@ -14,7 +14,9 @@ start" each: the gradient suite and the MLP identity check from the check binari
 into <out-root>/autograd-bin (`tools/autograd_smoke.py build-commands`), and the tiny fit test, the public
 examples and the Sequential and ops.Session probes (2026-10-19, lane ag-board-twins: the board's
 sequential-fit and ops-session-step lanes in miniature) through the installed wheel. A missing binary reads
-`not built`, never a pass.
+`not built`, never a pass. The importer probes (import-model-smoke; since 2026-10-20, lane ag-torch-twins,
+import-torch-smoke, a torch.export import) run there too; import-torch-smoke reads `SKIPPED` when the
+wheel's environment has no torch (set MOJOLEARN_REQUIRE_TORCH=1 in the box environment to fail instead).
 Nothing here times, measures, rents or deletes anything.
 """
 

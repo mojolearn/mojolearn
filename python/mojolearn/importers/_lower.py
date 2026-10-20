@@ -78,7 +78,7 @@ SUPPORTED_OPS = (
     ("LogSoftmax", "any axis"),
     ("MatMul", "any ranks that broadcast as NumPy's matmul"),
     ("Max", "inputs that broadcast"),
-    ("MaxPool", "2-D, square kernel_shape, equal strides, zero pads, dilations 1; the Indices output unused"),
+    ("MaxPool", "2-D, square kernel_shape, equal strides, pads smaller than the kernel, dilations 1; the Indices output unused"),
     ("Min", "inputs that broadcast"),
     ("Mul", "inputs that broadcast"),
     ("Neg", "any input"),
@@ -413,7 +413,17 @@ def _c_pool(G, n):
         out.append(f"kernel_shape={k} (only a square kernel is supported)")
     if len(set(st)) != 1:
         out.append(f"strides={st} (only equal strides are supported)")
-    if any(p != 0 for p in pads) or n.attrs.get("auto_pad", "NOTSET") not in ("NOTSET", "VALID"):  # cpu-route: model graph lowered on the host (one per side)
+    if n.attrs.get("auto_pad", "NOTSET") not in ("NOTSET", "VALID"):
+        out.append(f"auto_pad={n.attrs.get('auto_pad')} (only NOTSET and VALID are supported)")
+    elif n.op == "MaxPool":
+        # lane ag-real-models (2026-10-20): a padded MaxPool (torchvision's ResNet stem) lowers as a
+        # constant pad with the lowest float32 and an unpadded pool. A pad smaller than the kernel
+        # leaves a real element in every window, so the padded positions never win the max.
+        if k and any(p >= k[0] for p in pads):  # cpu-route: model graph lowered on the host (one per side)
+            out.append(f"pads={pads} (only pads smaller than the kernel are supported)")
+        elif any(p < 0 for p in pads):  # cpu-route: model graph lowered on the host (one per side)
+            out.append(f"pads={pads} (negative pads are not supported)")
+    elif any(p != 0 for p in pads):  # cpu-route: model graph lowered on the host (one per side)
         out.append(f"pads={pads} (only zero pads are supported)")
     if any(d != 1 for d in dil):  # cpu-route: model graph lowered on the host (one per spatial axis)
         out.append(f"dilations={dil} (only 1 is supported)")
@@ -421,7 +431,7 @@ def _c_pool(G, n):
         out.append("storage_order=1 is not supported")
     if n.attrs.get("ceil_mode", 0) and k and st:
         # ceil_mode changes nothing when every window fits exactly
-        floor = tuple((s[2 + i] - k[i]) // st[i] + 1 for i in range(2))  # cpu-route: model graph lowered on the host (two spatial axes)
+        floor = tuple((s[2 + i] + pads[i] + pads[2 + i] - k[i]) // st[i] + 1 for i in range(2))  # cpu-route: model graph lowered on the host (two spatial axes)
         if tuple(G.shape(n.outputs[0])[2:]) != floor:
             out.append("ceil_mode=1 with a partial last window is not supported")
     return out
@@ -973,10 +983,19 @@ def _l_conv(L, n):
     return [L.fit(s.conv2d(hx, hw, hb, stride=stride, padding=0), n.outputs[0])]
 
 
+#: the fill of a padded MaxPool's border: the lowest finite float32, below every real value
+_MAXPOOL_PAD = -3.4028234663852886e38
+
+
 def _l_pool(L, n):
-    k, st, _, _ = _window(n, 2)
+    k, st, pads, _ = _window(n, 2)
+    x = _x(L, n)
+    if n.op == "MaxPool" and any(pads):  # cpu-route: model graph lowered on the host (four sides)
+        # ONNX pads (top, left, bottom, right) as session pads: two per axis of (N, C, H, W)
+        x = L.s.pad(x, [0, 0, pads[0], pads[1], 0, 0, pads[2], pads[3]], _MAXPOOL_PAD)
+        return [L.s.max_pool2d(x, k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
     f = L.s.max_pool2d if n.op == "MaxPool" else L.s.avg_pool2d
-    return [f(_x(L, n), k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
+    return [f(x, k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
 
 
 def _l_pad(L, n):

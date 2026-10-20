@@ -393,6 +393,30 @@ Quality on the inference board (lane ag-inference-board, `program-run`):
 the imported Program's accuracy or perplexity is shown beside the torch
 twin's on the same checkpoint, time beside time, never as a gate.
 
+### 5.1 Torch twins (inventory, lane ag-torch-twins, 2026-10-20)
+
+Every public surface that claims closeness to torch or reads from it, what
+compares it against torch, and where that runs. None is a gate: torch's bits
+are a reference. Identity is decided by the digest lines across CPU, Metal,
+NVIDIA and AMD. The Mac test environment (the default pixi environment) has
+no torch, so every torch test there skips with `no torch in this
+environment (<error>)`; the `skgpu` pixi environment and the board venvs
+have torch, and box runs set `MOJOLEARN_REQUIRE_TORCH=1`, which turns that
+skip into a failure.
+
+| surface | compared against torch by | runs where | role |
+|---|---|---|---|
+| `import_model(ExportedProgram)` | python/mojolearn/tests/test_import_torch.py: the reader on every shared fixture; the torch.export import equals the ONNX import word for word; `IMPORT_TORCH_REFERENCE` max abs/rel to torch's forward, printed | Mac (skips without torch), boxes with torch | reference (torch distance printed); `IMPORT_DIGEST torch_*` is the identity line |
+| `import_model(ExportedProgram)`, does it start | tools/autograd_smoke.py `import-torch-smoke`: linear, layer norm, linear exported and run once; `RUN torch <v>` + `SMOKE_DIGEST`, or `SKIPPED no torch` | Apple smoke set (tools/apple_smoke_set.py), NVIDIA/AMD gate smoke (tools/gate_smoke_box.py) | smoke only, no torch comparison |
+| `import_model` closeness report | tools/import_compare.py `--torch FILE.py` | on demand, anywhere torch is installed | reference report |
+| `Sequential.load_state_dict(module.state_dict())`, `Session.load_weights(mapping)` | python/mojolearn/tests/test_torch_state_dict.py (added by this lane): a real torch state_dict in float32/bfloat16/float16 loads to torch's words exactly; `TORCH_STATE_DICT_REFERENCE` forward distance, printed. python/mojolearn/tests/test_weight_import.py covers the same entries torch-free (NumPy mappings with `source='torch'`) | Mac (skips without torch), boxes with torch | reference; `TORCH_STATE_DICT_DIGEST` is the identity line |
+| board `sequential-fit`, `sequential-predict` | tools/bench_board_neural.py TorchFitArm: the same torch.nn network, torch.optim.Adam, same sizes, batch, lr and seed | board boxes (NVIDIA, AMD, Apple); opponents scored once | reference: quality beside time |
+| board `ops-session-step` | the same step in torch autograd + torch.optim.SGD, same weights; each gradient's max difference from ours | board boxes | reference |
+| board `program-run` | the same forward in torch under `no_grad`; max error from a float64 forward and from ours | board boxes | reference |
+| board `mlp-train-step`, `mlp-predict`, `lm-*`, `transformer-*`, `mamba*-forward`, `samba-*`, `gemm` | the twins of docs/BENCH_BOARD.md's neural table (`F.linear` MLP, `torch_lm_step_opponent.py`, `LlamaEager`, the Mamba references) | board boxes | reference (the Mamba ones against pure-PyTorch references) |
+| board RNN/LSTM/GRU/CNN fit lanes | tools/bench_board_algos.py torch twins starting from ours' exported initial weights and row orders | board boxes | reference |
+| `CausalLM` (`causal-lm-generate*`) | transformers `LlamaForCausalLM.generate` on the same checkpoint; new ids equal or first divergence | board boxes | reference |
+
 ## 6. The Python surface (user voice)
 
 ```python
