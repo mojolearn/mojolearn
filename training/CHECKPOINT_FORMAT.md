@@ -820,6 +820,19 @@ counts do not add up to E. The record's meaning belongs to the kind:
   them through `OpsSession.load_optimizer_state`, the session's one restore
   path, so the next `step` continues word for word. The header `t` is the
   first parameter's step count.
+- **3, captured program** (`autograd/model_checkpoint.mojo`
+  ops_save_program / ops_load_program, lane ag-program): layout `p<i>` per
+  program parameter (one `unused` word for a program without parameters);
+  payload the parameters' values, both state arrays zeros; `t` 0, seed 0.
+  Ints: the description words of `autograd/program.mojo` program_words:
+  record version 1, the input count and (ndim, dims) per input, the
+  parameter count and (ndim, dims) per parameter, the node count and per
+  node (operation code, argument count, the value refs, integer count, the
+  integers, float count), the output count, the output refs and (ndim,
+  dims) per output. Floats: every node's float arguments in node order, by
+  their bits. A load checks every ref names an input, a parameter or an
+  earlier node, uploads the parameters as new session tensors and registers
+  the program over them, on any install's session.
 
 `training/checks/checkpoint_check.mojo` arm 7 (a nonzero byte at offset 52)
 is still refused: kind 1 with E = 0.

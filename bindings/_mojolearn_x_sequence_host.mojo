@@ -28,11 +28,12 @@ from autograd.pyapi import (
     ops_optimizer_py, ops_step_py, ops_scheduler_step_py, ops_learning_rate_py, ops_zero_grad_py,
     ops_optimizer_state_py, ops_load_optimizer_state_py,
     ops_backward_graph_py, ops_backward_seed_py, ops_grad_handle_py, ops_vjp_py, ops_hvp_py, ops_jvp_py,
+    ops_capture_py, ops_program_info_py, ops_program_run_py, ops_program_free_py,
 )
 from autograd.ops_api import OPS_HOST
 from autograd.model_checkpoint import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
-    ops_save_state_py,
+    ops_save_state_py, ops_load_program_py, ops_save_program_py,
 )
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 from sequence.pyapi import moe_backward_py
@@ -160,6 +161,32 @@ def ops_op_binding(sid: PythonObject, code: PythonObject, hs: PythonObject, ip: 
 
 def ops_op_packed_binding(sid: PythonObject, code: PythonObject, block: PythonObject) raises -> PythonObject:
     return ops_op_packed_py[HostExec, OPS_HOST](sid, code, block)
+
+
+
+# captured programs (autograd/program.mojo; OpsSession.capture / run_program)
+def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: PythonObject) raises -> PythonObject:
+    return ops_capture_py[HostExec, OPS_HOST](sid, inputs, outputs)
+
+
+def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
+    return ops_program_info_py[HostExec, OPS_HOST](sid, pid)
+
+
+def ops_program_run_binding(sid: PythonObject, pid: PythonObject, descs: PythonObject, addrs: PythonObject) raises -> PythonObject:
+    return ops_program_run_py[HostExec, OPS_HOST](sid, pid, descs, addrs)
+
+
+def ops_program_free_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
+    return ops_program_free_py[HostExec, OPS_HOST](sid, pid)
+
+
+def ops_save_program_binding(sid: PythonObject, pid: PythonObject, path: PythonObject) raises -> PythonObject:
+    return ops_save_program_py[HostExec, OPS_HOST](sid, pid, path)
+
+
+def ops_load_program_binding(sid: PythonObject, path: PythonObject) raises -> PythonObject:
+    return ops_load_program_py[HostExec, OPS_HOST](sid, path)
 
 
 def ops_scalar_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
@@ -415,6 +442,12 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[ops_vjp_binding]("ops_vjp")
         m.def_function[ops_hvp_binding]("ops_hvp")
         m.def_function[ops_jvp_binding]("ops_jvp")
+        m.def_function[ops_capture_binding]("ops_capture")
+        m.def_function[ops_program_info_binding]("ops_program_info")
+        m.def_function[ops_program_run_binding]("ops_program_run")
+        m.def_function[ops_program_free_binding]("ops_program_free")
+        m.def_function[ops_save_program_binding]("ops_save_program")
+        m.def_function[ops_load_program_binding]("ops_load_program")
         m.def_function[ops_profile_reset_binding]("ops_profile_reset")
         m.def_function[ops_profile_report_binding]("ops_profile_report")
         m.def_function[model_save_checkpoint_binding]("model_save_checkpoint")

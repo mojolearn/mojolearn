@@ -21,6 +21,9 @@ from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
+from autograd.program import OpsProgram
+from autograd.rankn import ShapeN
+from sequence.ops import FP
 from autograd.rankn_api import rn_dims, rn_shape
 from autograd.profile import ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
@@ -498,3 +501,73 @@ def ops_profile_reset_py() raises -> PythonObject:
 def ops_profile_report_py() raises -> PythonObject:
     """The launch profile as text (AG_PROFILE lines)."""
     return PythonObject(ag_profile_report())
+
+
+# ---------------------------------------------------------------- captured programs
+# (autograd/program.mojo; OpsSession.capture / run_program). One call each:
+# the replay is the session's, on its executor.
+def _dims_out(shapes: List[ShapeN]) raises -> PythonObject:
+    var out = Python.list()
+    for k in range(len(shapes)):  # small-loop(shapes: a program's inputs or outputs): result packing, no data
+        var dims = rn_dims(shapes[k])
+        var d = Python.list()
+        for j in range(len(dims)):  # small-loop(dims: a tensor's rank, at most 8): result packing, no data
+            d.append(PythonObject(dims[j]))
+        out.append(d)
+    return out
+
+
+def program_info(pid: Int, p: OpsProgram) raises -> PythonObject:
+    """[program id, input shapes, output shapes, parameter handles]."""
+    var res = Python.list()
+    res.append(PythonObject(pid))
+    res.append(_dims_out(p.in_shapes))
+    res.append(_dims_out(p.out_shapes))
+    var ph = Python.list()
+    for j in range(len(p.params)):  # small-loop(params: a program's parameter handles): result packing, no data
+        ph.append(PythonObject(p.params[j]))
+    res.append(ph)
+    return res
+
+
+def ops_capture_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, inputs: PythonObject, outputs: PythonObject,
+) raises -> PythonObject:
+    """Capture the logged operations computing the handles `outputs` from
+    the handles `inputs`; returns program_info."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    var pid = p[].capture(_input_handles(inputs), _input_handles(outputs))
+    return program_info(pid, p[].program(pid))
+
+
+def ops_program_info_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject,
+) raises -> PythonObject:
+    var p = ops_session[E, KIND](Int(py=sid))
+    var pid_i = Int(py=pid)
+    return program_info(pid_i, p[].program(pid_i))
+
+
+def ops_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject, descs: PythonObject, addrs: PythonObject,
+) raises -> PythonObject:
+    """Run program `pid`: descs holds one input descriptor (`cast_in_of`)
+    per input, addrs one float32 destination address per output (an array
+    of the output's shape)."""
+    var srcs = List[CastIn]()
+    for k in range(len(descs)):  # small-loop(descs: one descriptor per program input): argument parsing, no data
+        srcs.append(cast_in_of(descs[k], "program input"))
+    var dsts = List[FP]()
+    for k in range(len(addrs)):  # small-loop(addrs: one destination per program output): argument parsing, no data
+        dsts.append(fptr(addrs[k], "program output"))
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].run_program(Int(py=pid), srcs, dsts)
+    return PythonObject(0)
+
+
+def ops_program_free_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject,
+) raises -> PythonObject:
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].program_free(Int(py=pid))
+    return PythonObject(0)

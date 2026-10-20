@@ -766,7 +766,9 @@ NEURAL_IDS = [
     "neural/gru-fit/higgs/shape=full", "neural/rnn-fit/higgs/shape=full",
     "neural/tape-user-model/higgs/shape=full",
     # the public tape API lanes (2026-10-19, lane ag-board-twins)
-    "neural/sequential-fit/synthetic/shape=full", "neural/ops-session-step/gaussian/shape=full"]
+    "neural/sequential-fit/synthetic/shape=full", "neural/ops-session-step/gaussian/shape=full",
+    # the captured-program lane (2026-10-19, lane ag-program)
+    "neural/program-run/gaussian/shape=full"]
 #: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch
 FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i or "/sequential-fit/" in i}
 #: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
@@ -836,8 +838,9 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # nvidia ours + 6 torch (+35)
     # + sequential-fit (a fit lane: apple +6, amd +5, nvidia +7) and ops-session-step (apple ours + ours-fast
     # + 4 torch +6, amd +5, nvidia +7), 2026-10-19 lane ag-board-twins
-    assert cells == {"apple": 124, "amd": 102, "nvidia": 143}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 25, "cells": cells}}
+    # + program-run (the same arms as ops-session-step: apple +6, amd +5, nvidia +7), lane ag-program
+    assert cells == {"apple": 130, "amd": 107, "nvidia": 150}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 26, "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
@@ -1089,6 +1092,29 @@ def test_neural_tape_api_lanes_tables_fixtures_and_quality(tmp_path):
     t = q["torch-eager-fp32"]
     assert t["loss_abs_diff_vs_ours"] == 0.25 and t["grad_max_abs_diff_vs_ours_w1"] == 1.0
     assert t["param_max_abs_diff_vs_ours_b2"] == 0.0 and t["grad_digests_equal_ours"] is False
+
+
+def test_neural_program_run_lane_tables_fixtures_and_quality(tmp_path):
+    # 2026-10-19 (lane ag-program): program-run is one inference forward of a captured Program, with
+    # ops-session-step's weights and batch and its own span
+    np = pytest.importorskip("numpy")
+    assert "program-run" in bbn.PROGRAM_LANES and bbn.DATA_OF["program-run"] == "gaussian"
+    assert bbn.DEVICE_OF["program-run"] == "gpu" and bbn.MODEL_OF["program-run"] == "program"
+    assert bbn.program_params("small")["layers"] == ["linear 16 32 bias", "relu", "linear 32 4 bias", "softmax"]
+    assert bbn.lane_settings("program-run")["clock"] == bbn.PROGRAM_SPAN["inside_clock"]
+    rec = bbn.make_inputs("program-run", "small", 2, str(tmp_path / "program-run.npz"))
+    assert rec["lane"] == "program-run"
+    with np.load(str(tmp_path / "program-run.npz")) as z:
+        data = {k: z[k] for k in z.files}
+    assert data["X"].shape == (64, 16) and data["w:w2"].shape == (32, 4)
+    x = data["X"].astype(np.float64)
+    z = np.maximum(x @ data["w:w1"] + data["w:b1"], 0) @ data["w:w2"] + data["w:b2"]
+    p = np.exp(z - z.max(axis=1, keepdims=True))
+    p = (p / p.sum(axis=1, keepdims=True)).astype(np.float32)
+    q = bbn.quality("program-run", data, {"ours": {"y": p}, "torch-eager-fp32": {"y": p + np.float32(0.5)}})
+    assert q["ours"]["max_abs_err_vs_fp64"] < 1e-6 and q["ours"]["finite"]
+    t = q["torch-eager-fp32"]
+    assert abs(t["max_abs_diff_vs_ours"] - 0.5) < 1e-6 and t["digest_equal_ours"] is False
 
 
 def test_neural_driver_inputs_and_quality(tmp_path, monkeypatch):
