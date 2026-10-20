@@ -81,3 +81,16 @@ Program.save_control	control checkpoint; installed-release qualification pending
 Program.fit_if	conditional native training; installed-release qualification pending
 Session.load_control	control checkpoint; installed-release qualification pending
 Session.gradient_report	native gradient diagnostics; installed-release qualification pending
+# These existing replay entries now expose the unqualified optimization option.
+Program.run	opt-in graph rewrites; current installed-vendor qualification pending
+Session.run	opt-in graph rewrites; current installed-vendor qualification pending
+# Native generation policy and continuation source await current vendor qualification.
+CausalLM.generate	stopping and seeded sampling; current cross-vendor qualification pending
+CausalLM.stream	native bounded generation reads; current cross-vendor qualification pending
+CausalLM.generate_text	native text generation; current cross-vendor qualification pending
+CausalLM.stream_text	native text streaming; current cross-vendor qualification pending
+CausalLM.resume_generation	native generation continuation; current cross-vendor qualification pending
+causal_lm.GenerationStream	native generation stream state; current cross-vendor qualification pending
+GenerationStream.read	native generation stream reads; current cross-vendor qualification pending
+GenerationStream.info	native generation stream metadata; current cross-vendor qualification pending
+GenerationStream.state_dict	native generation stream checkpoint; current cross-vendor qualification pending
