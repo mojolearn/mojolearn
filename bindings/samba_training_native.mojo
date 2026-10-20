@@ -41,7 +41,11 @@ def _samba_count(targets: PythonObject, context: PythonObject) raises -> Int:
     var ignored = g[].arrays("i", Python.list(PythonObject(-100))) * n
     var mask = generation_array([n], "b")
     context["equal_elements"](targets._addr, ignored.buffer_info()[0], 2, n, mask._addr)
+    # The address does not retain its exporter. Keep the temporary native
+    # comparison buffer alive until the synchronous kernel has consumed it.
+    _ = ignored^
     var count = context["reduce_stat"](mask._addr, 5, n, 5)
+    _ = mask^
     if Int(py=count[0]) != 0 or Int(py=count[1]) != 0:
         raise Error("Samba: ignored-target count exceeds kernel indexing")
     return n - Int(py=count[2])
