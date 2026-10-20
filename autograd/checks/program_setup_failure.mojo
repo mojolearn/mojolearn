@@ -85,7 +85,7 @@ def one(value: Int) -> List[Int]:
 
 
 def check_training_fault(kind: Int, at: Int, conditional: Bool) raises:
-    var s = OpsSession[FaultExec](FaultExec(), False)
+    var s = OpsSession[FaultExec](FaultExec(), True)
     var input = List[Float32](length=2, fill=1.0)
     input[1] = 2.0
     var weight = List[Float32](length=1, fill=2.0)
@@ -95,6 +95,9 @@ def check_training_fault(kind: Int, at: Int, conditional: Bool) raises:
     var dst = CastIn.f32_c(Int(target.unsafe_ptr()), 2, 1)
     var x = s.upload_nd(src, ShapeN.of([2, 1]), False)
     var w = s.upload_nd(CastIn.f32_c(Int(weight.unsafe_ptr()), 1, 1), ShapeN.of([1, 1]), True)
+    # Gradient-bearing leaves require recording at creation; graph capture
+    # and Program.fit then use the supported inference-session boundary.
+    s.tape.no_grad()
     var operands = one(x)
     operands.append(w)
     var output = s.op(OPS_MATMUL, operands, List[Int](), List[Float32]())
