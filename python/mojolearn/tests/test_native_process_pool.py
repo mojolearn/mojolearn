@@ -198,3 +198,36 @@ def test_cpu_cooperative_multidevice_refusal_has_no_children():
         assert pool["workers"] == []
     finally:
         checked("close", (pool,))
+
+
+def test_addressed_calls_reuse_exact_worker_and_refuse_invalid_index():
+    devices = (0, 1) if _backend.vendor() == 'cpu' else (0,)
+    pool = checked('create', (devices, False, 'mojolearn._native_process'))
+    try:
+        audit = audit_native_call(call, 'call', (pool, len(devices), 'invalid'))
+        assert isinstance(audit.exception, ValueError) and 'index' in str(audit.exception)
+        assert not pool['workers']
+        for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+            assert not audit.report()[key], audit.report()
+        for i in reversed(range(len(devices))):
+            assert checked('call', (pool, i, ('addressed', i))) == ('addressed', i)
+        pids = [worker['pid'] for worker in pool['workers']]
+        assert pool['sequence'] == len(devices)
+        assert checked('call', (pool, 0, 'same-owner')) == 'same-owner'
+        assert [worker['pid'] for worker in pool['workers']] == pids
+        if len(devices) > 1:
+            import signal
+            # Only the second endpoint dies. The first addressed call still
+            # succeeds, proving the index selects a concrete living endpoint.
+            os.kill(pids[1], signal.SIGKILL)
+            assert checked('call', (pool, 0, 'first-survives')) == 'first-survives'
+            failed = audit_native_call(call, 'call', (pool, 1, 'second-died'))
+            assert failed.exception is not None
+            for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+                assert not failed.report()[key], failed.report()
+            assert pool['workers'] == [] and pool['closed'] is False
+            for pid in pids:
+                with pytest.raises(ChildProcessError):
+                    os.waitpid(pid, os.WNOHANG)
+    finally:
+        checked('close', (pool,))
