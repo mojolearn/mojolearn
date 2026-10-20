@@ -18,7 +18,7 @@ def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObj
         raise Error("Samba: token ids require positive (B, L) shape")
     var b = Int(py=shape[0])
     var l = Int(py=shape[1])
-    var fmt = String(PythonObject(view.format).lstrip("=@<"))
+    var fmt = String(view.format.lstrip("=@<"))
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("Samba: token ids must be native-endian integer buffers")
     var packed = g[].arrays(fmt)
