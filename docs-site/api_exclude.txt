@@ -72,3 +72,4 @@ _distributed_program.DistributedProgram	native distributed captured programs: qu
 Program.partition	native model/tensor/pipeline partitions: qualification pending
 Session.load_partitioned	native model/tensor/pipeline partitions: qualification pending
 _partitioned_program.PartitionedProgram	native model/tensor/pipeline partitions: qualification pending
+Program.run_dynamic	native variable-rank replay; cross-vendor qualification pending
