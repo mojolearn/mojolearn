@@ -33,8 +33,8 @@
 # repaired wheel's listing (`unzip -l`) for a mojolearn.libs/ directory.
 #
 # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): run it ONCE PER
-# WHEEL, the core `mojolearn-*` and each plugin `mojolearn_nvidia-*` /
-# `mojolearn_amd-*`, all into the same audit/ directory (repaired/ then holds
+# WHEEL, the core `mojolearn_core-*`, each plugin `mojolearn_nvidia-*` /
+# `mojolearn_amd-*` and the file-free `mojolearn-*` (an aggregate), all into the same audit/ directory (repaired/ then holds
 # the whole set). The logs of the core (and of the combined wheel) keep their
 # names, show.txt, repair.txt, twine.txt; a plugin's are show-<dist>.txt,
 # repair-<dist>.txt and twine-<dist>.txt. A PLUGIN'S RUNTIME LIVES IN THE
@@ -57,7 +57,8 @@ WHLABS="$(cd "$(dirname "$WHL")" && pwd)/$(basename "$WHL")"
 BASE=$(basename "$WHL")
 DIST=${BASE%%-*}
 case "$DIST" in
-  mojolearn) SUFFIX="" ;;
+  mojolearn_core) SUFFIX="" ;;
+  mojolearn) SUFFIX="-mojolearn" ;;
   mojolearn_nvidia|mojolearn_nvidia_ptx|mojolearn_amd|mojolearn_nvidia_sm89|mojolearn_nvidia_sm90|mojolearn_amd_gfx942) SUFFIX="-$DIST" ;;
   *) echo "not a mojolearn wheel: $BASE"; exit 2 ;;
 esac
@@ -83,8 +84,8 @@ fi
 EXCL=""
 if [ -n "$SUFFIX" ]; then
   VER=$(printf '%s' "$BASE" | cut -d- -f2)
-  CORE=$(ls -1 "$(dirname "$WHLABS")"/mojolearn-"$VER"-*.whl 2>/dev/null | head -1 || true)
-  [ -n "$CORE" ] || { echo "$BASE is a split plugin: its runtime is the core's mojolearn/.libs/, and no mojolearn-$VER-*.whl sits beside it to name them"; exit 2; }
+  CORE=$(ls -1 "$(dirname "$WHLABS")"/mojolearn_core-"$VER"-*.whl 2>/dev/null | head -1 || true)
+  [ -n "$CORE" ] || { echo "$BASE is a split plugin: its runtime is the core's mojolearn/.libs/, and no mojolearn_core-$VER-*.whl sits beside it to name them"; exit 2; }
   for lib in $(python3 -c 'import sys,zipfile; print(" ".join(sorted({n.rsplit("/",1)[-1] for n in zipfile.ZipFile(sys.argv[1]).namelist() if n.startswith("mojolearn/.libs/") and not n.endswith("/")})))' "$CORE"); do
     case " $EXCL " in *" $lib "*) ;; *) EXCL="$EXCL $lib" ;; esac
   done
