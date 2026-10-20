@@ -467,14 +467,24 @@ def model_loss[E: Exec](
     return tape.mean(ex, per)
 
 
+def epoch_lr(lr: Float32, sched: Int, sched_step: Int, gamma: Float32, epoch: Int) -> Float32:
+    """The learning rate of zero-based epoch `epoch` under schedule `sched`
+    (SCHED_CONSTANT, SCHED_STEP: lr gamma^(epoch // sched_step),
+    SCHED_EXPONENTIAL: lr gamma^epoch). A per-epoch host scalar computed in
+    Mojo; model_fit and the operation session's optimizers
+    (autograd/ops_api.mojo) both take it from here, so the same schedule
+    gives the same word."""
+    if sched == SCHED_CONSTANT:
+        return lr
+    var k = epoch // sched_step if sched == SCHED_STEP else epoch
+    if k == 0:
+        return lr
+    return Float32(Float64(lr) * identical_pow64(Float64(gamma), Float64(k)))
+
+
 def model_lr(cfg: FitConfig, epoch: Int) -> Float32:
     """The epoch's learning rate (a per-epoch scalar, computed in Mojo)."""
-    if cfg.sched == SCHED_CONSTANT:
-        return cfg.lr
-    var k = epoch // cfg.sched_step if cfg.sched == SCHED_STEP else epoch
-    if k == 0:
-        return cfg.lr
-    return Float32(Float64(cfg.lr) * identical_pow64(Float64(cfg.sched_gamma), Float64(k)))
+    return epoch_lr(cfg.lr, cfg.sched, cfg.sched_step, cfg.sched_gamma, epoch)
 
 
 # ---------------------------------------------------------------- fit / predict
