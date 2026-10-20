@@ -14,4 +14,6 @@ def graph_python_error(error: Error) -> PyObjectPtr:
         return raise_python_exception(Error(message[byte=12:]), ExceptionType.ValueError)
     if message.startswith("FileNotFoundError: "):
         return raise_python_exception(Error(message[byte=19:]), ExceptionType("PyExc_FileNotFoundError"))
+    if message.startswith("ImportError: "):
+        return raise_python_exception(Error(message[byte=13:]), ExceptionType("PyExc_ImportError"))
     return raise_python_exception(error)

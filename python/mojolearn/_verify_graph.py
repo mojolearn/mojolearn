@@ -269,7 +269,9 @@ def native_session_boundary():
     import numpy as np
     from . import ops
     a = np.arange(6, dtype=np.float32).reshape(2, 3)
-    with ops.Session() as s:
+    _refuses(lambda: _invoke(ops.Session, numeric_mode="invalid"), "numeric_mode", ValueError)
+    with _invoke(ops.Session, numeric_mode=" IDENTICAL ") as s:
+        assert _invoke(s.__enter__) is s
         x = _invoke(s.tensor, a.tolist())
         y = _invoke(s.scale, x, 2.0)
         pieces = _invoke(s.split, y, [1, 2], axis=1)
@@ -288,7 +290,7 @@ def native_session_boundary():
         _equal(_invoke(s.numpy, _invoke(s.embedding, table, ids)), a[ids])
         _equal(_invoke(s.numpy, _invoke(s.take, table, ids, axis=0)), a[ids])
         _refuses(lambda: _invoke(s.gelu, x, approximate="bad"), "approximate", ValueError)
-    with ops.Session(record=True) as s:
+    with _invoke(ops.Session, record=True) as s:
         x = _invoke(s.tensor, [[2.0]], requires_grad=True)
         loss = _invoke(s.mul, x, x)
         _invoke(s.backward, loss, create_graph=True)
@@ -308,6 +310,8 @@ def native_session_boundary():
         _invoke(s.zero_grad)
         _invoke(s.reset)
         _invoke(s.free, x)
+        assert _invoke(s.__exit__, None, None, None) is False
+        _invoke(s.close)
     return [out, first, second]
 
 

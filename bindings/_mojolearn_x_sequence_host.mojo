@@ -14,6 +14,7 @@ from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
 from autograd.python_errors import graph_python_error
 from autograd.ops_frontend import ops_session_call_py
+from autograd.session_frontend import ops_session_initialize_py
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -346,6 +347,16 @@ def ops_program_inspect_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi
             raise Error("TypeError: ops_program_inspect expects 3 arguments")
         var result = ops_program_inspect_binding(args[0], args[1], args[2])
         return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_session_initialize_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 6:
+            raise Error("TypeError: ops_session_initialize expects 6 arguments")
+        return ops_session_initialize_py(args[0], args[1], args[2], args[3], args[4], args[5]).steal_data()
     except error:
         return graph_python_error(error)
 
@@ -733,6 +744,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[ops_program_run_binding]("ops_program_run")
         m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
         m.def_py_c_function(ops_session_call_c_binding, "ops_session_call")
+        m.def_py_c_function(ops_session_initialize_c_binding, "ops_session_initialize")
         m.def_py_c_function(ops_program_execute_c_binding, "ops_program_execute")
         m.def_py_c_function(ops_program_inspect_c_binding, "ops_program_inspect")
         m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")
