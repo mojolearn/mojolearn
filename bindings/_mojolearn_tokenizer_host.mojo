@@ -97,6 +97,7 @@ from bindings.native_process_pool import process_c
 from bindings.parallel_mlp_native import parallel_mlp_c
 from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_causal_native import parallel_causal_c
+from bindings.optimizer_lifecycle import optimizer_finalize_binding
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1821,6 +1822,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
         module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
+        module.def_function[optimizer_finalize_binding]("optimizer_finalize")
         module.def_py_c_function(samba_config_c, "samba_config_call")
         module.def_py_c_function(samba_public_c, "samba_native_call")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")
