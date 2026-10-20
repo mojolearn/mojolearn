@@ -37,6 +37,12 @@ differentiate again: second derivatives, Hessian-vector products
 (:meth:`Session.hvp`), Jacobian-vector products (:meth:`Session.jvp`) and
 vector-Jacobian products (:meth:`Session.vjp`).
 
+:meth:`Session.capture` turns the operations of an inference session into a
+:class:`Program`: :meth:`Program.run` runs the whole model on new inputs in
+one call, with the same output bits as the operations called one by one, and
+:meth:`Program.save` writes it for :meth:`Session.load_program` on any
+install.
+
 Example
 -------
 >>> import numpy as np
@@ -55,7 +61,7 @@ np = require_numpy('mojolearn.ops')
 
 from . import _backend
 
-__all__ = ["Session"]
+__all__ = ["Session", "Program"]
 
 # autograd/ops_api.mojo OPS_*
 _OP = {
@@ -858,6 +864,92 @@ class Session:
             raise ValueError("give at least one tensor")
         return hs
 
+    # ------------------------------------------------------------ captured programs
+    def capture(self, inputs, outputs):
+        """Capture the operations that compute ``outputs`` from ``inputs``
+        as a :class:`Program` that runs again on new arrays in one call.
+
+        The session must not record (``Session(record=False)``). Every
+        operation since the last :meth:`reset` that ``outputs`` depend on is
+        kept, in order, with its arguments; tensors made with
+        :meth:`tensor` that the outputs read and that are not inputs are the
+        program's parameters, read where they are at each run (so a
+        :meth:`step` between runs is seen by the next run). Operations that
+        take an index array (:meth:`embedding`, :meth:`take`) cannot be
+        captured.
+
+        Parameters
+        ----------
+        inputs : int or list of int
+            Handles of the tensors that :meth:`Program.run` replaces with
+            new arrays, in the order ``run`` takes them.
+        outputs : int or list of int
+            Handles of the tensors ``run`` returns.
+
+        Returns
+        -------
+        Program
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(rng.standard_normal((16, 4), dtype=np.float32))
+        ...     w = s.tensor(rng.standard_normal((4, 3), dtype=np.float32))
+        ...     p = s.softmax(s.linear(x, w, activation="tanh"))
+        ...     model = s.capture(inputs=[x], outputs=[p])
+        ...     probs = model.run(rng.standard_normal((16, 4), dtype=np.float32))
+        """
+        ins = self._handles(inputs)
+        outs = self._handles(outputs)
+        # Mojo walks the session's operation log from the outputs
+        info = self._b.ops_capture(self._sid(), ins, outs)
+        return Program(self, info)
+
+    def run(self, program, *arrays):
+        """Run ``program`` on new input arrays: one call that uploads them,
+        runs every captured operation on the device and returns the outputs.
+
+        ``arrays`` are in the order of ``capture``'s ``inputs``, each of the
+        shape the captured input had (any dtype :meth:`tensor` takes). The
+        outputs are the values the same operations give when called one by
+        one, to the bit. Returns one float32 array for a program with one
+        output, else a tuple of arrays.
+        """
+        from ._cast_in import as_input, describe, matrix_view
+        if not isinstance(program, Program) or program._s is not self:
+            raise ValueError("program must be a Program of this session")
+        if len(arrays) != len(program.input_shapes):
+            raise ValueError(f"this program takes {len(program.input_shapes)} input arrays, got {len(arrays)}")
+        keep, descs = [], []
+        for k, x in enumerate(arrays):  # glue: one descriptor per program input
+            a = as_input(x)
+            want = program.input_shapes[k]
+            have = a.shape if a.ndim > 1 else (a.size, 1)
+            if tuple(have) != want:
+                raise ValueError(f"input {k} must have the shape {want}, got {tuple(a.shape)}")
+            m = matrix_view(a, "x") if a.ndim > 2 else a
+            keep.append(m)
+            descs.append(describe(m, "x"))
+        outs = [np.empty(sh, dtype=np.float32) for sh in program.output_shapes]  # glue: one destination per output
+        self._b.ops_program_run(self._sid(), program._id, descs, [o.ctypes.data for o in outs])  # glue: output addresses
+        del keep
+        return outs[0] if len(outs) == 1 else tuple(outs)
+
+    def load_program(self, path):
+        """Load a :class:`Program` saved with :meth:`Program.save`.
+
+        Its parameters become new tensors of this session. The session must
+        not record. A program saved on one install loads on any other,
+        a GPU install or the CPU-only install, and gives the same outputs.
+        """
+        if self.record:
+            raise ValueError("programs run in an inference session (Session(record=False))")
+        info = self._b.ops_load_program(self._sid(), os.fspath(path))  # cpu-route: program file read on the host
+        return Program(self, info)
+
     # ------------------------------------------------------------ checkpoints
     def save_state(self, path, params, optimizer=None, *, seed=0, epoch=0, step=0):
         """Save parameters, optimizer state and training counters to ``path``.
@@ -1077,3 +1169,60 @@ class Session:
             fp = [float(state["beta1_power"]), float(state["beta2_power"]), 1.0]
         ip = [_int(state["step"], "step", 0)] + hs
         self._b.ops_load_optimizer_state(self._sid(), optimizer, _int(param, "param", 1), ip, fp)
+
+
+class Program:
+    """A model captured from an inference :class:`Session`, run in one call.
+
+    Made by :meth:`Session.capture` or :meth:`Session.load_program`.
+    :meth:`run` uploads new input arrays, runs every captured operation on
+    the device and returns the outputs: the same values, to the bit, as
+    calling the operations one by one, with one call instead of one per
+    operation.
+
+    Attributes
+    ----------
+    input_shapes : tuple of tuple of int
+        The shape each input array of :meth:`run` must have.
+    output_shapes : tuple of tuple of int
+        The shapes of the arrays :meth:`run` returns.
+    params : tuple of int
+        Handles of the session tensors the program reads as parameters.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from mojolearn import ops
+    >>> rng = np.random.default_rng(0)
+    >>> W1 = rng.standard_normal((4, 8), dtype=np.float32)
+    >>> W2 = rng.standard_normal((8, 2), dtype=np.float32)
+    >>> with ops.Session() as s:
+    ...     x = s.tensor(np.zeros((32, 4), np.float32))
+    ...     h = s.linear(x, s.tensor(W1), activation="relu")
+    ...     y = s.softmax(s.linear(h, s.tensor(W2)))
+    ...     model = s.capture(inputs=[x], outputs=[y])
+    ...     s.reset()
+    ...     proba = model.run(rng.standard_normal((32, 4), dtype=np.float32))
+    """
+
+    def __init__(self, session, info):
+        self._s = session
+        self._id = int(info[0])
+        self.input_shapes = tuple(tuple(int(d) for d in sh) for sh in info[1])  # glue: at most eight dimensions per input
+        self.output_shapes = tuple(tuple(int(d) for d in sh) for sh in info[2])  # glue: at most eight dimensions per output
+        self.params = tuple(int(h) for h in info[3])  # glue: the parameter handles
+
+    def run(self, *arrays):
+        """Run the program on new input arrays (see :meth:`Session.run`)."""
+        return self._s.run(self, *arrays)
+
+    def save(self, path):
+        """Write the program and its parameters' current values to ``path``,
+        for :meth:`Session.load_program` on any install."""
+        self._s._b.ops_save_program(self._s._sid(), self._id, os.fspath(path))  # cpu-route: program file written on the host
+
+    def free(self):
+        """Release the program (its parameters stay session tensors)."""
+        if self._id is not None and self._s._id is not None:
+            self._s._b.ops_program_free(self._s._sid(), self._id)
+        self._id = None
