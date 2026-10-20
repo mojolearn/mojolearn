@@ -60,31 +60,3 @@ _mojolearn_linalg.public_fast_from_bf16	experimental Apple BF16 candidate; insta
 Sequential.dropout	needs the tape's dropout in the build (-D MOJOLEARN_AUTOGRAD_HAS_DROPOUT); refused by name in the shipped bindings
 Session.profile_reset	diagnostic launch profile for development, not user API
 Session.profile_report	diagnostic launch profile for development, not user API
-Sequential	autograd model API: checks pending on Apple, NVIDIA and AMD
-ops	operation session (mojolearn.ops.Session): checks pending on CPU, Apple, NVIDIA and AMD
-ops.Session	operation session: checks pending on CPU, Apple, NVIDIA and AMD
-MoEBlock.backward	new tape backward; no NVIDIA+AMD reference records yet (sequence/checks/moe_backward_check.mojo)
-Session.embedding	operation session embedding: its tape checks (embedding_check tape case, autograd embedding_gpu/cpu) pending on CPU, Apple, NVIDIA and AMD
-# Rank-N tensors (docs/plans/AUTOGRAD_RANKN.md): remove a line once its checks' digests match on CPU, Apple, NVIDIA and AMD.
-# Captured programs (autograd/program.mojo): remove a line once test_ops_program.py's PROGRAM_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
-# Model import (docs/plans/MODEL_IMPORT.md): remove a line once the IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
-# --- lane ag-import-docs: the import entry points (remove with the lines below once the import guide block's
-# PUBLIC_DIGEST lines and test_import_lower.py's IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD) ---
-# --- end lane ag-import-docs ---
-# >>> lane ag-import-lower: remove a line once test_import_lower.py's IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
-# <<< lane ag-import-lower
-# lane ag-import-torch
-# end lane ag-import-torch
-# The import elementwise family (docs/plans/MODEL_IMPORT.md 3.3): remove a line once the IMPORT and OPS_IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
-# >>> lane ag-program-embedding: ids tensors in captured programs; remove once test_ops_program.py PROGRAM_DIGEST embedding_* and test_import_lower.py IMPORT_DIGEST embedding_linear lines match on CPU, Apple, NVIDIA and AMD.
-Session.ids	ids tensors for captured embedding and take: PROGRAM_DIGEST and IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
-Program.input_kinds	ids inputs of captured programs: PROGRAM_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
-# <<< lane ag-program-embedding
-_catalog.catalog	model catalog: no verified entry yet (tools/model_catalog.py build from NVIDIA+AMD runs); remove once one lands
-_catalog.verify_catalog_entry	model catalog: no verified entry yet; remove once one lands
-# >>> lane ag-import-lm-ops: remove a line once the IMPORT any_all / cumsum / index and OPS_IMPORT_DIGEST lm-ops lines match on CPU, Apple, NVIDIA and AMD.
-Session.any	attention-mask ops: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
-Session.all	attention-mask ops: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
-Session.cumsum	the blocked scan: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
-Session.index	several index tensors: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
-# <<< lane ag-import-lm-ops

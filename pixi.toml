@@ -1815,6 +1815,12 @@ scikit-learn = "*"
 torch = "*"
 # the "Import a pretrained model" guide block and tools/real_model_import.py use torchvision's ResNet-18
 torchvision = "*"
+# tools/real_model_import.py converts ONNX zoo files below opset 13 (onnxruntime has no cp314 wheel; its reference runs on the boxes)
+onnx = "*"
+# the SmolLM2 row of tools/real_model_import.py (torch.export of a Hugging Face model)
+transformers = "==5.17.0"
+huggingface_hub = "*"
+safetensors = "*"
 
 [feature.test.tasks]
 test-runtime-control = "python3 -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_backend_control.py tools/test_gate_scope.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects"
