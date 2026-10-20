@@ -239,6 +239,9 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                 var ptr = FP(unsafe_from_address=Int(bytes.unsafe_ptr()))
                 wp[source].session.ex.download(ptr, wp[source].gradients[j] + wp[rank].first[j], n)
                 wp[rank].session.ex.upload(wp[rank].incoming[j], ptr, n)
+                # FP erases the List origin. Keep its owner alive until both
+                # transfers finish; Mojo otherwise destroys it at unsafe_ptr.
+                _ = bytes^
                 var a = Args()
                 a.p0 = wp[rank].incoming[j]
                 a.f0 = weight
@@ -262,6 +265,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                 for rank in range(len(self.workers)):  # driver-loop: parameter replicas
                     if rank != owner:
                         wp[rank].session.ex.upload(wp[rank].params[j] + lo, ptr, n)
+                _ = bytes^
         for rank in range(len(self.workers)):  # driver-loop: transfer completion
             self.workers[rank].session.ex.sync()
 
