@@ -37,7 +37,8 @@
 #   = 35% / 7% of bandwidth). Here a block of 256 threads moves a 32 x 32
 #   tile: coalesced loads into threadgroup memory (33-float rows), barrier,
 #   coalesced stores of the transposed tile. Each destination word is
-#   st(ld(source word)), the scalar body's. -D MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.
+#   the scalar body's: raw forward movement, st(ld(word)) for VJP.
+#   -D MOJOLEARN_IDN_TRANSPOSE_TILE_OFF.
 # None of the three keys on a shape beyond the stated cost and alignment
 # rules; every rule covers neighbouring shapes alike.
 from std.gpu import block_dim, block_idx, thread_idx
@@ -223,7 +224,7 @@ def ag_vec4_kernel[OP: Int](
 
 
 # ---------------------------------------------------------------- F(1)
-def ag_transpose_tile_kernel(src: FP, dst: FP, rows: Int32, cols: Int32):
+def ag_transpose_tile_kernel(src: FP, dst: FP, rows: Int32, cols: Int32, preserve_words: Int32):
     """dst (cols x rows) = the transpose of src (rows x cols), one 32 x 32
     tile a block of AGT_TPB threads."""
     var R = Int(rows)
@@ -243,7 +244,10 @@ def ag_transpose_tile_kernel(src: FP, dst: FP, rows: Int32, cols: Int32):
         var r = r0 + ly + j
         var c = c0 + lx
         if r < R and c < C:
-            tile[(ly + j) * AGT_PAD + lx] = ld(src, r * C + c)
+            # Same 2026-10-20 forward-word repair as the scalar transpose.
+            # The tiled route must preserve payloads/subnormals too; this
+            # flag does not alter tile geometry or arithmetic/VJP semantics.
+            tile[(ly + j) * AGT_PAD + lx] = src.unsafe_load(r * C + c) if preserve_words == 1 else ld(src, r * C + c)
         j += AGT_ROWS
     barrier()
     j = 0
@@ -252,7 +256,11 @@ def ag_transpose_tile_kernel(src: FP, dst: FP, rows: Int32, cols: Int32):
         var dr = c0 + ly + j
         var dc = r0 + lx
         if dr < C and dc < R:
-            st(dst, dr * R + dc, tile[lx * AGT_PAD + ly + j])
+            var value = tile[lx * AGT_PAD + ly + j]
+            if preserve_words == 1:
+                dst.unsafe_store(dr * R + dc, value)
+            else:
+                st(dst, dr * R + dc, value)
         j += AGT_ROWS
 
 
@@ -285,7 +293,7 @@ def ag_pass6_launch[OP: Int](ctx: DeviceContext, a: Args, n: Int) raises -> Bool
     comptime if OP == OP_AG_TRANSPOSE:
         var blocks = ((a.i0 + AGT_TILE - 1) // AGT_TILE) * ((a.i1 + AGT_TILE - 1) // AGT_TILE)
         ctx.enqueue_function[ag_transpose_tile_kernel](
-            a.p0, a.p1, Int32(a.i0), Int32(a.i1),
+            a.p0, a.p1, Int32(a.i0), Int32(a.i1), Int32(a.i2),
             grid_dim=(blocks, 1, 1), block_dim=(AGT_TPB, 1, 1),
         )
         return True
