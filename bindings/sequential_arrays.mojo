@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential buffer admission and ndarray ABI ownership."""
 from std.python import Python, PythonObject
-from std.memory import UnsafePointer, MutAnyOrigin
 
 
 def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -136,7 +135,7 @@ def sequential_x(value: PythonObject, name: String, context: PythonObject) raise
 
 
 def sequential_curve(value: PythonObject, count: Int) raises -> PythonObject:
-    var pointer = UnsafePointer[Float32, MutAnyOrigin](unsafe_from_address=Int(py=sequential_address(value)))
+    var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
     var result = Python.list()
     for k in range(count):  # driver-loop: over the native training engine's per-epoch scalar report
         result.append(PythonObject(pointer[k]))

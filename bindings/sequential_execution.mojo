@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential orchestration of the existing model numerical ABI."""
 from std.python import Python, PythonObject
-from std.memory import UnsafePointer, MutAnyOrigin
 from bindings.sequential_description import sequential_fields, sequential_sample, sequential_program, sequential_table, _integer
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x, sequential_curve
 
@@ -171,7 +170,7 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     fields["params_"] = params
     fields["n_iter_"] = n_iter
     if validation is not None:
-        var info = UnsafePointer[Int64, MutAnyOrigin](unsafe_from_address=Int(py=sequential_address(val_info)))
+        var info = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(val_info)))
         var ran = Int(info[0])
         fields["epochs_run_"] = ran
         fields["best_epoch_"] = PythonObject(info[1])
