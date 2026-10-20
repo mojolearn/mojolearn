@@ -536,8 +536,8 @@ def _connect_causal_native():
             for name, target in targets:  # glue: connects compiled sibling modules at package import
                 try:
                     entries[name] = _backend.binding(target, mode)
-                except (ImportError, RuntimeError, ValueError, OSError) as exc:
-                    entries[name] = str(exc)
+                except (ImportError, RuntimeError, ValueError, OSError, AttributeError) as exc:
+                    entries[name] = f"native binding {target} for {mode} is unavailable: {exc}"
             bindings["gpu:" + mode] = entries
     return runtime, {
         "runtime": runtime, "backend": _backend, "selected_vendor": vendor, "model_class": CausalLM,
