@@ -64,7 +64,7 @@ from autograd.ops_api import (
     OPS_MEAN_N, OPS_MINIMUM, OPS_MUL, OPS_NARROW, OPS_PAD, OPS_PERMUTE, OPS_POW, OPS_RECIPROCAL,
     OPS_RELU, OPS_RESHAPE, OPS_RESHAPE_N, OPS_ROUND, OPS_SCALE, OPS_SIGMOID, OPS_SIGN, OPS_SIN,
     OPS_SOFTMAX, OPS_SOFTMAX_N, OPS_SOFTPLUS, OPS_SQRT, OPS_SUB, OPS_SUM_N, OPS_TAKE, OPS_TANH,
-    OPS_TRANSPOSE, OPS_WHERE, OpsSession, ops_session,
+    OPS_TRANSPOSE, OPS_WHERE, OPS_ANY_ALL, OPS_CUMSUM, OPS_INDEX, OpsSession, ops_session,
 )
 from autograd.pyapi import program_info
 from autograd.rankn_api import rn_dims, rn_shape
@@ -226,7 +226,7 @@ def _desc_inputs(op: String) -> List[Int]:
     var d = List[Int]()
     if (op == "Reshape" or op == "Expand" or op == "Squeeze" or op == "Unsqueeze" or op == "Split"
             or op == "ReduceSum" or op == "ReduceMean" or op == "ReduceMax" or op == "ReduceMin"
-            or op == "ReduceL2" or op == "Trilu" or op == "Gather"):
+            or op == "ReduceL2" or op == "Trilu" or op == "Gather" or op == "CumSum"):
         d.append(1)
     elif op == "Slice":
         d.append(1)
@@ -316,7 +316,7 @@ def _in_table(op: String) -> Bool:
         or op == "Transpose" or op == "Expand" or op == "Concat" or op == "Split" or op == "Slice"
         or op == "Gather" or op == "ArgMax" or op == "GlobalAveragePool" or op == "GlobalMaxPool"
         or op == "Conv" or op == "MaxPool" or op == "AveragePool" or op == "Pad" or op == "Trilu"
-        or op == "ConstantOfShape" or op == "Constant")
+        or op == "ConstantOfShape" or op == "Constant" or op == "CumSum" or op == "GatherND")
 
 
 # ------------------------------------------------------------ the analysis --
@@ -635,6 +635,13 @@ def _subset(g: OnnxGraph, c: RCtx, a: _An, n: GNode, op: String) raises -> List[
     if op == "ArgMax":
         if _ai(g, n, "select_last_index", 0) != 0:
             out.append("select_last_index=1 is not supported")
+        return out^
+    if op == "CumSum":
+        var axis = _ints(c, g, _in(n, 1))
+        if not axis.ok:
+            out.append("the axis is computed from the model's inputs (a static axis is supported)")
+        elif len(axis.v) != 1:
+            out.append("the axis must be one integer")
         return out^
     if op == "Conv":
         var s = c.shape(_in(n, 0))
@@ -1437,6 +1444,19 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
         if op == "Gather":
             res.append(self._gather(n))
             return res^
+        if op == "CumSum":
+            var xn = _in(n, 0)
+            var r = self.rank(xn)
+            var axis = _ints(self.c, self.g[], _in(n, 1))
+            if not axis.ok or len(axis.v) != 1:
+                raise _fatal("the axis of " + self.g[].st.text(n.name) + " is not static")
+            var ints: List[Int] = [_sax(axis.v[0], r), _ai(self.g[], n, "exclusive", 0),
+                                   _ai(self.g[], n, "reverse", 0)]
+            res.append(self.fit(self.opk(OPS_CUMSUM, self.x(n, 0), ints), n.outputs[0]))  # the blocked scan on the executor
+            return res^
+        if op == "GatherND":
+            res.append(self._gather_nd(n))
+            return res^
         if op == "ArgMax":
             var xn = _in(n, 0)
             var o = n.outputs[0]
@@ -1532,6 +1552,34 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
         var pieces = self.split(h, sizes, axis)
         return pieces[1 if start != 0 else 0]
 
+    def _gather_nd(mut self, n: GNode) raises -> Int:
+        """GatherND (batch_dims 0): the indices' last axis split into its k
+        components (views), one session index over the data's first k axes.
+        The pieces keep a trailing axis of 1, so the result holds the
+        output's words with an extra axis of 1; fit gives the graph shape."""
+        var dn = _in(n, 0)
+        var r = self.rank(dn)
+        var si = self.c.shape(_in(n, 1))
+        var k = si[len(si) - 1]
+        var hx = self.x(n, 0)
+        var hi = self.x(n, 1)
+        var last = len(_session_shape(si)) - 1
+        var hs: List[Int] = [hx]
+        if k == 1:
+            hs.append(hi)
+        else:
+            var ones = List[Int]()
+            for _ in range(k):  # cpu-route: model graph lowered on the host (index components)
+                ones.append(1)
+            var pieces = self.split(hi, ones, last)
+            for j in range(k):  # cpu-route: model graph lowered on the host (index components)
+                hs.append(pieces[j])
+        var axes = List[Int]()
+        for j in range(k):  # cpu-route: model graph lowered on the host (indexed axes)
+            axes.append(_sax(j, r))
+        var y = self.op(OPS_INDEX, hs, axes, List[Float32]())  # flat ids and one gather on the executor
+        return self.fit(y, n.outputs[0])
+
     def _reduce(mut self, n: GNode, op: String) raises -> Int:
         var xn = _in(n, 0)
         var r = self.rank(xn)
@@ -1564,6 +1612,10 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
             y = self.reduce(OPS_SUM_N, h, sx)  # a sum on the executor through the session
         elif op == "ReduceMean":
             y = self.reduce(OPS_MEAN_N, h, sx)  # a mean on the executor through the session
+        elif (op == "ReduceMax" or op == "ReduceMin") and self.c.dtype(xn) == DT_BOOL:
+            # a boolean reduction (torch's any / all): the session's any / all,
+            # 0 or 1 words, order-free
+            y = self.opk(OPS_ANY_ALL, h, _cat1(0 if op == "ReduceMax" else 1, _cat1(1, sx)))
         elif op == "ReduceMax":
             y = self.reduce(OPS_MAX, h, sx)
         elif op == "ReduceMin":
