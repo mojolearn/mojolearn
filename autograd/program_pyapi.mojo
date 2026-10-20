@@ -149,7 +149,7 @@ def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
     out["storage_reuse"] = False
     out["liveness_scope"] = "logical values only; tape owns aliases and storage"
     var passes = Python.list()
-    for k in range(len(plan.pass_names)):  # driver-loop: graph transformation report
+    for k in range(len(plan.pass_names)):  # driver-loop: over graph transformation report
         var row = _dict()
         row["name"] = plan.pass_names[k]
         row["nodes_before"] = plan.before[k]
@@ -158,11 +158,11 @@ def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
         passes.append(row)
     out["passes"] = passes
     var origins = Python.list()
-    for k in range(len(plan.source_nodes)):  # driver-loop: source node provenance
+    for k in range(len(plan.source_nodes)):  # driver-loop: over source node provenance
         origins.append(PythonObject(plan.source_nodes[k]))
     out["source_nodes"] = origins
     var liveness = Python.list()
-    for k in range(len(plan.last_use)):  # driver-loop: logical reference use metadata
+    for k in range(len(plan.last_use)):  # driver-loop: over logical reference use metadata
         var row = _dict()
         row["value"] = k
         row["last_use"] = plan.last_use[k]
