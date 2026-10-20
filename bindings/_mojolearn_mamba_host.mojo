@@ -21,8 +21,9 @@ CPU-only install through `_backend._HOST_MODULES`:
   `mamba1_backward`, `mamba2_backward`, `mamba3_backward`
         the zero-state prefill VJPs over the device's own kernels
         (`mamba/host/mamba1_prefill_chain.mojo`,
-        `mamba/host/mamba2_prefill_chain.mojo`: the launch walks the
-        device's tape rules run; `mamba/impl/modules/mamba3_prefill_backward.mojo`), forward stages
+        `mamba/host/mamba2_prefill_chain.mojo`,
+        `mamba/host/mamba3_prefill_chain.mojo`: the launch walks the
+        device's tape rules run), forward stages
         included, as `tools/mamba_host_gen.py` writes them out for the host
         under `mamba/host/gen/`: every kernel a serial loop over its launch
         grid, every buffer a host allocation and the device GEMM
@@ -69,7 +70,7 @@ from mamba.checks.mamba3_fixture import (
 )
 from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
 from mamba.host.gen.mamba2_prefill_chain import mamba2_prefill_backward
-from mamba.host.gen.mamba3_prefill_backward import mamba3_prefill_backward
+from mamba.host.gen.mamba3_prefill_chain import mamba3_prefill_backward
 from mamba.host.gen.mamba1_prefill_chain import mamba1_prefill_backward
 # TOMBSTONE: MOJOLEARN_IDN_M1_SCAN=1 (NN34 affine_prefix: profile/state/branches in this file; LOSER avg 2.30x mamba1-forward) deleted 2026-10-11 by 291629888; code recoverable at 291629888^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch
