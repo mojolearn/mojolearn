@@ -23,10 +23,23 @@ so a host-binding call never reaches a device session. No new kernels: the
 operations launch the tape's, the losses', the metrics' and the trainers'
 existing opcodes (autograd/ops.mojo, autograd/loss_ops.mojo,
 autograd/data_ops.mojo, sequence/ops.mojo OP_FILL / OP_COPY /
-OP_GATHER_ROWS / OP_MLP_PERM)."""
+OP_GATHER_ROWS / OP_MLP_PERM).
+
+Optimizers (lane ag-session-optim, 2026-10-19): `optimizer` makes an
+optimizer of the session (SGD with momentum and Nesterov, Adam, AdamW, with
+weight decay and Sequential.compile's learning-rate schedules); `step`
+updates trainable uploaded tensors IN PLACE on the executor from the last
+backward's gradients, one OP_OPT launch per parameter (autograd/optim.mojo
+step_lr, the element body and the host scalars every sequence trainer
+runs), with the moment buffers and the step count held in the session, per
+(optimizer, parameter), allocated at the parameter's first step. The update
+is elementwise and its host scalars depend on the step count and the
+learning rate alone, so a parameter stepped here gets the words
+Sequential.fit's one flat launch gives it (sequence/recurrent.mojo
+opt_step: the same OP_OPT arguments, opt_scalars word for word)."""
 from std.ffi import _Global
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_FILL, OP_COPY
+from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from autograd.tape import Tape, Tensor
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX
@@ -36,6 +49,8 @@ from autograd.data import permutation, gather_rows
 from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
 from core.cast_in import CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast, upload_cast_i32
+from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
+from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -96,6 +111,10 @@ comptime OPS_METRIC_ACCURACY = 1
 comptime OPS_METRIC_LOG_LOSS = 2
 comptime OPS_METRIC_ROC_AUC = 3
 
+# The packed optimizer options of `optimizer`.
+comptime OPS_OPT_INTS = 4    # kind, nesterov, schedule, step size
+comptime OPS_OPT_FLOATS = 7  # lr, momentum, beta1, beta2, eps, weight_decay, gamma
+
 comptime _SLOT_BITS = 24
 comptime _SLOT_MASK = (1 << _SLOT_BITS) - 1
 
@@ -128,6 +147,39 @@ def _seed(lo: Int, hi: Int) raises -> UInt64:
     return (UInt64(hi) << 32) | UInt64(lo)
 
 
+@fieldwise_init
+struct _OpsOptimizer(ImplicitlyCopyable, Movable):
+    """One optimizer of a session: its OP_OPT configuration (packed as
+    Sequential.compile packs it), its learning-rate schedule
+    (autograd/model.mojo SCHED_*) and the schedule's epoch."""
+    var cfg: OptimizerConfig
+    var sched: Int
+    var sched_step: Int
+    var gamma: Float32
+    var epoch: Int
+
+
+@fieldwise_init
+struct _OpsOptState(ImplicitlyCopyable, Movable):
+    """The state of one (optimizer, parameter) pair: the executor buffers
+    of an autograd/optim.mojo OptimizerState (owned by the session), the
+    parameter's step count and the running host scalars."""
+    var opt: Int
+    var param: Int
+    var s1: FP
+    var s2: FP
+    var s3: FP
+    var parts: FP
+    var cell: FP
+    var n: Int
+    var block: Int
+    var nparts: Int
+    var t: Int
+    var pw1: Float32
+    var pw2: Float32
+    var mu_prod: Float32
+
+
 struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     """One executor, one tape and the live tensors of a composition."""
     var ex: Self.E
@@ -145,6 +197,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var free_slots: List[Int]
     #: owned buffers of freed handles, returned at the next reset or close
     var retired: List[Int]
+    #: the session's optimizers (id = index + 1) and their per-parameter state
+    var opts: List[_OpsOptimizer]
+    var opt_states: List[_OpsOptState]
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -161,6 +216,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.index_rows = List[Int]()
         self.free_slots = List[Int]()
         self.retired = List[Int]()
+        self.opts = List[_OpsOptimizer]()
+        self.opt_states = List[_OpsOptState]()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -198,6 +255,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return (self.generation[slot] << _SLOT_BITS) | (slot + 1)
 
     def _retire(mut self, slot: Int):
+        if self.owned[slot] != 0:
+            # a freed parameter's optimizer state goes with it (its buffers
+            # are returned with the freed uploads, after the queued updates)
+            self._drop_states((self.generation[slot] << _SLOT_BITS) | (slot + 1))
         self.live[slot] = False
         self.generation[slot] += 1
         if self.owned[slot] != 0:
@@ -289,6 +350,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var old = FP(unsafe_from_address=self.retired[i])
             self.ex.free(old)
         self.retired.clear()
+        for i in range(len(self.opt_states)):  # driver-loop: over optimizer states
+            var r = self.opt_states[i]
+            self.ex.free(r.s1)
+            self.ex.free(r.s2)
+            self.ex.free(r.s3)
+            self.ex.free(r.parts)
+            self.ex.free(r.cell)
+        self.opt_states.clear()
         self.ex.sync()
 
     # ------------------------------------------------------------ gradients
@@ -305,6 +374,250 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var g = self.tape.gradient(self.tensors[slot])
         var count = self.rows[slot] * self.cols[slot]
         self.ex.download(dst, g, count)
+
+    def zero_grad(mut self) raises:
+        """Forget the gradient of every trainable tensor (no launch): the
+        next backward with accumulate=True starts each from zero."""
+        if not self.tape.is_recording():
+            raise Error("ops: zero_grad needs a recording session (Session(record=True))")
+        for slot in range(len(self.live)):  # driver-loop: over session handles
+            if self.live[slot] and self.wants_grad[slot]:
+                var leaf = self.tensors[slot]
+                self.tape.clear_gradient(leaf)
+
+    # ------------------------------------------------------------ optimizers
+    def optimizer(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
+        """A new optimizer; returns its id (>= 1).
+
+        ints = [kind (OPT_SGD, OPT_ADAM or OPT_ADAMW), nesterov, schedule
+        (autograd/model.mojo SCHED_*), step size]; fs = [lr, momentum,
+        beta1, beta2, eps, weight_decay, gamma]. The configuration is packed
+        as Sequential.compile packs it (sgd: f1 momentum, f2 0; adam and
+        adamw: f1 beta1, f2 beta2; f7 0), so the update's arguments are
+        model_fit's words."""
+        if len(ints) != OPS_OPT_INTS or len(fs) != OPS_OPT_FLOATS:
+            raise Error("ops: optimizer takes 4 integers and 7 floats")
+        var kind = ints[0]
+        if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
+            raise Error("ops: the optimizer must be sgd, adam or adamw")
+        var lr = fs[0]
+        var momentum = fs[1]
+        var beta1 = fs[2]
+        var beta2 = fs[3]
+        var eps = fs[4]
+        var wd = fs[5]
+        var gamma = fs[6]
+        if not (lr > Float32(0)):
+            raise Error("ops: the learning rate must be positive")
+        if not (momentum >= Float32(0) and momentum < Float32(1)):
+            raise Error("ops: momentum must be in [0, 1)")
+        if not (beta1 >= Float32(0) and beta1 < Float32(1)) or not (beta2 >= Float32(0) and beta2 < Float32(1)):
+            raise Error("ops: beta1 and beta2 must be in [0, 1)")
+        if not (eps > Float32(0)):
+            raise Error("ops: eps must be positive")
+        if not (wd >= Float32(0)):
+            raise Error("ops: weight_decay must be >= 0")
+        var nesterov = ints[1] != 0
+        if nesterov and (kind != OPT_SGD or not (momentum > Float32(0))):
+            raise Error("ops: Nesterov momentum needs sgd with momentum > 0")
+        var sched = ints[2]
+        if sched < SCHED_CONSTANT or sched > SCHED_EXPONENTIAL:
+            raise Error("ops: unknown learning-rate schedule code " + String(sched))
+        if sched != SCHED_CONSTANT and not (gamma > Float32(0)):
+            raise Error("ops: the schedule's gamma must be positive")
+        if sched == SCHED_STEP and ints[3] < 1:
+            raise Error("ops: the step schedule's step size must be at least 1")
+        var f1 = momentum if kind == OPT_SGD else beta1
+        var f2 = Float32(0) if kind == OPT_SGD else beta2
+        var flags = 1 if nesterov else 0
+        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, Float32(0), lr)
+        var sched_step = ints[3] if sched == SCHED_STEP else 1
+        self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
+        return len(self.opts)
+
+    def _opt_index(self, o: Int) raises -> Int:
+        if o < 1 or o > len(self.opts):
+            raise Error("ops: " + String(o) + " is not an optimizer of this session")
+        return o - 1
+
+    def learning_rate(self, o: Int) raises -> Float32:
+        """Optimizer `o`'s learning rate at its schedule's current epoch."""
+        var op = self.opts[self._opt_index(o)]
+        return epoch_lr(op.cfg.lr, op.sched, op.sched_step, op.gamma, op.epoch)
+
+    def scheduler_step(mut self, o: Int) raises:
+        """Advance optimizer `o`'s schedule by one epoch."""
+        var oi = self._opt_index(o)
+        self.opts[oi].epoch += 1
+
+    def _param_slot(self, h: Int, what: String) raises -> Int:
+        var slot = self._slot(h)
+        if self.owned[slot] == 0 or not self.wants_grad[slot]:
+            raise Error("ops: " + what + " takes tensors made with requires_grad=True")
+        return slot
+
+    def _state_of(mut self, oi: Int, h: Int, n: Int) raises -> Int:
+        """The index of (optimizer oi, parameter h)'s state, allocated (zero
+        moment buffers, step 0) on first use."""
+        for i in range(len(self.opt_states)):  # driver-loop: over optimizer states
+            if self.opt_states[i].opt == oi and self.opt_states[i].param == h:
+                return i
+        var cfg = self.opts[oi].cfg
+        var st = OptimizerState(self.ex, cfg, n)
+        self.opt_states.append(_OpsOptState(
+            oi, h, st.s1, st.s2, st.s3, st.parts, st.cell, st.n, st.block, st.nparts, 0,
+            st.pw1, st.pw2, st.mu_prod,
+        ))
+        return len(self.opt_states) - 1
+
+    def _state_view(self, i: Int) -> OptimizerState:
+        """An OptimizerState over state i's buffers and running scalars (it
+        owns nothing; the session frees the buffers)."""
+        var r = self.opt_states[i]
+        var st = OptimizerState()
+        st.s1 = r.s1
+        st.s2 = r.s2
+        st.s3 = r.s3
+        st.parts = r.parts
+        st.cell = r.cell
+        st.n = r.n
+        st.block = r.block
+        st.nparts = r.nparts
+        st.pw1 = r.pw1
+        st.pw2 = r.pw2
+        st.mu_prod = r.mu_prod
+        return st^
+
+    def _drop_states(mut self, h: Int):
+        """Retire every optimizer state of parameter handle h."""
+        var i = len(self.opt_states) - 1
+        while i >= 0:  # driver-loop: over optimizer states
+            if self.opt_states[i].param == h:
+                var r = self.opt_states[i]
+                self.retired.append(Int(r.s1))
+                self.retired.append(Int(r.s2))
+                self.retired.append(Int(r.s3))
+                self.retired.append(Int(r.parts))
+                self.retired.append(Int(r.cell))
+                _ = self.opt_states.pop(i)
+            i -= 1
+
+    def step(mut self, o: Int, hs: List[Int]) raises:
+        """One update of each parameter in `hs` by optimizer `o`, in place,
+        from the last backward's gradients: per parameter ONE OP_OPT launch
+        (autograd/optim.mojo step_lr; no clip, no read-back, no sync) at the
+        schedule's current learning rate and the parameter's next step
+        count. Every parameter is checked before any is updated."""
+        var oi = self._opt_index(o)
+        if not self.tape.is_recording():
+            raise Error("ops: step needs a recording session (Session(record=True))")
+        if len(hs) < 1:
+            raise Error("ops: step takes at least one parameter")
+        var slots = List[Int](capacity=len(hs))
+        var grads = List[FP](capacity=len(hs))
+        for i in range(len(hs)):  # driver-loop: over the step's parameters
+            var slot = self._param_slot(hs[i], "step")
+            for j in range(len(slots)):  # driver-loop: over the step's parameters
+                if slots[j] == slot:
+                    raise Error("ops: step lists a parameter twice")
+            slots.append(slot)
+            grads.append(self.tape.gradient(self.tensors[slot]))
+        var cfg = self.opts[oi].cfg
+        var lr = self.learning_rate(o)
+        for i in range(len(slots)):  # driver-loop: over the step's parameters
+            var slot = slots[i]
+            var n = self.rows[slot] * self.cols[slot]
+            var si = self._state_of(oi, hs[i], n)
+            var t = self.opt_states[si].t + 1
+            var st = self._state_view(si)
+            step_lr(self.ex, cfg, st, FP(unsafe_from_address=self.owned[slot]), grads[i], n, t, lr)
+            self.opt_states[si].t = t
+            self.opt_states[si].pw1 = st.pw1
+            self.opt_states[si].pw2 = st.pw2
+            self.opt_states[si].mu_prod = st.mu_prod
+
+    def _snapshot(mut self, src: FP, slot: Int) raises -> Int:
+        """A copy of a state buffer shaped as parameter `slot`, as a new
+        tensor (valid until reset)."""
+        var r = self.rows[slot]
+        var c = self.cols[slot]
+        var dst = self.tape.reserve(self.ex, r * c)
+        var a = Args()
+        a.p0 = src
+        a.p1 = dst
+        self.ex.launch[OP_COPY](a, r * c)
+        return self._constant(dst, r, c, 0)
+
+    def optimizer_state(mut self, o: Int, h: Int) raises -> Tuple[Int, Float32, Float32, Float32, Int, Int, Int]:
+        """(step count, beta1^t, beta2^t, NAdam's mu product, then one
+        handle per state buffer: a copy of each buffer the kind uses, valid
+        until reset, and 0 for one it does not use). A parameter never
+        stepped reads step 0 and zero buffers."""
+        var oi = self._opt_index(o)
+        var slot = self._param_slot(h, "optimizer_state")
+        var si = self._state_of(oi, h, self.rows[slot] * self.cols[slot])
+        var r = self.opt_states[si]
+        var used = optimizer_slots(self.opts[oi].cfg)
+        var h1 = 0
+        var h2 = 0
+        var h3 = 0
+        if used[0]:
+            h1 = self._snapshot(r.s1, slot)
+        if used[1]:
+            h2 = self._snapshot(r.s2, slot)
+        if used[2]:
+            h3 = self._snapshot(r.s3, slot)
+        return (r.t, r.pw1, r.pw2, r.mu_prod, h1, h2, h3)
+
+    def load_optimizer_state(mut self, o: Int, h: Int, ints: List[Int], fs: List[Float32]) raises:
+        """Set (optimizer o, parameter h)'s state: ints = [step count, then
+        one tensor handle per state buffer (0 for a buffer the kind does
+        not use)], fs = [beta1^t, beta2^t, NAdam's mu product], the words
+        `optimizer_state` returns. Each buffer is copied on the executor."""
+        if len(ints) != 4 or len(fs) != 3:
+            raise Error("ops: load_optimizer_state takes 4 integers and 3 floats")
+        if ints[0] < 0:
+            raise Error("ops: the optimizer state's step count must be >= 0")
+        var oi = self._opt_index(o)
+        var slot = self._param_slot(h, "load_optimizer_state")
+        var n = self.rows[slot] * self.cols[slot]
+        var si = self._state_of(oi, h, n)
+        var r = self.opt_states[si]
+        var u = optimizer_slots(self.opts[oi].cfg)
+        var used = List[Bool]()
+        used.append(u[0])
+        used.append(u[1])
+        used.append(u[2])
+        var dsts = List[FP]()
+        dsts.append(r.s1)
+        dsts.append(r.s2)
+        dsts.append(r.s3)
+        # every handle checked before any copy
+        var srcs = List[FP]()
+        for k in range(3):  # driver-loop: over the three state buffers
+            var hk = ints[1 + k]
+            if not used[k]:
+                if hk != 0:
+                    raise Error("ops: this optimizer keeps no state buffer " + String(k + 1))
+                srcs.append(r.s1)
+                continue
+            if hk == 0:
+                raise Error("ops: the optimizer state lacks state buffer " + String(k + 1))
+            var ks = self._slot(hk)
+            if self.rows[ks] != self.rows[slot] or self.cols[ks] != self.cols[slot]:
+                raise Error("ops: an optimizer state buffer must have its parameter's shape")
+            var src_t = self.tensors[ks]
+            srcs.append(self.tape.value_of(self.ex, src_t))
+        for k in range(3):  # driver-loop: over the three state buffers
+            if used[k]:
+                var a = Args()
+                a.p0 = srcs[k]
+                a.p1 = dsts[k]
+                self.ex.launch[OP_COPY](a, n)
+        self.opt_states[si].t = ints[0]
+        self.opt_states[si].pw1 = fs[0]
+        self.opt_states[si].pw2 = fs[1]
+        self.opt_states[si].mu_prod = fs[2]
 
     # ------------------------------------------------------------ operations
     def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int) raises -> Int:
