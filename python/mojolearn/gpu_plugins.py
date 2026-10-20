@@ -264,10 +264,21 @@ PTX_MANIFEST_SCHEMA = "mojolearn.ptx-set.v2"
 PTX_CODE_FORMAT = "ptx"
 
 
-def validate_baseline_manifest(doc, files):
+#: The merged-binding index beside a merged file (packaging/linux/merged_layout.py).
+MERGED_INDEX = "_mojolearn_merged.json"
+
+
+def validate_baseline_manifest(doc, files, indexes=None):
     """Validate the PTX set's build manifest against the actual relative-file
     SHA256 values of its GPU bindings. Artifact ownership and build format
-    only; identity is the reference table's PTX column."""
+    only; identity is the reference table's PTX column.
+
+    Two layouts are valid. Per-binding: one row per binding file, and the
+    device-free x_trees glue proven through its rf/gbdt delegates. Merged: one
+    row per merged file naming its `members`, which must carry PTX modules
+    (x_trees is then in the same file as rf and gbdt), and the manifest's
+    `indexes` hash each directory's merged index. `indexes`, when given, is
+    the actual {relative index path: SHA256} of the set and must equal them."""
     import re
     if (not isinstance(doc, dict) or doc.get("schema") != PTX_MANIFEST_SCHEMA
             or doc.get("code_format") != PTX_CODE_FORMAT or doc.get("vendor") != "cuda"
@@ -279,6 +290,7 @@ def validate_baseline_manifest(doc, files):
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):  # glue: validate JSON file-manifest record shapes
         raise ValueError("PTX manifest files must be a list of file records")
     declared = {}
+    served, merged_dirs = set(), set()
     for row in rows:  # glue: validate file-manifest names and recorded SHA256 metadata
         name = row.get("file", "")
         if (not isinstance(name, str) or not name or name.startswith("/")
@@ -290,7 +302,18 @@ def validate_baseline_manifest(doc, files):
         modules = row.get("ptx_modules")
         if not isinstance(modules, list) or not all(isinstance(module, dict) for module in modules):  # glue: validate JSON PTX evidence record shapes
             raise ValueError(f"PTX module evidence must be a list of records for {name}")
-        if not modules:
+        if "members" in row:
+            members = row["members"]
+            if (not isinstance(members, list) or not members
+                    or not all(isinstance(m, str) and m.startswith("_mojolearn") for m in members)  # glue: validate merged-member name strings
+                    or not modules or "delegates" in row):
+                raise ValueError(f"invalid merged-file evidence for {name}")
+            for member in members:  # glue: one member name per module the merged file serves
+                if (mode, member) in served:
+                    raise ValueError(f"{member} is served by two files in {mode}")
+                served.add((mode, member))
+            merged_dirs.add(name.rsplit("/", 1)[0] + "/" if "/" in name else "")
+        elif not modules:
             prefix = name.rsplit("/", 1)[0] + "/" if "/" in name else ""
             expected = {prefix + "_mojolearn_rf.so", prefix + "_mojolearn_gbdt.so"}
             delegates = row.get("delegates", [])
@@ -306,6 +329,21 @@ def validate_baseline_manifest(doc, files):
         declared[name] = row.get("sha256")
     if not declared or declared != files:
         raise ValueError("PTX manifest does not match the complete GPU binding bytes")
+    for row in rows:  # glue: a binding file must not shadow a member of its directory's merged file
+        name = row.get("file", "")
+        prefix = name.rsplit("/", 1)[0] + "/" if "/" in name else ""
+        mode = prefix[:-1] or "fast"
+        if "members" not in row and (mode, name[len(prefix):-len(".so")]) in served:
+            raise ValueError(f"{name} would shadow the merged file that serves it")
+    listed = doc.get("indexes", [])
+    if (not isinstance(listed, list) or not all(isinstance(i, dict) for i in listed)  # glue: validate JSON index record shapes
+            or len({i.get("file") for i in listed}) != len(listed)):  # glue: index paths are unique
+        raise ValueError("invalid merged index records in the PTX manifest")
+    recorded = {i.get("file"): i.get("sha256") for i in listed}  # glue: index path -> recorded digest
+    if {f[:-len(MERGED_INDEX)] for f in recorded if isinstance(f, str) and f.endswith(MERGED_INDEX)} != merged_dirs:  # glue: one index per merged directory
+        raise ValueError("PTX manifest merged indexes do not match its merged files")
+    if indexes is not None and recorded != indexes:
+        raise ValueError("PTX manifest does not match the set's merged index bytes")
     return doc
 
 
@@ -326,11 +364,12 @@ def owns_member(profile, member, bundled_ptx=None):
     return member_payload(member) == profile
 
 
-def validate_bundled_ptx(descriptor, manifest_bytes, files):
+def validate_bundled_ptx(descriptor, manifest_bytes, files, indexes=None):
     """Validate the PTX slot's transported bytes against the vendor marker's
     descriptor; return the parsed manifest.
 
-    files is the complete relative GPU .so SHA256 map under cuda_ptx/sm_80.
+    files is the complete relative GPU .so SHA256 map under cuda_ptx/sm_80;
+    indexes, when given, the same for its merged indexes (_mojolearn_merged.json).
     """
     import hashlib
     import json
@@ -338,7 +377,7 @@ def validate_bundled_ptx(descriptor, manifest_bytes, files):
     if hashlib.sha256(manifest_bytes).hexdigest() != descriptor["manifest_sha256"]:
         raise ValueError("PTX manifest bytes differ from the vendor marker")
     manifest = json.loads(manifest_bytes)
-    validate_baseline_manifest(manifest, files)
+    validate_baseline_manifest(manifest, files, indexes)
     if manifest.get("source_dirty") is not False:
         raise ValueError("the PTX set needs a clean source manifest")
     return manifest
