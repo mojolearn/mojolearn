@@ -55,6 +55,7 @@ Example
 ...     probs = s.numpy(p)
 """
 import os
+from types import SimpleNamespace
 
 from ._optional_numpy import require_numpy
 np = require_numpy('mojolearn.ops')
@@ -229,6 +230,27 @@ class Session:
         self._args = np.zeros(_PACK_WORDS, dtype=np.int64)
         self._argf = self._args[_PACK_F:].view(np.float32)
         self._args_addr = self._args.ctypes.data
+        # Resolve installed CPU proxy attributes once during ABI setup.
+        # Every later public operation reads a C namespace of native entries.
+        self._distributed_binding = SimpleNamespace(
+            ops_distributed_open=self._b.ops_distributed_open,
+            ops_distributed_load=self._b.ops_distributed_load,
+            ops_distributed_fit=self._b.ops_distributed_fit,
+            ops_distributed_run=self._b.ops_distributed_run,
+            ops_distributed_state=self._b.ops_distributed_state,
+            ops_distributed_residency=self._b.ops_distributed_residency,
+            ops_distributed_save=self._b.ops_distributed_save,
+            ops_distributed_close=self._b.ops_distributed_close,
+            ops_partitioned_open=self._b.ops_partitioned_open,
+            ops_partitioned_load=self._b.ops_partitioned_load,
+            ops_partitioned_fit=self._b.ops_partitioned_fit,
+            ops_partitioned_run=self._b.ops_partitioned_run,
+            ops_partitioned_state=self._b.ops_partitioned_state,
+            ops_partitioned_residency=self._b.ops_partitioned_residency,
+            ops_partitioned_save=self._b.ops_partitioned_save,
+            ops_partitioned_close=self._b.ops_partitioned_close,
+            ops_partitioned_profile=self._b.ops_partitioned_profile,
+        )
         self._opt_kind = {}
 
     # ------------------------------------------------------------ lifetime
@@ -1253,11 +1275,13 @@ class Session:
 
     def load_partitioned(self, path, devices=(0,)):
         """Restore a complete partitioned program onto physical devices."""
-        return self._b.ops_partitioned_load(path, devices, _PartitionedProgram, self._b)
+        return self._distributed_binding.ops_partitioned_load(
+            path, devices, _PartitionedProgram, self._distributed_binding)
 
     def load_distributed(self, path, devices=(0,)):
         """Restore a complete distributed program onto the given devices."""
-        return self._b.ops_distributed_load(path, devices, _DistributedProgram, self._b)
+        return self._distributed_binding.ops_distributed_load(
+            path, devices, _DistributedProgram, self._distributed_binding)
 
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
@@ -1689,10 +1713,10 @@ class Program:
         when restoring a checkpoint. Eligible matrix products split independent
         output columns; stage-owned parameters and moments stay on one device.
         """
-        return self._s._b.ops_partitioned_open(
+        return self._s._distributed_binding.ops_partitioned_open(
             self._s._id, self._id, devices,
             (stages, tensor_shards, microbatches, optimizer, parameters, seed),
-            _PartitionedProgram, self._s._b)
+            _PartitionedProgram, self._s._distributed_binding)
 
     def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
                    parameters=(), seed=0):
@@ -1703,9 +1727,9 @@ class Program:
         ``parameters`` lists trainable handles, or is empty to train every
         floating-point parameter. ``seed`` controls native row permutations.
         """
-        return self._s._b.ops_distributed_open(
+        return self._s._distributed_binding.ops_distributed_open(
             self._s._id, self._id, devices, (logical_shards, optimizer, parameters, seed),
-            _DistributedProgram, self._s._b)
+            _DistributedProgram, self._s._distributed_binding)
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,
