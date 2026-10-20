@@ -6,7 +6,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
-from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32
+from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, _addr, _native_function
 from bindings.hostptr import f32_ptr
 
@@ -244,6 +244,136 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
     return _neural_plain(owner, x, state_value, step)
 
 
+def neural_training_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var mode = fields.get("numeric_mode")
+    if mode is None:
+        mode = context["backend"]._DEFAULT_MODE
+    else:
+        mode = mode.strip().lower()
+    if String(mode) != "identical" and String(mode) != "fast":
+        raise Error("NotImplementedError: neural backward requires identical or fast mode")
+    var key = fields["_native_route"] + PythonObject(":") + mode
+    var selected = context["training_bindings"].get(key)
+    if selected is None:
+        raise Error("NotImplementedError: native training bindings unavailable for " + String(key))
+    var family = "transformer" if String(fields["_native_kind"]) == "transformer" else "mamba"
+    var entries = selected[family]
+    if bi.type(entries) is bi.str:
+        raise Error("RuntimeError: " + String(entries))
+    var vendor = String(_native_function(entries, family + "_vendor")())
+    var code = Int(py=_native_function(entries, family + "_numeric_mode")())
+    if code != (1 if String(mode) == "identical" else 0):
+        raise Error("RuntimeError: native training binding numeric mode differs from the block")
+    if String(fields["_native_route"]) == "cpu":
+        if vendor != "cpu":
+            raise Error("RuntimeError: CPU backward requires native CPU kernels")
+    elif vendor != "metal" and vendor != "cuda" and vendor != "hip":
+        raise Error("RuntimeError: GPU backward requires native GPU kernels")
+    if family == "transformer" and Bool(py=bi.hasattr(entries, "transformer_arithmetic_profile")):
+        var profile = _native_function(entries, "transformer_arithmetic_profile")()
+        var saved = fields.get("_arithmetic_profile")
+        if saved is not None and Bool(py=fields.get("_arithmetic_profile_mode") == mode) and not Bool(py=saved == profile):
+            raise Error("RuntimeError: saved transformer arithmetic profile differs from training binding")
+        fields["_arithmetic_profile"] = profile
+        fields["_arithmetic_profile_mode"] = mode
+        fields["_arithmetic_profile_changed"] = _native_function(entries, "transformer_arithmetic_profile_changed")()
+    return entries
+
+
+def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
+    _ = generation_initialize_binding(context["generation_classes"])
+    var bi = Python.import_module("builtins")
+    var fields = bi.object.__getattribute__(block, "__dict__")
+    var kind = String(fields["_native_kind"])
+    var transformer = kind == "transformer"
+    if transformer and (fields["_int15"] is not None or Bool(py=fields["_extended"])):
+        raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options; numeric_profile=" + String(fields["numeric_profile"]))
+    var entries = neural_training_entries(fields, context)
+    var name = ("transformer" if transformer else kind) + "_backward"
+    if not Bool(py=bi.hasattr(entries, name)):
+        raise Error("RuntimeError: loaded native training binding lacks " + name)
+    var d = Int(py=fields["d_model"])
+    var x = _neural_input(input, d, False, context)
+    var b = Int(py=x.shape[0])
+    var l = Int(py=x.shape[1])
+    var dy = _model_f32(grad_output, "grad_output", context)
+    _model_shape(dy, [b, l, d], "grad_output")
+    var weights = fields["_w"]
+    if not transformer:
+        var mode = fields.get("numeric_mode")
+        if mode is None:
+            mode = context["backend"]._DEFAULT_MODE
+        else:
+            mode = mode.strip().lower()
+        var selected = context["training_bindings"][fields["_native_route"] + PythonObject(":") + mode]
+        if Int(py=selected["all_finite_f32"](dy._addr, dy.size)) != 1:
+            raise Error("neural backward: grad_output must be finite")
+        # Preserve the existing current-weight shape validation without
+        # calling a Python block constructor from the operation.
+        var plan = bi.object.__new__(context["config_context"]["plan_class"])
+        plan.kind = PythonObject(kind)
+        plan.d_model = PythonObject(d)
+        plan.block_kwargs = bi.dict()
+        if kind == "mamba2":
+            plan.block_kwargs["dt_limit"] = fields["dt_limit"]
+        var named = bi.dict()
+        var names = block._W_NAMES
+        for i in range(len(names)):  # driver-loop: over the fixed block weight registry
+            named[names[i]] = weights[i]
+        var checked = _model_block(named, plan, PythonObject("fp32_v1"), fields["_native_route"], _model_bindings(fields["_native_route"], kind, context, mode), context)
+        weights = bi.object.__getattribute__(checked, "__dict__")["_w"]
+    var keep = List[PythonObject]()
+    var addresses = py_ints([_addr(x, keep)])
+    var gradients = bi.list()
+    gradients.append(generation_array([b, l, d]))
+    for i in range(len(weights)):  # driver-loop: over parameter buffers and their shapes
+        addresses.append(_addr(weights[i], keep))
+        var shape = List[Int]()
+        for j in range(len(weights[i].shape)):  # driver-loop: over tensor shape metadata
+            shape.append(Int(py=weights[i].shape[j]))
+        gradients.append(generation_array(shape))
+    addresses.append(_addr(dy, keep))
+    for i in range(len(gradients)):  # driver-loop: over gradient buffer addresses
+        addresses.append(_addr(gradients[i], keep))
+    var params = py_ints([b, l, d])
+    if transformer:
+        for key in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
+            params.append(fields[key])
+        var lock = fields["_runtime_lock"]
+        lock.acquire()
+        try:
+            var session = Bool(py=bi.hasattr(entries, "transformer_session_backward")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+            if session:
+                if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
+                    _native_function(fields["_session_binding"], "transformer_session_close")(fields["_native_session"])
+                    fields["_native_session"] = PythonObject(None)
+                    fields["_session_binding"] = PythonObject(None)
+                if fields["_native_session"] is None:
+                    fields["_native_session"] = _native_function(entries, "transformer_session_create")()
+                    fields["_session_binding"] = entries.canonical
+                _native_function(entries, "transformer_session_backward")(fields["_native_session"], addresses, params)
+            else:
+                if fields["_native_session"] is not None and Bool(py=bi.hasattr(entries, "transformer_session_invalidate_tape")):
+                    _native_function(entries, "transformer_session_invalidate_tape")(fields["_native_session"])
+                _native_function(entries, name)(addresses, params)
+            lock.release()
+        except error:
+            lock.release()
+            raise error
+    else:
+        if kind == "mamba2":
+            params.extend(fields["dt_limit"])
+        _native_function(entries, name)(addresses, params)
+    var result = bi.dict()
+    result["x"] = gradients[0]
+    var names = block._W_NAMES
+    for i in range(len(names)):  # driver-loop: over named gradient slots
+        result[names[i]] = gradients[i + 1]
+    _ = keep^
+    return result
+
+
 def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
@@ -252,10 +382,16 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = neural_block_init_binding(args[0], args[1], args[2], args[3], args[4])
         elif operation == 1:
             result = neural_block_allocate_binding(args[0], args[1], args[2], args[3])
-        else:
+        elif operation == 2:
             result = neural_block_forward_binding(args[0], args[1], args[2], args[3], args[4], args[5])
+        else:
+            result = neural_block_backward_binding(args[0], args[1], args[2], args[3])
         return result.steal_data()
     except error:
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error, ExceptionType.TypeError)
+        if String(error).startswith("NotImplementedError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+        if String(error).startswith("RuntimeError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error, ExceptionType.ValueError)
