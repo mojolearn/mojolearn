@@ -4,10 +4,11 @@ the Mac and ships alone to a rented box.
 
 The release columns install LOCAL wheel files. A user runs
 `pip install mojolearn==V` against an index, and that is where the split
-Linux release can break: the core requires mojolearn-nvidia==V and
-mojolearn-amd==V; aggregates require native architecture payloads, which pin
-mojolearn==V back. All six projects upload in dependency order by separate jobs. Two
-subcommands:
+Linux release can break: the Linux `mojolearn` requires mojolearn-core==V,
+mojolearn-nvidia==V and mojolearn-amd==V; each vendor requires
+mojolearn-core==V (NVIDIA also mojolearn-nvidia-ptx==V); mojolearn-core
+requires no vendor (2026-10-20). Every project uploads in dependency order
+by separate jobs. Two subcommands:
 
   precheck --index testpypi|pypi --version V
       On the Mac, before anything is rented: all release projects serve V on
@@ -36,12 +37,13 @@ import urllib.request
 
 #: The projects of the split Linux release (python/mojolearn/gpu_plugins.py,
 #: spelled here because this file ships to the box without the package).
-CORE = "mojolearn"
+CORE = "mojolearn-core"
+META = "mojolearn"
 PLUGINS = {"cuda": "mojolearn-nvidia", "hip": "mojolearn-amd"}
 PAYLOADS = {vendor: (project,) for vendor, project in PLUGINS.items()}
 PTX_PROJECT = "mojolearn-nvidia-ptx"
-PROJECTS = (CORE, *PLUGINS.values(), PTX_PROJECT)
-REQUIRES = {CORE: tuple(PLUGINS.values()), "mojolearn-nvidia": (CORE, PTX_PROJECT),
+PROJECTS = (META, CORE, *PLUGINS.values(), PTX_PROJECT)
+REQUIRES = {META: (CORE, *PLUGINS.values()), CORE: (), "mojolearn-nvidia": (CORE, PTX_PROJECT),
             "mojolearn-amd": (CORE,), PTX_PROJECT: (CORE,)}
 
 
@@ -137,7 +139,7 @@ def precheck(index, version, api=None, fetch=fetch_json, fetch_meta=fetch_text):
             got = {k: v for k, v in pins.items() if k in PROJECTS}
             if got != want:
                 problems.append(f"{project}=={version} on {index} has invalid release requirements: "
-                                f"{got}, expected {want}" + (" (not the split core)" if project == CORE else ""))
+                                f"{got}, expected {want}")
             facts += f"; requires {', '.join(f'{k}=={v}' for k, v in sorted(got.items()))}"
         lines.append(f"  {project}=={version}: on {index}, {facts}")
     return lines, problems
