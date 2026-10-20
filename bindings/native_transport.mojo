@@ -152,7 +152,7 @@ def transport_connect(host: String, port: Int, timeout: Float64) raises -> Pytho
 
 def transport_close(socket: PythonObject) raises:
     if socket is not None:
-        socket.close()
+        TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket.close(socket)
 
 
 def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
@@ -181,11 +181,13 @@ def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
             result += _transport_json(value[i], depth + 1)
         return result + "]"
     if cls is t[].bi.dict:
-        var keys = t[].bi.sorted(value)
-        result += "{"
-        for i in range(len(keys)):  # driver-loop: over header object fields
+        var keys = t[].bi.list(value)
+        for i in range(len(keys)):
             if t[].bi.type(keys[i]) is not t[].bi.str:
                 raise Error("transport: JSON header keys must be strings")
+        keys = t[].bi.sorted(keys)
+        result += "{"
+        for i in range(len(keys)):  # driver-loop: over header object fields
             if i != 0:
                 result += ","
             result += String(t[].json_string(keys[i])) + ":" + _transport_json(value[keys[i]], depth + 1)
@@ -195,7 +197,7 @@ def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
 
 def transport_send(socket: PythonObject, header: PythonObject, payload: PythonObject = PythonObject(None)) raises:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    if t[].bi.type(socket) is not t[].socket or t[].bi.type(header) is not t[].bi.dict:
+    if not Bool(py=t[].bi.isinstance(socket, t[].socket)) or t[].bi.type(header) is not t[].bi.dict:
         raise Error("transport: send requires a native socket and dict header")
     var bytes = t[].bi.bytes() if payload is None else t[].bi.memoryview(payload).cast("B")
     var envelope = t[].bi.dict(header)
@@ -207,10 +209,10 @@ def transport_send(socket: PythonObject, header: PythonObject, payload: PythonOb
     var prefix = t[].bi.bytearray(4)
     for i in range(4):
         prefix[i] = PythonObject((n >> (24 - i * 8)) & 255)
-    socket.sendall(prefix)
-    socket.sendall(raw)
+    t[].socket.sendall(socket, prefix)
+    t[].socket.sendall(socket, raw)
     if len(bytes) != 0:
-        socket.sendall(bytes)
+        t[].socket.sendall(socket, bytes)
 
 
 def _transport_exact(socket: PythonObject, count: Int) raises -> PythonObject:
@@ -221,7 +223,7 @@ def _transport_exact(socket: PythonObject, count: Int) raises -> PythonObject:
     var view = t[].bi.memoryview(owner)
     var received = 0
     while received < count:  # driver-loop: over bytes received for one native frame
-        var got = Int(py=socket.recv_into(view[t[].bi.slice(received, count)], count - received))
+        var got = Int(py=t[].socket.recv_into(socket, view[t[].bi.slice(received, count)], count - received))
         if got <= 0:
             raise Error("transport: peer closed the connection")
         received += got
@@ -230,7 +232,7 @@ def _transport_exact(socket: PythonObject, count: Int) raises -> PythonObject:
 
 def transport_receive(socket: PythonObject, max_payload: Int) raises -> PythonObject:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    if t[].bi.type(socket) is not t[].socket or max_payload < 0:
+    if not Bool(py=t[].bi.isinstance(socket, t[].socket)) or max_payload < 0:
         raise Error("transport: receive requires a native socket and nonnegative bound")
     var prefix = _transport_exact(socket, 4)
     var count = 0
