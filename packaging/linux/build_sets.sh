@@ -72,14 +72,18 @@ export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 #
 # THE BOX RUN THAT DECIDES THE DEFAULT: tools/amd_compile_variance.sh on the
 # MI325X (cold cache; mixture -j 1 x2 and -j 8 x3; merged identical tier -j 1
-# vs -j 8). Results, filled in by the orchestrator:
-#   build times       -j 1: <owed> s   -j 8: <owed> s   merged tier: <owed> s vs <owed> s
-#   distinct bytes    -j 1: <owed>     -j 8: <owed>     canonical classes: <owed>
-#   gmm digests       <owed> (equal across all five builds = RESULTS-EQUAL)
-#   variance source   <owed> (REORDERED/SAME-KERNELS = packaging, canonical
-#                     compare covers it; CODE-DIFFERS = compiler, Modular ask)
-# AMD_COMPILE_JOBS_DEFAULT is the default after that run; it stays 1 until the
-# verdict reads RESULTS-EQUAL. MOJOLEARN_AMD_COMPILE_JOBS=1 keeps the old
+# vs -j 8), source 6bf016f25eabf29f44e2cfed160d0d62151ce31a, Mojo 1.0.0 ed45d567:
+#   build means       -j 1: 69.9 s (n=2); -j 8: 38.0 s (n=3), cold caches
+#   distinct bytes    -j 1: 1/2; -j 8: 1/3; cross-worker class REORDERED
+#   gmm digests       f71678fdc3973528:18cells for all five builds, RESULTS-EQUAL
+#   variance source   packaging; 137 kernel digests and code-object sets equal
+#   merged tier       -j 1 crashed (rc=139) at 515.196 s; -j 8 built in 794.290 s
+#                     (one build). No merged j1/j8 equivalence or speed ratio
+#                     is established by the empty 0-of-0 canonical comparison.
+# Evidence: bench/results/amd_compile_variance/2026-10-20/summary.json.
+# The supported default follows the successful eight-worker build and the
+# repeated GMM result comparison; other estimator results remain outside that
+# experiment's scope. MOJOLEARN_AMD_COMPILE_JOBS=1 keeps the old
 # one-worker path selectable for the A/B; tools/release_reuse.py reads this
 # line and the same variable, so a release's identity names the worker count.
 # NVIDIA sets and the host bindings (CPU codegen) keep two workers: every pair
@@ -88,11 +92,14 @@ export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 # the host bindings on every box). The host bindings in an AMD set also keep
 # two, so they stay byte-identical to the NVIDIA sets' copies (pack_wheel.py
 # compares them).
-AMD_COMPILE_JOBS_DEFAULT=1
+AMD_COMPILE_JOBS_DEFAULT=8
 GPU_COMPILE_JOBS=2
-case "${MOJOLEARN_GPU_ARCHS:-}" in
-  gfx*) GPU_COMPILE_JOBS="${MOJOLEARN_AMD_COMPILE_JOBS:-$AMD_COMPILE_JOBS_DEFAULT}" ;;
-esac
+# (an if and no nested ${..:-$X}, not a case: tools/release_reuse.py shell_view
+# models neither and would then see every later list line whole)
+if [[ "${MOJOLEARN_GPU_ARCHS:-}" == gfx* ]]; then
+  GPU_COMPILE_JOBS="${MOJOLEARN_AMD_COMPILE_JOBS:-}"
+  [[ -n "$GPU_COMPILE_JOBS" ]] || GPU_COMPILE_JOBS=$AMD_COMPILE_JOBS_DEFAULT
+fi
 [[ "$GPU_COMPILE_JOBS" =~ ^[1-9][0-9]?$ && "$GPU_COMPILE_JOBS" -le 32 ]] \
   || { echo 'MOJOLEARN_AMD_COMPILE_JOBS must be 1..32' >&2; exit 2; }
 # The CPU cap covers the widest compile: JOBS scripts at once, each with up to

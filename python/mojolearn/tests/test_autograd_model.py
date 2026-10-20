@@ -126,15 +126,17 @@ def test_bad_options():
         ml.Sequential().linear(2).compile(loss="cross_entropy").fit(X, y3, epochs=1)
 
 
-def test_dropout_trains_or_is_refused():
+def test_dropout_trains():
     X, yr, _, _ = _data()
     m = ml.Sequential().linear(8).relu().dropout(0.2).linear(1).compile(loss="mse", lr=0.01)
-    try:
-        m.fit(X, yr, epochs=5, batch_size=32, seed=0)
-    except Exception as exc:  # a build without the tape's dropout refuses by name
-        assert "Dropout is not available" in str(exc)
-        return
+    m.fit(X, yr, epochs=5, batch_size=32, seed=0)
     assert m.predict(X).shape == (120,)
+    np.testing.assert_array_equal(m.predict(X), m.predict(X))
+    other = ml.Sequential().linear(8).relu().dropout(0.2).linear(1).compile(loss="mse", lr=0.01)
+    other.fit(X, yr, epochs=2, batch_size=32, seed=0)
+    other.fit(X, yr, epochs=3, batch_size=32, resume=True)
+    np.testing.assert_array_equal(m.params_, other.params_)
+    print("USABILITY_DIGEST dropout", _digest(m))
 
 
 # ---------------------------------------------------------------- inputs as they are

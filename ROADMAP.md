@@ -20,8 +20,10 @@ source or installed-package versions recorded in their evidence.
   trains models through a native training loop. `ops.Session` exposes
   composable tensor operations, reverse-mode differentiation, losses,
   optimizers and schedules. The tape and backward traversal run in Mojo.
+  `Sequential` includes seeded dropout and validation-loss stopping with
+  restoration of the matching parameter and optimizer state.
   Higher derivatives include vector-Jacobian, Jacobian-vector and
-  Hessian-vector products. Tensor operations support up to eight dimensions,
+  Hessian-vector products, including LayerNorm. Tensor operations support up to eight dimensions,
   including broadcasting, axis reductions, batched matrix products,
   convolution and pooling. See [Build your own model](docs-site/user_guide/autograd.md)
   and the 0.8.54 and 0.8.55 [release entries](CHANGELOG.md).
@@ -29,9 +31,11 @@ source or installed-package versions recorded in their evidence.
   inference operations into a program and replay them in one native call.
   Programs can be saved and loaded; `Sequential` supports inference export
   and training checkpoints, and sessions can save and restore state.
-  Captured programs use fixed input shapes and the supported operation set.
-  This establishes capture and replay; broader graph optimization remains
-  below.
+  `Program.fit` trains a captured graph through native minibatch and epoch
+  loops. Program execution keeps fixed shapes by default and can accept
+  changing dimensions at a fixed rank with `dynamic_shapes=True`, where
+  the captured operations and parameters permit them. Broader graph
+  optimization remains below.
 - **Pretrained model import.** `import_model` accepts supported
   `torch.export` programs and ONNX models. Weight import accepts PyTorch
   state dictionaries and safetensors. The

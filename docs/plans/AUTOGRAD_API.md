@@ -247,7 +247,7 @@ naming the first bad layer):
 | 4 | Tanh | - | - | - | - |
 | 5 | Softmax (rows) | - | - | - | - |
 | 6 | LayerNorm | - | - | epsilon | weight (width), then bias (width) |
-| 7 | Dropout | - | - | drop probability | - (needs `-D MOJOLEARN_AUTOGRAD_HAS_DROPOUT`, lane ag-data's `Tape.dropout`; refused by name otherwise) |
+| 7 | Dropout | - | - | drop probability | - (built in; training only, with seeded step/layer counters) |
 | 8 | Residual | source (-1 the input, else an earlier layer) | - | - | - |
 
 GELU is left out: the tape has no GELU op yet.
@@ -343,9 +343,6 @@ AMD (lane ag-public-api, 2026-10-19).
 Still excluded from the public docs (`docs-site/api_exclude.txt`):
 
 - Checks not green on all three vendors: none.
-- `Sequential.dropout`: refused by name unless the build defines
-  `MOJOLEARN_AUTOGRAD_HAS_DROPOUT`, which no shipped binding does. The
-  session's `dropout` op is public.
 - `Session.profile_reset` / `Session.profile_report`: the development launch
   profile (`MOJOLEARN_AG_PROFILE`), not user API.
 

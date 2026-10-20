@@ -334,7 +334,9 @@ def _run(column, mode, path):
 
 def _gpu_present():
     try:
-        return ml.vendor() in ("metal", "cuda", "hip")
+        # This suite needs the sequence binding, not the unrelated core
+        # binding queried by ml.vendor() in a focused source build.
+        return _backend.binding("_mojolearn_x_sequence").x_sequence_vendor() in ("metal", "cuda", "hip")
     except Exception:
         return False
 

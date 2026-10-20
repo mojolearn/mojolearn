@@ -19,7 +19,7 @@ from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
 from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
-from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
+from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, FitValidation, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
 from autograd.program import OpsProgram
 from autograd.rankn import ShapeN
@@ -95,7 +95,8 @@ def model_fit_py[E: Exec](
     state[FS_EPOCH] values, read when resuming)], and ip[14] = resume (0/1);
     loss_curve then holds state[FS_EPOCH] + epochs values. Returns the epochs
     completed in all (the earlier ones included)."""
-    var stateful = len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE
+    var validated = len(addrs) == 13 and len(ip) == 16
+    var stateful = (len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE) or validated
     var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
     if not (stateful or plain) or len(fp) < FIT_FLOATS + 1:
         raise Error("model_fit: requires 4 addresses and 14 integer parameters (or 8 and 15 with the "
@@ -115,6 +116,16 @@ def model_fit_py[E: Exec](
         ag_profile_reset()
     var n_iter: Int
     if stateful:
+        var validation = Optional[FitValidation]()
+        if validated:
+            var classes = CastIn.f32_c(0, 1, 1)
+            if cfg.target != 0:
+                classes = cast_in_of(addrs[10], "training classes")
+            validation = Optional[FitValidation](FitValidation(
+                cast_in_of(addrs[8], "validation X"), cast_in_of(addrs[9], "validation y"),
+                classes, fptr(addrs[11], "validation curve"), ival(ip, 15) != 0,
+                IP64(unsafe_from_address=Int(py=addrs[12])),
+            ))
         var sa = Int(py=addrs[6])
         if sa == 0:
             raise Error("model_fit: null training-state buffer")
@@ -125,7 +136,7 @@ def model_fit_py[E: Exec](
             prev = fptr(addrs[7], "earlier loss_curve")
         _ = model_fit_state(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
                             fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"),
-                            fptr(addrs[4], "m"), fptr(addrs[5], "v"), state, prev, resume)
+                            fptr(addrs[4], "m"), fptr(addrs[5], "v"), state, prev, resume, validation)
         n_iter = Int(state[FS_EPOCH])
     else:
         n_iter = model_fit(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,

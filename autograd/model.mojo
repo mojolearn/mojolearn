@@ -25,18 +25,16 @@ from autograd.layers import NeuralRules, layer_norm
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 from core.cast_in import CAST_KIND_SIGNED, CastIn
-from autograd.cast_ops import upload_cast
+from autograd.cast_ops import upload_cast, validation_codes
 # Description version 2 (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md
 # section 5): per-sample input shapes of any rank and the shape layers.
 from autograd.rankn import RN_MAX_RANK, ShapeN
 from autograd.rankn_conv import rankn_conv2d, rankn_max_pool2d, rankn_avg_pool2d
 from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
 
-# Lane ag-data adds `Tape.dropout`; lane ag-forward adds the tape's
-# inference mode. Until they land these stay off and the model trainer does
-# not reach either (a Dropout layer is refused at fit time with a clear error;
-# prediction records a plain forward with gradient-free leaves).
-comptime HAS_DROPOUT = is_defined["MOJOLEARN_AUTOGRAD_HAS_DROPOUT"]()
+# Tape.dropout is part of the native tape. Its mask is keyed by seed,
+# optimizer step and layer, including across checkpoint/resume.
+comptime HAS_DROPOUT = True
 comptime HAS_INFERENCE = is_defined["MOJOLEARN_AUTOGRAD_HAS_INFERENCE"]()
 
 # LAUNCHES (lane ag-pass1-launches, read from the code; tape.mojo's
@@ -451,6 +449,17 @@ struct FitConfig(Copyable, Movable):
     var tol: Float64
     var huber_delta: Float32
     var init: Bool
+
+
+@fieldwise_init
+struct FitValidation(Copyable, Movable):
+    var x: CastIn
+    var y: CastIn
+    var classes: CastIn
+    var curve: FP
+    var restore: Bool
+    # Native result: executed epochs in this call, retained absolute epoch.
+    var result: MutPointer[Int64, MutUntrackedOrigin]
 
 
 def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
@@ -868,6 +877,7 @@ def model_fit[E: Exec](
 def model_fit_state[E: Exec](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
+    validation: Optional[FitValidation] = None,
 ) raises -> Int:
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
 
@@ -980,6 +990,53 @@ def model_fit_state[E: Exec](
     var n_batches = (N + bs - 1) // bs
     var dloss = ex.alloc(n_batches)
     var dcurve = ex.alloc(cfg.epochs)
+    var nv = 0
+    var vx = dummy_ptr()
+    var vy = dummy_ptr()
+    var vloss = dummy_ptr()
+    var vcurve = dummy_ptr()
+    var best_p = dummy_ptr()
+    var best_m = dummy_ptr()
+    var best_v = dummy_ptr()
+    var best_epoch = 0
+    var best_step = step
+    var best_pw1 = st.pw1
+    var best_pw2 = st.pw2
+    var best_mu = st.mu_prod
+    var restore = False
+    if validation:
+        var v = validation.value().copy()
+        nv = v.x.rows
+        if nv < 1 or v.x.cols != D or v.y.rows != nv:
+            raise Error("validation_data must have matching nonempty rows and the training input width")
+        vx = ex.alloc(nv * D)
+        vy = ex.alloc(nv * TW)
+        upload_cast(ex, vx, v.x)
+        if cfg.target == TARGET_DENSE:
+            if v.y.cols != O:
+                raise Error("validation targets must have the model's output width")
+            upload_cast(ex, vy, v.y)
+        else:
+            var codes = ex.alloc(nv)
+            validation_codes(ex, v.y, v.classes, codes)
+            var oh = Args()
+            oh.p0 = codes
+            oh.p1 = vy
+            oh.i0 = TW
+            oh.i1 = 1 if (cfg.target == TARGET_CODE_VALUES or TW == 1) else 0
+            ex.launch[OP_ONE_HOT](oh, nv * TW)
+            ex.free(codes)
+        vloss = ex.alloc((nv + bs - 1) // bs)
+        vcurve = ex.alloc(cfg.epochs)
+        restore = v.restore
+        if restore:
+            best_p = ex.alloc(np_)
+            best_m = ex.alloc(np_)
+            best_v = ex.alloc(np_)
+        # Validation monitoring starts afresh for each fit call. A resumed
+        # call can use a different validation set without stale comparisons.
+        best = Float64(1.0e308)
+        stall = 0
     var tape = Tape()
     var epoch_tape = Tape()
     var word = List[Float32](length=1, fill=Float32(0))
@@ -1051,18 +1108,63 @@ def model_fit_state[E: Exec](
         var mean = epoch_tape.scale(ex, epoch_tape.sum(ex, parts), inv_n)
         _copy(ex, dcurve + e, epoch_tape.value(mean), 1)
         n_iter = e + 1
-        if cfg.patience > 0:
+        var monitored = dcurve + e
+        if nv > 0:
+            var nb = (nv + bs - 1) // bs
+            for vi in range(nb):  # driver-loop: over validation batches
+                var off = vi * bs
+                var B = min(bs, nv - off)
+                tape.reset()
+                var x = tape.variable(ex, vx + off * D, B, D, False)
+                var target = tape.variable(ex, vy + off * TW, B, TW, False)
+                var pred = model_forward(tape, ex, spec, P, Gr, x, False, cfg.seed, step)
+                var loss = model_loss(tape, ex, cfg, pred, target)
+                var weighted = tape.scale(ex, loss, Float32(B))
+                _copy(ex, vloss + vi, tape.value(weighted), 1)
+            epoch_tape.reset()
+            var parts = epoch_tape.variable(ex, vloss, 1, nb, False)
+            var average = epoch_tape.scale(ex, epoch_tape.sum(ex, parts), identical_div(Float32(1), Float32(nv)))
+            _copy(ex, vcurve + e, epoch_tape.value(average), 1)
+            monitored = vcurve + e
+        if cfg.patience > 0 or nv > 0:
             ex.sync()
-            ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())), dcurve + e, 1)
+            ex.download(FP(unsafe_from_address=Int(word.unsafe_ptr())), monitored, 1)
             var value = Float64(word[0])
+            if value != value or abs(value) > Float64(3.4028234663852886e38):
+                raise Error("model fit: monitored loss is not finite")
             if value > best - cfg.tol:
                 stall += 1
             else:
                 stall = 0
             if value < best:
                 best = value
-            if stall >= cfg.patience:
+                best_epoch = e + 1
+                if restore:
+                    _copy(ex, best_p, P, np_)
+                    _copy(ex, best_m, s1, np_)
+                    _copy(ex, best_v, s2, np_)
+                    best_step = step
+                    best_pw1 = st.pw1
+                    best_pw2 = st.pw2
+                    best_mu = st.mu_prod
+            if cfg.patience > 0 and stall >= cfg.patience:
                 break
+    if validation:
+        var v = validation.value().copy()
+        ex.sync()
+        ex.download(v.curve, vcurve, n_iter)
+        v.result[0] = Int64(n_iter)
+        v.result[1] = Int64(start + best_epoch)
+        if restore:
+            _copy(ex, P, best_p, np_)
+            _copy(ex, s1, best_m, np_)
+            _copy(ex, s2, best_v, np_)
+            step = best_step
+            st.pw1 = best_pw1
+            st.pw2 = best_pw2
+            st.mu_prod = best_mu
+            stall = 0
+            n_iter = best_epoch
     ex.sync()
     ex.download(Pio, P, np_)
     ex.download(Mio, s1, np_)
@@ -1073,8 +1175,10 @@ def model_fit_state[E: Exec](
     St[FS_VALID] = 1
     St[FS_EPOCH] = Int64(start + n_iter)
     St[FS_STEP] = Int64(step)
-    St[FS_STALL] = Int64(stall)
-    St[FS_BEST] = bitcast[DType.int64](best)
+    # Validation monitoring is per call. Do not compare its loss with a
+    # different validation set, or with training loss after a resumed fit.
+    St[FS_STALL] = Int64(0 if validation else stall)
+    St[FS_BEST] = bitcast[DType.int64](Float64(1.0e308) if validation else best)
     St[FS_PW1] = _f32_word(st.pw1)
     St[FS_PW2] = _f32_word(st.pw2)
     St[FS_MU] = _f32_word(st.mu_prod)

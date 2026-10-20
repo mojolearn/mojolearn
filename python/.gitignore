@@ -41,6 +41,10 @@ mojolearn/_mojolearn_mamba.so
 # untracked in `git status` where a careless add would have committed a
 # 12 MB Mach-O. Added the day the binding first compiled.
 mojolearn/_mojolearn_transformer.so
+# Generated merged bindings and their loader index (bindings/merged_build.sh).
+mojolearn/_mojolearn_native*.so
+mojolearn/_mojolearn_merged.json
+mojolearn/host/_mojolearn_merged.json
 # Build outputs copied in by packaging/macos/build_release_wheel.sh so that
 # `python -m mojolearn verify` has a comparator inside the wheel and
 # `python -m mojolearn identity` has the harness, the three training GPU

@@ -18,15 +18,19 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args
 from core.cast_in import (
     CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CastIn, cast_f32_bits, cast_i32_bits, cast_raw_bits,
+    cast_w64_bits, label_kind_of,
 )
+from core.label_encode import label_sort_key, label_is_nan
+from autograd.embedding_ops import embedding_check_words, embedding_refuse_ids
 
 comptime OP_CAST_F32 = 3500
 comptime OP_CAST_GATHER = 3501
 # lane ag-thin-glue2: integer ids (any integer dtype, any strides) to the
 # int32 words the embedding op reads
 comptime OP_CAST_I32 = 3502
+comptime OP_CAST_LABEL_CODES = 3503
 comptime OP_CAST_FIRST = OP_CAST_F32
-comptime OP_CAST_LAST = OP_CAST_I32
+comptime OP_CAST_LAST = OP_CAST_LABEL_CODES
 
 comptime _BP = MutPointer[UInt8, MutUntrackedOrigin]
 
@@ -89,6 +93,29 @@ def op_cast_gather(t: Int, a: Args):
 
 
 @always_inline
+def op_cast_label_codes(t: Int, a: Args):
+    # Each validation label searches the sorted training vocabulary. Integer
+    # keys preserve int64 labels and float64 labels exactly on every vendor.
+    var value = cast_w64_bits(cast_raw_bits(a.p0, a.i4 + t * a.i3, a.i1), a.i0, a.i1)
+    var key = label_sort_key(value, a.i2)
+    var lo = 0
+    var hi = a.i8
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        var bits = cast_w64_bits(cast_raw_bits(a.p1, a.i9 + mid * a.i7, a.i6), a.i5, a.i6)
+        if label_sort_key(bits, a.i2) < key:
+            lo = mid + 1
+        else:
+            hi = mid
+    var code = -1
+    if lo < a.i8 and not label_is_nan(value, a.i2):
+        var bits = cast_w64_bits(cast_raw_bits(a.p1, a.i9 + lo * a.i7, a.i6), a.i5, a.i6)
+        if label_sort_key(bits, a.i2) == key:
+            code = lo
+    a.p2.unsafe_store(t, bitcast[DType.float32](Int32(code)))
+
+
+@always_inline
 def apply_cast[OP: Int](t: Int, a: Args):
     comptime if OP == OP_CAST_F32:
         op_cast_f32(t, a)
@@ -96,9 +123,50 @@ def apply_cast[OP: Int](t: Int, a: Args):
         op_cast_gather(t, a)
     elif OP == OP_CAST_I32:
         op_cast_i32(t, a)
+    elif OP == OP_CAST_LABEL_CODES:
+        op_cast_label_codes(t, a)
 
 
 # ---------------------------------------------------------------- drivers
+def validation_codes[E: Exec](mut ex: E, src: CastIn, classes: CastIn, dst: FP) raises:
+    src.check("validation labels")
+    classes.check("training classes")
+    if src.cols != 1 or classes.cols != 1:
+        raise Error("validation labels and training classes must be vectors")
+    var kind = label_kind_of(src.kind, src.itemsize, "validation labels")
+    if kind != label_kind_of(classes.kind, classes.itemsize, "training classes"):
+        raise Error("validation labels must use the training labels' integer or floating kind")
+    var raw = ex.alloc(src.words())
+    var cls = ex.alloc(classes.words())
+    upload_bytes(ex, raw, src.start(), src.nbytes())
+    upload_bytes(ex, cls, classes.start(), classes.nbytes())
+    var a = Args()
+    a.p0 = raw
+    a.p1 = cls
+    a.p2 = dst
+    a.i0 = src.kind
+    a.i1 = src.itemsize
+    a.i2 = kind
+    a.i3 = src.s0
+    a.i4 = src.origin()
+    a.i5 = classes.kind
+    a.i6 = classes.itemsize
+    a.i7 = classes.s0
+    a.i8 = classes.rows
+    a.i9 = classes.origin()
+    ex.launch[OP_CAST_LABEL_CODES](a, src.rows)
+    var sa = ex.alloc(embedding_check_words(src.rows))
+    var sb = ex.alloc(embedding_check_words(src.rows))
+    try:
+        embedding_refuse_ids(ex, dst, src.rows, classes.rows, sa, sb)
+    except:
+        raise Error("validation labels contain an unknown class or NaN")
+    ex.free(raw)
+    ex.free(cls)
+    ex.free(sa)
+    ex.free(sb)
+
+
 def upload_bytes[E: Exec](mut ex: E, dst: FP, addr: Int, nbytes: Int) raises:
     """The nbytes at host `addr` into the executor words at dst; a 1..3-byte
     tail travels zero-padded in one more word (no read past the caller's

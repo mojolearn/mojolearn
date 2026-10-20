@@ -17,6 +17,7 @@ def harness():
 
 
 ROWS = (
+    "et-clf-weighted", "et-reg-weighted", "gbdt-class-weights", "gbdt-multiclass-offgrid",
     "sequence-lstm", "sequence-gru", "sequence-rnn", "sequence-mlp",
     "sequence-layernorm", "sequence-moe", "x-isotonic",
     "x-prep-label-encoder", "x-prep-label-binarizer", "x-prep-label-binarizer-multilabel",
@@ -85,11 +86,11 @@ def test_all_historical_missing_batch_lanes_are_declared(harness):
         "x-metrics-classification", "x-metrics-regression", "x-metrics-ranking",
         "x-metrics-cluster", "x-metrics-splitters",
     }
-    assert len(expected) == 57
+    assert len(expected) == 61
     assert set(harness.BATCH_REVISIONS) == expected
     assert all(harness.BATCH_REVISIONS[name] for name in expected)
     assert all(name in harness.BATCH for name in expected)
-    assert sum(callable(harness.BATCH[name]) for name in expected) == 41
+    assert sum(callable(harness.BATCH[name]) for name in expected) == 45
 
 
 ADDED_PROBES = (

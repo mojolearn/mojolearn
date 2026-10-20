@@ -425,6 +425,34 @@ def test_native_host_exports_are_classified_by_code():
         assert name not in ex, f"{name} loops only over a reviewed small bound"
 
 
+def test_device_executor_specialization_keeps_host_data_loops_visible():
+    # A generic executor driver is GPU work when the binding specializes it
+    # with DeviceExec. Its own untagged data loops must still be reported.
+    src = """
+def _specialized_driver[E: Exec](n: Int, values):
+    for i in range(n):
+        values[i] += 1
+def _device_program(n: Int, values):
+    _specialized_driver[DeviceExec](n, values)
+def _host_program(n: Int, values):
+    _specialized_driver[HostExec](n, values)
+def _register_programs(m):
+    m.def_function[_device_program]("fixture_device_program")
+    m.def_function[_host_program]("fixture_host_program")
+"""
+    ref = scratch({DEV: src})
+    tree = nhr.Tree(ref)
+    exports = tree.host_exports()
+    assert "fixture_device_program" not in exports
+    assert "fixture_host_program" in exports
+    # Separate fixture without a host caller: host-export exclusion must not
+    # hide the data loop reachable through a device specialization.
+    device_only = src.replace('    m.def_function[_host_program]("fixture_host_program")', "")
+    ref = scratch({DEV: device_only})
+    found = nhr.scan_file(nhr.Tree(ref), DEV)
+    assert any(rule == "mojo-host-loop" and "range(n)" in text for rule, _, text in found)
+
+
 def test_owed_rules_never_enter_the_baseline():
     row = "py-native-host\tnative-host\tL12\tdebt\tpython/mojolearn/_buffer.py\t0\tx"
     try:
