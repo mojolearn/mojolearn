@@ -130,7 +130,7 @@ struct RCtx(Movable):
         var v = self.maybe_ints(g, name)
         if not v.ok:
             raise Error(what + " '" + g.st.text(name) + "' is computed from tensor values (a data-dependent shape)")
-        return v.v^
+        return v.v.copy()
 
 
 # ------------------------------------------------------------- attributes --

@@ -1626,7 +1626,9 @@ def onnx_info_py(h: PythonObject) raises -> PythonObject:
             w.append(PythonObject(g[].problems[i].op))
             w.append(PythonObject(g[].problems[i].reason))
     elif g[].status != ONNX_OK:
-        w.append(PythonObject(g[].st.intern(g[].message)))
+        var msg = g[].message
+        var mk = g[].st.intern(msg)
+        w.append(PythonObject(mk))
     else:
         w.append(PythonObject(g[].opset))
         w.append(PythonObject(len(g[].buf_kind)))
