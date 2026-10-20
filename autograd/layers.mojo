@@ -53,6 +53,8 @@ def layer_norm[E: Exec](
         split_rows = ln_fold_rows(m)
     splits = (m + split_rows - 1) // split_rows
     var saved = Args()
+    # Retain epsilon for the recorded VJP used by higher-order autograd.
+    saved.f0 = eps
     saved.p4 = mean
     saved.p5 = rstd
     saved.p6 = tape.reserve(ex, splits * d)

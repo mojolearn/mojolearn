@@ -32,11 +32,9 @@ from autograd.rankn import RN_MAX_RANK, ShapeN
 from autograd.rankn_conv import rankn_conv2d, rankn_max_pool2d, rankn_avg_pool2d
 from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
 
-# Lane ag-data adds `Tape.dropout`; lane ag-forward adds the tape's
-# inference mode. Until they land these stay off and the model trainer does
-# not reach either (a Dropout layer is refused at fit time with a clear error;
-# prediction records a plain forward with gradient-free leaves).
-comptime HAS_DROPOUT = is_defined["MOJOLEARN_AUTOGRAD_HAS_DROPOUT"]()
+# Tape.dropout is part of the native tape. Its mask is keyed by seed,
+# optimizer step and layer, including across checkpoint/resume.
+comptime HAS_DROPOUT = True
 comptime HAS_INFERENCE = is_defined["MOJOLEARN_AUTOGRAD_HAS_INFERENCE"]()
 
 # LAUNCHES (lane ag-pass1-launches, read from the code; tape.mojo's

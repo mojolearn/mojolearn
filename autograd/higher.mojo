@@ -45,6 +45,7 @@ from autograd.higher_ops import (
     EXPAND, CLAMP, OP_HO_INDICATOR, OP_HO_SIGN, OP_HO_CLAMP_FWD, OP_HO_INSIDE, higher_refusal,
 )
 from autograd.higher_fused import lower_fused_vjp
+from autograd.layers import LAYER_NORM
 
 
 # ---------------------------------------------------------------- operations
@@ -154,6 +155,34 @@ def _fold_to[E: Exec](mut tape: Tape, mut ex: E, c: Tensor, rows: Int, cols: Int
 
 
 # ---------------------------------------------------------------- lowering
+def _layer_norm_vjp[E: Exec](
+    mut tape: Tape, mut ex: E, i: Int, upstream: Tensor, edge: Int,
+) raises -> Tensor:
+    # Recompute normalized inputs as recorded primitives. The ordinary
+    # backward keeps its existing fused kernels; only create_graph uses this
+    # expression, whose reductions have the tape's vendor-independent order.
+    var n = tape._nodes[i]
+    var x = tape._handle(tape._parents[n.start])
+    var w = tape._handle(tape._parents[n.start + 1])
+    var xm = tape.reshape(ex, x, n.rows, n.cols)
+    var g = tape.reshape(ex, upstream, n.rows, n.cols)
+    if edge == 2:
+        return tape.sum(ex, g, AXIS_ROWS)
+    var center = tape.subtract(ex, xm, tape.mean(ex, xm, AXIS_COLS))
+    var square = tape.multiply(ex, center, center)
+    var variance = tape.mean(ex, square, AXIS_COLS)
+    var eps = tape.scalar(ex, n.saved.f0)
+    var denom = tape.sqrt(ex, tape.add(ex, variance, eps))
+    var norm = tape.divide(ex, center, denom)
+    if edge == 1:
+        return tape.sum(ex, tape.multiply(ex, g, norm), AXIS_ROWS)
+    var weighted = tape.multiply(ex, g, w)
+    var average = tape.mean(ex, weighted, AXIS_COLS)
+    var cov = tape.mean(ex, tape.multiply(ex, weighted, norm), AXIS_COLS)
+    var residual = tape.subtract(ex, tape.subtract(ex, weighted, average), tape.multiply(ex, norm, cov))
+    return tape.divide(ex, residual, denom)
+
+
 def lower_vjp[E: Exec](mut tape: Tape, mut ex: E, i: Int, upstream: Tensor, edge: Int) raises -> Tensor:
     """The VJP of node i into its input `edge` for the upstream gradient
     tensor `upstream` (node i's shape), as recorded tape operations: a
@@ -161,6 +190,8 @@ def lower_vjp[E: Exec](mut tape: Tape, mut ex: E, i: Int, upstream: Tensor, edge
     The fused kinds go to lower_fused_vjp; custom rules are refused."""
     var n = tape._nodes[i]
     var op = n.op
+    if op == CUSTOM + LAYER_NORM:
+        return _layer_norm_vjp(tape, ex, i, upstream, edge)
     if op >= CUSTOM:
         raise Error(higher_refusal(op))
     if (op == LINEAR or op == LOSS_ELEM or op == LOSS_REDUCED or op == LOSS_CE or op == LOSS_SCE
@@ -278,6 +309,8 @@ def backward_recorded[E: Exec](mut tape: Tape, mut ex: E, output: Tensor, seed: 
         if not active[i]:
             continue
         var kind = tape._nodes[i].op
+        if kind == CUSTOM + LAYER_NORM:
+            continue
         if kind >= CUSTOM:
             raise Error(higher_refusal(kind))
         if not _recorded_kind(kind):
