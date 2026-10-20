@@ -59,10 +59,15 @@ def _digest(b, a, name):
     return str(b.verify_digest(a.ctypes.data, a.nbytes))  # cpu-route: verification digest of a host array after the run
 
 
-def _seeded(b, shapes, seed):
+def _seeded(b, shapes, seed, kinds=None):
+    """Seeded inputs, one per model input. An input that holds token ids (a program input kind 1) gets
+    int32 zeros: every id table has row 0, and the report only needs a deterministic, valid input."""
     np = _np()
     arrays = []
     for k, shape in enumerate(shapes):  # glue: one buffer per model input
+        if kinds is not None and k < len(kinds) and int(kinds[k]) == 1:
+            arrays.append(np.zeros(tuple(shape), dtype=np.int32))
+            continue
         a = np.empty(tuple(shape), dtype=np.float32)
         # Mojo writes the seeded values (input k is Philox stream k)
         b.verify_fill(a.ctypes.data, a.size, int(seed), k)  # cpu-route: verification inputs made before the run
@@ -133,7 +138,7 @@ def record_program(program, path):
     file ``path`` that ``Program.save`` just wrote."""
     s = program._s
     b = s._b
-    arrays = _seeded(b, program.input_shapes, DEFAULT_SEED)
+    arrays = _seeded(b, program.input_shapes, DEFAULT_SEED, getattr(program, "input_kinds", None))
     outs = s.run(program, *arrays)
     outs = outs if isinstance(outs, tuple) else (outs,)
     names_in = _names([e[0] for e in getattr(program, "inputs", ())], arrays, "input")  # glue: the model's input names
@@ -193,7 +198,7 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
             prog = s.load_program(path)
             n = len(prog.input_shapes)
             if inputs is None:
-                arrays, names_in, source = _seeded(s._b, prog.input_shapes, seed), _names(exp_names_in, prog.input_shapes, "input"), "seeded"
+                arrays, names_in, source = _seeded(s._b, prog.input_shapes, seed, getattr(prog, "input_kinds", None)), _names(exp_names_in, prog.input_shapes, "input"), "seeded"
             else:
                 names_in, arrays = _load_inputs(inputs, exp_names_in, n)
                 source = "file"
