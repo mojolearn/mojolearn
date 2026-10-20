@@ -35,7 +35,7 @@ _A_FLOAT, _A_INT, _A_STRING, _A_TENSOR, _A_FLOATS, _A_INTS, _A_STRINGS, _A_TENSO
 def _binding():
     from .. import _backend
     b = _backend.binding("_mojolearn_x_sequence")
-    if not hasattr(b, "onnx_read"):
+    if not hasattr(b, "onnx_read"):  # cpu-route: model file parsing in Mojo (the reader entry)
         raise RuntimeError("mojolearn: this install's x_sequence binding has no ONNX reader (onnx_read); "
                            "rebuild the x_sequence bindings")
     return b
@@ -118,12 +118,12 @@ def _attr(c, strings, floats, views):
     if kind == _A_FLOATS:
         first, end = c.take(), c.take()
         return tuple(floats[first:end])
-    n = c.take()
+    count = c.take()
     if kind == _A_INTS:
-        return tuple([c.take() for _ in range(n)])  # glue: one word per entry of an ints attribute record
+        return tuple([c.take() for _ in range(count)])  # glue: one word per entry of an ints attribute record
     if kind == _A_STRINGS:
-        return tuple([strings[c.take()] for _ in range(n)])  # glue: one word per entry of a strings attribute record
-    return tuple([_tensor(c, strings, views) for _ in range(n)])  # glue: one record per tensors attribute entry
+        return tuple([strings[c.take()] for _ in range(count)])  # glue: one word per entry of a strings attribute record
+    return tuple([_tensor(c, strings, views) for _ in range(count)])  # glue: one record per tensors attribute entry
 
 
 def _views(b, h, c, strings):
@@ -160,7 +160,7 @@ class _Native:
             names.append(str(name))
             flat.append(len(dims))
             flat.extend(dims)
-        words, strings = self.b.onnx_resolve(self.h, names, flat)
+        words, strings = self.b.onnx_resolve(self.h, names, flat)  # cpu-route: model file parsing in Mojo
         _header(words, strings, "the model graph")
         c = _Words(words)
         c.i = 3
@@ -171,8 +171,8 @@ class _Native:
             dtypes[name] = dt
         folded = {}
         for _ in range(c.take()):  # glue: one record per folded value
-            name, n = strings[c.take()], c.take()
-            folded[name] = tuple([c.take() for _ in range(n)])  # glue: the folded words the reader returned
+            name, count = strings[c.take()], c.take()
+            folded[name] = tuple([c.take() for _ in range(count)])  # glue: the folded words the reader returned
         no_rule = tuple([strings[c.take()] for _ in range(c.take())])  # glue: one word per node without a rule
         return Resolved(shapes_out, dtypes, folded, no_rule, tuple(_problems(c, strings)))
 
@@ -190,9 +190,9 @@ def read(path):
     """
     path = os.fspath(path)
     b = _binding()
-    h = int(b.onnx_read(os.fsdecode(path)))
+    h = int(b.onnx_read(os.fsdecode(path)))  # cpu-route: model file parsing in Mojo
     try:
-        words, strings, floats = b.onnx_info(h)
+        words, strings, floats = b.onnx_info(h)  # cpu-route: model file parsing in Mojo
         status = _header(words, strings, path)
         c = _Words(words)
         c.i = 3
