@@ -25,8 +25,9 @@ EXPECTED_CASES = (
     "structural_view_optimization", "structural_control_and_derivatives", "optimizer_validation_preservation",
     "conditional_training", "conditional_training_refusals", "conditional_training_resume",
     "broadcast_relu_words_and_cost", "broadcast_relu_validation", "broadcast_relu_control_and_training",
+    "integer_loop_state_refusal",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5)))
 
 
 _AUDITS = []
@@ -866,6 +867,85 @@ def broadcast_relu_control_and_training():
     for actual, expected in zip(*trained):
         _equal(actual, expected)
     outputs.extend(trained[0])
+    return outputs
+
+
+
+def integer_loop_state_refusal():
+    import numpy as np
+    from . import ops
+    a = np.array([[1, 3]], np.float32)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-loop-kinds-") as d, ops.Session() as s:
+        x = s.tensor(a)
+        condition = s.capture(x, s.full((1, 1), 1))
+        good = s.capture(x, s.scale(x, 1))
+        integer = s.argmax(x, axis=1, keepdims=True, int32=True)
+        ids = s.ids(np.array([[1, 2]], np.int32))
+        wrapped = [integer, ids, s.reshape(integer, (1, 1)), s.copy(integer),
+                   s.detach(integer), s.permute(integer, (1, 0)),
+                   s.expand(integer, (2, 1)), s.concat([integer, integer], axis=1),
+                   s.split(ids, 2, axis=1)[0],
+                   s.where(s.full((1, 1), 1), integer, integer)]
+        for value in wrapped:
+            body = s.capture(x, value)
+            seed = np.ones(s.shape(value), np.float32)
+            for optimize in (False, True):
+                _refuses(lambda: _invoke(body.while_loop, a, condition=condition,
+                                        max_iterations=1, optimize=optimize),
+                         "state outputs must hold floating-point values", ValueError)
+            _refuses(lambda: _invoke(body.vjp_while, a, condition=condition,
+                                    max_iterations=1, seeds=seed),
+                     "state outputs must hold floating-point values", ValueError)
+            _equal(_invoke(good.run, a), a)
+
+        # A wrapped body that is never executed must not taint initial state.
+        unexecuted = s.capture(x, s.copy(integer))
+        zero = _invoke(unexecuted.while_loop, a, condition=condition, max_iterations=0)
+        _equal(zero["outputs"], a)
+        assert zero["iterations"] == 0
+        zero_vjp = _invoke(unexecuted.vjp_while, a, condition=condition, max_iterations=0,
+                           seeds=np.ones_like(a))
+        _equal(zero_vjp["input_gradients"][0], np.ones_like(a))
+
+        floating = s.capture(x, s.argmax(x, axis=1, keepdims=True))
+        result = _invoke(floating.while_loop, a, condition=condition, max_iterations=1)
+        differentiated = _invoke(floating.vjp_while, a, condition=condition, max_iterations=1,
+                                 seeds=np.ones((1, 1), np.float32))
+        _equal(result["outputs"], np.ones((1, 1), np.float32))
+        _equal(differentiated["outputs"], result["outputs"])
+        _equal(differentiated["input_gradients"][0], np.zeros_like(a))
+        outputs.extend((result["outputs"], differentiated["input_gradients"][0]))
+
+        # Kind propagation preserves supported integer value paths: eager
+        # argmax -> reshape/copy -> embedding, and integer captured inputs.
+        table_values = np.arange(8, dtype=np.float32).reshape(4, 2)
+        table = s.tensor(table_values)
+        copied = s.copy(s.reshape(integer, (1, 1)))
+        embedded = s.embedding(table, copied)
+        eager = _invoke(s.numpy, embedded)
+        _equal(eager, table_values[[1]])
+        p = s.capture(copied, embedded)
+        assert p.input_kinds == (1,)
+        values = np.array([[2]], np.int32)
+        replay = _invoke(p.run, values)
+        _equal(replay, table_values[[2]])
+        _refuses(lambda: _invoke(p.run, values.astype(np.float32)), "integer", TypeError)
+        outputs.extend((eager, replay))
+        path, control_path = Path(d) / "integer-input.mjl", Path(d) / "integer-state.mjl"
+        _invoke(p.save, path)
+        invalid_state = s.capture(x, ids)
+        _invoke(invalid_state.save_control, control_path, condition=condition, max_iterations=1)
+        with ops.Session() as restored:
+            loaded = _invoke(restored.load_program, path)
+            assert loaded.input_kinds == (1,)
+            replay = _invoke(loaded.run, values)
+            _equal(replay, table_values[[2]])
+            outputs.append(replay)
+            control = _invoke(restored.load_control, control_path)
+            _refuses(lambda: _invoke(control["body"].while_loop, a,
+                                    condition=control["condition"], max_iterations=1),
+                     "state outputs must hold floating-point values", ValueError)
     return outputs
 
 

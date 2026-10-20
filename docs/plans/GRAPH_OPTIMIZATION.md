@@ -136,3 +136,23 @@ The source registry has 26 cases and 126 expected output digests. Source/control
 checks do not execute or qualify this candidate. Native compilation, physical
 vendor and installed-package evidence remain pending; the default remains off.
 The existing upstream PythonObject ownership blocker remains unchanged.
+
+## Integer loop-state correction
+
+An isolated probe of the existing sequence binary confirmed that inference
+accepted an integer parameter as floating loop state, and both inference and
+VJP accepted an int32 argmax wrapped in a reshape. The direct argmax refusal and
+floating argmax controls behaved correctly. Original evidence is retained under
+`finish-graph-20261020/integer-loop-probe.{py,json,log}` in the evidence directory.
+
+The separate correctness source repair propagates integer-word kind through
+captured input/parameter replay and value-layout/selection operations, including
+early-return copy/gather paths. Inference checks the executed result before
+copying it into the next state; the existing VJP check now observes the kind.
+No word conversion or arithmetic change is made, and zero-iteration wrapped
+bodies remain unexecuted. Invalid floating loop state raises ValueError while
+normal integer embedding/captured-input/checkpoint paths stay available.
+The added verifier case checks direct/parameter/wrapped refusals, recovery,
+zero-iteration behavior, floating argmax/VJP, eager and captured integer
+embedding, and serialization. Registry: 27 cases, 131 expected output digests.
+Native compilation and runtime validation of this repair remain pending.

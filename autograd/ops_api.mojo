@@ -1023,9 +1023,29 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.opt_states[si].mu_prod = fs[2]
 
     # ------------------------------------------------------------ operations
-    def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int) raises -> Int:
+    def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int, integer_words: Bool = False) raises -> Int:
         var t = self.tape.variable(self.ex, values, rows, cols, False)
-        return self._add(t, 0, False, index_rows)
+        var h = self._add(t, 0, False, index_rows)
+        self.int_words[self._slot(h)] = integer_words
+        return h
+
+    def _result_int_words(self, code: Int, hs: List[Int], ints: List[Int]) raises -> Bool:
+        # Dtype metadata follows value selection/layout, independently of
+        # storage aliases. These operations do not convert int32 words into
+        # floating-point values. Arithmetic outputs keep their existing float
+        # semantics; argmax explicitly chooses its result representation.
+        if code == OPS_ARGMAX:
+            return ints[2] == 0
+        if code == OPS_CONCAT:
+            for k in range(len(hs)):  # driver-loop: over concatenated value kinds
+                if self.int_words[self._slot(hs[k])]:
+                    return True
+            return False
+        if code == OPS_WHERE:
+            return self.int_words[self._slot(hs[1])] or self.int_words[self._slot(hs[2])]
+        if code == OPS_TRANSPOSE or code == OPS_RESHAPE or code == OPS_DETACH or code == OPS_COPY or code == OPS_EMBEDDING or code == OPS_RESHAPE_N or code == OPS_PERMUTE or code == OPS_NARROW or code == OPS_TAKE or code == OPS_EXPAND or code == OPS_PAD or code == OPS_INDEX:
+            return self.int_words[self._slot(hs[0])]
+        return False
 
     def op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """Run operation `code` on the tensors `hs` with integer and float
@@ -1154,7 +1174,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var g_src = self.tape.value_of(self.ex, x[0])
             var g_idx = self.tape.value_of(self.ex, x[1])
             gather_rows(self.ex, g_src, g_idx, g_start, g_count, g_cols, g_dst)
-            return self._constant(g_dst, g_count, g_cols, 0)
+            return self._constant(g_dst, g_count, g_cols, 0, self.int_words[gx])
         elif code == OPS_PERMUTATION:
             _need("permutation", n, 0, 4, ni, 0, nf)
             var p_rows = ints[0]
@@ -1260,7 +1280,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             ca.p1 = c_dst
             self.ex.launch[OP_COPY](ca, c_count)
             if c_shape.ndim == 2:
-                return self._constant(c_dst, c_rows, c_cols, 0)
+                return self._constant(c_dst, c_rows, c_cols, 0, self.int_words[cx])
             var c_t = self.tape.variable(self.ex, c_dst, c_rows, c_cols, False)
             t = rn_as_shape(self.tape, self.ex, c_t, c_shape)
         elif code == OPS_RESHAPE_N:
@@ -1368,7 +1388,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var ks = self.tape.shape_of(x[0])
             if ks.ndim != 2:
                 t = rn_as_shape(self.tape, self.ex, t, ks)
-        return self._add(t, 0, False, 0)
+        var result = self._add(t, 0, False, 0)
+        self.int_words[self._slot(result)] = self._result_int_words(code, hs, ints)
+        return result
 
     # ------------------------------------------------------------ the import family
     def _import_op(mut self, code: Int, x: List[Tensor], ints: List[Int], fs: List[Float32]) raises -> Tensor:
@@ -1815,14 +1837,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.programs[pi] = OpsProgram()
         self.programs[pi].live = False
 
-    def _leaf(mut self, buf: FP, sh: ShapeN) raises -> Int:
+    def _leaf(mut self, buf: FP, sh: ShapeN, integer_words: Bool = False) raises -> Int:
         """A temporary handle of a leaf over `buf` on the current tape."""
         var t: Tensor
         if sh.ndim == 2:
             t = self.tape.variable(self.ex, buf, sh.d[0], sh.d[1], False)
         else:
             t = self.tape.variable_nd(self.ex, buf, sh, False)
-        return self._add(t, 0, False, 0)
+        var h = self._add(t, 0, False, 0)
+        self.int_words[self._slot(h)] = integer_words
+        return h
 
     def _drop_temps(mut self, temps: List[Int]):
         for i in range(len(temps)):  # driver-loop: over a replay's temporary handles
@@ -1927,13 +1951,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 upload_cast_i32(self.ex, buf, srcs[k], "ops: program input")
             else:
                 upload_cast(self.ex, buf, srcs[k])
-            var h = self._leaf(buf, sh)
+            var h = self._leaf(buf, sh, self.programs[pi].in_kinds[k] == PROGRAM_IN_IDS)
             temps.append(h)
             vals.append(h)
         var phs = List[Int]()
         for j in range(len(pbufs)):  # driver-loop: over program parameters
             var sh = self.programs[pi].param_shapes[j]
-            var h = self._leaf(FP(unsafe_from_address=pbufs[j]), sh)
+            var integer_words = self.int_words[self._slot(self.programs[pi].params[j])]
+            var h = self._leaf(FP(unsafe_from_address=pbufs[j]), sh, integer_words)
             temps.append(h)
             phs.append(h)
         var nn = self.programs[pi].n_nodes()
