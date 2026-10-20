@@ -122,7 +122,7 @@ from bindings.causal_lm_public import (
     GenerationHandle, causal_lm_admit_binding, causal_lm_allocate_binding,
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
-    causal_lm_text_stream_binding, causal_lm_generate_text_binding,
+    causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
 )
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
@@ -1334,9 +1334,10 @@ def vocab_decode_binding(
 
 
 def vocab_encode_public_binding(
-    tokenizer: PythonObject, var text: PythonObject, add_special: PythonObject,
+    tokenizer: PythonObject, input_text: PythonObject, add_special: PythonObject,
     allow_special: PythonObject, bytes_only: PythonObject,
 ) raises -> PythonObject:
+    var text = input_text
     var bi = Python.import_module("builtins")
     var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
@@ -1445,6 +1446,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[causal_lm_generate_binding]("causal_lm_generate")
         module.def_function[causal_lm_text_stream_binding]("causal_lm_text_stream")
         module.def_function[causal_lm_generate_text_binding]("causal_lm_generate_text")
+        module.def_function[causal_lm_resident_binding]("causal_lm_resident")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))
