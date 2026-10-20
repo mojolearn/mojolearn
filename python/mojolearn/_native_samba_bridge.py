@@ -27,7 +27,7 @@ def connect(config_cls, model_cls, training, neural):
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"Samba native execution requires a compiled {name}")
         entries[name] = entry
-    exact_schedule = training._lr_native("lr_schedule_exact")
+    exact_schedule = training._lr_native("lr_schedule_exact")  # cpu-route: connects the existing exact host-scalar learning-rate entry at import; native owner evaluates one scalar per step
     if not isinstance(exact_schedule, BuiltinFunctionType):
         raise TypeError("Samba schedule requires a compiled exact schedule entry")
     return {
