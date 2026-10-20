@@ -145,7 +145,7 @@ def _parallel_view(value: PythonObject) raises -> PythonObject:
     return value._mv if p[].bi.type(value) is p[].array_cls else p[].bi.memoryview(value)
 
 
-def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False) raises -> PythonObject:
+def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False, finite: Bool = True) raises -> PythonObject:
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var own_array = p[].bi.type(value) is p[].array_cls
     var view = _parallel_view(value)
@@ -183,7 +183,7 @@ def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False)
             dst[i] = src[source]
     else:
         memcpy(dest=dst, src=src, count=n)
-    if not integer:
+    if not integer and finite:
         var fp = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
         for i in range(n):
             if not isfinite(fp[i]):

@@ -423,6 +423,141 @@ def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets:
     return b[].bi.tuple(result)
 
 
+def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
+    _mlp_mode()
+    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
+    var shards = b[].bi.list(parts)
+    if len(shards) == 0:
+        raise Error("ordered reduction needs at least one shard")
+    var first = b[].bi.list(shards[0])
+    var total = b[].bi.list()
+    var dims = List[List[Int]]()
+    var counts = List[Int]()
+    var count = 0
+    for j in range(len(first)):  # driver-loop: over the caller's gradient tensor registry
+        var view = _parallel_view(first[j])
+        var shape = first[j].shape if b[].bi.type(first[j]) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
+        var axes = List[Int]()
+        var n = 1
+        for axis in range(len(shape)):
+            var dimension = Int(py=shape[axis])
+            if dimension < 0 or (dimension != 0 and n > 2147483647 // dimension):
+                raise Error("gradient registry exceeds signed 32-bit kernel indexing")
+            axes.append(dimension)
+            n *= dimension
+        if count > 2147483647 - n:
+            raise Error("gradient registry exceeds signed 32-bit kernel indexing")
+        count += n
+        counts.append(n)
+        # Ordered addition historically admits nonfinite float32 inputs; the
+        # existing accumulation kernel owns canonicalization. Do not turn a
+        # preparation helper's finite scan into a new reduction restriction.
+        total.append(_parallel_array(first[j], axes, False, False))
+        dims.append(axes^)
+    if len(shards) == 1:
+        return total
+    if len(first) == 0 or count == 0:
+        raise Error("ordered reduction needs nonempty gradient tensors")
+    var stacked = generation_array([2, count])
+    var output = generation_array([count])
+    for shard in range(1, len(shards)):  # driver-loop: over fixed ascending logical gradient shard order
+        var current = b[].bi.list(shards[shard])
+        if len(current) != len(total):
+            raise Error("ordered reduction gradient tensor count mismatch")
+        var offset = 0
+        var stack = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=stacked._addr))
+        for j in range(len(total)):  # driver-loop: over paired gradient tensor buffers
+            var value = _parallel_array(current[j], dims[j], False, False)
+            var left = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr))
+            var right = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
+            memcpy(dest=stack + offset, src=left, count=counts[j])
+            memcpy(dest=stack + count + offset, src=right, count=counts[j])
+            offset += counts[j]
+            _ = value^
+        var addresses = b[].bi.list()
+        addresses.append(output._addr)
+        addresses.append(stacked._addr)
+        _ = b[].entries["accumulate"](addresses, py_ints([count, 2, -1]))
+        var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
+        offset = 0
+        for j in range(len(total)):  # driver-loop: over owned folded gradient output tensors
+            var destination = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=total[j]._addr))
+            memcpy(dest=destination, src=source + offset, count=counts[j])
+            offset += counts[j]
+    _ = stacked^
+    _ = output^
+    return total
+
+
+def neural_cooperative_admit() raises:
+    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
+    var count = Int(py=b[].bi.int(b[].environ.get(PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode("ascii"), PythonObject("1").encode("ascii"))))
+    if count > 1:
+        for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:
+            if b[].entries[name] is None:
+                raise Error("ImportError: training binding lacks cooperative neural update entry " + name)
+            if Int(py=b[].entries[name]()) != 1:
+                raise Error("RuntimeError: training binding refused " + name)
+
+
+def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises -> PythonObject:
+    neural_cooperative_admit()
+    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
+    var next = mlp_validate_state(state)
+    var step = Int(py=next["optimizer"]["step"])
+    if step == 2147483647:
+        raise Error("SmallMLPTrainer step exceeds its supported range")
+    if len(gradients) != 4:
+        raise Error("SmallMLPTrainer requires exactly four parameter gradients")
+    var params = generation_array([195])
+    var grads = generation_array([195])
+    var offsets = generation_array([5], "i")
+    var info = generation_array([3])
+    var pp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=params._addr))
+    var gp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=grads._addr))
+    var op = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=offsets._addr))
+    var names = _mlp_names()
+    var offset = 0
+    for j in range(4):  # driver-loop: over transactional MLP parameter and gradient buffers
+        var value = _parallel_array(gradients[j], _mlp_dims(j))
+        var n = Int(py=value.size)
+        op[j] = Int32(offset)
+        var src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=next["weights"][names[j]]._addr))
+        memcpy(dest=pp + offset, src=src, count=n)
+        src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
+        memcpy(dest=gp + offset, src=src, count=n)
+        offset += n
+        _ = value^
+    op[4] = Int32(offset)
+    var cfg = next["config"]
+    var plan = py_ints([4, 2, step + 1, 0])
+    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:
+        plan.append(cfg[name])
+    for i in range(4):
+        plan.append(0)
+    var saved = next["optimizer"]
+    var written = b[].entries["optimizer_step"](params._addr, grads._addr,
+        saved["m"]._addr, saved["v"]._addr, offsets._addr, saved["flags"]._addr, info._addr, plan)
+    if Int(py=written) != 195:
+        raise Error("RuntimeError: SmallMLPTrainer update returned incomplete state")
+    _mlp_finite(params, "updated parameter")
+    _mlp_finite(saved["m"], "first moment")
+    _mlp_finite(saved["v"], "second moment")
+    offset = 0
+    for j in range(4):  # driver-loop: over completed transactional parameter publication
+        var value = next["weights"][names[j]]
+        var n = Int(py=value.size)
+        var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
+        memcpy(dest=dst, src=pp + offset, count=n)
+        offset += n
+    saved["step"] = step + 1
+    _ = params^
+    _ = grads^
+    _ = offsets^
+    _ = info^
+    return next
+
+
 def mlp_call(operation: String, args: PythonObject) raises -> PythonObject:
     if operation == "initialize":
         mlp_initialize(args[0], args[1], args[2], args[3], String(args[4]), String(args[5]))
@@ -436,6 +571,10 @@ def mlp_call(operation: String, args: PythonObject) raises -> PythonObject:
         mlp_publish(args[0], args[1])
     elif operation == "gradient":
         return mlp_gradients_from_state(args[0], args[1], args[2])
+    elif operation == "ordered_sum":
+        return neural_ordered_sum(args[0])
+    elif operation == "apply":
+        return mlp_apply_from_state(args[0], args[1])
     else:
         raise Error("parallel MLP: unknown operation " + operation)
     return PythonObject(None)
@@ -451,4 +590,6 @@ def parallel_mlp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             return raise_python_exception(error, ExceptionType.TypeError)
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("ImportError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
         return raise_python_exception(error, ExceptionType.ValueError)
