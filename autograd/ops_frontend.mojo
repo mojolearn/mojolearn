@@ -13,6 +13,7 @@ from autograd.program_save import ops_program_save_native_py
 from bindings.native_json import native_path
 from autograd.weight_frontend import ops_weights_native_py
 from autograd.session_lifetime import SessionLifetime
+from autograd.execution_profile_pyapi import execution_profile_object
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -119,6 +120,11 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: this session is closed")
     var sid = session._id
     var s = ops_session[E, KIND](Int(py=sid))
+    if name == "execution_profile_begin":
+        s[].ex.execution_profile_begin()
+        return PythonObject(None)
+    if name == "execution_profile_end":
+        return execution_profile_object(s[].ex.execution_profile_end())
     if name == "save_program":
         return ops_program_save_native_py[E, KIND](args[0], args[1])
     if name == "load_weights":

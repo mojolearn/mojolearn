@@ -245,6 +245,14 @@ class Session:
         """Release tensor ``h``; its memory is reused after :meth:`reset`."""
         return self._session_native(self, "free", (h,))
 
+    def execution_profile_begin(self):
+        """Begin executor allocation, transfer, synchronization and operation accounting."""
+        return self._session_native(self, "execution_profile_begin", ())
+
+    def execution_profile_end(self):
+        """Drain the executor and return counters for the active profiling interval."""
+        return self._session_native(self, "execution_profile_end", ())
+
     def profile_reset(self):
         """Clear the process-wide launch profile (recorded when the
         MOJOLEARN_AG_PROFILE environment variable is set)."""
