@@ -257,3 +257,42 @@ def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path
         assert report['exception'] is None, report
         for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
             assert not report[key], report
+
+
+def test_samba_last_dropout_stream_commits_and_restores_exhausted_checkpoint():
+    from mojolearn.tests.test_samba_gradients_native import _model
+    from mojolearn.tests.test_samba_state_native import _assert_state_equal
+
+    model = _model(['attention'], True)
+    model.generator.counter = 0xffffffff
+    owner = object.__new__(ParallelNeuralTrainer)
+    audit_native_call(owner.__init__, model, devices=(0,), logical_shards=1).assert_native()
+    shards = [(np.array([[1, 2, 3]], np.int32), np.array([[2, 3, 4]], np.int32))]
+    replay = None
+    try:
+        assert audit_native_call(owner.train_step, shards).assert_native()['completed_steps'] == 1
+        checkpoint = audit_native_call(owner.checkpoint).assert_native()
+        assert checkpoint['state']['rng']['counter'] == 2**32
+        replay = audit_native_call(ParallelNeuralTrainer.from_checkpoint, checkpoint, devices=(0,)).assert_native()
+        for active in (owner, replay):
+            before = audit_native_call(active.checkpoint).assert_native()
+            failed = audit_native_call(active.train_step, shards)
+            assert isinstance(failed.exception, RuntimeError), failed.report()
+            assert 'counter exhausted' in str(failed.exception)
+            for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+                assert not failed.report()[key], failed.report()
+            _assert_state_equal(audit_native_call(active.checkpoint).assert_native()['state'], before['state'])
+    finally:
+        primary = sys.exception()
+        failures = []
+        for active in (owner, replay):
+            if active is not None:
+                try:
+                    audit_native_call(active.close).assert_native()
+                except BaseException as error:
+                    failures.append(error)
+        if primary is not None:
+            for error in failures:
+                primary.add_note('Child cleanup also failed: ' + repr(error))
+        elif failures:
+            raise ExceptionGroup('final-stream child cleanup failures', failures)
