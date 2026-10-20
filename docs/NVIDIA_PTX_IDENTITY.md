@@ -123,4 +123,71 @@ places the two can produce different bits, and what holds each one:
 - `pack_wheel.py --profile release-split` packs the PTX set into
   `mojolearn-nvidia-ptx` with its own build proof. The split audit checks
   disjoint file ownership and matching PTX manifest digests across packages.
-  Publication uploads PTX first, NVIDIA next, and the core after both vendors.
+  Publication uploads the Linux core first, PTX before NVIDIA, and the
+  aggregate Linux `mojolearn` package after the vendor packages.
+
+## Installed artifact qualification
+
+The installed artifact path is
+`tools/release_installed_checks.sh qualify-identity`, which dispatches to
+`tools/release_identity_installed.sh`. It accepts `cuda sm_80` for PTX.
+Use a held NVIDIA GPU with no compatible native set in the wheel, such as
+an A40 (`sm_86`) when the wheel ships native `sm_89` only. Leave
+`MOJOLEARN_GPU_ARCH` unset: this checks the user's automatic selection.
+The qualifier removes inherited routing overrides itself.
+
+Run on the Linux GPU box, using the exact retained wheels and an explicit
+selection JSON containing a nonempty `lanes` list:
+
+```sh
+bash tools/release_installed_checks.sh qualify-identity \
+  "$CORE_WHEEL" "$CORE_SHA256" cuda /root/results-ptx-qualification \
+  "$WHEEL_SOURCE_COMMIT" sm_80 "$SELECTION_JSON" \
+  "$NVIDIA_WHEEL" "$PTX_WHEEL"
+```
+
+The source commit is the one inside the wheel's `identity_columns/COMMIT`,
+not the later commit of the qualification tools. No native rebuild is
+needed to exercise retained wheel bytes.
+
+The gate requires both the existing expanded CLI smoke and the selected
+base-fixture identity checks. For PTX it additionally requires:
+
+- A CUDA `sm_80` selection receipt identifying the PTX format, the manifest
+  hash, the installed source commit and an actually loaded identical-mode
+  binding.
+- Numerical worker binding hashes belonging to that identical PTX payload.
+  A native CUDA run, an import-only receipt, or a worker loading fast-mode
+  bytes cannot establish PTX identity.
+- The existing complete-cell and reference comparisons. Missing, refused,
+  divergent or timed-out work remains a failure.
+
+The selected set (`sm_80`) and physical device architecture (`sm_86` on an
+A40) are recorded separately. `identity-receipt.json`, `identity.json`,
+the smoke receipt, wheel hashes, selection hash, tool hashes and complete
+logs stay together. The receipt states the exact selection, base fixture
+and one repetition; it does not claim the full surface suite or a
+performance measurement. Use a fresh output directory for each changed
+artifact or selection and preserve previous failures.
+
+The lower-level `tools/qualify_verifier_wheel.py --require-ptx` option
+requires this route for its expanded smoke. It does not force PTX or admit
+an identity column by itself.
+
+## Paper evidence
+
+A passing installed PTX result can support an additional tested hardware
+and driver configuration in the MLSys paper. Retain the GPU model, driver,
+exact wheel bytes and their source commit, PTX selection and loaded-binding
+hashes, reference-table hash, selected methods, fixtures, parts and verdicts.
+Keep these as a dated evidence record; later code changes do not update it.
+Archive rented-box outputs on the Mac and in R2 before teardown.
+
+The paper's evidence is pinned separately in
+`mlsys/results/measurement-sources.json`; PDF builds do not import new
+results. Import and review a completed PTX record explicitly, add its
+scoped identity result to the verification discussion and supporting
+artifact, then rebuild the named and anonymous PDFs. Do not alter the
+fixed historical verification totals or infer all-device coverage from one
+new card. A qualification run supplies no new timing comparison for the
+measurement boards or cost tables.

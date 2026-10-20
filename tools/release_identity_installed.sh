@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 exec "${MOJOLEARN_QUALIFY_PYTHON:-python3}" - "$ROOT" "$@" <<'PY'
 # IDENTITY_PY_BEGIN
-import hashlib, json, os, pathlib, re, signal, subprocess, sys, time, zipfile
+import csv, hashlib, json, os, pathlib, re, signal, subprocess, sys, time, zipfile
 P = pathlib.Path
 PARTS = ('train', 'infer', 'model', 'batch', 'stepfull')
 
@@ -44,7 +44,7 @@ def main(argv):
     root, wheel, expected_sha, vendor, out, commit, arch, selection, *plugins = argv
     root, wheel, out, selection = map(lambda p: P(p).resolve(), (root, wheel, out, selection))
     plugins = [P(p).resolve() for p in plugins]
-    assert vendor in ('cuda', 'hip') and arch in ('sm_89', 'sm_90', 'sm_90a', 'gfx942')
+    assert vendor in ('cuda', 'hip') and arch in ('sm_80', 'sm_89', 'sm_90', 'sm_90a', 'gfx942')
     assert vendor == ('hip' if arch == 'gfx942' else 'cuda')
     assert re.fullmatch('[0-9a-f]{40}', commit) and sha(wheel) == expected_sha
     with zipfile.ZipFile(wheel) as z:
@@ -64,6 +64,7 @@ def main(argv):
                MOJOLEARN_CPU_THREADS='1')
     receipt = dict(schema='mojolearn.installed-light-identity.v1', status='INCOMPLETE',
         source_commit=commit, vendor=vendor, architecture=arch,
+        code_format='ptx' if arch == 'sm_80' else 'native',
         artifacts=[dict(name=p.name, sha256=sha(p)) for p in [wheel]+plugins],
         selection_sha256=sha(selection), lanes=lanes, fixtures=['base'], repeats=1,
         parts=list(PARTS), excluded_properties=['batchgrad','batchscale','ragged','rlpair'],
@@ -89,15 +90,29 @@ def main(argv):
         if code: raise RuntimeError(f'{name} failed ({code}); original log retained')
     save()
     try:
+        if arch == 'sm_80':
+            run('hardware', ['nvidia-smi', '--query-gpu=name,uuid,compute_cap,driver_version',
+                             '--format=csv,noheader'])
+            rows=list(csv.reader((out/'hardware.log').read_text().splitlines()))
+            assert rows and all(len(row)==4 for row in rows), 'missing NVIDIA hardware witness'
+            receipt['hardware']=[dict(zip(('name','uuid','compute_capability','driver_version'),
+                                         (value.strip() for value in row))) for row in rows]
+            receipt['hardware_sha256']=sha(out/'hardware.log')
+            save()
         # Retain the existing independently judged smoke receipt unchanged.
         cmd=[sys.executable,root/'tools/qualify_verifier_wheel.py',wheel,'--scope','expanded',
              '--python',sys.executable,'--expected-source-commit',commit,'--output',out/'smoke']
         for p in plugins: cmd += ['--plugin',p]
+        if arch == 'sm_80': cmd += ['--require-ptx']
         run('expanded-smoke',cmd,1800)
         smoke=json.loads((out/'smoke/results.json').read_text())
         assert smoke['status']=='PASSED' and smoke['scope']=='expanded'
         assert smoke['wheel_sha256']==expected_sha and smoke['source_commit']==commit
         assert smoke['installed']['vendor']==vendor
+        if arch == 'sm_80':
+            sys.path.insert(0,str(root/'tools'))
+            from qualify_verifier_wheel import admit_ptx_selection, admit_ptx_bindings
+            admit_ptx_selection(smoke['installed'],commit)
         assert {x['wheel_sha256'] for x in smoke.get('plugins',[])}=={sha(p) for p in plugins}
         run('create-venv',[sys.executable,'-m','venv',out/'venv'],60)
         py=out/'venv/bin/python'
@@ -111,15 +126,29 @@ assert m.vendor()==sys.argv[1] and m.numeric_mode()=='identical'
 assert m.__version__==sys.argv[3]
 assert (p.parent/'identity_columns/COMMIT').read_text().strip()==sys.argv[4]
 assert _backend.gpu_arch()==sys.argv[2]
-print(json.dumps(dict(package=str(p),vendor=m.vendor(),architecture=_backend.gpu_arch(),version=m.__version__)))
+ptx=_backend.baseline_selection_receipt()
+if ptx is not None:
+    _backend.binding('_mojolearn', 'identical')
+    ptx=_backend.baseline_selection_receipt()
+print(json.dumps(dict(package=str(p),vendor=m.vendor(),gpu_arch=_backend.gpu_arch(),version=m.__version__,
+                     ptx_selection=ptx,ptx_payload_files=_backend.ptx_payload_files(),
+                     device_arch=_backend._device_arch('cuda')[0] if m.vendor()=='cuda' else None)))
 """
         run('installed-guard',[py,'-c',guard,vendor,arch,wheel.name.split('-')[1],commit])
+        installed=json.loads((out/'installed-guard.log').read_text())
+        receipt['installed']=installed
+        if arch == 'sm_80':
+            admit_ptx_selection(installed,commit)
+        save()
         # Explicit selected lanes intentionally request the five core parts.
         # --all would also request extended gradient/ragged/replay properties.
         run('identity',[py,'-m','mojolearn','verify','--lanes',','.join(lanes),
             '--fixtures','base','--repeats','1','--no-models','--cpu-threads','1',
             '--cell-timeout','120','--json-out',out/'identity.json','--json'],limit)
-        admit_identity(json.loads((out/'identity.json').read_text()),lanes)
+        identity=json.loads((out/'identity.json').read_text())
+        admit_identity(identity,lanes)
+        if arch == 'sm_80':
+            receipt['ptx_worker_bindings']=admit_ptx_bindings(identity,installed)
         assert all(sha(p)==r['sha256'] for p,r in zip([wheel]+plugins,receipt['artifacts']))
         receipt.update(status='PASSED', identity_sha256=sha(out/'identity.json'),
                        smoke_receipt_sha256=sha(out/'smoke/results.json'))

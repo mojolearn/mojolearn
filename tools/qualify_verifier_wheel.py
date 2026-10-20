@@ -130,8 +130,46 @@ from mojolearn import _backend
 p=pathlib.Path(mojolearn.__file__).resolve()
 assert p.is_relative_to(pathlib.Path(sys.prefix).resolve()) and 'site-packages' in p.parts
 assert mojolearn.__version__ == sys.argv[1]
-print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojolearn.vendor(),gpu_arch=_backend.gpu_arch(),gpu_plugin=_backend.gpu_plugin())))
+arch=_backend.gpu_arch()
+ptx=_backend.baseline_selection_receipt()
+if ptx is not None:
+    _backend.binding('_mojolearn', 'identical')
+    ptx=_backend.baseline_selection_receipt()
+print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojolearn.vendor(),
+                     gpu_arch=arch,gpu_plugin=_backend.gpu_plugin(),ptx_selection=ptx,
+                     ptx_payload_files=_backend.ptx_payload_files(),
+                     device_arch=_backend._device_arch('cuda')[0] if mojolearn.vendor()=='cuda' else None)))
 """
+
+
+def admit_ptx_selection(installed, source_commit):
+    """Require the installed, source-bound PTX set, including a loaded binding."""
+    assert installed['vendor'] == 'cuda' and installed['gpu_arch'] == 'sm_80', \
+        'PTX qualification requires the CUDA sm_80 set'
+    selection = installed.get('ptx_selection') or {}
+    assert selection.get('schema') == 'mojolearn.ptx-selection.v2'
+    assert selection.get('selected') == selection.get('code_format') == 'ptx', \
+        'native CUDA execution does not qualify PTX'
+    assert selection.get('arch') == 'sm_80' and selection.get('numeric_mode') == 'identical'
+    assert selection.get('source_commit') == source_commit, 'PTX source differs from the installed core'
+    assert re.fullmatch('[0-9a-f]{64}', selection.get('manifest_sha256', ''))
+    payloads = installed.get('ptx_payload_files') or {}
+    assert payloads and selection.get('loaded_files'), 'PTX binding load evidence is missing'
+    for row in selection['loaded_files']:
+        assert row['file'].startswith('identical/') and payloads.get(row['file']) == row['sha256'], \
+            'loaded binding is outside the identical PTX manifest'
+    return selection
+
+
+def admit_ptx_bindings(doc, installed):
+    """Bind numerical workers to the identical PTX payload, not just a preflight."""
+    payloads = {digest for name, digest in installed['ptx_payload_files'].items()
+                if name.startswith('identical/')}
+    gpu = [row for row in doc.get('bindings', []) if row.get('kind') != 'host']
+    assert gpu and not doc.get('bindings_error'), 'missing numerical worker binding evidence'
+    assert all(row.get('sha256') in payloads for row in gpu), \
+        'numerical worker loaded a binding outside the identical PTX payload'
+    return dict(bindings=len(gpu), sha256=sorted({row['sha256'] for row in gpu}))
 
 
 def runner(manifest, receipt, output):
@@ -173,6 +211,9 @@ def qualify_jobs(run, save, manifest, python, work, output, models, scope, devic
     """The smoke's jobs against an installed package: the same for a wheel
     installed here and for a package pip resolved from an index."""
     manifest["installed"] = run("installed", [python, "-c", INSTALLED_GUARD, version], work, True)
+    if manifest.get('require_ptx'):
+        admit_ptx_selection(manifest["installed"], manifest["source_commit"])
+    save()
     # Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never a
     # reason to rerun. One fit per cell (--repeats 1), and the `batch` job is
     # deleted: `extended` runs the same knn/base train, infer and batch cells
@@ -229,6 +270,7 @@ def qualify_installed(parser, args):
         parser.error("use a fresh output directory")
     manifest = dict(wheel=None, wheel_sha256=None, status="INCOMPLETE", jobs=[], scope=args.scope,
                     source_commit=None, release_qualified=False, expanded=None,
+                    require_ptx=args.require_ptx,
                     installed_from=dict(python=python, expected_version=args.expected_version))
     save, run = runner(manifest, receipt, output)
     save()
@@ -276,6 +318,8 @@ def main():
     parser.add_argument("--plugin", type=Path, action="append", default=[],
                         help="a split GPU plugin wheel installed with the core (repeatable)")
     parser.add_argument('--scope', choices=('expanded', 'cpu-only'), default='expanded')
+    parser.add_argument('--require-ptx', action='store_true',
+                        help='refuse unless the installed CUDA sm_80 PTX set actually loads; does not force the route')
     parser.add_argument('--multi-gpu-devices', help='optional two distinct indices, e.g. 0,1')
     parser.add_argument('--expected-source-commit', help='full commit recorded inside the candidate wheel')
     # THE USER'S INSTALL, FROM THE INDEX (tools/index_release_check.py,
@@ -287,6 +331,8 @@ def main():
                         help='qualify the mojolearn already installed for this interpreter (no wheel, no install)')
     parser.add_argument('--expected-version', help='with --installed-python: the version that must be installed')
     args = parser.parse_args()
+    if args.require_ptx and args.scope != 'expanded':
+        parser.error('--require-ptx needs expanded GPU scope')
     if args.installed_python:
         if args.wheel or args.plugin or args.wheelhouse:
             parser.error('--installed-python qualifies what is installed: no wheel, --plugin or --wheelhouse')
@@ -330,7 +376,7 @@ def main():
         parser.error("one --plugin per distribution")
     manifest = dict(wheel=str(wheel), wheel_sha256=digest, status="INCOMPLETE", jobs=[],
                     scope=args.scope, source_commit=source_commit, release_qualified=False,
-                    expanded=None)
+                    expanded=None, require_ptx=args.require_ptx)
     if plugins:
         manifest["plugins"] = plugins
     save, run = runner(manifest, receipt, output)

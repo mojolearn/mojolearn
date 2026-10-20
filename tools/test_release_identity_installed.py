@@ -19,6 +19,63 @@ def evidence():
 
 
 class IdentityAdmissionTests(unittest.TestCase):
+    def test_ptx_artifact_gate_requires_both_route_and_worker_evidence(self):
+        import hashlib
+        import json
+        import tempfile
+        import zipfile
+        from unittest.mock import patch
+        from test_qualify_verifier_wheel import ptx_install
+
+        root = SCRIPT.resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            wheel = work/'mojolearn_core-0.9.0-py3-none-any.whl'
+            with zipfile.ZipFile(wheel, 'w') as archive:
+                archive.writestr('mojolearn/identity_columns/COMMIT', 'c'*40)
+            selection = work/'selection.json'
+            selection.write_text(json.dumps(dict(lanes=['ridge'])))
+            digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+            for worker_hash, expected in [('a'*64, 'PASSED'), ('b'*64, 'FAILED')]:
+                out = work/expected
+                calls = []
+                def spawn(command, **kwargs):
+                    calls.append(command)
+                    if command[0] == 'nvidia-smi':
+                        kwargs['stdout'].write('NVIDIA A40, GPU-test, 8.6, 580.00\n')
+                    elif 'expanded' in command:
+                        self.assertIn('--require-ptx', command)
+                        (out/'smoke').mkdir()
+                        (out/'smoke/results.json').write_text(json.dumps(dict(
+                            status='PASSED', scope='expanded', source_commit='c'*40,
+                            wheel_sha256=digest, installed=ptx_install())))
+                    elif '-c' in command:
+                        kwargs['stdout'].write(json.dumps(ptx_install()))
+                    elif 'verify' in command:
+                        report = evidence()
+                        report['bindings'] = [dict(module='_mojolearn_native', sha256=worker_hash)]
+                        (out/'identity.json').write_text(json.dumps(report))
+                    class Process:
+                        pid = 123
+                        def wait(self, timeout=None): return 0
+                    return Process()
+                args = list(map(str, [root, wheel, digest, 'cuda', out, 'c'*40,
+                                      'sm_80', selection]))
+                with patch('subprocess.Popen', side_effect=spawn), patch('os.killpg'):
+                    if expected == 'PASSED':
+                        ns['main'](args)
+                    else:
+                        with self.assertRaises(AssertionError):
+                            ns['main'](args)
+                receipt = json.loads((out/'identity-receipt.json').read_text())
+                self.assertEqual(receipt['status'], expected)
+                self.assertEqual(receipt['code_format'], 'ptx')
+                self.assertEqual(receipt['installed']['device_arch'], 'sm_86')
+                self.assertEqual(receipt['hardware'][0]['name'], 'NVIDIA A40')
+                if expected == 'PASSED':
+                    self.assertEqual(receipt['ptx_worker_bindings']['sha256'], ['a'*64])
+                self.assertTrue(any('verify' in command for command in calls))
+
     def test_complete_core_identity(self):
         ns['admit_identity'](evidence(), ['ridge'])
 
