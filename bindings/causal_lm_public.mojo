@@ -75,6 +75,13 @@ def causal_lm_admit_binding(
     return PythonObject(None)
 
 
+def _block(model: PythonObject, index: Int) raises -> PythonObject:
+    # PublicOutputsMixin.__getattribute__ is Python even for private metadata.
+    # Access the object's plain dictionary with CPython's base implementation,
+    # bypassing that overridden getter; every field below is stored metadata.
+    return GENERATION_BOUNDARY.get_or_create_ptr()[].bi.object.__getattribute__(model._blocks[index], "__dict__")
+
+
 def _positions(model: PythonObject, state: PythonObject, length: Int) raises:
     var have = 0 if state is None else Int(py=state.positions)
     if length < 0 or have < 0:
@@ -101,12 +108,12 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
     state.layers = g[].bi.list()
     var kind = String(model.kind)
     for i in range(len(model._blocks)):
-        var blk = model._blocks[i]
+        var blk = _block(model, i)
         var st = g[].bi.object.__new__(g[].layer_classes[kind])
         if kind == "transformer":
-            var window = Int(py=blk.window)
-            var nkv = Int(py=blk.n_kv_heads)
-            var hd = Int(py=blk.head_dim)
+            var window = Int(py=blk["window"])
+            var nkv = Int(py=blk["n_kv_heads"])
+            var hd = Int(py=blk["head_dim"])
             var n = b * nkv * (cap if window == 0 else window) * hd
             st.batch_size = PythonObject(b)
             st.n_kv_heads = PythonObject(nkv)
@@ -119,7 +126,7 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
             st._resident_session = PythonObject(None)
             st._numeric_profile = model.numeric_profile
         elif kind == "mamba1":
-            var di = Int(py=blk.d_inner)
+            var di = Int(py=blk["d_inner"])
             var profile = Int(py=model._native_entries["mamba1_profile"])
             st.conv_window = generation_array([b, di, 4])
             st.h = generation_array([b, di, 16])
@@ -134,8 +141,8 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
                 st.affine_a = generation_array([b, di, 16, 6])
                 st.affine_b = generation_array([b, di, 16, 6])
         else:
-            var cd = Int(py=blk.conv_dim)
-            var nh = Int(py=blk.nheads)
+            var cd = Int(py=blk["conv_dim"])
+            var nh = Int(py=blk["nheads"])
             st.conv_window = generation_array([b, cd, 4])
             st.h = generation_array([b, nh, 64, 128])
             st.buffer_xbc = generation_array([b, 256, cd])
@@ -219,26 +226,26 @@ def _transformer_args(
     b: Int, l: Int, planes: Bool, mut keep: List[PythonObject],
 ) raises -> PythonObject:
     var addresses = py_ints([_addr(x, keep)])
-    for j in range(len(blk._w)):
-        addresses.append(0 if planes and j >= 2 else _addr(blk._w[j], keep))
+    for j in range(len(blk["_w"])):
+        addresses.append(0 if planes and j >= 2 else _addr(blk["_w"][j], keep))
     addresses.append(_addr(st.k_cache, keep))
     addresses.append(_addr(st.v_cache, keep))
     addresses.append(_addr(y, keep))
-    for j in range(len(blk._wopt)):
-        addresses.append(_addr(blk._wopt[j], keep))
+    for j in range(len(blk["_wopt"])):
+        addresses.append(_addr(blk["_wopt"][j], keep))
     if planes:
-        for j in range(len(blk._int15)):
-            var trip = blk._int15[j]
+        for j in range(len(blk["_int15"])):
+            var trip = blk["_int15"][j]
             for k in range(3):
                 addresses.append(0 if trip is None else _addr(trip[k], keep))
     return addresses
 
 
 def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) raises -> PythonObject:
-    var p = py_ints([b, l, Int(py=blk.d_model), Int(py=blk.n_heads), Int(py=blk.n_kv_heads),
-                    Int(py=blk.head_dim), Int(py=blk.intermediate), Int(py=st.max_tokens),
-                    Int(py=st.cached_tokens), Int(py=blk.window)])
-    p.extend(blk._opts_tail)
+    var p = py_ints([b, l, Int(py=blk["d_model"]), Int(py=blk["n_heads"]), Int(py=blk["n_kv_heads"]),
+                    Int(py=blk["head_dim"]), Int(py=blk["intermediate"]), Int(py=st.max_tokens),
+                    Int(py=st.cached_tokens), Int(py=blk["window"])])
+    p.extend(blk["_opts_tail"])
     return p
 
 
@@ -256,7 +263,7 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
     var kind = String(model.kind)
     try:
         for i in range(len(model._blocks)):
-            var blk = model._blocks[i]
+            var blk = _block(model, i)
             var st = state.layers[i]
             var y = generation_array([b, l, d])
             var addresses = PythonObject(None)
@@ -266,13 +273,13 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
                 if g[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
                     raise Error("CausalLM: layer state is owned by a decode session")
                 var old_profile = g[].bi.getattr(st, "arithmetic_profile", PythonObject(None))
-                var profile_id = g[].bi.getattr(blk, "_arithmetic_profile", PythonObject(None))
+                var profile_id = blk.get("_arithmetic_profile", PythonObject(None))
                 if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
                     raise Error("CausalLM: state arithmetic profile differs")
                 if profile_id is not None:
                     st.arithmetic_profile = profile_id
-                var cap = Int(py=st.max_tokens) if Int(py=blk.window) == 0 else Int(py=blk.window)
-                var cache_n = b * Int(py=blk.n_kv_heads) * cap * Int(py=blk.head_dim)
+                var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
+                var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
                 params = _transformer_params(blk, st, b, l)
                 var profile = model._head_int15 is not None
                 var device15 = profile and Bool(py=e.__contains__("forward15"))
@@ -280,24 +287,24 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
                 addresses[10] = PythonObject(_mutable(st.k_cache, [cache_n], keep, copies))
                 addresses[11] = PythonObject(_mutable(st.v_cache, [cache_n], keep, copies))
                 if device15:
-                    if blk._native_session is None:
-                        blk._native_session = e["create"]()
-                    st.cached_tokens = e["forward15"](blk._native_session, addresses, params)
+                    if blk["_native_session"] is None:
+                        blk["_native_session"] = e["create"]()
+                    st.cached_tokens = e["forward15"](blk["_native_session"], addresses, params)
                 elif profile:
                     st.cached_tokens = e["forward15_host"](addresses, params)
                 elif Bool(py=e.__contains__("forward_session")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
-                    if blk._native_session is None:
-                        blk._native_session = e["create"]()
-                        blk._session_binding = e["block_binding"]
-                    st.cached_tokens = e["forward_session"](blk._native_session, addresses, params)
+                    if blk["_native_session"] is None:
+                        blk["_native_session"] = e["create"]()
+                        blk["_session_binding"] = e["block_binding"]
+                    st.cached_tokens = e["forward_session"](blk["_native_session"], addresses, params)
                 else:
                     st.cached_tokens = e["forward"](addresses, params)
             else:
                 addresses = py_ints([_addr(x, keep)])
-                for j in range(len(blk._w)):
-                    addresses.append(_addr(blk._w[j], keep))
+                for j in range(len(blk["_w"])):
+                    addresses.append(_addr(blk["_w"][j], keep))
                 if kind == "mamba1":
-                    var di = Int(py=blk.d_inner)
+                    var di = Int(py=blk["d_inner"])
                     addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies))
                     addresses.append(_mutable(st.h, [b, di, 16], keep, copies))
                     addresses.append(_addr(y, keep))
@@ -313,19 +320,19 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
                     e["forward"](addresses, params)
                     st.absolute_position = PythonObject(Int(py=st.absolute_position) + l)
                 else:
-                    var nh = Int(py=blk.nheads)
-                    var cd = Int(py=blk.conv_dim)
+                    var nh = Int(py=blk["nheads"])
+                    var cd = Int(py=blk["conv_dim"])
                     addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies))
                     addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies))
                     addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
                     addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
                     addresses.append(_addr(y, keep))
-                    var last = generation_array([b, Int(py=blk.nheads), 64, 128])
+                    var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
                     addresses.append(_addr(last, keep))
                     params = py_ints([b, l, d, Int(py=st.buffered_tokens)])
-                    params.extend(blk.dt_limit)
+                    params.extend(blk["dt_limit"])
                     st.buffered_tokens = e["forward"](addresses, params)
-                    blk.h_last_ = last
+                    blk["h_last_"] = last
             _writeback(copies)
             x = y
         var hn = x
@@ -401,7 +408,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     var out = generation_array([b, n], "i")
     try:
         for i in range(len(model._blocks)):
-            var blk = model._blocks[i]
+            var blk = _block(model, i)
             var st = state.layers[i]
             var a = _transformer_args(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
             var open_a = g[].bi.list()
@@ -734,28 +741,28 @@ def _fingerprint(model: PythonObject) raises -> PythonObject:
         h.update(_array_bytes(model._norm))
     h.update(_array_bytes(model._head))
     for i in range(len(model._blocks)):
-        var blk = model._blocks[i]
+        var blk = _block(model, i)
         if String(model.kind) == "transformer":
-            _hash_scalar(h, blk._opts_tail)
-            _hash_scalar(h, blk.n_heads)
-            _hash_scalar(h, blk.n_kv_heads)
-            _hash_scalar(h, blk.window)
-            for j in range(len(blk._wopt)):
-                if blk._wopt[j] is not None:
-                    h.update(_array_bytes(blk._wopt[j]))
+            _hash_scalar(h, blk["_opts_tail"])
+            _hash_scalar(h, blk["n_heads"])
+            _hash_scalar(h, blk["n_kv_heads"])
+            _hash_scalar(h, blk["window"])
+            for j in range(len(blk["_wopt"])):
+                if blk["_wopt"][j] is not None:
+                    h.update(_array_bytes(blk["_wopt"][j]))
         elif String(model.kind) == "mamba2":
-            _hash_scalar(h, blk.dt_limit)
+            _hash_scalar(h, blk["dt_limit"])
         else:
             _hash_scalar(h, model._native_entries["mamba1_profile"])
-        for j in range(len(blk._w)):
-            if blk._w[j] is not None:
-                _hash_scalar(h, blk._w[j].shape)
-                h.update(_array_bytes(blk._w[j]))
+        for j in range(len(blk["_w"])):
+            if blk["_w"][j] is not None:
+                _hash_scalar(h, blk["_w"][j].shape)
+                h.update(_array_bytes(blk["_w"][j]))
         if model._head_int15 is not None:
-            for j in range(len(blk._int15)):
-                if blk._int15[j] is not None:
+            for j in range(len(blk["_int15"])):
+                if blk["_int15"][j] is not None:
                     for k in range(3):
-                        h.update(_array_bytes(blk._int15[j][k]))
+                        h.update(_array_bytes(blk["_int15"][j][k]))
     if model._head_int15 is not None:
         for k in range(3):
             h.update(_array_bytes(model._head_int15[k]))
