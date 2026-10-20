@@ -33,7 +33,7 @@ def checkpoint_array(raw: PythonObject, shape: PythonObject, code: String, array
     result._addr = store.buffer_info()[0]
     result._readonly = PythonObject(False)
     result.shape = bi.tuple(shape)
-    result.dtype = PythonObject("<f4" if code == "f" else ("<u2" if code == "H" else ("<i8" if code == "q" else "<i4")))
+    result.dtype = PythonObject("<f4" if code == "f" else ("<u2" if code == "H" else ("<i8" if code == "q" else ("<i1" if code == "b" else "<i4"))))
     result.ndim = PythonObject(len(shape))
     result.size = PythonObject(count)
     result.nbytes = PythonObject(count * itemsize)

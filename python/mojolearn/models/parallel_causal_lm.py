@@ -282,7 +282,7 @@ class ParallelCausalLM(CausalLM):
             # worker can silently take the GPU block classes on a host box.
             for device in devices:  # glue: starts one worker per device
                 self._rpc(device, 'route', self.route)
-            super().__init__(plan, weights, device=self.route, **kwargs)
+            super()._initialize_legacy(plan, weights, device=self.route, **kwargs)
             self._rpc(self.layer_devices[0], 'tensors', {'embed': self._embed})
             self._rpc(self.layer_devices[-1], 'tensors', {'norm': self._norm, 'head': self._head,
                                                           'head_int15': self._head_int15})
