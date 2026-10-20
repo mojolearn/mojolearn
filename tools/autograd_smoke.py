@@ -66,8 +66,8 @@ tool never builds), then `run` starts each entry with a 5 s timer:
 A row is `ok` (exited 0 inside its timer), `STARTED` (still running at the timer: it started, no
 verdict), `failed` (non-zero exit, with its last lines) or `not built` (no binary: refused by name,
 never a pass); a probe that prints a `SKIPPED <reason>` line reads `SKIPPED` (never silence, never
-`ok`). A model refusal reads `REFUSED`; incomplete pytest coverage reads `SKIPPED` or `PARTIAL`,
-never `ok`. Each Python entry checks its actual compiled binding vendor and numeric mode before
+`ok`). A model refusal reads `REFUSED`; incomplete pytest coverage reads `SKIPPED` or `PARTIAL`
+and fails the gate. Each Python entry checks its actual compiled binding vendor and numeric mode before
 running. Installed-package checks use isolated Python; --source-package explicitly selects a source
 tree and labels that scope in the report. This is smoke coverage, not performance or identity qualification.
 tools/apple_smoke_set.py lists these entries beside its derived lanes and
@@ -640,7 +640,8 @@ def run(vendor, bin_dir, python, out, timeout=TIMEOUT_S, *, entries=None, source
     with open(tmp, "w") as fh:
         json.dump(doc, fh, indent=1, sort_keys=True)
     os.replace(tmp, out)
-    bad = [r for r in rows if r["status"] in ("failed", "not built")]
+    bad = [r for r in rows if r["status"] in ("failed", "not built")
+           or ("junit" in r and r["status"] in ("SKIPPED", "PARTIAL"))]
     return 1 if bad else 0
 
 

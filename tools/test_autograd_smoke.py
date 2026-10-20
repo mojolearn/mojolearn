@@ -61,7 +61,7 @@ def _completed_entry(cmd, log, timeout, env=None, cwd=None, *, skipped=0, tests=
 
 
 @pytest.mark.parametrize("tests,skipped,status,rc", [
-    (3, 0, "ok", 0), (3, 3, "SKIPPED", 0), (3, 1, "PARTIAL", 0), (0, 0, "failed", 1),
+    (3, 0, "ok", 0), (3, 3, "SKIPPED", 1), (3, 1, "PARTIAL", 1), (0, 0, "failed", 1),
 ])
 def test_pytest_coverage_and_isolation(monkeypatch, tmp_path, tests, skipped, status, rc):
     def start(cmd, log, timeout, env, cwd):
