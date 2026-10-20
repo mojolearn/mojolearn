@@ -1732,7 +1732,8 @@ struct Tape(Movable):
         var out = self._record(ex, output, rows, cols, REDUCE, [x], a)
         if axis == AXIS_COLS:
             # rank-N metadata only: the leading dims and (1,) for rank >= 3
-            _ = self._with_shape(out, self._lead_shape(n_at, 1))
+            var lead = self._lead_shape(n_at, 1)
+            _ = self._with_shape(out, lead)
         if word:
             self._word_node = out._index
         return out
