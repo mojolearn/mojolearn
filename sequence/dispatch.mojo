@@ -157,14 +157,11 @@ from autograd.cast_ops import OP_CAST_FIRST, OP_CAST_LAST, apply_cast
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
 # lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo OP_RNC_*, 4100..4109)
 from autograd.rankn_ops import OP_RNC_FIRST, OP_RNC_LAST, apply_rankn_core
-=======
 # >>> lane ag-rankn-fold: rank-N broadcasts, axis reductions, max (4200..4219)
 from autograd.rankn_fold_ops import OP_RNF_FIRST, OP_RNF_LAST, apply_rankn_fold
 # <<< lane ag-rankn-fold
->>>>>>> origin/lane/ag-rankn-fold
 =======
 # lane ag-rankn-bmm: the batched matrix product (docs/plans/AUTOGRAD_RANKN.md 2.3)
 from autograd.rankn_bmm_ops import OP_RNB_FIRST, OP_RNB_LAST, apply_rn_bmm
@@ -384,7 +381,6 @@ def apply[OP: Int](t: Int, a: Args):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
     # ---- lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo
     # OP_RNC_*, 4100..4109; docs/plans/AUTOGRAD_RANKN.md section 7), above the
     # cast family and the higher-order plan's 3600..3619.
@@ -396,7 +392,6 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNC_FIRST or OP_CELL_BWD_SCAN > OP_RNC_LAST
     ), "rank-N core opcode collides with recurrent scan"
     # ---- end lane ag-rankn-core
-=======
     # >>> lane ag-rankn-fold: the rank-N broadcast / reduction / max family
     # (autograd/rankn_fold_ops.mojo OP_RNF_*, 4200..4219; docs/plans/AUTOGRAD_RANKN.md 7)
     comptime assert OP_RNF_FIRST <= OP_RNF_LAST, "rank-N fold opcode range is empty"
@@ -406,7 +401,6 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNF_FIRST or OP_CELL_BWD_SCAN > OP_RNF_LAST
     ), "rank-N fold opcode collides with recurrent scan"
     # <<< lane ag-rankn-fold
->>>>>>> origin/lane/ag-rankn-fold
 =======
     # lane ag-rankn-bmm: the batched matrix product (autograd/rankn_bmm_ops.mojo
     # OP_RNB_*, 4300..4309), above every other autograd range.
@@ -484,16 +478,13 @@ def apply[OP: Int](t: Int, a: Args):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
-<<<<<<< HEAD
     elif OP >= OP_RNC_FIRST and OP <= OP_RNC_LAST:
         # lane ag-rankn-core: the rank-N view copy
         apply_rankn_core[OP](t, a)
-=======
     # >>> lane ag-rankn-fold
     elif OP >= OP_RNF_FIRST and OP <= OP_RNF_LAST:
         apply_rankn_fold[OP](t, a)
     # <<< lane ag-rankn-fold
->>>>>>> origin/lane/ag-rankn-fold
 =======
     elif OP >= OP_RNB_FIRST and OP <= OP_RNB_LAST:
         # lane ag-rankn-bmm: the batched matrix product
