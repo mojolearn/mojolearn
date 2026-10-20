@@ -5,7 +5,8 @@ OP_COLSUM_DIV (the linear node's bias gradient). Moved here unchanged from
 sequence/mlp.mojo; the in-register epilogue they share with the forward
 (gemm_epi_value) stays there."""
 from sequence.ops import Args, gemm_dot, ld, op_colsum, st
-from sequence.mlp import gemm_epi_value, op_divs
+from sequence.mlp import gemm_epi_value
+from autograd.kernels.mlp import op_divs
 
 
 @always_inline

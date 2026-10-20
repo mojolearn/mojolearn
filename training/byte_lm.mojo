@@ -69,25 +69,34 @@ from gemm.neural_backward import (
 )
 from gemm.contract import OP_NT, OP_NN
 from embedding.checks.embedding_identical import (
-    ANY_EMB_SABOTAGE, EMB_AUTO_SORT_MIN_CELLS, emb_run_scratch_ints,
-    identical_embedding_forward_into, identical_embedding_backward_into,
+    ANY_EMB_SABOTAGE,
+    EMB_AUTO_SORT_MIN_CELLS,
+    identical_embedding_forward_into,
     identical_embedding_forward_prerefused_into,
+)
+from autograd.kernels.embedding import (
+    emb_run_scratch_ints,
+    identical_embedding_backward_into,
     identical_embedding_backward_prerefused_into,
 )
-from embedding.owned_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
+from autograd.kernels.embedding_runs import NN50_OWNED_RUNS, OwnedEmbeddingRuns
 from training.neural_ab_lifetime import NN62_LIFETIME_ARENA, NeuralLifetimeArena, NeuralLiveRange
 from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
-from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
-    ANY_LOSS_SABOTAGE, identical_ce_forward_into, identical_ce_backward_into,
-    identical_ce_ones_floats, identical_ce_workspace_max_floats,
+    ANY_LOSS_SABOTAGE,
+    identical_ce_forward_into,
+    identical_ce_ones_floats,
+    identical_ce_workspace_max_floats,
 )
+from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_CHUNK,
-    chunked_lm_head_v2_gemm_forward_into, chunked_lm_head_v2_gemm_backward_into,
+    chunked_lm_head_v2_gemm_forward_into,
     chunked_lm_head_v2_gemm_workspace_floats,
 )
+from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
 from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
     identical_optimizer_workspace_floats,
@@ -101,7 +110,7 @@ from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConf
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
 from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages,
 )
 # The step's backward (loss, head, every layer, embedding) runs on one

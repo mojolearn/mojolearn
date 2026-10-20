@@ -16,7 +16,7 @@
       "training/byte_lm.mojo",
       "training/byte_lm_logits.mojo",
       "transformer/impl/llama/modeling_llama.mojo",
-      "transformer/checks/transformer_backward.mojo",
+      "autograd/kernels/transformer.mojo",
       "mamba/impl/modules/idn_gemm_ws.mojo",
       "x_cnn/device.mojo"
     ],
@@ -46,7 +46,7 @@
     "owned_workspace": [
       "training/dev_tensors.mojo",
       "transformer/impl/llama/modeling_llama.mojo",
-      "transformer/checks/transformer_backward.mojo"
+      "autograd/kernels/transformer.mojo"
     ],
     "sequence_same_chain": [
       "sequence/ops.mojo",
@@ -114,7 +114,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -222,7 +222,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -307,7 +307,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -395,7 +395,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -694,7 +694,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -780,7 +780,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -875,7 +875,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -963,7 +963,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",
@@ -1046,7 +1046,7 @@
       "caller_paths": [
         "training/dev_tensors.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "ab": {
         "candidate": {
@@ -1248,7 +1248,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "gemm/host/neural_gemm.mojo",

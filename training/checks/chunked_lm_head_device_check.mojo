@@ -3,9 +3,10 @@
 from max.gpu.host import DeviceContext
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_CHUNK,
-    chunked_lm_head_v2_train_host, chunked_lm_head_v2_gemm_forward_into,
-    chunked_lm_head_v2_gemm_backward_into,
+    chunked_lm_head_v2_train_host,
+    chunked_lm_head_v2_gemm_forward_into,
 )
+from autograd.kernels.lm import chunked_lm_head_v2_gemm_backward_into
 from training.checks.chunked_lm_head_oracle import chunked_lm_head_v2_oracle
 from gemm.neural_dispatch import identical_gemm_workspace_max_floats
 

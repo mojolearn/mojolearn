@@ -5,7 +5,7 @@
 # whether any gradient is correct.
 #
 # WHAT IT DOES ESTABLISH, and it was worth establishing: on 2026-09-03
-# `mamba/checks/mamba_backward.mojo` went through a compiler for the first
+# `autograd/kernels/mamba1_proj.mojo` went through a compiler for the first
 # time since it was written, UNMODIFIED, in all four configurations -- the
 # clean build and each of the three sabotage arms. The plan's section 10 item
 # 1 predicted "the five-element `Tuple` returns and the `comptime if` early
@@ -14,8 +14,8 @@
 # `gemm/checks/gemm_backward.mojo`.
 #
 # SINCE 2026-09-03 IT ALSO COVERS THE ARITHMETIC. The two kernel files
-# `mamba/impl/ops/selective_scan_backward.mojo` and
-# `mamba/impl/modeling/modeling_mamba_backward.mojo` are
+# `autograd/kernels/mamba1_scan.mojo` and
+# `autograd/kernels/mamba1.mojo` are
 # pulled in through `_force_elaborate_kernels`, so a syntax or type error in
 # any of the fourteen new launchers or the ten new kernels fails this build.
 # **THAT IS STILL NOT A RESULT ABOUT GRADIENTS.** No value is asserted, no
@@ -27,7 +27,7 @@
 # arm. Build all twenty configurations (clean plus each arm) or the probe has
 # covered less than it appears to; the arm lists are in the three files'
 # headers and `pixi.toml`'s `build-mamba-backward-probe` comment.
-# `mamba/checks/mamba_backward.mojo` is a library module with no `main()`, so
+# `autograd/kernels/mamba1_proj.mojo` is a library module with no `main()`, so
 # `mojo build` on it fails with "module does not define a `main` function"
 # before it ever type checks anything (pixi.toml records that exact failure
 # for 21 of 22 check files). This driver exists solely to give the compiler an
@@ -41,7 +41,7 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mamba.checks.mamba_fixture import MambaDims
-from mamba.checks.mamba_backward import (
+from autograd.kernels.mamba1_proj import (
     PROJ_COUNT,
     PROJ_IN,
     RED_COUNT,
@@ -76,7 +76,7 @@ from mamba.checks.mamba_backward import (
 # THE ARITHMETIC, imported from the two kernel files DIRECTLY rather than
 # through `mamba_backward`'s re-exports, so that this probe fails on a broken
 # kernel file even if the routing layer's import list drifts.
-from mamba.impl.ops.selective_scan_backward import (
+from autograd.kernels.mamba1_scan import (
     bwd_da_partial_floats,
     bwd_dh_floats,
     bwd_h_checkpoint_floats,
@@ -88,7 +88,7 @@ from mamba.impl.ops.selective_scan_backward import (
     selective_scan_bwd_scan_into,
     selective_scan_checkpoint_fn,
 )
-from mamba.impl.modeling.modeling_mamba_backward import (
+from autograd.kernels.mamba1 import (
     mamba_backward_block_sabotage_name,
     mamba_bwd_concat_p_into,
     mamba_bwd_concat_xp_into,

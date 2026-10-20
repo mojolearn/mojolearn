@@ -50,7 +50,10 @@ FAMILIES = (
                       "autograd/metrics.mojo", "autograd/data.mojo",
                       "autograd/profile.mojo", "autograd/optim.mojo", "autograd/higher.mojo",
                       "autograd/model_checkpoint.mojo", "training/checkpoint.mojo",
-                      "autograd/program.mojo", "autograd/weight_import.mojo"),
+                      "autograd/program.mojo", "autograd/weight_import.mojo",
+                      # the backward bodies moved out of sequence/recurrent*.mojo and sequence/mlp.mojo
+                      "autograd/kernels/recurrent.mojo", "autograd/kernels/recurrent_scan.mojo",
+                      "autograd/kernels/mlp.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
@@ -78,6 +81,8 @@ FAMILIES = (
             "model_import_params", "ops_load_weights",
             # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)
             "onnx_read", "onnx_info", "onnx_copy_blob", "onnx_resolve", "onnx_close",
+            # model verification reports (autograd/model_verify.mojo; python -m mojolearn verify-model)
+            "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(

@@ -18,6 +18,11 @@
                                          bundle an external implementation
                                          can check itself against
                                          (docs/CONFORMANCE.md)
+    python -m mojolearn verify-model MODEL [--inputs F.npz] [--expect R.json]
+                                         run a saved model on this install
+                                         and check its output bits against
+                                         a report from another install
+                                         (_verify_model.py)
     python -m mojolearn identity         run the identity_break lanes on
                                          this box and diff them against the
                                          three GPU columns shipped in the
@@ -626,6 +631,9 @@ def build_parser():
                    help="emit one JSON object as the verdict instead of the "
                         "human line (the harness's own output still streams)")
     d.set_defaults(func=_identity.cmd_identity)
+
+    from . import _verify_model
+    _verify_model.add_parser(sub)
 
     c.set_defaults(func=lambda _args: (c.print_help(),
                                        _verify.EXIT_USAGE)[1])

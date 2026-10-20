@@ -31,7 +31,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDeviceWeights, LlamaDeviceStages, LlamaDims, LlamaKVCache,
     LlamaRopeTable, llama_decoder_layer_forward,
 )
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 # NN31 (MOJOLEARN_IDN_ACT_RETAIN=2) is the IDENTICAL default since 2026-10-08

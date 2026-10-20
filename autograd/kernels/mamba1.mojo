@@ -7,7 +7,7 @@ is `mamba/impl/modeling/modeling_mamba.mojo`, and the split
 is the same one: that file owns forward seams S1-S4 (RMSNorm), S12 (the z
 gate), S13 (the conv tap chain), S14 (the softplus), S15, S16 (the residual)
 and the four S17 projections, and this file owns their derivatives.
-`mamba/impl/ops/selective_scan_backward.mojo` owns S5'-S11', the
+`autograd/kernels/mamba1_scan.mojo` owns S5'-S11', the
 scan. `archive/plans/mamba/IDENTICAL_BACKWARD_PLAN.md` is the plan and its topology names
 T6, T7, T8 are used below without restating their prices.
 
@@ -32,7 +32,7 @@ WHAT IS HERE, BY THE PLAN'S OPERATION NUMBERS
 NEW DEVIATIONS THIS FILE SPENDS
 --------------------------------
 **DEVIATION 1085, `silu'` HAS EXACTLY ONE SPELLING IN THIS REPOSITORY AND IT
-IS NOT NEW.** `transformer/checks/transformer_backward.mojo:713`
+IS NOT NEW.** `autograd/kernels/transformer.mojo:713`
 (`bwd_silu_backward_kernel`, DEVIATION 1411) already writes the SiLU
 derivative under this repository's pins, and it writes
 
@@ -64,7 +64,7 @@ table row is corrected. **This was found by reading, not by running**; no
 fixture has been built and nothing has been measured.
 
 **DEVIATION 1087, THIS REPOSITORY NOW HAS TWO RMSNORM BACKWARDS AND THEY ARE
-NOT THE SAME NUMBER.** `transformer/checks/transformer_backward.mojo`'s `bwd_norm_dh_kernel` (:801),
+NOT THE SAME NUMBER.** `autograd/kernels/transformer.mojo`'s `bwd_norm_dh_kernel` (:801),
 `bwd_norm_dot_kernel` (:824) and `bwd_norm_dx_kernel` (:932) compute the same
 mathematical node as T7 between them, and spell it
 
@@ -91,7 +91,7 @@ WHAT THIS FILE IS NOT
 ----------------------
 Not a gate, not a driver and not an orchestrator: there is no function here
 that runs a whole backward pass, because the order the launches go in is the
-caller's and `mamba/checks/mamba_backward.mojo` is where the routed calls
+caller's and `autograd/kernels/mamba1_proj.mojo` is where the routed calls
 live. **Nothing here has been compiled or run**, no gradient has ever come
 out of it, and every sentence about behavior is a prediction. Gates MB1-MB10
 are SPECIFIED AND NOT BUILT and the host backward oracle they compare against
@@ -108,7 +108,7 @@ enqueues and returns. THE CALLER OWNS EVERY BUFFER and must keep each alive
 past its own `ctx.synchronize()`.
 
 DEVIATIONS 1075-1078 (T6, T7, T8 and the softplus derivative, declared in
-`mamba/checks/mamba_backward.mojo`), 1085-1087 (spent here).
+`autograd/kernels/mamba1_proj.mojo`), 1085-1087 (spent here).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -133,7 +133,7 @@ from checks.numerics import (
 # is DEVIATION 720's device construction, and the two forward arms are
 # imported so that a sabotaged forward gets a matching derivative: a backward
 # that differentiates a function the forward did not compute is not a
-# backward. (`transformer/checks/transformer_backward.mojo:166` imports
+# backward. (`autograd/kernels/transformer.mojo:166` imports
 # `pinned_mul` from the same place, for the same reason.)
 from mamba.impl.modeling.modeling_mamba import (
     SAB_S12_MUL_SIGMOID,
@@ -306,7 +306,7 @@ def _silu_prime(x: Float32) -> Float32:
     """`silu'(x) = sig(x) * (1 + x*(1 - sig(x)))`, left to right.
 
     TRANSCRIBED, NOT DERIVED, from
-    `transformer/checks/transformer_backward.mojo:713`
+    `autograd/kernels/transformer.mojo:713`
     (`bwd_silu_backward_kernel`, DEVIATION 1411), which already writes this
     exact chain under this repository's pins. Four roundings after the
     sigmoid, each intermediate flushed and STORED so no backend can reach
@@ -853,7 +853,7 @@ def mamba_bwd_conv_tap_product_kernel(
 
     `d(conv1d.weight)[d,k] = sum over tokens of dconv * hin_shifted`, which
     is a Hadamard product and then a token-axis reduction. The reduction is
-    `mamba/checks/mamba_backward.mojo::mamba_backward_reduce_into` at
+    `autograd/kernels/mamba1_proj.mojo::mamba_backward_reduce_into` at
     `RED_CONV_W_TAP<k>`, a ones-vector `OP_NN` v1 GEMM at `(1, d_inner, M)`;
     the PRODUCT is arithmetic and is here, because a routing layer with a
     float multiply in it is not a routing layer.

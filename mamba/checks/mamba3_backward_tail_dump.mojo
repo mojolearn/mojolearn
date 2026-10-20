@@ -11,7 +11,7 @@ from mamba.impl.ops.mamba3_siso import m3_angle_rate
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
-from mamba.checks.mamba3_backward import (
+from autograd.kernels.mamba3_proj import (
     PROJ3_IN, PROJ3_OUT,
     RED3_D, RED3_NORM_W,
     RED3_DT_BIAS,
@@ -37,7 +37,7 @@ from mamba.impl.modules.mamba3 import (
     allocate_inference_cache,
     mamba3_block_forward,
 )
-from mamba.impl.modules.mamba3_backward import (
+from autograd.kernels.mamba3 import (
     mamba3_beta_join_kernel,
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,

@@ -6,7 +6,7 @@ restates for the host (`mamba/host/gen/mamba2_prefill_chain.mojo`, served by
 binding assembles the same VJP on the tape (autograd/rules_mamba.mojo), whose
 rules launch these same kernels in this same order. No device module imports
 this file (lane del-mamba, 2026-10-19: the device copy of this walk is
-tombstoned in mamba/impl/modules/mamba2_prefill_backward.mojo).
+tombstoned in autograd/kernels/mamba2_prefill.mojo).
 No incoming cache or final-state cotangent is accepted.
 """
 from std.memory import bitcast
@@ -25,14 +25,14 @@ from mamba.checks.mamba2_fixture import (
     M2_D_STATE,
     M2_HEADDIM,
 )
-from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
 from mamba.impl.modules.mamba2 import (
     Mamba2DeviceStages,
     Mamba2DeviceWeights,
     allocate_inference_cache,
     mamba2_block_forward,
 )
-from mamba.impl.modules.mamba2_backward import (
+from autograd.kernels.mamba2 import (
     Mamba2BackwardTail,
     mamba2_backward_d_skip_into,
     mamba2_backward_gnorm_into,
@@ -42,7 +42,7 @@ from mamba.impl.modules.mamba2_backward import (
     mamba2_backward_block_norm_into,
 )
 from mamba.impl.modules.ssd_minimal import m2_q_eff
-from mamba.impl.ops.mamba2_ssd_backward import (
+from autograd.kernels.mamba2_ssd import (
     Mamba2SSDBackwardState,
     Mamba2SSDDiscretizeBackward,
     Mamba2ConvBackward,
@@ -64,7 +64,7 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from mamba.checks.mamba2_fixture import Mamba2Weights
-from mamba.impl.modules.mamba2_prefill_backward import Mamba2PrefillGradients
+from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
 
 
 def mamba2_prefill_backward(

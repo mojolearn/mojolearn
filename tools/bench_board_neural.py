@@ -1791,7 +1791,7 @@ def program_params(shape="full", **readback):
     for k, v in readback.items():
         if k not in out:
             raise KeyError("program_params: %r is not one of the lane's settings" % (k,))
-        out[k] = v
+        out[k] = list(v) if isinstance(v, tuple) else v
     return out
 
 
@@ -1819,6 +1819,7 @@ def program_record(library, implementation, shape="full", **readback):
     if implementation is not None:
         rec["__implementation__"] = implementation
     rec.update(program_params(shape, **readback))
+    return rec
 def gen_record(lane, library, implementation, shape="full", **readback):
     """A causal-lm-generate arm's parameter record for tools/bench_board_params.py."""
     rec = {"__library__": library}
@@ -4157,6 +4158,75 @@ class TorchProgramArm:
     parameters); a round moves the batch to the device, runs softmax(relu(x @ w1 + b1) @ w2 + b2) under the
     setting's autocast and brings the probabilities back on the host. A compile arm compiles the forward in its
     untimed warm-up round."""
+
+    def __init__(self, lane, shape, data, arm):
+        import numpy as np
+        self.np, self.lane, self.shape, self.arm = np, lane, shape, arm
+        where, setting = arm_setting(arm)
+        if where != "gpu":
+            raise RuntimeError("REFUSED: %s: program-run races torch on the GPU only" % arm)
+        twin = _load("torch_lm_step_opponent")
+        col = twin.COLUMNS[setting.replace("-", "_")]
+        torch, dev, kind, name, sync = _torch_device()
+        self.torch, self.dev, self.kind, self._sync = torch, dev, kind, sync
+        torch.manual_seed(SEED)
+        hip = getattr(torch.version, "hip", None)
+        if col["tf32"] and not (kind == "cuda" and not hip):
+            raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA matmul mode; torch on %s "
+                               "accepts the flag and changes nothing" % (arm, "ROCm" if hip else kind))
+        precision = twin.set_precision(torch, col["tf32"])
+        self.autocast, probe = None, None
+        if col["autocast"]:
+            probe = twin.probe_autocast(torch, dev, col["autocast"], sync)
+            if not probe.get("applicable"):
+                raise RuntimeError("REFUSED: %s: torch.autocast(%r, %s) does not work on this box: %s"
+                                   % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
+            self.autocast = getattr(torch, col["autocast"])
+        self.compile = bool(col["compile"])
+        self.ws = [torch.from_numpy(np.ascontiguousarray(data["w:" + n], dtype=np.float32)).to(dev)
+                   for n in OPS_PARAMS]
+        self.X = torch.from_numpy(np.ascontiguousarray(data["X"], dtype=np.float32))
+
+        def forward(x, w1, b1, w2, b2):
+            h = torch.relu(x @ w1 + b1)
+            return torch.softmax((h @ w2 + b2).float(), dim=-1)
+        self.fn = torch.compile(forward) if self.compile else forward
+        d_in, hidden = (int(v) for v in self.ws[0].shape)
+        classes = int(self.ws[2].shape[1])
+        self.record = program_record("torch", torch.nn.functional.softmax, shape, batch_size=int(self.X.shape[0]),
+                                     layers=program_layers(d_in, hidden, classes))
+        self.info = {"library": "torch", "version": torch.__version__,
+                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
+                     "torch_backend": kind, "device": "gpu", "device_name": name,
+                     "setting": setting, "precision": precision_text(setting),
+                     "compile": "torch.compile (inductor, default mode)" if self.compile else "eager",
+                     "mode": "torch %s, %s" % ("compile" if self.compile else "eager", precision_text(setting)),
+                     "precision_readback": precision, "autocast_probe": probe,
+                     "column": setting.replace("-", "_") + " (tools/torch_lm_step_opponent.py COLUMNS)",
+                     "torch_threads": torch.get_num_threads(), "pre_clock_fit": False, "input_home": "host",
+                     "call": LANE_TEXT[lane][1]}
+        self.out = None
+        sync()
+
+    def call(self):
+        import contextlib
+        torch = self.torch
+        with torch.no_grad(), contextlib.ExitStack() as stack:
+            if self.autocast is not None:
+                stack.enter_context(torch.autocast(device_type=self.dev.type, dtype=self.autocast))
+            y = self.fn(self.X.to(self.dev), *self.ws)
+        self.out = y.float().cpu().numpy()
+
+    def sync(self):
+        self._sync()
+
+    def outputs(self):
+        return {"y": self.np.asarray(self.out)}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self.np.asarray(self.out)).data)[:16]
+
+
 #: the byte-LM tensor names -> transformers' Llama names (the 162M's export, research/gpt3-small-162m)
 BYTE_LM_HF_NAME = {"norm1_w": "input_layernorm.weight", "w_q": "self_attn.q_proj.weight",
                    "w_k": "self_attn.k_proj.weight", "w_v": "self_attn.v_proj.weight",

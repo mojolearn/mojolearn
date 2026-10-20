@@ -71,7 +71,7 @@
     },
     "existing_m3_angle_suffix": {
       "paths": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "controls": [
@@ -81,7 +81,7 @@
     },
     "existing_m2_gradient_leaves": {
       "paths": [
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo"
       ],
       "relationship": "Existing fixed256 row leaves/serial final merge; NN39 changes final merge only."
@@ -460,10 +460,10 @@
       "implementation_paths": [
         "mamba/impl/ops/neural_scan_profile.mojo",
         "mamba/impl/ops/neural_mamba_scan.mojo",
-        "mamba/impl/ops/selective_scan_backward.mojo",
+        "autograd/kernels/mamba1_scan.mojo",
         "mamba/impl/modeling/modeling_mamba.mojo",
         "mamba/checks/mamba_oracle.mojo",
-        "mamba/checks/mamba_backward.mojo",
+        "autograd/kernels/mamba1_proj.mojo",
         "mamba/host/gen/neural_scan_profile.mojo",
         "mamba/host/gen/neural_mamba_scan.mojo",
         "mamba/host/gen/selective_scan_backward.mojo",
@@ -480,7 +480,7 @@
         "python/mojolearn/_mamba_impl.py",
         "bindings/_mojolearn_neural_host.mojo",
         "mamba/impl/modeling/modeling_mamba.mojo",
-        "mamba/checks/mamba_backward.mojo"
+        "autograd/kernels/mamba1_proj.mojo"
       ],
       "arithmetic_and_host_contract": "New fp32 profile: absolute32 adjacent prefix-affine trees, six slots per state chain, prefill/decode carry and canonical-tree VJP. Device, direct/generated host and alternate host inference share profile2 state ABI.",
       "full_workload_selection": {
@@ -754,14 +754,14 @@
         "MOJOLEARN_IDN_M3_ANGLE_DT_SUFFIX_OFF"
       ],
       "implementation_paths": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "caller_paths": [
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba3_backward.mojo",
+        "autograd/kernels/mamba3_proj.mojo",
         "python/mojolearn/_samba_impl.py"
       ],
       "arithmetic_and_host_contract": "Inherited fixed64 suffix graph already exists. Candidate computes each descending exclusive suffix seed once for identical replay; generated host mirrors in-place seed transformation.",
@@ -824,14 +824,14 @@
       ],
       "implementation_paths": [
         "mamba/impl/ops/neural_gradient_profile.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo"
       ],
       "caller_paths": [
         "bindings/_mojolearn_mamba.mojo",
         "bindings/_mojolearn_mamba_host.mojo",
         "python/mojolearn/_mamba_impl.py",
-        "mamba/checks/mamba2_backward.mojo"
+        "autograd/kernels/mamba2_proj.mojo"
       ],
       "arithmetic_and_host_contract": "Existing fixed256-row partials now merge adjacent pairs with odd-tail carry. Device/generated host import shared pure helper for convW/b,A/A_log,dt_bias terminal gradients.",
       "full_workload_selection": {

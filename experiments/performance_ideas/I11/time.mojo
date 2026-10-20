@@ -4,8 +4,8 @@ from max.gpu.host import DeviceContext
 from std.time import perf_counter_ns
 from gemm.checks.gemm_step_arms import gemm_step_env_int
 from embedding.checks.embedding_check import _upload_i32,_upload_f32,_download_f32,_zeros_i32_list
-from embedding.checks.embedding_identical import identical_embedding_backward_into
-from embedding.checks.embedding_sort import PLAN_SORT
+from autograd.kernels.embedding import identical_embedding_backward_into
+from autograd.kernels.embedding_sort import PLAN_SORT
 from embedding.checks.embedding_oracle import EmbConfig
 
 def main() raises:

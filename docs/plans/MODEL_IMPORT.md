@@ -202,9 +202,9 @@ middle-axis broadcasts), `relu/sigmoid/tanh/exp/log/sqrt/scale`,
 | ReduceMin | amin | `scale(max(scale(x, -1), axis), -1)` | - |
 | ReduceL2 | linalg_vector_norm (ord 2) | `sqrt(sum(mul(x, x), axis))` | - |
 | GlobalAveragePool, GlobalMaxPool | adaptive_avg_pool2d (output 1x1), amax | `mean(axis=(2,3), keepdims=True)` / `max(...)` | rank 4 |
-| Conv (2-D) | convolution | `conv2d(x, w, b, stride, padding)` | `group=1`, `dilations=(1,1)`, equal strides, symmetric equal pads (`pads=[p,p,p,p]`), `auto_pad=NOTSET`, `transposed=False`; `kernel_shape` matches the weight |
+| Conv (2-D) | convolution | `conv2d(x, w, b, stride, padding, groups)` | any `group` dividing both channel counts (grouped and depthwise: lane ag-import-conv-gaps, one OP_RN_BMM launch over every group), `dilations=(1,1)`, equal strides, any non-negative pads (equal pads lower as `padding`, unequal ones as `pad` then `padding=0`), `auto_pad` NOTSET, VALID, SAME_UPPER or SAME_LOWER resolved to explicit pads from the static shapes at lowering, `transposed=False`; `kernel_shape` matches the weight |
 | Conv (1-D) | convolution (3-D input) | `unsqueeze(x, 2)`, `unsqueeze(w, 2)`, `conv2d` with `kh=1`, `squeeze(2)` | the same subset; padding on W only |
-| MaxPool, AveragePool (2-D) | max_pool2d_with_indices (first output), avg_pool2d | `max_pool2d(k, stride)` / `avg_pool2d(k, stride)` | square `kernel_shape`, equal strides, `pads=0`, `ceil_mode=0`, `dilations=1`, `storage_order=0`; AveragePool `count_include_pad` irrelevant at pad 0 |
+| MaxPool, AveragePool (2-D) | max_pool2d_with_indices (first output), avg_pool2d | `max_pool2d(k, stride)` / `avg_pool2d(k, stride)` | square `kernel_shape`, equal strides, `ceil_mode=0` (or windows that fit), `dilations=1`, `storage_order=0`; pads and `auto_pad` as Conv, each pad below the kernel size. With pads: MaxPool = `pad(-inf)` then `max_pool2d`; AveragePool `count_include_pad=1` = `pad(0)` then `avg_pool2d`; `count_include_pad=0` (the default) = the window sum (a depthwise `conv2d` of `pad(0)` with ones, taps in (kh, kw) order) divided by a count map (the same convolution of a zero-padded ones image, exact integers, built on the device once and kept as a program parameter) |
 | Dropout | dropout (eval), native_dropout | identity (the input handle; inference import) | `training_mode` absent or false |
 | Identity, Constant | clone, alias, detach, lift_fresh_copy | the input handle / an initializer | - |
 | Cast | _to_copy, to.dtype | to float16/bfloat16/float32/float64: identity (storage is float32; a widening already happened at upload); to int on element values: refuse (shape subgraphs fold statically) | - |
@@ -307,7 +307,7 @@ Refusal message, one for the whole graph:
 ```
 UnsupportedModel: 3 nodes of model.onnx cannot be imported:
   /layer.0/attn/Resize (Resize): no kernel; see mojolearn.importers.supported_ops()
-  /layer.0/conv (Conv): group=32 (only group=1 is supported)
+  /layer.0/conv (Conv): dilations=(2, 2) (only 1 is supported)
   /head/TopK (TopK): no kernel
 ```
 

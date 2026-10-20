@@ -50,12 +50,21 @@ session logs its operation calls; `capture(inputs, outputs)` keeps the
 logged operations the outputs depend on as a program, and `run_program`
 replays it in one call (inputs uploaded, every node through `_op_run` with
 its recorded arguments on a scratch tape, parameters read in place,
-outputs downloaded). No new kernels."""
+outputs downloaded). No new kernels.
+
+Index tensors (lane ag-program-embedding): `upload_ids` makes a session
+tensor of int32 words (the caller's integer array cast on the executor by
+upload_cast_i32, the cast the embedding's and take's caller-array form
+runs); `embedding` and `take` take such a tensor as their second input, so
+a captured program records the ids as a value (an input of kind
+PROGRAM_IN_IDS, uploaded through the same cast at each run) instead of an
+address. The eager words are the caller-array form's: the same int32 words
+reach the same Tape.embedding and rankn_take kernels."""
 from std.ffi import _Global
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div
-from autograd.tape import Tape, Tensor
+from autograd.tape import Tape, Tensor, IdsHandle
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
 from autograd.layers import NeuralRules, layer_norm
 from autograd.higher import backward_recorded, backward_scalar_recorded
@@ -64,7 +73,9 @@ from autograd.data import permutation, gather_rows
 from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
 from core.cast_in import CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast, upload_cast_i32
-from autograd.program import OpsLog, OpsProgram, program_refuses_code, same_shape, shape_text
+from autograd.program import (
+    OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, program_refuses_node, same_shape, shape_text,
+)
 from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
 # Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
@@ -156,7 +167,7 @@ comptime OPS_NARROW = 40         # [axis, piece, mode, ...]: mode 0 sizes..., mo
 comptime OPS_TAKE = 41           # [ids descriptor (7 words), axis]
 comptime OPS_SOFTMAX_N = 42      # [axis]
 comptime OPS_LOG_SOFTMAX_N = 43  # [axis]
-comptime OPS_CONV2D = 44         # [stride, padding]; x, weight, optional bias
+comptime OPS_CONV2D = 44         # [stride, padding, groups (optional, 1)]; x, weight, optional bias
 comptime OPS_MAXPOOL2D = 45      # [kernel, stride]
 comptime OPS_AVGPOOL2D = 46      # [kernel, stride]
 # 47 stays reserved (the rank-N plan held it for an argmax result; argmax is
@@ -283,6 +294,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var wants_grad: List[Bool]
     #: a permutation output: the row count its indices address (else 0)
     var index_rows: List[Int]
+    #: an upload_ids tensor: its storage holds int32 words (embedding and
+    #: take ids), so a program naming it as an input casts to int32 words
+    var int_words: List[Bool]
     var free_slots: List[Int]
     #: owned buffers of freed handles, returned at the next reset or close
     var retired: List[Int]
@@ -311,6 +325,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.owned = List[Int]()
         self.wants_grad = List[Bool]()
         self.index_rows = List[Int]()
+        self.int_words = List[Bool]()
         self.free_slots = List[Int]()
         self.retired = List[Int]()
         self.opts = List[_OpsOptimizer]()
@@ -343,6 +358,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.owned[slot] = owned
             self.wants_grad[slot] = wants_grad
             self.index_rows[slot] = index_rows
+            self.int_words[slot] = False
         else:
             slot = len(self.live)
             if slot >= _SLOT_MASK:
@@ -356,6 +372,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.owned.append(owned)
             self.wants_grad.append(wants_grad)
             self.index_rows.append(index_rows)
+            self.int_words.append(False)
         return (self.generation[slot] << _SLOT_BITS) | (slot + 1)
 
     def _retire(mut self, slot: Int):
@@ -424,6 +441,39 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         upload_cast(self.ex, buf, src)
         var t = self.tape.variable_nd(self.ex, buf, shape, requires_grad)
         return self._add(t, Int(buf), requires_grad, 0)
+
+    def upload_ids(mut self, src: CastIn, shape: ShapeN) raises -> Int:
+        """A new tensor of `shape` holding the caller's integer array as
+        int32 words (any integer dtype, cast on the executor by
+        upload_cast_i32; values outside int32 saturate and the embedding's
+        and take's id checks refuse them): the ids of `embedding` and `take`
+        as a tensor, which a captured program records as a value. `src` is
+        the array's row-major (rows, cols) matrix view; `shape` has its
+        element count. The tensor takes no gradient."""
+        src.check("ops: ids")
+        var rows = src.rows
+        var cols = src.cols
+        if rows <= 0 or cols <= 0 or rows > ((1 << 60) // 4) // cols:
+            raise Error("ops: ids dimensions must be positive")
+        if shape.count() != rows * cols:
+            raise Error("ops: ids: the shape does not match the array")
+        var buf = self.ex.alloc(rows * cols)
+        upload_cast_i32(self.ex, buf, src, "ops: ids")
+        var t: Tensor
+        if shape.ndim == 2:
+            t = self.tape.variable(self.ex, buf, shape.d[0], shape.d[1], False)
+        else:
+            t = self.tape.variable_nd(self.ex, buf, shape, False)
+        var h = self._add(t, Int(buf), False, 0)
+        self.int_words[self._slot(h)] = True
+        return h
+
+    def _ids_of(mut self, t: Tensor) raises -> IdsHandle:
+        """The int32 words of tensor t (an upload_ids tensor, a program's
+        ids input or an int32 argmax) as the tape's ids, read in place."""
+        var n = self.tape.shape_of(t).count()
+        var data = self.tape.value_of(self.ex, t)
+        return self.tape.ids(self.ex, data, n)
 
     def load_into(mut self, h: Int, src: CastIn) raises:
         """Overwrite the values of uploaded tensor h with the caller's
@@ -1166,18 +1216,27 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # int32 saturate and the embedding's id check refuses them) in a
             # session buffer that lives with the graph: it is returned at the
             # next reset or close, like a freed upload.
-            _need("embedding", n, 1, 8, ni, 0, nf)
-            var e_src = CastIn(
-                ints[0], cast_in_kind(ints[1], ints[2], "ops: embedding ids"), ints[2],
-                ints[3], ints[4], ints[5], ints[6],
-            )
-            e_src.check("ops: embedding ids")
-            var e_n = e_src.count()
-            var e_buf = self.ex.alloc(e_n)
-            self.retired.append(Int(e_buf))
-            upload_cast_i32(self.ex, e_buf, e_src, "ops: embedding ids")
-            var e_ids = self.tape.ids(self.ex, e_buf, e_n)
-            t = self.tape.embedding(self.ex, x[0], e_ids, ints[7])
+            # Lane ag-program-embedding: with two tensors (table, ids) the
+            # ids are a tensor of int32 words (upload_ids) and ints is
+            # [padding_idx]: the same words reach the same Tape.embedding, and
+            # a program records the ids as a value.
+            if n == 2:
+                _need("embedding", n, 2, 1, ni, 0, nf)
+                var e_tids = self._ids_of(x[1])
+                t = self.tape.embedding(self.ex, x[0], e_tids, ints[0])
+            else:
+                _need("embedding", n, 1, 8, ni, 0, nf)
+                var e_src = CastIn(
+                    ints[0], cast_in_kind(ints[1], ints[2], "ops: embedding ids"), ints[2],
+                    ints[3], ints[4], ints[5], ints[6],
+                )
+                e_src.check("ops: embedding ids")
+                var e_n = e_src.count()
+                var e_buf = self.ex.alloc(e_n)
+                self.retired.append(Int(e_buf))
+                upload_cast_i32(self.ex, e_buf, e_src, "ops: embedding ids")
+                var e_ids = self.tape.ids(self.ex, e_buf, e_n)
+                t = self.tape.embedding(self.ex, x[0], e_ids, ints[7])
         elif code == OPS_COPY:
             _need("copy", n, 1, 0, ni, 0, nf)
             var cx = self._slot(hs[0])
@@ -1229,21 +1288,30 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # lane ag-rankn-python: x's slices at integer ids along an axis
             # (plan 2.6). The ids arrive as embedding's do: an input
             # descriptor cast on the executor to int32 words in a session
-            # buffer returned at the next reset or close.
-            _need("take", n, 1, 8, ni, 0, nf)
-            var k_src = CastIn(
-                ints[0], cast_in_kind(ints[1], ints[2], "ops: take indices"), ints[2],
-                ints[3], ints[4], ints[5], ints[6],
-            )
-            k_src.check("ops: take indices")
-            var k_n = k_src.count()
-            var k_buf = self.ex.alloc(k_n)
-            self.retired.append(Int(k_buf))
-            upload_cast_i32(self.ex, k_buf, k_src, "ops: take indices")
-            var k_ids = self.tape.ids(self.ex, k_buf, k_n)
-            var k_nd = self.tape.ndim(x[0])
-            var k_axis = rn_normalize_axis(ints[7], k_nd if k_nd > 0 else 1)
-            t = rankn_take(self.tape, self.ex, x[0], k_ids, k_axis)
+            # buffer returned at the next reset or close. With two tensors
+            # (x, ids; lane ag-program-embedding) the ids are a tensor of
+            # int32 words and ints is [axis], as embedding's.
+            if n == 2:
+                _need("take", n, 2, 1, ni, 0, nf)
+                var k_tids = self._ids_of(x[1])
+                var kt_nd = self.tape.ndim(x[0])
+                var kt_axis = rn_normalize_axis(ints[0], kt_nd if kt_nd > 0 else 1)
+                t = rankn_take(self.tape, self.ex, x[0], k_tids, kt_axis)
+            else:
+                _need("take", n, 1, 8, ni, 0, nf)
+                var k_src = CastIn(
+                    ints[0], cast_in_kind(ints[1], ints[2], "ops: take indices"), ints[2],
+                    ints[3], ints[4], ints[5], ints[6],
+                )
+                k_src.check("ops: take indices")
+                var k_n = k_src.count()
+                var k_buf = self.ex.alloc(k_n)
+                self.retired.append(Int(k_buf))
+                upload_cast_i32(self.ex, k_buf, k_src, "ops: take indices")
+                var k_ids = self.tape.ids(self.ex, k_buf, k_n)
+                var k_nd = self.tape.ndim(x[0])
+                var k_axis = rn_normalize_axis(ints[7], k_nd if k_nd > 0 else 1)
+                t = rankn_take(self.tape, self.ex, x[0], k_ids, k_axis)
         elif code == OPS_SOFTMAX_N or code == OPS_LOG_SOFTMAX_N:
             _need("softmax", n, 1, 1, ni, 0, nf)
             t = rn_softmax_along(self.tape, self.ex, x[0], ints[0], code == OPS_LOG_SOFTMAX_N)
@@ -1255,6 +1323,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: conv2d takes x (N, C, H, W) and weight (out_channels, C, kh, kw)")
             if ints[0] < 1 or ints[1] < 0:
                 raise Error("ops: conv2d needs stride >= 1 and padding >= 0")
+            # the optional third integer: groups (1 when absent)
+            var cg = ints[2] if ni > 2 else 1
+            if cg < 1:
+                raise Error("ops: conv2d needs groups >= 1")
             if n == 3:
                 var oc = self.tape.dim(x[1], 0)
                 if self.tape.shape_of(x[2]).count() != oc:
@@ -1262,9 +1334,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var oc_dims = List[Int]()
                 oc_dims.append(oc)
                 var cb = rn_as_shape(self.tape, self.ex, x[2], rn_shape(oc_dims, "ops: conv2d"))
-                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], Optional[Tensor](cb), ints[0], ints[1])
+                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], Optional[Tensor](cb), ints[0], ints[1], cg)
             else:
-                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], None, ints[0], ints[1])
+                t = rankn_conv2d(self.tape, self.ex, x[0], x[1], None, ints[0], ints[1], cg)
         elif code == OPS_MAXPOOL2D or code == OPS_AVGPOOL2D:
             _need("pool2d", n, 1, 2, ni, 0, nf)
             if self.tape.ndim(x[0]) != 4:
@@ -1630,6 +1702,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: capture: an input is named twice")
             value_of[inputs[k]] = k
             p.in_shapes.append(self.shapes[s])
+            p.in_kinds.append(PROGRAM_IN_IDS if self.int_words[s] else PROGRAM_IN_FLOAT)
         var need = Dict[Int, Int]()
         for k in range(len(outputs)):  # driver-loop: over program outputs
             var s = self._slot(outputs[k])
@@ -1655,9 +1728,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if not keep[i]:
                 continue
             var code = self.oplog.code[i]
-            if program_refuses_code(code):
+            if program_refuses_node(code, self.oplog.h_at[i + 1] - self.oplog.h_at[i]):
                 raise Error("ops: capture: embedding and take read the caller's index array, "
-                            + "which a program cannot hold")
+                            + "which a program cannot hold; pass the ids as a tensor (ids) instead")
             p.code.append(code)
             for j in range(self.oplog.h_at[i], self.oplog.h_at[i + 1]):  # small-loop(hs: an op's input handles): description words, no data
                 var h = self.oplog.hs[j]
@@ -1775,7 +1848,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         for k in range(len(srcs)):  # driver-loop: over program inputs
             var sh = self.programs[pi].in_shapes[k]
             var buf = self.tape.reserve(self.ex, sh.count())
-            upload_cast(self.ex, buf, srcs[k])
+            if self.programs[pi].in_kinds[k] == PROGRAM_IN_IDS:
+                # ids: the int32 words upload_ids gives (embedding and take read them)
+                upload_cast_i32(self.ex, buf, srcs[k], "ops: program input")
+            else:
+                upload_cast(self.ex, buf, srcs[k])
             var h = self._leaf(buf, sh)
             temps.append(h)
             vals.append(h)

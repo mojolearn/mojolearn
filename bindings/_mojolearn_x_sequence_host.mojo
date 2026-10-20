@@ -36,6 +36,7 @@ from autograd.ops_api import OPS_HOST
 # import_resolve.mojo): host only, the same entries in both bindings
 from autograd.import_reader import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
 from autograd.import_resolve import onnx_resolve_py
+from autograd.model_verify import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from autograd.model_checkpoint import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
     ops_save_state_py, ops_load_program_py, ops_save_program_py,
@@ -315,6 +316,24 @@ def model_checkpoint_info_binding(path: PythonObject) raises -> PythonObject:
     return model_checkpoint_info_py(path)
 
 
+# Model verification reports (autograd/model_verify.mojo): host digests over
+# files and returned arrays, the same numbers from every binding.
+def verify_digest_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
+    return verify_digest_py(addr, nbytes)
+
+
+def verify_file_sha256_binding(path: PythonObject) raises -> PythonObject:
+    return verify_file_sha256_py(path)
+
+
+def verify_model_info_binding(path: PythonObject) raises -> PythonObject:
+    return verify_model_info_py(path)
+
+
+def verify_fill_binding(addr: PythonObject, n: PythonObject, seed: PythonObject, stream: PythonObject) raises -> PythonObject:
+    return verify_fill_py(addr, n, seed, stream)
+
+
 def model_load_checkpoint_binding(path: PythonObject, addrs: PythonObject) raises -> PythonObject:
     return model_load_checkpoint_py(path, addrs)
 
@@ -496,6 +515,10 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[model_save_checkpoint_binding]("model_save_checkpoint")
         m.def_function[model_checkpoint_info_binding]("model_checkpoint_info")
         m.def_function[model_load_checkpoint_binding]("model_load_checkpoint")
+        m.def_function[verify_digest_binding]("verify_digest")
+        m.def_function[verify_file_sha256_binding]("verify_file_sha256")
+        m.def_function[verify_model_info_binding]("verify_model_info")
+        m.def_function[verify_fill_binding]("verify_fill")
         m.def_function[ops_save_state_binding]("ops_save_state")
         m.def_function[ops_load_state_binding]("ops_load_state")
         m.def_function[adafactor_step_binding]("adafactor_step")

@@ -277,7 +277,7 @@ def _zeros(n: Int) -> List[Float32]:
 def pinned_silu_prime(v: Float32) -> Float32:
     """`silu'(v) = sig(v) * (1 + v*(1 - sig(v)))`, left to right, FOUR
     roundings after the sigmoid (plan row B7 as amended by DEVIATION 1085:
-    `transformer/checks/transformer_backward.mojo::bwd_silu_backward_kernel`'s
+    `autograd/kernels/transformer.mojo::bwd_silu_backward_kernel`'s
     chain, the one `modeling_mamba_backward.mojo::_silu_prime` transcribes).
     This file used to fuse the middle `1 + v*(1 - sig)` into one
     `identical_mul_add` (its old free choice FC1, three roundings); the

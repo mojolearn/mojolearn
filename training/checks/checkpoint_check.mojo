@@ -96,7 +96,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDeviceWeights,
     LlamaRopeTable,
 )
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 
 from training.checkpoint import (
     CKPT_DESCRIPTOR_BYTES,

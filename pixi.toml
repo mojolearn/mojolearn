@@ -1362,8 +1362,8 @@ check-device-scan-batch = "mojo run -j 1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . c
 check-transformer-weight-validation = "mojo run -j 1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . transformer/checks/weight_validation_check.mojo"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
-# (mamba/impl/ops/selective_scan_backward.mojo and
-# mamba/impl/modeling/modeling_mamba_backward.mojo).
+# (autograd/kernels/mamba1_scan.mojo and
+# autograd/kernels/mamba1.mojo).
 # **IT ASSERTS NOTHING ABOUT ANY GRADIENT**: no value is checked, no bits are
 # compared, no kernel is launched, and plan gates MB1-MB10 do not exist.
 #
@@ -1813,6 +1813,8 @@ scikit-learn = "*"
 # 2026-10-20: the importer's torch.export path (test_import_torch) and the torch-reference tests skipped on the Mac
 # because the test environment had no torch; the CPU wheel is enough here (the boxes install the GPU builds).
 torch = "*"
+# the "Import a pretrained model" guide block and tools/real_model_import.py use torchvision's ResNet-18
+torchvision = "*"
 
 [feature.test.tasks]
 test-runtime-control = "python3 -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_backend_control.py tools/test_gate_scope.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects"

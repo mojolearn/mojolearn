@@ -96,7 +96,7 @@ DEVIATION 795 -- THE TRANSFORMER SURFACE'S OWN DEPARTURES, IN ONE BLOCK.
   `python/mojolearn/transformer.py` and
   `python/mojolearn/tests/test_transformer_surface.py`. The lane's
   kernels, oracle, gates and contract are untouched. Since 2026-09-09
-  the BACKWARD (`transformer/checks/transformer_backward.mojo`) is on
+  the BACKWARD (`autograd/kernels/transformer.mojo`) is on
   this surface too, as `transformer_backward`, IDENTICAL tier only, and
   `window` (sliding-window causal attention with a ring KV cache) is
   the tenth forward scalar.
@@ -189,7 +189,7 @@ from transformer.impl.llama.modeling_llama import (
     _upload,
     llama_decoder_layer_forward,
 )
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
 )

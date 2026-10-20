@@ -76,7 +76,7 @@ comptime LAYER_RESIDUAL = 8      # arg0: -1 the model input, else an earlier lay
 comptime LAYER_RESHAPE = 9       # args: the new per-sample dims (one may be -1), 0 pads
 comptime LAYER_PERMUTE = 10      # args: a permutation of the per-sample axes, -1 pads
 comptime LAYER_FLATTEN = 11      # the per-sample shape becomes one axis
-comptime LAYER_CONV2D = 12       # (out_channels, kernel, stride, padding, bias 0/1); input (C, H, W)
+comptime LAYER_CONV2D = 12       # (out_channels, kernel, stride, padding, bias 0/1, groups; 0 = 1); input (C, H, W)
 comptime LAYER_MAXPOOL2D = 13    # (kernel, stride); input (C, H, W)
 comptime LAYER_AVGPOOL2D = 14    # (kernel, stride); input (C, H, W)
 
@@ -256,6 +256,18 @@ def _arg(prog: List[Int], base: Int, k: Int) -> Int:
     return prog[base + 1 + k]
 
 
+def conv_groups(spec: ModelSpec, i: Int) -> Int:
+    """Layer i's (a Conv2d) channel groups: its sixth argument, 0 (the
+    encoding before groups) read as 1."""
+    return max(1, spec.xargs[SPEC2_ARGS * i + 5])
+
+
+def conv_in_per_group(spec: ModelSpec, i: Int) -> Int:
+    """Layer i's (a Conv2d) input channels per group: the weight's
+    second dimension."""
+    return spec.in_shape[i].d[0] // conv_groups(spec, i)
+
+
 def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
     """Validate a version-2 description (SPEC2_*): the per-sample input
     shape, then the layers with their per-sample shapes, widths (the last
@@ -371,11 +383,15 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
                 st = _arg(prog, base, 2)
                 pad = _arg(prog, base, 3)
                 var bias = _arg(prog, base, 4)
+                var groups = max(1, _arg(prog, base, 5))
                 if ch < 1 or ks < 1 or st < 1 or pad < 0 or (bias != 0 and bias != 1):
                     raise Error(_layer_name(i) + " (Conv2d): out_channels, kernel_size and stride must be "
                                 + "positive, padding >= 0 and bias 0 or 1")
+                if c % groups != 0 or ch % groups != 0:
+                    raise Error(_layer_name(i) + " (Conv2d): groups must divide the input channels and "
+                                + "out_channels")
                 p_off = off
-                off += ch * c * ks * ks + (ch if bias == 1 else 0)
+                off += ch * (c // groups) * ks * ks + (ch if bias == 1 else 0)
             else:
                 ch = c
                 ks = a0
@@ -529,7 +545,8 @@ def model_init_params[E: Exec](mut ex: E, spec: ModelSpec, P: FP, seed: UInt64) 
             # fan_out = out_channels kh kw; the bias from the same draw, as Linear
             var oc = spec.arg0[i]
             var ks = spec.arg1[i]
-            var c = spec.in_shape[i].d[0]
+            # (with groups: fan_in = C / groups kh kw, the weight's second dimension)
+            var c = conv_in_per_group(spec, i)
             var fan = c * ks * ks + oc * ks * ks
             var bound = ftz(identical_sqrt(ftz(identical_div(Float32(6), Float32(fan)))))
             var n = oc * c * ks * ks + (oc if spec.xargs[SPEC2_ARGS * i + 4] == 1 else 0)
@@ -678,7 +695,8 @@ def _model_forward_v2[E: Exec](
         elif k == LAYER_CONV2D:
             var oc = spec.arg0[i]
             var ks = spec.arg1[i]
-            var c = spec.in_shape[i].d[0]
+            var c = conv_in_per_group(spec, i)
+            var groups = conv_groups(spec, i)
             var off = spec.param_off[i]
             var wd = List[Int]()
             wd.append(oc)
@@ -692,9 +710,10 @@ def _model_forward_v2[E: Exec](
                 bd.append(oc)
                 var b2 = _param(tape, ex, P, Gr, off + oc * c * ks * ks, 1, oc, train)
                 var b1 = tape.view_nd(ex, b2, rn_shape(bd, "model"))
-                h = rankn_conv2d(tape, ex, h, w4, Optional[Tensor](b1), spec.xargs[xa + 2], spec.xargs[xa + 3])
+                h = rankn_conv2d(tape, ex, h, w4, Optional[Tensor](b1), spec.xargs[xa + 2], spec.xargs[xa + 3],
+                                 groups)
             else:
-                h = rankn_conv2d(tape, ex, h, w4, None, spec.xargs[xa + 2], spec.xargs[xa + 3])
+                h = rankn_conv2d(tape, ex, h, w4, None, spec.xargs[xa + 2], spec.xargs[xa + 3], groups)
         elif k == LAYER_MAXPOOL2D:
             h = rankn_max_pool2d(tape, ex, h, spec.arg0[i], spec.arg1[i])
         elif k == LAYER_AVGPOOL2D:

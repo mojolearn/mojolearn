@@ -303,6 +303,49 @@ class Session:
         # referenced until the binding has copied it
         return int(self._b.ops_upload(self._sid(), describe(a, "x"), [flag]))
 
+    def ids(self, x):
+        """Copy an array of integer ids to the device; returns its handle.
+
+        ``x`` is an array of up to 8 dimensions of any integer dtype, held
+        as int32 values. Pass the handle as the ``ids`` of
+        :meth:`embedding` or the ``indices`` of :meth:`take`: the result is
+        the same as passing the array itself, and :meth:`capture` can then
+        name the ids as an input of a :class:`Program`, so a language model
+        captured once runs on new token ids. The tensor takes no gradient;
+        read its values with ``s.numpy(h).view(numpy.int32)``.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> with ops.Session() as s:
+        ...     table = s.tensor(rng.standard_normal((10, 4), dtype=np.float32))
+        ...     tokens = s.ids(np.array([[3, 1, 4], [1, 5, 9]]))
+        ...     h = s.embedding(table, tokens)
+        ...     model = s.capture(inputs=[tokens], outputs=[h])
+        ...     rows = model.run(np.array([[2, 7, 1], [8, 2, 8]]))
+        """
+        from ._cast_in import as_input, describe, matrix_view
+        a = as_input(x)
+        if a.dtype.kind not in "iu":
+            raise TypeError(f"ids must be integers, got dtype {a.dtype}")
+        if a.ndim > _MAX_RANK:
+            raise ValueError(f"ids must have at most {_MAX_RANK} dimensions")
+        if a.size == 0:
+            raise ValueError("ids must not be empty")
+        # flag word bit 1: an ids tensor (Mojo casts the integers to int32
+        # words on the executor); `a` stays referenced until the binding has
+        # copied it
+        if a.ndim > 2:
+            m = matrix_view(a, "ids")
+            return int(self._b.ops_upload(self._sid(), describe(m, "ids"), [2, a.ndim] + list(a.shape)))
+        return int(self._b.ops_upload(self._sid(), describe(a, "ids"), [2]))
+
+    @staticmethod
+    def _is_handle(v):
+        return isinstance(v, (int, np.integer)) and not isinstance(v, bool)
+
     def shape(self, h):
         """The shape of tensor ``h`` as a tuple: ``(rows, cols)`` for a
         matrix, every dimension for a tensor of another rank."""
@@ -514,13 +557,17 @@ class Session:
     def take(self, x, indices, axis=0):
         """The slices of ``x`` at ``indices`` along ``axis``.
 
-        ``indices`` is an array of integers (any integer dtype), flattened
-        in row-major order; the result replaces ``axis`` by one slice per
-        index. An index outside ``[0, x.shape[axis])`` raises an error. In a
-        recording session the gradient of ``x`` sums the gradients of every
-        slice taken from each position, in ascending index position.
+        ``indices`` is an array of integers (any integer dtype) or a
+        tensor made with :meth:`ids`, flattened in row-major order; the
+        result replaces ``axis`` by one slice per index. An index outside
+        ``[0, x.shape[axis])`` raises an error. In a recording session the
+        gradient of ``x`` sums the gradients of every slice taken from each
+        position, in ascending index position.
         """
         from ._cast_in import as_input, describe
+        if self._is_handle(indices):
+            # an ids tensor: Mojo reads its int32 words on the device
+            return self._op("take", (x, indices), [_int(axis, "axis")])
         a = as_input(indices)
         if a.dtype.kind not in "iu":
             raise TypeError(f"indices must be integers, got dtype {a.dtype}")
@@ -536,17 +583,25 @@ class Session:
         return self._op("take", (x,), describe(a, "indices") + [_int(axis, "axis")])
 
     # ------------------------------------------------------------ convolution and pooling
-    def conv2d(self, x, weight, bias=None, stride=1, padding=0):
+    def conv2d(self, x, weight, bias=None, stride=1, padding=0, groups=1):
         """A 2-D convolution (cross-correlation) of ``x``.
 
-        ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C, kh, kw)``
-        and ``bias`` an optional tensor of ``out_channels`` values. The
-        input is padded with ``padding`` zeros on every side and the kernel
-        moves ``stride`` positions at a time; the result is
-        ``(N, out_channels, H_out, W_out)``.
+        ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C // groups,
+        kh, kw)`` and ``bias`` an optional tensor of ``out_channels`` values.
+        The input is padded with ``padding`` zeros on every side and the
+        kernel moves ``stride`` positions at a time; the result is
+        ``(N, out_channels, H_out, W_out)``. With ``groups`` greater than 1
+        the channels split into ``groups`` equal blocks and each block of
+        outputs sees only its block of inputs; ``groups=C`` is a depthwise
+        convolution.
+
+        Example::
+
+            y = s.conv2d(x, w, stride=1, padding=1, groups=4)
         """
         handles = (x, weight) if bias is None else (x, weight, bias)
-        return self._op("conv2d", handles, [_int(stride, "stride", 1), _int(padding, "padding", 0)])
+        return self._op("conv2d", handles, [_int(stride, "stride", 1), _int(padding, "padding", 0),
+                                            _int(groups, "groups", 1)])
 
     def max_pool2d(self, x, kernel_size, stride=None):
         """The largest value of each ``kernel_size`` window of an
@@ -787,8 +842,9 @@ class Session:
         """Rows of ``table`` picked by integer ``ids``: ``table[ids]``.
 
         ``table`` is a ``(num_embeddings, embedding_dim)`` tensor and ``ids``
-        an array of integers (any integer dtype) in ``[0, num_embeddings)``,
-        flattened in row-major order;
+        an array of integers (any integer dtype) in ``[0, num_embeddings)``
+        or a tensor of them made with :meth:`ids`, flattened in row-major
+        order;
         the result has one row per id. An id outside that range raises an
         error. In a recording session the gradient of ``table`` sums, for
         each row, the gradients of every position that picked it, in
@@ -804,6 +860,10 @@ class Session:
         ...     g = s.grad(w)
         """
         from ._cast_in import as_input, describe
+        if self._is_handle(ids):
+            pad = -1 if padding_idx is None else _int(padding_idx, "padding_idx", 0)
+            # an ids tensor: Mojo reads its int32 words on the device
+            return self._op("embedding", (table, ids), [pad])
         a = as_input(ids)
         if a.dtype.kind not in "iu":
             raise TypeError(f"ids must be integers, got dtype {a.dtype}")
@@ -1056,9 +1116,10 @@ class Session:
         kept, in order, with its arguments; tensors made with
         :meth:`tensor` that the outputs read and that are not inputs are the
         program's parameters, read where they are at each run (so a
-        :meth:`step` between runs is seen by the next run). Operations that
-        take an index array (:meth:`embedding`, :meth:`take`) cannot be
-        captured.
+        :meth:`step` between runs is seen by the next run). :meth:`embedding`
+        and :meth:`take` are captured when their ids are a tensor made with
+        :meth:`ids` (name it as an input to run on new ids); called with an
+        index array they cannot be captured.
 
         Parameters
         ----------
@@ -1095,7 +1156,8 @@ class Session:
         runs every captured operation on the device and returns the outputs.
 
         ``arrays`` are in the order of ``capture``'s ``inputs``, each of the
-        shape the captured input had (any dtype :meth:`tensor` takes). The
+        shape the captured input had (any dtype :meth:`tensor` takes; an
+        input made with :meth:`ids` takes an integer array). The
         outputs are the values the same operations give when called one by
         one, to the bit. Returns one float32 array for a program with one
         output, else a tuple of arrays.
@@ -1112,6 +1174,8 @@ class Session:
             have = a.shape if a.ndim > 1 else (a.size, 1)
             if tuple(have) != want:
                 raise ValueError(f"input {k} must have the shape {want}, got {tuple(a.shape)}")
+            if program.input_kinds[k] == 1 and a.dtype.kind not in "iu":
+                raise TypeError(f"input {k} holds ids and must be an integer array, got dtype {a.dtype}")
             m = matrix_view(a, "x") if a.ndim > 2 else a
             keep.append(m)
             descs.append(describe(m, "x"))
@@ -1448,6 +1512,9 @@ class Program:
     ----------
     input_shapes : tuple of tuple of int
         The shape each input array of :meth:`run` must have.
+    input_kinds : tuple of int
+        0 for an input of values, 1 for an input of integer ids (a tensor
+        made with :meth:`Session.ids`).
     output_shapes : tuple of tuple of int
         The shapes of the arrays :meth:`run` returns.
     params : tuple of int
@@ -1475,6 +1542,9 @@ class Program:
         self.input_shapes = tuple(tuple(int(d) for d in sh) for sh in info[1])  # glue: at most eight dimensions per input
         self.output_shapes = tuple(tuple(int(d) for d in sh) for sh in info[2])  # glue: at most eight dimensions per output
         self.params = tuple(int(h) for h in info[3])  # glue: the parameter handles
+        # a binding built before the input kinds returns four entries: every input holds values
+        kinds = info[4] if len(info) > 4 else [0] * len(self.input_shapes)
+        self.input_kinds = tuple(int(k) for k in kinds)  # glue: one kind per program input
 
     def run(self, *arrays):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
@@ -1482,8 +1552,17 @@ class Program:
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,
-        for :meth:`Session.load_program` on any install."""
+        for :meth:`Session.load_program` on any install.
+
+        Beside it, ``<path>.verify.json`` records this install's report: the
+        program run once on seeded inputs, with the digest of every input and
+        output. On another install, ``python -m mojolearn verify-model
+        <path>`` runs the saved program on the same inputs and checks that
+        every output has the same bits.
+        """
         self._s._b.ops_save_program(self._s._sid(), self._id, os.fspath(path))  # cpu-route: program file written on the host
+        from ._verify_model import record_program
+        record_program(self, path)
 
     def free(self):
         """Release the program (its parameters stay session tensors)."""

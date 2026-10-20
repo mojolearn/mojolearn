@@ -15,8 +15,20 @@ from x_cnn.ops import (
     pool_relu_rows_bwd_at, fill_one_at, col2im_at,
 )
 from x_cnn.device import (
-    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, _im2col, _conv_relu_on_device, TILED_ROWS, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
+    cnn_ctx,
+    launch,
+    fp,
+    ip,
+    device_gemm,
+    _conv_out,
+    _im2col,
+    _conv_relu_on_device,
+    TILED_ROWS,
+    _tiled_grid,
+    _LT,
+    _LR,
 )
+from autograd.kernels.cnn import rows_bwd_tiled_kernel
 
 
 def fill_kernel(p: FP, n: Int32, salt: UInt32):

@@ -4,8 +4,9 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
-from embedding.checks.embedding_identical import identical_embedding_backward_into, EMB_TPB
-from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+from embedding.checks.embedding_identical import EMB_TPB
+from autograd.kernels.embedding import identical_embedding_backward_into
+from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_check import _upload_i32, _download_i32, compare_i32
 

@@ -20,7 +20,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -61,7 +61,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -87,7 +87,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -126,7 +126,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -147,7 +147,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "bindings/neural_gemm_boundary.mojo",
@@ -194,7 +194,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -225,7 +225,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo",
         "bindings/neural_gemm_boundary.mojo",
@@ -269,7 +269,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -301,7 +301,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -356,7 +356,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -412,7 +412,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -471,7 +471,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -508,7 +508,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -533,7 +533,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -575,7 +575,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -597,7 +597,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -636,7 +636,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -666,7 +666,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -707,7 +707,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -733,7 +733,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -770,7 +770,7 @@
       "wired_callers": [
         "training/dev_tensors.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "optional_variants": [
         "Mamba custom workspace growth is separate NN40; CNN and ByteLM-head manual scratch caches retain their existing policies."
@@ -862,7 +862,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -900,7 +900,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],
@@ -922,7 +922,7 @@
         "training/byte_lm.mojo",
         "training/byte_lm_logits.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "mamba/impl/modules/idn_gemm_ws.mojo",
         "x_cnn/device.mojo"
       ],

@@ -88,7 +88,7 @@
       "kind": "existing_arm",
       "status": "not_tested",
       "source_paths": [
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "workloads": [
         "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
@@ -115,7 +115,7 @@
       "status": "not_tested",
       "source_paths": [
         "training/byte_lm_afn.mojo",
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "workloads": [
         "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
@@ -342,7 +342,7 @@
       "kind": "new_variant",
       "status": "not_tested",
       "source_paths": [
-        "training/byte_lm_afn_grad.mojo"
+        "autograd/kernels/transformer_afn.mojo"
       ],
       "workloads": [
         "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",

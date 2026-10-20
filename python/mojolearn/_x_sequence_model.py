@@ -286,15 +286,25 @@ class Sequential:
         self._append(_LAYER["flatten"])
         return self
 
-    def conv2d(self, out_channels, kernel_size, stride=1, padding=0, bias=True):
+    def conv2d(self, out_channels, kernel_size, stride=1, padding=0, bias=True, groups=1):
         """Append a 2-D convolution of ``(channels, height, width)``
         samples with ``out_channels`` square ``kernel_size`` kernels,
-        ``stride`` and zero ``padding`` on every side."""
+        ``stride`` and zero ``padding`` on every side. With ``groups``
+        greater than 1 the channels split into ``groups`` equal blocks and
+        each block of outputs sees only its block of inputs (``groups``
+        equal to the input channels is a depthwise convolution); the weight
+        is ``(out_channels, channels // groups, kernel_size, kernel_size)``.
+
+        Example::
+
+            model.conv2d(32, 3, padding=1, groups=32)
+        """
         oc = _positive(out_channels, "out_channels")
         k = _positive(kernel_size, "kernel_size")
         st = _positive(stride, "stride")
         pad = _positive(padding, "padding", 0)
-        self._append(_LAYER["conv2d"], oc, k, args=[oc, k, st, pad, 1 if bias else 0, 0])
+        g = _positive(groups, "groups")
+        self._append(_LAYER["conv2d"], oc, k, args=[oc, k, st, pad, 1 if bias else 0, g])
         return self
 
     def max_pool2d(self, kernel_size, stride=None):
@@ -553,8 +563,8 @@ class Sequential:
         (as in a ``torch.nn.Sequential`` of the same layers, activations
         included) with ``prefix`` in front. Weights use PyTorch's layouts:
         a ``linear`` weight is ``(out_features, in_features)``, a
-        ``conv2d`` weight ``(out_channels, in_channels, kernel_size,
-        kernel_size)``, a ``layer_norm`` weight and bias ``(width,)``.
+        ``conv2d`` weight ``(out_channels, in_channels // groups,
+        kernel_size, kernel_size)``, a ``layer_norm`` weight and bias ``(width,)``.
         float16, bfloat16, float32 and float64 tensors are accepted and
         converted to float32 on the device (float16 and bfloat16 exactly,
         float64 rounded to the nearest float32).
@@ -718,6 +728,9 @@ class Sequential:
             desc = describe(classes, "classes")
         prog = self._program(self.n_features_in_)
         self._binding().model_save_checkpoint(os.fspath(path), addrs, prog, ip, fp, desc)  # cpu-route: checkpoint file written on the host
+        # this install's verification report beside the file (<path>.verify.json)
+        from ._verify_model import record_sequential
+        record_sequential(self, path)
 
     def save_checkpoint(self, path):
         """Save the model and its full training state to ``path``.
@@ -729,6 +742,10 @@ class Sequential:
         ``fit(..., resume=True)`` then continues training exactly where it
         stopped, on any install: a checkpoint written on one GPU vendor (or
         on the CPU) resumes to the same parameters on another.
+
+        Beside it, ``<path>.verify.json`` records this install's report (the
+        model's outputs on seeded inputs, by digest), for
+        ``python -m mojolearn verify-model <path>`` on another install.
 
         Parameters
         ----------
@@ -757,7 +774,9 @@ class Sequential:
         classes of a classifier), without the optimizer state.
         :meth:`load` reads it back on any install, GPU or CPU, and
         :meth:`predict` and :meth:`predict_proba` give the same values
-        there as here.
+        there as here. Beside it, ``<path>.verify.json`` records this
+        install's report, for ``python -m mojolearn verify-model <path>`` on
+        another install.
 
         Parameters
         ----------

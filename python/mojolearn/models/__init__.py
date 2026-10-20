@@ -35,6 +35,10 @@ from .safetensors import Checkpoint, SafetensorsFile
 from .causal_lm import CausalLM, CausalLMState
 from .parallel_causal_lm import ParallelCausalLM
 from .tokenizer import PATTERNS, Tokenizer
+# catalog / verify_catalog_entry: listed in docs-site/api_exclude.txt until the first verified catalog
+# entry lands; then add them to the docstring above and drop those two lines.
+from ._catalog import catalog, verify_catalog_entry
 
 __all__ = ["ParallelCausalLM", "CausalLM", "CausalLMState", "Checkpoint", "FAMILIES", "HFConfig", "ModelPlan",
-           "PATTERNS", "SafetensorsFile", "Tokenizer", "UnsupportedModel", "plan_for"]
+           "PATTERNS", "SafetensorsFile", "Tokenizer", "UnsupportedModel", "catalog", "plan_for",
+           "verify_catalog_entry"]

@@ -54,7 +54,8 @@ from sequence.ops import (
     Args,
     dummy_ptr,
 )
-from sequence.recurrent import bias_rows, colsum, gather_rows, gemm
+from sequence.recurrent import bias_rows, gather_rows, gemm
+from autograd.kernels.recurrent import colsum
 from checks.numerics import ftz, identical_div, identical_mul, identical_pow64, identical_sqrt
 from std.sys.compile import is_defined
 from autograd.tape import Tape, Tensor

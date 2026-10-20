@@ -14,10 +14,9 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from embedding.checks.embedding_oracle import EmbConfig, emb_refuse_shape
-from embedding.checks.embedding_sort import embedding_sort_runs, PLAN_SORT
-from embedding.checks.embedding_identical import (
-    ANY_EMB_SABOTAGE, EMB_TPB, _emb_backward_launch, _emb_backward_refuse_launch,
-)
+from autograd.kernels.embedding_sort import embedding_sort_runs, PLAN_SORT
+from embedding.checks.embedding_identical import ANY_EMB_SABOTAGE, EMB_TPB
+from autograd.kernels.embedding import _emb_backward_launch, _emb_backward_refuse_launch
 
 comptime NN50_OWNED_RUNS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

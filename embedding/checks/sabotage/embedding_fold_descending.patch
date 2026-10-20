@@ -1,8 +1,8 @@
-diff --git a/embedding/checks/embedding_identical.mojo b/embedding/checks/embedding_identical.mojo
-index ae2ac3c5e..24aafd538 100644
---- a/embedding/checks/embedding_identical.mojo
-+++ b/embedding/checks/embedding_identical.mojo
-@@ -446,7 +446,7 @@ def emb_backward_kernel(
+diff --git a/autograd/kernels/embedding.mojo b/autograd/kernels/embedding.mojo
+index 2bd987daa..d31937609 100644
+--- a/autograd/kernels/embedding.mojo
++++ b/autograd/kernels/embedding.mojo
+@@ -249,7 +249,7 @@ def emb_backward_kernel(
              dw.unsafe_store(cell, ftz(dy.unsafe_load(t1 * width + j)))
              return
  

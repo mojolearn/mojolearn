@@ -540,6 +540,64 @@ model.save("resnet18.program")
 The program takes inputs of the example's shape. To run another batch size, export with that size, or
 mark the batch axis as dynamic with `torch.export.Dim` and set it with `shapes` at import.
 
+## Verify a model on another GPU
+
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. You can check this
+for your own model. `Program.save`, `Sequential.save_checkpoint` and `Sequential.export` write a report
+beside the model file, `<file>.verify.json`. The report holds the model's outputs on a fixed set of
+seeded inputs, by digest. Copy both files to the other machine and run `python -m mojolearn verify-model`
+there. It loads the model, runs it on the same inputs and compares every output with the report.
+
+<!-- block: verify-model -->
+```python
+import numpy as np
+import mojolearn
+
+rng = np.random.default_rng(0)
+X = rng.random((256, 4), dtype=np.float32)
+labels = (X[:, 0] > X[:, 1]).astype(np.int64)
+clf = mojolearn.Sequential().linear(16).relu().linear(2)
+clf = clf.compile(loss="cross_entropy", optimizer="adam", lr=0.01)
+clf = clf.fit(X, labels, epochs=5, batch_size=32, seed=0)
+clf.export("classifier.ckpt")   # also writes classifier.ckpt.verify.json
+```
+
+On the other machine, with `classifier.ckpt` and `classifier.ckpt.verify.json` in the current directory:
+
+```bash
+python -m mojolearn verify-model classifier.ckpt
+```
+
+```text
+model    classifier.ckpt  kind=sequential-export  sha256=3f1c...
+         description=9a0e...  bytes=1204
+install  mojolearn <version>  numeric_mode=identical  vendor=cuda  device=NVIDIA L40S, <driver>
+input    X  shape=16x4  dtype=float32  digest=5b2d...  (seeded, seed 0)
+output   output  shape=16x2  digest=c47a...  MATCH
+expected classifier.ckpt.verify.json: mojolearn <version>  vendor=metal  device=Apple M4 Max
+verdict  MATCH
+```
+
+The report lists:
+
+- the install: the mojolearn version, numeric mode, vendor and device;
+- the model file: its SHA-256 and its description hash, which covers the layers or operations but not
+  the weights. A checkpoint and an export of the same model have the same description hash;
+- every input: its shape, dtype and digest;
+- every output: its shape and digest, and with an expected report, `MATCH` or `DIFFER`.
+
+The verdict is `MATCH` only when the model file, every input and every output equal the expected
+report's. Options:
+
+- `--expect REPORT.json` compares with a report written elsewhere, instead of the one beside the model.
+- `--inputs FILE.npz` runs the model on your own arrays, one per model input. A report written this way
+  is checked with the same `--inputs` file.
+- `--out REPORT.json` saves this machine's report. `--json` prints it as JSON.
+
+The exit status is 0 when every output matches, or when there is no report to compare with. It is 1 when
+anything differs, 2 for a usage error and 4 when the model cannot run. The same check works for a
+captured or imported program saved with `save`, and for a model saved on the CPU-only install.
+
 ## Numeric modes
 
 Both entry points take `numeric_mode`: `Sequential(numeric_mode=...)` and

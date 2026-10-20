@@ -121,11 +121,11 @@ from training.afn_optim import (
     afn_scratch_view,
 )
 from training.checks.loss import (
-    identical_ce_backward_into,
     identical_ce_forward_into,
     identical_ce_ones_floats,
     identical_ce_workspace_max_floats,
 )
+from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_contract import (
     REDUCTION_MEAN,
     REDUCTION_NONE,

@@ -6,7 +6,7 @@ the host (`mamba/host/gen/mamba1_prefill_chain.mojo`, served by
 binding assembles the same VJP on the tape (autograd/rules_mamba.mojo), whose
 rules launch these same kernels in this same order. No device module imports
 this file (lane del-mamba, 2026-10-19: the device copy of this walk is
-tombstoned in mamba/impl/modeling/modeling_mamba_prefill_backward.mojo).
+tombstoned in autograd/kernels/mamba1_prefill.mojo).
 """
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
@@ -21,8 +21,8 @@ comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DE
 
 
 from core.identity_trace import IdentityTrace
-from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
-from mamba.checks.mamba_backward import (
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba1_proj import (
     PROJ_OUT,
     PROJ_DT,
     PROJ_IN,
@@ -56,7 +56,7 @@ from mamba.impl.modeling.modeling_mamba import (
     mamba_upload,
     mamba_zeros,
 )
-from mamba.impl.modeling.modeling_mamba_backward import (
+from autograd.kernels.mamba1 import (
     mamba_bwd_concat_xp_into,
     mamba_bwd_concat_p_into,
     mamba_bwd_conv_tap_product_into,
@@ -66,7 +66,7 @@ from mamba.impl.modeling.modeling_mamba_backward import (
     mamba_bwd_gate_into,
     mamba_bwd_norm_into,
 )
-from mamba.impl.ops.selective_scan_backward import (
+from autograd.kernels.mamba1_scan import (
     bwd_da_partial_floats,
     bwd_dh_floats,
     bwd_h_checkpoint_floats,
@@ -77,7 +77,7 @@ from mamba.impl.ops.selective_scan_backward import (
     selective_scan_checkpoint_fn,
 )
 
-from mamba.impl.modeling.modeling_mamba_prefill_backward import (
+from autograd.kernels.mamba1_prefill import (
     Mamba1PrefillGradients,
     m1_conv_w_interleave_kernel,
 )
