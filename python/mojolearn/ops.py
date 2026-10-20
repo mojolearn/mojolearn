@@ -221,6 +221,8 @@ class Session:
         self.numeric_mode = numeric_mode
         self._b = _backend.binding("_mojolearn_x_sequence", numeric_mode)
         self._id = int(self._b.ops_open(1 if self.record else 0))
+        # Resolve a CPU host proxy once during setup, before any replay.
+        self._program_execute = self._b.ops_program_execute
         # One argument block per session, written in place each call and read
         # by address in Mojo (no list crosses into the binding). A binding
         # built before the packed entry takes the list call.
@@ -1225,7 +1227,7 @@ class Session:
         natively. A captured reshape should use ``-1`` for an inferred
         dimension when its element count can change.
         """
-        return self._b.ops_program_execute(self._id, program._id, program._s._id,
+        return self._program_execute(self._id, program._id, program._s._id,
                                            arrays, dynamic_shapes, optimize, False)
 
     def load_distributed(self, path, devices=(0,)):
@@ -1585,6 +1587,10 @@ class Program:
 
     def __init__(self, session, info):
         self._s = session
+        self._execute_native = session._b.ops_program_execute
+        self._inspect_native = session._b.ops_program_inspect
+        self._control_native = session._b.ops_program_control
+        self._fit_native = session._b.ops_program_fit_native
         self._id = int(info[0])
         self.input_shapes = tuple(tuple(int(d) for d in sh) for sh in info[1])  # glue: at most eight dimensions per input
         self.output_shapes = tuple(tuple(int(d) for d in sh) for sh in info[2])  # glue: at most eight dimensions per output
@@ -1595,28 +1601,28 @@ class Program:
 
     def run(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
-        return self._s._b.ops_program_execute(self._s._id, self._id, self._s._id,
+        return self._execute_native(self._s._id, self._id, self._s._id,
                                              arrays, dynamic_shapes, optimize, False)
 
     def inspect(self, *, optimize=False):
         """Return the graph's operations, references, attributes and shapes."""
-        return self._s._b.ops_program_inspect(self._s._id, self._id, optimize)
+        return self._inspect_native(self._s._id, self._id, optimize)
 
     def profile(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run and return outputs with per-node timing and storage accounting."""
-        return self._s._b.ops_program_execute(self._s._id, self._id, self._s._id,
+        return self._execute_native(self._s._id, self._id, self._s._id,
                                              arrays, dynamic_shapes, optimize, True)
 
     def run_if(self, condition, otherwise, *arrays, optimize=False):
         """Evaluate a scalar condition graph and execute its selected branch."""
-        return self._s._b.ops_program_control(
+        return self._control_native(
             self._s._id, self._id,
             (condition._s._id, condition._id, otherwise._s._id, otherwise._id),
             arrays, 0, optimize)
 
     def while_loop(self, *arrays, condition, max_iterations, optimize=False):
         """Apply this state graph while the scalar condition holds, up to a limit."""
-        return self._s._b.ops_program_control(
+        return self._control_native(
             self._s._id, self._id, (condition._s._id, condition._id, self._s._id, 0),
             arrays, max_iterations, optimize)
 
@@ -1661,7 +1667,7 @@ class Program:
         >>> opt = session.optimizer("adam", lr=0.01)
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
-        self.loss_curve_, self.n_iter_ = self._s._b.ops_program_fit_native(
+        self.loss_curve_, self.n_iter_ = self._fit_native(
             self._s._id, self._id, arrays, targets,
             (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta))
         return self

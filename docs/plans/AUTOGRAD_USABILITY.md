@@ -121,3 +121,18 @@ arithmetic, fuse reductions, alter the saved graph or change graph training.
 The default remains false. Full-dataset NVIDIA+AMD A/B, identity qualification,
 source-build tests and installed-package checks remain pending for this round.
 No speedup or default promotion is claimed.
+
+Qualification entry points for the new round are `python -m mojolearn
+verify-graph --vendor {cpu,metal,cuda,hip}` and
+`tools/graph_features_check.sh {source,installed} <vendor> <evidence-dir>`.
+The installed mode clears `PYTHONPATH`, uses a neutral working directory and
+requires the actual package path under the interpreter's site-packages.
+Nine required cases retain 21 output digests, backend/mode readback and
+per-call transitive Python traces. Deliberate changed-digest, missing-case,
+failed-case and wrong-mode comparator controls must be rejected. Native
+qualifications remain pending; the 18 source/controller tests passing here
+validate the verifier and runtime-audit machinery, not a GPU implementation.
+The native boundary keeps the ndarray return interface through its cached C
+type and a native bytearray owner. Input/output pointer metadata bypasses
+NumPy's Python `ctypes` helper. CPU host binding proxy attributes resolve once
+at setup, before the audited graph operation.
