@@ -7,7 +7,7 @@ CONTEXT = None
 def connect(config_cls, model_cls, training, neural):
     # ABI connection at package import only; no operation invokes this function.
     from types import BuiltinFunctionType, SimpleNamespace
-    from . import _backend
+    from . import _backend, _buffer
     entries = {}
     mode = _backend.default_mode()
     binding = _backend.binding("_mojolearn_training", mode)
@@ -31,7 +31,14 @@ def connect(config_cls, model_cls, training, neural):
     exact_schedule = training._lr_native("lr_schedule_exact")  # cpu-route: connects the existing exact host-scalar learning-rate entry at import; native owner evaluates one scalar per step
     if not isinstance(exact_schedule, BuiltinFunctionType):
         raise TypeError("Samba schedule requires a compiled exact schedule entry")
+    core = {}
+    for name in ("equal_elements", "reduce_stat"):  # glue: connect existing native input-count entries at import
+        entry = _buffer._native(name)
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"Samba input admission requires a compiled {name}")
+        core[name] = entry
     return {
+        **core,
         "neural": neural.CONTEXT, "entries": SimpleNamespace(**entries),
         "mode": mode, "vendor": _backend.vendor(), "config_class": config_cls,
         "model_class": model_cls, "optimizer_class": training.AdamW,

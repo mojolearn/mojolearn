@@ -433,34 +433,3 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
     _ = offsets^
     _ = info^
     return result
-
-
-def samba_state_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
-    try:
-        var args = PythonObject(from_borrowed=args_ptr)
-        var operation = String(args[0])
-        var values = args[1]
-        var context = args[2]
-        var result = PythonObject(None)
-        if operation == "snapshot":
-            result = samba_snapshot(values[0], Bool(py=values[1]), context)
-        elif operation == "validate":
-            result = samba_validate_state(values[0], context)
-        elif operation == "from_state":
-            result = samba_from_state(values[0], context)
-        elif operation == "publish":
-            result = samba_publish(values[0], values[1], context)
-        elif operation == "apply":
-            result = samba_apply_gradients_from_state(values[0], values[1], context)
-        else:
-            raise Error("Samba: unknown native state operation")
-        return result.steal_data()
-    except error:
-        var message = String(error)
-        if message.startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
-        if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
-        if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
-        return raise_python_exception(error, ExceptionType.ValueError)
