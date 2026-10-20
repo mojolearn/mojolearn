@@ -362,7 +362,8 @@ def test_mask_ops_read():
     ep = torch.export.export(m, (torch.zeros(2, 5, 6),))
     g = torch_export.read(ep)
     ops = {n.op for n in g.nodes}
-    for op in ("ReduceMax", "ReduceMin", "And", "Or", "Not", "CumSum", "GatherND"):
+    # torch.export may decompose `all` as not(any(not x)): ReduceMin then never appears, ReduceMax and Not do
+    for op in ("ReduceMax", "And", "Or", "Not", "CumSum", "GatherND"):
         assert op in ops, (op, sorted(ops))
     r = resolve(g)
     assert not r.problems and not r.no_rule, (r.problems, r.no_rule)
