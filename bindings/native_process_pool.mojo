@@ -268,6 +268,10 @@ def process_pool_start(pool: PythonObject) raises:
             var hello = transport_receive(connection, 0)[0]
             if String(hello.get("kind", "")) != "hello" or String(hello.get("token", "")) != token or Int(py=hello.get("pid", -1)) != pid:
                 raise Error("process: child authentication or process identity mismatch")
+            # Existing local model workers have no training-operation timeout.
+            # Keep only the connection handshake bounded; large supported
+            # model steps must not acquire a new two-minute runtime limit.
+            socket_type.settimeout(connection, PythonObject(None))
             worker["identity"] = hello
     except error:
         transport_close(server)
@@ -336,6 +340,7 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
     hello["pid"] = p[].pid()
     hello["vendor"] = p[].vendor
     transport_send(socket, hello, PythonObject(None))
+    TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket.settimeout(socket, PythonObject(None))
     return socket
 
 
