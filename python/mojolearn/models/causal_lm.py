@@ -359,7 +359,7 @@ class CausalLM:
         int15_binding = None
         if self._head_int15 is not None:
             if self.device == "cpu":
-                int15_binding = _backend.load_host_module("_mojolearn_linalg_host")
+                int15_binding = _backend.load_host_module("_mojolearn_linalg_host")  # cpu-route: explicit CPU model quantized head binding
             else:
                 from .._linalg_impl import _int15_binding
                 int15_binding = _int15_binding()
