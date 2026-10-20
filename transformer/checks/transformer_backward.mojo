@@ -433,7 +433,7 @@ comptime BWD_ANY_SABOTAGE = (
 
 # lane w2-lmgrad (2026-10-03): the FAST Apple arms, never in a sabotage build.
 comptime _AFN_WGRAD = AFN_LM_WGRAD_SPLIT and not BWD_ANY_SABOTAGE
-# TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 comptime _AFN_NORM1_RESID = AFN_LM_BWD_NORM1_RESID and not BWD_ANY_SABOTAGE
 
@@ -2033,7 +2033,7 @@ def _afn_wgrad(
 
 
 # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (_afn_route_a_resid_ok, _afn_bwd_epi_on, _afn_route_a_resid: the fused
-# dA + residual store of the hand walk's two fan-ins) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# dA + residual store of the hand walk's two fan-ins) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 
 
@@ -3293,7 +3293,7 @@ def bwd_refuse_nonfinite_d_out(ctx: DeviceContext, mut d_out: DeviceBuffer[DType
         )
 
 
-# TOMBSTONE: llama_decoder_layer_backward_device (hand decoder-layer backward walk; superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: llama_decoder_layer_backward_device (hand decoder-layer backward walk; superseded by the tape) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 # The walk, its host-list wrapper llama_decoder_layer_backward (now autograd/rules_transformer.mojo, on the tape) and the
 # MOJOLEARN_AFN_LM_BWD_EPILOGUE arm it alone carried. Every layer backward runs autograd/rules_transformer.mojo::

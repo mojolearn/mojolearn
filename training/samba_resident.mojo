@@ -692,7 +692,7 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
             _d2d(s.ctx, s.acts[i + 1], 0, s.t_stages[j].residual2, m * dm)
 
 
-# TOMBSTONE: llama_decoder_layer_backward_device (hand decoder-layer backward walk; superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: llama_decoder_layer_backward_device (hand decoder-layer backward walk; superseded by the tape) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 # (the uncalled _backward_blocks body that the del-samba merge kept, with its non-default-options fallback to the hand
 # walk, goes with it: the session builds every attention block at the default options and the tape entry refuses others.)

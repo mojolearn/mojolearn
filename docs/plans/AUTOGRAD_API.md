@@ -519,10 +519,15 @@ kernels. What stays hand-written becomes a custom rule.
    `(q + k) + v`, the hand path's pinned order; `OP_AG_ACCUMULATE` is
    `bwd_add2_kernel`'s arithmetic, so the expected result is the hand
    path's bits. The tape adds a seed copy, four ADD VJP copies and 25 zero
-   fills of custom destinations per layer. Traced or materialized calls and
-   non-default block options are refused (they keep the hand path). The
-   embedding gather and LM head are not in this backward; they move with
-   item 4.
+   fills of custom destinations per layer. The embedding gather and LM head
+   are not in this backward; they move with item 4. Done 2026-10-19 (lane
+   ag-transformer-owners): traced calls record the identity cards 0-36 from
+   the rules' launches, `materialize` reaches the attention dispatch, every
+   remaining caller (identity-card checks, neural_attention_owner,
+   byte_lm_layer_pool/offload, the stateless `transformer_backward` entry,
+   samba_resident) runs the tape, non-default block options are refused by
+   name, and the hand walk is deleted (docs/TOMBSTONES.md,
+   `LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK`).
 3. Mamba (`mamba/impl/modeling/modeling_mamba_prefill_backward.mojo::
    mamba1_prefill_backward`, `mamba/impl/modules/mamba2_backward.mojo`):
    migrate the block assembly (norm, in/out projections, residual, block

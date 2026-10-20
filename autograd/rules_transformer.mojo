@@ -165,7 +165,7 @@ from transformer.checks.transformer_backward import (
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 # The bindings' session and saved-tape backwards call llama_decoder_layer_backward_autograd only.
-# TOMBSTONE: llama_decoder_layer_backward_device (hand decoder-layer backward walk; superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: llama_decoder_layer_backward_device (hand decoder-layer backward walk; superseded by the tape) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
 # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
 # Its last callers (traced identity cards, materialized stages, the trainers and checks that called it directly) run
 # llama_decoder_layer_backward_autograd (or the host-list llama_decoder_layer_backward below): the rules record the
@@ -821,9 +821,9 @@ def llama_decoder_layer_backward_autograd(
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
     comptime assert not (is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER"]() or is_defined["MOJOLEARN_AUTOGRAD_TRANSFORMER_OFF"]()), "removed 2026-10-19 (lane/del-transformer, dd4194a23): AUTOGRAD_TRANSFORMER(_OFF) selected the hand decoder-layer backward walk in the transformer session and saved-tape bindings; the tape was PROMOTED (same bits Apple = NVIDIA = AMD, 20 GRAD lines; session NV 5.231 -> 5.259 ms, AMD 3.415 -> 3.484, saved NV 5.118 -> 5.153, AMD 3.648 -> 3.710, average 1.01). The bindings call the tape only. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch."
-    # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+    # TOMBSTONE: MOJOLEARN_AFN_LM_BWD_EPILOGUE (arm of the deleted hand decoder-layer backward walk) deleted 2026-10-19 by 7b6862e3d; code recoverable at 7b6862e3d^.
     # Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
-    comptime assert not (is_defined["MOJOLEARN_AFN_LM_BWD_EPILOGUE"]() or is_defined["MOJOLEARN_AFN26_LM_BWD_EPILOGUE"]()), "removed 2026-10-19 (lane/ag-transformer-owners, SHA_DEL): AFN_LM_BWD_EPILOGUE (Apple FAST, MERGED-UNMEASURED opt-in) fused the gate/up and q/k/v dA fan-ins into one GEMM store inside the hand decoder-layer backward walk; the walk is deleted and the tape never carried the arm, so no path reads the define (never measured). Restore with experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch."
+    comptime assert not (is_defined["MOJOLEARN_AFN_LM_BWD_EPILOGUE"]() or is_defined["MOJOLEARN_AFN26_LM_BWD_EPILOGUE"]()), "removed 2026-10-19 (lane/ag-transformer-owners, 7b6862e3d): AFN_LM_BWD_EPILOGUE (Apple FAST, MERGED-UNMEASURED opt-in) fused the gate/up and q/k/v dA fan-ins into one GEMM store inside the hand decoder-layer backward walk; the walk is deleted and the tape never carried the arm, so no path reads the define (never measured). Restore with experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch."
     if not w.opts.is_default():
         raise Error(
             "llama backward: only the default decoder block has a backward (RMSNorm at eps 1e-6, SwiGLU,"

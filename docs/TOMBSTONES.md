@@ -38,6 +38,8 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_MLP_SEED_SCALE`](#mojolearn_autograd_mlp_seed_scale) | Neural | DROPPED-noise | 2026-10-18 | lane only |
 | [`MOJOLEARN_AUTOGRAD_RNN_OFF`](#mojolearn_autograd_rnn_off) | Neural | removed (hand glue, tape is the only path) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_RNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_RNN_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_SAMBA_OFF`](#mojolearn_autograd_samba_off) | Neural | DELETED (hand path; tape only) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch) |
+| [`llama_decoder_layer_backward_device` (no define)](#llama_decoder_layer_backward_hand_walk) | Neural | DELETED (hand walk; tape only) | 2026-10-19 | [LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch](../experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch) |
+| [`MOJOLEARN_AFN_LM_BWD_EPILOGUE`](#llama_decoder_layer_backward_hand_walk) | Neural (Apple FAST) | removed (only reader deleted; never measured) | 2026-10-19 | [LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch](../experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch) |
 | [`MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF`](#mojolearn_autograd_small_mlp_off) | Neural | removed (hand glue superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch) |
 | [`MOJOLEARN_EST_REUSE_PART`](#mojolearn_est_reuse_part) | Trees | DROPPED-BUG | 2026-10-09 | [MOJOLEARN_EST_REUSE_PART.patch](../experiments/removed/MOJOLEARN_EST_REUSE_PART.patch) |
 | [`MOJOLEARN_EST_SHRINK_FUSED`](#mojolearn_est_shrink_fused) | Trees | DROPPED-inconclusive | 2026-10-09 | [MOJOLEARN_EST_SHRINK_FUSED.patch](../experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch) |
@@ -3340,6 +3342,57 @@ grid_controls entry existed.
 The `removed` refusal is a `comptime assert` at the top of `llama_decoder_layer_backward_autograd` in
 autograd/rules_transformer.mojo, not in core/six_lane_experiment_guards.mojo: the pre-push rebuild fence refuses a change to
 that module (76 bindings import it) and asks for the area's own module.
+
+## LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK
+
+Hand-glue deletion (lane ag-transformer-owners, 2026-10-19). No define: the walk was a function, not a switch.
+
+- What it was: `transformer/checks/transformer_backward.mojo::llama_decoder_layer_backward_device`, the hand-written
+  backward of one Llama decoder layer (stages 0-36 in launch order, an identity-card `_rec` after each), and its host-list
+  wrapper `llama_decoder_layer_backward`. `MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF)` (section above) had already moved the
+  bindings' session and saved-tape backwards to the tape; the walk stayed for what the tape refused (traced calls,
+  materialized stages, non-default block options) and for its direct callers.
+- What replaced it, per caller (all on `autograd/rules_transformer.mojo::llama_decoder_layer_backward_autograd`):
+  - Traced identity cards (`transformer/checks/transformer_backward_check.mojo`, `training/checks/train_loop.mojo`,
+    `transformer/checks/metal_reuse_validation.mojo`): the tape accepts the trace. `TransformerRules` holds the caller's
+    `IdentityTrace` by address, the prefix and `materialize`; each rule records the walk's cards after its own launches in
+    card order (Args slot i9 names a linear or rope node's cards; the gate member records 7-9 because the tape runs up
+    before gate; the attention rule passes the trace into `bwd_attention_dispatch`, which records 17-21). A traced or
+    materialized call keeps the entry copy into `in_d_residual2` (cards 0-1) and refuses a non-finite `d_out` before any
+    card with the walk's words (`bwd_refuse_nonfinite_d_out`). The host-list `llama_decoder_layer_backward` now lives in
+    `autograd/rules_transformer.mojo` on the tape. `transformer_backward_check` still compares the device cards with the
+    host oracle word for word.
+  - Materialized stages: `materialize` passes through to the attention dispatch, as the walk passed it.
+  - Non-default block options: refused by name in the tape entry. The walk never read `w.opts`: it computed the default
+    block's gradient whatever the options said, so no correct product path used it. Every remaining caller builds default
+    blocks (neural_attention_owner refuses others itself; byte_lm_layer_pool / offload use `_block_weights`'s default
+    record; samba_resident's session builds default blocks).
+  - `training/neural_attention_owner.mojo` (both backward sites), `training/byte_lm_layer_pool.mojo`,
+    `training/byte_lm_offload.mojo`, `training/checks/byte_lm_layer_pool_check.mojo`: same arguments, the tape entry.
+  - The stateless `transformer_backward` binding entry (`bindings/_mojolearn_transformer.mojo::_transformer_backward_run`):
+    the host-list wrapper, now on the tape.
+  - `training/samba_resident.mojo`: the non-default-options fallback sat in `_backward_blocks`, an uncalled body the
+    del-samba merge kept (its imports were already gone); deleted with the walk.
+- Also deleted: `MOJOLEARN_AFN_LM_BWD_EPILOGUE` (and the `MOJOLEARN_AFN26_LM_BWD_EPILOGUE` alias), an Apple FAST arm
+  (MERGED-UNMEASURED, lane/apple-fast-neural @ 600237d7c, no A/B ever run) that fused the gate/up and q/k/v dA fan-ins into
+  one GEMM store inside the walk (`_AFN_BWD_EPI`, `_afn_route_a_resid_ok`, `_afn_bwd_epi_on`, `_afn_route_a_resid`). The
+  tape never carried it, so with the walk gone nothing reads the define. `MOJOLEARN_AFN_LMGRAD_ALL` still compiles (it now
+  turns the arm on with no reader). Also gone: the walk's `StepPhaseClock` / `timing_tick` diagnostics (`grad.*`,
+  `bwd.*` phase names under `MOJOLEARN_STEP_PHASE_TIMERS` / `MOJOLEARN_TRANSFORMER_TIMING`).
+- Verdict: DELETED (Andrew 2026-10-19: every trainer runs its backward on the tape; delete the hand glue). No new timing:
+  the product path was PROMOTED under `MOJOLEARN_AUTOGRAD_TRANSFORMER` (NV + AMD average 1.01, same bits); the traced and
+  materialized callers are checks, never timed. Bits: unchanged on untraced calls (same launches). Traced and materialized
+  calls run the walk's launches on the walk's buffers with one difference, the entry copy is the tape's `OP_COPY` (a bit
+  copy, as `bwd_copy_kernel` is). The orchestrator's check run (transformer_backward_check against the host oracle, the
+  identity cards, metal_reuse_validation, train_loop, byte_lm_layer_pool_check) is owed.
+- Deleted by 7b6862e3d, recoverable at 7b6862e3d^. Patch: `experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch` (the
+  deletion and its sha fill-in reversed over `transformer/checks/transformer_backward.mojo`, `autograd/rules_transformer.mojo`,
+  `autograd/rules_lm.mojo`, `training/samba_resident.mojo`; it restores the walk with no callers, the callers stay on the
+  tape). No grid_controls entry existed.
+- Guard: `MOJOLEARN_AFN_LM_BWD_EPILOGUE` and `MOJOLEARN_AFN26_LM_BWD_EPILOGUE` refused by a `comptime assert` in
+  `llama_decoder_layer_backward_autograd` (autograd/rules_transformer.mojo), not in core/six_lane_experiment_guards.mojo (the
+  rebuild fence, as for `MOJOLEARN_AUTOGRAD_TRANSFORMER`). The walk had no define to refuse.
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): both rows, **DELETED (removed)**.
 
 ## MOJOLEARN_AUTOGRAD_CNN_OFF
 
