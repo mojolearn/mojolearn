@@ -399,8 +399,8 @@ class Sequential:
         if k:
             # classes_ as it is (Mojo refuses a non-contiguous one)
             desc = describe(classes, "classes")
-        self._binding().model_save_checkpoint(os.fspath(path), addrs, self._program(self.n_features_in_),
-                                              ip, fp, desc)
+        prog = self._program(self.n_features_in_)
+        self._binding().model_save_checkpoint(os.fspath(path), addrs, prog, ip, fp, desc)  # cpu-route: checkpoint file written on the host
 
     def save_checkpoint(self, path):
         """Save the model and its full training state to ``path``.
@@ -490,7 +490,7 @@ class Sequential:
         model = cls(numeric_mode=numeric_mode)
         b = model._binding()
         path = os.fspath(path)
-        export, layers, ints, floats = b.model_checkpoint_info(path)
+        export, layers, ints, floats = b.model_checkpoint_info(path)  # cpu-route: checkpoint file read on the host
         model._layers = [(int(c), int(a0), int(a1), float(f)) for c, a0, a1, f in layers]  # glue: one description record per layer
         (loss, target, opt, flags, sched, step_size, patience, batch, shuffle, d, n_out, y_1d,
          n_run, k, class_kind, class_size, n_params) = (int(v) for v in ints)  # glue: counts returned by Mojo
@@ -510,7 +510,7 @@ class Sequential:
             state = np.zeros(_FIT_STATE_WORDS, dtype=np.int64)
             curve = np.zeros(n_run, dtype=np.float32)
             addrs[1:5] = [m.ctypes.data, v.ctypes.data, state.ctypes.data, curve.ctypes.data]
-        b.model_load_checkpoint(path, addrs)
+        b.model_load_checkpoint(path, addrs)  # cpu-route: checkpoint file read on the host
         model.params_ = params
         model.n_features_in_ = d
         model.n_outputs_ = n_out
