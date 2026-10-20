@@ -35,8 +35,9 @@ RANKN_LANES = ('core', 'fold', 'bmm', 'layout', 'conv')
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', choices=('cpu', 'gpu', 'both'), default='cpu')
-    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example', 'higher'), default='all')
-    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example', 'rankn'), default='all')
+    # One --only (the higher-order and rank-N merges each added a copy, and argparse refuses a repeated option).
+    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example', 'higher', 'rankn', 'import'),
+                        default='all')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--mojo', default='mojo')
     args = parser.parse_args()
@@ -235,6 +236,29 @@ def main():
                                               'results': len(a), 'mismatches': mismatches})
                 if mismatches:
                     raise RuntimeError(f'local CPU/GPU rankn {lane} digests differ: {mismatches[:4]}')
+        # The model-import elementwise family (docs/plans/MODEL_IMPORT.md 3.3): autograd/checks/import_{cpu,gpu}.mojo
+        # print `IMPORT <kind> <case> digest <d>` lines and `PASS import cases N ...`; the local CPU and GPU lines
+        # must agree, and the orchestrator diffs the kept files across CPU, Metal, NVIDIA and AMD.
+        import_logs = {}
+        for backend in backends:
+            if args.only in ('all', 'import'):
+                path = native(f'{backend}-import', f'autograd/checks/import_{backend}.mojo')
+                text = path.read_text()
+                lines = sorted(line for line in text.splitlines() if line.startswith('IMPORT '))
+                if not lines or 'PASS import cases' not in text or 'FAIL' in text:
+                    raise RuntimeError(f'import ({backend}): no IMPORT lines, no PASS import cases, or a FAIL')
+                digests = out / f'import-digests-{backend}.txt'
+                digests.write_text(''.join(line + '\n' for line in lines))
+                report['comparisons'].append({'backend': backend, 'kind': 'import elementwise family',
+                                              'lines': len(lines), 'digests': str(digests)})
+                save()
+                import_logs[backend] = lines
+        if len(import_logs) == 2:
+            mismatches = sorted(set(import_logs['cpu']) ^ set(import_logs['gpu']))
+            report['comparisons'].append({'kind': 'local CPU/GPU import digest comparison',
+                                          'results': len(import_logs['cpu']), 'mismatches': mismatches})
+            if mismatches:
+                raise RuntimeError(f'local CPU/GPU import digests differ: {mismatches[:4]}')
         if args.only in ('all', 'example'):
             native('custom-regression', 'autograd/examples/custom_regression.mojo')
         report['status'] = 'passed'

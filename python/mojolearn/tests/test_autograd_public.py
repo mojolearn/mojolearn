@@ -2,7 +2,7 @@
 """The public autograd surface as its documentation shows it: every Python
 block of docs-site/user_guide/autograd.md runs verbatim (the Sequential
 quickstart, the operation-session quickstart, the two-expert mixture
-classifier, the shapes section and the weight import), and every ``>>>`` example of the Sequential and ops.Session
+classifier, the shapes section, the weight import and the model import), and every ``>>>`` example of the Sequential and ops.Session
 docstrings runs (load_state_dict and load_weights included). Small sizes. Each case checks shapes and finite values,
 runs twice for the same digest, and prints PUBLIC_DIGEST lines to diff
 across CPU, Metal, NVIDIA and AMD."""
@@ -201,6 +201,46 @@ def test_guide_import_weights():
     _emit("guide_import_logits", _digest(logits))
     _emit("guide_import_session", _digest(logits_session))
 
+
+
+def test_guide_import_model(tmp_path, monkeypatch):
+    """The import block on the conv_relu_maxpool_flatten_gemm fixture (tests/_onnx_fixture.py), written as
+    the cnn.onnx the block names. The imported logits are compared with the same operations called one by
+    one in a session on the fixture's weights; the lowering's own tests hold that comparison word for word."""
+    b = _blocks()
+    if "import" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+        pytest.skip("no captured-program entries in this binding (rebuild it)")
+    pytest.importorskip("mojolearn.importers._program", reason="no model-import lowering in this tree")
+    from mojolearn import ops
+    from mojolearn.tests import _onnx_fixture as fx
+    monkeypatch.chdir(tmp_path)
+    fixture = fx.write_fixture("conv_relu_maxpool_flatten_gemm", tmp_path)
+    pathlib.Path(fixture.path).rename(tmp_path / "cnn.onnx")
+    ns = _run(b["import"])
+    model, images, logits = ns["model"], ns["images"], ns["logits"]
+    assert [tuple(t[:2]) for t in model.inputs] == [("x", (8, 3, 8, 8))]
+    assert [tuple(t[:2]) for t in model.outputs] == [("y", (8, 10))]
+    assert logits.shape == (8, 10) and logits.dtype == np.float32 and np.isfinite(logits).all()
+    assert np.array_equal(ns["logits_served"].view(np.uint32), logits.view(np.uint32))
+    assert np.array_equal(model.run(images).view(np.uint32), logits.view(np.uint32))
+
+    def init(name, shape=None):
+        t = fixture.initializers[name]
+        return np.frombuffer(t.data, dtype="<f4").reshape(shape or t.shape)
+
+    with ops.Session() as s:
+        h = s.conv2d(s.tensor(images), s.tensor(init("conv_w")), s.tensor(init("conv_b", (1, 4))), padding=1)
+        f = s.flatten(s.max_pool2d(s.relu(h), 2))
+        w = s.transpose(s.tensor(init("fc_w")))                       # [10, 64] -> [64, 10] on the device
+        eager = s.numpy(s.linear(f, w, s.tensor(init("fc_b", (1, 10)))))
+    assert np.allclose(logits, eager, rtol=1e-5, atol=1e-5)
+
+    ns2 = _run(b["import"])
+    assert _digest(logits) == _digest(ns2["logits"])
+    _emit("guide_import_model_logits", _digest(logits))
+    _emit("guide_import_model_eager", _digest(eager))
+    _emit("guide_import_model_bits_equal_eager", "yes" if np.array_equal(logits.view(np.uint32),
+                                                                          eager.view(np.uint32)) else "no")
 
 def _docstring_examples():
     import mojolearn
