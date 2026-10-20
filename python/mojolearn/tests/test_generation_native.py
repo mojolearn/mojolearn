@@ -30,7 +30,10 @@ def load_fixture(tmp_path, family="llama", *, uniform=False, profile="fp32_v1"):
     else:
         cfg, tensors = family_fixture(family, False)
     _write_checkpoint(str(tmp_path), cfg, tensors)
-    return CausalLM.load(tmp_path, device=DEVICE, numeric_profile=profile)
+    model = CausalLM.load(tmp_path, device=DEVICE, numeric_profile=profile)
+    assert model._native_vendor in ({"cpu"} if DEVICE == "cpu" else {"metal", "cuda", "hip"})
+    assert model._native_numeric_mode == 1
+    return model
 
 
 def block_reference(model, ids, state=None):
