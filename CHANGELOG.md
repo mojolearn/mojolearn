@@ -2,6 +2,24 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.55 (published 2026-10-20)
+
+- Import pretrained models: `mojolearn.import_model` takes a `torch.export.ExportedProgram` or an ONNX file (opset 13 or later) and returns a
+  program that runs on the GPU in one call. Operations it cannot run are named in one error. In `identical` mode, mojolearn returns the same
+  bits on Apple, NVIDIA and AMD GPUs, and an imported model inherits it.
+- A verified model catalog, `mojolearn.models.catalog()`, lists pretrained models checked on Apple, NVIDIA and AMD GPUs, with the exact source,
+  the import command and the output digest; `mojolearn.models.verify_catalog_entry(name)` repeats the check on your install. It covers
+  ResNet-18, SqueezeNet 1.1, MobileNet-v3 small, ResNet-50, an MNIST network and SmolLM2-135M.
+- `python -m mojolearn verify-model` checks a saved model on another GPU against the report saved beside it.
+- Captured programs: `Session.capture` and `Session.run` record a model once and run it in one call; `Program.save` and
+  `Session.load_program` store and reload it on any install.
+- Load weights from PyTorch state dicts and safetensors files: `Sequential.load_state_dict` and `Session.load_weights`.
+- Train custom models with `ops.Session`: optimizer steps on the GPU (`optimizer`, `step`, schedules), second derivatives (`vjp`, `jvp`,
+  `hvp`, `backward(create_graph=True)`), and tensors of any rank (reshape, permute, broadcasting, axis reductions, batched matrix products,
+  concatenation, convolution with groups, pooling).
+- Save, load and resume `Sequential` training and session state exactly; `Sequential.export` saves a model for inference.
+- `Sequential` accepts inputs of any numeric dtype and memory layout without copying them first.
+
 ## 0.8.54 (published 2026-10-20)
 
 - A native autograd engine: every operation records its gradient, and the backward pass runs on the GPU. In
