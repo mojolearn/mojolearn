@@ -114,21 +114,40 @@ class AuditSplit(unittest.TestCase):
         return {words[i + 1] for i, w in enumerate(words) if w == "--exclude"}
 
     def test_each_wheel_of_the_set_is_audited_into_one_directory(self):
-        for prefix in ("mojolearn", "mojolearn_nvidia", "mojolearn_amd"):
+        # 2026-10-20: the core is mojolearn_core-*; the file-free mojolearn-* is
+        # an aggregate (test_the_linux_mojolearn_is_an_aggregate)
+        for prefix in ("mojolearn_core", "mojolearn_nvidia", "mojolearn_amd"):
             r = self.audit(self.wheel(prefix))
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         audit = self.dist / "audit"
         self.assertEqual(sorted(p.name.split("-")[0] for p in (audit / "repaired").glob("*.whl")),
-                         ["mojolearn", "mojolearn_amd", "mojolearn_nvidia"])
+                         ["mojolearn_amd", "mojolearn_core", "mojolearn_nvidia"])
         for log in ("show.txt", "repair.txt", "twine.txt", "show-mojolearn_nvidia.txt", "repair-mojolearn_amd.txt",
                     "twine-mojolearn_amd.txt"):
             self.assertTrue((audit / log).is_file(), log)
         twine = [c[-1] for c in self.calls() if "twine check" in c[-1]]
         self.assertEqual(twine, [f"pip install -q twine >/dev/null 2>&1 && twine check /r/{d}-*.whl"
-                                 for d in ("mojolearn", "mojolearn_nvidia", "mojolearn_amd")])
+                                 for d in ("mojolearn_core", "mojolearn_nvidia", "mojolearn_amd")])
+
+    def test_the_linux_mojolearn_is_an_aggregate(self):
+        # metadata only: no auditwheel (there is no ELF), the split audit and
+        # twine; it lands in repaired/ beside the others under its own logs
+        meta = self.wheel("mojolearn")
+        self.assertTrue(meta.name.startswith(f"mojolearn-{tsw.pw.read_version()}-"))
+        r = self.audit(meta)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse([c for c in self.calls() if "auditwheel" in c[-1]])
+        self.assertEqual([c[-1] for c in self.calls()],
+                         [f"pip install -q twine >/dev/null 2>&1 && twine check /r/{meta.name}"])
+        audit = self.dist / "audit"
+        self.assertTrue((audit / "repaired" / meta.name).is_file())
+        for log in ("show-mojolearn.txt", "twine-mojolearn.txt"):
+            self.assertTrue((audit / log).is_file(), log)
+        self.assertFalse((audit / "show.txt").exists())
+        self.assertEqual(json.loads((audit / "show-mojolearn.txt").read_text())["split"]["problems"], [])
 
     def test_a_plugin_excludes_the_core_runtime_by_name(self):
-        with zipfile.ZipFile(self.wheel("mojolearn")) as z:
+        with zipfile.ZipFile(self.wheel("mojolearn_core")) as z:
             core_libs = {n.rsplit("/", 1)[-1] for n in z.namelist() if n.startswith("mojolearn/.libs/")}
         self.assertTrue(core_libs)
         # even with manifests that name nothing, the core's closure is excluded
@@ -139,15 +158,15 @@ class AuditSplit(unittest.TestCase):
         self.assertEqual(self.excluded(), core_libs)
 
     def test_the_core_excludes_what_the_manifests_name(self):
-        r = self.audit(self.wheel("mojolearn"))
+        r = self.audit(self.wheel("mojolearn_core"))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.excluded(), {"libAsyncRTMojoBindings.so", "libcuda.so.1"})
 
     def test_a_plugin_with_no_core_beside_it_is_refused(self):
-        self.wheel("mojolearn").unlink()
+        self.wheel("mojolearn_core").unlink()
         r = self.audit(self.wheel("mojolearn_amd"))
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
-        self.assertIn("no mojolearn-", r.stdout)
+        self.assertIn("no mojolearn_core-", r.stdout)
         self.assertFalse(self.log.exists())
 
     def repair_command(self):
@@ -157,14 +176,14 @@ class AuditSplit(unittest.TestCase):
         """0.8.21: auditwheel measured manylinux_2_34 for both plugins and, asked
         for 2_35, wrote both tags; split_audit refused the set. A plugin is
         repaired to the core's tag with --only-plat."""
-        core_tag = self.wheel("mojolearn").name[:-4].split("-")[-1]
+        core_tag = self.wheel("mojolearn_core").name[:-4].split("-")[-1]
         r = self.audit(self.wheel("mojolearn_amd"), FAKE_SHOW_TAG="manylinux_2_34_x86_64")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn(f"auditwheel repair --only-plat --plat {core_tag} ", self.repair_command())
         self.assertIn(f"the core's platform tag {core_tag} (measured", r.stdout)
 
     def test_the_core_is_repaired_to_its_measured_tag_only(self):
-        r = self.audit(self.wheel("mojolearn"))
+        r = self.audit(self.wheel("mojolearn_core"))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("auditwheel repair --only-plat --plat manylinux_2_35_x86_64 ", self.repair_command())
 
