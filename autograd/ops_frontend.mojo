@@ -15,6 +15,7 @@ from autograd.weight_frontend import ops_weights_native_py
 from autograd.session_lifetime import SessionLifetime
 from autograd.execution_profile_pyapi import execution_profile_object
 from autograd.control_checkpoint import control_save_py, control_load_py
+from autograd.gradient_diagnostics import gradient_report_py
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -126,6 +127,8 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: this session is closed")
     var sid = session._id
     var s = ops_session[E, KIND](Int(py=sid))
+    if name == "gradient_report":
+        return gradient_report_py[E, KIND](Int(py=sid), _ints(args[0], "handle", 1), Bool(py=args[1]))
     if name == "execution_profile_begin":
         s[].ex.execution_profile_begin()
         return PythonObject(None)
