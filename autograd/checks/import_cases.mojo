@@ -579,8 +579,8 @@ def _any_all_case[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
     for i in range(n):  # small-loop(n: check data, host side)
         if i % 3 != 0 and i % 7 != 0:
             xv[i] = Float32(0)
-    for i in range(6):  # small-loop(6: rows that are all nonzero, for all)
-        xv[(2 * 7 + i) * 6 + 1] = Float32(0.75)
+    for j in range(7):  # small-loop(7: one column (i = 2, k = 1) that is all nonzero along axis 1, for all)
+        xv[(2 * 7 + j) * 6 + 1] = Float32(0.75)
     tape.reset()
     var x = tape.tensor_nd(ex, xv, sx, False)
     var ax1: List[Int] = [1]
