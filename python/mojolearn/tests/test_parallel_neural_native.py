@@ -169,3 +169,88 @@ def test_worker_failure_rolls_back_and_retry_restarts_owned_processes():
         assert audit_native_call(owner.train_step, [(x, y)]).assert_native()['completed_steps'] == 1
     finally:
         audit_native_call(owner.close).assert_native()
+
+
+def test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay(tmp_path, monkeypatch):
+    from mojolearn import _training_impl as training
+    from mojolearn.tests.test_samba_gradients_native import _model, _reference
+    from mojolearn.tests.test_samba_state_native import _assert_state_equal
+
+    model = _model(['attention', 'mamba3'], True)
+    model.generator.counter = 9
+    model.max_norm = .01
+    model.optimizer.lr_schedule = training.WarmupCosineLR(.003, 3, 17)
+    initial = model.state_dict()
+    shards = [(np.array([[1, 2, 3]], np.int64), np.array([[2, -100, 4]], np.int64)),
+              (np.array([[4, 5, 6]], np.int16), np.array([[5, 6, 7]], np.int16))]
+    reference = []
+    offset = 0
+    for inputs, targets in shards:
+        reference.append(_reference(model, inputs.astype(np.int32), targets.astype(np.int32),
+                                    None, 9, offset))
+        offset += inputs.size
+    # Independent per-shard model chain plus explicit left-associated float32
+    # addition. The coordinator/worker/fold implementation is not the oracle.
+    expected = [np.frombuffer(a, np.float32) + np.frombuffer(b, np.float32)
+                for a, b in zip(reference[0][1], reference[1][1])]
+    gradient = np.concatenate(expected).astype(np.float64)
+    norm = np.linalg.norm(gradient)
+    assert norm > model.max_norm
+    clipped = gradient * (model.max_norm / (norm + 1e-6))
+    config = initial['optimizer']
+    rate = float(np.float32(np.float32(.003) / np.float32(3)))
+    parameters = np.asarray(initial['parameters'], dtype=np.float64)
+    parameters = parameters * (1 - rate * config['weight_decay']) - rate * clipped / (
+        np.abs(clipped) + config['eps'])
+
+    owner = object.__new__(ParallelNeuralTrainer)
+    child = audited_child_module(tmp_path, monkeypatch)
+    checked('init_with_worker', owner, model, (0,), 2, child)
+    replay = None
+    pids = []
+    try:
+        result = audit_native_call(owner.train_step, shards).assert_native()
+        np.testing.assert_array_equal(np.asarray(result['losses'], np.float32).view(np.uint32),
+                                      np.asarray([part[0] for part in reference], np.float32).view(np.uint32))
+        actual_gradients = audit_native_call(owner.export_gradients).assert_native()
+        for actual, want in zip(actual_gradients, expected):
+            np.testing.assert_array_equal(np.asarray(actual).reshape(-1).view(np.uint32), want.view(np.uint32))
+        checkpoint = audit_native_call(owner.checkpoint).assert_native()
+        state = checkpoint['state']
+        assert state['rng']['counter'] == initial['rng']['counter'] + 1
+        assert state['rng']['seed'] == initial['rng']['seed']
+        assert state['schedule'] == initial['schedule']
+        assert state['t'] == 1
+        np.testing.assert_allclose(np.asarray(state['parameters']), parameters, rtol=3e-5, atol=2e-7)
+        np.testing.assert_allclose(np.asarray(state['exp_avg']), (1-config['beta1']) * clipped,
+                                   rtol=2e-5, atol=2e-9)
+        np.testing.assert_allclose(np.asarray(state['exp_avg_sq']), (1-config['beta2']) * clipped**2,
+                                   rtol=3e-5, atol=2e-12)
+        replay = audit_native_call(ParallelNeuralTrainer.from_checkpoint, checkpoint, devices=(0,)).assert_native()
+        audit_native_call(owner.train_step, shards).assert_native()
+        audit_native_call(replay.train_step, shards).assert_native()
+        _assert_state_equal(audit_native_call(owner.checkpoint).assert_native()['state'],
+                            audit_native_call(replay.checkpoint).assert_native()['state'])
+        pids = [row['pid'] for row in owner._pool['workers'] + owner._update_pool['workers']]
+    finally:
+        primary = sys.exception()
+        for active in (owner, replay):
+            if active is not None:
+                try:
+                    audit_native_call(active.close).assert_native()
+                except BaseException as error:
+                    if primary is None:
+                        raise
+                    primary.add_note('Child cleanup also failed: ' + repr(error))
+        if primary is not None:
+            primary.add_note('Full Samba worker diagnostics and audit reports: ' + str(tmp_path))
+            for path in sorted(tmp_path.glob('*.stderr.log')):
+                primary.add_note(str(path) + '\n' + '\n'.join(path.read_text().splitlines()[-12:]))
+    assert len(pids) == 2
+    for pid in pids:
+        path = tmp_path / (str(pid) + '.json')
+        assert path.exists(), str(path)
+        report = json.loads(path.read_text())
+        assert report['exception'] is None, report
+        for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+            assert not report[key], report
