@@ -80,7 +80,8 @@ class PluginLoader(unittest.TestCase):
         self.B._SPLIT = None
         import json
         gp = self.B.gpu_plugins
-        self.dist_info("mojolearn", self.version,
+        # 2026-10-20: the Linux core is its own distribution, mojolearn-core
+        self.dist_info(gp.CORE_DISTRIBUTION, self.version,
                        (gp.CORE_MARKER, json.dumps(gp.core_marker(self.version))))
 
     def combined_core(self):
@@ -157,15 +158,16 @@ class PluginLoader(unittest.TestCase):
         self.split_core()
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        # the core requires both plugins, so a missing one is a broken
-        # install: the message says so and names the core reinstall, never a
-        # separate `pip install mojolearn-nvidia`
+        # 2026-10-20: the core requires no vendor, so mojolearn-core alone is a
+        # valid install; on a GPU box the message names the package to install
         self.assertIn("mojolearn-nvidia", str(exc))
-        self.assertIn("incomplete", str(exc))
-        self.assertIn(f'pip install --force-reinstall "mojolearn=={self.version}"', str(exc))
-        self.assertNotIn('pip install "mojolearn-nvidia', str(exc))
+        self.assertIn(f"beside this mojolearn-core {self.version}", str(exc))
+        self.assertIn(f'pip install "mojolearn-nvidia=={self.version}"', str(exc))
+        self.assertNotIn("--force-reinstall", str(exc))
+        self.assertNotIn('"mojolearn==', str(exc))
         self.assertIn("MOJOLEARN_VENDOR=cpu", str(exc))
-        # twin: the same box with the plugin installed loads it
+        # twin: the same box with only the NVIDIA plugin installed (no
+        # mojolearn-amd: core + one vendor is a complete install) loads it
         self.plugin("cuda", ["sm_90a"])
         kind, base = self.layout(cuda=True)
         self.assertEqual((kind, base), ("vendor", str(self.pkg / "cuda_native" / "sm_90a")))
@@ -177,7 +179,7 @@ class PluginLoader(unittest.TestCase):
         exc = self.refusal(hip=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
         self.assertIn("mojolearn-amd, the package", str(exc))
-        self.assertIn(f'pip install --force-reinstall "mojolearn=={self.version}"', str(exc))
+        self.assertIn(f'pip install "mojolearn-amd=={self.version}"', str(exc))
         self.assertNotIn("mojolearn-nvidia", str(exc))
         self.plugin("hip", ["gfx942"])
         self.assertEqual(self.layout(hip=True), ("vendor", str(self.pkg / "hip_native" / "gfx942")))
@@ -195,8 +197,8 @@ class PluginLoader(unittest.TestCase):
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
         self.assertIn("mojolearn-nvidia, the package", str(exc))
-        self.assertIn('pip install --force-reinstall "mojolearn==', str(exc))
-        # twin: the AMD box takes the AMD plugin
+        self.assertIn(f'pip install "mojolearn-nvidia=={self.version}"', str(exc))
+        # twin: the AMD box takes the AMD plugin (core + AMD only is complete)
         self.assertEqual(self.layout(hip=True)[0], "vendor")
 
     def test_both_plugins_pick_by_the_probe(self):
@@ -216,8 +218,8 @@ class PluginLoader(unittest.TestCase):
         self.plugin("cuda", ["sm_90a"], version="0.0.1")
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn("mojolearn-nvidia 0.0.1", str(exc))
-        self.assertIn(f'pip install --force-reinstall "mojolearn=={self.version}"', str(exc))
+        self.assertIn(f"mojolearn-nvidia 0.0.1 and mojolearn-core {self.version}", str(exc))
+        self.assertIn(f'pip install --force-reinstall "mojolearn-nvidia=={self.version}"', str(exc))
         # even on a box with no GPU: a mismatched plugin is never loaded or ignored
         self.assertIsInstance(self.refusal(), self.B.GpuPluginError)
 
@@ -233,7 +235,7 @@ class PluginLoader(unittest.TestCase):
         self.dist_info("mojolearn-nvidia", self.version)
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn(f'pip install --force-reinstall "mojolearn=={self.version}"', str(exc))
+        self.assertIn(f'pip install --force-reinstall "mojolearn-nvidia=={self.version}"', str(exc))
 
     def test_cpu_on_request_is_not_a_plugin_refusal(self):
         self.split_core()
@@ -249,7 +251,7 @@ class PluginLoader(unittest.TestCase):
         exc = self.refusal(cuda=True, hip=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
         self.assertIn("mojolearn-nvidia, the package", str(exc))
-        self.assertIn('pip install --force-reinstall "mojolearn==', str(exc))
+        self.assertIn(f'pip install "mojolearn-nvidia=={self.version}"', str(exc))
         os.environ["MOJOLEARN_VENDOR"] = "hip"
         self.assertEqual(self.layout(cuda=True, hip=True)[0], "vendor")
 
@@ -317,8 +319,19 @@ class PluginLoader(unittest.TestCase):
         self.assertEqual(self.layout(), ("flat", str(self.pkg)))
 
     def test_a_malformed_marker_refuses(self):
-        self.dist_info("mojolearn", self.version, (self.B.gpu_plugins.CORE_MARKER, "{}"))
+        self.dist_info(self.B.gpu_plugins.CORE_DISTRIBUTION, self.version, (self.B.gpu_plugins.CORE_MARKER, "{}"))
         self.assertIsInstance(self.refusal(), self.B.GpuPluginError)
+
+    def test_a_core_marker_under_the_old_core_name_is_not_the_split_core(self):
+        # 2026-10-20: the split core is mojolearn-core; a `mojolearn`
+        # .dist-info (the combined wheel, or the file-free Linux mojolearn)
+        # never makes this install the split core
+        import json
+        gp = self.B.gpu_plugins
+        self.dist_info("mojolearn", self.version, (gp.CORE_MARKER, json.dumps(gp.core_marker(self.version))))
+        self.sets("cuda", ["sm_90a"])
+        self.assertEqual(self.layout(cuda=True), ("vendor", str(self.pkg / "cuda" / "sm_90a")))
+        self.assertEqual(self.B._PLUGINS_FOUND, {})
 
 
 class ArchitecturePayloadLoader(PluginLoader):
