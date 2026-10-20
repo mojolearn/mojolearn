@@ -34,13 +34,24 @@ This is build tooling: it never runs in the library.
         exit 1 unless the manifest's members for D equal the packer's list
   python3 tools/merged_bindings.py owner --outdir DIR --name N
         print the merged file in DIR that holds N (from its index), or nothing
+  python3 tools/merged_bindings.py check-index --outdir DIR --dir D [--platform P] [--byte-lm 0|1]
+        exit 1 unless DIR's index names exactly the plan's files and members
+        and each of those files exists (the packers' gate before staging)
+
+`index` is a read-modify-write of one JSON file, and the release packers run
+several merged builds of one directory at once, so it holds an exclusive
+flock for the whole update (index_lock below).
 """
 import argparse
+import contextlib
+import fcntl
+import hashlib
 import json
 import os
 import pathlib
 import platform as _platform
 import sys
+import tempfile
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = REPO / "bindings" / "merged_groups.json"
@@ -209,7 +220,29 @@ def read_index(outdir):
     return json.loads(p.read_text())
 
 
+@contextlib.contextmanager
+def index_lock(outdir):
+    """An exclusive flock serializing every index update of `outdir`. The lock
+    file lives in the temp directory, keyed by the directory's real path, so
+    nothing but the index itself is ever written into a package directory
+    (package-data would ship a lock file left there)."""
+    real = os.path.realpath(outdir)
+    key = hashlib.sha256(real.encode()).hexdigest()[:16]
+    path = os.path.join(tempfile.gettempdir(), f"mojolearn-merged-index-{key}.lock")
+    with open(path, "a") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
 def cmd_index(args):
+    with index_lock(args.outdir):
+        return _index_locked(args)
+
+
+def _index_locked(args):
     names = [n for n in args.members.split(",") if n]
     idx = read_index(args.outdir)
     files = idx.setdefault("files", {})
@@ -236,6 +269,29 @@ def cmd_owner(args):
             print(os.path.join(args.outdir, fname))
             return 0
     return 0
+
+
+def cmd_check_index(args):
+    want = {stem + ".so": sorted(mem) for stem, _cls, mem in plan(args.dir, args.platform, args.byte_lm)}
+    p = index_path(args.outdir)
+    if not p.is_file():
+        print(f"merged_bindings: {p} is absent; the merged build did not index {args.outdir}", file=sys.stderr)
+        return 1
+    got = {f: sorted(m) for f, m in read_index(args.outdir).get("files", {}).items()}
+    bad = []
+    for f in sorted(set(want) | set(got)):
+        if f not in got:
+            bad.append(f"{f}: planned, not in the index")
+        elif f not in want:
+            bad.append(f"{f}: in the index, not in the plan (stale)")
+        elif got[f] != want[f]:
+            bad.append(f"{f}: members differ (only indexed: {sorted(set(got[f]) - set(want[f])) or '-'}, "
+                       f"only planned: {sorted(set(want[f]) - set(got[f])) or '-'})")
+        elif not (pathlib.Path(args.outdir) / f).is_file():
+            bad.append(f"{f}: indexed and planned, but the file is absent")
+    for line in bad:
+        print(f"merged_bindings: {p}: {line}", file=sys.stderr)
+    return 1 if bad else 0
 
 
 def cmd_members(args):
@@ -286,6 +342,8 @@ def main(argv=None):
     p = sub.add_parser("index")
     p.add_argument("--outdir", required=True); p.add_argument("--stem", required=True)
     p.add_argument("--members", required=True); p.set_defaults(fn=cmd_index)
+    p = sub.add_parser("check-index"); common(p)
+    p.add_argument("--outdir", required=True); p.set_defaults(fn=cmd_check_index)
     p = sub.add_parser("owner")
     p.add_argument("--outdir", required=True); p.add_argument("--name", required=True); p.set_defaults(fn=cmd_owner)
     args = ap.parse_args(argv)
