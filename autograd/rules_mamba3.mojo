@@ -75,7 +75,7 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
 
 from core.identity_trace import IdentityTrace
-from mamba.checks.mamba3_backward import (
+from autograd.kernels.mamba3_proj import (
     PROJ3_IN, PROJ3_OUT,
     RED3_D, RED3_NORM_W,
     RED3_DT_BIAS,
@@ -94,14 +94,14 @@ from mamba.checks.mamba3_fixture import (
     Mamba3Dims,
     Mamba3Weights,
 )
-from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
 from mamba.impl.modules.mamba3 import (
     Mamba3DeviceStages,
     Mamba3DeviceWeights,
     allocate_inference_cache,
     mamba3_block_forward,
 )
-from mamba.impl.modules.mamba3_backward import (
+from autograd.kernels.mamba3 import (
     AFN_M3_BWD_CHUNK,
     afn_m3_theta_chunks,
     mamba3_afn_backward_angle_into,
@@ -128,7 +128,7 @@ from mamba.impl.modules.mamba3_backward import (
     mamba3_backward_block_norm_into,
 )
 from mamba.impl.modeling.modeling_mamba import mamba_download, mamba_upload, mamba_zeros
-from mamba.impl.modules.mamba3_prefill_backward import (
+from autograd.kernels.mamba3_prefill import (
     IDN_M3_BWD_SKIP_DEAD,
     Mamba3DeviceGradients,
     Mamba3PrefillGradients,

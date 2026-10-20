@@ -22,6 +22,7 @@ from x_cnn.checks.oracle import (
     o_pad_bwd, o_adapt_avg_bwd, o_adapt_max_fwd, o_sage_max_bwd, o_l2norm, o_adam,
 )
 import x_cnn.device as D
+import autograd.kernels.cnn as DB
 import x_cnn.host.ops_host as Hh
 
 
@@ -91,7 +92,7 @@ def main() raises:
     var x = _fixture(N * C * H * W, 1)
     var w = _fixture(OC * C * K * K, 2)
     var dout = _fixture(N * OC * OH * OW, 3)
-    var bd = D.conv2d_backward_device(x, w, dout, prm)
+    var bd = DB.conv2d_backward_device(x, w, dout, prm)
     var bh = Hh.conv2d_backward_host(x, w, dout, prm)
     var nx = N * C * H * W
     var nw = OC * C * K * K
@@ -117,7 +118,7 @@ def main() raises:
     var d2 = _fixture(N2 * 3 * OH2 * OW2, 6)
     var nx2 = N2 * 2 * H2 * W2
     var nw2 = 3 * 2 * K * K
-    var bd2 = D.conv2d_backward_device(x2, w2, d2, prm2)
+    var bd2 = DB.conv2d_backward_device(x2, w2, d2, prm2)
     var bh2 = Hh.conv2d_backward_host(x2, w2, d2, prm2)
     _check("5701_conv_dw", o_conv_dw(x2, d2, N2, 2, H2, W2, 3, K, K, 1, 1, 1, 1, OH2, OW2, False),
            o_conv_dw(x2, d2, N2, 2, H2, W2, 3, K, K, 1, 1, 1, 1, OH2, OW2, True),

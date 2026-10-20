@@ -153,9 +153,9 @@
    },
    "default": "pipe",
    "source": [
-    "mamba/impl/modules/mamba3_backward.mojo:2378",
-    "mamba/impl/modules/mamba3_backward.mojo:2384",
-    "mamba/impl/modules/mamba3_backward.mojo:2552"
+    "autograd/kernels/mamba3.mojo:2378",
+    "autograd/kernels/mamba3.mojo:2384",
+    "autograd/kernels/mamba3.mojo:2552"
    ],
    "binding": "_mojolearn_mamba",
    "bits_change": false,

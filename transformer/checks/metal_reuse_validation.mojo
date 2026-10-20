@@ -16,7 +16,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDeviceWeights, LlamaDeviceStages, LlamaKVCache, LlamaRopeTable,
     _upload, PLANT_AT_NONE, llama_decoder_layer_forward_planted,
 )
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward
 from transformer.checks.transformer_check import (
     llama_dims_of, device_dump, run_host_case, compare_dumps, count_moved,

@@ -3,7 +3,7 @@
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from mamba.impl.modules.mamba3_refusal import (
+from autograd.kernels.mamba_refusal import (
     M3_REFUSAL_NONE, M3_DEVICE_REFUSAL,
     m3_first_nonfinite_code, m3_refuse_nonfinite_named,
 )

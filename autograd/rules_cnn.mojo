@@ -9,12 +9,12 @@
 # and softmax_xent_into[True] / softmax_xent_res_loss, which already writes
 # the logits gradient `glog`):
 #
-#   head    linear_backward_into[True] (x_cnn/device.mojo linear_backward_m):
+#   head    linear_backward_into[True] (autograd/kernels/cnn.mojo linear_backward_m):
 #           dW GEMM TN, bias_grad_gemm (leaf + fold, or the GEMM on ones),
 #           dX GEMM NN -> the last block's gout (or `ghead` with no block);
 #           one host wait
 #   blocks  for j = nb-1 .. 0: conv_block_backward_into[True]
-#           (x_cnn/device.mojo conv_block_backward_into): [the conv + ReLU
+#           (autograd/kernels/cnn.mojo conv_block_backward_into): [the conv + ReLU
 #           recompute when the forward saved no cols / conv output], the
 #           pool + ReLU + row-layout kernel (pool_relu_rows_bwd_at or the
 #           tiled rows kernel) or the ReLU rows kernel(s) without a pool,
@@ -73,7 +73,8 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
 from x_cnn.ops import FP as XFP, IP as XIP
 from x_cnn.ops import CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_N, PP_C, PP_OH, PP_OW
-from x_cnn.device import cnn_ctx, conv_block_backward_into, linear_backward_into
+from x_cnn.device import cnn_ctx
+from autograd.kernels.cnn import conv_block_backward_into, linear_backward_into
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the AUTOGRAD_CNN switch and the hand walk;

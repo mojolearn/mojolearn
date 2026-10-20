@@ -87,7 +87,7 @@ from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import numeric_mode_name
 from transformer.checks.transformer_fixture import fixture_tensor
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     LlamaBackwardStages,
     bwd_attention_eager_stages,
 )

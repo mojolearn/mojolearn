@@ -76,7 +76,7 @@ from training.byte_lm import (
 )
 from training.byte_lm_config import ByteConfig
 from transformer.impl.llama.modeling_llama import llama_rms_norm
-from transformer.checks.transformer_backward import bwd_rms_norm
+from autograd.kernels.transformer import bwd_rms_norm
 
 comptime ARM_ENV = "MOJOLEARN_STEP_GLUE_ARM"
 comptime SAB_ENV = "MOJOLEARN_STEP_GLUE_ARM_SABOTAGE"

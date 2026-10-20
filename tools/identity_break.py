@@ -10531,18 +10531,18 @@ GRAD_SEQ_BATCH, GRAD_SEQ_LEN = 8, 64
 #: count, per block, read from the public backward's source on 2026-09-15.
 #: Transformer: every weight gradient, the seven projections through
 #: `_route_b` and both RMSNorm weights as `ones . dprod` (DEVIATION 1410),
-#: transformer/checks/transformer_backward.mojo. Mamba-1: the four
+#: autograd/kernels/transformer.mojo. Mamba-1: the four
 #: projections' dB and the RED_* reductions (`mamba_backward_reduce_into`,
 #: OP_NN at (1, W, M)), NOT `A_log` ("T4 dA over t: t DESCENDING ... NOT
-#: routed", "T5 parameter fold over b", mamba/checks/mamba_backward.mojo),
+#: routed", "T5 parameter fold over b", autograd/kernels/mamba1_proj.mojo),
 #: modeling_mamba_prefill_backward.mojo. Mamba-2: the two projections and
 #: the block norm, gated norm and D reductions, NOT conv1d.weight,
-#: conv1d.bias, dt_bias or A_log, which mamba/impl/ops/mamba2_ssd_backward.mojo
+#: conv1d.bias, dt_bias or A_log, which autograd/kernels/mamba2_ssd.mojo
 #: folds serially over every (row, position) in one thread per channel
 #: (`mamba2_conv_backward_kernel`, `mamba2_dt_backward_kernel`,
 #: `mamba2_da_product_backward_kernel`). Mamba-3: every weight gradient (the
 #: two projections and the seven RED3_* reductions),
-#: mamba/impl/modules/mamba3_prefill_backward.mojo.
+#: autograd/kernels/mamba3_prefill.mojo.
 GRAD_CLAIMED = {
     "transformer": ("input_layernorm.weight", "post_attention_layernorm.weight", "q_proj.weight", "k_proj.weight",
                     "v_proj.weight", "o_proj.weight", "gate_proj.weight", "up_proj.weight", "down_proj.weight"),

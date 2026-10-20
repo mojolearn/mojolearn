@@ -22,7 +22,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDeviceWeights, LlamaDeviceStages, LlamaRopeTable, LlamaKVCache,
     llama_decoder_layer_forward,
 )
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 

@@ -616,7 +616,7 @@ class TransformerForwardTape:
 # refused in Mojo: weights at upload (DEVIATION 1875), x, rotary table and carried cache on
 # every call (llama_refuse_bad_call). decode == prefill is section 7.2's construction; the
 # lane's clause (d) verifies it bitwise under IDENTICAL and FAST fails it by design.
-# backward: transformer/checks/transformer_backward.mojo chains, default options only.
+# backward: autograd/kernels/transformer.mojo chains, default options only.
 class TransformerBlock(NumericModeMixin):
     """One Llama-shaped transformer decoder block, float32.
 

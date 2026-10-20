@@ -19,7 +19,7 @@ already said so in as many words and pointed AT THIS DOCSTRING for the
 reason, which is the shape of the defect: the correct sentence was written
 once, downstream, while the wrong one stayed at the entry point everybody
 reads first. What Metal actually lacks is a THREADGROUP float atomic
-(`mamba/impl/ops/selective_scan_backward.mojo:1171`,
+(`autograd/kernels/mamba1_scan.mojo:1171`,
 `gbdt/methods/doc_parallel_boosting.mojo:1797`), so IDENTITY_PATHS row 2's
 shared accumulation has no float spelling on Apple at any width. Row 1's
 global flush does have one, and IDENTICAL declines it anyway, for the reason

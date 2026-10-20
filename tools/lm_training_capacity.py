@@ -25,7 +25,7 @@ SOURCES = (
     "python/mojolearn/_byte_lm_config.py",
     "training/byte_lm.mojo",
     "transformer/impl/llama/modeling_llama.mojo",
-    "transformer/checks/transformer_backward.mojo",
+    "autograd/kernels/transformer.mojo",
 )
 
 

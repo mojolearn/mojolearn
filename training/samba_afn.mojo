@@ -81,10 +81,8 @@ from core.device_arena import (
     arena_take,
 )
 from core.neural_context import neural_ctx
-from embedding.checks.embedding_identical import (
-    identical_embedding_backward_into,
-    identical_embedding_forward_into,
-)
+from embedding.checks.embedding_identical import identical_embedding_forward_into
+from autograd.kernels.embedding import identical_embedding_backward_into
 from embedding.checks.embedding_oracle import EmbConfig
 #: lane w2-epi (MOJOLEARN_AFN_SAMBA_HEAD_GEMM): the FAST matrix-unit kernel's
 #: launcher and policies, instantiated only under that switch.
@@ -123,7 +121,7 @@ from training.checks.loss_contract import (
     ce_refuse_targets,
 )
 from training.estimator import identical_ce_admit_call, identical_ce_loss_resident
-from transformer.checks.transformer_backward import bwd_rms_norm
+from autograd.kernels.transformer import bwd_rms_norm
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 
 

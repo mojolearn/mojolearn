@@ -95,7 +95,7 @@ from gemm.host.neural_gemm import gemm_host_rows
 from training.checks.optimizer_contract import microbatch_split_is_identical
 
 
-#: `transformer/checks/transformer_backward.mojo:85-86`.
+#: `autograd/kernels/transformer.mojo:85-86`.
 comptime HOST_BWD_NEG_HALF: Float32 = -0.5
 comptime HOST_BWD_TWO: Float32 = 2.0
 

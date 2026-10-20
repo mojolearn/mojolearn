@@ -20,7 +20,7 @@ from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 _NO_PADDING = -1
-#: ORDER MATCHES embedding/checks/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
+#: ORDER MATCHES autograd/kernels/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
 #: PLAN_AUTO = 2 is embedding/checks/embedding_identical.mojo's.
 _PLAN_CODE = {"scan": 0, "sort": 1, "auto": 2}
 #: Table tokens for the binding's resident device copy (one per layer and

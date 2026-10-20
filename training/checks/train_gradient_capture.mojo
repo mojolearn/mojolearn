@@ -17,7 +17,7 @@ from gemm.neural_dispatch import ANY_SABOTAGE as GEMM_SABOTAGE
 from gemm.neural_backward import ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE
 from training.checks.loss import ANY_LOSS_SABOTAGE
 from training.checks.optimizer import ANY_SABOTAGE as OPT_SABOTAGE
-from transformer.checks.transformer_backward import BWD_ANY_SABOTAGE
+from autograd.kernels.transformer import BWD_ANY_SABOTAGE
 from transformer.impl.llama.modeling_llama import BLOCK_ANY_SABOTAGE
 from training.checks.checkpoint_check import device_weights
 from training.checks.train_loop import (
@@ -27,7 +27,7 @@ from training.checks.train_loop import (
     param_id_name, param_id_count, TrainBuffers, TrainConfig, download_f32, env_str,
     env_u64, train_batch_ids, train_dims, train_step, unpack_params,
 )
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages, LlamaRopeTable,
 )

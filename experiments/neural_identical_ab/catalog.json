@@ -480,7 +480,7 @@
       ],
       "source_anchors": [
         "transformer/impl/llama/fused_attention.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "arm_a": "Independently retain probabilities, exponent state or only canonical row summaries under an explicit storage/recompute budget.",
       "arm_b": "Incumbent stored/recomputed state choice.",
@@ -561,7 +561,7 @@
       ],
       "source_anchors": [
         "transformer/impl/llama/fused_attention.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "arm_a": "Share useful dK/dV input tiles among independent key/feature tasks while merging the same query partials in order.",
       "arm_b": "Incumbent gradient grid and separate input loads.",
@@ -587,7 +587,7 @@
       ],
       "source_anchors": [
         "transformer/impl/llama/fused_attention.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "arm_a": "Reuse probability/dOutput tiles while producing fixed-order row-dot leaves and their gradient consumers.",
       "arm_b": "Separate full-array row-dot and pointwise gradient passes.",
@@ -616,7 +616,7 @@
       ],
       "source_anchors": [
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "sequence/layernorm.mojo"
       ],
       "arm_a": "Use a fixed logical lane count and pair tree for norm/mean/variance and backward dots, independent of hardware width.",
@@ -643,7 +643,7 @@
       ],
       "source_anchors": [
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "sequence/layernorm.mojo"
       ],
       "arm_a": "Retain the incumbent row-scalar fold and parallelize independent normalization/affine/residual cells.",
@@ -672,7 +672,7 @@
       ],
       "source_anchors": [
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "arm_a": "Compute SiLU and gate product together, optionally retain derivative-needed state; fuse paired backward pointwise outputs.",
       "arm_b": "Separate activation/product/derivative passes.",
@@ -777,7 +777,7 @@
         "Transformer/LM training"
       ],
       "source_anchors": [
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "training/byte_lm.mojo"
       ],
       "arm_a": "Alias explicitly immutable incoming residual-gradient views or transfer ownership rather than copy whole tensors.",
@@ -805,7 +805,7 @@
       "source_anchors": [
         "training/byte_lm_layer_pool.mojo",
         "training/byte_lm_offload.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "arm_a": "Compare explicit layer groups of stored versus recomputed activation state from a byte/recompute model, with full cold and repeated steps.",
       "arm_b": "Incumbent activation retention/replay schedule.",
@@ -832,7 +832,7 @@
       "source_anchors": [
         "training/samba_ops.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "arm_a": "Pass an explicit owner/generation-tagged saved-forward handle into backward instead of recomputing from an empty cache.",
       "arm_b": "Re-run identical attention forward during the training backward handoff.",
@@ -887,7 +887,7 @@
       ],
       "source_anchors": [
         "mamba/impl/ops/selective_scan_interface.mojo",
-        "mamba/impl/ops/selective_scan_backward.mojo",
+        "autograd/kernels/mamba1_scan.mojo",
         "mamba/host/gen"
       ],
       "arm_a": "Compose affine recurrence summaries at fixed absolute-position chunk boundaries with a specified carry tree and replay.",
@@ -996,7 +996,7 @@
         "Samba training"
       ],
       "source_anchors": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "arm_a": "Compute canonical suffix summaries once and reuse across d_dt/angle-gradient consumers instead of repeating each suffix.",
@@ -1023,8 +1023,8 @@
         "Samba training"
       ],
       "source_anchors": [
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen"
       ],
       "arm_a": "Produce fixed-position per-token gradient leaves then merge with a common tree; attribute each parameter family separately.",
@@ -1311,7 +1311,7 @@
       ],
       "source_anchors": [
         "embedding/checks/embedding_identical.mojo",
-        "embedding/checks/embedding_sort.mojo"
+        "autograd/kernels/embedding_sort.mojo"
       ],
       "arm_a": "Use existing stable radix grouping and process touched rows; separately vary group task geometry and dense zero initialization.",
       "arm_b": "Incumbent row scan/bitonic grouping path.",
@@ -1338,7 +1338,7 @@
         "microbatch replay"
       ],
       "source_anchors": [
-        "embedding/checks/embedding_sort.mojo",
+        "autograd/kernels/embedding_sort.mojo",
         "training/byte_lm.mojo"
       ],
       "arm_a": "Retain canonical sorted IDs, position map and segments for an explicitly owned unchanged token batch.",

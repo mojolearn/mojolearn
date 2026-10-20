@@ -23,10 +23,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul_add, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from core.device_scan import device_first_nonfinite
-from embedding.checks.embedding_identical import (
-    identical_embedding_backward_into,
-    identical_embedding_forward_into,
-)
+from embedding.checks.embedding_identical import identical_embedding_forward_into
+from autograd.kernels.embedding import identical_embedding_backward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.neural_backward import (
     identical_gemm_backward_a_into,
@@ -43,7 +41,7 @@ from gemm.contract import OP_NT
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.checks.loss_contract import CeConfig, ce_count, ce_refuse_inputs
 from training.estimator import identical_ce_admit_call, identical_ce_loss_resident
-from transformer.checks.transformer_backward import bwd_rms_norm
+from autograd.kernels.transformer import bwd_rms_norm
 from transformer.impl.llama.modeling_llama import (
     llama_rms_norm,
 )

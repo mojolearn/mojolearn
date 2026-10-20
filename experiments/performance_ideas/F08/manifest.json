@@ -11,7 +11,7 @@
     "experiments/performance_ideas/F08/caller.py",
     "experiments/performance_ideas/apple_fast/lm_task.py",
     "training/byte_lm_afn.mojo",
-    "training/byte_lm_afn_grad.mojo"
+    "autograd/kernels/transformer_afn.mojo"
   ],
   "candidate_defines": [
     "MOJOLEARN_AFN_LM_BWD_NOSYNC"

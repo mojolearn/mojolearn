@@ -54,12 +54,14 @@ from checks.vendor import COMPILED_VENDOR
 from embedding.checks.embedding_identical import (
     PLAN_AUTO,
     emb_resolve_plan,
-    identical_embedding_backward_into,
-    identical_embedding_backward_prerefused_into,
     identical_embedding_forward_into,
     identical_embedding_forward_prerefused_into,
 )
-from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+from autograd.kernels.embedding import (
+    identical_embedding_backward_into,
+    identical_embedding_backward_prerefused_into,
+)
+from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 #: lane afn-mlp (2026-10-03): the Apple FAST atomic backward, compiled only
 #: under FAST + Apple + `-D MOJOLEARN_AFN_EMB_ATOMIC_BWD`; every other build
 #: runs the paths below unchanged (embedding/checks/embedding_fast_apple.mojo).

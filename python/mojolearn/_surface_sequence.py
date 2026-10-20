@@ -50,7 +50,10 @@ FAMILIES = (
                       "autograd/metrics.mojo", "autograd/data.mojo",
                       "autograd/profile.mojo", "autograd/optim.mojo", "autograd/higher.mojo",
                       "autograd/model_checkpoint.mojo", "training/checkpoint.mojo",
-                      "autograd/program.mojo", "autograd/weight_import.mojo"),
+                      "autograd/program.mojo", "autograd/weight_import.mojo",
+                      # the backward bodies moved out of sequence/recurrent*.mojo and sequence/mlp.mojo
+                      "autograd/kernels/recurrent.mojo", "autograd/kernels/recurrent_scan.mojo",
+                      "autograd/kernels/mlp.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",

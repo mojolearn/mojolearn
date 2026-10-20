@@ -19,7 +19,7 @@ record(49, "wired_draft", ["embedding/checks/embedding_identical.mojo"],
        ["MOJOLEARN_NN49_EMB_VECTOR4=1"],
        "Four independent adjacent feature chains share each canonical run lookup in the actual touched-row backward route. Existing radix/touched infrastructure is reused; no new identity/quality claim.",
        ["Route only runs when existing touched-row dispatch is active (n_positions < vocab); other shapes retain incumbent.", "Full LM/embedding callers and all-vendor qualification remain unrun; include zeroing/sort/readback in timing."])
-record(50, "component_draft", ["embedding/owned_runs.mojo", "embedding/checks/embedding_identical.mojo"],
+record(50, "component_draft", ["autograd/kernels/embedding_runs.mojo", "embedding/checks/embedding_identical.mojo"],
        ["MOJOLEARN_NN50_OWNED_RUNS=1"],
        "OwnedEmbeddingRuns snapshots device IDs, validates them on GPU with a two-word error readback, sorts once, and calls the canonical backward fold with retained groups. No Python data work.",
        ["Public LM/microbatch owner integration pending.", "Owner must not expose/mutate its internal IDs/groups and must retain all buffers through completion.", "Construction/copy/sort costs must be included in cold timing."])
