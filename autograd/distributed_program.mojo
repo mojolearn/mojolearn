@@ -29,6 +29,7 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
     var params: List[FP]
     var trainable: List[Bool]
     var full: List[FP]
+    var dataset_storage: List[FP]
     var batches: List[FP]
     var shapes: List[ShapeN]
     var target: FP
@@ -52,6 +53,7 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
         self.params = List[FP]()
         self.trainable = trainable.copy()
         self.full = List[FP]()
+        self.dataset_storage = List[FP]()
         self.batches = List[FP]()
         self.shapes = List[ShapeN]()
         self.target = dummy_ptr()
@@ -85,39 +87,49 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
             self.incoming.append(self.session.ex.alloc(max(1, n)))
 
     def release_dataset(mut self) raises:
-        if not self.dataset_ready:
-            return
-        for j in range(len(self.full)):  # driver-loop: input buffer owners
-            self.session.ex.free(self.full[j])
-            self.session.ex.free(self.batches[j])
-        self.session.ex.free(self.target)
-        self.session.ex.free(self.batch_target)
-        self.session.ex.free(self.indices)
+        # Register every acquisition immediately, including a partial setup.
+        # Full/batch lists borrow these buffers and need not have equal lengths.
+        for j in range(len(self.dataset_storage)):  # driver-loop: call-scoped allocation owners
+            self.session.ex.free(self.dataset_storage[j])
+        self.dataset_storage.clear()
         self.full.clear()
         self.batches.clear()
         self.shapes.clear()
+        self.target = dummy_ptr()
+        self.batch_target = dummy_ptr()
+        self.indices = dummy_ptr()
         self.dataset_ready = False
 
     def prepare(mut self, srcs: List[CastIn], shapes: List[ShapeN], target: CastIn,
                 batch: Int, loss_kind: Int) raises:
         self.release_dataset()
         var rows = shapes[0].d[0]
-        for k in range(len(srcs)):  # driver-loop: input arrays
-            var buf = self.session.ex.alloc(srcs[k].count())
-            self.full.append(buf)
-            self.batches.append(self.session.ex.alloc(batch * (shapes[k].count() // rows)))
-            self.shapes.append(shapes[k])
-            if self.program.in_kinds[k] == PROGRAM_IN_IDS:
-                upload_cast_i32(self.session.ex, buf, srcs[k], "distributed program ids")
-            else:
-                upload_cast(self.session.ex, buf, srcs[k])
-        self.target_cols = max(1, target.cols)
-        self.target = self.session.ex.alloc(max(1, target.count()))
-        self.batch_target = self.session.ex.alloc(max(1, batch * self.target_cols))
-        self.indices = self.session.ex.alloc(rows)
-        self.dataset_ready = True
-        if loss_kind != 0:
-            upload_cast(self.session.ex, self.target, target)
+        try:
+            for k in range(len(srcs)):  # driver-loop: input arrays
+                var buf = self.session.ex.alloc(srcs[k].count())
+                self.dataset_storage.append(buf)
+                self.full.append(buf)
+                var batch_buf = self.session.ex.alloc(batch * (shapes[k].count() // rows))
+                self.dataset_storage.append(batch_buf)
+                self.batches.append(batch_buf)
+                self.shapes.append(shapes[k])
+                if self.program.in_kinds[k] == PROGRAM_IN_IDS:
+                    upload_cast_i32(self.session.ex, buf, srcs[k], "distributed program ids")
+                else:
+                    upload_cast(self.session.ex, buf, srcs[k])
+            self.target_cols = max(1, target.cols)
+            self.target = self.session.ex.alloc(max(1, target.count()))
+            self.dataset_storage.append(self.target)
+            self.batch_target = self.session.ex.alloc(max(1, batch * self.target_cols))
+            self.dataset_storage.append(self.batch_target)
+            self.indices = self.session.ex.alloc(rows)
+            self.dataset_storage.append(self.indices)
+            if loss_kind != 0:
+                upload_cast(self.session.ex, self.target, target)
+            self.dataset_ready = True
+        except error:
+            self.release_dataset()
+            raise error
 
     def gradient(mut self, start: Int, count: Int, loss_kind: Int, delta: Float32,
                  stream: Int) raises:
@@ -362,6 +374,8 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
             # may expose a mixed step: restore the last complete checkpoint.
             self.usable = False
             self.busy = False
+            for rank in range(len(self.workers)):  # driver-loop: failed-call dataset owners
+                self.workers[rank].release_dataset()
             raise err
         self.busy = False
 

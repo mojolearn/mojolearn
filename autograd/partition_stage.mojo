@@ -12,6 +12,25 @@ from autograd.optim import OptimizerConfig, OptimizerState, step_lr
 from autograd.import_api import ImportRules
 from autograd.program_runtime import program_loss
 from autograd.rankn import ShapeN
+from autograd.cast_ops import upload_cast, upload_cast_i32
+from core.cast_in import CastIn
+
+
+def stage_input_bytes[E: Exec](mut ex: E, source: CastIn, shape: ShapeN,
+                              integer: Bool) raises -> GraphBytes:
+    var words = List[Float32](length=shape.count(), fill=Float32(0))
+    var buf = ex.alloc(shape.count())
+    try:
+        if integer:
+            upload_cast_i32(ex, buf, source, "partitioned ids")
+        else:
+            upload_cast(ex, buf, source)
+        ex.download(FP(unsafe_from_address=Int(words.unsafe_ptr())), buf, shape.count())
+    except error:
+        ex.free(buf)
+        raise error
+    ex.free(buf)
+    return GraphBytes(shape, words^, integer)
 
 
 struct NodeGradients(Copyable, Movable):
