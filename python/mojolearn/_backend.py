@@ -167,7 +167,8 @@ import re
 import sys
 import threading
 
-from . import _merged, gpu_plugins, host_surface
+from . import _merged
+from . import gpu_plugins, host_surface
 from ._version import __version__ as _CORE_VERSION
 
 
