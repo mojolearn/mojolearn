@@ -30,12 +30,12 @@ strings list, -1 for none; a float an index into the floats list):
            status 5: n_problems, problems (name, op, reason) ...
            status 1-4: message
   value    name, dtype, rank, rank x (is_str, value or string)
-  tensor   name, dtype, rank, dims ..., buffer, offset, nbytes
+  tensor   name, dtype, rank, dims ..., buffer, start, end (a byte range)
   node     op, domain, name, n_in, inputs ..., n_out, outputs ...,
            n_attr, attributes ...
   attr     name, kind, payload: 1 float -> float; 2 int -> value;
-           3 string -> string; 4 tensor -> tensor; 6 floats -> count,
-           first float; 7 ints -> count, values ...; 8 strings -> count,
+           3 string -> string; 4 tensor -> tensor; 6 floats -> first,
+           end (a range of floats); 7 ints -> count, values ...; 8 strings -> count,
            strings ...; 9 tensors -> count, tensors ...
 dtype: 0 f32, 1 f16, 2 bf16, 3 f64, 4 i64, 5 i32, 6 bool. Buffer kinds:
 0 the model file, 1 the reader's own bytes (`onnx_copy_blob`), 2 an
@@ -1581,7 +1581,7 @@ def _w_tensor(w: PythonObject, t: TRec) raises:
         w.append(PythonObject(t.dims[i]))
     w.append(PythonObject(t.buf))
     w.append(PythonObject(t.off))
-    w.append(PythonObject(t.nbytes))
+    w.append(PythonObject(t.off + t.nbytes))
 
 
 def _w_value(w: PythonObject, v: GValue) raises:
@@ -1668,11 +1668,11 @@ def onnx_info_py(h: PythonObject) raises -> PythonObject:
                 elif a.kind == AK_TENSOR:
                     _w_tensor(w, a.tensors[0])
                 elif a.kind == AK_FLOATS:
-                    w.append(PythonObject(len(a.floats)))
                     w.append(PythonObject(nf))
                     for j in range(len(a.floats)):  # cpu-route: model file parsing (attribute list)
                         floats.append(PythonObject(a.floats[j]))
                         nf += 1
+                    w.append(PythonObject(nf))
                 elif a.kind == AK_INTS:
                     w.append(PythonObject(len(a.ints)))
                     for j in range(len(a.ints)):  # cpu-route: model file parsing (attribute list)
