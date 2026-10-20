@@ -84,25 +84,25 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
     gradient_pids = []
     update_pid = None
     try:
-        result = checked('train', owner, shards)
+        result = audit_native_call(owner.train_step, shards).assert_native()
         np.testing.assert_allclose(result['losses'], expected_losses, rtol=3e-6, atol=3e-7)
         assert result['completed_steps'] == 1
-        retained = checked('export_gradients', owner)
+        retained = audit_native_call(owner.export_gradients).assert_native()
         for observed, expected in zip(retained, summed):
             np.testing.assert_allclose(np.asarray(observed), expected, rtol=5e-6, atol=5e-7)
-        checkpoint = checked('checkpoint', owner)
+        checkpoint = audit_native_call(owner.checkpoint).assert_native()
         cfg = initial['config']
         for key, gradient in zip(initial['parameter_order'], summed):
             expected = np.asarray(initial['weights'][key], dtype=np.float64) * (1-cfg['lr']*cfg['weight_decay'])
             expected -= cfg['lr'] * gradient / (np.abs(gradient) + cfg['eps'])
             np.testing.assert_allclose(np.asarray(checkpoint['state']['weights'][key]), expected, rtol=6e-6, atol=6e-7)
-        replay = checked('restore', ParallelNeuralTrainer, checkpoint, (devices[0],))
+        replay = audit_native_call(ParallelNeuralTrainer.from_checkpoint, checkpoint, devices=(devices[0],)).assert_native()
         # The portable checkpoint and both restored/live owners have distinct
         # parameter storage; changing the saved bytes cannot alter replay.
         np.asarray(checkpoint['state']['weights']['weight1'])[:] = 99
-        checked('train', owner, shards)
-        checked('train', replay, shards)
-        assert training_state(checked('checkpoint', owner)) == training_state(checked('checkpoint', replay))
+        audit_native_call(owner.train_step, shards).assert_native()
+        audit_native_call(replay.train_step, shards).assert_native()
+        assert training_state(audit_native_call(owner.checkpoint).assert_native()) == training_state(audit_native_call(replay.checkpoint).assert_native())
         gradient_pids = [worker['pid'] for worker in owner._pool['workers']]
         update_pid = owner._update_pool['workers'][0]['pid']
         pids = gradient_pids + [update_pid]
@@ -117,7 +117,7 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
         for active in (owner, replay):
             if active is not None:
                 try:
-                    checked('close', active)
+                    audit_native_call(active.close).assert_native()
                 except BaseException as error:
                     cleanup_errors.append(error)
         if primary is not None:
@@ -152,20 +152,20 @@ def test_worker_failure_rolls_back_and_retry_restarts_owned_processes():
     model = model_fixture()
     np.asarray(model._opt.params[0])[0, 0] = 2
     owner = object.__new__(ParallelNeuralTrainer)
-    checked('init', owner, model, (0,), 1)
+    audit_native_call(owner.__init__, model, devices=(0,), logical_shards=1).assert_native()
     x = np.zeros((1, 8), np.float32)
     x[0, 0] = np.finfo(np.float32).max
     y = np.array([0], np.int32)
     try:
-        before = checked('checkpoint', owner)
-        failed = audit_native_call(native, 'train', (owner, [(x, y)]))
+        before = audit_native_call(owner.checkpoint).assert_native()
+        failed = audit_native_call(owner.train_step, [(x, y)])
         assert isinstance(failed.exception, RuntimeError), failed.report()
         for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
             assert not failed.report()[key], failed.report()
-        assert training_state(checked('checkpoint', owner)) == training_state(before)
+        assert training_state(audit_native_call(owner.checkpoint).assert_native()) == training_state(before)
         assert owner._pool['workers'] == []
         assert owner._pool['closed'] is False
         x[0, 0] = 1
-        assert checked('train', owner, [(x, y)])['completed_steps'] == 1
+        assert audit_native_call(owner.train_step, [(x, y)]).assert_native()['completed_steps'] == 1
     finally:
-        checked('close', owner)
+        audit_native_call(owner.close).assert_native()

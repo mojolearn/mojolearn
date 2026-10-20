@@ -107,7 +107,8 @@ def test_ordered_gradient_fold_has_fixed_left_association_and_owns_inputs():
     tiny = np.float32(2**-24)
     parts = [first, [np.array([tiny, -tiny], np.float32), np.ones((2, 3), np.float32)],
              [np.array([tiny, -tiny], np.float32), np.full((2, 3), 2, np.float32)]]
-    folded = checked('ordered_sum', parts)
+    from mojolearn.parallel_training import ordered_sum_gradients
+    folded = audit_native_call(ordered_sum_gradients, parts).assert_native()
     # Both separate additions tie to even; a tree combining the tiny terms
     # first would produce a one-ULP change and fail this independent oracle.
     np.testing.assert_array_equal(np.asarray(folded[0]).view(np.uint32), [0x3f800000, 0xbf800000])
