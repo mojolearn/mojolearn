@@ -131,7 +131,8 @@ def test_bindings_register_the_gpu_names():
 
 
 def test_host_modules_are_host_only():
-    for rel, forbidden in ((EMB_HOST, ("embedding.checks.embedding_identical", "autograd.kernels.embedding_sort")),
+    for rel, forbidden in ((EMB_HOST, ("embedding.checks.embedding_identical", "autograd.kernels.embedding",
+                                       "autograd.kernels.embedding_sort")),
                            (IVF_HOST, ("ivf.estimator", "ivf.impl.neighbors.ivf_flat.ivf_flat_build",
                                        "ivf.impl.neighbors.ivf_flat.ivf_flat_search",
                                        "neighbors.checks", "core.row_norms"))):
