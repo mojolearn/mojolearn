@@ -31,6 +31,17 @@ EXTENSION = re.compile(r'mojolearn/(cuda|hip)(?:_native|_ptx)?/(sm_[0-9]+a?|gfx[
                        r'(?:(identical)/)?(_mojolearn[^/]*)\.so')
 
 
+# THE MERGED BINDINGS (lane merged-bindings, 2026-10-20): a set directory ships
+# its bindings one file each, or as merged files plus the index
+# _mojolearn_merged.json naming each file's members (surface.set_layout). The
+# index is shipped and hashed like a binary; it is collected beside
+# `extensions` as `merged_indexes` ({path: {'sha256', 'files'}}), never in it.
+INDEX = re.compile(r'mojolearn/(cuda|hip)(?:_native|_ptx)?/(sm_[0-9]+a?|gfx[0-9a-f]+)/'
+                   r'(?:(identical)/)?' + re.escape(surface.MERGED_INDEX))
+HOST_INDEX = 'mojolearn/host/' + surface.MERGED_INDEX
+HOST_BINARY = re.compile(r'mojolearn/host/_mojolearn_[^/]*_host\.so')
+
+
 def set_key(member):
     """'vendor/arch' of an architecture extension member in either layout."""
     match = EXTENSION.fullmatch(member)
@@ -40,8 +51,27 @@ def set_key(member):
 def build_layout_member(member):
     """An architecture extension member at the build layout
     (mojolearn/<vendor>/<arch>/...), whichever package directory it sits in."""
-    match = EXTENSION.fullmatch(member)
+    match = EXTENSION.fullmatch(member) or INDEX.fullmatch(member)
     return '/'.join(('mojolearn', match[1], match[2], member.split('/', 3)[3]))
+
+
+def wheel_layout(indexes):
+    """The binding layout of a wheel inspect_wheel admitted: one layout per
+    wheel, so any shipped index means merged."""
+    return 'merged' if indexes else 'per-binding'
+
+
+def index_key(member):
+    """'vendor/arch' of an architecture set's index member in either layout."""
+    match = INDEX.fullmatch(member)
+    return match[1] + '/' + match[2] if match else None
+
+
+def normal_indexes(indexes):
+    """A merged_indexes map with each file's members sorted, for comparison
+    (the sha256 binds the index bytes; member order is the build's)."""
+    return {k: {'sha256': r.get('sha256'), 'files': {f: sorted(m) for f, m in (r.get('files') or {}).items()}}
+            for k, r in (indexes or {}).items()}
 # DEVIATION 2680: the CPU TRAINING binding. One vendor-neutral copy per wheel,
 # beside the architecture trees rather than inside one, because it targets no
 # GPU and reads back vendor 'cpu'.
@@ -170,7 +200,8 @@ def inventory_digest(inventory):
     return hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()
 
 
-def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, vendors=BOTH_VENDORS):
+def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, vendors=BOTH_VENDORS,
+                  index_out=None):
     """Verify RECORD and every advertised architecture/mode on final bytes.
 
     `host_out`, when given, is filled with the vendor-neutral CPU TRAINING
@@ -179,8 +210,13 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
     because the host binding must NOT enter `extensions`: release_audit compares
     that dict wholesale against the packer's payload, which records the host
     under `host_native` instead, outside the per-architecture map.
+
+    `index_out`, when given, is filled with the shipped merged indexes
+    ({member without 'mojolearn/': {'sha256', 'files'}}); wheel_layout()
+    names the layout they imply. Every set is checked complete in its own
+    layout, one layout per wheel.
     """
-    extensions, sets = {}, {}
+    extensions, sets, prefixes, indexes, hosts = {}, {}, {}, {}, set()
     require(re.fullmatch(r'.+-manylinux_[A-Za-z0-9_.]+_x86_64\.whl', wheel.name),
             'Final Linux wheel requires a repaired manylinux x86_64 tag')
     with zipfile.ZipFile(wheel) as archive:
@@ -215,9 +251,17 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
                 vendor, arch, mode, name = match.groups()
                 extensions[path.removeprefix('mojolearn/')] = digest
                 sets.setdefault((vendor, arch, mode or 'fast'), set()).add(name)
-            elif path in HOST_MEMBERS:
+                prefixes[(vendor, arch, mode or 'fast')] = path.removeprefix('mojolearn/').rsplit('/', 1)[0] + '/'
+            elif INDEX.fullmatch(path) or path == HOST_INDEX:
+                try:
+                    files = json.loads(archive.read(path)).get('files')
+                except (ValueError, AttributeError):
+                    files = None
+                indexes[path.removeprefix('mojolearn/')] = {'sha256': digest, 'files': files}
+            elif HOST_BINARY.fullmatch(path):
                 # DEVIATION 2680: vendor-neutral, one copy for the whole wheel,
                 # so it belongs to no architecture and is recorded on its own.
+                hosts.add(path.rsplit('/', 1)[1])
                 if host_out is not None:
                     host_out[path.removeprefix('mojolearn/')] = digest
             elif path.endswith('.so') and '/_mojolearn' in path:
@@ -225,10 +269,31 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
         require(declared == set(paths), 'RECORD does not cover the complete wheel')
         require({v for v, _, _ in sets} == set(vendors),
                 'Final release wheel must contain ' + ' and '.join(v.upper() for v in sorted(vendors)))
+        layouts, checked = [], set()
         for vendor, arch in {(v, a) for v, a, _ in sets}:
             for mode in surface.MODES:
-                require(sets.get((vendor, arch, mode)) == surface.expected_bindings(mode, byte_lm),
-                        'Incomplete final wheel set: ' + '/'.join((vendor, arch, mode)))
+                where = '/'.join((vendor, arch, mode))
+                prefix = prefixes.get((vendor, arch, mode))
+                require(prefix is not None, 'Incomplete final wheel set: ' + where)
+                files = {n + '.so' for n in sets[(vendor, arch, mode)]}
+                try:
+                    kind, _ = surface.set_layout(prefix, files, indexes, surface.expected_bindings(mode, byte_lm))
+                except ValueError as exc:
+                    raise ValueError('Incomplete final wheel set: ' + where + ' (' + str(exc) + ')') from exc
+                require(sorted(files) == sorted(surface.expected_set_files(mode, byte_lm, kind)),
+                        'Final wheel set differs from the merged plan: ' + where)
+                layouts.append(kind)
+                checked.add(prefix + surface.MERGED_INDEX)
+        if hosts:
+            kind, _ = surface.set_layout('host/', hosts, indexes, HOST_NAMES)
+            require(sorted(hosts) == sorted(surface.expected_set_files('host', byte_lm, kind)),
+                    'Final wheel host set differs from the merged plan')
+            layouts.append(kind)
+            checked.add('host/' + surface.MERGED_INDEX)
+        require(set(indexes) <= checked, 'Merged index outside a binding set: ' + ','.join(sorted(set(indexes) - checked)))
+        surface.one_layout(layouts)
+        if index_out is not None:
+            index_out.update(indexes)
         python_sources = ((root / 'python/mojolearn').glob('*.py') if flat_python
                           else (root / 'python/mojolearn').rglob('*.py'))
         for source in python_sources:
@@ -238,7 +303,7 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
 
 
 def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch=None, allowed=frozenset(),
-                 vendors=BOTH_VENDORS):
+                 vendors=BOTH_VENDORS, indexes=None):
     qualification, _ = surface.retained(directory, allowed)
     require(qualification.get('vendor') == vendor, 'Wrong staged qualification vendor')
     require(qualification.get('wheel_sha256') == wheel_sha,
@@ -249,6 +314,11 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
     require(audit.get('advertised_vendors') == sorted(vendors)
             and audit.get('extension_hashes') == extensions and audit.get('sets') == sets,
             'Qualification audited a different wheel layout or extension inventory')
+    # The merged indexes the wheel ships ({} per-binding): an installed member
+    # loads from the file its directory's index names.
+    indexes = indexes or {}
+    require(normal_indexes(audit.get('merged_indexes')) == normal_indexes(indexes),
+            'Qualification audited different merged indexes')
     proof_path = directory / 'build-provenance.json'
     require(digest_file(proof_path) == audit.get('build_provenance_sha256'),
             'Build proof differs from qualification audit')
@@ -310,9 +380,11 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
             for binding_name, binding in bindings.items():
                 member = PurePosixPath(binding['path']).relative_to(package).as_posix()
                 match = EXTENSION.fullmatch('mojolearn/' + member)
+                # Its own file, or the merged file its directory's index names.
+                served = surface.member_file(member.rsplit('/', 1)[0] + '/', binding_name, indexes)
                 require(match is not None and match[1] == vendor
                         and (arch is None or match[2] == arch)
-                        and (match[3] or 'fast') == mode and match[4] == binding_name
+                        and (match[3] or 'fast') == mode and member == served
                         and binding.get('sha256') == extensions.get(member),
                         'Installed binding does not match final wheel vendor/mode')
                 if binding_name in MODE_READBACK | {'_mojolearn_byte_lm'} or 'mode_code' in binding:
@@ -333,9 +405,10 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
     split core was packed with."""
     wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
     require(runtime_key in RELEASE_ARCHES_ACCEPTED, 'Unknown runtime architecture')
-    host_extensions = {}
+    host_extensions, indexes = {}, {}
     extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True,
-                                     host_out=host_extensions, vendors=vendors)
+                                     host_out=host_extensions, vendors=vendors, index_out=indexes)
+    layout = wheel_layout(indexes)
     version = surface.release_version(source_root)  # DEVIATION 2290: the source root's, never a literal
     carried = {'/'.join(k.split('/')[:2]) for k in sets}
     require(carried_ok(carried, vendors),
@@ -355,6 +428,12 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         require(payload.get('extensions') == {'mojolearn/' + n: h for n, h in extensions.items()}
                 and payload.get('source_inventory') == inventory,
                 'Final payload or source differs from assembly inventory')
+        # THE MERGED BINDINGS: the payload records the shipped indexes beside
+        # the .so map, and the one layout of the wheel.
+        require(normal_indexes(payload.get('merged_indexes'))
+                == normal_indexes({'mojolearn/' + n: r for n, r in indexes.items()})
+                and payload.get('binding_layout', 'per-binding') == layout,
+                'Final payload merged indexes or binding layout differ from the wheel')
         require(set(payload.get('sets', {})) == carried, 'Missing assembly set proofs')
         require(payload.get('optional_native', {}).get('_mojolearn_byte_lm') == dict(included=True,
                     supported_modes=['identical'], unsupported_modes=['fast']),
@@ -369,8 +448,10 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         host_native = payload.get('host_native')
         require(isinstance(host_native, dict) and set(host_native) == set(HOST_NAMES),
                 'Release payload host binding inventory differs from the manifest')
+        payload_indexes = {'mojolearn/' + n: r for n, r in indexes.items()}
         for name in HOST_NAMES:
-            member = 'mojolearn/host/' + name + '.so'
+            # Its own file, or the merged host file the index names.
+            member = surface.member_file('mojolearn/host/', name, payload_indexes)
             require(payload.get('optional_native', {}).get(name) == dict(included=True,
                         supported_modes=['identical'], unsupported_modes=['fast']),
                     'Release host binding must be included in IDENTICAL only: ' + name)
@@ -380,7 +461,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
                     and record.get('supported_modes') == ['identical']
                     and record.get('sha256') == host_extensions.get(member.removeprefix('mojolearn/')),
                     'Release payload host binding differs from the wheel: ' + name)
-        require(set(host_extensions) == {m.removeprefix('mojolearn/') for m in HOST_MEMBERS},
+        require(set(host_extensions) == {'host/' + f for f in surface.expected_set_files('host', True, layout)},
                 'Release wheel host binding inventory differs from the manifest')
         for field, select in [('python_sha256', lambda n: n.endswith('.py')),
                               ('runtime_sha256', lambda n: '/.libs/' in n)]:
@@ -404,7 +485,19 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         proved = proof.get('extensions')
         proved = ({build_layout_member(m): h for m, h in proved.items()} if isinstance(proved, dict)
                   and all(EXTENSION.fullmatch(m) for m in proved) else proved)
-        require(len(expected) == sum(len(surface.expected_bindings(mode, True)) for mode in surface.MODES) and proved == expected, 'Architecture build bytes differ')
+        require(len(expected) == sum(len(surface.expected_set_files(mode, True, layout)) for mode in surface.MODES)
+                and proved == expected, 'Architecture build bytes differ')
+        # The leg's indexes (build layout) are the wheel's for this set, and the
+        # leg built the wheel's layout. A proof from before the merged bindings
+        # carries neither field: per-binding, no indexes.
+        expected_indexes = normal_indexes({build_layout_member('mojolearn/' + n): r for n, r in indexes.items()
+                                           if index_key('mojolearn/' + n) == key})
+        proved_indexes = proof.get('merged_indexes', {})
+        require(isinstance(proved_indexes, dict), 'Architecture build indexes are not a map')
+        proved_indexes = normal_indexes({build_layout_member(k): r for k, r in proved_indexes.items()
+                                         if INDEX.fullmatch(k)})
+        require(proof.get('binding_layout', 'per-binding') == layout and proved_indexes == expected_indexes,
+                'Architecture build indexes or binding layout differ')
         proof_hashes[key] = digest_file(proof_path)
         expected_link = {'sha256': proof_hashes[key], 'source_sha256': source_sha}
         from staged_native_admission import SCHEMA as STAGED_SCHEMA
@@ -412,11 +505,16 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
             expected_link.update(origin='staged-admission', reused=[])
         require(payload['sets'][key] == expected_link, 'Assembly proof linkage differs')
     vendor, arch = runtime_key.split('/')
-    return dict(sha256=wheel_sha or digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=sorted(vendors),
-                assembly_profile=surface.RELEASE_PROFILE, qualification_vendor=vendor, runtime_architecture=arch,
-                source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
-                architecture_build_proofs=proof_hashes, extension_hashes=extensions,
-                host_extension_hashes=host_extensions, sets=sets)
+    audit = dict(sha256=wheel_sha or digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=sorted(vendors),
+                 assembly_profile=surface.RELEASE_PROFILE, qualification_vendor=vendor, runtime_architecture=arch,
+                 source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
+                 architecture_build_proofs=proof_hashes, extension_hashes=extensions,
+                 host_extension_hashes=host_extensions, sets=sets)
+    # Only a merged wheel's audit carries the indexes (installed members load
+    # from the files they name), so a per-binding audit is the one it always was.
+    if layout == 'merged':
+        audit.update(merged_indexes=indexes, binding_layout=layout)
+    return audit
 
 
 def check_release061(wheel, qualification_root, source_root, wheel_sha=None, vendors=BOTH_VENDORS):
@@ -476,7 +574,8 @@ def check_release061(wheel, qualification_root, source_root, wheel_sha=None, ven
             allowed, declared = surface.read_declared_failures(directory, source_root)
             allowances[key] = allowed
             check_vendor(directory, vendor, expected['sha256'], inventory,
-                         expected['extension_hashes'], expected['sets'], arch, allowed, vendors)
+                         expected['extension_hashes'], expected['sets'], arch, allowed, vendors,
+                         expected.get('merged_indexes'))
             check_corpora(directory, source_root)
             tiers[key] = 'full'
             directories[key] = directory
@@ -663,10 +762,11 @@ def check(wheel, qualification_root, source_root):
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     wheel_sha = digest_file(wheel)
     inventory = tracked_native_inventory(source_root)
-    extensions, sets = inspect_wheel(wheel, source_root)
+    indexes = {}
+    extensions, sets = inspect_wheel(wheel, source_root, index_out=indexes)
     directories = {v: qualification_root / v for v in ('hip', 'cuda')}
     for vendor, directory in directories.items():
-        check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets)
+        check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, indexes=indexes)
         check_corpora(directory, source_root)
     # Recompute comparators from retained inputs; a standalone PASS JSON is
     # not evidence. They independently admit hashes, fixtures and raw bits.
