@@ -2,6 +2,7 @@
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
+from autograd.python_errors import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session
@@ -78,7 +79,7 @@ def _tuple_ints(xs: List[Int]) raises -> PythonObject:
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
     var b = Python.import_module("builtins")
     out._s = session
-    out._id = b.int(info[0])
+    out._id = graph_int(info[0])
     out._execute_native = session._program_execute
     out._inspect_native = session._program_inspect
     out._control_native = session._program_control
@@ -94,7 +95,7 @@ def _program_initialize(mut out: PythonObject, session: PythonObject, info: Pyth
             var source = b.tuple(shapes[j])
             var shape = Python.list()
             for axis in range(len(source)):  # driver-loop: over tensor rank metadata
-                shape.append(b.int(source[axis]))
+                shape.append(graph_int(source[axis]))
             dims.append(b.tuple(shape))
         if k == 0:
             out.input_shapes = b.tuple(dims)
@@ -103,13 +104,13 @@ def _program_initialize(mut out: PythonObject, session: PythonObject, info: Pyth
     var parameter_source = b.tuple(info[3])
     var params = Python.list()
     for k in range(len(parameter_source)):  # driver-loop: over parameter handle metadata
-        params.append(b.int(parameter_source[k]))
+        params.append(graph_int(parameter_source[k]))
     out.params = b.tuple(params)
     var kinds = Python.list()
     if len(info) > 4:
         var kind_source = b.tuple(info[4])
         for k in range(len(kind_source)):  # driver-loop: over input kind metadata
-            kinds.append(b.int(kind_source[k]))
+            kinds.append(graph_int(kind_source[k]))
     else:
         for k in range(len(out.input_shapes)):  # driver-loop: over legacy value-only input descriptors
             kinds.append(0)
