@@ -179,6 +179,7 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(buffers)):  # driver-loop: over owners acquired before a failed upload
             s[].ex.free(buffers[k])
         raise err
+    _ = inputs^  # raw addresses erase origins; retain scalar sequence owners through upload
     var upload_ns = Int(perf_counter_ns()) - started
     var held = Tape()
     swap(held, s[].prog_tape)
@@ -393,6 +394,8 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     train_program(s[], Int(py=pid), srcs, shapes, target, kind, Float32(py=delta),
                   opt, params, count, batch, Bool(py=shuffle), seed_word,
                   FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
+    _ = owners^
+    _ = target_owners^
     var out = Python.list()
     out.append(curve)
     out.append(PythonObject(count))
