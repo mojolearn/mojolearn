@@ -565,9 +565,93 @@ def _h_index_select(r, n, a, ov):
 def _h_index(r, n, a, ov):
     idx = list(a["indices"])
     used = [i for i, t in enumerate(idx) if t is not None]  # cpu-route: model graph description on the host (index positions)
-    if len(used) != 1:
-        raise _Refuse("indexing with more than one index tensor is not supported")
-    return r.emit("Gather", [r.val(a["self"]), r.val(idx[used[0]])], [n.name], n.name, axis=used[0])
+    if not used:
+        raise _Refuse("indexing without an index tensor is not supported")
+    for i in used:  # cpu-route: model graph description on the host (index positions)
+        if r.meta(idx[i]).dtype == r.torch.bool:
+            raise _Refuse("indexing with a boolean mask (a data-dependent shape) is not supported")
+    if len(used) == 1:
+        return r.emit("Gather", [r.val(a["self"]), r.val(idx[used[0]])], [n.name], n.name, axis=used[0])
+    return _index_nd(r, n, a["self"], [idx[i] for i in used], used)  # cpu-route: model graph description on the host (index positions)
+
+
+def _index_nd(r, n, x, tensors, axes):
+    """x[i0, i1, ...] with several index tensors on axes ``axes`` as ONNX
+    GatherND: the indexed axes moved to the front (Transpose), the index
+    tensors broadcast and stacked on a new last axis, one GatherND, and the
+    broadcast axes moved to where the first indexed axis stood when the
+    indexed axes are consecutive (torch's rule)."""
+    rank = r.rank(x)
+    shapes = [r.shape(t) for t in tensors]  # cpu-route: model graph description on the host (the index tensors)
+    if any(not isinstance(d, int) for sh in shapes for d in sh) or any(  # cpu-route: model graph description on the host (one per axis)
+            not isinstance(d, int) for d in r.shape(x)):  # cpu-route: model graph description on the host (one per axis)
+        raise _Refuse("indexing with several index tensors of dynamic shapes is not supported")
+    bshape = tuple(int(d) for d in r.torch.broadcast_shapes(*shapes))  # cpu-route: model graph description on the host (one per axis)
+    others = [d for d in range(rank) if d not in axes]  # cpu-route: model graph description on the host (one per axis)
+    xv = r.val(x)
+    if list(axes) != list(range(len(axes))):  # cpu-route: model graph description on the host (one per axis)
+        xv = r.emit("Transpose", [xv], [r.fresh(n.name)], r.fresh(n.name), perm=tuple(list(axes) + others))
+    parts = []
+    for t, sh in zip(tensors, shapes):  # cpu-route: model graph description on the host (the index tensors)
+        v = r.val(t)
+        if tuple(sh) != bshape:
+            v = r.emit("Expand", [v, r.const_i(bshape)], [r.fresh(n.name)], r.fresh(n.name))
+        parts.append(r.emit("Unsqueeze", [v, r.const_i([-1])], [r.fresh(n.name)], r.fresh(n.name)))
+    packed = r.emit("Concat", parts, [r.fresh(n.name)], r.fresh(n.name), axis=-1)
+    nb = len(bshape)
+    consecutive = list(axes) == list(range(axes[0], axes[0] + len(axes)))  # cpu-route: model graph description on the host (one per axis)
+    if not (consecutive and axes[0] > 0 and nb > 0):
+        return r.emit("GatherND", [xv, packed], [n.name], n.name, batch_dims=0)
+    y = r.emit("GatherND", [xv, packed], [r.fresh(n.name)], r.fresh(n.name), batch_dims=0)
+    lead = axes[0]
+    perm = [nb + d for d in range(lead)] + list(range(nb)) + [nb + d for d in range(lead, len(others))]  # cpu-route: model graph description on the host (one per axis)
+    return r.emit("Transpose", [y], [n.name], n.name, perm=tuple(perm))
+
+
+def _is_bool(r, arg):
+    if isinstance(arg, bool):
+        return True
+    return r.is_node(arg) and r.meta(arg).dtype == r.torch.bool
+
+
+def _h_bitwise(op):
+    def h(r, n, a, ov):
+        x, y = a["self"], a["other"]
+        if not (_is_bool(r, x) and _is_bool(r, y)):
+            raise _Refuse(f"bitwise operations on integers (only on booleans, as logical {op}) are not supported")
+        return r.emit(op, [r.number(x, y), r.number(y, x)], [n.name], n.name)
+    return h
+
+
+def _h_bitwise_not(r, n, a, ov):
+    x = a["self"]
+    if not _is_bool(r, x):
+        raise _Refuse("bitwise not on integers (only on booleans, as logical not) is not supported")
+    return r.emit("Not", [r.val(x)], [n.name], n.name)
+
+
+def _h_any_all(op):
+    # any / all along axes: ReduceMax / ReduceMin over a boolean (0 or 1)
+    # tensor; a non-boolean input is first tested against zero
+    def h(r, n, a, ov):
+        x = a["self"]
+        v = r.val(x)
+        if not _is_bool(r, x):
+            eq = r.emit("Equal", [v, r.number(0, x)], [r.fresh(n.name)], r.fresh(n.name))
+            v = r.emit("Not", [eq], [r.fresh(n.name)], r.fresh(n.name))
+        dims = _first(a, "dim")
+        if dims is not None and not isinstance(dims, int) and len(dims) == 0:
+            dims = None
+        ins = [v]
+        if dims is not None:
+            ins.append(r.const_i([dims] if isinstance(dims, int) else list(dims)))
+        return r.emit(op, ins, [n.name], n.name, keepdims=int(bool(a.get("keepdim", False))))
+    return h
+
+
+def _h_cumsum(r, n, a, ov):
+    return r.emit("CumSum", [r.val(a["self"]), r.const_i([int(a["dim"])], ())], [n.name], n.name,
+                  exclusive=0, reverse=0)
 
 
 def _h_reduce(op):
@@ -787,6 +871,10 @@ _HANDLERS.update({
     "aten.scalar_tensor": _h_scalar_tensor,
     "aten.tril": _h_trilu(0), "aten.triu": _h_trilu(1), "aten.constant_pad_nd": _h_pad,
     "aten.arange": _h_arange, "aten.sym_size": _h_sym_size, "aten.sym_numel": _h_sym_numel,
+    # attention-mask construction of transformer exports (lane ag-import-lm-ops)
+    "aten.any": _h_any_all("ReduceMax"), "aten.all": _h_any_all("ReduceMin"),
+    "aten.bitwise_and": _h_bitwise("And"), "aten.bitwise_or": _h_bitwise("Or"),
+    "aten.bitwise_not": _h_bitwise_not, "aten.cumsum": _h_cumsum,
 })
 
 
