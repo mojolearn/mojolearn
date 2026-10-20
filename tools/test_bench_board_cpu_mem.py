@@ -66,16 +66,16 @@ def test_plan_never_puts_ours_cpu_on_any_race():
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_dry_run_same_plan_with_or_without_no_cpu_arm(vendor, capsys):
     fams = ["--families", "trees,classical,classical2,neural"]
-    # 99 races (93 until Oct 7 2026, when the six GPU inference lanes transformer-decode,
-    # mamba1/2/3-decode, samba-decode and mlp-predict joined): the counts are pinned per
-    # vendor in test_bench_board.py
+    # The deprecated flag must preserve the complete current plan as recipes
+    # are added; its contract is independent of the historical race count.
     races = bb.plan_races(vendor, bb.modes_for(vendor), bb.FAMILIES[:-1])
     total = "TOTAL races=%d cells=%d" % (len(races), sum(len(r["arms"]) for r in races))
-    assert len(races) == 99
+    assert races
     texts = []
     for flag in ([], ["--no-cpu-arm"]):
         assert bb.main(["--dry-run", "--vendor", vendor] + flag + fams) == 0
         texts.append(capsys.readouterr().out)
+    assert texts[0] == texts[1]
     for text in texts:
         assert total in text
         assert "our CPU: never raced (the board races only our GPU)" in text
