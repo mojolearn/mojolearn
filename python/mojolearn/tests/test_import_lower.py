@@ -1,0 +1,276 @@
+# SPDX-License-Identifier: Apache-2.0
+"""The lowering of imported models (docs/plans/MODEL_IMPORT.md lane 2).
+
+Each shared fixture of tests/_onnx_fixture.py (written without ``onnx`` or
+``torch``) is imported, run on fixed-seed inputs and compared word for word
+with an eager ``ops.Session`` composition of the same operations on the same
+weights; a second run gives the same words; ``save`` then
+``Session.load_program`` gives them again; the BatchNorm prologue equals the
+eager fold; a ``Gemm`` ``transB`` weight equals the transposed weight. The
+refusals (Resize, Conv group=2, a data-dependent Reshape, Gather by an index
+input) come in one error naming every node, before anything is uploaded.
+Prints IMPORT_DIGEST lines to diff across CPU, Metal, NVIDIA and AMD."""
+import hashlib
+
+import numpy as np
+import pytest
+
+from mojolearn import _backend
+from mojolearn import importers
+from mojolearn.importers import UnsupportedModel
+from mojolearn.tests import _onnx_fixture as fx
+
+BATCH = 3  # odd and small: no board shape
+
+
+def _has_entries():
+    try:
+        b = _backend.binding("_mojolearn_x_sequence")
+        if not (hasattr(b, "ops_open") and hasattr(b, "ops_capture") and hasattr(b, "ops_load_weights")):
+            return False
+        from mojolearn import ops
+        with ops.Session() as s:
+            return s.shape(s.erf(s.tensor(np.zeros((2, 3), dtype=np.float32)))) == (2, 3)
+    except Exception:
+        return False
+
+
+needs_binding = pytest.mark.skipif(not _has_entries(),
+                                   reason="the sequence binding has no capture, weight import or import kinds "
+                                          "(rebuild it)")
+
+
+def _ops():
+    from mojolearn import ops
+    return ops
+
+
+def _words(a):
+    return np.ascontiguousarray(a, dtype=np.float32).view(np.uint32)
+
+
+def _digest(*arrays):
+    h = hashlib.sha256()
+    for a in arrays:
+        h.update(np.ascontiguousarray(a).tobytes())
+    return h.hexdigest()[:16]
+
+
+def _same(got, want, what):
+    g, w = _words(got).reshape(-1), _words(want).reshape(-1)
+    assert got.shape == want.shape, (what, got.shape, want.shape)
+    diff = np.flatnonzero(g != w)
+    assert diff.size == 0, f"{what}: {diff.size} words differ, first at {diff[0]}"
+
+
+def _init(f, name):
+    t = f.initializers[name]
+    return np.frombuffer(t.data, dtype="<f4").reshape(t.shape).copy()
+
+
+def _row(a):
+    return np.ascontiguousarray(a, dtype=np.float32).reshape(1, -1)
+
+
+def _input(shape, seed):
+    return np.random.default_rng(seed).standard_normal(shape).astype(np.float32)
+
+
+# ------------------------------------------------------------ references --
+# Each reference calls the session operations the lowering emits, in order,
+# so the words must be equal.
+
+def _ref_linear_ln_linear(s, f, x):
+    h = s.linear(x, s.tensor(np.ascontiguousarray(_init(f, "w1").T)), s.tensor(_row(_init(f, "b1"))))
+    h = s.layer_norm(h, s.tensor(_row(_init(f, "ln_scale"))), s.tensor(_row(_init(f, "ln_bias"))), eps=1e-5)
+    return s.linear(h, s.tensor(np.ascontiguousarray(_init(f, "w2").T)), s.tensor(_row(_init(f, "b2"))))
+
+
+def _ref_conv(s, f, x):
+    h = s.conv2d(x, s.tensor(_init(f, "conv_w")), s.tensor(_row(_init(f, "conv_b"))), stride=1, padding=1)
+    h = s.max_pool2d(s.relu(h), 2, stride=2)
+    h = s.reshape(h, (BATCH, 64))
+    return s.linear(h, s.tensor(np.ascontiguousarray(_init(f, "fc_w").T)), s.tensor(_row(_init(f, "fc_b"))))
+
+
+def _ref_attention(s, f, x, t=5, d=8, heads=2):
+    dh = d // heads
+
+    def heads_of(w):
+        return s.reshape(s.matmul(x, s.tensor(_init(f, w))), (BATCH, t, heads, dh))
+
+    q = s.permute(heads_of("wq"), (0, 2, 1, 3))
+    k = s.permute(heads_of("wk"), (0, 2, 3, 1))
+    v = s.permute(heads_of("wv"), (0, 2, 1, 3))
+    sc = s.mul(s.matmul(q, k), s.tensor(_init(f, "scale").reshape(1, 1)))
+    p = s.softmax(s.add(sc, s.tensor(_init(f, "mask"))), axis=-1)
+    o = s.reshape(s.permute(s.matmul(p, v), (0, 2, 1, 3)), (BATCH, t, d))
+    return s.matmul(o, s.tensor(_init(f, "wo")))
+
+
+def _bn_fold(s, f, c=4):
+    sc, b = s.tensor(_row(_init(f, "bn_scale"))), s.tensor(_row(_init(f, "bn_bias")))
+    mean, var = s.tensor(_row(_init(f, "bn_mean"))), s.tensor(_row(_init(f, "bn_var")))
+    fs = s.div(sc, s.sqrt(s.add(var, s.full((1, 1), 1e-5))))
+    ft = s.sub(b, s.mul(mean, fs))
+    return s.reshape(fs, (1, c, 1, 1)), s.reshape(ft, (1, c, 1, 1))
+
+
+def _ref_batchnorm(s, f, x):
+    fs, ft = _bn_fold(s, f)
+    return s.relu(s.add(s.mul(x, fs), ft))
+
+
+def _ref_shape_fold(s, f, x):
+    return s.relu(s.reshape(x, (BATCH, 6)))
+
+
+CASES = {
+    "linear_layernorm_linear": ((BATCH, 6), _ref_linear_ln_linear),
+    "external_sharded": ((BATCH, 6), _ref_linear_ln_linear),
+    "conv_relu_maxpool_flatten_gemm": ((BATCH, 3, 8, 8), _ref_conv),
+    "attention_two_head_causal": ((BATCH, 5, 8), _ref_attention),
+    "batchnorm_relu": ((BATCH, 4, 5, 5), _ref_batchnorm),
+    "shape_fold": ((BATCH, 2, 3), _ref_shape_fold),
+}
+
+
+@needs_binding
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_fixture_equals_eager(tmp_path, name):
+    shape, ref = CASES[name]
+    f = fx.write_fixture(name, tmp_path)
+    prog = importers.import_model(f.path, shapes={"x": shape})
+    assert prog.inputs == [("x", shape, "float32")]
+    want_out = f.output_shape(BATCH)
+    assert [(o[0], o[1]) for o in prog.outputs] == [(k, want_out[k]) for k in want_out]
+    x = _input(shape, 7)
+    y = prog.run(x)
+    again = prog.run(x)
+    _same(again, y, f"{name}: a second run")
+    ops = _ops()
+    with ops.Session() as s:
+        want = s.numpy(ref(s, f, s.tensor(x)))
+    _same(y, want, f"{name}: the program against the eager composition")
+    # by name too
+    _same(prog.run(x=x), y, f"{name}: the inputs by name")
+    path = tmp_path / f"{name}.mlprog"
+    prog.save(path)
+    with ops.Session() as s2:
+        loaded = s2.load_program(path)
+        _same(loaded.run(x), y, f"{name}: the saved program")
+    print(f"IMPORT_DIGEST {name} {_digest(y)}")
+
+
+@needs_binding
+def test_batchnorm_prologue_is_the_eager_fold(tmp_path):
+    f = fx.write_fixture("batchnorm_relu", tmp_path)
+    prog = importers.import_model(f.path, shapes={"x": (BATCH, 4, 5, 5)})
+    s = prog._s
+    params = [s.numpy(h) for h in prog.params if s.shape(h) == (1, 4, 1, 1)]
+    assert len(params) == 2, "the folded scale and shift are the program's parameters"
+    ops = _ops()
+    with ops.Session() as r:
+        fs, ft = _bn_fold(r, f)
+        want = [r.numpy(fs), r.numpy(ft)]
+    _same(params[0], want[0], "the folded scale")
+    _same(params[1], want[1], "the folded shift")
+    print(f"IMPORT_DIGEST batchnorm_fold {_digest(*params)}")
+
+
+@needs_binding
+def test_gemm_transb_weight_is_the_transpose(tmp_path):
+    f = fx.write_fixture("linear_layernorm_linear", tmp_path)
+    prog = importers.import_model(f.path, shapes={"x": (BATCH, 6)})
+    s = prog._s
+    w1 = [s.numpy(h) for h in prog.params if s.shape(h) == (6, 5)]
+    assert len(w1) == 1
+    _same(w1[0], np.ascontiguousarray(_init(f, "w1").T), "the transposed Gemm weight")
+
+
+def _mixed(directory):
+    """x [batch, 7] -> Slice [:, 1:6] -> Gather columns (0, 2, 3) -> Clip(-0.5, 0.5) -> Pow 2 -> Add a [3]
+    bias -> ReduceMean over axis 1 (keepdims 0) [batch]; the clipped values also go through Softmax
+    (axis 1) and ArgMax (axis 1, keepdims 0) [batch]."""
+    inits = [fx.tensor("starts", "i64", (1,), (1,)), fx.tensor("ends", "i64", (1,), (6,)),
+             fx.tensor("axes", "i64", (1,), (1,)), fx.tensor("cols", "i64", (3,), (0, 2, 3)),
+             fx.tensor("lo", "f32", (), (-0.5,)), fx.tensor("hi", "f32", (), (0.5,)),
+             fx.tensor("two", "i64", (), (2,)), fx.weight("bias", (3,), 41), fx.tensor("mean_axes", "i64", (1,), (1,))]
+    nodes = [fx.node("Slice", ["x", "starts", "ends", "axes"], ["xs"], name="slice"),
+             fx.node("Gather", ["xs", "cols"], ["xg"], name="gather", axis=1),
+             fx.node("Clip", ["xg", "lo", "hi"], ["xc"], name="clip"),
+             fx.node("Pow", ["xc", "two"], ["xp"], name="pow"),
+             fx.node("Add", ["xp", "bias"], ["xb"], name="bias"),
+             fx.node("ReduceMean", ["xb", "mean_axes"], ["m"], name="mean", keepdims=0),
+             fx.node("Softmax", ["xc"], ["p"], name="softmax", axis=1),
+             fx.node("ArgMax", ["xc"], ["a"], name="argmax", axis=1, keepdims=0)]
+    return fx._write(directory, "mixed.onnx", nodes, [("x", "f32", ("batch", 7))],
+                     [("m", "f32", ("batch",)), ("p", "f32", ("batch", 3)), ("a", "i64", ("batch",))], inits,
+                     lambda b: {"m": (b,), "p": (b, 3), "a": (b,)}, opset=18)
+
+
+@needs_binding
+def test_mixed_ops_equal_eager(tmp_path):
+    f = _mixed(str(tmp_path))
+    prog = importers.import_model(f.path, shapes={"x": (BATCH, 7)})
+    assert prog.outputs == [("m", (BATCH,), "float32"), ("p", (BATCH, 3), "float32"), ("a", (BATCH,), "int32")]
+    x = _input((BATCH, 7), 11)
+    m, p, a = prog.run(x)
+    assert a.dtype == np.int32 and m.shape == (BATCH,)
+    ops = _ops()
+    with ops.Session() as s:
+        h = s.tensor(x)
+        xs = s.split(h, [1, 5, 1], axis=1)[1]
+        xg = s.concat([s.split(xs, [1, 4], axis=1)[0], s.split(xs, [2, 2, 1], axis=1)[1]], axis=1)
+        xc = s.minimum(s.maximum(xg, s.tensor(np.full((1, 1), -0.5, np.float32))),
+                       s.tensor(np.full((1, 1), 0.5, np.float32)))
+        xb = s.add(s.pow_scalar(xc, 2.0), s.tensor(_row(_init(f, "bias"))))
+        want_m = s.numpy(s.reshape(s.mean(xb, axis=(1,), keepdims=True), (1, BATCH))).reshape(BATCH)
+        want_p = s.numpy(s.softmax(xc, axis=-1))
+        want_a = s.numpy(s.reshape(s.argmax(xc, axis=1, keepdims=True, int32=True), (1, BATCH)))
+    _same(m, want_m, "ReduceMean")
+    _same(p, want_p, "Softmax")
+    assert np.array_equal(a, want_a.view(np.int32).reshape(BATCH))
+    print(f"IMPORT_DIGEST mixed {_digest(m, p, a)}")
+
+
+# ------------------------------------------------------------ refusals ----
+
+def _refused_model(directory):
+    inits = [fx.weight("w", (4, 2, 3, 3), 51), fx.tensor("scales", "f32", (4,), (1.0, 1.0, 2.0, 2.0)),
+             fx.weight("table", (10, 3), 52)]
+    nodes = [fx.node("Conv", ["x", "w"], ["c"], name="conv_g2", kernel_shape=(3, 3), group=2),
+             fx.node("Resize", ["c", "", "scales"], ["r"], name="up", mode="nearest"),
+             fx.node("Floor", ["y"], ["yf"], name="floor"),
+             fx.node("Cast", ["yf"], ["target"], name="cast", to=7),
+             fx.node("Reshape", ["x2", "target"], ["xr"], name="reshape_dd"),
+             fx.node("Gather", ["table", "ids"], ["e"], name="emb", axis=0)]
+    return fx.make_model(f"{directory}/refused.onnx", nodes,
+                         [("x", "f32", (2, 4, 6, 6)), ("y", "f32", (2,)), ("x2", "f32", (2, 6)),
+                          ("ids", "i64", (5,))],
+                         [("r", "f32", (2, 4, 8, 8)), ("xr", "f32", (3, 4)), ("e", "f32", (5, 3))], inits)
+
+
+def test_refusals_list_every_node_before_any_upload(tmp_path, monkeypatch):
+    from mojolearn.importers import _program
+
+    def no_session(*a, **k):
+        raise AssertionError("the import opened a session before refusing the model")
+
+    monkeypatch.setattr(_program, "Session", no_session)
+    path = _refused_model(str(tmp_path))
+    with pytest.raises(UnsupportedModel) as e:
+        importers.import_model(path)
+    names = [p[0] for p in e.value.problems]
+    for node in ("conv_g2", "up", "reshape_dd", "emb"):
+        assert node in names, (node, str(e.value))
+    msg = str(e.value)
+    assert "group=2" in msg and "no kernel" in msg and "indices" in msg
+    assert isinstance(e.value, ValueError)
+
+
+def test_supported_ops_lists_the_table():
+    table = dict(importers.supported_ops())
+    for op in ("Gemm", "Conv", "LayerNormalization", "BatchNormalization", "Softmax", "MatMul", "Gather"):
+        assert op in table and table[op]
+    assert "Resize" not in table
