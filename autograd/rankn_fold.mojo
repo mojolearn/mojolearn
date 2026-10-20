@@ -268,7 +268,7 @@ def _axis_flags(s: ShapeN, axes: List[Int]) raises -> InlineArray[Bool, RN_MAX_R
         if red[ax]:
             raise Error("reduction axes must be distinct")
         red[ax] = True
-    return red
+    return red^
 
 
 def _reduce_desc(
