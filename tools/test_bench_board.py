@@ -504,8 +504,8 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # 2026-10-20 (lane ag-inference-board): 109 races with sequential-fit, ops-session-step, sequential-predict and the two
     # causal-lm-generate lanes; the cell total is derived from the plan so a new arm does not stale this line.
     cells = sum(len(r["arms"]) for r in before)
-    assert len(before) == 109
-    assert "TOTAL races=%d cells=%d" % (109 + len(algos), cells + sum(len(r["arms"]) for r in algos)) in text
+    assert len(before) == 118  # 2026-10-20: + program-run, sequential-predict, the two causal-lm-generate lanes
+    assert "TOTAL races=%d cells=%d" % (118 + len(algos), cells + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -520,9 +520,9 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
     # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
     neural = bb.plan_races("apple", ["identical"], ["neural"])
-    assert len(neural) == 21  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
+    assert len(neural) == 23  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    assert len(both) == 28  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes at both shapes
+    assert len(both) == 37  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes at both shapes
     assert "family neural     races=%d cells=%d" % (len(both), sum(len(r["arms"]) for r in both)) in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
@@ -749,35 +749,45 @@ def test_render_board_on_an_empty_result_has_no_direction_words():
 
 # --- the neural family ------------------------------------------------------
 
-NEURAL_IDS = [
-    "neural/lm-train-step/bytes/shape=full", "neural/lm-forward/bytes/shape=full",
+NEURAL_IDS = [  # the planner's order (bench_board.plan_races, identical on apple/nvidia/amd; regenerated 2026-10-20)
+    "neural/lm-train-step/bytes/shape=full",
+    "neural/lm-forward/bytes/shape=full",
     "neural/gemm/gaussian/shape=full",
     "neural/transformer-forward/gaussian/shape=full",
     "neural/mamba1-forward/gaussian/shape=full",
     "neural/mamba2-forward/gaussian/shape=full",
     "neural/mamba3-forward/gaussian/shape=full",
-    "neural/samba-train-step/bytes/shape=full", "neural/samba-forward/bytes/shape=full",
+    "neural/samba-train-step/bytes/shape=full",
+    "neural/samba-forward/bytes/shape=full",
     "neural/mlp-train-step/gaussian/shape=full",
-    # the GPU inference lanes (Oct 7 2026, 347f4b2d9)
     "neural/transformer-decode/gaussian/shape=full",
     "neural/mamba1-decode/gaussian/shape=full",
     "neural/mamba2-decode/gaussian/shape=full",
     "neural/mamba3-decode/gaussian/shape=full",
     "neural/samba-decode/bytes/shape=full",
     "neural/mlp-predict/gaussian/shape=full",
-    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full",
-    # the whole-fit lanes of the tape-trained models (2026-10-19, lane ag-bench)
-    "neural/mlp-fit/higgs/shape=full", "neural/lstm-fit/higgs/shape=full",
-    "neural/gru-fit/higgs/shape=full", "neural/rnn-fit/higgs/shape=full",
+    "neural/gemm-bf16/gaussian/shape=full",
+    "neural/gemm-int8/gaussian/shape=full",
+    "neural/mlp-fit/higgs/shape=full",
+    "neural/lstm-fit/higgs/shape=full",
+    "neural/gru-fit/higgs/shape=full",
+    "neural/rnn-fit/higgs/shape=full",
     "neural/tape-user-model/higgs/shape=full",
-    # the public tape API lanes (2026-10-19, lane ag-board-twins)
-    "neural/sequential-fit/synthetic/shape=full", "neural/ops-session-step/gaussian/shape=full",
-    # the captured-program lane (2026-10-19, lane ag-program)
-    "neural/program-run/gaussian/shape=full",
-    # the inference lanes (2026-10-19, lane ag-inference-board): sequential-predict is a fit lane
+    "neural/sequential-fit/synthetic/shape=full",
     "neural/sequential-predict/synthetic/shape=full",
+    "neural/ops-session-step/gaussian/shape=full",
+    "neural/program-run/gaussian/shape=full",
+    "neural/mlp-fit/higgs/shape=full",
+    "neural/lstm-fit/higgs/shape=full",
+    "neural/gru-fit/higgs/shape=full",
+    "neural/rnn-fit/higgs/shape=full",
+    "neural/tape-user-model/higgs/shape=full",
+    "neural/sequential-fit/synthetic/shape=full",
+    "neural/sequential-predict/synthetic/shape=full",
+    "neural/ops-session-step/gaussian/shape=full",
     "neural/causal-lm-generate/mojolearn-162m/shape=full",
-    "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full"]
+    "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full",
+]
 #: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch
 FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i or "/sequential-fit/" in i or "/sequential-predict/" in i}
 #: fit lanes with no MLX twin (bench_board_neural.PREDICT_LANES)
@@ -852,13 +862,11 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # + sequential-fit (a fit lane: apple +6, amd +5, nvidia +7) and ops-session-step (apple ours + ours-fast
     # + 4 torch +6, amd +5, nvidia +7), 2026-10-19 lane ag-board-twins
     # + program-run (the same arms as ops-session-step: apple +6, amd +5, nvidia +7), lane ag-program
-    assert cells == {"apple": 130, "amd": 107, "nvidia": 150}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 26, "cells": cells}}
     # + sequential-predict (a fit lane without MLX: apple ours-fast + 4 torch +5, amd +5, nvidia +7) and the two
     # causal-lm-generate lanes (eager torch only: apple ours + ours-fast + 2 +4 each, amd ours + 2 +3 each,
-    # nvidia ours + 3 +4 each), 2026-10-19 lane ag-inference-board
-    assert cells == {"apple": 137, "amd": 113, "nvidia": 158}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 28, "cells": cells}}
+    # nvidia ours + 3 +4 each), 2026-10-19 lane ag-inference-board; totals regenerated from the planner 2026-10-20
+    assert cells == {"apple": 190, "amd": 158, "nvidia": 221}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 37, "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
@@ -907,16 +915,16 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # nvidia 5 x (ours + 6 torch) = +35, amd 5 x (ours + 4 torch) = +25; +5 races everywhere
 # 2026-10-19 (lanes ag-board-twins + ag-inference-board): + sequential-fit and ops-session-step (apple +12, nvidia
 # +14, amd +10) and sequential-predict + the two causal-lm-generate lanes (apple +13, nvidia +15, amd +11); +5 races
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 390, 128, 137),
-                                                      ("nvidia", 332, 88, 158),
-                                                      ("amd", 279, 84, 113)])
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 443, 128, 190),
+                                                      ("nvidia", 395, 88, 221),
+                                                      ("amd", 324, 84, 158)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=109 cells=%d" % cells in text
+    assert "TOTAL races=118 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=28 cells=%d" % neural in text
+    assert "family neural     races=37 cells=%d" % neural in text
     assert "neural: ours IDENTICAL" in text
     assert ("ours-fast, the Apple tier" in text) == (vendor == "apple")
     # what is left off the plan is printed by name, never dropped silently

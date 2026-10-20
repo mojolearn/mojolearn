@@ -1791,6 +1791,10 @@ def program_params(shape="full", **readback):
     for k, v in readback.items():
         if k not in out:
             raise KeyError("program_params: %r is not one of the lane's settings" % (k,))
+        out[k] = v
+    return out
+
+
 def gen_params(lane, shape="full", **readback):
     """causal-lm-generate's work settings (2026-10-19, lane ag-inference-board), the same explicit values on
     every arm; `readback` overrides a value with what the arm read back from the model it built (its config
@@ -5557,6 +5561,9 @@ def program_quality(data, outs):
         q[arm]["max_abs_diff_vs_ours"] = diff
         q[arm]["max_rel_diff_vs_ours"] = diff / (float(np.abs(r).max()) or 1.0)
         q[arm]["digest_equal_ours"] = q[arm]["output_digest"] == q[ref_arm]["output_digest"]
+    return q
+
+
 def gen_quality(data, outs):
     """causal-lm-generate's quality (2026-10-19, lane ag-inference-board): every arm's new-ids digest, and every
     other arm's agreement with ours: tokens_equal_ours (all new ids), first_divergence_index (the first new-token
