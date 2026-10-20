@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE AUTOGRAD SMOKE ENTRIES (2026-10-19, lane ag-bench): does the tape start on this vendor.
 
-Ten "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
+Eleven "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing timed:
 
   autograd-gradients     autograd/checks/gpu.mojo, the gradient suite on the vendor's GPU (every
                          case prints PASS and its digest; the digests equal the CPU column's).
@@ -47,6 +47,10 @@ Ten "does it start" entries per vendor (metal, nvidia, amd), 5 s each, nothing t
                          prints `RUN torch <version>` and a SMOKE_DIGEST line, or `SKIPPED no torch
                          (<reason>)` and exits 0 when torch is missing (MOJOLEARN_REQUIRE_TORCH=1 makes
                          that a failure). The row's status reads `SKIPPED` then, never `ok`.
+  real-model-smoke       (2026-10-20, lane ag-real-models) tools/real_model_import.py in miniature:
+                         torchvision's squeezenet1_1 with its published weights, torch.export at a
+                         1 x 3 x 64 x 64 input, import_model, one Program.run; finite (1, 1000)
+                         logits and a SMOKE_DIGEST line, or SMOKE_REFUSED lines naming each node.
 
 A check binary is built ONCE per vendor by the orchestrator (`build-commands` prints the lines; this
 tool never builds), then `run` starts each entry with a 5 s timer:
@@ -103,6 +107,9 @@ ENTRIES = (
     # 2026-10-20 (lane ag-torch-twins): the torch.export source of the importer; RUN or SKIPPED, never silent
     {"name": "import-torch-smoke", "probe": "import-torch",
      "what": "mojolearn.import_model of a tiny torch.export ExportedProgram, then one Program.run (SKIPPED without torch)"},
+    # 2026-10-20 (lane ag-real-models): a real pretrained model, tools/real_model_import.py in miniature
+    {"name": "real-model-smoke", "probe": "real-model",
+     "what": "torchvision squeezenet1_1 (published weights) exported at 1x3x64x64, imported, one Program.run"},
 )
 
 
@@ -312,8 +319,44 @@ def probe_import_torch():
     return 0
 
 
+def probe_real_model():
+    """real-model-smoke: does a real pretrained model start through the importer. torchvision's
+    squeezenet1_1 with its published weights, exported by tools/real_model_import.py's own source step
+    at a tiny 1 x 3 x 64 x 64 input, imported and run once; a refusal prints its nodes and counts as
+    started (the import ran and named what it cannot run)."""
+    import importlib.util
+    import numpy as np
+    import mojolearn
+    from mojolearn.importers import UnsupportedModel
+    spec = importlib.util.spec_from_file_location("real_model_import", ROOT / "tools" / "real_model_import.py")
+    rm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rm)
+    try:
+        import torch  # noqa: F401
+        import torchvision  # noqa: F401
+    except ImportError as exc:
+        print("SMOKE_FAIL real-model torch or torchvision is not installed (%s)" % exc)
+        return 1
+    model = dict(rm.MODELS["squeezenet1_1"], input=(lambda b: (1, 3, 64, 64), "image"))
+    ep, shapes, arrays, _ = rm.source_torchvision(model, 1, 7, {})
+    try:
+        prog = mojolearn.import_model(ep, shapes=shapes)
+    except UnsupportedModel as e:
+        for name, op, why in e.problems:
+            print("SMOKE_REFUSED real-model squeezenet1_1 %s %s: %s" % (op, name, why))
+        return 0
+    y = np.asarray(prog.run(*arrays))
+    if y.shape != (1, 1000) or not np.isfinite(y).all():
+        print("SMOKE_FAIL real-model output %s finite %s" % (y.shape, bool(np.isfinite(y).all())))
+        return 1
+    print("SMOKE_DIGEST real-model squeezenet1_1 %s vendor %s mode %s"
+          % (_probe_digest([y]), mojolearn.vendor(), mojolearn.numeric_mode()))
+    return 0
+
+
 PROBES = {"sequential": probe_sequential, "session": probe_session, "generate": probe_generate,
-          "predict": probe_predict, "import": probe_import, "import-torch": probe_import_torch}
+          "predict": probe_predict, "import": probe_import, "import-torch": probe_import_torch,
+          "real-model": probe_real_model}
 
 
 def _skipped_line(log, offset=0):
