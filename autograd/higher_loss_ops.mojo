@@ -22,6 +22,7 @@
 # 3600..3609.
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, ld, st
+from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST
 
 comptime OP_HL_ONEHOT = 3610
 comptime OP_HL_FIRST = OP_HL_ONEHOT
@@ -48,6 +49,8 @@ def op_hl_onehot(t: Int, a: Args):
 
 @always_inline
 def apply_higher_loss[OP: Int](t: Int, a: Args):
+    # the fence against lane H1's range (sequence/dispatch.mojo fences the rest)
+    comptime assert OP_HL_FIRST > OP_HO_LAST or OP_HL_LAST < OP_HO_FIRST, "recorded-loss opcodes overlap the higher-order family"
     comptime if OP == OP_HL_ONEHOT:
         op_hl_onehot(t, a)
 
