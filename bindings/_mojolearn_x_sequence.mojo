@@ -294,7 +294,7 @@ def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> Pyt
 
 
 def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    stages: PythonObject, tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
+    options: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[DeviceExec]()
@@ -303,7 +303,7 @@ def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: 
     for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
         var context = DeviceContext(device_id=ids[k])
         executors.append(DeviceExec(context))
-    var handle = partition_open[DeviceExec, OPS_DEVICE](sid, pid, ids, stages, tensor_shards, microbatches, optimizer, parameters, seed, executors^)
+    var handle = partition_open[DeviceExec, OPS_DEVICE](sid, pid, ids, options[0], options[1], options[2], options[3], options[4], options[5], executors^)
     return distributed_object(cls, binding, handle)
 
 
@@ -351,7 +351,7 @@ def ops_partitioned_profile_binding(id: PythonObject) raises -> PythonObject:
 
 
 def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    logical_shards: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
+    options: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[DeviceExec]()
@@ -360,7 +360,7 @@ def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: 
     for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
         var context = DeviceContext(device_id=ids[k])
         executors.append(DeviceExec(context))
-    var handle = distributed_open[DeviceExec, OPS_DEVICE](sid, pid, ids, logical_shards, optimizer, parameters, seed, executors^)
+    var handle = distributed_open[DeviceExec, OPS_DEVICE](sid, pid, ids, options[0], options[1], options[2], options[3], executors^)
     return distributed_object(cls, binding, handle)
 
 

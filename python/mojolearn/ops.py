@@ -1490,8 +1490,9 @@ class Program:
         output columns; stage-owned parameters and moments stay on one device.
         """
         return self._s._b.ops_partitioned_open(
-            self._s._id, self._id, devices, stages, tensor_shards,
-            microbatches, optimizer, parameters, seed, _PartitionedProgram, self._s._b)
+            self._s._id, self._id, devices,
+            (stages, tensor_shards, microbatches, optimizer, parameters, seed),
+            _PartitionedProgram, self._s._b)
 
     def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
                    parameters=(), seed=0):
@@ -1503,7 +1504,7 @@ class Program:
         floating-point parameter. ``seed`` controls native row permutations.
         """
         return self._s._b.ops_distributed_open(
-            self._s._id, self._id, devices, logical_shards, optimizer, parameters, seed,
+            self._s._id, self._id, devices, (logical_shards, optimizer, parameters, seed),
             _DistributedProgram, self._s._b)
 
     def save(self, path):
