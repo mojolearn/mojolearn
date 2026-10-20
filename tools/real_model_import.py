@@ -490,6 +490,7 @@ def run_one(name, batch, seed, cache, out_dir, imagenet_val=None):
         else:
             source, shapes, arrays, ref = source_onnx(spec, batch, seed, src_info, cache)
         doc["input_digest"] = _digest(*arrays)
+        doc["import_shapes"] = {k: list(v) for k, v in shapes.items()} if shapes else None
         doc["input_shapes"] = [list(a.shape) for a in arrays]
         from mojolearn.importers import UnsupportedModel
         t0 = time.perf_counter()
