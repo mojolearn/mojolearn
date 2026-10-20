@@ -16,7 +16,8 @@ build)
     arch=${4:?accelerator architecture}
     mkdir -p "$output/bindings" "$output/tmp"
     export TMPDIR="$output/tmp" MOJOLEARN_COMPILE_JOBS=1
-    git ls-files '*.mojo' 'python/mojolearn/*.py' 'python/mojolearn/tests/test_*' \
+    # Patch-synced build trees keep new source files untracked.
+    git ls-files --cached --others --exclude-standard '*.mojo' 'python/mojolearn/*.py' 'python/mojolearn/tests/test_*' \
         'tools/autograd_usability_check.sh' > "$output/source-files.txt"
     tar -czf "$output/source.tar.gz" -T "$output/source-files.txt"
     set +e
@@ -41,6 +42,17 @@ test)
         metal) unset MOJOLEARN_VENDOR ;;
         *) echo "unknown target $target" >&2; exit 2 ;;
     esac
+    "$test_python" - "$target" > "$output/binding.json" <<'PY'
+import json
+import sys
+from mojolearn import _backend
+b = _backend.binding("_mojolearn_x_sequence")
+info = {"vendor": b.x_sequence_vendor(), "numeric_mode": b.x_sequence_numeric_mode(),
+        "binding": getattr(b, "__file__", None), "binding_type": type(b).__name__}
+print(json.dumps(info, indent=2))
+assert info["vendor"] == sys.argv[1], info
+assert info["numeric_mode"] == "identical", info
+PY
     set +e
     "$test_python" -m pytest -q -s -p no:cacheprovider \
         python/mojolearn/tests/test_autograd_usability.py \
