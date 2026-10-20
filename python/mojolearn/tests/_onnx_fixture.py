@@ -315,6 +315,18 @@ def shape_fold(directory):
                   [("y", "f32", ("batch", 6))], inits, lambda b: {"y": (b, 6)})
 
 
+def embedding_linear(directory, vocab=11, t=4, d=6, o=3):
+    """ids [batch, t] (int64 token ids) -> Gather of a [vocab, d] table on axis 0 [batch, t, d]
+    -> MatMul [d, o] -> Add a [o] bias [batch, t, o]: a language model's embedding and output
+    projection, the ids a model input."""
+    inits = [weight("table", (vocab, d), 61), weight("proj", (d, o), 62), weight("proj_b", (o,), 63)]
+    nodes = [node("Gather", ["table", "ids"], ["e"], name="embed", axis=0),
+             node("MatMul", ["e", "proj"], ["m"], name="proj"),
+             node("Add", ["m", "proj_b"], ["y"], name="proj_bias")]
+    return _write(directory, "embedding_linear.onnx", nodes, [("ids", "i64", ("batch", t))],
+                  [("y", "f32", ("batch", t, o))], inits, lambda b: {"y": (b, t, o)})
+
+
 FIXTURES = {
     "linear_layernorm_linear": linear_layernorm_linear,
     "conv_relu_maxpool_flatten_gemm": conv_relu_maxpool_flatten_gemm,
@@ -322,6 +334,7 @@ FIXTURES = {
     "batchnorm_relu": batchnorm_relu,
     "external_sharded": lambda d: linear_layernorm_linear(d, external=("shard0.bin", "shard1.bin")),
     "shape_fold": shape_fold,
+    "embedding_linear": embedding_linear,
 }
 
 
