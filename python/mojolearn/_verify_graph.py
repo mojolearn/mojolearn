@@ -23,8 +23,9 @@ EXPECTED_CASES = (
     "variable_rank_replay",
     "executed_control_vjp", "executor_accounting", "control_checkpoint", "gradient_diagnostics",
     "structural_view_optimization", "structural_control_and_derivatives", "optimizer_validation_preservation",
+    "conditional_training", "conditional_training_refusals",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2)))
 
 
 _AUDITS = []
@@ -348,6 +349,109 @@ def training_after_optimization():
     for a, b in zip(*states):
         _equal(a, b)
     return states[0]
+
+
+def conditional_training():
+    import numpy as np
+    from . import ops
+    a = np.array([[1], [-2], [3], [-4]], np.float32)
+    target = np.ones_like(a)
+    # Independent scalar SGD oracle: all values and the step size are dyadic,
+    # and each batch has one row, so no reduction implementation is shared.
+    expected = [np.float32(0.25), np.float32(0.5), np.float32(-0.5)]
+    curve = []
+    for _ in range(2):
+        total = np.float32(0)
+        for row in a[:, 0]:
+            index = 1 if row > 0 else 2
+            error = np.float32(np.float32(row * expected[0]) + expected[index] - np.float32(1))
+            total = np.float32(total + np.float32(error * error))
+            derivative = np.float32(np.float32(2) * error)
+            expected[0] = np.float32(expected[0] - np.float32(np.float32(0.0625) * np.float32(derivative * row)))
+            expected[index] = np.float32(expected[index] - np.float32(np.float32(0.0625) * derivative))
+        curve.append(np.float32(total * np.float32(0.25)))
+    with ops.Session() as s:
+        x = s.tensor(a)
+        w, positive, negative = (s.tensor([[value]]) for value in (0.25, 0.5, -0.5))
+        condition = s.capture(x, s.greater(s.sum(x), s.full((1, 1), 0)))
+        body = s.capture(x, s.add(s.matmul(x, w), positive))
+        other = s.capture(x, s.add(s.matmul(x, w), negative))
+        optimizer = s.optimizer("sgd", lr=0.0625)
+        result = _invoke(body.fit_if, condition, other, a, targets=target, optimizer=optimizer,
+                         epochs=2, batch_size=1, shuffle=False)
+        assert result is body and body.n_iter_ == 2
+        assert body.branch_counts_ == {"true": 4, "false": 4}
+        outputs = [s.numpy(handle) for handle in (w, positive, negative)]
+        for actual, value in zip(outputs, expected):
+            _equal(actual, np.array([[value]], np.float32))
+        np.testing.assert_allclose(body.loss_curve_, np.array(curve, np.float32), rtol=1e-6, atol=0)
+        outputs.append(body.loss_curve_)
+        for handle, step in ((w, 8), (positive, 4), (negative, 4)):
+            assert s.optimizer_state(optimizer, handle)["step"] == step
+
+        # An inactive branch must not decay its parameter or advance moments.
+        adaptive = s.optimizer("adamw", lr=0.01, weight_decay=0.1)
+        _invoke(body.fit_if, condition, other, a, targets=target, optimizer=adaptive,
+                epochs=1, batch_size=1, shuffle=False)
+        state = s.optimizer_state(adaptive, negative)
+        before = [s.numpy(negative), s.numpy(state["exp_avg"]), s.numpy(state["exp_avg_sq"])]
+        step = state["step"]
+        _invoke(body.fit_if, condition, other, a[:1], targets=target[:1], optimizer=adaptive,
+                epochs=1, batch_size=1, shuffle=False)
+        state = s.optimizer_state(adaptive, negative)
+        after = [s.numpy(negative), s.numpy(state["exp_avg"]), s.numpy(state["exp_avg_sq"])]
+        assert state["step"] == step and body.branch_counts_ == {"true": 1, "false": 0}
+        for actual, value in zip(after, before):
+            _equal(actual, value)
+        outputs.extend(after)
+        # Selecting only a parameter from the inactive branch is a valid
+        # zero-update batch, not an attempt to backpropagate a constant loss.
+        frozen = s.numpy(positive)
+        _invoke(body.fit_if, condition, other, a[1:2], targets=target[1:2], optimizer=adaptive,
+                parameters=[positive], epochs=1, batch_size=1, shuffle=False)
+        _equal(s.numpy(positive), frozen)
+        outputs.append(body.loss_curve_)
+        return outputs
+
+
+def conditional_training_refusals():
+    import numpy as np
+    from . import ops
+    a = np.ones((3, 1), np.float32)
+    with ops.Session() as s, ops.Session() as foreign:
+        x, w = s.tensor(np.ones((2, 1), np.float32)), s.tensor([[0.25]])
+        product = s.matmul(x, w)
+        body = s.capture(x, product)
+        other = s.capture(x, s.reshape(product, (2, 1)))
+        condition = s.capture(x, s.greater(s.sum(x), s.full((1, 1), 0)))
+        optimizer = s.optimizer("sgd", lr=0.0625)
+        options = dict(targets=a, optimizer=optimizer, epochs=1, batch_size=3, shuffle=False)
+        # Otherwise cannot reshape three rows to two; it must remain unexecuted.
+        _invoke(body.fit_if, condition, other, a, **options)
+        assert body.branch_counts_ == {"true": 1, "false": 0}
+        _refuses(lambda: _invoke(body.fit_if, condition, other, -a, **options), "program node")
+        nonscalar = s.capture(x, x)
+        _refuses(lambda: _invoke(body.fit_if, nonscalar, other, a, **options), "one scalar", ValueError)
+        nonfinite = s.capture(x, s.scale(s.sum(x), float("inf")))
+        _refuses(lambda: _invoke(body.fit_if, nonfinite, other, a, **options), "finite", ValueError)
+        threshold = s.tensor([[1]])
+        predicate_parameter = s.capture(x, threshold)
+        _refuses(lambda: _invoke(body.fit_if, predicate_parameter, other, a,
+                                parameters=[threshold], **options), "predicate-only", ValueError)
+        fx = foreign.tensor([[1]])
+        foreign_condition = foreign.capture(fx, fx)
+        _refuses(lambda: _invoke(body.fit_if, foreign_condition, other, a, **options), "same session", ValueError)
+        _invoke(body.fit_if, condition, other, a, **options)
+        recovered = body.loss_curve_
+        # The selected branch can contain no trainable parameters at all.
+        constant = s.capture(x, x)
+        before = s.numpy(w)
+        step = s.optimizer_state(optimizer, w)["step"]
+        _invoke(body.fit_if, condition, constant, -a, **options)
+        _equal(s.numpy(w), before)
+        assert s.optimizer_state(optimizer, w)["step"] == step
+        _equal(body.loss_curve_, np.array([4], np.float32))
+        return [recovered, body.loss_curve_]
 
 
 def structural_view_optimization():

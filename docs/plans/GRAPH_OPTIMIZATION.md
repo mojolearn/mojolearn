@@ -42,7 +42,7 @@ infinities/subnormals, retained intermediate/repeated outputs, independent outpu
 buffers, variable ranks, invalid reshape/rank refusals and recovery, copy/detach
 boundaries, lazy control flow, bounded loops, serialization and derivatives.
 The existing post-optimization training oracle now includes transpose chains.
-The source enumerates 20 cases and 88 numerical digests. Cheap controller tests
+The optimization source round enumerated 20 cases and 88 numerical digests. Cheap controller tests
 validate the reporting and audit machinery; they do not qualify native execution.
 
 The first native optimizer run exposed a preexisting layout inconsistency: eager
@@ -64,3 +64,26 @@ a separate blocker; no unsupported compensation or global completion claim is
 permitted. Full-dataset end-to-end NVIDIA+AMD A/B, with preserved identity and
 quality, is required before any performance default promotion. No such timing
 evidence is claimed for this source round.
+
+## Conditional minibatch training source round
+
+`Program.fit_if` is an excluded, unqualified native source addition. It accepts
+three captured components in one session: scalar predicate, true branch and
+false branch. Input kinds/ranks must agree and each branch has one output.
+The predicate runs without derivatives once per minibatch; only its selected
+branch is replayed onto the training tape. A union of parameter identities gives
+shared parameters one buffer and optimizer state. Parameters absent from the
+selected branch do not advance momentum, weight decay or the optimizer step.
+Predicate-only parameters cannot be trained through this discrete decision.
+The existing optimizer epoch determines row shuffling and conditional dropout
+step keys, with disjoint node ranges for the two branches.
+
+Epochs, batches, selection, tape walks, loss aggregation and updates run in Mojo.
+Both ordinary and conditional fit now assign public result attributes natively.
+The verifier adds independent scalar SGD, shared-state step counts, inactive
+AdamW state, zero-update branches, lazy invalid branches, scalar/finite predicate
+refusals, session identity and recovery checks. The full source verifier now has
+22 cases and 98 numerical digests; native compilation/execution is pending.
+This is component composition for conditional minibatch training, not arbitrary
+nested graph regions, loop training, differentiated predicates or distributed
+control flow. Control checkpoint optimizer-state/resume coverage remains next.

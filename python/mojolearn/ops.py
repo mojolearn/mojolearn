@@ -1436,10 +1436,21 @@ class Program:
         >>> opt = session.optimizer("adam", lr=0.01)
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
-        self.loss_curve_, self.n_iter_ = self._fit_native(
-            self._s._id, self._id, arrays, targets,
-            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta))
-        return self
+        return self._session_native(self._s, "fit", (self, None, None, arrays, targets,
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
+
+    def fit_if(self, condition, otherwise, *arrays, targets=None, optimizer,
+               parameters=None, loss="mse", epochs=10, batch_size=32,
+               shuffle=True, seed=0, huber_delta=1.0):
+        """Train the branch selected by a scalar predicate for each minibatch.
+
+        Components belong to one session and accept the same input ranks and
+        kinds. The predicate is discrete. Shared parameters have one optimizer
+        state; parameters absent from the selected branch are unchanged.
+        Returns this program with epoch losses and per-call branch counts.
+        """
+        return self._session_native(self._s, "fit_if", (self, condition, otherwise, arrays, targets,
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
 
     def save_control(self, path, *, condition, otherwise=None, max_iterations=None):
         """Save a conditional or bounded loop with shared parameters in one file."""

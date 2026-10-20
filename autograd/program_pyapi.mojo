@@ -16,7 +16,7 @@ from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
 from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_optimize import ProgramOptimization, program_optimize
-from autograd.program_runtime import replay_values, parameter_buffers, train_program
+from autograd.program_runtime import replay_values, parameter_buffers, train_program, train_program_control
 from autograd.pyapi import _input_handles, _seed, ival, fval, _dims_out
 
 
@@ -401,6 +401,7 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     optimizer: PythonObject, parameters: PythonObject, loss: PythonObject,
     epochs: PythonObject, batch_size: PythonObject, shuffle: PythonObject,
     seed: PythonObject, delta: PythonObject,
+    condition_id: Int = 0, otherwise_id: Int = 0,
 ) raises -> PythonObject:
     # One public binding call owns option parsing as well as the entire
     # upload/shuffle/batch/backward/update path. Old packed ABI stays usable.
@@ -431,6 +432,14 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var opt = _integer(optimizer, "optimizer", 1)
     var seed_word = uint64_input(seed, "seed")
     var params = p.params.copy()
+    if otherwise_id > 0:
+        var other = s[].program(otherwise_id)
+        for k in range(len(other.params)):  # driver-loop: over default branch parameter union
+            var found = False
+            for j in range(len(params)):  # driver-loop: over shared parameter identity
+                found = found or params[j] == other.params[k]
+            if not found:
+                params.append(other.params[k])
     if String(py=b.type(parameters).__name__) != "NoneType":
         if is_integer_input(parameters):
             params.clear()
@@ -451,12 +460,18 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         target_owners.append(ProgramInput(targets, False))
         target = target_owners[0].src
     var curve = output_array(ShapeN.of([count]))
-    train_program(s[], Int(py=pid), srcs, shapes, target, kind, Float32(py=delta),
-                  opt, params, count, batch, Bool(py=shuffle), seed_word,
-                  FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
+    var branches = train_program_control(s[], Int(py=pid), srcs, shapes, target, kind, Float32(py=delta),
+                                        opt, params, count, batch, Bool(py=shuffle), seed_word,
+                                        FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])),
+                                        condition_id, otherwise_id)
     _ = owners^
     _ = target_owners^
     var out = Python.list()
     out.append(curve)
     out.append(PythonObject(count))
+    if condition_id > 0:
+        var counts = b.dict()
+        counts["true"] = branches[0]
+        counts["false"] = branches[1]
+        out.append(counts)
     return out
