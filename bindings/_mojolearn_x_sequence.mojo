@@ -35,6 +35,7 @@ from autograd.partition_pyapi import (
 )
 from max.gpu.host import DeviceContext
 from sequence.launch_profile import launch_profile_level
+from autograd.program_control_grad import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
@@ -484,6 +485,8 @@ def ops_program_inspect_binding(sid: PythonObject, pid: PythonObject, optimize: 
 
 def ops_program_control_binding(sid: PythonObject, pid: PythonObject, programs: PythonObject,
                                 arrays: PythonObject, limit: PythonObject, optimize: PythonObject) raises -> PythonObject:
+    if len(programs) == 6:
+        return ops_program_control_vjp_py[DeviceExec, OPS_DEVICE](sid, pid, programs, arrays, limit)
     return ops_program_control_py[DeviceExec, OPS_DEVICE](sid, pid, programs[1], programs[3],
                                                programs[0], programs[2], arrays, limit, optimize)
 

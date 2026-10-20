@@ -21,8 +21,9 @@ EXPECTED_CASES = (
     "training_after_optimization", "node_diagnostics_and_profile",
     "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
     "variable_rank_replay",
+    "executed_control_vjp",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21)))
 
 
 _AUDITS = []
@@ -125,6 +126,99 @@ def variable_rank_replay():
         _refuses(lambda: _invoke(p.run_dynamic, np.ones((2, 5), np.float32)), "program node 0")
         _refuses(lambda: _invoke(p.run_dynamic, np.ones((1,) * 9, np.float32)), "rank", ValueError)
         _equal(_invoke(p.run_dynamic, np.arange(6, dtype=np.float32).reshape(2, 3)), outputs[0])
+    return outputs
+
+
+def executed_control_vjp():
+    import numpy as np
+    from . import ops
+    outputs = []
+    seed = np.array([[0.5]], np.float32)
+
+    # Independent scalar-double oracle, including the stopping decision.
+    # Perturbations stay away from predicate boundaries in all five fixtures.
+    def oracle(x, w, loop, maximum):
+        if loop:
+            iterations = 0
+            while x < 8 and iterations < maximum:
+                x *= w
+                iterations += 1
+            return 0.5 * x
+        return 0.5 * (x * w if x > 0 else x * x)
+
+    with tempfile.TemporaryDirectory(prefix="mojolearn-control-vjp-") as d, ops.Session() as s:
+        x = s.tensor([[1.25]])
+        w = s.tensor([[2.0]])
+        condition = s.capture(x, s.greater(x, s.full((1, 1), 0)))
+        loop_condition = s.capture(x, s.less(x, s.full((1, 1), 8)))
+        body = s.capture(x, s.mul(x, w))
+        otherwise = s.capture(x, s.mul(x, x))
+        for initial, loop, maximum in ((1.25, False, 0), (-1.25, False, 0),
+                                       (1.25, True, 8), (9.0, True, 8), (1.25, True, 2)):
+            a = np.array([[initial]], np.float32)
+            if loop:
+                report = _invoke(body.vjp_while, a, condition=loop_condition,
+                                 max_iterations=maximum, seeds=seed, parameters=[w])
+            else:
+                report = _invoke(body.vjp_if, condition, otherwise, a, seeds=seed, parameters=[w])
+            value, dx, dw = report["outputs"], report["input_gradients"][0], report["parameter_gradients"][w]
+            expected = oracle(initial, 2.0, loop, maximum)
+            _equal(value, np.array([[expected * 2]], np.float32))
+            epsilon = 1e-5
+            expected_dx = (oracle(initial + epsilon, 2.0, loop, maximum) -
+                           oracle(initial - epsilon, 2.0, loop, maximum)) / (2 * epsilon)
+            expected_dw = (oracle(initial, 2.0 + epsilon, loop, maximum) -
+                           oracle(initial, 2.0 - epsilon, loop, maximum)) / (2 * epsilon)
+            np.testing.assert_allclose(dx, [[expected_dx]], rtol=1e-6, atol=1e-7)
+            np.testing.assert_allclose(dw, [[expected_dw]], rtol=1e-6, atol=1e-7)
+            outputs.extend((value, dx, dw))
+            if loop:
+                assert report["iterations"] == (0 if initial == 9 else min(3, maximum))
+                assert report["stopped"] is (initial == 9 or maximum >= 3)
+        zero = _invoke(body.vjp_while, [[1.25]], condition=loop_condition,
+                       max_iterations=0, seeds=seed, parameters=[w])
+        assert zero["iterations"] == 0 and zero["stopped"] is False
+        _equal(zero["input_gradients"][0], seed)
+        _equal(zero["parameter_gradients"][w], np.zeros((1, 1), np.float32))
+        _refuses(lambda: _invoke(body.vjp_if, condition, otherwise, [[1.25]],
+                                seeds=np.ones((2, 1), np.float32)), "seed must have", ValueError)
+        _refuses(lambda: _invoke(body.vjp_if, condition, otherwise, [[1.25]],
+                                seeds=seed, parameters=[w, w]), "twice", ValueError)
+        dead = s.tensor([[3.0]])
+        dead_branch = s.capture(x, s.mul(x, dead))
+        s.free(dead)
+        lazy = _invoke(body.vjp_if, condition, dead_branch, [[1.25]], seeds=seed)
+        _equal(lazy["outputs"], outputs[0])
+        for name, program in (("body", body), ("condition", condition),
+                              ("loop", loop_condition), ("otherwise", otherwise)):
+            _invoke(program.save, Path(d) / (name + ".mjl"))
+        with ops.Session() as restored:
+            rb = _invoke(restored.load_program, Path(d) / "body.mjl")
+            rc = _invoke(restored.load_program, Path(d) / "condition.mjl")
+            rl = _invoke(restored.load_program, Path(d) / "loop.mjl")
+            ro = _invoke(restored.load_program, Path(d) / "otherwise.mjl")
+            rw, = rb.params
+            branch = _invoke(rb.vjp_if, rc, ro, [[1.25]], seeds=seed, parameters=[rw])
+            loop = _invoke(rb.vjp_while, [[1.25]], condition=rl, max_iterations=8,
+                           seeds=seed, parameters=[rw])
+            for report, offset in ((branch, 0), (loop, 6)):
+                _equal(report["outputs"], outputs[offset])
+                _equal(report["input_gradients"][0], outputs[offset + 1])
+                _equal(report["parameter_gradients"][rw], outputs[offset + 2])
+        multi = s.capture(x, [s.mul(x, w), s.mul(x, x)])
+        both = _invoke(multi.vjp_if, condition, multi, [[1.25]],
+                       seeds=(seed, np.array([[0.25]], np.float32)), parameters=[w])
+        _equal(both["input_gradients"][0], np.array([[1.625]], np.float32))
+        _equal(both["parameter_gradients"][w], np.array([[0.625]], np.float32))
+        outputs.extend((*both["outputs"], both["input_gradients"][0], both["parameter_gradients"][w]))
+        growing = s.capture(x, s.concat([x, x], axis=0))
+        growing_condition = s.capture(x, s.less(s.sum(x), s.full((1, 1), 4)))
+        grown = _invoke(growing.vjp_while, [[1.25]], condition=growing_condition,
+                        max_iterations=3, seeds=np.ones((4, 1), np.float32), parameters=[])
+        assert grown["iterations"] == 2 and grown["stopped"] is True
+        _equal(grown["outputs"], np.full((4, 1), 1.25, np.float32))
+        _equal(grown["input_gradients"][0], np.array([[4]], np.float32))
+        outputs.extend((grown["outputs"], grown["input_gradients"][0]))
     return outputs
 
 

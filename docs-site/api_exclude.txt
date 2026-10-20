@@ -73,3 +73,5 @@ Program.partition	native model/tensor/pipeline partitions: qualification pending
 Session.load_partitioned	native model/tensor/pipeline partitions: qualification pending
 _partitioned_program.PartitionedProgram	native model/tensor/pipeline partitions: qualification pending
 Program.run_dynamic	native variable-rank replay; cross-vendor qualification pending
+Program.vjp_if	native conditional differentiation; cross-vendor qualification pending
+Program.vjp_while	native loop differentiation; cross-vendor qualification pending
