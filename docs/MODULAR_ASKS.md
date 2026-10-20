@@ -41,3 +41,23 @@ default manager on one VF).
 **Meanwhile.** mojolearn sets `MODULAR_DEVICE_CONTEXT_MEMORY_MANAGER_SIZE=1073741824` on AMD hosts with `setdefault`
 (a caller's own setting wins), which MAX supports: fresh processes 0.78 s instead of 5.9 s, concurrent processes pass, no
 bit changes (`verify --compare` against NVIDIA: 1747 agree, 0 differ). NVIDIA keeps MAX's defaults.
+
+## Reproducible gfx942 code generation with a cold cache (2026-10-20, lane amd-compile-speed)
+
+**Need.** `mojo build --target-accelerator gfx942` gives the same embedded AMDGPU code objects every time it compiles
+the same source with the same flags. Measured at d181d9792 (Mojo cache wiped before every build): `build_mixture.sh`
+3 distinct binaries in 5 builds at `-j 2`, 1 in 5 at `-j 1`; `build_tsa.sh` 2 in 4 at `-j 2`, 2 in 12 at `-j 1`. The
+differences are inside kernels (gemm_identical, holtwinters): a few register numbers or two swapped instructions, so the
+order of the compiler's own work changes its output, even with one worker. NVIDIA and CPU codegen of the same commits
+matched in every cold pair (264 of 264 NVIDIA binaries).
+
+**The ask.** Deterministic AMDGPU codegen (no pointer-ordered or thread-ordered iteration in scheduling or register
+allocation), independent of `-j`, so two cold builds of one commit are byte-identical as on NVIDIA.
+
+**Where.** `packaging/linux/build_sets.sh` (the gfx* sets' compiler workers, `AMD_COMPILE_JOBS_DEFAULT`),
+`tools/release_reuse.py` (gfx rebuild NOTE), `tools/bincache.py` (the cache freezes the first bytes per key).
+
+**Meanwhile.** The release contract is the output digest, checked on the hardware; the binding cache and release reuse
+freeze shipped bytes. `tools/amd_compile_variance.sh` measures whether parallel workers change results or only bytes
+and classifies each pair (`tools/compare_gpu_builds.py`: REORDERED and SAME-KERNELS are layout, CODE-DIFFERS is this
+ask); the AMD worker count follows its verdict. We do not canonicalize or rewrite differing kernel code.
