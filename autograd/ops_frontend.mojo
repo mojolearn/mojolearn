@@ -8,7 +8,9 @@ from autograd.ops_api import ops_session
 from autograd.program_pyapi import ProgramInput, _integer
 from autograd.program_arrays import output_array
 from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
-from autograd.model_checkpoint import ops_load_program_py
+from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, ops_load_state_py
+from autograd.program_save import ops_program_save_native_py
+from bindings.native_json import native_path
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -94,6 +96,14 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject,
 ) raises -> PythonObject:
     var name = String(operation)
+    if name == "save_program":
+        return ops_program_save_native_py[E, KIND](args[0], args[1])
+    if name == "free_program":
+        if not _nil(session._id) and not _nil(args[0]._id):
+            var owner = ops_session[E, KIND](Int(py=session._id))
+            owner[].program_free(Int(py=args[0]._id))
+        Python.import_module("builtins").setattr(args[0], "_id", PythonObject(None))
+        return PythonObject(None)
     if name == "close":
         if not _nil(session._id):
             _ = ops_close_py[E, KIND](session._id)
@@ -140,7 +150,34 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "load_program":
         if s[].tape.is_recording():
             raise Error("ValueError: programs run in an inference session (Session(record=False))")
-        return _program_object(session, ops_load_program_py[E, KIND](sid, args[0]))
+        return _program_object(session, ops_load_program_py[E, KIND](sid, native_path(args[0])))
+    if name == "save_state":
+        var params = _ints(args[1], "handle", 1)
+        if len(params) == 0:
+            raise Error("ValueError: params must hold at least one tensor handle")
+        var opt = 0 if _nil(args[2]) else _int(args[2], "optimizer", 1)
+        if opt != 0:
+            _ = s[]._opt_index(opt)
+        var seed = _seed_words(args[3])
+        var counters = Python.list()
+        counters.append(seed[0])
+        counters.append(seed[1])
+        counters.append(_int(args[4], "epoch", 0))
+        counters.append(_int(args[5], "step", 0))
+        _ = ops_save_state_py[E, KIND](sid, native_path(args[0]), _tuple_ints(params), PythonObject(opt), counters)
+        return PythonObject(None)
+    if name == "load_state":
+        var opt = 0 if _nil(args[1]) else _int(args[1], "optimizer", 1)
+        if opt != 0:
+            _ = s[]._opt_index(opt)
+        var grad = Bool(py=args[2]) and s[].recording()
+        var res = ops_load_state_py[E, KIND](sid, native_path(args[0]), PythonObject(Int(grad)), PythonObject(opt))
+        var result = Python.import_module("builtins").dict()
+        result["params"] = res[0]
+        result["seed"] = (UInt64(py=res[3]) << 32) | UInt64(py=res[2])
+        result["epoch"] = res[4]
+        result["step"] = res[5]
+        return result
     if name == "reset":
         s[].reset()
         return PythonObject(None)
