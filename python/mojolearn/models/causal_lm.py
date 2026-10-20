@@ -522,6 +522,7 @@ def _connect_causal_native():
     from .config import _NATIVE_CONTEXT as config_context
     from .safetensors import _NATIVE_CONTEXT as checkpoint_context
     runtime = runtime_binding()._module
+    runtime.native_codec_call("initialize", (Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
     _backend.default_mode()
     bindings = {"cpu:identical": _causal_native_connections()}
     vendor = _backend.vendor()
