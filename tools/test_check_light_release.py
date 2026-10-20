@@ -124,6 +124,65 @@ class LightReleaseTests(unittest.TestCase):
                 self.assertEqual(gate.wheel_kind(self.root / published), ('linux', 'wheel', {'cuda', 'hip'}))
                 self.assertEqual(gate.check(self.root, self.commit, 'linux')['runtime_vendors'], [vendor])
 
+    def aggregate(self, vendor='cuda', mutate=None):
+        self.split('core', vendor)
+        for filename in self.manifest['files']:
+            (self.root / filename).unlink()
+        version = '0.8.7'
+        wheel = f'mojolearn-{version}-py3-none-manylinux_2_35_x86_64.whl'
+        dist = f'mojolearn-{version}.dist-info/'
+        members = {
+            dist + 'METADATA': '\n'.join([
+                'Metadata-Version: 2.1', 'Name: mojolearn', 'Version: ' + version,
+                *['Requires-Dist: ' + r for r in gate._GPU_PACKAGES.meta_requirements(version)], '']),
+            dist + 'gpu_plugin.json': json.dumps(gate._GPU_PACKAGES.meta_marker(version)),
+            dist + 'LINUX_PAYLOAD.json': json.dumps({'source_commit': self.commit}),
+        }
+        if mutate:
+            mutate(members, dist)
+        with zipfile.ZipFile(self.root / wheel, 'w') as z:
+            for name, value in members.items():
+                z.writestr(name, value)
+        self.manifest['files'] = {wheel: gate.digest(self.root / wheel)}
+        self.reports[vendor]['plugins'] = [
+            dict(wheel=f"/box/{r['wheel_name']}-{version}-py3-none-manylinux_2_35_x86_64.whl",
+                 wheel_sha256='e' * 64) for r in gate._GPU_PACKAGES.distribution_rows()]
+        self.write()
+        return wheel
+
+    def test_file_free_aggregate_reports_dependency_smoke_scope(self):
+        for vendor in ('cuda', 'hip'):
+            with self.subTest(vendor=vendor):
+                wheel = self.aggregate(vendor)
+                result = gate.check(self.root, self.commit, 'linux')
+                self.assertEqual(result['aggregate_dependency_smokes'], [wheel])
+                self.assertFalse(result['full_numerical_certification'])
+
+    def test_aggregate_requires_every_exact_dependency_including_ptx(self):
+        for change in (
+            lambda r: r['plugins'].pop(),
+            lambda r: r['plugins'][0].update(wheel='/box/mojolearn_nvidia-0.8.6-py3-none-manylinux_2_35_x86_64.whl'),
+            lambda r: r['plugins'][0].update(wheel_sha256=None),
+            lambda r: r.update(wheel='/box/mojolearn-0.8.7-py3-none-manylinux_2_35_x86_64.whl'),
+        ):
+            self.aggregate()
+            change(self.reports['cuda'])
+            self.write()
+            with self.assertRaisesRegex(ValueError, 'aggregate receipt'):
+                gate.check(self.root, self.commit, 'linux')
+
+    def test_aggregate_cannot_hide_runtime_files_or_change_dependencies_or_source(self):
+        for change in (
+            lambda m, d: m.update({'mojolearn/__init__.py': 'pass'}),
+            lambda m, d: m.update({d + 'METADATA': m[d + 'METADATA'].replace('==0.8.7', '>=0.8.7')}),
+            lambda m, d: m.update({d + 'LINUX_PAYLOAD.json': json.dumps({'source_commit': 'b' * 40})}),
+            lambda m, d: m.update({d + 'gpu_plugin.json': json.dumps(
+                dict(gate._GPU_PACKAGES.meta_marker('0.8.7'), requires=[]))}),
+        ):
+            self.aggregate(mutate=change)
+            with self.assertRaisesRegex(ValueError, 'aggregate'):
+                gate.check(self.root, self.commit, 'linux')
+
     def test_split_plugin_passes_only_on_its_own_vendors_receipt(self):
         for publish, vendor in (('nvidia', 'cuda'), ('amd', 'hip')):
             with self.subTest(publish=publish):
