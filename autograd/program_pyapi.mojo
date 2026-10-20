@@ -8,6 +8,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
+from autograd.program_arrays import output_array
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
@@ -43,7 +44,7 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
         s1 = Int(py=a.strides[1])
     elif nd > 2 and not Bool(py=a.flags.c_contiguous):
         raise Error(what + ": tensors above rank two must be C-contiguous")
-    var src = CastIn(Int(py=a.ctypes.data), kind, size, sh.rows(), sh.cols(), s0, s1)
+    var src = CastIn(Int(py=a.__array_interface__["data"][0]), kind, size, sh.rows(), sh.cols(), s0, s1)
     src.check(what)
     return (src, sh)
 
@@ -121,14 +122,6 @@ def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool) raises ->
     return out^
 
 
-def output_array(shape: ShapeN) raises -> PythonObject:
-    var dims = Python.list()
-    for k in range(shape.ndim):  # small-loop(shape.ndim: tensor rank): at most eight shape words
-        dims.append(PythonObject(shape.d[k]))
-    # Allocation only: all output values are written by the native executor.
-    return Python.import_module("numpy").empty(dims, dtype="float32")
-
-
 def _dict() raises -> PythonObject:
     return Python.import_module("builtins").dict()
 
@@ -203,7 +196,7 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(outs)):  # driver-loop: over returned arrays
             var sh = s[].shapes[s[]._slot(outs[k])]
             var a = output_array(sh)
-            s[].download(outs[k], FP(unsafe_from_address=Int(py=a.ctypes.data)))
+            s[].download(outs[k], FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])))
             download_bytes += sh.count() * 4
             result.append(a)
         download_ns = Int(perf_counter_ns()) - started
@@ -326,7 +319,7 @@ def ops_program_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
     var s = ops_session[E, KIND](Int(py=sid))
     train_program(s[], Int(py=pid), srcs, shapes, target, ival(ip, 1), fval(fp, 0),
                   ival(ip, 0), _input_handles(parameters), epochs, ival(ip, 3), ival(ip, 4) != 0,
-                  _seed(ip, 5), FP(unsafe_from_address=Int(py=curve.ctypes.data)))
+                  _seed(ip, 5), FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
     return curve
 
 
@@ -379,7 +372,8 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var params = p.params.copy()
     if String(py=b.type(parameters).__name__) != "NoneType":
         if Bool(py=b.hasattr(parameters, "__index__")):
-            params = List[Int](_integer(parameters, "parameter", 1))
+            params.clear()
+            params.append(_integer(parameters, "parameter", 1))
         else:
             params = _input_handles(parameters)
     var owners = program_inputs(p, arrays, True)
@@ -396,7 +390,7 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var curve = output_array(ShapeN.of([count]))
     train_program(s[], Int(py=pid), srcs, shapes, target, kind, Float32(py=delta),
                   opt, params, count, batch, Bool(py=shuffle), seed_word,
-                  FP(unsafe_from_address=Int(py=curve.ctypes.data)))
+                  FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
     var out = Python.list()
     out.append(curve)
     out.append(PythonObject(count))

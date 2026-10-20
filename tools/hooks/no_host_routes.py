@@ -70,6 +70,7 @@ __main__.py _backend.py host_surface.py _cpu_reference.py _conformance.py
 _verify.py _verify_all.py _verify_causal_lm.py _verify_distributed.py
 _verify_par.py _verify_parallel_cv.py _verify_reference.py _verify_resources.py
 _verify_small.py _verify_worker.py _verification_catalog.py
+_verify_graph.py _verify_native_runtime.py _verify_generation.py
 _verification_coverage.py _verification_ctr_models.py
 _verification_evidence_data.py _verification_profiles.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
