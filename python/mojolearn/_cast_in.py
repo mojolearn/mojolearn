@@ -32,8 +32,8 @@ def describe(x, name):
         raise ValueError(f"{name} must have at most 2 dimensions, got {x.ndim}")
     if x.size == 0:
         raise ValueError(f"{name} must not be empty")
-    if not (x.flags.c_contiguous or x.flags.f_contiguous):
-        raise ValueError(f"{name} must be C- or Fortran-contiguous; pass numpy.ascontiguousarray({name})")
+    if any(st < 0 for st in x.strides):  # glue: at most two stride words, no data
+        raise ValueError(f"{name} must not be a reversed view; pass numpy.ascontiguousarray({name})")
     size = dt.itemsize
     if x.ndim == 0:
         rows, cols, s0, s1 = 1, 1, size, size

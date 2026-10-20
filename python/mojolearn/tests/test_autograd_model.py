@@ -207,8 +207,8 @@ def test_regressor_inputs_as_they_are_give_the_same_bits():
 def test_inputs_refused_by_name():
     X, yr, _, _ = _data()
     m = ml.Sequential().linear(1).compile(loss="mse")
-    with pytest.raises(ValueError, match="contiguous"):
-        m.fit(np.zeros((120, 10), dtype=np.float32)[:, ::2], yr, epochs=1)
+    with pytest.raises(ValueError, match="reversed"):
+        m.fit(np.zeros((120, 10), dtype=np.float32)[::-1], yr, epochs=1)
     with pytest.raises(TypeError, match="numeric"):
         m.fit(X.astype(object), yr, epochs=1)
     with pytest.raises(TypeError, match="numeric"):
@@ -234,7 +234,9 @@ def test_session_tensor_takes_inputs_as_they_are():
         assert np.array_equal(s.numpy(s.tensor(2.5)), np.full((1, 1), 2.5, dtype=np.float32))
         big = np.array([2 ** 40 + 1, -(2 ** 31) - 3, 16777217], dtype=np.int64)
         assert np.array_equal(s.numpy(s.tensor(big)), big.astype(np.float32).reshape(-1, 1))
-        with pytest.raises(ValueError, match="contiguous"):
-            s.tensor(X[:, ::2])
+        # a strided view is cast by byte stride on the device, no host copy
+        assert np.array_equal(s.numpy(s.tensor(X[:, ::2])), np.ascontiguousarray(X[:, ::2]))
+        with pytest.raises(ValueError, match="reversed"):
+            s.tensor(X[::-1])
         with pytest.raises(TypeError, match="numeric"):
             s.tensor(X.astype(object))

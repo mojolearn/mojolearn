@@ -101,7 +101,10 @@ struct CastIn(ImplicitlyCopyable, Movable):
         return self.rows * self.cols
 
     def nbytes(self) -> Int:
-        return self.rows * self.cols * self.itemsize
+        """Bytes from the first element to the end of the last one: the span the
+        cast reads. Strided views (a column slice, a row-stepped view) are
+        accepted; the kernel addresses element (r, c) at r * s0 + c * s1."""
+        return (self.rows - 1) * self.s0 + (self.cols - 1) * self.s1 + self.itemsize
 
     def words(self) -> Int:
         """4-byte words holding the span (the last one zero-padded)."""
@@ -128,10 +131,10 @@ struct CastIn(ImplicitlyCopyable, Movable):
             raise Error(what + ": null buffer address")
         if self.rows < 1 or self.cols < 1 or self.rows > ((1 << 40) // self.cols):
             raise Error(what + ": the array must not be empty")
-        if not (self.is_c_order() or self.is_f_order()):
-            raise Error(
-                what + ": the array must be C- or Fortran-contiguous; pass numpy.ascontiguousarray of it"
-            )
+        # Any non-negative strides are fine (the kernel addresses by byte stride); a reversed view
+        # (negative stride) or a stride narrower than the item (overlapping elements) is refused.
+        if (self.rows > 1 and self.s0 < self.itemsize) or (self.cols > 1 and self.s1 < self.itemsize):
+            raise Error(what + ": the array's strides must be non-negative and at least one item; pass numpy.ascontiguousarray of it")
         if self.nbytes() >= (1 << 33):
             raise Error(what + ": the array is larger than 8 GiB")
 
