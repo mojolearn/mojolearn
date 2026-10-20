@@ -154,6 +154,8 @@ from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_spli
 from sequence.moe_backward import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
 from autograd.embedding_ops import OP_EMB_FIRST, OP_EMB_LAST, apply_embedding
 from autograd.cast_ops import OP_CAST_FIRST, OP_CAST_LAST, apply_cast
+# lane ag-rankn-bmm: the batched matrix product (docs/plans/AUTOGRAD_RANKN.md 2.3)
+from autograd.rankn_bmm_ops import OP_RNB_FIRST, OP_RNB_LAST, apply_rn_bmm
 
 
 @always_inline
@@ -358,6 +360,14 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_CAST_FIRST or OP_CELL_FWD_SCAN > OP_CAST_LAST) and (
         OP_CELL_BWD_SCAN < OP_CAST_FIRST or OP_CELL_BWD_SCAN > OP_CAST_LAST
     ), "cast opcode collides with recurrent scan"
+    # lane ag-rankn-bmm: the batched matrix product (autograd/rankn_bmm_ops.mojo
+    # OP_RNB_*, 4300..4309), above every other autograd range.
+    comptime assert OP_RNB_FIRST <= OP_RNB_LAST, "rank-N bmm opcode range is empty"
+    comptime assert OP_RNB_FIRST > OP_CAST_LAST and OP_RNB_FIRST > OP_EMB_LAST and OP_RNB_FIRST > OP_MOEB_LAST and OP_RNB_FIRST > OP_AGH_LAST and OP_RNB_FIRST > OP_AGS_LAST and OP_RNB_FIRST > OP_ROW_LAST and OP_RNB_FIRST > OP_GK_LAST and OP_RNB_FIRST > OP_AGC_LAST, "rank-N bmm opcodes overlap a lower family"
+    comptime assert OP_RNB_FIRST > OP_AG_LAST and OP_RNB_FIRST > OP_AGD_LAST and OP_RNB_FIRST > OP_AGO_LAST and OP_RNB_FIRST > OP_LS_LAST and OP_RNB_FIRST > OP_AGM_LAST and OP_RNB_FIRST > OP_AGK_LAST and OP_RNB_FIRST > OP_P1_LAST and OP_RNB_FIRST > OP_AGF_LAST and OP_RNB_FIRST > OP_MLP_LB_LAST, "rank-N bmm opcodes overlap an autograd family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_RNB_FIRST or OP_CELL_FWD_SCAN > OP_RNB_LAST) and (
+        OP_CELL_BWD_SCAN < OP_RNB_FIRST or OP_CELL_BWD_SCAN > OP_RNB_LAST
+    ), "rank-N bmm opcode collides with recurrent scan"
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -400,6 +410,9 @@ def apply[OP: Int](t: Int, a: Args):
         apply_embedding[OP](t, a)
     elif OP >= OP_CAST_FIRST and OP <= OP_CAST_LAST:
         apply_cast[OP](t, a)
+    elif OP >= OP_RNB_FIRST and OP <= OP_RNB_LAST:
+        # lane ag-rankn-bmm: the batched matrix product
+        apply_rn_bmm[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
