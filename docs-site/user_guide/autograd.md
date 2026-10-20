@@ -154,6 +154,20 @@ print("digest", hashlib.sha256(proba.tobytes()).hexdigest()[:16])
 The last line prints a digest of the predicted probabilities. Run the script on an Apple, an NVIDIA and
 an AMD GPU: in `identical` mode the three digests are the same.
 
+## Save a trained model for inference
+
+`model.export("model.ckpt")` writes the layers and the trained parameters (and a classifier's classes),
+without the optimizer state. `mojolearn.Sequential.load("model.ckpt")` reads it back on any install, a
+GPU install or the CPU-only install, and `predict` and `predict_proba` return the same values there as
+on the machine that trained it. To keep training later, save with `save_checkpoint` instead and see
+[Moving training between vendors](cross_vendor_training.md).
+
+```python
+model.export("model.ckpt")
+served = mojolearn.Sequential.load("model.ckpt")
+labels = served.predict(X_new)
+```
+
 ## Numeric modes
 
 Both entry points take `numeric_mode`: `Sequential(numeric_mode=...)` and
