@@ -406,20 +406,35 @@ struct OptimizerState(Movable):
         initial_accumulator_value), as rnn_fit does."""
         var used = optimizer_slots(cfg)
         var n2 = n if used[1] else 1
-        var s2 = ex.alloc(n2)
-        if init_acc != Float32(0.0):
-            var f = Args()
-            f.p0 = s2
-            f.f0 = init_acc
-            ex.launch[OP_FILL](f, n2)
+        var acquired = List[FP]()
         var block = ag_fold_block(n)
         var nparts = (n + block - 1) // block
         var clip = cfg.clip > Float32(0.0)
-        self.s1 = ex.alloc(n if used[0] else 1)
-        self.s2 = s2
-        self.s3 = ex.alloc(n if used[2] else 1)
-        self.parts = ex.alloc(nparts if clip else 1)
-        self.cell = ex.alloc(2)
+        try:
+            var s2 = ex.alloc(n2)
+            acquired.append(s2)
+            if init_acc != Float32(0.0):
+                var f = Args()
+                f.p0 = s2
+                f.f0 = init_acc
+                ex.launch[OP_FILL](f, n2)
+            var s1 = ex.alloc(n if used[0] else 1)
+            acquired.append(s1)
+            var s3 = ex.alloc(n if used[2] else 1)
+            acquired.append(s3)
+            var parts = ex.alloc(nparts if clip else 1)
+            acquired.append(parts)
+            var cell = ex.alloc(2)
+            acquired.append(cell)
+            self.s1 = s1
+            self.s2 = s2
+            self.s3 = s3
+            self.parts = parts
+            self.cell = cell
+        except error:
+            for buffer in acquired:  # driver-loop: over acquired optimizer state buffers
+                ex.free(buffer)
+            raise error
         self.n = n
         self.block = block
         self.nparts = nparts

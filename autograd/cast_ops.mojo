@@ -207,17 +207,21 @@ def upload_cast[E: Exec](mut ex: E, dst: FP, src: CastIn) raises:
         ex.upload(dst, FP(unsafe_from_address=src.addr), src.count())
         return
     var raw = ex.alloc(src.words())
-    upload_bytes(ex, raw, src.start(), src.nbytes())
-    var a = Args()
-    a.p0 = raw
-    a.p1 = dst
-    a.i0 = src.kind
-    a.i1 = src.itemsize
-    a.i2 = src.cols
-    a.i3 = src.s0
-    a.i4 = src.s1
-    a.i5 = src.origin()
-    ex.launch[OP_CAST_F32](a, src.count())
+    try:
+        upload_bytes(ex, raw, src.start(), src.nbytes())
+        var a = Args()
+        a.p0 = raw
+        a.p1 = dst
+        a.i0 = src.kind
+        a.i1 = src.itemsize
+        a.i2 = src.cols
+        a.i3 = src.s0
+        a.i4 = src.s1
+        a.i5 = src.origin()
+        ex.launch[OP_CAST_F32](a, src.count())
+    except error:
+        ex.free(raw)
+        raise error
     ex.free(raw)
 
 
@@ -233,17 +237,21 @@ def upload_cast_i32[E: Exec](mut ex: E, dst: FP, src: CastIn, what: String) rais
         ex.upload(dst, FP(unsafe_from_address=src.addr), src.count())
         return
     var raw = ex.alloc(src.words())
-    upload_bytes(ex, raw, src.start(), src.nbytes())
-    var a = Args()
-    a.p0 = raw
-    a.p1 = dst
-    a.i0 = src.kind
-    a.i1 = src.itemsize
-    a.i2 = src.cols
-    a.i3 = src.s0
-    a.i4 = src.s1
-    a.i5 = src.origin()
-    ex.launch[OP_CAST_I32](a, src.count())
+    try:
+        upload_bytes(ex, raw, src.start(), src.nbytes())
+        var a = Args()
+        a.p0 = raw
+        a.p1 = dst
+        a.i0 = src.kind
+        a.i1 = src.itemsize
+        a.i2 = src.cols
+        a.i3 = src.s0
+        a.i4 = src.s1
+        a.i5 = src.origin()
+        ex.launch[OP_CAST_I32](a, src.count())
+    except error:
+        ex.free(raw)
+        raise error
     ex.free(raw)
 
 
