@@ -646,45 +646,8 @@ class Mamba1Block(_MambaBase):
         grads : dict of str to mojolearn.Array
             ``'x'`` plus one entry per constructor weight, under the same names.
         """
-        what = "Mamba1Block.backward"
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if mode not in ("identical", "fast"):
-            raise NotImplementedError(
-                f"mojolearn {what}: the zero-state prefill backward runs under "
-                f"IDENTICAL or FAST; got numeric_mode={mode!r}"
-            )
-        x = _batch_tokens(x, what, self.d_model, False)
-        b, l, _ = x.shape
-        if b < 1 or l < 1:
-            raise ValueError(f"mojolearn {what}: B and L must be positive")
-        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
-                         what, "grad_output", x.shape)
-        if not all_finite(dy):
-            raise ValueError(f"mojolearn {what}: grad_output must be finite")
-        # Revalidate current weight layouts before exposing raw addresses.
-        # In-place value changes are intentional; dtype/shape mutation is not.
-        checked = Mamba1Block(dict(zip(self._W_NAMES, self._w)),
-                              numeric_mode=mode)
-        if checked.d_model != self.d_model:
-            raise ValueError(f"mojolearn {what}: current weights changed d_model")
-        weights = checked._w
-        extension = self._extension()
-        native = getattr(extension, "mamba1_backward", None)
-        if native is None:
-            raise RuntimeError(
-                f"mojolearn {what}: loaded Mamba extension lacks mamba1_backward; "
-                "install a current alpha wheel with IDENTICAL Mamba backward support "
-                "or rebuild bindings/build_mamba.sh in IDENTICAL mode"
-            )
-        # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
-        gradients = ([empty(x.shape, "<f4")]
-                     + [empty(w.shape, "<f4") for w in weights])  # glue: allocates one gradient per weight
-        addresses = ([addr_ro(x, name="x")]
-                     + [addr_ro(w, name="weight") for w in weights]  # glue: one address per weight tensor
-                     + [addr_ro(dy, name="grad_output")]
-                     + [addr(g, name="gradient") for g in gradients])  # glue: one address per gradient tensor
-        native(addresses, [b, l, self.d_model])
-        return dict(zip(("x",) + self._W_NAMES, gradients))
+        return _native_neural_bridge.RUNTIME.neural_block_backward(
+            self, x, grad_output, _native_neural_bridge.CONTEXT)
 
     def step(self, x, state):
         """Run one decode token.
@@ -1161,7 +1124,8 @@ class Mamba2Block(_MambaBase):
         grads : dict of str to mojolearn.Array
             ``'x'`` plus one entry per constructor weight, under the same names.
         """
-        return self._prefill_backward(x, grad_output, "mamba2_backward")
+        return _native_neural_bridge.RUNTIME.neural_block_backward(
+            self, x, grad_output, _native_neural_bridge.CONTEXT)
 
     def step(self, x, state):
         """Run one decode token.

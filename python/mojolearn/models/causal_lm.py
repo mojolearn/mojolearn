@@ -521,6 +521,7 @@ def _connect_causal_native():
                                     Mamba2BlockInference, _causal_native_connections)
     from .config import _NATIVE_CONTEXT as config_context
     from .safetensors import _NATIVE_CONTEXT as checkpoint_context
+    from .._native_neural_bridge import connect_training
     runtime = runtime_binding()._module
     runtime.native_codec_call("initialize", (Array, _lowbit.BF16Weight, _lowbit.Int8Weight))
     _backend.default_mode()
@@ -553,6 +554,7 @@ def _connect_causal_native():
         "int8_class": _lowbit.Int8Weight, "projections": _PROJECTIONS,
         "optional_names": _OPT_NAMES, "rlock": _thread.RLock,
         "training_module": training,
+        "training_bindings": connect_training(_backend, vendor, bindings),
         "primitive_classes": {"cpu": _CpuPrimitives, "gpu": _GpuPrimitives},
         "block_classes": {
             "cpu": {"transformer": TransformerBlockInference, "mamba1": Mamba1BlockInference,

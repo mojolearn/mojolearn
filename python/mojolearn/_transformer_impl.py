@@ -1276,75 +1276,8 @@ class TransformerBlock(NumericModeMixin):
             float32 gradients keyed ``"x"`` plus the nine weight names, each in its
             tensor's shape.
         """
-        what = "TransformerBlock.backward"
-        if getattr(self, "_int15", None) is not None:
-            # Training is not in the profile's first version: every trainer
-            # refuses it by name (`_numeric_profile` row `training` False).
-            _numeric_profile.resolve(self.numeric_profile, f"mojolearn {what} numeric_profile",
-                                     use="training")
-        if getattr(self, "_extended", False):
-            # lane/block-options: the backward chains spell the frozen
-            # profile's seams and none of the options'.
-            raise NotImplementedError(
-                f"mojolearn {what}: the backward is implemented for the "
-                "default block options only (rope_theta 10000.0, no "
-                "rope_scaling, full rotary, max_positions 8192, no bias, "
-                "norm='rmsnorm' at eps 1e-6, mlp='swiglu', no qk_norm, no "
-                f"attn_softcap); this block has norm={self.norm!r}, "
-                f"mlp={self.mlp!r}, rope_theta={self.rope_theta!r}, "
-                f"rope_scaling={self.rope_scaling!r}, rope_dim={self.rope_dim!r}, "
-                f"max_positions={self.max_positions!r}, qkv_bias={self.qkv_bias!r}, "
-                f"o_bias={self.o_bias!r}, norm_eps={self.norm_eps!r}, "
-                f"norm_bias={self.norm_bias!r}, mlp_bias={self.mlp_bias!r}, "
-                f"qk_norm={self.qk_norm!r}, attn_softcap={self.attn_softcap!r}"
-            )
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if mode not in ("identical", "fast"):
-            raise NotImplementedError(
-                f"mojolearn {what}: the zero-state prefill backward runs under "
-                f"IDENTICAL or FAST; got numeric_mode={mode!r}"
-            )
-        x = _batch_tokens(x, what, self.d_model, False)
-        b, l = int(x.shape[0]), int(x.shape[1])
-        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
-                         what, "grad_output", x.shape)
-        ext = self._extension()
-        native = getattr(ext, "transformer_backward", None)
-        if native is None:
-            raise RuntimeError(
-                f"mojolearn {what}: the loaded transformer extension lacks "
-                "transformer_backward; rebuild bindings/build_transformer.sh"
-                " in IDENTICAL mode"
-            )
-        w = self._w
-        grads = [_buffers.empty(x.shape, "<f4")] + [_buffers.empty(a.shape, "<f4") for a in w]  # glue: allocates one gradient per weight
-        # ORDER MATCHES bindings/_mojolearn_transformer.mojo::
-        # transformer_backward_binding: x, the nine weights, grad_output,
-        # grad_x, the nine weight gradients.
-        addrs = ([_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr_ro(dy)]  # glue: one address per weight tensor
-                 + [_addr(g) for g in grads])  # glue: one address per gradient tensor
-        params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
-                  self.head_dim, self.intermediate, self.window]
-        # lane/neural-net-experiment: the session entry keeps the weights,
-        # the forward workspace and the backward stages on the device
-        # across calls (Samba training calls this per block per step).
-        if (_exports(ext, "transformer_session_backward")
-                and os.environ.get("MOJOLEARN_TRANSFORMER_LEGACY_SETUP") != "1"):
-            with self._runtime_lock:
-                if self._native_session is not None and self._session_binding is not ext:
-                    self._session_binding.transformer_session_close(self._native_session)
-                    self._native_session = None
-                    self._session_binding = None
-                if self._native_session is None:
-                    self._native_session = ext.transformer_session_create()
-                    self._session_binding = ext
-                ext.transformer_session_backward(self._native_session, addrs, params)
-            return dict(zip(("x",) + self._W_NAMES, grads))
-        with self._runtime_lock:
-            if self._native_session is not None and _exports(self._session_binding, "transformer_session_invalidate_tape"):
-                self._session_binding.transformer_session_invalidate_tape(self._native_session)
-            native(addrs, params)
-        return dict(zip(("x",) + self._W_NAMES, grads))
+        return _native_neural_bridge.RUNTIME.neural_block_backward(
+            self, x, grad_output, _native_neural_bridge.CONTEXT)
 
     # DEVIATION 2940 (lane/infer-speed-neural). On the CPU host route
     # (bindings/_mojolearn_transformer_host.mojo exports no transformer_decode_session_*) the
