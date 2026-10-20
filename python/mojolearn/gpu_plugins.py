@@ -284,7 +284,19 @@ def package_requirements(profile, version):
     return dependencies
 
 
+def meta_marker(version):
+    """The Linux `mojolearn` wheel's gpu_plugin.json: an aggregate (no files,
+    only requirements), the role packaging/linux/audit.sh and
+    packaging/portable_math/wheel.py admit without an ELF."""
+    return dict(schema=PLUGIN_SCHEMA, role="aggregate", distribution=META_DISTRIBUTION,
+                version=version, requires=meta_requirements(version))
+
+
 def package_marker(profile, version, arches=(), bundled_ptx=None):
+    if profile == META_PROFILE:
+        if bundled_ptx is not None or arches:
+            raise ValueError("the mojolearn meta wheel carries no files")
+        return meta_marker(version)
     if profile == CORE_PROFILE:
         if bundled_ptx is not None:
             raise ValueError("only the NVIDIA vendor package carries a PTX slot")
