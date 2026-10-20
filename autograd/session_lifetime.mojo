@@ -7,11 +7,17 @@ from autograd.ops_api import ops_session_open, ops_session_close
 from autograd.program_arrays import initialize_program_arrays
 
 
-struct SessionLifetime[E: Exec & Movable & Deinitable, KIND: Int](Movable):
+struct SessionLifetime[E: Exec & Movable & Deinitable, KIND: Int](Movable, Writable):
     var sid: Int
 
     def __init__(out self, sid: Int):
         self.sid = sid
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("_OpsSessionLifetime(open=", self.sid != 0, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("_OpsSessionLifetime(open=", self.sid != 0, ")")
 
     def close(mut self) raises:
         var sid = self.sid
