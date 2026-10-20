@@ -549,21 +549,24 @@ def split_combined(wheels, out_dir):
     require(len(roles) == len(wheels) and plugins.CORE_PROFILE in roles, 'A split set needs exactly one core')
     core = roles[plugins.CORE_PROFILE]
     version = core.name.split('-')[1]
+    # the rebuilt combined wheel keeps the combined layout's mojolearn-<v>.dist-info;
+    # the core itself is mojolearn_core-<v> (2026-10-20)
     dist = 'mojolearn-' + version + '.dist-info/'
     with zipfile.ZipFile(core) as archive:
-        payload = json.loads(archive.read(dist + 'LINUX_PAYLOAD.json'))
+        payload = json.loads(archive.read(plugins.CORE_WHEEL_NAME + '-' + version + '.dist-info/LINUX_PAYLOAD.json'))
     split = payload.pop('split', None)
     require(payload.get('assembly_profile') == SPLIT_PROFILE and isinstance(split, dict)
             and split.get('role') == plugins.CORE_PROFILE, 'The core payload is not the split profile\'s')
     packed = {k.split('/')[0] for k in payload.get('sets', {})}
-    given = {plugins.by_profile(r) for r in roles if r != plugins.CORE_PROFILE}
+    given = {plugins.by_profile(r) for r in roles if r not in (plugins.CORE_PROFILE, plugins.META_PROFILE)}
     require(packed and given == packed,
             'Stage every plugin the core was packed with: packed ' + ','.join(sorted(packed))
             + ', staged ' + (','.join(sorted(given)) or 'none'))
     expected_roles = {plugins.CORE_PROFILE}
     expected_roles.update(plugins.plugin(v)['profile'] for v in packed)
     expected_roles.update(plugins.payload_for(*key.split('/'))['profile'] for key in payload.get('sets', {}))
-    require(set(roles) == expected_roles, 'Stage the core and every native vendor package')
+    # the file-free Linux `mojolearn` may be staged with them; it adds no member
+    require(set(roles) - {plugins.META_PROFILE} == expected_roles, 'Stage the core and every native vendor package')
     members = {}
     for wheel in wheels:
         with zipfile.ZipFile(wheel) as archive:
@@ -587,7 +590,7 @@ def split_combined(wheels, out_dir):
         writer.writerow([name, 'sha256=' + encoded, str(len(data))])
     writer.writerow([dist + 'RECORD', '', ''])
     members[dist + 'RECORD'] = rows.getvalue().encode()
-    out = Path(out_dir) / core.name
+    out = Path(out_dir) / ('mojolearn' + core.name[len(plugins.CORE_WHEEL_NAME):])
     with zipfile.ZipFile(out, 'w') as archive:
         for name, data in members.items():
             archive.writestr(zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0)), data)
