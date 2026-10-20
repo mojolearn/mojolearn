@@ -248,3 +248,22 @@ def rn_desc_view(mut words: List[Int], s: ShapeN, strides: InlineArray[Int, RN_M
     rn_collapse(shape, st)
     rn_desc_shape(words, shape)
     rn_desc_strides(words, st[0])
+
+
+# ---------------------------------------------------------------- tape kinds and tags
+# PERMUTE_N: the tape node kind of a permute view (below CUSTOM, beside
+# TRANSPOSE 20 and RESHAPE 21; 37 is free: docs/plans/AUTOGRAD_HIGHER_ORDER.md
+# takes 32 and 33). Recorded pending; see RN_VIEW_MARK.
+comptime PERMUTE_N = 37
+# Custom tag blocks of the rank-N lanes (docs/plans/AUTOGRAD_RANKN.md
+# section 7): 128..135 core, 136..151 fold, 152..159 bmm, 160..175 layout,
+# 176..191 conv. A custom node of these tags may be a pending strided view.
+comptime RN_TAG_FIRST = 128
+comptime RN_TAG_END = 192
+# A PENDING STRIDED VIEW's saved Args (Tape.strided_view_args): p0 the
+# source buffer, p11 a descriptor holding one RN_DESC_VIEW record at word 0
+# (the view's shape, collapsed, and the source strides along it), i0 the
+# base offset (elements) into p0, i1..i8 the view's source strides along
+# its own (uncollapsed) axes, i9 = 1 while the value buffer is not filled,
+# i10 = RN_VIEW_MARK. p1..p10 and i11 stay free for the op's own use.
+comptime RN_VIEW_MARK = 0x524E5631
