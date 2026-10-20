@@ -32,6 +32,8 @@ build)
     ;;
 test)
     test_python=${MOJOLEARN_TEST_PYTHON:?set the test Python executable}
+    mkdir -p "$output/tmp"
+    export TMPDIR="$output/tmp"
     export PYTHONPATH="$root/python" MOJOLEARN_NUMERIC_MODE=identical
     case "$target" in
         cpu) export MOJOLEARN_VENDOR=cpu ;;

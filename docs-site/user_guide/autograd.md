@@ -39,6 +39,24 @@ The parameters are initialized from `seed`, the rows are shuffled from `seed` ev
 `clf.params_` holds every trained parameter as one flat float32 vector. For regression, use
 `loss="mse"` or `loss="huber"` with one output per target column.
 
+Add `.dropout(0.2)` between layers to drop activations during training. Prediction and validation
+use every activation. Its seeded masks continue across resumed training calls.
+
+To monitor held-out data, pass `validation_data=(X_valid, y_valid)` to `fit`. Configure
+`n_iter_no_change` and `tol` in `compile` to stop when validation loss stops improving:
+
+```python
+clf.compile(loss="cross_entropy", optimizer="adam", lr=0.01,
+            n_iter_no_change=5, tol=1e-4)
+clf.fit(X_train, y_train, epochs=100, validation_data=(X_valid, y_valid),
+        restore_best_weights=True)
+```
+
+`validation_loss_curve_` records this call's validation losses. `best_epoch_` is the best epoch,
+and `epochs_run_` is how many epochs the call executed. Restoring the best weights also restores
+the matching optimizer, shuffle and schedule state, so `resume=True` continues from that epoch.
+Validation monitoring starts afresh on each call.
+
 ## Operation session quickstart
 
 A session keeps tensors on the device and runs one native operation per call. Each call returns an
@@ -105,7 +123,7 @@ step, call `zero_grad`, then `backward(loss, accumulate=True)` for each loss.
 
 | Group | `Sequential` | `ops.Session` |
 |---|---|---|
-| Layers and operations | `linear`, `relu`, `sigmoid`, `tanh`, `softmax`, `layer_norm`, `residual` | `matmul`, `add`, `sub`, `mul`, `div` (with row, column and scalar broadcasting), `relu`, `sigmoid`, `tanh`, `exp`, `log`, `sqrt`, `scale`, `transpose`, `reshape`, `sum`, `mean`, `softmax`, `log_softmax`, `linear`, `layer_norm`, `dropout`, `full`, `copy`, `detach` |
+| Layers and operations | `linear`, `relu`, `sigmoid`, `tanh`, `softmax`, `layer_norm`, `dropout`, `residual` | `matmul`, `add`, `sub`, `mul`, `div` (with row, column and scalar broadcasting), `relu`, `sigmoid`, `tanh`, `exp`, `log`, `sqrt`, `scale`, `transpose`, `reshape`, `sum`, `mean`, `softmax`, `log_softmax`, `linear`, `layer_norm`, `dropout`, `full`, `copy`, `detach` |
 | Losses | `mse`, `huber`, `cross_entropy`, `bce_with_logits` | `mse`, `mae`, `huber`, `bce_with_logits`, `cross_entropy` (mean or sum) |
 | Metrics | `loss_curve_` | `accuracy`, `log_loss`, `roc_auc` |
 | Optimizers | `sgd`, `momentum` (optionally Nesterov), `adam`, `adamw`, with weight decay | `optimizer` (`sgd` with optional momentum and Nesterov, `adam`, `adamw`, with weight decay) and `step`, in place on the device; `zero_grad`; `optimizer_state` and `load_optimizer_state` for checkpoints |
@@ -359,8 +377,8 @@ with ops.Session(record=True) as s:
 ```
 
 Each recorded backward keeps its intermediate tensors until `reset`, and takes a few operations per
-recorded operation, so use `create_graph=True` only where you differentiate again. `layer_norm` has a
-first-order gradient only: a backward with `create_graph=True` through it raises an error that says so.
+recorded operation, so use `create_graph=True` only where you differentiate again. `layer_norm`
+supports recorded gradients through its input, scale and bias.
 
 ## Save a trained model for inference
 
@@ -414,8 +432,34 @@ with ops.Session() as s:
     served_second = served.run(batch2)   # equal to second
 ```
 
-Each input array must have the shape the captured input had. `embedding` and `take` read an index array
-from Python, so a composition that uses them cannot be captured.
+By default each input array keeps its captured shape. Pass `dynamic_shapes=True` to `run` to vary
+dimensions while keeping the rank, for example batch size or sequence length. Parameter shapes
+and the operations must accept those dimensions; use `-1` in a captured reshape for an inferred
+dimension. Tensor handles containing integer indices let `embedding` and `take` participate in capture.
+
+## Train a captured model
+
+`Program.fit` runs shuffling, minibatches, forward and backward passes, optimizer updates and epoch
+loops in one native call. Capture one prediction output and choose a loss:
+
+```python
+with ops.Session() as s:
+    x = s.tensor(X)
+    w = s.tensor(np.zeros((X.shape[1], 1), dtype=np.float32))
+    model = s.capture([x], [s.matmul(x, w)])
+    opt = s.optimizer("adam", lr=0.01)
+    model.fit(X, targets=y.reshape(-1, 1), optimizer=opt,
+              loss="mse", epochs=20, batch_size=32)
+    predictions = model.run(X[:5], dynamic_shapes=True)
+```
+
+`loss_curve_` contains the epoch losses. Calling `fit` again with the same optimizer continues its
+state and schedule. Every captured parameter is trainable by default; pass `parameters=[w]` to
+train a subset and keep other captured constants fixed.
+
+For a custom objective, capture a scalar loss as the one output, include target tensors among the
+program inputs, and call `fit(X, y, optimizer=opt, loss="output")`. Inputs must have equal sample
+counts on their first axis; minibatches preserve the remaining dimensions.
 
 ## Import weights
 
