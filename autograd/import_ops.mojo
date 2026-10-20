@@ -5,13 +5,15 @@
 # leaky relu, elu, hard sigmoid / swish, clip, abs, floor, ceil, round, sin,
 # cos, sign, reciprocal, logical not, pow; the broadcasting binary kinds pow,
 # minimum, maximum, where, the comparisons and logical and / or; argmax's
-# position words; constant pad). Shared by HostExec and DeviceExec through
+# position words; constant pad; lane ag-import-lm-ops: the nonzero test of
+# any / all, cumsum's blocked scan and the flat ids of a multi-tensor index).
+# Shared by HostExec and DeviceExec through
 # sequence/dispatch.mojo, so the host column and every GPU run the same
 # bodies.
 #
 # Codes OP_IMP_FIRST..OP_IMP_LAST (4600..4619) are this family;
-# sequence/dispatch.mojo routes and fences them. 4600..4606 are used,
-# 4607..4619 are reserved for this family.
+# sequence/dispatch.mojo routes and fences them. 4600..4609 are used,
+# 4610..4619 are reserved for this family.
 #
 # Every body is one thread per output word with no order to declare: a word
 # is a function of the words it reads, through ld / st (ftz) and the
@@ -21,6 +23,31 @@
 # operand's gradient, which the tape calls fold with OP_RN_REDUCE_PART and
 # the blocked fold (autograd/import_api.mojo), order (F) of
 # autograd/rankn_fold_ops.mojo.
+#
+# THE SCAN ORDER (cumsum, OP_IMP_SCAN_TOTALS / OP_IMP_SCAN_FINAL, lane
+# ag-import-lm-ops). A scan along an axis of length L is cut into leaves of
+# IMP_SCAN_LEAF = 64 consecutive positions in scan order (the reversed order
+# for a reverse scan). Within a leaf the terms are added in ascending scan
+# order, left to right, one add at a time (add: ftz). The words of an
+# output at scan position j are:
+#   L <= 64:  ((v0 + v1) + v2) ... + vj
+#   L > 64:   Q[b - 1] + (((v[64b] + v[64b + 1]) ... + vj)), b = j // 64,
+#             where T[b] is leaf b's total (its 64 terms in the same order)
+#             and Q is the inclusive scan of T by this same rule
+#             (recursively, one level per factor of 64); leaf 0 adds no Q.
+# An exclusive scan's word at j is the inclusive word at j - 1 (0 at j = 0).
+# Every word is one thread's sum of at most 64 terms plus one add, so no
+# sequential chain runs along the axis; the order is the same on every
+# executor and every launch geometry. The gradient is the scan of the
+# upstream in the other direction, same exclusive flag, same rule.
+#
+# THE FLAT IDS DESCRIPTOR (OP_IMP_FLAT_IDS, a multi-tensor index): word 0
+# nk (the broadcast index shape's rank), word 1 the index tensor's base
+# offset, then nk records of IMP_IDS_REC = 2 words [extent, stride] (stride
+# 0 on an axis the index tensor broadcasts over). Index values are float
+# words holding integers; a negative one counts from the end of its axis.
+# A NaN, a fraction or an index outside its axis makes the id -1, which the
+# embedding's id check refuses before any row is read.
 #
 # THE BINARY DESCRIPTOR (int32 bit patterns in tape storage, read with
 # rn_word, never ld; bound to Args.p11):
@@ -60,6 +87,9 @@ comptime OP_IMP_BIN_VJP = 4603
 comptime OP_IMP_ARGMAX = 4604
 comptime OP_IMP_PAD = 4605
 comptime OP_IMP_PAD_VJP = 4606
+comptime OP_IMP_SCAN_TOTALS = 4607
+comptime OP_IMP_SCAN_FINAL = 4608
+comptime OP_IMP_FLAT_IDS = 4609
 comptime OP_IMP_FIRST = 4600
 comptime OP_IMP_LAST = 4619
 
@@ -84,7 +114,8 @@ comptime IMP_SIGN = 17
 comptime IMP_RECIPROCAL = 18
 comptime IMP_NOT = 19            # 1 where x == 0, else 0
 comptime IMP_POW_SCALAR = 20     # f0 the exponent
-comptime IMP_UNARY_LAST = 20
+comptime IMP_BOOL = 21           # 1 where x != 0 (NaN included), else 0
+comptime IMP_UNARY_LAST = 21
 
 # Binary kinds (Args.i1 of OP_IMP_BIN_*).
 comptime IMP_POW = 1
@@ -109,6 +140,11 @@ comptime IMP_BIN_HEAD = 5
 comptime IMP_BIN_REC = 5
 comptime IMP_PAD_HEAD = 2
 comptime IMP_PAD_REC = 4
+comptime IMP_IDS_HEAD = 2
+comptime IMP_IDS_REC = 2
+# the scan's leaf length (THE SCAN ORDER above); fixed, so cumsum's words
+# never depend on the fold lane's settings
+comptime IMP_SCAN_LEAF = 64
 
 # derivative constants, float32 roundings of the closed forms
 comptime IMP_TWO_OVER_SQRT_PI = Float32(1.1283791670955126)
@@ -121,8 +157,9 @@ comptime IMP_GELU_C3 = Float32(0.134145)
 
 def unary_has_gradient(kind: Int) -> Bool:
     """False for the piecewise-constant kinds (floor, ceil, round, sign,
-    not): their gradient is zero."""
-    return not (kind == IMP_FLOOR or kind == IMP_CEIL or kind == IMP_ROUND or kind == IMP_SIGN or kind == IMP_NOT)
+    not, bool): their gradient is zero."""
+    return not (kind == IMP_FLOOR or kind == IMP_CEIL or kind == IMP_ROUND or kind == IMP_SIGN or kind == IMP_NOT
+                or kind == IMP_BOOL)
 
 
 def binary_has_gradient(kind: Int) -> Bool:
@@ -249,6 +286,8 @@ def imp_unary_value(kind: Int, x: Float32, f0: Float32, f1: Float32) -> Float32:
         return div(Float32(1), x)
     if kind == IMP_NOT:
         return _unit(x == Float32(0))
+    if kind == IMP_BOOL:
+        return _unit(x != Float32(0))
     # IMP_POW_SCALAR
     return _pow(x, f0)
 
@@ -316,7 +355,7 @@ def imp_unary_vjp_value(kind: Int, g: Float32, x: Float32, y: Float32, f0: Float
         if f0 == Float32(0):
             return Float32(0)
         return mul(g, mul(f0, _pow(x, sub(f0, Float32(1)))))
-    # floor, ceil, round, sign, not: piecewise constant
+    # floor, ceil, round, sign, not, bool: piecewise constant
     return Float32(0)
 
 
@@ -550,6 +589,110 @@ def op_imp_pad_vjp(t: Int, a: Args):
 
 
 @always_inline
+def _scan_src(o: Int, j: Int, q: Int, L: Int, I: Int, rev: Int) -> Int:
+    """The source word of scan position j (scan order) of outer o, inner q."""
+    var r = j
+    if rev == 1:
+        r = L - 1 - j
+    return (o * L + r) * I + q
+
+
+@always_inline
+def _leaf_sum(p: FP, o: Int, lo: Int, hi: Int, q: Int, L: Int, I: Int, rev: Int) -> Float32:
+    """Scan positions lo .. hi (inclusive, one leaf) added in ascending scan
+    order, left to right."""
+    var s = ld(p, _scan_src(o, lo, q, L, I, rev))
+    var j = lo + 1
+    while j <= hi:  # small-loop(at most IMP_SCAN_LEAF - 1 = 63 terms: one leaf of the declared scan order)
+        s = add(s, ld(p, _scan_src(o, j, q, L, I, rev)))
+        j += 1
+    return s
+
+
+@always_inline
+def op_imp_scan_totals(t: Int, a: Args):
+    """Leaf totals of a scan: p1[t] = the sum of leaf b of outer o, inner q
+    (t = (o * nb + b) * I + q, nb = ceil(L / 64)), in scan order. p0 the
+    source (outer, L, inner), i1 L, i2 I, i3 1 for a reverse scan."""
+    var L = a.i1
+    var I = a.i2
+    var nb = (L + IMP_SCAN_LEAF - 1) // IMP_SCAN_LEAF
+    var q = t % I
+    var rest = t // I
+    var b = rest % nb
+    var o = rest // nb
+    var lo = b * IMP_SCAN_LEAF
+    var hi = min(lo + IMP_SCAN_LEAF, L) - 1
+    st(a.p1, t, _leaf_sum(a.p0, o, lo, hi, q, L, I, a.i3))
+
+
+@always_inline
+def op_imp_scan_final(t: Int, a: Args):
+    """Output word t = (o * L + r) * I + q of a scan (THE SCAN ORDER): p0 the
+    source, p1 the output, p2 Q, the inclusive scan of the leaf totals
+    (outer, nb, inner; unbound when i5 = 0, a single leaf); i1 L, i2 I, i3
+    1 for a reverse scan, i4 1 for an exclusive one."""
+    var L = a.i1
+    var I = a.i2
+    var q = t % I
+    var rest = t // I
+    var r = rest % L
+    var o = rest // L
+    var j = r
+    if a.i3 == 1:
+        j = L - 1 - r
+    if a.i4 == 1:
+        j -= 1
+    if j < 0:
+        st(a.p1, t, Float32(0))
+        return
+    var b = j // IMP_SCAN_LEAF
+    var s = _leaf_sum(a.p0, o, b * IMP_SCAN_LEAF, j, q, L, I, a.i3)
+    if a.i5 == 1 and b > 0:
+        var nb = (L + IMP_SCAN_LEAF - 1) // IMP_SCAN_LEAF
+        s = add(ld(a.p2, (o * nb + b - 1) * I + q), s)
+    st(a.p1, t, s)
+
+
+@always_inline
+def op_imp_flat_ids(t: Int, a: Args):
+    """Flat id t of a multi-tensor index (THE FLAT IDS DESCRIPTOR): the
+    index tensor p0's word at broadcast position t, wrapped to [0, i1) and
+    times i2, written (i3 = 1) or added to the id already at p1[t] (i3 = 0)
+    as an int32 word; -1 where the index or the earlier id is invalid."""
+    var nk = rn_word(a.p11, 0)
+    var off = rn_word(a.p11, 1)
+    var rem = t
+    var k = nk - 1
+    while k >= 0:  # small-loop(nk <= 8: tensor rank, shape metadata)
+        var at = IMP_IDS_HEAD + k * IMP_IDS_REC
+        var ext = rn_word(a.p11, at)
+        var c = rem % ext
+        rem = rem // ext
+        off += c * rn_word(a.p11, at + 1)
+        k -= 1
+    var v = ld(a.p0, off)
+    var dim = a.i1
+    var ok = v == v and floor(v) == v and v > Float32(-2147483648.0) and v < Float32(2147483648.0)
+    var iv = 0
+    if ok:
+        iv = Int(v)
+        if iv < 0:
+            iv += dim
+        ok = iv >= 0 and iv < dim
+    var prev = 0
+    if a.i3 == 0:
+        prev = Int(bitcast[DType.int32](a.p1.unsafe_load(t)))
+        if prev < 0:
+            ok = False
+    var w = Int32(-1)
+    if ok:
+        w = Int32(prev + iv * a.i2)
+    # raw, never through st: ftz would zero a small integer's pattern
+    a.p1.unsafe_store(t, bitcast[DType.float32](w))
+
+
+@always_inline
 def apply_import[OP: Int](t: Int, a: Args):
     """The OP_IMP_FIRST..OP_IMP_LAST family (sequence/dispatch.mojo)."""
     comptime if OP == OP_IMP_UNARY_FWD:
@@ -566,3 +709,9 @@ def apply_import[OP: Int](t: Int, a: Args):
         op_imp_pad(t, a)
     elif OP == OP_IMP_PAD_VJP:
         op_imp_pad_vjp(t, a)
+    elif OP == OP_IMP_SCAN_TOTALS:
+        op_imp_scan_totals(t, a)
+    elif OP == OP_IMP_SCAN_FINAL:
+        op_imp_scan_final(t, a)
+    elif OP == OP_IMP_FLAT_IDS:
+        op_imp_flat_ids(t, a)
