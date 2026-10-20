@@ -49,6 +49,11 @@ tool on the Mac and this plan runs nothing there beyond a pure-Python zip):
     <set root>/_mojolearn_x.so           $ORIGIN/.libs:$ORIGIN/../.libs:$ORIGIN/../../.libs
     <set root>/<tier>/_mojolearn_x.so    $ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs
     <set root>/host/_mojolearn_x_host.so $ORIGIN/../.libs:$ORIGIN/../cuda/.libs:$ORIGIN/../hip/.libs:$ORIGIN/.libs
+
+(In the merged layout each directory holds _mojolearn_native.so, or
+_mojolearn_native_host.so in host/, plus _mojolearn_merged.json; the merged
+files take the same RUNPATH by directory, and each index is recorded in the
+manifest's merged_indexes with its digest.)
     .libs/lib*.so                        $ORIGIN
 
 The host row (2026-09-14) is the vendor-neutral CPU bindings, packed ONCE at
@@ -222,6 +227,8 @@ def main():
     if not a.patchelf:
         raise SystemExit("stage_libs: patchelf not found; build_sets.sh installs one")
 
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from merged_layout import INDEX, read_index
     exts = sorted(root.glob("_mojolearn*.so"))
     for tier in ("identical",):
         exts += sorted((root / tier).glob("_mojolearn*.so"))
@@ -283,16 +290,31 @@ def main():
             tier = ext.parent.name
         set_runpath(a.patchelf, ext, rp)
         n, runpath, rpath = elf_dynamic(ext)
-        ext_records.append({"path": str(ext.relative_to(root)), "tier": tier,
-                            "bytes": ext.stat().st_size, "sha256": sha256(ext),
-                            "needed": n, "runpath": runpath})
+        record = {"path": str(ext.relative_to(root)), "tier": tier,
+                  "bytes": ext.stat().st_size, "sha256": sha256(ext),
+                  "needed": n, "runpath": runpath}
+        members = (read_index(ext.parent) or {}).get(ext.name)
+        if members is not None:
+            record["members"] = members
+        ext_records.append(record)
     verify_closed(exts + sorted(libs.glob("*.so*")), libs, env_lib)
+    # MERGED LAYOUT (packaging/linux/merged_layout.py): each merged file's
+    # index ships beside it and the loader trusts it, so it is recorded with
+    # its digest like every other shipped file of the set.
+    merged_indexes = []
+    for d in [root, root / "identical", root / "host"]:
+        index = read_index(d) if d.is_dir() else None
+        if index is not None:
+            merged_indexes.append({"path": str((d / INDEX).relative_to(root)), "sha256": sha256(d / INDEX),
+                                   "files": index})
 
     total_ext = sum(r["bytes"] for r in ext_records)
     total_libs = sum(r["bytes"] for r in staged)
     manifest = {
         "set": str(root), "env_lib": str(env_lib),
         "extensions": ext_records, "staged_libs": staged,
+        "merged_indexes": merged_indexes,
+        "binding_layout": "merged" if merged_indexes else "per-binding",
         "driver_libs_not_staged": driver, "edges": edges,
         "input_edges": input_edges, "portable_math": portable_math,
         "bytes_extensions": total_ext, "bytes_staged_libs": total_libs,
