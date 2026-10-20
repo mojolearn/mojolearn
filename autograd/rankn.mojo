@@ -266,4 +266,8 @@ comptime RN_TAG_END = 192
 # base offset (elements) into p0, i1..i8 the view's source strides along
 # its own (uncollapsed) axes, i9 = 1 while the value buffer is not filled,
 # i10 = RN_VIEW_MARK. p1..p10 and i11 stay free for the op's own use.
+# A custom rule whose input is a pending view receives that input's value
+# buffer, which holds words only after a dense read: a strided reader's rule
+# reads its operands through the buffers and descriptors it saved
+# (Tape.operand_nd at record time), as matmul's backward does.
 comptime RN_VIEW_MARK = 0x524E5631
