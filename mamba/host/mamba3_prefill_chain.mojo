@@ -7,7 +7,7 @@ binding and the Samba train step assemble the same VJP on the tape
 (autograd/rules_mamba3.mojo), whose rules launch these same kernels in this
 same order. No device module imports this file (lane ag-mamba3-tape,
 2026-10-19: the device copy of this walk is tombstoned in
-mamba/impl/modules/mamba3_prefill_backward.mojo).
+autograd/kernels/mamba3_prefill.mojo).
 No incoming cache or final-state cotangent is accepted.
 """
 from std.memory import bitcast
@@ -25,7 +25,7 @@ comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DE
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
-from mamba.checks.mamba3_backward import (
+from autograd.kernels.mamba3_proj import (
     PROJ3_IN, PROJ3_OUT,
     RED3_D, RED3_NORM_W,
     RED3_DT_BIAS,
@@ -42,14 +42,14 @@ from mamba.checks.mamba3_fixture import (
     M3_HEADDIM,
     M3_NUM_ROPE_ANGLES,
 )
-from mamba.impl.modules.mamba3_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
 from mamba.impl.modules.mamba3 import (
     Mamba3DeviceStages,
     Mamba3DeviceWeights,
     allocate_inference_cache,
     mamba3_block_forward,
 )
-from mamba.impl.modules.mamba3_backward import (
+from autograd.kernels.mamba3 import (
     mamba3_backward_gate_skip_into,
     mamba3_backward_qkdot_into,
     mamba3_backward_s16_s15_into,
@@ -79,13 +79,13 @@ from mamba.impl.modeling.modeling_mamba import (
 )
 from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
 
-from mamba.impl.modules.mamba3_backward import (
+from autograd.kernels.mamba3 import (
     AFN_M3_BWD_CHUNK,
     afn_m3_theta_chunks,
     mamba3_afn_backward_angle_into,
 )
 # the result types and the scratch helpers stay with the device tree
-from mamba.impl.modules.mamba3_prefill_backward import (
+from autograd.kernels.mamba3_prefill import (
     IDN_M3_BWD_SKIP_DEAD,
     Mamba3DeviceGradients,
     Mamba3PrefillGradients,

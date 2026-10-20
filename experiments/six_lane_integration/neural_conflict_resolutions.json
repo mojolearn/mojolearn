@@ -15,7 +15,7 @@
     "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
   },
   {
-    "path": "mamba/impl/modules/mamba3_backward.mojo",
+    "path": "autograd/kernels/mamba3.mojo",
     "conflict_blocks": 3,
     "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
   },
@@ -105,7 +105,7 @@
     "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
   },
   {
-    "path": "transformer/checks/transformer_backward.mojo",
+    "path": "autograd/kernels/transformer.mojo",
     "conflict_blocks": 1,
     "resolution": "Semantic combination; separate numerical alternatives, deduplicated equivalent kernels and caller contracts. See DECISIONS.md."
   },

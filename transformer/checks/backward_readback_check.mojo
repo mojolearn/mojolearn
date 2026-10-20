@@ -10,7 +10,7 @@ from core.identity_trace import IdentityTrace
 from core.step_phase import step_counts_now
 from transformer.impl.llama.modeling_llama import LlamaDims
 from transformer.checks.transformer_fixture import fixture_case, fixture_dims
-from transformer.checks.transformer_backward import LlamaBackwardStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from transformer.checks.transformer_backward_check import (
     backward_device_dump, bwd_stage_cells, clause_a_case,
 )

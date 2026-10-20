@@ -15,7 +15,11 @@ shape resolution's own) comes back at once, before anything is uploaded.
   results become uploaded parameters, so the captured program holds none of
   that work;
 * the graph inputs become placeholder tensors and every remaining node is
-  one or a few session calls, the operations ``Session.capture`` records.
+  one or a few session calls, the operations ``Session.capture`` records;
+  an integer input read only as ``Gather`` indices (a language model's
+  token ids) is an ids tensor (``Session.ids``), and its ``Gather`` is an
+  ``embedding`` (a 2-D table on axis 0) or a ``take``, so the program takes
+  new ids at each run.
 
 Python here maps names, shapes, axes and attribute numbers; it never reads
 or computes a floating-point element of the model. Every value computation,
@@ -59,7 +63,7 @@ SUPPORTED_OPS = (
     ("Expand", "a static shape"),
     ("Flatten", "any axis"),
     ("Floor", "any input"),
-    ("Gather", "constant indices"),
+    ("Gather", "constant indices, or an integer model input read only as indices, each in [0, size)"),
     ("Gelu", "approximate 'none' or 'tanh'"),
     ("Gemm", "any transA, transB, alpha and beta; a bias that broadcasts"),
     ("GlobalAveragePool", "rank 3 or more"),
@@ -81,6 +85,7 @@ SUPPORTED_OPS = (
     ("Max", "inputs that broadcast"),
     ("MaxPool", "2-D, square kernel_shape, equal strides, dilations 1; any pads or auto_pad; "
                 "the Indices output unused"),
+    ("MaxPool", "2-D, square kernel_shape, equal strides, pads smaller than the kernel, dilations 1; the Indices output unused"),
     ("Min", "inputs that broadcast"),
     ("Mul", "inputs that broadcast"),
     ("Neg", "any input"),
@@ -222,6 +227,16 @@ class _Graph:
                 if i:
                     self.consumers.setdefault(i, []).append(n)
         self.output_names = frozenset(o[0] for o in g.outputs)  # cpu-route: model graph lowered on the host (graph outputs)
+        # integer model inputs that needed nodes read only as Gather indices: held as
+        # ids tensors (int32 words), the program's ids inputs
+        index_inputs = set()
+        for name, dt, _ in self.inputs:  # cpu-route: model graph lowered on the host (graph inputs)
+            readers = self.consumers.get(name, ())
+            if dt in ("i64", "i32") and readers and name not in self.output_names and all(
+                    c.op == "Gather" and len(c.inputs) > 1 and c.inputs[1] == name and c.inputs[0] != name
+                    for c in readers):  # cpu-route: model graph lowered on the host (the input's readers)
+                index_inputs.add(name)
+        self.index_inputs = frozenset(index_inputs)
 
     def shape(self, name):
         return self.res.shapes[name]
@@ -358,8 +373,9 @@ def _c_slice(G, n):
 
 
 def _c_gather(G, n):
-    if G.ints(n.inputs[1]) is None:
-        return ["the indices are computed from the model's inputs (constant indices are supported)"]
+    if G.ints(n.inputs[1]) is None and n.inputs[1] not in G.index_inputs:
+        return ["the indices are computed from the model's inputs (constant indices, or an integer "
+                "model input read only as indices, are supported)"]
     return []
 
 
@@ -443,6 +459,18 @@ def _c_pool(G, n):
     if k and any(p < 0 or p >= k[0] for p in pads):  # cpu-route: model graph lowered on the host (one per side)
         # a pad of the kernel's size or more makes windows of padding only
         out.append(f"pads={pads} (each pad must be between 0 and kernel_shape - 1)")
+    if n.attrs.get("auto_pad", "NOTSET") not in ("NOTSET", "VALID"):
+        out.append(f"auto_pad={n.attrs.get('auto_pad')} (only NOTSET and VALID are supported)")
+    elif n.op == "MaxPool":
+        # lane ag-real-models (2026-10-20): a padded MaxPool (torchvision's ResNet stem) lowers as a
+        # constant pad with the lowest float32 and an unpadded pool. A pad smaller than the kernel
+        # leaves a real element in every window, so the padded positions never win the max.
+        if k and any(p >= k[0] for p in pads):  # cpu-route: model graph lowered on the host (one per side)
+            out.append(f"pads={pads} (only pads smaller than the kernel are supported)")
+        elif any(p < 0 for p in pads):  # cpu-route: model graph lowered on the host (one per side)
+            out.append(f"pads={pads} (negative pads are not supported)")
+    elif any(p != 0 for p in pads):  # cpu-route: model graph lowered on the host (one per side)
+        out.append(f"pads={pads} (only zero pads are supported)")
     if any(d != 1 for d in dil):  # cpu-route: model graph lowered on the host (one per spatial axis)
         out.append(f"dilations={dil} (only 1 is supported)")
     if n.attrs.get("storage_order", 0):
@@ -590,7 +618,14 @@ class _Lowerer:
         G, s = self.G, self.s
         inputs = []
         for name, _, _ in G.inputs:  # cpu-route: model graph lowered on the host (graph inputs)
-            h = s.full(session_shape(G.shape(name)), 0.0)  # a placeholder; capture names it an input
+            if name in G.index_inputs:
+                # an ids placeholder (id 0 is in range of every table); capture names it an
+                # ids input, and it is freed after the capture with the other unread uploads
+                from .._optional_numpy import require_numpy
+                np = require_numpy("mojolearn.importers")
+                h = self._own(s.ids(np.zeros(session_shape(G.shape(name)), dtype=np.int32)))
+            else:
+                h = s.full(session_shape(G.shape(name)), 0.0)  # a placeholder; capture names it an input
             self.h[name] = h
             inputs.append(h)
         for n in G.needed:  # cpu-route: model graph lowered on the host (graph nodes)
@@ -905,6 +940,11 @@ def _l_gather(L, n):
     r = len(sh)
     ax = _norm(n.attrs.get("axis", 0), r)
     dim = sh[ax]
+    if n.inputs[1] in G.index_inputs:
+        # ids from a model input: an embedding row lookup for a 2-D table on axis 0, else a take
+        hx, hi = L.get(x), L.get(n.inputs[1])
+        y = s.embedding(hx, hi) if r == 2 and ax == 0 else s.take(hx, hi, axis=_sax(ax, r))
+        return [L.fit(y, n.outputs[0])]
     idx = [i + dim if i < 0 else i for i in G.ints(n.inputs[1])]  # cpu-route: model graph lowered on the host (constant index integers)
     if L.cur_const:
         # a constant table: one take at import (the program reads the result as a parameter)
@@ -1007,6 +1047,10 @@ def _l_conv(L, n):
     return [L.fit(s.conv2d(hx, hw, hb, stride=stride, padding=0, groups=group), n.outputs[0])]
 
 
+#: the fill of a padded MaxPool's border: the lowest finite float32, below every real value
+_MAXPOOL_PAD = -3.4028234663852886e38
+
+
 def _l_pool(L, n):
     s = L.s
     k, st, pads, _ = _window(L.G, n)
@@ -1038,6 +1082,14 @@ def _l_pool(L, n):
     count = s.conv2d(image, s.full((1, 1, kk, kk), 1.0), None, stride=stride, padding=0)
     count = count if L.cur_const else L.persist(count)
     return [s.div(total, count)] + rest
+    k, st, pads, _ = _window(n, 2)
+    x = _x(L, n)
+    if n.op == "MaxPool" and any(pads):  # cpu-route: model graph lowered on the host (four sides)
+        # ONNX pads (top, left, bottom, right) as session pads: two per axis of (N, C, H, W)
+        x = L.s.pad(x, [0, 0, pads[0], pads[1], 0, 0, pads[2], pads[3]], _MAXPOOL_PAD)
+        return [L.s.max_pool2d(x, k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
+    f = L.s.max_pool2d if n.op == "MaxPool" else L.s.avg_pool2d
+    return [f(x, k[0], stride=st[0])] + [None] * (len(n.outputs) - 1)
 
 
 def _l_pad(L, n):

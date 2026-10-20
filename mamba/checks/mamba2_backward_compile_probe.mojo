@@ -4,7 +4,7 @@
 # not a gate and its passing says nothing about whether any gradient is
 # correct. NOTHING HERE HAS BEEN COMPILED OR RUN.
 #
-# `mamba/checks/mamba2_backward.mojo` is a library module with no `main()`, so
+# `autograd/kernels/mamba2_proj.mojo` is a library module with no `main()`, so
 # `mojo build` on it fails with "module does not define a `main` function"
 # before it ever type checks anything (pixi.toml records that exact failure
 # for 21 of 22 check files). This driver exists solely to give the compiler an
@@ -30,7 +30,7 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mamba.checks.mamba2_fixture import Mamba2Dims
-from mamba.checks.mamba2_backward import (
+from autograd.kernels.mamba2_proj import (
     CELL2_COUNT,
     PROJ2_COUNT,
     PROJ2_IN,

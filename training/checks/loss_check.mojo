@@ -32,12 +32,12 @@ from transformer.checks.transformer_fixture import fixture_splitmix64
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE,
     ce_refuse_device_inputs,
-    identical_ce_backward_into,
     identical_ce_forward_into,
     identical_ce_ones_floats,
     identical_ce_workspace_max_floats,
     loss_sabotage_name,
 )
+from autograd.kernels.lm import identical_ce_backward_into
 from training.checks.loss_fixture import (
     BITS_POS_INF,
     BITS_QNAN,

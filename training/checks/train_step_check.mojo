@@ -42,7 +42,7 @@ THE ORDER THIS MUST BE RUN IN
 ------------------------------
 Clause (a) -- one step against the composed host oracle, on ONE device --
 comes before any GPU is rented. Two of the twelve stages of a step have no
-gate of their own (`transformer/checks/transformer_backward.mojo` and
+gate of their own (`autograd/kernels/transformer.mojo` and
 `embedding/checks/embedding_identical.mojo`), so a cross-vendor agreement
 without clause (a) would show only that three machines compute the same
 thing, which is compatible with all three being wrong.
@@ -118,7 +118,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaRopeTable,
     llama_block_sabotage_name,
 )
-from transformer.checks.transformer_backward import (
+from autograd.kernels.transformer import (
     LlamaBackwardStages,
     llama_backward_sabotage_name,
 )
@@ -1475,7 +1475,7 @@ def main() raises:
     )
     print(
         "=== TWO OF THE TWELVE STAGES OF A STEP HAVE NO GATE OF THEIR OWN:"
-        " transformer/checks/transformer_backward.mojo and"
+        " autograd/kernels/transformer.mojo and"
         " embedding/checks/embedding_identical.mojo. Clause (a) below is"
         " the ONLY thing in this repository that has ever compared either"
         " of them to its oracle."

@@ -242,6 +242,35 @@ def test_guide_import_model(tmp_path, monkeypatch):
     _emit("guide_import_model_bits_equal_eager", "yes" if np.array_equal(logits.view(np.uint32),
                                                                           eager.view(np.uint32)) else "no")
 
+def test_guide_import_pretrained(tmp_path, monkeypatch):
+    """The pretrained-import block: torchvision's ResNet-18 with its published weights (downloaded on the
+    first run), exported, imported and run on four seeded images. Finite (4, 1000) logits, a second run equal
+    word for word, the saved program equal after loading; torch's own logits are a reference only."""
+    b = _blocks()
+    if "import-pretrained" not in b or not hasattr(_backend.binding("_mojolearn_x_sequence"), "ops_capture"):
+        pytest.skip("no captured-program entries in this binding (rebuild it)")
+    pytest.importorskip("mojolearn.importers._program", reason="no model-import lowering in this tree")
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    from mojolearn import ops
+    monkeypatch.chdir(tmp_path)
+    ns = _run(b["import-pretrained"])
+    model, images, logits = ns["model"], ns["images"], ns["logits"]
+    assert [tuple(t[:2]) for t in model.inputs] == [("x", (4, 3, 224, 224))]
+    assert logits.shape == (4, 1000) and logits.dtype == np.float32 and np.isfinite(logits).all()
+    assert len(ns["labels"]) == 4
+    assert np.array_equal(model.run(images).view(np.uint32), logits.view(np.uint32))
+    with ops.Session() as s:
+        served = s.load_program("resnet18.program")
+        assert np.array_equal(served.run(images).view(np.uint32), logits.view(np.uint32))
+    with torch.no_grad():
+        ref = ns["net"](torch.from_numpy(images)).numpy()
+    # a reference report, not a gate: torch sums in another order
+    print(f"GUIDE_PRETRAINED max_abs={float(np.abs(logits - ref).max()):.3e} "
+          f"top1_agree={float((logits.argmax(1) == ref.argmax(1)).mean()):.2f}")
+    _emit("guide_import_pretrained_logits", _digest(logits))
+
+
 def _docstring_examples():
     import mojolearn
     from mojolearn import ops

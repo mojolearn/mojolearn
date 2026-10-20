@@ -33,7 +33,7 @@ from mamba.impl.modules.mamba2 import (
     allocate_inference_cache,
     mamba2_block_forward,
 )
-from mamba.impl.modules.mamba2_backward import (
+from autograd.kernels.mamba2 import (
     Mamba2BackwardTail,
     mamba2_backward_d_skip_into,
     mamba2_backward_gnorm_into,
@@ -43,7 +43,7 @@ from mamba.impl.modules.mamba2_backward import (
     mamba2_backward_block_norm_into,
 )
 from mamba.impl.modules.ssd_minimal import m2_q_eff
-from mamba.impl.ops.mamba2_ssd_backward import (
+from autograd.kernels.mamba2_ssd import (
     Mamba2SSDBackwardState,
     Mamba2SSDDiscretizeBackward,
     Mamba2ConvBackward,

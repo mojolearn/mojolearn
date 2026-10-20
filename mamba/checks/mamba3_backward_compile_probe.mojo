@@ -4,7 +4,7 @@
 # not a gate and its passing says nothing about whether any gradient is
 # correct. NOTHING HERE HAS BEEN COMPILED OR RUN.
 #
-# `mamba/checks/mamba3_backward.mojo` is a library module with no `main()`, so
+# `autograd/kernels/mamba3_proj.mojo` is a library module with no `main()`, so
 # `mojo build` on it fails with "module does not define a `main` function"
 # before it ever type checks anything. This driver exists solely to give the
 # compiler an entry point that pulls the module in, and it is the exact shape
@@ -27,7 +27,7 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from mamba.checks.mamba3_fixture import Mamba3Dims
-from mamba.checks.mamba3_backward import (
+from autograd.kernels.mamba3_proj import (
     CELL3_COUNT,
     PROJ3_COUNT,
     PROJ3_IN,
@@ -63,7 +63,7 @@ from mamba.checks.mamba3_backward import (
     mamba3_rope_pair_indices,
     mamba3_rope_pair_is_rotated,
 )
-from mamba.impl.modules.mamba3_backward import (
+from autograd.kernels.mamba3 import (
     mamba3_backward_block_norm_into,
     mamba3_backward_pack_in_proj_into,
 )

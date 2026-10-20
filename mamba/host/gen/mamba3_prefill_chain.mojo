@@ -9,7 +9,7 @@ binding and the Samba train step assemble the same VJP on the tape
 (autograd/rules_mamba3.mojo), whose rules launch these same kernels in this
 same order. No device module imports this file (lane ag-mamba3-tape,
 2026-10-19: the device copy of this walk is tombstoned in
-mamba/impl/modules/mamba3_prefill_backward.mojo).
+autograd/kernels/mamba3_prefill.mojo).
 No incoming cache or final-state cotangent is accepted.
 """
 from mamba.host.device_shim import host_launch, launch_count

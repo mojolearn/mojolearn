@@ -14,7 +14,7 @@ T1-T5 are used below without restating their prices.
 **THIS FILE OWNS EXACTLY WHAT THE FORWARD SCAN FILE OWNS, MIRRORED.**
 `selective_scan_interface.mojo` owns forward seams S5-S11; this file owns
 their backward and nothing else. S1'-S4', S12'-S16' and the conv live in
-`mamba/impl/modeling/modeling_mamba_backward.mojo`, exactly
+`autograd/kernels/mamba1.mojo`, exactly
 as their forward halves live in `modeling_mamba.mojo`. Splitting the backward
 the way the forward is split is the whole reason there are two files: a seam
 and its derivative should be readable side by side.
@@ -116,7 +116,7 @@ spelling below is GATE SCALE and its `h` plus `dh` footprint is
 enqueues and returns without waiting. THE CALLER OWNS EVERY BUFFER and must
 keep each alive past its own `ctx.synchronize()`.
 
-DEVIATIONS 1070-1074 (T1-T5, declared in `mamba/checks/mamba_backward.mojo`),
+DEVIATIONS 1070-1074 (T1-T5, declared in `autograd/kernels/mamba1_proj.mojo`),
 1081-1084 (spent here).
 """
 
@@ -1509,7 +1509,7 @@ def mamba_bwd_da_log_into(
 # SIZING HELPERS
 # ===========================================================================
 # The two buffers plan section 5.3 prices, so a caller can allocate them
-# without re-deriving the shape. `mamba/checks/mamba_backward.mojo` carries
+# without re-deriving the shape. `autograd/kernels/mamba1_proj.mojo` carries
 # the same two numbers as `t2_h_checkpoint_floats` and `t3_dh_floats`; these
 # are spelled in terms of `dim` rather than `MambaDims` because this file
 # knows nothing about a block.

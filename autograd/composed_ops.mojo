@@ -32,7 +32,8 @@
 # through a pointer chosen by a conditional expression (autograd/ops.mojo
 # _ld_right).
 from sequence.ops import Args, FP, op_gemm, op_opt
-from sequence.mlp import EPI_ACT_BWD, EPI_L2GRAD, op_divs, op_l2grad
+from sequence.mlp import EPI_ACT_BWD, EPI_L2GRAD, op_l2grad
+from autograd.kernels.mlp import op_divs
 from autograd.kernels.linear import op_agk_gemm_epi, op_colsum_div
 
 comptime OP_AGC_OPT_FINISH = 2000

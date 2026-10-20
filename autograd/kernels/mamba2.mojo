@@ -26,7 +26,7 @@ from checks.numerics import (
     identical_sigmoid,
     identical_silu,
 )
-from mamba.checks.mamba2_backward import (
+from autograd.kernels.mamba2_proj import (
     PROJ2_OUT,
     PROJ2_IN,
     RED2_GNORM_W,

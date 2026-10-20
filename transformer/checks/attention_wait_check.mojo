@@ -12,7 +12,7 @@ from max.gpu.host import DeviceContext
 from core.step_phase import step_counts_now
 from core.identity_trace import IdentityTrace
 from transformer.impl.llama.modeling_llama import LlamaDims, LlamaDeviceStages
-from transformer.checks.transformer_backward import LlamaBackwardStages, bwd_attention_weight_grad
+from autograd.kernels.transformer import LlamaBackwardStages, bwd_attention_weight_grad
 from transformer.checks.transformer_backward_check import clause_a_case
 
 

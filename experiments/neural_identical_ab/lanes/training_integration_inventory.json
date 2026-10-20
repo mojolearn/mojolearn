@@ -43,12 +43,12 @@
       "id": "NN50",
       "implementation_status": "wired_draft",
       "implementation_paths": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
       "caller_paths": [
-        "embedding/owned_runs.mojo",
+        "autograd/kernels/embedding_runs.mojo",
         "embedding/checks/embedding_identical.mojo",
         "training/byte_lm.mojo"
       ],
