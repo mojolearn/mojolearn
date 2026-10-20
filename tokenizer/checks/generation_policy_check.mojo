@@ -17,4 +17,4 @@ def main() raises:
         assert_equal(generation_pick(uniform, False, 1, 0, 0.25, 17, 2, i), 0)
     var logits: List[Float32] = [-100, 0, -100, -100]
     assert_equal(generation_pick(logits, False, 1, 0, 1, 7, 0, 0), 1)
-    print("generation-policy: 75 assertions passed")
+    print("generation-policy: 74 assertions passed")
