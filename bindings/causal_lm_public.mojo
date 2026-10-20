@@ -743,7 +743,16 @@ def causal_lm_stream_binding(model: PythonObject, value: PythonObject, maximum: 
         raise Error("generation: max_new_tokens must be nonnegative")
     var prompt = generation_ids(value, Int(py=model.vocab_size))
     var handle = GenerationHandle(model, prompt, n)
-    _options(handle, options)
+    try:
+        _options(handle, options)
+    except error:
+        var parallel = model._native_entries.get("parallel_call")
+        if parallel is not None:
+            try:
+                _ = parallel("release_layers", Python.list(model, handle.state))
+            except cleanup_error:
+                raise Error("generation: option validation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
+        raise error
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var stream = g[].bi.object.__new__(g[].stream_cls)
     stream._native = PythonObject(alloc=handle^)
@@ -1102,58 +1111,69 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
             raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])
     var s = stream._native.downcast_value_ptr[GenerationHandle]()
-    s[].produced = Int(py=checkpoint["produced"])
-    if s[].produced < 0 or s[].produced > s[].max_new:
-        raise Error("generation: invalid checkpoint output position")
-    s[].current = generation_ids(checkpoint["current"], Int(py=model.vocab_size))
-    var b = len(s[].lengths)
-    if Int(py=s[].current.shape[0]) != b or len(checkpoint["lengths"]) != b or len(checkpoint["finished"]) != b:
-        raise Error("generation: checkpoint batch counts differ")
-    if s[].produced > 0 and Int(py=s[].current.shape[1]) != 1:
-        raise Error("generation: continuation checkpoint must hold one pending token per row")
-    var position = 0 if s[].produced == 0 else Int(py=s[].prompt.shape[1]) + s[].produced - 1
-    if Int(py=checkpoint["positions"]) != position:
-        raise Error("generation: checkpoint cache position disagrees with output count")
-    s[].state.positions = PythonObject(position)
-    for i in range(b):
-        s[].lengths[i] = Int(py=checkpoint["lengths"][i])
-        s[].finished[i] = Bool(py=checkpoint["finished"][i])
-        if s[].lengths[i] < 0 or s[].lengths[i] > s[].produced:
-            raise Error("generation: invalid checkpoint row length")
-    if len(checkpoint["layers"]) != len(s[].state.layers):
-        raise Error("generation: checkpoint layer count differs")
-    var kind = String(model.kind)
-    var profile = Int(py=model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
-    var arrays = _state_arrays(kind, profile)
-    for i in range(len(s[].state.layers)):
-        var dest = s[].state.layers[i]
+    try:
+        s[].produced = Int(py=checkpoint["produced"])
+        if s[].produced < 0 or s[].produced > s[].max_new:
+            raise Error("generation: invalid checkpoint output position")
+        s[].current = generation_ids(checkpoint["current"], Int(py=model.vocab_size))
+        var b = len(s[].lengths)
+        if Int(py=s[].current.shape[0]) != b or len(checkpoint["lengths"]) != b or len(checkpoint["finished"]) != b:
+            raise Error("generation: checkpoint batch counts differ")
+        if s[].produced > 0 and Int(py=s[].current.shape[1]) != 1:
+            raise Error("generation: continuation checkpoint must hold one pending token per row")
+        var position = 0 if s[].produced == 0 else Int(py=s[].prompt.shape[1]) + s[].produced - 1
+        if Int(py=checkpoint["positions"]) != position:
+            raise Error("generation: checkpoint cache position disagrees with output count")
+        s[].state.positions = PythonObject(position)
+        for i in range(b):
+            s[].lengths[i] = Int(py=checkpoint["lengths"][i])
+            s[].finished[i] = Bool(py=checkpoint["finished"][i])
+            if s[].lengths[i] < 0 or s[].lengths[i] > s[].produced:
+                raise Error("generation: invalid checkpoint row length")
+        if len(checkpoint["layers"]) != len(s[].state.layers):
+            raise Error("generation: checkpoint layer count differs")
+        var kind = String(model.kind)
+        var profile = Int(py=model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
+        var arrays = _state_arrays(kind, profile)
+        for i in range(len(s[].state.layers)):
+            var dest = s[].state.layers[i]
+            var parallel = model._native_entries.get("parallel_call")
+            if parallel is not None:
+                dest = parallel("state_snapshot", Python.list(dest))
+            var source = checkpoint["layers"][i]
+            for j in range(len(arrays)):
+                var expected = g[].bi.getattr(dest, arrays[j])
+                var supplied = source[arrays[j]]
+                if g[].bi.type(supplied) is not g[].array_cls or String(supplied.dtype) != "<f4" or not Bool(py=supplied.shape == expected.shape):
+                    raise Error("generation: checkpoint state array shape or dtype differs")
+                g[].bi.setattr(dest, arrays[j], generation_copy(supplied))
+            if kind == "transformer":
+                if Int(py=source["cached_tokens"]) != position:
+                    raise Error("generation: checkpoint layer cache position differs")
+                dest.cached_tokens = PythonObject(position)
+            elif kind == "mamba1":
+                if Int(py=source["profile_id"]) != profile or Int(py=source["absolute_position"]) != position:
+                    raise Error("generation: checkpoint Mamba profile/position differs")
+                dest.absolute_position = PythonObject(position)
+            else:
+                if Int(py=source["buffered_tokens"]) != position % 256:
+                    raise Error("generation: checkpoint Mamba2 buffered length differs")
+                dest.buffered_tokens = source["buffered_tokens"]
+            if parallel is not None:
+                _ = parallel("state_publish", Python.list(s[].state.layers[i], dest))
+        s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
+        s[].pending_bytes = g[].bi.bytearray(checkpoint["pending_bytes"])
+        return stream
+    except error:
+        # These caches belong only to this attempted restore. Existing live
+        # streams retain their own worker tokens and are never touched.
         var parallel = model._native_entries.get("parallel_call")
         if parallel is not None:
-            dest = parallel("state_snapshot", Python.list(dest))
-        var source = checkpoint["layers"][i]
-        for j in range(len(arrays)):
-            var expected = g[].bi.getattr(dest, arrays[j])
-            var supplied = source[arrays[j]]
-            if g[].bi.type(supplied) is not g[].array_cls or String(supplied.dtype) != "<f4" or not Bool(py=supplied.shape == expected.shape):
-                raise Error("generation: checkpoint state array shape or dtype differs")
-            g[].bi.setattr(dest, arrays[j], generation_copy(supplied))
-        if kind == "transformer":
-            if Int(py=source["cached_tokens"]) != position:
-                raise Error("generation: checkpoint layer cache position differs")
-            dest.cached_tokens = PythonObject(position)
-        elif kind == "mamba1":
-            if Int(py=source["profile_id"]) != profile or Int(py=source["absolute_position"]) != position:
-                raise Error("generation: checkpoint Mamba profile/position differs")
-            dest.absolute_position = PythonObject(position)
-        else:
-            if Int(py=source["buffered_tokens"]) != position % 256:
-                raise Error("generation: checkpoint Mamba2 buffered length differs")
-            dest.buffered_tokens = source["buffered_tokens"]
-        if parallel is not None:
-            _ = parallel("state_publish", Python.list(s[].state.layers[i], dest))
-    s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
-    s[].pending_bytes = g[].bi.bytearray(checkpoint["pending_bytes"])
-    return stream
+            try:
+                _ = parallel("release_layers", Python.list(model, s[].state))
+            except cleanup_error:
+                raise Error("generation: checkpoint restore failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
+        raise error
 
 
 def causal_state_init_binding(state: PythonObject, values: PythonObject) raises -> PythonObject:
@@ -1206,6 +1226,8 @@ def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
         return result.steal_data()
     except error:
         var message = String(error)
+        if message.startswith("RuntimeError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
             return raise_python_exception(error, ExceptionType.TypeError)
         return raise_python_exception(error, ExceptionType.ValueError)
