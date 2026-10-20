@@ -51,7 +51,7 @@ info = {"vendor": b.x_sequence_vendor(), "numeric_mode": b.x_sequence_numeric_mo
         "binding": getattr(b, "__file__", None), "binding_type": type(b).__name__}
 print(json.dumps(info, indent=2))
 assert info["vendor"] == sys.argv[1], info
-assert info["numeric_mode"] == "identical", info
+assert info["numeric_mode"] == 1, info  # Native NUMERIC_IDENTICAL enum.
 PY
     set +e
     "$test_python" -m pytest -q -s -p no:cacheprovider \
