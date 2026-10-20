@@ -92,8 +92,8 @@ def op_rn_bmm(t: Int, a: Args):
     # the outer contraction coordinates, row-major
     var outer = 1
     var cbase = RNB_HEAD + RNB_REC * nf
-    for q in range(nc):  # small-loop(nc: tensor rank, at most 8): extent product
-        outer *= rn_word(d, cbase + RNB_REC * q)
+    for axis in range(nc):  # small-loop(nc: tensor rank, at most 8): extent product
+        outer *= rn_word(d, cbase + RNB_REC * axis)
     var acc = Float32(0.0)
     for o in range(outer):  # the declared chain's outer coordinates, ascending
         var r = o
