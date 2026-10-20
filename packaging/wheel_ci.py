@@ -232,7 +232,9 @@ def versions(argv):
 def pins(argv):
     root = pathlib.Path(argv[0]).resolve()
     target = _one(r'^DEFAULT_MACOS_TARGET = "([^"]+)"', root / "python/setup.py")
-    scripts = sorted((root / "bindings").glob("build*.sh"))
+    # build_defines.sh is a sourced helper (MOJOLEARN_BUILD_DEFINES -> flags),
+    # not a build script; it compiles nothing and pins nothing.
+    scripts = sorted(p for p in (root / "bindings").glob("build*.sh") if p.name != "build_defines.sh")
     # The merged build (one native file per group, the release layout) pins
     # the same floor and baselines; it is named apart so loops over build*.sh
     # never run it.
