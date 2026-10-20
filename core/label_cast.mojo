@@ -22,11 +22,11 @@ def host_unique_inverse_cast(src: CastIn, label_kind: Int, classes_addr: Int, co
     # the bytes in whole words (the tail zero-padded), so a word read never
     # passes the caller's buffer
     var raw = List[Float32](length=src.words(), fill=Float32(0))
-    memcpy(dest=_BP(unsafe_from_address=Int(raw.unsafe_ptr())), src=_BP(unsafe_from_address=src.addr), count=src.nbytes())
+    memcpy(dest=_BP(unsafe_from_address=Int(raw.unsafe_ptr())), src=_BP(unsafe_from_address=src.start()), count=src.nbytes())
     var rp = FP(unsafe_from_address=Int(raw.unsafe_ptr()))
     var w64 = List[UInt64](length=n, fill=UInt64(0))
     for i in range(n):  # host twin: one label per row, as _widen_kernel
-        w64[i] = cast_w64_bits(cast_raw_bits(rp, i * src.s0, size), src.kind, size)
+        w64[i] = cast_w64_bits(cast_raw_bits(rp, src.origin() + i * src.s0, size), src.kind, size)
     var cls = List[UInt64](length=n, fill=UInt64(0))
     var k = host_unique_inverse(
         MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(w64.unsafe_ptr())), n, label_kind,

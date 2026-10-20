@@ -31,10 +31,11 @@ comptime _BP = MutPointer[UInt8, MutUntrackedOrigin]
 def op_cast_f32(t: Int, a: Args):
     """dst[t] = float32 of the caller's row-major element t. p0 the
     caller's bytes in words, p1 dst; i0 kind, i1 item size, i2 cols, i3 the
-    row stride and i4 the column stride in bytes."""
+    row stride and i4 the column stride in bytes (signed), i5 element
+    (0, 0)'s byte offset in the words (CastIn.origin)."""
     var r = t // a.i2
     var c = t - r * a.i2
-    var raw = cast_raw_bits(a.p0, r * a.i3 + c * a.i4, a.i1)
+    var raw = cast_raw_bits(a.p0, a.i5 + r * a.i3 + c * a.i4, a.i1)
     a.p1.unsafe_store(t, bitcast[DType.float32](cast_f32_bits(raw, a.i0, a.i1)))
 
 
@@ -120,7 +121,7 @@ def upload_cast[E: Exec](mut ex: E, dst: FP, src: CastIn) raises:
         ex.upload(dst, FP(unsafe_from_address=src.addr), src.count())
         return
     var raw = ex.alloc(src.words())
-    upload_bytes(ex, raw, src.addr, src.nbytes())
+    upload_bytes(ex, raw, src.start(), src.nbytes())
     var a = Args()
     a.p0 = raw
     a.p1 = dst
@@ -129,6 +130,7 @@ def upload_cast[E: Exec](mut ex: E, dst: FP, src: CastIn) raises:
     a.i2 = src.cols
     a.i3 = src.s0
     a.i4 = src.s1
+    a.i5 = src.origin()
     ex.launch[OP_CAST_F32](a, src.count())
     ex.free(raw)
 
