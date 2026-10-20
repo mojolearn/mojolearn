@@ -167,6 +167,9 @@ from autograd.rankn_bmm_ops import OP_RNB_FIRST, OP_RNB_LAST, apply_rn_bmm
 from autograd.rankn_layout_ops import OP_RNL_FIRST, OP_RNL_LAST, apply_rankn_layout
 # ---- lane ag-rankn-conv (AUTOGRAD_RANKN.md 2.8): rank-4 conv2d and pools, 4500..4519
 from autograd.rankn_conv_ops import OP_RNV_FIRST, OP_RNV_LAST, apply_rankn_conv
+# ---- lane ag-import-kernels (docs/plans/MODEL_IMPORT.md 3.3): the import elementwise family, 4600..4619
+from autograd.import_ops import OP_IMP_FIRST, OP_IMP_LAST, apply_import
+# ---- end lane ag-import-kernels
 # lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the higher-order bodies
 from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST, apply_higher
 
@@ -428,6 +431,16 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNV_FIRST or OP_CELL_BWD_SCAN > OP_RNV_LAST
     ), "rank-N conv opcode collides with recurrent scan"
     # ---- end lane ag-rankn-conv
+    # ---- lane ag-import-kernels: the import elementwise family (autograd/
+    # import_ops.mojo OP_IMP_*, 4600..4619), above every other family.
+    comptime assert OP_IMP_FIRST <= OP_IMP_LAST, "import opcode range is empty"
+    comptime assert OP_IMP_FIRST > OP_RNV_LAST and OP_IMP_FIRST > OP_RNL_LAST and OP_IMP_FIRST > OP_RNB_LAST and OP_IMP_FIRST > OP_RNF_LAST and OP_IMP_FIRST > OP_RNC_LAST and OP_IMP_FIRST > OP_HO_LAST, "import opcodes overlap a rank-N or higher-order family"
+    comptime assert OP_IMP_FIRST > OP_CAST_LAST and OP_IMP_FIRST > OP_EMB_LAST and OP_IMP_FIRST > OP_HL_LAST and OP_IMP_FIRST > OP_MOEB_LAST and OP_IMP_FIRST > OP_AGH_LAST and OP_IMP_FIRST > OP_AGS_LAST and OP_IMP_FIRST > OP_ROW_LAST and OP_IMP_FIRST > OP_GK_LAST and OP_IMP_FIRST > OP_AGC_LAST, "import opcodes overlap a lower family"
+    comptime assert OP_IMP_FIRST > OP_AG_LAST and OP_IMP_FIRST > OP_AGD_LAST and OP_IMP_FIRST > OP_AGO_LAST and OP_IMP_FIRST > OP_LS_LAST and OP_IMP_FIRST > OP_AGM_LAST and OP_IMP_FIRST > OP_AGK_LAST and OP_IMP_FIRST > OP_P1_LAST and OP_IMP_FIRST > OP_AGF_LAST and OP_IMP_FIRST > OP_MLP_LB_LAST, "import opcodes overlap an autograd family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_IMP_FIRST or OP_CELL_FWD_SCAN > OP_IMP_LAST) and (
+        OP_CELL_BWD_SCAN < OP_IMP_FIRST or OP_CELL_BWD_SCAN > OP_IMP_LAST
+    ), "import opcode collides with recurrent scan"
+    # ---- end lane ag-import-kernels
     # lane ag-ho-core (H1): the higher-order bodies (autograd/higher_ops.mojo
     # OP_HO_*, 3600..3609), above the cast family.
     comptime assert OP_HO_FIRST <= OP_HO_LAST, "higher-order opcode range is empty"
@@ -496,6 +509,9 @@ def apply[OP: Int](t: Int, a: Args):
     elif OP >= OP_RNV_FIRST and OP <= OP_RNV_LAST:
         # lane ag-rankn-conv: rank-4 conv2d and pools
         apply_rankn_conv[OP](t, a)
+    elif OP >= OP_IMP_FIRST and OP <= OP_IMP_LAST:
+        # lane ag-import-kernels: the import elementwise family
+        apply_import[OP](t, a)
     elif OP >= OP_HO_FIRST and OP <= OP_HO_LAST:
         apply_higher[OP](t, a)
     elif OP == OP_GEMM:
