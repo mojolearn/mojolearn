@@ -12,8 +12,8 @@ same order. No device module imports this file (lane ag-mamba3-tape,
 mamba/impl/modules/mamba3_prefill_backward.mojo).
 No incoming cache or final-state cotangent is accepted.
 """
-from std.memory import bitcast
 from mamba.host.device_shim import host_launch, launch_count
+from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns
 

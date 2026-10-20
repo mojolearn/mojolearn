@@ -6,8 +6,8 @@ its launches allocate with. The device VJP is assembled on the tape
 (autograd/rules_mamba3.mojo::mamba3_tape_backward_on); the CPU column's hand
 walk is mamba/host/mamba3_prefill_chain.mojo.
 """
-from std.time import perf_counter_ns
 from mamba.host.device_shim import host_launch, launch_count
+from std.time import perf_counter_ns
 
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 
