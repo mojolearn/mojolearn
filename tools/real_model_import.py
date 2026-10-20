@@ -45,8 +45,10 @@ images stay on the box and never enter the repository or the wheel. torchvision'
 (the weights' meta) is recorded beside it as source.published_top1. tools/model_catalog.py builds
 python/mojolearn/models/catalog.json from these JSON files.
 
-Box needs: torch, torchvision, transformers (SmolLM2), onnxruntime (the ONNX reference), onnx (only to
-convert a model-zoo file below opset 13). Network for the first download of each weight file. Exit
+Box needs: torch, torchvision, transformers (SmolLM2), onnxruntime (the ONNX reference), onnx (to
+convert a model-zoo file below opset 13: onnx.version_converter.convert_version(model, 13), saved beside
+the download as <stem>-opset13.onnx with its sha256, and that file is imported and run by onnxruntime;
+without onnx such a row fails with the reason instead of importing the old opset). Network for the first download of each weight file. Exit
 status 0 when every row has a status (ok or refused); 1 when a row failed (its log tail in the JSON).
 """
 import argparse
@@ -210,13 +212,61 @@ def _download(url, dest):
 
 
 def _onnx_opset(path):
-    """The default-domain opset of an ONNX file, read by mojolearn's own parser (no onnx package)."""
-    from mojolearn.tests import _onnx_proto_oracle as proto  # the test oracle's wire reader (no binding needed)
-    m = proto.model(Path(path).read_bytes())
-    for o in m["opset_import"]:
-        if o["domain"] in ("", "ai.onnx"):
-            return o["version"]
+    """The default-domain opset of an ONNX file: read by the onnx package when it is installed (the graph
+    only, no external data), else by mojolearn's own test-oracle wire reader."""
+    try:
+        import onnx
+    except ImportError:
+        onnx = None
+    if onnx is not None:
+        m = onnx.load(str(path), load_external_data=False)
+        ops = [(o.domain, o.version) for o in m.opset_import]
+    else:
+        from mojolearn.tests import _onnx_proto_oracle as proto  # the test oracle's wire reader (no binding needed)
+        ops = [(o["domain"], o["version"]) for o in proto.model(Path(path).read_bytes())["opset_import"]]
+    for domain, version in ops:
+        if domain in ("", "ai.onnx"):
+            return int(version)
     return None
+
+
+#: the importer reads opset 13 and later; a model-zoo file below it is converted once with onnx's own converter
+MIN_OPSET = 13
+
+
+def _convert_opset(path, opset, info):
+    """`path` (default-domain opset `opset` < 13) converted with onnx.version_converter.convert_version(model,
+    13), saved beside the original as <stem>-opset13.onnx with its sha256 in <that>.sha256 (written on the
+    conversion, checked on every later run), recorded in `info`. Returns the converted file's path. Raises
+    when the onnx package is missing or the converted file is still below opset 13: never imports the
+    unconverted file (the importer would refuse it by opset)."""
+    try:
+        import onnx
+        from onnx import version_converter
+    except ImportError as e:
+        raise RuntimeError(f"{path} is opset {opset}: the onnx package is needed to convert it to opset "
+                           f"{MIN_OPSET} (pip install onnx): {e}") from e
+    conv = path.with_name(path.stem + f"-opset{MIN_OPSET}.onnx")
+    pin = conv.with_name(conv.name + ".sha256")
+    if conv.is_file() and pin.is_file():
+        sha = _sha256_file(conv)
+        if sha != pin.read_text().strip():
+            raise RuntimeError(f"{conv} has sha256 {sha}, recorded {pin.read_text().strip()}: delete both to "
+                               f"convert again")
+    else:
+        model = version_converter.convert_version(onnx.load(str(path)), MIN_OPSET)
+        tmp = conv.with_name(conv.name + ".part")
+        onnx.save(model, str(tmp))
+        os.replace(tmp, conv)
+        sha = _sha256_file(conv)
+        pin.write_text(sha + "\n")
+    got = _onnx_opset(conv)
+    if got is None or got < MIN_OPSET:
+        raise RuntimeError(f"{conv}: onnx.version_converter left opset {got} (opset {MIN_OPSET} is needed)")
+    info.update(opset_conversion=f"onnx.version_converter.convert_version(model, {MIN_OPSET})",
+                converted_file=str(conv), converted_sha256=sha, converted_opset=got,
+                onnx_version=onnx.__version__)
+    return conv
 
 
 def _onnx_shapes(path, x):
@@ -253,24 +303,12 @@ def source_onnx(spec, batch, seed, info, cache):
     src = path
     try:
         opset = _onnx_opset(path)
-    except Exception:  # noqa: BLE001  the importer's own error then names the problem
+    except Exception as e:  # noqa: BLE001  recorded; the importer's own error then names the problem
         opset = None
+        info["opset_error"] = f"{type(e).__name__}: {str(e)[:200]}"
     info["opset"] = opset
-    if opset is not None and opset < 13:
-        # a model-zoo file below the importer's opset 13: onnx's own version converter, recorded; the
-        # converted file's sha256 is recorded too. Without the onnx package the import refuses by opset.
-        try:
-            import onnx
-            from onnx import version_converter
-        except ImportError:
-            info["opset_conversion"] = "onnx is not installed; the file is imported as is"
-        else:
-            conv = cache / (path.stem + "-opset13.onnx")
-            if not conv.is_file():
-                onnx.save(version_converter.convert_version(onnx.load(str(path)), 13), str(conv))
-            src = conv
-            info.update(opset_conversion="onnx.version_converter 13", converted_file=str(conv),
-                        converted_sha256=_sha256_file(conv), onnx_version=onnx.__version__)
+    if opset is not None and opset < MIN_OPSET:
+        src = _convert_opset(path, opset, info)
     x = _example(spec, batch, seed)
     return str(src), _onnx_shapes(str(src), x), [x], ("onnxruntime", str(src))
 
