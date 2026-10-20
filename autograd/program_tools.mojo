@@ -94,64 +94,70 @@ def program_op_name(code: Int) -> String:
     if code == 43:
         return "log_softmax_nd"
     if code == 44:
-        return "reserved"
+        return "conv2d"
     if code == 45:
-        return "erf"
+        return "max_pool2d"
     if code == 46:
-        return "gelu"
+        return "avg_pool2d"
     if code == 47:
-        return "softplus"
+        return "reserved"
     if code == 48:
-        return "silu"
+        return "erf"
     if code == 49:
-        return "leaky_relu"
+        return "gelu"
     if code == 50:
-        return "elu"
+        return "softplus"
     if code == 51:
-        return "hard_sigmoid"
+        return "silu"
     if code == 52:
-        return "hard_swish"
+        return "leaky_relu"
     if code == 53:
-        return "clip"
+        return "elu"
     if code == 54:
-        return "abs"
+        return "hard_sigmoid"
     if code == 55:
-        return "floor"
+        return "hard_swish"
     if code == 56:
-        return "ceil"
+        return "clip"
     if code == 57:
-        return "round"
+        return "abs"
     if code == 58:
-        return "sin"
+        return "floor"
     if code == 59:
-        return "cos"
+        return "ceil"
     if code == 60:
-        return "sign"
+        return "round"
     if code == 61:
-        return "reciprocal"
+        return "sin"
     if code == 62:
-        return "pow"
+        return "cos"
     if code == 63:
-        return "minimum"
+        return "sign"
     if code == 64:
-        return "maximum"
+        return "reciprocal"
     if code == 65:
-        return "where"
+        return "pow"
     if code == 66:
-        return "compare"
+        return "minimum"
     if code == 67:
-        return "logical"
+        return "maximum"
     if code == 68:
-        return "expand"
+        return "where"
     if code == 69:
-        return "argmax"
+        return "compare"
     if code == 70:
-        return "pad"
+        return "logical"
     if code == 71:
-        return "any_all"
+        return "expand"
     if code == 72:
-        return "cumsum"
+        return "argmax"
     if code == 73:
+        return "pad"
+    if code == 74:
+        return "any_all"
+    if code == 75:
+        return "cumsum"
+    if code == 76:
         return "index"
     return "op_" + String(code)
 

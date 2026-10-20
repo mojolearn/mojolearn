@@ -8,7 +8,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
-from autograd.program_tools import program_cse
+from autograd.program_optimize import program_optimize
 from autograd.program_runtime import parameter_buffers, replay_values
 from autograd.program_pyapi import program_inputs, output_array, _dict, _result, _integer
 from autograd.cast_ops import upload_cast, upload_cast_i32
@@ -113,9 +113,12 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
                 if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
                     raise Error("while_loop state outputs must hold floating-point values")
     if Bool(py=optimize):
-        body = program_cse(body)
-        condition = program_cse(condition)
-        other = program_cse(other)
+        var body_plan = program_optimize(body)
+        var condition_plan = program_optimize(condition)
+        var other_plan = program_optimize(other)
+        body = body_plan.program.copy()
+        condition = condition_plan.program.copy()
+        other = other_plan.program.copy()
     var inputs = program_inputs(body, arrays, True)
     var buffers = List[FP]()
     var shapes = List[ShapeN]()
