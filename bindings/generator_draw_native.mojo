@@ -56,7 +56,12 @@ def _generator_f32(value: PythonObject) raises -> Float32:
 def _generator_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
     # The shared native packer preserves f32 bytes and converts arbitrary
     # buffer strides/layout into C order without Array or NumPy callbacks.
-    return _model_f32(value, "Generator input", context["neural"])
+    var result = _model_f32(value, "Generator input", context["neural"])
+    # The former _c32/as_f32_c admission rejects empty inputs before stream
+    # consumption. Nonfinite input remains the existing kernel's admission.
+    if Int(py=result.size) == 0:
+        raise Error("Generator input is empty; at least one element is required")
+    return result
 
 
 def _generator_sqrt(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -94,7 +99,12 @@ def _generator_run(entry: PythonObject, shape: PythonObject, count: PythonObject
     var lo = seed.__and__(PythonObject(4294967295))
     var hi = seed.__rshift__(32).__and__(PythonObject(4294967295))
     var params = Python.list(count, bi.int(offset), bi.int(lo), bi.int(hi), bi.int(stream), kind, bi.float(a), bi.float(b))
-    _ = entry(Python.list(out._addr, source._addr), params)
+    try:
+        _ = entry(Python.list(out._addr, source._addr), params)
+    except error:
+        # Existing def_function RNG entries report numerical admission through
+        # the base Exception type; preserve that public failure contract.
+        raise Error("Exception: " + String(error))
     _ = source^
     return out
 
@@ -201,4 +211,6 @@ def generator_draw_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
             return raise_python_exception(error, ExceptionType("PyExc_OSError"))
         if message.startswith("ZeroDivisionError:"):
             return raise_python_exception(error, ExceptionType("PyExc_ZeroDivisionError"))
+        if message.startswith("Exception:"):
+            return raise_python_exception(error, ExceptionType("PyExc_Exception"))
         return raise_python_exception(error, ExceptionType.ValueError)

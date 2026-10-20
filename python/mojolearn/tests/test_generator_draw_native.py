@@ -107,7 +107,11 @@ def test_uniform_shape_seed_and_exact_integer_oracle(shape):
     actual = checked(gen.uniform, shape, -2., 6.)
     expected_shape, count = LegacyDraws().shape(shape)
     expected = np.array([float(u)*8.-2. for u in units(seed, 0, count)], 'f4').reshape(expected_shape)
-    bits(actual, expected)
+    # Array's established rank-zero Python buffer exporter is flat. Inspect
+    # product shape directly and compare all bytes, without letting NumPy's
+    # conversion silently substitute shape (1,) for the requested scalar ().
+    assert actual.shape == expected_shape and actual.ndim == len(expected_shape)
+    assert actual.dtype == '<f4' and actual.tobytes() == expected.tobytes()
     assert gen.state_dict() == dict(seed=seed, counter=1)
     np.asarray(actual)[...] = 4  # The returned buffer remains writable.
 
@@ -177,17 +181,18 @@ def test_dropout_implicit_stream_and_chunk_offsets_replay_complete_draw():
     ('dropout', (np.ones(3, 'f4'), .2), dict(offset=-1), None, 1),
     ('dropout', (np.ones(3, 'f4'), .2), dict(offset='bad-number'), None, 1),
     ('dropout', (np.ones(3, 'f4'), .2), {}, 'unknown', 1),
-    ('dropout', (np.ones(0, 'f4'), .2), {}, None, 1),
+    ('dropout', (np.ones(0, 'f4'), .2), {}, None, 0),
     ('dropout', (np.ones(3, 'f4'), .2), dict(stream=-1), None, 0),
     ('dropout', (np.array([float('nan')], 'f4'), .2), {}, None, 1),
 ])
 def test_failed_calls_keep_the_established_stream_consumption(operation, args, kwargs, mode, advance):
     gen = training.Generator(7, numeric_mode=mode)
     old = LegacyDraws(7, mode=mode)
-    with pytest.raises(Exception):
+    with pytest.raises(Exception) as original:
         getattr(old, operation)(*args, **kwargs)
     audit = audit_native_call(getattr(gen, operation), *args, **kwargs)
     assert audit.exception is not None, audit.report()
+    assert type(audit.exception) is type(original.value), audit.report()
     for key in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
         assert not audit.report()[key], audit.report()
     assert gen.counter == old.counter == advance
