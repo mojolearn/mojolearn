@@ -1057,3 +1057,11 @@ class SambaStack(object):
             raw = bytes.fromhex(d["hex"])
             payload[key] = _buffers.frombytes(raw, dtype, d["shape"])
         return payload
+
+
+# Import-time native ABI connection; legacy public methods remain until their
+# complete supported operation has a native owner and whole-call audit.
+from . import _native_samba_bridge
+_native_samba_bridge.RUNTIME = _native_neural_bridge.RUNTIME
+_native_samba_bridge.CONTEXT = _native_samba_bridge.connect(
+    SambaConfig, SambaStack, T, _native_neural_bridge)
