@@ -6,7 +6,7 @@ kernels. Moved unchanged out of embedding/checks/embedding_identical.mojo,
 which keeps the forward gather, the id and nonfinite refusals both
 directions share, the plan and the sabotage switches."""
 
-from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort_runs
+from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort_runs
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

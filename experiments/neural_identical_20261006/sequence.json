@@ -51,7 +51,7 @@
       "implementation_paths": [
         "mamba/impl/ops/identical_scan_window.mojo",
         "mamba/impl/ops/selective_scan_interface.mojo",
-        "mamba/impl/ops/selective_scan_backward.mojo",
+        "autograd/kernels/mamba1_scan.mojo",
         "mamba/host/gen/selective_scan_interface.mojo",
         "tools/mamba_host_gen.py",
         "mamba/host/gen/device_optimizations.mojo"
@@ -92,7 +92,7 @@
           "implementation_paths": [
             "mamba/impl/ops/identical_scan_window.mojo",
             "mamba/impl/ops/selective_scan_interface.mojo",
-            "mamba/impl/ops/selective_scan_backward.mojo",
+            "autograd/kernels/mamba1_scan.mojo",
             "mamba/host/gen/selective_scan_interface.mojo",
             "tools/mamba_host_gen.py",
             "mamba/host/gen/device_optimizations.mojo"
@@ -179,7 +179,7 @@
       "implementation_paths": [
         "mamba/impl/modules/afn_defines.mojo",
         "mamba/impl/modules/ssd_minimal.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/ssd_minimal.mojo"
       ],
       "candidate_defines": [
@@ -214,7 +214,7 @@
           "implementation_paths": [
             "mamba/impl/modules/afn_defines.mojo",
             "mamba/impl/modules/ssd_minimal.mojo",
-            "mamba/impl/ops/mamba2_ssd_backward.mojo",
+            "autograd/kernels/mamba2_ssd.mojo",
             "mamba/host/gen/ssd_minimal.mojo"
           ],
           "remaining_work": [
@@ -237,7 +237,7 @@
       "implementation_paths": [
         "mamba/impl/modules/ssd_minimal.mojo",
         "mamba/host/gen/ssd_minimal.mojo",
-        "mamba/impl/ops/mamba2_ssd_backward.mojo"
+        "autograd/kernels/mamba2_ssd.mojo"
       ],
       "candidate_defines": [],
       "baseline_defines": [
@@ -323,7 +323,7 @@
       "title": "Linear work Mamba 3 angle gradient",
       "status": "wired_candidate_unverified",
       "implementation_paths": [
-        "mamba/impl/modules/mamba3_backward.mojo",
+        "autograd/kernels/mamba3.mojo",
         "mamba/host/gen/mamba3_backward.mojo"
       ],
       "candidate_defines": [
@@ -362,7 +362,7 @@
             "existing IDN_M3_ANGLE_DT_SUFFIX"
           ],
           "implementation_paths": [
-            "mamba/impl/modules/mamba3_backward.mojo",
+            "autograd/kernels/mamba3.mojo",
             "mamba/host/gen/mamba3_backward.mojo"
           ],
           "remaining_work": [
@@ -385,7 +385,7 @@
       "title": "Canonical Mamba parameter gradient folds",
       "status": "wired_candidate_unverified",
       "implementation_paths": [
-        "mamba/impl/ops/mamba2_ssd_backward.mojo",
+        "autograd/kernels/mamba2_ssd.mojo",
         "mamba/host/gen/mamba2_ssd_backward.mojo"
       ],
       "candidate_defines": [

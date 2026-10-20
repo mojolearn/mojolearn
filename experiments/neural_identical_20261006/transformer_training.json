@@ -48,7 +48,7 @@
         "transformer/impl/llama/attention_v2_model_device.mojo",
         "transformer/impl/llama/attention_v2_model_host.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "training/byte_lm_host_kernels.mojo",
@@ -238,7 +238,7 @@
       "implementation_paths": [
         "training/neural_identical_experiments.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "candidate_defines": [
         "MOJOLEARN_IDN_TRAIN_SWIGLU=1"

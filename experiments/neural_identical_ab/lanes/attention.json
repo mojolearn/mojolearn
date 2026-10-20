@@ -110,7 +110,7 @@
         "transformer/experiments/summary_model.mojo",
         "transformer/experiments/summary_model_host.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "transformer/experiments/profile.mojo",
@@ -175,7 +175,7 @@
       "implementation_status": "wired_draft",
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "candidate_defines": [
         "MOJOLEARN_NN22_EAGER_DKDV_PAIR=1"
@@ -202,7 +202,7 @@
       "implementation_status": "wired_draft",
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "candidate_defines": [
         "MOJOLEARN_NN23_ROWDOT_DS=1"
@@ -232,7 +232,7 @@
         "transformer/experiments/norm_profile.mojo",
         "transformer/experiments/attention_schedules.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo",
+        "autograd/kernels/transformer.mojo",
         "transformer/checks/transformer_oracle.mojo",
         "transformer/checks/transformer_backward_oracle.mojo",
         "transformer/experiments/profile.mojo",
@@ -295,7 +295,7 @@
       "implementation_paths": [
         "transformer/experiments/attention_schedules.mojo",
         "transformer/impl/llama/modeling_llama.mojo",
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "candidate_defines": [
         "MOJOLEARN_NN26_TRAIN_SWIGLU=1"
@@ -393,7 +393,7 @@
       "id": "NN30",
       "implementation_status": "reused_existing",
       "implementation_paths": [
-        "transformer/checks/transformer_backward.mojo"
+        "autograd/kernels/transformer.mojo"
       ],
       "candidate_defines": [],
       "baseline_defines": [
