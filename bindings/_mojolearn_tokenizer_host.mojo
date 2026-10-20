@@ -123,6 +123,7 @@ from bindings.causal_lm_public import (
     causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
     causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
     causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
+    causal_lm_snapshot_binding, causal_lm_resume_binding,
 )
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
@@ -1447,6 +1448,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[causal_lm_text_stream_binding]("causal_lm_text_stream")
         module.def_function[causal_lm_generate_text_binding]("causal_lm_generate_text")
         module.def_function[causal_lm_resident_binding]("causal_lm_resident")
+        module.def_function[causal_lm_snapshot_binding]("causal_lm_snapshot")
+        module.def_function[causal_lm_resume_binding]("causal_lm_resume")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))

@@ -38,6 +38,10 @@ def causal_lm_admit_binding(
     var kind = String(model.kind)
     if kind == "transformer":
         entries["forward"] = _native_function(block_binding, "transformer_forward")
+        if Bool(py=g[].bi.hasattr(block_binding, "transformer_session_forward")):
+            entries["create"] = _native_function(block_binding, "transformer_session_create")
+            entries["forward_session"] = _native_function(block_binding, "transformer_session_forward")
+            entries["block_binding"] = block_binding
         if model._head_int15 is not None:
             if Bool(py=g[].bi.hasattr(block_binding, "transformer_session_forward_int15")):
                 entries["create"] = _native_function(block_binding, "transformer_session_create")
@@ -167,6 +171,49 @@ def _addr(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
     return generation_address(value, keep)
 
 
+def _mutable(
+    value: PythonObject, expected: List[Int], mut keep: List[PythonObject], mut copies: List[PythonObject],
+) raises -> Int:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var view = PythonObject(None)
+    var shape = PythonObject(None)
+    if g[].bi.type(value) is g[].array_cls:
+        if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
+            raise Error("CausalLM: state must be writable C-contiguous float32")
+        view = value._mv
+        shape = value.shape
+    else:
+        view = g[].bi.memoryview(value)
+        shape = view.shape
+        if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
+            raise Error("CausalLM: state must be writable C-contiguous float32")
+    if len(shape) != len(expected):
+        raise Error("CausalLM: state buffer rank differs")
+    var size = 1
+    for i in range(len(expected)):
+        if Int(py=shape[i]) != expected[i]:
+            raise Error("CausalLM: state buffer shape differs")
+        size *= expected[i]
+    if Int(py=view.nbytes) != size * 4:
+        raise Error("CausalLM: state buffer span differs")
+    var address = _addr(value, keep)
+    if g[].bi.type(value) is not g[].array_cls:
+        var pair = g[].bi.list()
+        pair.append(view)
+        pair.append(keep[len(keep) - 1])
+        copies.append(pair)
+    return address
+
+
+def _writeback(mut copies: List[PythonObject]) raises:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    for i in range(len(copies)):
+        var view = copies[i][0].cast("B")
+        var source = g[].bi.memoryview(copies[i][1]).cast("B")
+        view.__setitem__(g[].bi.slice(PythonObject(None)), source)
+    copies.clear()
+
+
 def _transformer_args(
     model: PythonObject, blk: PythonObject, st: PythonObject, x: PythonObject, y: PythonObject,
     b: Int, l: Int, planes: Bool, mut keep: List[PythonObject],
@@ -203,6 +250,7 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
     _state(model, state, b, l)
     var e = model._native_entries
     var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
     var x = generation_array([b, l, d])
     e["embedding_forward"](py_ints([_addr(x, keep), _addr(model._embed, keep), _addr(ids, keep)]), py_ints([b * l, v, d]))
     var kind = String(model.kind)
@@ -214,42 +262,63 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
             var addresses = PythonObject(None)
             var params = PythonObject(None)
             if kind == "transformer":
-                if st._resident_session is not None:
+                var g = GENERATION_BOUNDARY.get_or_create_ptr()
+                if g[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
                     raise Error("CausalLM: layer state is owned by a decode session")
+                var old_profile = g[].bi.getattr(st, "arithmetic_profile", PythonObject(None))
+                var profile_id = g[].bi.getattr(blk, "_arithmetic_profile", PythonObject(None))
+                if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
+                    raise Error("CausalLM: state arithmetic profile differs")
+                if profile_id is not None:
+                    st.arithmetic_profile = profile_id
+                var cap = Int(py=st.max_tokens) if Int(py=blk.window) == 0 else Int(py=blk.window)
+                var cache_n = b * Int(py=blk.n_kv_heads) * cap * Int(py=blk.head_dim)
                 params = _transformer_params(blk, st, b, l)
                 var profile = model._head_int15 is not None
                 var device15 = profile and Bool(py=e.__contains__("forward15"))
                 addresses = _transformer_args(model, blk, st, x, y, b, l, device15, keep)
+                addresses[10] = PythonObject(_mutable(st.k_cache, [cache_n], keep, copies))
+                addresses[11] = PythonObject(_mutable(st.v_cache, [cache_n], keep, copies))
                 if device15:
                     if blk._native_session is None:
                         blk._native_session = e["create"]()
                     st.cached_tokens = e["forward15"](blk._native_session, addresses, params)
                 elif profile:
                     st.cached_tokens = e["forward15_host"](addresses, params)
+                elif Bool(py=e.__contains__("forward_session")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
+                    if blk._native_session is None:
+                        blk._native_session = e["create"]()
+                        blk._session_binding = e["block_binding"]
+                    st.cached_tokens = e["forward_session"](blk._native_session, addresses, params)
                 else:
                     st.cached_tokens = e["forward"](addresses, params)
             else:
                 addresses = py_ints([_addr(x, keep)])
                 for j in range(len(blk._w)):
                     addresses.append(_addr(blk._w[j], keep))
-                addresses.append(_addr(st.conv_window, keep))
-                addresses.append(_addr(st.h, keep))
                 if kind == "mamba1":
+                    var di = Int(py=blk.d_inner)
+                    addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies))
+                    addresses.append(_mutable(st.h, [b, di, 16], keep, copies))
                     addresses.append(_addr(y, keep))
                     params = py_ints([b, l, d])
                     var profile = Int(py=e["mamba1_profile"])
                     if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
                         raise Error("CausalLM: incompatible or failed Mamba1 state")
                     if profile == 2:
-                        addresses.append(_addr(st.affine_boundary, keep))
-                        addresses.append(_addr(st.affine_a, keep))
-                        addresses.append(_addr(st.affine_b, keep))
+                        addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies))
+                        addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies))
+                        addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies))
                         params.append(st.absolute_position)
                     e["forward"](addresses, params)
                     st.absolute_position = PythonObject(Int(py=st.absolute_position) + l)
                 else:
-                    addresses.append(_addr(st.buffer_xbc, keep))
-                    addresses.append(_addr(st.buffer_dtraw, keep))
+                    var nh = Int(py=blk.nheads)
+                    var cd = Int(py=blk.conv_dim)
+                    addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies))
+                    addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies))
+                    addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
+                    addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
                     addresses.append(_addr(y, keep))
                     var last = generation_array([b, Int(py=blk.nheads), 64, 128])
                     addresses.append(_addr(last, keep))
@@ -257,6 +326,7 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
                     params.extend(blk.dt_limit)
                     st.buffered_tokens = e["forward"](addresses, params)
                     blk.h_last_ = last
+            _writeback(copies)
             x = y
         var hn = x
         if model._norm is not None:
@@ -629,3 +699,208 @@ def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
     var ids = _read(owner[], max(1, owner[].max_new))
     return _decode_chunk(owner[], ids)
+
+
+def _array_bytes(value: PythonObject) raises -> PythonObject:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if g[].bi.type(value) is g[].array_cls:
+        return value._mv.tobytes("C")
+    return g[].bi.memoryview(value).tobytes("C")
+
+
+def _hash() raises -> PythonObject:
+    return _native_function(Python.import_module("hashlib"), "sha256")()
+
+
+def _hash_scalar(hash: PythonObject, value: PythonObject) raises:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    hash.update(g[].bi.str(value).encode("utf-8"))
+    hash.update(PythonObject("\n").encode("utf-8"))
+
+
+def _fingerprint(model: PythonObject) raises -> PythonObject:
+    var h = _hash()
+    _hash_scalar(h, model.kind)
+    _hash_scalar(h, model.numeric_profile)
+    _hash_scalar(h, model.norm_eps)
+    _hash_scalar(h, model.max_positions)
+    _hash_scalar(h, model._embed.shape)
+    h.update(_array_bytes(model._embed))
+    if model._norm is not None:
+        h.update(_array_bytes(model._norm))
+    h.update(_array_bytes(model._head))
+    for i in range(len(model._blocks)):
+        var blk = model._blocks[i]
+        if String(model.kind) == "transformer":
+            _hash_scalar(h, blk._opts_tail)
+            _hash_scalar(h, blk.n_heads)
+            _hash_scalar(h, blk.n_kv_heads)
+            _hash_scalar(h, blk.window)
+            for j in range(len(blk._wopt)):
+                if blk._wopt[j] is not None:
+                    h.update(_array_bytes(blk._wopt[j]))
+        elif String(model.kind) == "mamba2":
+            _hash_scalar(h, blk.dt_limit)
+        else:
+            _hash_scalar(h, model._native_entries["mamba1_profile"])
+        for j in range(len(blk._w)):
+            if blk._w[j] is not None:
+                _hash_scalar(h, blk._w[j].shape)
+                h.update(_array_bytes(blk._w[j]))
+        if model._head_int15 is not None:
+            for j in range(len(blk._int15)):
+                if blk._int15[j] is not None:
+                    for k in range(3):
+                        h.update(_array_bytes(blk._int15[j][k]))
+    if model._head_int15 is not None:
+        for k in range(3):
+            h.update(_array_bytes(model._head_int15[k]))
+    return h.hexdigest()
+
+
+def _state_arrays(kind: String, profile: Int = 1) -> List[String]:
+    if kind == "transformer":
+        return [String("k_cache"), String("v_cache")]
+    if kind == "mamba2":
+        return [String("conv_window"), String("h"), String("buffer_xbc"), String("buffer_dtraw")]
+    if profile == 2:
+        return [String("conv_window"), String("h"), String("affine_boundary"), String("affine_a"), String("affine_b")]
+    return [String("conv_window"), String("h")]
+
+
+def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
+    var h = _hash()
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    for name in [String("schema"), String("model"), String("options"), String("maximum"),
+                 String("produced"), String("positions"), String("lengths"), String("finished"), String("text")]:
+        _hash_scalar(h, checkpoint[name])
+    h.update(checkpoint["pending_bytes"])
+    h.update(_array_bytes(checkpoint["prompt"]))
+    h.update(_array_bytes(checkpoint["current"]))
+    for i in range(len(checkpoint["layers"])):
+        var layer = checkpoint["layers"][i]
+        var names = g[].bi.sorted(layer.keys())
+        for j in range(len(names)):
+            _hash_scalar(h, names[j])
+            var value = layer[names[j]]
+            if g[].bi.type(value) is g[].array_cls:
+                _hash_scalar(h, value.shape)
+                _hash_scalar(h, value.dtype)
+                h.update(_array_bytes(value))
+            else:
+                _hash_scalar(h, value)
+    return h.hexdigest()
+
+
+def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
+    var s = stream._native.downcast_value_ptr[GenerationHandle]()
+    if s[].busy or not s[].usable:
+        raise Error("generation: cannot checkpoint a busy or failed stream")
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var result = g[].bi.dict()
+    result["schema"] = PythonObject("mojolearn.generation.v1")
+    result["model"] = _fingerprint(s[].model)
+    result["maximum"] = PythonObject(s[].max_new)
+    result["produced"] = PythonObject(s[].produced)
+    result["positions"] = s[].state.positions
+    result["prompt"] = generation_copy(s[].prompt)
+    result["current"] = generation_copy(s[].current)
+    result["lengths"] = py_ints(s[].lengths)
+    var finished = g[].bi.list()
+    for i in range(len(s[].finished)):
+        finished.append(s[].finished[i])
+    result["finished"] = finished
+    result["text"] = PythonObject(s[].tokenizer is not None)
+    result["pending_bytes"] = g[].bi.bytes(s[].pending_bytes)
+    var options = g[].bi.list()
+    options.append(s[].greedy)
+    # Decimal conversion avoids truncating UInt64 through the signed Python
+    # bridge. Every unsigned seed is representable by Python's native int.
+    options.append(g[].bi.int(String(s[].seed)))
+    options.append(Float64(s[].temperature))
+    options.append(s[].top_k)
+    options.append(s[].top_p)
+    options.append(py_ints(s[].eos))
+    options.append(s[].pad)
+    result["options"] = options
+    var layers = g[].bi.list()
+    var kind = String(s[].model.kind)
+    var profile = Int(py=s[].model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
+    var arrays = _state_arrays(kind, profile)
+    for i in range(len(s[].state.layers)):
+        var st = s[].state.layers[i]
+        var entry = g[].bi.dict()
+        for j in range(len(arrays)):
+            entry[arrays[j]] = generation_copy(g[].bi.getattr(st, arrays[j]))
+        if kind == "transformer":
+            entry["cached_tokens"] = st.cached_tokens
+        elif kind == "mamba1":
+            entry["absolute_position"] = st.absolute_position
+            entry["profile_id"] = st.profile_id
+        else:
+            entry["buffered_tokens"] = st.buffered_tokens
+        layers.append(entry)
+    result["layers"] = layers
+    result["checksum"] = _snapshot_hash(result)
+    return result
+
+
+def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, tokenizer: PythonObject) raises -> PythonObject:
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if String(checkpoint["schema"]) != "mojolearn.generation.v1":
+        raise Error("generation: unsupported checkpoint schema")
+    if String(checkpoint["model"]) != String(_fingerprint(model)):
+        raise Error("generation: checkpoint model weights/settings do not match")
+    if String(checkpoint["checksum"]) != String(_snapshot_hash(checkpoint)):
+        raise Error("generation: checkpoint checksum differs")
+    if Bool(py=checkpoint["text"]) and tokenizer is None:
+        raise Error("generation: a text checkpoint requires its tokenizer")
+    var stream = causal_lm_stream_binding(model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])
+    var s = stream._native.downcast_value_ptr[GenerationHandle]()
+    s[].produced = Int(py=checkpoint["produced"])
+    if s[].produced < 0 or s[].produced > s[].max_new:
+        raise Error("generation: invalid checkpoint output position")
+    s[].current = generation_ids(checkpoint["current"], Int(py=model.vocab_size))
+    var b = len(s[].lengths)
+    if Int(py=s[].current.shape[0]) != b or len(checkpoint["lengths"]) != b or len(checkpoint["finished"]) != b:
+        raise Error("generation: checkpoint batch counts differ")
+    if s[].produced > 0 and Int(py=s[].current.shape[1]) != 1:
+        raise Error("generation: continuation checkpoint must hold one pending token per row")
+    var position = 0 if s[].produced == 0 else Int(py=s[].prompt.shape[1]) + s[].produced - 1
+    if Int(py=checkpoint["positions"]) != position:
+        raise Error("generation: checkpoint cache position disagrees with output count")
+    s[].state.positions = PythonObject(position)
+    for i in range(b):
+        s[].lengths[i] = Int(py=checkpoint["lengths"][i])
+        s[].finished[i] = Bool(py=checkpoint["finished"][i])
+        if s[].lengths[i] < 0 or s[].lengths[i] > s[].produced:
+            raise Error("generation: invalid checkpoint row length")
+    if len(checkpoint["layers"]) != len(s[].state.layers):
+        raise Error("generation: checkpoint layer count differs")
+    var kind = String(model.kind)
+    var profile = Int(py=model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
+    var arrays = _state_arrays(kind, profile)
+    for i in range(len(s[].state.layers)):
+        var dest = s[].state.layers[i]
+        var source = checkpoint["layers"][i]
+        for j in range(len(arrays)):
+            var expected = g[].bi.getattr(dest, arrays[j])
+            var supplied = source[arrays[j]]
+            if g[].bi.type(supplied) is not g[].array_cls or String(supplied.dtype) != "<f4" or not Bool(py=supplied.shape == expected.shape):
+                raise Error("generation: checkpoint state array shape or dtype differs")
+            g[].bi.setattr(dest, arrays[j], generation_copy(supplied))
+        if kind == "transformer":
+            if Int(py=source["cached_tokens"]) != position:
+                raise Error("generation: checkpoint layer cache position differs")
+            dest.cached_tokens = PythonObject(position)
+        elif kind == "mamba1":
+            if Int(py=source["profile_id"]) != profile or Int(py=source["absolute_position"]) != position:
+                raise Error("generation: checkpoint Mamba profile/position differs")
+            dest.absolute_position = PythonObject(position)
+        else:
+            if Int(py=source["buffered_tokens"]) != position % 256:
+                raise Error("generation: checkpoint Mamba2 buffered length differs")
+            dest.buffered_tokens = source["buffered_tokens"]
+    s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
+    s[].pending_bytes = g[].bi.bytearray(checkpoint["pending_bytes"])
+    return stream

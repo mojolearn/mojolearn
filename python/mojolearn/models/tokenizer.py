@@ -377,45 +377,22 @@ class Tokenizer:
         `allow_special=True`; the segments between them are encoded alone
         (a special token ends the text before it, as the binding's
         `<|endoftext|>` rule has it)."""
-        if isinstance(data, str):
-            raise TypeError("mojolearn.models.Tokenizer: encode_bytes takes bytes; use encode for str")
-        raw = _text_bytes(data)
-        if not raw:
-            return []
-        out = array.array("i", bytes(4 * len(raw)))
-        count = int(_native(self._m.vocab_encode, self._handle, addr_ro(raw, name="text"), len(raw),
-                            addr(out, name="ids"), len(raw), bool(allow_special),
-                            prefix="mojolearn.models.Tokenizer: "))
-        return out[:count].tolist()
+        return self._m.vocab_encode_public(self, data, False, allow_special, True)
 
     def encode(self, text, *, add_special_tokens=True, allow_special=False):
         """The ids of `text` (str, NFC-normalized when the file says so, then
         UTF-8; or bytes-like), with the template's BOS/EOS ids around them
         when `add_special_tokens` is True."""
-        if isinstance(text, str) and self.normalizer == "NFC":
-            text = unicodedata.normalize("NFC", text)
-        ids = self.encode_bytes(_text_bytes(text), allow_special=allow_special)
-        if add_special_tokens:
-            return list(self.bos_ids) + ids + list(self.eos_ids)
-        return ids
+        return self._m.vocab_encode_public(self, text, add_special_tokens, allow_special, False)
 
     # ------------------------------------------------------------ decode
     def decode_bytes(self, ids):
         """The bytes of an id sequence; an added token renders its content.
         An id outside the vocabulary is refused by value and position."""
-        if isinstance(ids, (str, bytes, bytearray)):
-            raise TypeError(f"mojolearn.models.Tokenizer: ids must be a sequence of int, got {type(ids).__name__}")
-        seq = list(ids)
-        if not seq:
-            return b""
-        cap = len(seq) * self._max_token_bytes
-        out = bytearray(cap)
-        count = int(_native(self._m.vocab_decode, self._handle, seq, addr(out, name="text"), cap,
-                            prefix="mojolearn.models.Tokenizer: "))
-        return bytes(out[:count])
+        return self._m.vocab_decode_public(self, ids, True, "replace")
 
     def decode(self, ids, errors="replace"):
-        return self.decode_bytes(ids).decode("utf-8", errors)
+        return self._m.vocab_decode_public(self, ids, False, errors)
 
     def __repr__(self):
         return (f"Tokenizer(pattern={self.pattern!r}, n_ranks={self._n_ranks}, added={len(self.added)}, "

@@ -118,6 +118,11 @@ class _RemotePrimitives:
         return self.model._rpc(self.model.layer_devices[-1], 'head_int15', x)
 
 
+from .causal_lm import CausalLMState, _argmax_last, _prompt_then_new
+from .._buffer import empty, addr, addr_ro
+from .._bufcheck import memcopy
+
+
 class ParallelCausalLM(CausalLM):
     """Experimental layer ownership. Use ``load(path, layer_devices=(0, 1))``.
 
@@ -126,6 +131,129 @@ class ParallelCausalLM(CausalLM):
     explicitly or use a context manager. Calls and states must not be used
     concurrently. Output and state mathematics are the ordinary CausalLM path.
     """
+    # Existing RPC owner remains here until its transport/orchestration is
+    # native. It must not enter CausalLM's native-only coordinator or masquerade
+    # as a repaired product path. These are the pre-migration methods unchanged.
+    def _initialize_native_runtime(self):
+        pass
+
+    def _run(self, ids, state, step, what):
+        """The stack: embedding, the blocks, the final norm, the head. ONE
+        spelling for the stateless forward, the stateful forward and the
+        decode step; only what each block is handed differs."""
+        b, l = int(ids.shape[0]), int(ids.shape[1])
+        if state is not None:
+            if not isinstance(state, CausalLMState):
+                raise TypeError(f"mojolearn {what}: state must be a CausalLMState (allocate_state)")
+            if state._owner is not self:
+                raise ValueError(f"mojolearn {what}: state belongs to another model; allocate a state on this model")
+            if state.batch_size != b or len(state.layers) != self.n_layers:
+                raise ValueError(
+                    f"mojolearn {what}: the state holds {state.batch_size} rows and {len(state.layers)} layers, "
+                    f"the call has B = {b} and the model {self.n_layers} layers")
+        self._check_positions(what, state, l)
+        n, d = b * l, self.d_model
+        x = self._prims.embedding(self._embed, ids.reshape((n,))).reshape((b, l, d))
+        for i, blk in enumerate(self._blocks):  # glue: drives one native forward per layer
+            if state is None:
+                x = blk.forward(x)
+            elif step:
+                x = blk.step(x, state.layers[i])
+            else:
+                x = blk.forward(x, state.layers[i])
+        hn = x.reshape((n, d))
+        if self._norm is not None:          # None: no final norm (the byte-LM format)
+            hn = self._prims.rms_norm(hn, self._norm, self.norm_eps)
+        if self._head_int15 is not None:
+            logits = self._prims.linear_int15(hn, self._head_int15)
+        else:
+            logits = self._prims.linear(hn, self._head)
+        if state is not None:
+            state.positions += l
+        return logits.reshape((b, l, self.vocab_size))
+
+    def forward(self, ids, state=None):
+        """`(B, L)` int32 ids in, `(B, L, vocab)` float32 logits out. With
+        `state=None` every block runs from a zero state and nothing is kept;
+        with a `CausalLMState` the blocks read and update it in place."""
+        what = "CausalLM.forward"
+        return self._run(self._ids(ids, what), state, False, what)
+
+    __call__ = forward
+
+    def allocate_state(self, batch_size, max_tokens):
+        """The zero decode state for `batch_size` rows of up to `max_tokens`
+        positions each (`Mamba*Block.allocate_state(B)`,
+        `TransformerBlock.allocate_state(B, max_tokens)`)."""
+        b, smax = int(batch_size), int(max_tokens)
+        if b < 1 or smax < 1:
+            raise ValueError("mojolearn CausalLM.allocate_state: batch_size and max_tokens must be positive")
+        if self.max_positions is not None and smax > self.max_positions:
+            raise ValueError(
+                f"mojolearn CausalLM.allocate_state: max_tokens={smax} exceeds max_positions={self.max_positions}")
+        layers = []
+        for blk in self._blocks:  # glue: allocates native state per layer
+            layers.append(blk.allocate_state(b, smax) if self.kind == "transformer" else blk.allocate_state(b))
+        return CausalLMState(b, smax, layers, owner=self)
+
+    def reset_state(self, state):
+        """Replace caches with fresh zero state, preserving capacity and batch size.
+
+        States are owned by their allocating model; cross-model reuse is refused.
+        """
+        if not isinstance(state, CausalLMState) or state._owner is not self:
+            raise ValueError("mojolearn CausalLM.reset_state: state belongs to another model")
+        fresh = self.allocate_state(state.batch_size, state.max_tokens)
+        state.layers = fresh.layers
+        state.positions = 0
+        return state
+
+    def step(self, ids, state):
+        """One decode token per row: `(B,)` or `(B, 1)` ids in, `(B, vocab)`
+        logits out, `state` updated in place. It is `forward` at L = 1 with
+        each block's `step` (their one spelling for decode)."""
+        what = "CausalLM.step"
+        if state is None:
+            raise ValueError("mojolearn CausalLM.step: state is required (allocate_state(B, max_tokens) makes the fresh one)")
+        ids = self._ids(ids, what, step=True)
+        out = self._run(ids, state, True, what)
+        return out.reshape((int(ids.shape[0]), self.vocab_size))
+
+    def generate(self, ids, max_new_tokens, *, greedy=True):
+        """`(B, L)` ids in, `(B, L + max_new_tokens)` int32 ids out: the
+        prompt followed by greedy continuations (argmax of the last
+        position, ties to the lowest index), one carried state, the prompt
+        as one prefill and every later token as one `step`. No stop token:
+        exactly `max_new_tokens` are produced per row."""
+        what = "CausalLM.generate"
+        if greedy is not True:
+            raise NotImplementedError(f"mojolearn {what}: greedy=True is the only decoding implemented; got greedy={greedy!r}")
+        n_new = int(max_new_tokens)
+        if n_new < 0:
+            raise ValueError(f"mojolearn {what}: max_new_tokens must be >= 0, got {max_new_tokens!r}")
+        ids = self._ids(ids, what)
+        b, l = int(ids.shape[0]), int(ids.shape[1])
+        if n_new == 0:
+            return ids.copy()
+        total = l + n_new
+        if self.max_positions is not None and total > self.max_positions:
+            raise ValueError(f"mojolearn {what}: {l} prompt + {n_new} new tokens exceed max_positions={self.max_positions}")
+        fast = self._generate_resident(ids, n_new, total)
+        if fast is not None:
+            return fast
+        state = self.allocate_state(b, total)
+        logits = self._run(ids, state, False, what)
+        nxt = _argmax_last(logits, b, l, self.vocab_size)
+        new = empty((n_new, b), "<i4")
+        at = addr(new, name="new ids")
+        for k in range(n_new):  # decode steps: one native forward each, no per-row work  # glue: drives one native forward per decode step
+            memcopy(at + k * b * 4, addr_ro(nxt, name="next ids"), b * 4)
+            if k == n_new - 1:
+                break
+            lg = self._run(nxt.reshape((b, 1)), state, True, what)
+            nxt = _argmax_last(lg, b, 1, self.vocab_size)
+        return _prompt_then_new(ids, b, l, n_new, at, True)
+
     def _generate_resident(self, ids, n_new, total, last_logits=None):
         # Blocks and decode handles belong to remote worker processes. The
         # parent's single-process resident loop cannot consume those handles;

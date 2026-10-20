@@ -83,7 +83,7 @@ from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig
                      UnsupportedModel, plan_for)
 from .safetensors import Checkpoint
 
-__all__ = ["CausalLM", "CausalLMState"]
+__all__ = ["CausalLM", "CausalLMState", "GenerationStream"]
 
 #: The block-dict keys that are projection matrices, per kind: the tensors a
 #: low-bit format packs. Everything else in a block dict stays float32.
@@ -399,6 +399,28 @@ class CausalLM:
             from .._linalg_impl import quantize_int15
             self._head_int15 = quantize_int15(self._head)
 
+        self._initialize_native_runtime()
+
+    def _initialize_native_runtime(self):
+        from ..tokenizer import _binding as _runtime_binding
+        from .._transformer_impl import TransformerState
+        from .._mamba_impl import Mamba1State, Mamba2State
+        self._runtime = _runtime_binding()
+        self._runtime.generation_initialize((
+            Array, CausalLMState,
+            {"transformer": TransformerState, "mamba1": Mamba1State, "mamba2": Mamba2State},
+            GenerationStream))
+        if self.device == "gpu":
+            from .._training_impl import _load as _training_binding
+            primitives = _training_binding()
+        else:
+            primitives = self._prims._ext
+        int15_binding = None
+        if self._head_int15 is not None:
+            from .._linalg_impl import _int15_binding
+            int15_binding = _int15_binding()
+        self._runtime.causal_lm_admit(self, self._blocks[0]._extension(), primitives, int15_binding)
+
     def _make_blocks(self, cls, layers, kwargs):
         return [cls(w, **kwargs) for w in layers]  # glue: builds one block per model layer
 
@@ -522,191 +544,107 @@ class CausalLM:
                 f"{state.positions}; {l} more do not fit")
 
     def _run(self, ids, state, step, what):
-        """The stack: embedding, the blocks, the final norm, the head. ONE
-        spelling for the stateless forward, the stateful forward and the
-        decode step; only what each block is handed differs."""
-        b, l = int(ids.shape[0]), int(ids.shape[1])
-        if state is not None:
-            if not isinstance(state, CausalLMState):
-                raise TypeError(f"mojolearn {what}: state must be a CausalLMState (allocate_state)")
-            if state._owner is not self:
-                raise ValueError(f"mojolearn {what}: state belongs to another model; allocate a state on this model")
-            if state.batch_size != b or len(state.layers) != self.n_layers:
-                raise ValueError(
-                    f"mojolearn {what}: the state holds {state.batch_size} rows and {len(state.layers)} layers, "
-                    f"the call has B = {b} and the model {self.n_layers} layers")
-        self._check_positions(what, state, l)
-        n, d = b * l, self.d_model
-        x = self._prims.embedding(self._embed, ids.reshape((n,))).reshape((b, l, d))
-        for i, blk in enumerate(self._blocks):  # glue: drives one native forward per layer
-            if state is None:
-                x = blk.forward(x)
-            elif step:
-                x = blk.step(x, state.layers[i])
-            else:
-                x = blk.forward(x, state.layers[i])
-        hn = x.reshape((n, d))
-        if self._norm is not None:          # None: no final norm (the byte-LM format)
-            hn = self._prims.rms_norm(hn, self._norm, self.norm_eps)
-        if self._head_int15 is not None:
-            logits = self._prims.linear_int15(hn, self._head_int15)
-        else:
-            logits = self._prims.linear(hn, self._head)
-        if state is not None:
-            state.positions += l
-        return logits.reshape((b, l, self.vocab_size))
+        return self._runtime.causal_lm_forward(self, ids, state, step)
 
     def forward(self, ids, state=None):
-        """`(B, L)` int32 ids in, `(B, L, vocab)` float32 logits out. With
-        `state=None` every block runs from a zero state and nothing is kept;
-        with a `CausalLMState` the blocks read and update it in place."""
-        what = "CausalLM.forward"
-        return self._run(self._ids(ids, what), state, False, what)
+        """Return `(B, L, vocabulary)` logits for integer token ids `(B, L)`.
+
+        A supplied state is updated in place. With no state, the sequence starts
+        from fresh caches. In `identical` mode, mojolearn returns the same bits
+        on Apple, NVIDIA and AMD GPUs.
+        """
+        return self._runtime.causal_lm_forward(self, ids, state, False)
 
     __call__ = forward
 
     def allocate_state(self, batch_size, max_tokens):
-        """The zero decode state for `batch_size` rows of up to `max_tokens`
-        positions each (`Mamba*Block.allocate_state(B)`,
-        `TransformerBlock.allocate_state(B, max_tokens)`)."""
-        b, smax = int(batch_size), int(max_tokens)
-        if b < 1 or smax < 1:
-            raise ValueError("mojolearn CausalLM.allocate_state: batch_size and max_tokens must be positive")
-        if self.max_positions is not None and smax > self.max_positions:
-            raise ValueError(
-                f"mojolearn CausalLM.allocate_state: max_tokens={smax} exceeds max_positions={self.max_positions}")
-        layers = []
-        for blk in self._blocks:  # glue: allocates native state per layer
-            layers.append(blk.allocate_state(b, smax) if self.kind == "transformer" else blk.allocate_state(b))
-        return CausalLMState(b, smax, layers, owner=self)
+        """Allocate fresh caches for `batch_size` sequences and `max_tokens` positions."""
+        return self._runtime.causal_lm_allocate(self, batch_size, max_tokens)
 
     def reset_state(self, state):
-        """Replace caches with fresh zero state, preserving capacity and batch size.
-
-        States are owned by their allocating model; cross-model reuse is refused.
-        """
-        if not isinstance(state, CausalLMState) or state._owner is not self:
-            raise ValueError("mojolearn CausalLM.reset_state: state belongs to another model")
-        fresh = self.allocate_state(state.batch_size, state.max_tokens)
-        state.layers = fresh.layers
-        state.positions = 0
-        return state
+        """Reset this model's state, preserving its batch size and capacity."""
+        return self._runtime.causal_lm_reset(self, state)
 
     def step(self, ids, state):
-        """One decode token per row: `(B,)` or `(B, 1)` ids in, `(B, vocab)`
-        logits out, `state` updated in place. It is `forward` at L = 1 with
-        each block's `step` (their one spelling for decode)."""
-        what = "CausalLM.step"
-        if state is None:
-            raise ValueError("mojolearn CausalLM.step: state is required (allocate_state(B, max_tokens) makes the fresh one)")
-        ids = self._ids(ids, what, step=True)
-        out = self._run(ids, state, True, what)
-        return out.reshape((int(ids.shape[0]), self.vocab_size))
+        """Return `(B, vocabulary)` logits and update state for one token per row."""
+        return self._runtime.causal_lm_forward(self, ids, state, True)
 
-    def generate(self, ids, max_new_tokens, *, greedy=True):
-        """`(B, L)` ids in, `(B, L + max_new_tokens)` int32 ids out: the
-        prompt followed by greedy continuations (argmax of the last
-        position, ties to the lowest index), one carried state, the prompt
-        as one prefill and every later token as one `step`. No stop token:
-        exactly `max_new_tokens` are produced per row."""
-        what = "CausalLM.generate"
-        if greedy is not True:
-            raise NotImplementedError(f"mojolearn {what}: greedy=True is the only decoding implemented; got greedy={greedy!r}")
-        n_new = int(max_new_tokens)
-        if n_new < 0:
-            raise ValueError(f"mojolearn {what}: max_new_tokens must be >= 0, got {max_new_tokens!r}")
-        ids = self._ids(ids, what)
-        b, l = int(ids.shape[0]), int(ids.shape[1])
-        if n_new == 0:
-            return ids.copy()
-        total = l + n_new
-        if self.max_positions is not None and total > self.max_positions:
-            raise ValueError(f"mojolearn {what}: {l} prompt + {n_new} new tokens exceed max_positions={self.max_positions}")
-        fast = self._generate_resident(ids, n_new, total)
-        if fast is not None:
-            return fast
-        state = self.allocate_state(b, total)
-        logits = self._run(ids, state, False, what)
-        nxt = _argmax_last(logits, b, l, self.vocab_size)
-        new = empty((n_new, b), "<i4")
-        at = addr(new, name="new ids")
-        for k in range(n_new):  # decode steps: one native forward each, no per-row work  # glue: drives one native forward per decode step
-            memcopy(at + k * b * 4, addr_ro(nxt, name="next ids"), b * 4)
-            if k == n_new - 1:
-                break
-            lg = self._run(nxt.reshape((b, 1)), state, True, what)
-            nxt = _argmax_last(lg, b, 1, self.vocab_size)
-        return _prompt_then_new(ids, b, l, n_new, at, True)
+    def generate(self, ids, max_new_tokens, *, greedy=True, seed=None,
+                 temperature=1.0, top_k=0, top_p=1.0, eos_token_id=None,
+                 pad_token_id=None):
+        """Return the prompt and up to `max_new_tokens` continuation ids.
+
+        Greedy ties choose the lowest id. Sampling (`greedy=False`) requires
+        an explicit unsigned 64-bit seed. Temperature applies before top-k,
+        then top-p. `eos_token_id` accepts one id or a sequence of ids. Finished
+        batch rows are padded; decoding ends when every row finishes or reaches
+        the token limit. With no EOS, the output has exactly `(B, L + max_new_tokens)`
+        ids. A missing pad id uses the first EOS id, or zero.
+        """
+        return self._runtime.causal_lm_generate(
+            self, ids, max_new_tokens,
+            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
+
+    def stream(self, ids, max_new_tokens, *, greedy=True, seed=None,
+               temperature=1.0, top_k=0, top_p=1.0, eos_token_id=None,
+               pad_token_id=None):
+        """Create a continuation stream; `read(n)` returns at most `n` new ids per row.
+
+        Read size does not change sampled ids. `info()` reports completion and
+        each row's generated length, including its EOS token.
+        """
+        return self._runtime.causal_lm_stream(
+            self, ids, max_new_tokens,
+            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
+
+    def generate_text(self, text, max_new_tokens, *, tokenizer, greedy=True,
+                      seed=None, temperature=1.0, top_k=0, top_p=1.0,
+                      eos_token_id=None, pad_token_id=None):
+        """Tokenize text and return its decoded continuation, excluding EOS tokens.
+
+        Pass a `models.Tokenizer` loaded for this checkpoint. Sampling and
+        stopping use the same options as `generate`.
+        """
+        return self._runtime.causal_lm_generate_text(
+            self, tokenizer, text, max_new_tokens,
+            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
+
+    def stream_text(self, text, max_new_tokens, *, tokenizer, greedy=True,
+                    seed=None, temperature=1.0, top_k=0, top_p=1.0,
+                    eos_token_id=None, pad_token_id=None):
+        """Create a text continuation stream; `read(n)` consumes at most `n` tokens.
+
+        A read may return an empty string while a UTF-8 character is incomplete.
+        Use `info()['done']` to detect completion.
+        """
+        return self._runtime.causal_lm_text_stream(
+            self, tokenizer, text, max_new_tokens,
+            (greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id))
+
+    def resume_generation(self, checkpoint, *, tokenizer=None):
+        """Resume a generation checkpoint on the same model weights and settings."""
+        return self._runtime.causal_lm_resume(self, checkpoint, tokenizer)
 
     def _generate_resident(self, ids, n_new, total, last_logits=None):
-        """`generate`'s greedy loop in ONE native call (lane/py-lm,
-        2026-09-28), or None where it does not apply: a GPU transformer
-        stack whose binding exports `causal_lm_session_*`, and
-        `MOJOLEARN_HOTPATH` not `python`. Every block opens its resident
-        `TransformerDecodeSession` (DEVIATION 2940) on a fresh state; the
-        `CausalLMSession` holds the embedding, final norm and head; one
-        `causal_lm_session_run` runs the prompt and every later token and
-        returns the ids. The kernels, operands, M and the argmax rule are the
-        per-layer route's (the binding's section header), so the ids are
-        too; that route stays below as the reference arm."""
-        from .._buffer import hotpath_enabled
-        from .._transformer_impl import TransformerDecodeSession, _exports
-        if self.device != "gpu" or self.kind != "transformer" or not hotpath_enabled():
-            return None
-        # the resident session always applies a final norm; a model without one
-        # (the byte-LM format) takes the per-layer route below
-        if self._norm is None:
-            return None
-        # lane/lowbit-default (2026-09-29): under fixed15_v1 the resident
-        # session opens through the profile's entries (the blocks' planes
-        # and the head's planes resident, `causal_lm_session_open_int15`);
-        # a binding without them takes the per-layer route below, which
-        # computes the same profile.
-        int15 = self._head_int15 is not None
-        ext = self._blocks[0]._extension()
-        if not (_exports(ext, "causal_lm_session_run")
-                and _exports(ext, "transformer_decode_session_create")):
-            return None
-        if int15 and not (_exports(ext, "causal_lm_session_open_int15")
-                          and _exports(ext, "transformer_decode_session_open_int15")):
-            return None
-        # Gated on NVIDIA only (the 4090 and the H100, lane/lowbit-default:
-        # resident == per-layer bit for bit, two sabotage arms). AMD and Apple
-        # keep the per-layer route under the profile, which their boxes
-        # gated, until the resident session is run there.
-        if int15 and _backend.vendor() != "cuda":
-            return None
-        b, l = int(ids.shape[0]), int(ids.shape[1])
-        state = self.allocate_state(b, total)
-        sessions = []
-        lm = ext.causal_lm_session_create()
-        try:
-            for blk, st in zip(self._blocks, state.layers):  # glue: walks the layer states
-                sessions.append(TransformerDecodeSession(blk, st))
-            head = self._head
-            if int15:
-                hh, hl, he = self._head_int15
-                ext.causal_lm_session_open_int15(
-                    lm, [addr_ro(self._embed, name="embed"), addr_ro(self._norm, name="norm"),
-                         addr_ro(hh, name="head hi"), addr_ro(hl, name="head lo"),
-                         addr_ro(he, name="head exponents")],
-                    [b, self.vocab_size, self.d_model, float(self.norm_eps)])
-            else:
-                ext.causal_lm_session_open(
-                    lm, [addr_ro(self._embed, name="embed"), addr_ro(self._norm, name="norm"),
-                         0 if head is self._embed else addr_ro(head, name="head")],
-                    [b, self.vocab_size, self.d_model, float(self.norm_eps)])
-            out = empty((b, n_new), "<i4")
-            ext.causal_lm_session_run(
-                lm, [ss._native for ss in sessions],  # glue: native session handles of the layers
-                [addr_ro(ids, name="ids"), addr(out, name="ids_out"),
-                 0 if last_logits is None else addr(last_logits, name="last_logits")], [l, n_new, 0])
-        finally:
-            ext.causal_lm_session_close(lm)
-            for ss in sessions:  # glue: closes the layer sessions
-                ss.discard()
-        return _prompt_then_new(ids, b, l, n_new, addr_ro(out, name="ids_out"), False)
+        # Retained diagnostic door; arithmetic and lifecycle are native.
+        return self._runtime.causal_lm_resident(self, ids, n_new, last_logits, None)
 
     def __repr__(self):
         return (f"CausalLM(model_type={self.plan.model_type!r}, layers={self.n_layers}, d_model={self.d_model}, "
                 f"vocab={self.vocab_size}, weight_format={self.weight_format!r}, device={self.device!r})")
+
+
+class GenerationStream:
+    """A native continuation with explicit bounded reads and resumable state."""
+
+    def read(self, max_tokens=1):
+        """Return the next token array or text fragment; stop at EOS or the limit."""
+        return self._runtime.causal_lm_read(self, max_tokens)
+
+    def info(self):
+        """Return completion, generated lengths and whether the stream remains usable."""
+        return self._runtime.causal_lm_info(self)
+
+    def state_dict(self):
+        """Return independent state bytes, sampling options and model fingerprint."""
+        return self._runtime.causal_lm_snapshot(self)
