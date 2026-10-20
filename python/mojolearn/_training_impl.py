@@ -2367,14 +2367,7 @@ class Generator(object):
         high : float, default 1.0
             Upper bound; must be >= `low`.
         """
-        shape, n = self._shape(shape)
-        lo, hi = float(_round_f32(low)), float(_round_f32(high))
-        span = float(_round_f32(hi - lo))
-        if not (span >= 0.0):
-            raise ValueError("mojolearn.Generator.uniform: high must be >= low")
-        out = _rng_call(_load(self.numeric_mode), _RNG_UNIFORM, n, 0,
-                        self.seed, self._next_stream(), lo, span)
-        return out.reshape(shape)
+        return _native_samba_bridge.RUNTIME.generator_draw("uniform", (self, shape, low, high), _native_samba_bridge.CONTEXT)
 
     def normal(self, shape, mean=0.0, std=1.0):
         """Draw float32 normal values (Box-Muller).
@@ -2388,14 +2381,7 @@ class Generator(object):
         std : float, default 1.0
             Standard deviation; must be >= 0.
         """
-        shape, n = self._shape(shape)
-        sd = float(_round_f32(std))
-        if not (sd >= 0.0):
-            raise ValueError("mojolearn.Generator.normal: std must be >= 0")
-        out = _rng_call(_load(self.numeric_mode), _RNG_NORMAL, n, 0,
-                        self.seed, self._next_stream(),
-                        float(_round_f32(mean)), sd)
-        return out.reshape(shape)
+        return _native_samba_bridge.RUNTIME.generator_draw("normal", (self, shape, mean, std), _native_samba_bridge.CONTEXT)
 
     # `a=None` means sqrt(5) and is not a behavior change (2026-09-20). The default used to read
     # `a=math.sqrt(5.0)`, evaluated at class definition time; `math` here is `_portable_math`, whose sqrt
@@ -2468,26 +2454,11 @@ class Generator(object):
         y : array of float32
         key : dict
         """
-        p = float(_round_f32(p))
-        if not (0.0 <= p < 1.0):
-            raise ValueError("mojolearn.Generator.dropout: p must be in [0, 1)")
-        x = _c32(x, "x", "Generator.dropout")
-        scale = float(_round_f32(1.0 / (1.0 - p)))
-        stream = self._next_stream() if stream is None else int(stream)
-        key = {"seed": self.seed, "stream": stream, "p": p, "scale": scale,
-               "offset": int(offset)}
-        y = _rng_call(_load(self.numeric_mode), _RNG_DROPOUT_FORWARD, x.size,
-                      key["offset"], self.seed, stream, p, scale,
-                      x.reshape(-1))
-        return y.reshape(x.shape), key
+        return _native_samba_bridge.RUNTIME.generator_draw("dropout", (self, x, p, offset, stream), _native_samba_bridge.CONTEXT)
 
     def dropout_backward(self, dy, key):
         """Gradient of `dropout`: apply the mask and scale recorded in `key` to `dy`."""
-        dy = _c32(dy, "dy", "Generator.dropout_backward")
-        dx = _rng_call(_load(self.numeric_mode), _RNG_DROPOUT_BACKWARD,
-                       dy.size, key["offset"], key["seed"], key["stream"],
-                       key["p"], key["scale"], dy.reshape(-1))
-        return dx.reshape(dy.shape)
+        return _native_samba_bridge.RUNTIME.generator_draw("dropout_backward", (self, dy, key), _native_samba_bridge.CONTEXT)
 
 
 # ===================================================================
