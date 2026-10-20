@@ -77,67 +77,33 @@ class CrossVendorMismatch(RuntimeError):
     """Two workers disagree, or the group is not a valid split of one step."""
 
 
+from ._backend import load_host_module as _load_host_module
+from ._array import Array as _Array
+from ._buffer import _native as _buffer_native
+_native_cross_vendor = _load_host_module("_mojolearn_tokenizer_host").cross_vendor_call
+_native_cross_vendor("initialize", (_Array, CrossVendorMismatch, _buffer_native("fold_pair_f32")))
+
+
 # ------------------------------------------------------------ the fold
 
 
 def _f32(payload):
-    return flat_bytes(payload, name="gradient").cast("f")
+    return _native_cross_vendor("f32", (payload,))
 
 
 def fold_pair(total, shard):
-    """One step of the device reduction on the host:
-    ftz(ftz(total) + ftz(shard)) elementwise, one float32 rounding per add
-    (training/byte_lm_parallel.mojo `_ordered_add_kernel`, fma(1, a, b)).
-    Both are float32 buffers of the same length; returns bytes.
-
-    The fold runs in Mojo, the base binding's `fold_pair_f32` (the core
-    host binding on a CPU-only coordinator); a live worker folds on its
-    device (`ParallelByteLanguageModelTrainer` `fold_*`), which is the fast
-    path at training size."""
-    t, g = _f32(total), _f32(shard)
-    if len(t) != len(g):
-        raise ValueError("fold_pair: gradients differ in length")
-    out, sh = array.array("f"), array.array("f")
-    out.frombytes(t.cast("B"))
-    sh.frombytes(g.cast("B"))
-    # the elementwise fold in Mojo (the base binding's `fold_pair_f32`;
-    # lane cgr4-py-compute: no Python element loop)
-    from ._buffer import _native
-    _native("fold_pair_f32")(out.buffer_info()[0], sh.buffer_info()[0], len(out))
-    return out.tobytes()
+    """Add two float32 buffers with the fixed FTZ reduction contract."""
+    return _native_cross_vendor("pair", (total, shard))
 
 
 def ordered_fold(gradients, *, prefix=None):
-    """The device reduction, on the host: copy g[0] (or start from `prefix`,
-    an already folded run of the shards BEFORE these), then
-    total = fold_pair(total, g[k]) in shard order. `gradients` is a
-    sequence of float32 buffers in shard order; returns bytes. A left fold,
-    so folding a prefix and then the rest equals folding everything at
-    once; that is what lets the chained protocol move one gradient per
-    worker."""
-    gradients = list(gradients)
-    if prefix is None:
-        if not gradients:
-            raise ValueError("ordered_fold needs at least one gradient")
-        total = bytes(_f32(gradients[0]).cast("B"))
-        rest = gradients[1:]
-    else:
-        total = bytes(_f32(prefix).cast("B"))
-        rest = gradients
-    n = len(_f32(total))
-    if any(len(_f32(g)) != n for g in rest):  # glue: length check per shard gradient buffer
-        raise ValueError("ordered_fold: gradients differ in length")
-    for g in rest:  # glue: one native fold_pair per shard buffer
-        total = fold_pair(total, g)
-    return total
+    """Fold float32 shard buffers in logical order, optionally after a prefix."""
+    return _native_cross_vendor("fold", (gradients, prefix))
 
 
 def state_hash(state):
-    """sha256 over parameters, m, v and flags, in that order."""
-    h = hashlib.sha256()
-    for key in ("parameters", "m", "v", "flags"):  # glue: four named state arrays
-        h.update(flat_bytes(state[key], name=key))
-    return h.hexdigest()
+    """Return SHA256 over parameters, m, v and flags, in that order."""
+    return _native_cross_vendor("state_hash", (state,))
 
 
 def trainer_state_hash(trainer):
@@ -150,33 +116,15 @@ def trainer_state_hash(trainer):
 
 # ------------------------------------------------------------ framing
 def _send(sock, header, payload=b""):
-    header = dict(header, nbytes=len(payload))
-    raw = json.dumps(header, sort_keys=True).encode()
-    sock.sendall(struct.pack(">I", len(raw)) + raw)
-    if payload:
-        sock.sendall(payload)
-
-
-def _recv_exact(sock, n):
-    buf = bytearray(n)
-    view, got = memoryview(buf), 0
-    while got < n:
-        k = sock.recv_into(view[got:], n - got)
-        if k == 0:
-            raise ConnectionError("cross_vendor: peer closed the connection")
-        got += k
-    return bytes(buf)
+    return _native_cross_vendor("send", (sock, header, payload))
 
 
 def _recv(sock, max_payload):
-    (size,) = struct.unpack(">I", _recv_exact(sock, 4))
-    if size > 1 << 20:
-        raise ConnectionError("cross_vendor: oversized header")
-    header = json.loads(_recv_exact(sock, size))
-    nbytes = int(header.get("nbytes", 0))
-    if not 0 <= nbytes <= max_payload:
-        raise ConnectionError("cross_vendor: payload of %d bytes refused" % nbytes)
-    return header, _recv_exact(sock, nbytes) if nbytes else b""
+    return _native_cross_vendor("receive", (sock, max_payload))
+
+
+def _recv_exact(sock, n):
+    return _native_cross_vendor("receive_exact", (sock, n))
 
 
 # ------------------------------------------------------------ coordinator
