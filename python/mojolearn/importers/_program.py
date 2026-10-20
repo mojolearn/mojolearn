@@ -264,7 +264,7 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     words_handle = None
     keep = ()
     try:
-        if not hasattr(b, "onnx_import"):
+        if not hasattr(b, "onnx_import"):  # cpu-route: model graph lowered in Mojo (the import entry)
             raise RuntimeError("mojolearn: this install's x_sequence binding has no model import (onnx_import); "
                                "rebuild the x_sequence bindings")
         g = _read(source, b)
@@ -276,10 +276,10 @@ def import_model(source, *, shapes=None, numeric_mode=None):
         else:
             # a GraphIR built in Python (torch.export), or read by another module: to Mojo as words
             words, strings, floats, keep = _graph_words(g)
-            handle = words_handle = int(b.onnx_from_words(words, strings, floats, [_addr(a) for a in keep]))  # glue: buffer addresses
+            handle = words_handle = int(b.onnx_from_words(words, strings, floats, [_addr(a) for a in keep]))  # cpu-route: model graph handed to Mojo (buffer addresses only)
         names, flat = _shape_words(shapes)
         # one call: every problem is listed before anything reaches the device
-        res = b.onnx_import(handle, s._sid(), names, flat, [_addr(a) for a in keep], str(g.source))  # glue: buffer addresses
+        res = b.onnx_import(handle, s._sid(), names, flat, [_addr(a) for a in keep], str(g.source))  # cpu-route: model graph lowered in Mojo (buffer addresses only)
         status = int(res[0])
         if status == _IMPORT_PROBLEMS:
             raise UnsupportedModel(g.source, [(str(name), None if op is None else str(op), str(why))
