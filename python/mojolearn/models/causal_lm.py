@@ -533,11 +533,10 @@ def _connect_causal_native():
             if mode == "fast" and vendor != "metal":
                 continue
             entries = {}
-            for name, target in (("transformer", "_mojolearn_transformer"),
-                                 ("mamba1", "_mojolearn_mamba"),
-                                 ("mamba2", "_mojolearn_mamba"),
-                                 ("primitives", "_mojolearn_training"),
-                                 ("linalg", "_mojolearn_linalg")):  # glue: connects compiled sibling modules at package import
+            targets = (("transformer", "_mojolearn_transformer"),
+                       ("mamba1", "_mojolearn_mamba"), ("mamba2", "_mojolearn_mamba"),
+                       ("primitives", "_mojolearn_training"), ("linalg", "_mojolearn_linalg"))
+            for name, target in targets:  # glue: connects compiled sibling modules at package import
                 try:
                     entries[name] = _backend.binding(target, mode)
                 except (ImportError, RuntimeError, ValueError, OSError) as exc:
