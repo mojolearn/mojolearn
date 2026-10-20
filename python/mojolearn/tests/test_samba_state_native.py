@@ -60,6 +60,13 @@ def test_native_samba_snapshot_and_reconstruction_preserve_complete_state(monkey
         resumed = _call("snapshot", clone, True)
     _assert_state_equal(actual, expected)
     _assert_state_equal(resumed, expected)
+    # The saved final-normalization epsilon is separate from each attention
+    # block's fixed backward profile (1e-6). Reusing checkpoint-interface
+    # defaults here used to mark restored attention blocks as extended.
+    assert clone.config.norm_eps == stack.config.norm_eps
+    assert clone._blocks[1].norm_eps == stack._blocks[1].norm_eps == 1e-6
+    assert clone._blocks[1]._opts_tail == stack._blocks[1]._opts_tail
+    assert clone._blocks[1]._extended is False
     for item in expected["registry"]:
         view = clone.arrays[item["name"]]
         assert view._addr == clone.flat._addr + 4 * item["offset"]
