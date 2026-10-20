@@ -27,8 +27,9 @@ EXPECTED_CASES = (
     "broadcast_relu_words_and_cost", "broadcast_relu_validation", "broadcast_relu_control_and_training",
     "integer_loop_state_refusal",
     "attention_shared_projection_vjp", "conditional_tied_normalization_checkpoint",
+    "higher_rank_derivatives",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5, 8, 20)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5, 8, 20, 7)))
 
 
 _AUDITS = []
@@ -1383,6 +1384,51 @@ def _composition_negative_control(expected):
     except AssertionError:
         return
     raise AssertionError("composition oracle admitted a deliberately halved gradient")
+
+
+def higher_rank_derivatives():
+    import numpy as np
+    from . import ops
+    value = np.arange(12, dtype=np.float32).reshape(2, 3, 2) / np.float32(16)
+    direction = np.arange(1, 13, dtype=np.float32).reshape(2, 3, 2) / np.float32(8)
+    first = np.exp(value.astype(np.float64))
+    second = first * direction
+    _composition_negative_control(second)
+    with ops.Session(record=True) as s:
+        x = _invoke(s.tensor, value, requires_grad=True)
+        alias = _invoke(s.reshape, x, (6, 2))
+        loss = _invoke(s.sum, _invoke(s.exp, alias))
+        _invoke(s.backward, loss, create_graph=True)
+        gx, ga = _invoke(s.grad_tensor, x), _invoke(s.grad_tensor, alias)
+        dx, da = _invoke(s.numpy, gx), _invoke(s.numpy, ga)
+        _composition_gradient(dx, first)
+        _composition_gradient(da, first.reshape(6, 2))
+        assert _invoke(s.shape, x) == value.shape
+        assert _invoke(s.shape, alias) == (6, 2)
+        v = _invoke(s.tensor, direction)
+        _invoke(s.backward, _invoke(s.sum, _invoke(s.mul, gx, v)))
+        twice = _invoke(s.grad, x)
+        _composition_gradient(twice, second)
+        hv, = _invoke(s.hvp, loss, [x], [v])
+        hessian = _invoke(s.numpy, hv)
+        _composition_gradient(hessian, second)
+        output = _invoke(s.reshape, _invoke(s.exp, x), (2, 1, 3, 2))
+        ju = _invoke(s.jvp, output, [x], [v])
+        forward = _invoke(s.numpy, ju)
+        _composition_gradient(forward, second.reshape(2, 1, 3, 2))
+        wrong = _invoke(s.tensor, direction.reshape(6, 2))
+        _refuses(lambda: _invoke(s.hvp, loss, [x], [wrong]), "full shape", ValueError)
+        _refuses(lambda: _invoke(s.jvp, output, [x], [wrong]), "full shape", ValueError)
+        linear = _invoke(s.sum, _invoke(s.scale, x, 2))
+        hz, = _invoke(s.hvp, linear, [x], [v])
+        zero = _invoke(s.numpy, hz)
+        _composition_gradient(zero, np.zeros(value.shape))
+        unused = _invoke(s.tensor, np.ones((2, 1, 3, 2), np.float32), requires_grad=True)
+        u = _invoke(s.tensor, np.ones((2, 1, 3, 2), np.float32))
+        _, hu = _invoke(s.hvp, loss, [x, unused], [v, u])
+        unconnected = _invoke(s.numpy, hu)
+        _composition_gradient(unconnected, np.zeros((2, 1, 3, 2)))
+    return [dx, da, twice, hessian, forward, zero, unconnected]
 
 
 def attention_shared_projection_vjp():

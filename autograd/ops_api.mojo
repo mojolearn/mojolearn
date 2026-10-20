@@ -630,10 +630,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if len(vs) != len(hs):
             raise Error("ops: " + what + " takes one direction per input")
         for i in range(len(hs)):  # driver-loop: over the call's input handles
-            var a = self.shape(hs[i])
-            var b = self.shape(vs[i])
-            if a[0] != b[0] or a[1] != b[1]:
-                raise Error("ops: each direction of " + what + " must have its input's shape")
+            if not same_shape(self.shape_nd(hs[i]), self.shape_nd(vs[i])):
+                raise Error("ValueError: ops: each direction of " + what + " must have its input's full shape")
 
     def _copy_constant(mut self, src: FP, rows: Int, cols: Int) raises -> Int:
         """A new constant session tensor holding a copy of `src`."""
@@ -645,7 +643,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return self._constant(dst, rows, cols, 0)
 
     def _copy_constant_nd(mut self, src: FP, shape: ShapeN) raises -> Int:
-        # VJP results retain the input's full rank, rather than publishing the
+        # Derivative results retain their full rank, rather than publishing the
         # tape's flattened matrix storage as the public tensor shape.
         var dst = self.tape.reserve(self.ex, shape.count())
         var a = Args()
@@ -654,14 +652,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.ex.launch[OP_COPY](a, shape.count())
         return self._leaf(dst, shape)
 
-    def _zeros(mut self, rows: Int, cols: Int) raises -> Int:
+    def _zeros_nd(mut self, shape: ShapeN) raises -> Int:
         """A new constant session tensor of zeros."""
-        var dst = self.tape.reserve(self.ex, rows * cols)
+        var dst = self.tape.reserve(self.ex, shape.count())
         var a = Args()
         a.p0 = dst
         a.f0 = Float32(0)
-        self.ex.launch[OP_FILL](a, rows * cols)
-        return self._constant(dst, rows, cols, 0)
+        self.ex.launch[OP_FILL](a, shape.count())
+        return self._leaf(dst, shape)
 
     def _directional(mut self, gs: List[Tensor], vs: List[Int]) raises -> Tensor:
         """sum_i sum(gs[i] * vs[i]) as one recorded (1, 1) tensor, the
@@ -754,15 +752,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var res = List[Int](capacity=len(hs))
         if not self.tape.requires_grad(d):
             for i in range(len(hs)):  # driver-loop: over the call's input handles
-                var s = self.shape(hs[i])
-                res.append(self._zeros(s[0], s[1]))
+                res.append(self._zeros_nd(self.shape_nd(hs[i])))
             return res^
         self.tape.backward_scalar_with_rules(self.ex, d, NeuralRules(), False)
         for i in range(len(xs)):  # driver-loop: over the call's input handles
             var x = xs[i]
-            var s = self.shape(hs[i])
             var gbuf = self.tape.gradient(x)
-            res.append(self._copy_constant(gbuf, s[0], s[1]))
+            res.append(self._copy_constant_nd(gbuf, self.shape_nd(hs[i])))
         return res^
 
     def jvp(mut self, out_h: Int, hs: List[Int], us: List[Int]) raises -> Int:
@@ -778,15 +774,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var xs = self._wrt(hs, "jvp")
         self._same_shapes(hs, us, "jvp")
         var t = self.tensor(out_h)
-        var oshape = self.shape(out_h)
-        var rows = oshape[0]
-        var cols = oshape[1]
-        var wbuf = self.tape.reserve(self.ex, rows * cols)
+        var oshape = self.shape_nd(out_h)
+        var wbuf = self.tape.reserve(self.ex, oshape.count())
         var fa = Args()
         fa.p0 = wbuf
         fa.f0 = Float32(0)
-        self.ex.launch[OP_FILL](fa, rows * cols)
-        var w = self.tape.variable(self.ex, wbuf, rows, cols, True)
+        self.ex.launch[OP_FILL](fa, oshape.count())
+        var w = self.tape.variable_nd(self.ex, wbuf, oshape, True)
         backward_recorded(self.tape, self.ex, t, w)
         var gs = List[Tensor](capacity=len(xs))
         for i in range(len(xs)):  # driver-loop: over the call's input handles
@@ -794,10 +788,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             gs.append(self.tape.grad_of(x))
         var d = self._directional(gs, us)
         if not self.tape.requires_grad(d):
-            return self._zeros(rows, cols)
+            return self._zeros_nd(oshape)
         self.tape.backward_scalar_with_rules(self.ex, d, NeuralRules(), False)
         var jbuf = self.tape.gradient(w)
-        return self._copy_constant(jbuf, rows, cols)
+        return self._copy_constant_nd(jbuf, oshape)
 
     # ------------------------------------------------------------ optimizers
     def optimizer(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
