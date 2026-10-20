@@ -292,6 +292,75 @@ def ops_grad_py[E: Exec & Movable & Deinitable, KIND: Int](
     return PythonObject(0)
 
 
+# Higher-order gradients (autograd/ops_api.mojo OpsSession.backward_graph,
+# backward_seed, grad_handle, vjp, hvp, jvp; lane ag-ho-session): one call
+# each, handles and lists of handles only.
+def _input_handles(p: PythonObject) raises -> List[Int]:
+    var hs = List[Int]()
+    for i in range(len(p)):  # small-loop(p: the inputs or directions of vjp, jvp or hvp): argument parsing, no data
+        hs.append(ival(p, i))
+    return hs^
+
+
+def _handles_out(hs: List[Int]) raises -> PythonObject:
+    var res = Python.list()
+    for i in range(len(hs)):  # small-loop(hs: one result handle per input of vjp or hvp): handle list building, no data
+        res.append(PythonObject(hs[i]))
+    return res
+
+
+def ops_backward_graph_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, h: PythonObject,
+) raises -> PythonObject:
+    """Differentiate the (1, 1) tensor `h`, recording the gradients as tensors."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].backward_graph(Int(py=h))
+    return PythonObject(0)
+
+
+def ops_backward_seed_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, h: PythonObject, seed: PythonObject, create_graph: PythonObject,
+) raises -> PythonObject:
+    """Differentiate tensor `h` against the seed tensor `seed` of its shape."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].backward_seed(Int(py=h), Int(py=seed), Int(py=create_graph) != 0)
+    return PythonObject(0)
+
+
+def ops_grad_handle_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, h: PythonObject,
+) raises -> PythonObject:
+    """The recorded gradient of tensor `h` as a new handle."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(p[].grad_handle(Int(py=h)))
+
+
+def ops_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, out_h: PythonObject, inputs: PythonObject, seed: PythonObject, create_graph: PythonObject,
+) raises -> PythonObject:
+    """The vector-Jacobian products of `out_h` for `seed`: one handle per input."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    var hs = p[].vjp(Int(py=out_h), _input_handles(inputs), Int(py=seed), Int(py=create_graph) != 0)
+    return _handles_out(hs)
+
+
+def ops_hvp_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, loss: PythonObject, params: PythonObject, vs: PythonObject,
+) raises -> PythonObject:
+    """The Hessian-vector products of `loss` along `vs`: one handle per parameter."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    var hs = p[].hvp(Int(py=loss), _input_handles(params), _input_handles(vs))
+    return _handles_out(hs)
+
+
+def ops_jvp_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, out_h: PythonObject, inputs: PythonObject, us: PythonObject,
+) raises -> PythonObject:
+    """The Jacobian-vector product of `out_h` along `us`: one handle."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(p[].jvp(Int(py=out_h), _input_handles(inputs), _input_handles(us)))
+
+
 # Session optimizers (autograd/ops_api.mojo OpsSession.optimizer / step):
 # one call each, handles and options only; every number is computed in the
 # session.
