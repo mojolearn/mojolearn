@@ -66,10 +66,17 @@ BATCH = 3
 
 
 def test_package_never_imports_torch():
+    # The child imports the same package this test imported (its parent directory goes first on PYTHONPATH),
+    # and exits 3 when torch was loaded, so a child that cannot import the package (exit 1) is not read as torch.
+    import mojolearn
+    pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(mojolearn.__file__)))
+    env = dict(os.environ)
+    env["PYTHONPATH"] = pkg_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     code = ("import sys, mojolearn.importers, mojolearn.importers.torch_export; "
-            "sys.exit(1 if 'torch' in sys.modules else 0)")
-    rc = subprocess.run([sys.executable, "-c", code], env=dict(os.environ)).returncode
-    assert rc == 0, "importing mojolearn.importers imported torch"
+            "sys.exit(3 if 'torch' in sys.modules else 0)")
+    r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+    assert r.returncode != 3, "importing mojolearn.importers imported torch"
+    assert r.returncode == 0, "the child could not import the package: " + r.stderr[-400:]
 
 
 # ------------------------------------------------------------ the modules --
