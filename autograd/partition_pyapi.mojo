@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # One-call native ABI for model/tensor/pipeline partitioned captured graphs.
 from std.ffi import _Global
+from bindings.native_json import native_path
 from std.memory import alloc, memcpy
 from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
@@ -133,7 +134,7 @@ def partition_load[E: Exec & Movable & Deinitable, KIND: Int](
     path: PythonObject, devices: List[Int], var executors: List[E],
 ) raises -> PythonObject:
     initialize_program_arrays()
-    var ck = read_checkpoint_unchecked(String(py=path))
+    var ck = read_checkpoint_unchecked(String(py=native_path(path)))
     var plan = partition_from_checkpoint(ck)
     var ip = List[Int]()
     var fp = List[Float32]()
@@ -217,7 +218,7 @@ def partition_run_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject
 def partition_save_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, path: PythonObject) raises -> PythonObject:
     var d = partition[E, KIND](id)
     var ck = partition_checkpoint(d[])
-    return PythonObject(save_checkpoint(String(py=path), ck).bytes)
+    return PythonObject(save_checkpoint(String(py=native_path(path)), ck).bytes)
 
 
 def partition_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
@@ -296,6 +297,12 @@ def partition_profile_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
         row["end_ns"] = PythonObject(e.end_ns)
         result.append(row)
     return result
+
+
+def partition_enter_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    var d = partition[E, KIND](id)
+    d[].ready()
+    return owner
 
 
 def partition_close_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:

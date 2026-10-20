@@ -3,7 +3,7 @@
 # by this worker have persistent device storage; other inputs are transient.
 # Node-local recomputation supplies exact native VJPs without a Python tape.
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_SCALE, dummy_ptr
+from sequence.ops import FP, Args, OP_SCALE, OP_FILL, dummy_ptr
 from autograd.ops import OP_AG_ACCUMULATE
 from autograd.ops_api import OpsSession, OPS_DROPOUT
 from autograd.program import OpsProgram
@@ -126,6 +126,12 @@ struct ModelStage[E: Exec & Movable & Deinitable](Movable):
             self.session.ex.sync()
             return
         var out = self.session.tensor(h)
+        self.gradients = NodeGradients()
+        if not self.session.tape.requires_grad(out):
+            # A detached node stops its incoming adjoint. Other graph paths
+            # retain their own contributions in the coordinator's fold.
+            self.session.ex.sync()
+            return
         if seed.shape.count() != self.session.shapes[self.session._slot(h)].count():
             raise Error("partitioned backward: output seed shape mismatch")
         var seed_buf = self.session.ex.alloc(seed.shape.count())
@@ -196,12 +202,24 @@ struct ModelStage[E: Exec & Movable & Deinitable](Movable):
             if not self.owns[j] or not self.trainable[j]:
                 continue
             var n = parameters[j].shape.count()
-            if len(gradients[j].words) != n:
-                raise Error("partitioned update: trainable parameter has no gradient")
+            if len(gradients[j].words) != 0 and len(gradients[j].words) != n:
+                raise Error("partitioned update: parameter gradient shape mismatch")
             var grad = self.session.ex.alloc(n)
-            self.session.ex.upload(grad, FP(unsafe_from_address=Int(gradients[j].words.unsafe_ptr())), n)
-            step_lr(self.session.ex, cfg, self.states[j], self.params[j], grad, n, step, lr)
-            self.session.ex.download(FP(unsafe_from_address=Int(parameters[j].words.unsafe_ptr())), self.params[j], n)
+            try:
+                if len(gradients[j].words) == 0:
+                    # No differentiable path is an explicit zero gradient;
+                    # selected optimizer states keep their global step clock.
+                    var fill = Args()
+                    fill.p0 = grad
+                    fill.f0 = Float32(0)
+                    self.session.ex.launch[OP_FILL](fill, n)
+                else:
+                    self.session.ex.upload(grad, FP(unsafe_from_address=Int(gradients[j].words.unsafe_ptr())), n)
+                step_lr(self.session.ex, cfg, self.states[j], self.params[j], grad, n, step, lr)
+                self.session.ex.download(FP(unsafe_from_address=Int(parameters[j].words.unsafe_ptr())), self.params[j], n)
+            except error:
+                self.session.ex.free(grad)
+                raise error
             self.session.ex.free(grad)
         self.session.ex.sync()
 

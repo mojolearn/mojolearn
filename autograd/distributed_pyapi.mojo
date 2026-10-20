@@ -2,6 +2,7 @@
 # Native ABI and lifetime table. Python forwards arrays/options in one call;
 # parsing, topology, ownership, graph walks and checkpoint bytes stay here.
 from std.ffi import _Global
+from bindings.native_json import native_path
 from std.memory import alloc, memcpy
 from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
@@ -157,7 +158,7 @@ def distributed_load[E: Exec & Movable & Deinitable, KIND: Int](
     path: PythonObject, device_ids: List[Int], var executors: List[E],
 ) raises -> PythonObject:
     initialize_program_arrays()
-    var ck = read_checkpoint_unchecked(String(py=path))
+    var ck = read_checkpoint_unchecked(String(py=native_path(path)))
     var p = distributed_graph(ck)
     var ip = List[Int]()
     var fp = List[Float32]()
@@ -268,7 +269,7 @@ def distributed_run_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObje
 
 def distributed_save_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, path: PythonObject) raises -> PythonObject:
     var d = distributed[E, KIND](id)
-    return PythonObject(save_distributed(d[], String(py=path)))
+    return PythonObject(save_distributed(d[], String(py=native_path(path))))
 
 
 def distributed_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
@@ -327,6 +328,12 @@ def distributed_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: Pyth
     result["logical_shards"] = PythonObject(d[].logical_shards)
     result["transport"] = PythonObject("native host staging")
     return result
+
+
+def distributed_enter_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    var d = distributed[E, KIND](id)
+    d[].ready()
+    return owner
 
 
 def distributed_close_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:

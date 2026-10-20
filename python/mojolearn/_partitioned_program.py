@@ -44,7 +44,7 @@ class PartitionedProgram:
         return self._b.ops_partitioned_close(self._id)
 
     def __enter__(self):
-        return self
+        return self._b.ops_partitioned_enter(self._id, self)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
+        return self._b.ops_partitioned_close(self._id)
