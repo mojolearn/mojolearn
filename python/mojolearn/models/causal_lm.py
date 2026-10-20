@@ -368,7 +368,7 @@ class CausalLM:
         return self._runtime.causal_lm_blocks(self)
 
     def parameters(self):
-        """Return tensors by checkpoint name, retaining their existing storage."""
+        """Return tensors by checkpoint name."""
         return self._runtime.causal_lm_parameters(self)
 
     def _ids(self, x, what, step=False):
