@@ -376,6 +376,46 @@ served = mojolearn.Sequential.load("model.ckpt")
 labels_served = served.predict(X)
 ```
 
+## Run a captured model
+
+Each operation of a session is one call from Python. Once a composition works, `capture` turns it into a
+`Program` that runs the whole model in one call: `run` uploads new input arrays, runs every captured
+operation on the device and returns the outputs, the same values to the bit as calling the operations
+one by one. Capture from an inference session (`Session()`, without `record=True`). The tensors the
+outputs read that are not inputs, such as the weights, are the program's parameters: `run` reads them
+where they are, so they are not copied per call. `save` writes the program and its parameters, and
+`load_program` reads the file back on any install, a GPU install or the CPU-only install.
+
+<!-- block: program -->
+```python
+import numpy as np
+from mojolearn import ops
+
+rng = np.random.default_rng(0)
+K = 0.3 * rng.standard_normal((4, 1, 3, 3), dtype=np.float32)       # 4 filters of 3 x 3
+W = 0.1 * rng.standard_normal((64, 2), dtype=np.float32)            # 4 x 4 x 4 features -> 2 classes
+batch1 = rng.standard_normal((8, 1, 8, 8), dtype=np.float32)
+batch2 = rng.standard_normal((8, 1, 8, 8), dtype=np.float32)
+
+with ops.Session() as s:
+    images = s.tensor(batch1)
+    h = s.max_pool2d(s.relu(s.conv2d(images, s.tensor(K), padding=1)), 2)
+    proba = s.softmax(s.linear(s.flatten(h), s.tensor(W)))         # (8, 2)
+    eager = s.numpy(proba)
+    model = s.capture(inputs=[images], outputs=[proba])
+    s.reset()                         # the program keeps what it needs
+    first = model.run(batch1)         # equal to eager, bit for bit
+    second = model.run(batch2)        # one call per batch
+    model.save("cnn.program")
+
+with ops.Session() as s:
+    served = s.load_program("cnn.program")
+    served_second = served.run(batch2)   # equal to second
+```
+
+Each input array must have the shape the captured input had. `embedding` and `take` read an index array
+from Python, so a composition that uses them cannot be captured.
+
 ## Numeric modes
 
 Both entry points take `numeric_mode`: `Sequential(numeric_mode=...)` and
