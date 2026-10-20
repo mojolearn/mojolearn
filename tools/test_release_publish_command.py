@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PublishCommandTests(unittest.TestCase):
-    def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False, split=None, preverified=False):
+    def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False, split=None, preverified=False,
+               meta=False):
         with tempfile.TemporaryDirectory(prefix='release publish ') as directory:
             root = Path(directory)
             for name in ('bin', 'python/mojolearn', 'tools', 'packaging'):
@@ -26,10 +27,16 @@ class PublishCommandTests(unittest.TestCase):
             # This is a staging/dispatch test, not native artifact admission.
             (root / 'packaging/verify_alpha_artifacts.py').write_text('print("{}")\n')
             source = 'a' * 40
-            wheel = root / ('mojolearn-0.8.9-py3-none-' +
-                ('manylinux_2_35_x86_64' if platform == 'linux' else 'macosx_11_0_arm64') + '.whl')
+            # Linux: the core is mojolearn_core-* (2026-10-20); macOS: the one complete mojolearn-*
+            wheel = root / ('mojolearn_core-0.8.9-py3-none-manylinux_2_35_x86_64.whl' if platform == 'linux'
+                            else 'mojolearn-0.8.9-py3-none-macosx_11_0_arm64.whl')
             with zipfile.ZipFile(wheel, 'w') as archive:
                 archive.writestr('mojolearn/identity_columns/COMMIT', source)
+            if meta:
+                # the file-free Linux mojolearn: only its .dist-info
+                wheel = root / 'mojolearn-0.8.9-py3-none-manylinux_2_35_x86_64.whl'
+                with zipfile.ZipFile(wheel, 'w') as archive:
+                    archive.writestr('mojolearn-0.8.9.dist-info/METADATA', 'Name: mojolearn\n')
             plugins, vendor = [], 'cuda' if platform == 'linux' else 'metal'
             if split:
                 # a split plugin publishes alone; the receipt installed it beside the core
@@ -98,9 +105,24 @@ class PublishCommandTests(unittest.TestCase):
                 self.assertEqual(list(manifest['files']), [f'mojolearn_{split}-0.8.9-py3-none-manylinux_2_35_x86_64.whl'])
                 self.assertIn('light_platform=linux', calls)
                 self.assertIn(f'--title mojolearn-{split} 0.8.9 linux', calls)
-                self.assertIn('installed by pip install mojolearn (the Linux core 0.8.9 requires it', calls)
-                self.assertNotIn(f'pip install mojolearn-{split}', calls)
+                self.assertIn(f'pip install mojolearn-{split} installs it with mojolearn-core', calls)
+                self.assertNotIn('the Linux core 0.8.9 requires it', calls)
                 self.assertNotIn('mojolearn[', calls)
+
+    def test_the_core_publishes_as_mojolearn_core(self):
+        result, calls, manifest = self.invoke('linux')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(list(manifest['files']), ['mojolearn_core-0.8.9-py3-none-manylinux_2_35_x86_64.whl'])
+        self.assertIn('--title mojolearn-core 0.8.9 linux', calls)
+        self.assertIn('with no vendor dependency', calls)
+
+    def test_the_file_free_linux_mojolearn_publishes_preverified(self):
+        result, calls, manifest = self.invoke('linux', receipt=False, preverified=True, meta=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(list(manifest['files']), ['mojolearn-0.8.9-py3-none-manylinux_2_35_x86_64.whl'])
+        self.assertIn('--title mojolearn 0.8.9 linux', calls)
+        self.assertIn('a file-free wheel requiring mojolearn-core, mojolearn-nvidia and mojolearn-amd', calls)
+        self.assertNotIn('light_smoke', manifest)
 
     def test_failed_smoke_never_reaches_github(self):
         result, calls, _ = self.invoke('linux', failed=True)
