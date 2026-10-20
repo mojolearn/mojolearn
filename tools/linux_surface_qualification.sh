@@ -95,7 +95,9 @@ for directory, dirs, names in os.walk(root):
         if rel.startswith('python/mojolearn/tests/'):
             continue
         if (name.endswith('.mojo') or rel.startswith(('bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/')) and name.endswith(('.py', '.sh'))
-                or rel in ('pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh')):
+                or rel in ('pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh',
+                           # the merged bindings' manifest and root generator (bindings/merged_build.sh)
+                           'bindings/merged_groups.json', 'tools/merged_bindings.py')):
             files.append([rel, hashlib.sha256(path.read_bytes()).hexdigest()])
 files.sort()
 (out / 'source-inventory.json').write_text(json.dumps(files, indent=2) + '\n')

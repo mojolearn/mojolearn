@@ -146,7 +146,10 @@ def is_native_source(rel):
     return bool(name.endswith('.mojo') or rel.startswith((
         'bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/'))
         and name.endswith(('.py', '.sh')) or rel in (
-        'pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh'))
+        'pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh',
+        # The merged bindings: the manifest and the root generator decide what
+        # each merged native file compiles (bindings/merged_build.sh).
+        'bindings/merged_groups.json', 'tools/merged_bindings.py'))
 
 
 def native_inventory(root):

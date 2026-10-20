@@ -72,6 +72,10 @@ if [[ -z "${MOJOLEARN_BUILD_JOBS:-}" ]]; then
     ((jobs >= 1)) || jobs=1
     MOJOLEARN_BUILD_JOBS=$jobs
 fi
+# MOJOLEARN_MERGED_BINDINGS (0|1, default 1) is refused here when malformed,
+# before any set starts, rather than by the first build.
+BINDING_LAYOUT=$("$PY" packaging/linux/merged_layout.py enabled) || exit 2
+if [[ "$BINDING_LAYOUT" = 1 ]]; then BINDING_LAYOUT=merged; else BINDING_LAYOUT=per-binding; fi
 printf '%s\n' "$commit" > "$ROOT/commit.txt"
 {
     echo "route=cpu-build-box"
@@ -86,8 +90,12 @@ printf '%s\n' "$commit" > "$ROOT/commit.txt"
     echo "cpu=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //')"
     echo "nproc=$ncpu mem_gib=$mem_gib build_jobs=$MOJOLEARN_BUILD_JOBS"
     echo "archs=${ARCHS[*]}"
+    # The binding layout each set is built in (MOJOLEARN_MERGED_BINDINGS, default
+    # 1 = merged); every build proof records the layout it read back.
+    echo "binding_layout_requested=$BINDING_LAYOUT"
     for f in tools/release061_remote_build.sh tools/cpu_build_guard.py tools/release_linux_cpu_box.sh \
-             tools/linux_surface_qualification.sh packaging/linux/build_sets.sh tools/bincache.py; do
+             tools/linux_surface_qualification.sh packaging/linux/build_sets.sh tools/bincache.py \
+             bindings/merged_build.sh bindings/merged_groups.json tools/merged_bindings.py packaging/linux/merged_layout.py; do
         [[ -f "$f" ]] && echo "route_file $f $(sha256sum "$f" | cut -c1-64)"
     done
 } > "$OUT/route.txt"
