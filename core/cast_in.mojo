@@ -7,14 +7,18 @@ the user's buffer untouched; no copy, cast or reorder happens there.
 
 Accepted element types (NumPy `dtype.num` with the item size checked
 against it): bool (0), the signed integers int8..int64 (1, 3, 5, 7, 9), the
-unsigned integers uint8..uint64 (2, 4, 6, 8, 10), float32 (11) and float64
-(12). Accepted layouts: C order or Fortran order (a dense span, every
-element once); anything else is refused by name.
+unsigned integers uint8..uint64 (2, 4, 6, 8, 10), float16 (23), float32 (11)
+and float64 (12). Accepted layouts: any byte strides, negative (a reversed
+view) included, as long as no two elements overlap (lane ag-thin-glue2).
+The span the cast reads starts at the lowest byte of the four corner
+elements (`start()`); element (r, c) sits at `origin() + r * s0 + c * s1`
+from it.
 
 Conversions, integer operations only, so every backend (and the host
 column) gives the same bits:
   * to float32 (`cast_f32_bits`): float32 as is (the bits, subnormals
-    included); float64 by round-to-nearest-even narrowing
+    included); float16 by its exact bit expansion (`f16_to_f32_bits`, NaN ->
+    the quiet NaN 0x7FC00000); float64 by round-to-nearest-even narrowing
     (`checks/soft_f64.mojo::sf64_to_f32`'s statements, the native
     `cast_f64_to_f32` the estimators' input path takes, NaN -> the quiet
     NaN 0x7FC00000); integers by round-to-nearest-even from their exact
@@ -22,15 +26,16 @@ column) gives the same bits:
   * to a 64-bit label word (`cast_w64_bits`, the label sort's input): float
     -> float64 bits (float32 widened exactly), signed -> sign-extended
     int64, unsigned and bool -> zero-extended (uint64 is refused for labels:
-    its upper half does not fit the int64 key).
+    its upper half does not fit the int64 key; float16 labels are refused).
   * back from a 64-bit label word to the caller's item (`narrow_w64`): the
     exact inverse of `cast_w64_bits` for every value it produced.
 
 Byte access. The array's bytes travel in 4-byte executor words (the span is
-uploaded as it is; a 1..3-byte tail goes in one zero-padded word). Element
-offsets are multiples of the item size from the base, so an 8-byte item is
-two whole words, a 4-byte item one, and a 1- or 2-byte item sits inside one
-word (little-endian, as on every target)."""
+uploaded as it is; a 1..3-byte tail goes in one zero-padded word). An item
+is read from the one to three words its bytes cover (little-endian, as on
+every target), so a stride that is not a multiple of the item size (a field
+of a structured array) reads the right bytes too; only the words the item
+covers are read, never one past the span."""
 from std.memory import bitcast
 from sequence.ops import FP
 
@@ -44,6 +49,7 @@ comptime NPY_BOOL = 0
 comptime NPY_FLOAT = 11
 comptime NPY_DOUBLE = 12
 comptime NPY_ULONGLONG = 10
+comptime NPY_HALF = 23
 
 
 def cast_in_kind(dtype_num: Int, itemsize: Int, what: String) raises -> Int:
@@ -60,19 +66,24 @@ def cast_in_kind(dtype_num: Int, itemsize: Int, what: String) raises -> Int:
         # numbers their unsigned twins (the width comes from the item size,
         # so long's platform size needs no table)
         return CAST_KIND_SIGNED if dtype_num % 2 == 1 else CAST_KIND_UNSIGNED
+    if dtype_num == NPY_HALF:
+        if itemsize != 2:
+            raise Error(what + ": float item size does not match its dtype")
+        return CAST_KIND_FLOAT
     if dtype_num == NPY_FLOAT or dtype_num == NPY_DOUBLE:
         if itemsize != (4 if dtype_num == NPY_FLOAT else 8):
             raise Error(what + ": float item size does not match its dtype")
         return CAST_KIND_FLOAT
     raise Error(
         what + ": dtype number " + String(dtype_num)
-        + " is not supported; pass a float32, float64, integer or bool array"
+        + " is not supported; pass a float16, float32, float64, integer or bool array"
     )
 
 
 struct CastIn(ImplicitlyCopyable, Movable):
     """One caller array: base address, element kind and size, (rows, cols)
-    and byte strides. A 1-D array of n is (n, 1); a scalar (1, 1)."""
+    and byte strides (signed: a reversed view has a negative stride; `addr`
+    is element (0, 0)). A 1-D array of n is (n, 1); a scalar (1, 1)."""
 
     var addr: Int
     var kind: Int
@@ -100,11 +111,33 @@ struct CastIn(ImplicitlyCopyable, Movable):
     def count(self) -> Int:
         return self.rows * self.cols
 
+    def lo_off(self) -> Int:
+        """Byte offset (<= 0) from element (0, 0) to the lowest byte of the
+        array: the sum of the negative corner steps."""
+        var d0 = (self.rows - 1) * self.s0
+        var d1 = (self.cols - 1) * self.s1
+        return (d0 if d0 < 0 else 0) + (d1 if d1 < 0 else 0)
+
+    def hi_end(self) -> Int:
+        """Byte offset from element (0, 0) to the end of the highest item."""
+        var d0 = (self.rows - 1) * self.s0
+        var d1 = (self.cols - 1) * self.s1
+        return (d0 if d0 > 0 else 0) + (d1 if d1 > 0 else 0) + self.itemsize
+
+    def start(self) -> Int:
+        """Host address of the span's first byte (the lowest one)."""
+        return self.addr + self.lo_off()
+
+    def origin(self) -> Int:
+        """Byte offset of element (0, 0) from `start()`: element (r, c) is
+        at origin() + r * s0 + c * s1 of the span, never negative."""
+        return -self.lo_off()
+
     def nbytes(self) -> Int:
-        """Bytes from the first element to the end of the last one: the span the
-        cast reads. Strided views (a column slice, a row-stepped view) are
-        accepted; the kernel addresses element (r, c) at r * s0 + c * s1."""
-        return (self.rows - 1) * self.s0 + (self.cols - 1) * self.s1 + self.itemsize
+        """Bytes from the lowest byte to the end of the highest item: the
+        span the cast reads (column slices, row-stepped and reversed views
+        included)."""
+        return self.hi_end() - self.lo_off()
 
     def words(self) -> Int:
         """4-byte words holding the span (the last one zero-padded)."""
@@ -125,24 +158,28 @@ struct CastIn(ImplicitlyCopyable, Movable):
         )
 
     def check(self, what: String) raises:
-        """Refuses a null buffer, an empty or oversized shape, and any
-        layout other than C or Fortran order."""
+        """Refuses a null buffer, an empty or oversized shape, and
+        overlapping elements (a stride narrower than the item)."""
         if self.addr == 0:
             raise Error(what + ": null buffer address")
         if self.rows < 1 or self.cols < 1 or self.rows > ((1 << 40) // self.cols):
             raise Error(what + ": the array must not be empty")
-        # Any non-negative strides are fine (the kernel addresses by byte stride); a reversed view
-        # (negative stride) or a stride narrower than the item (overlapping elements) is refused.
-        if (self.rows > 1 and self.s0 < self.itemsize) or (self.cols > 1 and self.s1 < self.itemsize):
-            raise Error(what + ": the array's strides must be non-negative and at least one item; pass numpy.ascontiguousarray of it")
+        # Any strides are fine, negative (a reversed view) included: the span starts at the lowest
+        # corner byte and the kernel addresses by signed byte stride. A stride narrower than the item
+        # along a dimension of more than one element (overlapping elements) is refused.
+        var a0 = self.s0 if self.s0 >= 0 else -self.s0
+        var a1 = self.s1 if self.s1 >= 0 else -self.s1
+        if (self.rows > 1 and a0 < self.itemsize) or (self.cols > 1 and a1 < self.itemsize):
+            raise Error(what + ": the array's elements overlap (a stride is narrower than one item); pass numpy.ascontiguousarray of it")
         if self.nbytes() >= (1 << 33):
             raise Error(what + ": the array is larger than 8 GiB")
 
     def byte_offset(self, t: Int) -> Int:
-        """Byte offset of row-major element t (row t // cols, column t % cols)."""
+        """Byte offset from `start()` of row-major element t (row t // cols,
+        column t % cols)."""
         var r = t // self.cols
         var c = t - r * self.cols
-        return r * self.s0 + c * self.s1
+        return self.origin() + r * self.s0 + c * self.s1
 
 
 @always_inline
@@ -152,17 +189,20 @@ def _word(w: FP, i: Int) -> UInt64:
 
 @always_inline
 def cast_raw_bits(w: FP, off: Int, itemsize: Int) -> UInt64:
-    """The item at byte offset `off` of the words `w`, zero-extended."""
+    """The item at byte offset `off` (>= 0) of the words `w`, zero-extended.
+    Reads only the one to three words the item's bytes cover; an item at a
+    multiple of its size reads exactly the words it did before."""
     var wi = off >> 2
+    var b = off & 3
+    var last = (off + itemsize - 1) >> 2
+    var v = _word(w, wi) >> UInt64(b * 8)
+    if last > wi:
+        v |= _word(w, wi + 1) << UInt64(32 - b * 8)
+    if last > wi + 1:  # an 8-byte item off a word boundary (b > 0)
+        v |= _word(w, wi + 2) << UInt64(64 - b * 8)
     if itemsize == 8:
-        return _word(w, wi) | (_word(w, wi + 1) << 32)
-    var v = _word(w, wi)
-    if itemsize == 4:
         return v
-    var sh = UInt64((off & 3) * 8)
-    if itemsize == 2:
-        return (v >> sh) & UInt64(0xFFFF)
-    return (v >> sh) & UInt64(0xFF)
+    return v & ((UInt64(1) << UInt64(itemsize * 8)) - 1)
 
 
 @always_inline
@@ -288,11 +328,35 @@ def f32_to_f64_bits(b32: UInt64) -> UInt64:
 
 
 @always_inline
+def f16_to_f32_bits(h: UInt64) -> UInt32:
+    """The exact float32 of IEEE half `h` (low 16 bits), by bit expansion:
+    every half is a float32, so nothing rounds. A NaN becomes the quiet NaN
+    0x7FC00000 (as `f64_to_f32_bits`); subnormal halves are normalized."""
+    var s = UInt32((h >> 15) & 1) << 31
+    var e = Int((h >> 10) & UInt64(0x1F))
+    var f = h & UInt64(0x3FF)
+    if e == 0x1F:
+        if f != 0:
+            return UInt32(0x7FC00000)
+        return s | UInt32(0x7F800000)
+    if e == 0:
+        if f == 0:
+            return s
+        # f * 2^-24 with its top bit at `lead` (0..9): exponent lead - 24
+        var lead = _top_bit(f)
+        var frac = UInt32((f << UInt64(23 - lead)) & UInt64(0x7FFFFF))
+        return s | (UInt32(lead + 103) << 23) | frac
+    return s | (UInt32(e + 112) << 23) | (UInt32(f) << 13)
+
+
+@always_inline
 def cast_f32_bits(raw: UInt64, kind: Int, itemsize: Int) -> UInt32:
     """The float32 (bits) of one item `raw` (`cast_raw_bits`)."""
     if kind == CAST_KIND_FLOAT:
         if itemsize == 4:
             return UInt32(raw)
+        if itemsize == 2:
+            return f16_to_f32_bits(raw)
         return f64_to_f32_bits(raw)
     if kind == CAST_KIND_BOOL:
         return UInt32(0x3F800000) if raw != 0 else UInt32(0)
@@ -333,6 +397,8 @@ def narrow_w64(w: UInt64, kind: Int, itemsize: Int) -> UInt64:
 def label_kind_of(kind: Int, itemsize: Int, what: String) raises -> Int:
     """The label sort's kind (core/label_encode.mojo: 0 float64, 1 int64)."""
     if kind == CAST_KIND_FLOAT:
+        if itemsize == 2:
+            raise Error(what + ": float16 labels are not supported; pass float32 labels")
         return 0
     if kind == CAST_KIND_UNSIGNED and itemsize == 8:
         raise Error(what + ": uint64 labels are not supported; pass int64 labels")
