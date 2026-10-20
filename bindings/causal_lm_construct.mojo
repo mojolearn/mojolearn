@@ -437,7 +437,9 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
     return block
 
 
-def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Shared native admission and host metadata ownership. Parallel models
+    # construct their layer owners in the assigned child processes afterward.
     var bi = Python.import_module("builtins")
     _ = generation_initialize_binding(context["generation_classes"])
     var format = String(options[0])
@@ -497,6 +499,16 @@ def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: 
     var layers = weights["layers"]
     if len(layers) != Int(py=plan.n_layers):
         raise Error("CausalLM: layer dict count differs from num_hidden_layers")
+    return bindings
+
+
+def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bindings = causal_model_prepare(model, plan, weights, options, context)
+    var bi = Python.import_module("builtins")
+    var format = String(options[0])
+    var route = model.device
+    var profile = model.numeric_profile
+    var layers = weights["layers"]
     model._blocks = bi.list()
     for i in range(len(layers)):  # driver-loop: over the model layer definitions
         var block = _model_block(layers[i], plan, profile, route, bindings, context)

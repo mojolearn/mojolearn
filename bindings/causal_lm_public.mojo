@@ -110,6 +110,9 @@ def _block(model: PythonObject, index: Int) raises -> PythonObject:
     # PublicOutputsMixin.__getattribute__ is Python even for private metadata.
     # Access the object's plain dictionary with CPython's base implementation,
     # bypassing that overridden getter; every field below is stored metadata.
+    var parallel = model._native_entries.get("parallel_call")
+    if parallel is not None:
+        return parallel("block_fields", Python.list(model, index))
     return GENERATION_BOUNDARY.get_or_create_ptr()[].bi.object.__getattribute__(model._blocks[index], "__dict__")
 
 
@@ -254,8 +257,18 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
     state._usable = PythonObject(True)
     state.layers = g[].bi.list()
     var kind = String(model.kind)
-    for i in range(len(model._blocks)):
-        state.layers.append(causal_layer_allocate(model, i, b, cap))
+    var parallel = model._native_entries.get("parallel_call")
+    try:
+        for i in range(len(model._blocks)):  # driver-loop: over model layer state owners
+            state.layers.append(causal_layer_allocate(model, i, b, cap) if parallel is None else
+                                parallel("allocate_layer", Python.list(model, i, b, cap)))
+    except error:
+        if parallel is not None:
+            try:
+                _ = parallel("release_layers", Python.list(model, state))
+            except cleanup_error:
+                raise Error("CausalLM: state allocation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
+        raise error
     return state
 
 
@@ -275,6 +288,17 @@ def causal_lm_reset_binding(model: PythonObject, state: PythonObject) raises -> 
     if g[].bi.type(state) is not g[].state_cls or state._owner is not model:
         raise Error("CausalLM: state belongs to another model")
     var fresh = causal_lm_allocate_binding(model, state.batch_size, state.max_tokens)
+    var parallel = model._native_entries.get("parallel_call")
+    if parallel is not None:
+        try:
+            _ = parallel("release_layers", Python.list(model, state))
+        except error:
+            state._usable = PythonObject(False)
+            try:
+                _ = parallel("release_layers", Python.list(model, fresh))
+            except cleanup_error:
+                raise Error("CausalLM: state reset failed: " + String(error) + "; fresh-state cleanup also failed: " + String(cleanup_error))
+            raise error
     state.layers = fresh.layers
     state.positions = PythonObject(0)
     state._usable = PythonObject(True)
@@ -446,40 +470,71 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
     return y
 
 
-def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
-    var b = Int(py=ids.shape[0])
-    var l = Int(py=ids.shape[1])
+def causal_model_embedding(model: PythonObject, ids: PythonObject) raises -> PythonObject:
+    var flat = Int(py=ids.ndim) == 1
+    var b = 1 if flat else Int(py=ids.shape[0])
+    var l = Int(py=ids.shape[0]) if flat else Int(py=ids.shape[1])
     var d = Int(py=model.d_model)
     var v = Int(py=model.vocab_size)
-    _state(model, state, b, l)
     var e = model._native_entries
     var keep = List[PythonObject]()
-    var copies = List[PythonObject]()
     var x = generation_array([b, l, d])
     e["embedding_forward"](py_ints([_addr(x, keep), _addr(model._embed, keep), _addr(ids, keep)]), py_ints([b * l, v, d]))
-    var kind = String(model.kind)
+    if flat:
+        var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
+        x.shape = bi.tuple(py_ints([l, d]))
+        x.strides = bi.tuple(py_ints([d * 4, 4]))
+        x.ndim = PythonObject(2)
+    _ = keep^
+    return x
+
+
+def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = True, packed: Bool = True) raises -> PythonObject:
+    var flat = Int(py=x.ndim) == 2
+    var b = 1 if flat else Int(py=x.shape[0])
+    var l = Int(py=x.shape[0]) if flat else Int(py=x.shape[1])
+    var d = Int(py=model.d_model)
+    var v = Int(py=model.vocab_size)
+    var e = model._native_entries
+    var keep = List[PythonObject]()
+    var hn = x
+    if normalize and model._norm is not None:
+        hn = generation_array([b, l, d])
+        var np = py_ints([b * l, d])
+        np.append(model.norm_eps)
+        e["rms_norm_forward"](py_ints([_addr(hn, keep), _addr(x, keep), _addr(model._norm, keep)]), np)
+    var out = generation_array([b, l, v])
+    if model._head_int15 is None or not packed:
+        e["linear_forward"](py_ints([_addr(out, keep), _addr(hn, keep), _addr(model._head, keep)]), py_ints([b * l, v, d]))
+    else:
+        var hi = generation_array([b * l, d], "b")
+        var lo = generation_array([b * l, d], "b")
+        var ex = generation_array([b * l], "i")
+        e["quantize15"](py_ints([_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)]), py_ints([b * l, d]))
+        var hp = model._head_int15
+        e["gemm15"](py_ints([_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
+            _addr(hp[0], keep), _addr(hp[1], keep), _addr(hp[2], keep)]), py_ints([b * l, v, d]))
+    if flat:
+        var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
+        out.shape = bi.tuple(py_ints([l, v]))
+        out.strides = bi.tuple(py_ints([v * 4, 4]))
+        out.ndim = PythonObject(2)
+    _ = keep^
+    return out
+
+
+def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+    var l = Int(py=ids.shape[1])
+    _state(model, state, Int(py=ids.shape[0]), l)
+    var parallel = model._native_entries.get("parallel_call")
     try:
-        for i in range(len(model._blocks)):
+        if parallel is not None:
+            return parallel("run", Python.list(model, ids, state))
+        var x = causal_model_embedding(model, ids)
+        for i in range(len(model._blocks)):  # driver-loop: over ordered model layers
             x = causal_layer_run(model, i, x, state.layers[i])
-        var hn = x
-        if model._norm is not None:
-            hn = generation_array([b, l, d])
-            var np = py_ints([b * l, d])
-            np.append(model.norm_eps)
-            e["rms_norm_forward"](py_ints([_addr(hn, keep), _addr(x, keep), _addr(model._norm, keep)]), np)
-        var out = generation_array([b, l, v])
-        if model._head_int15 is None:
-            e["linear_forward"](py_ints([_addr(out, keep), _addr(hn, keep), _addr(model._head, keep)]), py_ints([b * l, v, d]))
-        else:
-            var hi = generation_array([b * l, d], "b")
-            var lo = generation_array([b * l, d], "b")
-            var ex = generation_array([b * l], "i")
-            e["quantize15"](py_ints([_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)]), py_ints([b * l, d]))
-            var hp = model._head_int15
-            e["gemm15"](py_ints([_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
-                _addr(hp[0], keep), _addr(hp[1], keep), _addr(hp[2], keep)]), py_ints([b * l, v, d]))
+        var out = causal_model_head(model, x)
         state.positions = PythonObject(Int(py=state.positions) + l)
-        _ = keep^
         return out
     except error:
         state._usable = PythonObject(False)
@@ -494,7 +549,19 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
         if one:
             raise Error("CausalLM.step: state is required")
         state = causal_lm_allocate_binding(model, ids.shape[0], ids.shape[1])
-    var out = _run(model, ids, state)
+    var out = PythonObject(None)
+    var parallel = model._native_entries.get("parallel_call")
+    try:
+        out = _run(model, ids, state)
+    except error:
+        if supplied_state is None and parallel is not None:
+            try:
+                _ = parallel("release_layers", Python.list(model, state))
+            except cleanup_error:
+                raise Error("CausalLM: forward failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
+        raise error
+    if supplied_state is None and parallel is not None:
+        _ = parallel("release_layers", Python.list(model, state))
     if one:
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
         out.shape = g[].bi.tuple(py_ints([Int(py=ids.shape[0]), Int(py=model.vocab_size)]))
@@ -796,25 +863,43 @@ def causal_lm_info_binding(stream: PythonObject) raises -> PythonObject:
     return result
 
 
-def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
-    var stream = causal_lm_stream_binding(model, value, maximum, options)
-    var s = stream._native.downcast_value_ptr[GenerationHandle]()
-    if s[].greedy and len(s[].eos) == 0:
-        var resident = causal_lm_resident_binding(model, value, maximum, PythonObject(None), s[].state)
+def _generate_complete(model: PythonObject, value: PythonObject, maximum: PythonObject, mut s: GenerationHandle) raises -> PythonObject:
+    if s.greedy and len(s.eos) == 0:
+        var resident = causal_lm_resident_binding(model, value, maximum, PythonObject(None), s.state)
         if resident is not None:
             return resident
-    var continuation = _read(s[], max(1, s[].max_new))
-    var b = len(s[].lengths)
-    var l = Int(py=s[].prompt.shape[1])
+    var continuation = _read(s, max(1, s.max_new))
+    var b = len(s.lengths)
+    var l = Int(py=s.prompt.shape[1])
     var n = Int(py=continuation.shape[1])
     var result = generation_array([b, l + n], "i")
     var dest = i32_ptr(Int(py=result._addr))
-    var prompt = i32_ptr(Int(py=s[].prompt._addr))
+    var prompt = i32_ptr(Int(py=s.prompt._addr))
     var tail = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=continuation._addr))
     for r in range(b):
         memcpy(dest=dest + r * (l + n), src=prompt + r * l, count=l)
         if n > 0:
             memcpy(dest=dest + r * (l + n) + l, src=tail + r * n, count=n)
+    _ = continuation^
+    return result
+
+
+def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
+    var stream = causal_lm_stream_binding(model, value, maximum, options)
+    var s = stream._native.downcast_value_ptr[GenerationHandle]()
+    var parallel = model._native_entries.get("parallel_call")
+    var result = PythonObject(None)
+    try:
+        result = _generate_complete(model, value, maximum, s[])
+    except error:
+        if parallel is not None:
+            try:
+                _ = parallel("release_layers", Python.list(model, s[].state))
+            except cleanup_error:
+                raise Error("CausalLM: generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
+        raise error
+    if parallel is not None:
+        _ = parallel("release_layers", Python.list(model, s[].state))
     return result
 
 
@@ -834,8 +919,21 @@ def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, 
 def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject, text: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var stream = causal_lm_text_stream_binding(model, tokenizer, text, maximum, options)
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
-    var ids = _read(owner[], max(1, owner[].max_new))
-    return _decode_chunk(owner[], ids)
+    var parallel = model._native_entries.get("parallel_call")
+    var result = PythonObject(None)
+    try:
+        var ids = _read(owner[], max(1, owner[].max_new))
+        result = _decode_chunk(owner[], ids)
+    except error:
+        if parallel is not None:
+            try:
+                _ = parallel("release_layers", Python.list(model, owner[].state))
+            except cleanup_error:
+                raise Error("CausalLM: text generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
+        raise error
+    if parallel is not None:
+        _ = parallel("release_layers", Python.list(model, owner[].state))
+    return result
 
 
 def _array_bytes(value: PythonObject) raises -> PythonObject:
@@ -969,6 +1067,9 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
     var arrays = _state_arrays(kind, profile)
     for i in range(len(s[].state.layers)):
         var st = s[].state.layers[i]
+        var parallel = s[].model._native_entries.get("parallel_call")
+        if parallel is not None:
+            st = parallel("state_snapshot", Python.list(st))
         var entry = g[].bi.dict()
         for j in range(len(arrays)):
             entry[arrays[j]] = generation_copy(g[].bi.getattr(st, arrays[j]))
@@ -1026,6 +1127,9 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
     var arrays = _state_arrays(kind, profile)
     for i in range(len(s[].state.layers)):
         var dest = s[].state.layers[i]
+        var parallel = model._native_entries.get("parallel_call")
+        if parallel is not None:
+            dest = parallel("state_snapshot", Python.list(dest))
         var source = checkpoint["layers"][i]
         for j in range(len(arrays)):
             var expected = g[].bi.getattr(dest, arrays[j])
@@ -1045,6 +1149,8 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
             if Int(py=source["buffered_tokens"]) != position % 256:
                 raise Error("generation: checkpoint Mamba2 buffered length differs")
             dest.buffered_tokens = source["buffered_tokens"]
+        if parallel is not None:
+            _ = parallel("state_publish", Python.list(s[].state.layers[i], dest))
     s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
     s[].pending_bytes = g[].bi.bytearray(checkpoint["pending_bytes"])
     return stream

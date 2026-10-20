@@ -335,6 +335,38 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
     return result
 
 
+def process_pool_call(pool: PythonObject, worker_index: Int, request: PythonObject) raises -> PythonObject:
+    # Persistent layer owners require an addressed request. A reported model
+    # error preserves the living worker; a transport/protocol failure tears
+    # down the pool because remote state ownership can no longer be trusted.
+    var count = 1 if Bool(py=pool["cooperative"]) else len(pool["devices"])
+    if worker_index < 0 or worker_index >= count:
+        raise Error("process: addressed worker index outside the selected group")
+    process_pool_start(pool)
+    var sequence = Int(py=pool["sequence"])
+    var reply = PythonObject(None)
+    try:
+        var worker = pool["workers"][worker_index]
+        process_send(worker["socket"], "request", sequence, request)
+        reply = process_receive(worker["socket"])
+        if Int(py=reply[0].get("sequence", -1)) != sequence:
+            raise Error("process: response sequence mismatch")
+        var kind = String(reply[0].get("kind", ""))
+        if kind != "result" and kind != "error":
+            raise Error("process: unexpected addressed worker response")
+        pool["sequence"] = sequence + 1
+    except error:
+        try:
+            process_pool_close(pool)
+        except cleanup_error:
+            raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
+        pool["closed"] = False
+        raise error
+    if String(reply[0]["kind"]) == "error":
+        raise Error("RuntimeError: native model worker failed: " + String(reply[1]))
+    return reply[1]
+
+
 def process_worker_connect(argv: PythonObject) raises -> PythonObject:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     if len(argv) != 3:
@@ -388,6 +420,8 @@ def process_call(operation: String, args: PythonObject) raises -> PythonObject:
         return process_pool_create(args[0], Bool(py=args[1]), String(args[2]))
     elif operation == "map":
         return process_pool_map(args[0], args[1])
+    elif operation == "call":
+        return process_pool_call(args[0], Int(py=args[1]), args[2])
     elif operation == "close":
         process_pool_close(args[0])
     elif operation == "worker_echo":
