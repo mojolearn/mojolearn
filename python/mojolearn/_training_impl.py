@@ -802,12 +802,7 @@ class _Optimizer(NumericModeMixin):
         return self.total_norm_
 
     def __del__(self):
-        res, binding = getattr(self, "_res", None), getattr(self, "_res_binding", None)
-        if res is not None and binding is not None:
-            try:
-                binding.optimizer_resident_close(res)
-            except Exception:
-                pass
+        return _optimizer_finalize_native(self)
 
     # -- the parameters every algorithm shares --------------------------
     def _config(self):
@@ -3054,3 +3049,8 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     if wrote != output.size:
         raise RuntimeError("MLP sessions returned an invalid output count")
     return output
+
+
+# Import-time ABI connection only; finalization never invokes the selector.
+from .tokenizer import _binding as _connect_optimizer_lifecycle
+_optimizer_finalize_native = _connect_optimizer_lifecycle()._module.optimizer_finalize
