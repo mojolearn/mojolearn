@@ -74,7 +74,8 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
     var ptr = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=info._addr))
     opt["total_norm_"] = PythonObject(Float64(ptr[1])) if ptr[0] != 0.0 else PythonObject(None)
     opt["clip_coef_"] = PythonObject(Float64(ptr[2])) if ptr[0] != 0.0 else PythonObject(None)
-    _ = info^
+    # `info` is borrowed from the caller for this entire function; it cannot
+    # be consumed here, and the borrow retains storage through the reads.
     opt["lr_"] = PythonObject(Float64(Float32(Float64(py=opt["lr"]))))
     var result = Python.dict()
     result["loss"] = loss
