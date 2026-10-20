@@ -11,10 +11,32 @@ from mojolearn._causal_lm_fixtures import family_fixture, _write_checkpoint
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models import CausalLM, Checkpoint, HFConfig, plan_for
 from mojolearn.models import causal_lm
+from mojolearn.models import config as model_config
 from mojolearn import _backend, _buffer, _linalg_impl
 from mojolearn._mode import PublicOutputsMixin
 
 DEVICE = os.environ.get("MOJOLEARN_GENERATION_DEVICE", "cpu")
+
+
+def _parameter_fixture(family):
+    if family != "byte_lm":
+        return family_fixture(family, False)
+    old, original = family_fixture("llama", False)
+    cfg = dict(format="mojolearn.byte-lm", n_layers=old["num_hidden_layers"],
+               d_model=old["hidden_size"], n_heads=old["num_attention_heads"],
+               n_kv=old["num_key_value_heads"], head_dim=16, intermediate=64,
+               vocab_size=old["vocab_size"], max_position_embeddings=128,
+               rope_theta=10000.0, rms_norm_eps=1e-6,
+               positional_encoding="rotary", rope_pairing="rotate_half", norm="rmsnorm",
+               norm_placement="pre-norm, no final norm", mlp="swiglu", bias=False,
+               tie_word_embeddings=False)
+    tensors = {"embed": original["model.embed_tokens.weight"],
+               "lm_head": original["lm_head.weight"]}
+    previous = {key: name for key, name, _ in model_config._LLAMA_LAYER}
+    for i in range(cfg["n_layers"]):
+        for key, name, _ in model_config._BYTE_LM_LAYER:
+            tensors[name.format(i=i)] = original[previous[key].format(i=i)]
+    return cfg, tensors
 
 
 def _forbidden(*args, **kwargs):
@@ -39,6 +61,21 @@ def _poison(patch):
     patch.setattr(json, "loads", _forbidden)
     patch.setattr(np, "empty", _forbidden)
     patch.setattr(np, "array", _forbidden)
+
+
+@pytest.mark.parametrize("family", ["qwen2", "qwen3", "phi3", "byte_lm"])
+def test_parameters_returns_every_checkpoint_tensor_by_name(tmp_path, monkeypatch, family):
+    config, tensors = _parameter_fixture(family)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device=DEVICE, numeric_profile="fp32_v1")
+    with monkeypatch.context() as patch:
+        _poison(patch)
+        parameters = audit_native_call(model.parameters).assert_native()
+    assert set(parameters) == set(tensors)
+    assert None not in parameters
+    for name, (_, shape, raw) in tensors.items():
+        assert parameters[name].shape == tuple(shape)
+        assert parameters[name].tobytes() == raw
 
 
 @pytest.mark.parametrize("family", ["llama", "mistral", "qwen2", "qwen3", "phi3", "mamba", "mamba2"])

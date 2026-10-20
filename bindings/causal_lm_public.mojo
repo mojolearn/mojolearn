@@ -128,20 +128,64 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
     var result = g[].bi.dict()
     var p = model.plan
     result[p.embed_name] = model._embed
-    result[p.norm_name] = model._norm
+    if p.norm_name is not None:
+        result[p.norm_name] = model._norm
     if p.head_name is not None:
         result[p.head_name] = model._head
     var weight_names = model._native_entries["weight_names"]
-    for i in range(len(model._blocks)):
+    # Same canonical optional slot order as the transformer native ABI.
+    var optional_names = [String("q_proj.bias"), String("k_proj.bias"), String("v_proj.bias"),
+                          String("o_proj.bias"), String("input_layernorm.bias"),
+                          String("post_attention_layernorm.bias"), String("up_proj.bias"),
+                          String("down_proj.bias"), String("gate_proj.bias"),
+                          String("q_norm.weight"), String("k_norm.weight")]
+    var keep = List[PythonObject]()
+    for i in range(len(model._blocks)):  # driver-loop: over model layer metadata
         var names = g[].bi.dict()
-        for j in range(len(p._layer_map)):
+        var slices = g[].bi.dict()
+        for j in range(len(p._layer_map)):  # driver-loop: over checkpoint tensor mappings
             var entry = p._layer_map[j]
             names[entry[0]] = PythonObject(String(entry[1]).replace("{i}", String(i)))
+            slices[entry[0]] = entry[2]
         var blk = _block(model, i)
-        for j in range(min(len(weight_names), len(blk["_w"]))):
-            var key = weight_names[j]
+        var values = g[].bi.dict()
+        for j in range(min(len(weight_names), len(blk["_w"]))):  # driver-loop: over block weight slots
+            if blk["_w"][j] is not None:
+                values[weight_names[j]] = blk["_w"][j]
+        if String(model.kind) == "transformer":
+            for j in range(len(optional_names)):  # driver-loop: over optional block weight slots
+                if blk["_wopt"][j] is not None:
+                    values[optional_names[j]] = blk["_wopt"][j]
+        var keys = g[].bi.list(values)
+        var fused = g[].bi.dict()
+        for j in range(len(keys)):  # driver-loop: over checkpoint tensor names
+            var key = keys[j]
             var name = names.get(key, PythonObject("layers." + String(i) + "." + String(key)))
-            result.setdefault(name, blk["_w"][j])
+            var rows = slices.get(key)
+            if rows is None:
+                result[name] = values[key]
+            else:
+                # A fused checkpoint tensor (Phi-3 QKV / gate-up) is split
+                # for execution. Return every row under its checkpoint name.
+                var piece = g[].bi.list(rows)
+                piece.append(values[key])
+                fused.setdefault(name, g[].bi.list()).append(piece)
+        var fused_names = g[].bi.list(fused)
+        for j in range(len(fused_names)):  # driver-loop: over fused checkpoint tensor names
+            var name = fused_names[j]
+            var pieces = fused[name]
+            var rows = 0
+            var cols = Int(py=pieces[0][2].shape[1])
+            for k in range(len(pieces)):  # driver-loop: over projection slice metadata
+                rows = max(rows, Int(py=pieces[k][1]))
+            var joined = generation_array([rows, cols])
+            for k in range(len(pieces)):  # driver-loop: over contiguous projection buffers
+                var begin = Int(py=pieces[k][0])
+                var end = Int(py=pieces[k][1])
+                if end > begin:
+                    memcpy(dest=f32_ptr(Int(py=joined._addr)) + begin * cols, src=f32_ptr(_addr(pieces[k][2], keep)), count=(end - begin) * cols)
+            result[name] = joined
+    _ = keep^
     return result
 
 
