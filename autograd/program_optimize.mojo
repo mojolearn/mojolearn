@@ -18,14 +18,14 @@ def _header(p: OpsProgram) -> OpsProgram:
 
 def _args(p: OpsProgram, k: Int) -> List[Int]:
     var out = List[Int]()
-    for i in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: node reference metadata
+    for i in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over node reference metadata
         out.append(p.args[i])
     return out^
 
 
 def _ints(p: OpsProgram, k: Int) -> List[Int]:
     var out = List[Int]()
-    for i in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: node integer metadata
+    for i in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over node integer metadata
         out.append(p.ints[i])
     return out^
 
@@ -33,11 +33,11 @@ def _ints(p: OpsProgram, k: Int) -> List[Int]:
 def _append(p: OpsProgram, k: Int, mut q: OpsProgram, code: Int,
             args: List[Int], ints: List[Int]):
     q.code.append(code)
-    for i in range(len(args)):  # driver-loop: node reference metadata
+    for i in range(len(args)):  # driver-loop: over node reference metadata
         q.args.append(args[i])
-    for i in range(len(ints)):  # driver-loop: node integer metadata
+    for i in range(len(ints)):  # driver-loop: over node integer metadata
         q.ints.append(ints[i])
-    for i in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: unchanged float attributes
+    for i in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over unchanged float attributes
         q.fs.append(p.fs[i])
     q.end_node()
 
@@ -55,7 +55,7 @@ struct ProgramOptimization(Movable):
     def __init__(out self, p: OpsProgram):
         self.program = p.copy()
         self.source_nodes = List[Int]()
-        for k in range(p.n_nodes()):  # driver-loop: immutable source node provenance
+        for k in range(p.n_nodes()):  # driver-loop: over immutable source node provenance
             self.source_nodes.append(k)
         self.pass_names = List[String]()
         self.before = List[Int]()
@@ -88,7 +88,7 @@ def _reshape_count(p: OpsProgram, k: Int) -> Int:
     if p.a_at[k + 1] - p.a_at[k] != 1 or p.f_at[k + 1] != p.f_at[k]:
         return 0
     var count = 1
-    for i in range(at, end):  # small-loop(shape: at most eight dimensions): count proof only
+    for i in range(at, end):  # driver-loop: over explicit reshape dimension metadata
         var d = p.ints[i]
         if d <= 0 or count > 0x7fffffffffffffff // d:
             return 0
@@ -101,16 +101,16 @@ def _permutation(p: OpsProgram, k: Int) -> List[Int]:
     # Normalize negative axes from its declared rank, never captured sizes.
     var out = List[Int]()
     var at = p.i_at[k]
-    var n = p.i_at[k + 1] - at - 1
-    if p.code[k] != 34 or n < 1 or n > 8:
+    var rank = p.i_at[k + 1] - at - 1
+    if p.code[k] != 34 or rank < 1 or rank > 8:
         return out^
     if p.ints[at] != 0 or p.a_at[k + 1] - p.a_at[k] != 1 or p.f_at[k + 1] != p.f_at[k]:
         return out^
-    var seen = List[Bool](length=n, fill=False)
-    for i in range(n):  # small-loop(rank: at most eight axes): permutation metadata proof
+    var seen = List[Bool](length=rank, fill=False)
+    for i in range(rank):  # driver-loop: over declared permutation rank metadata
         var axis = p.ints[at + 1 + i]
-        axis = axis + n if axis < 0 else axis
-        if axis < 0 or axis >= n or seen[axis]:
+        axis = axis + rank if axis < 0 else axis
+        if axis < 0 or axis >= rank or seen[axis]:
             out.clear()
             return out^
         seen[axis] = True
@@ -141,7 +141,7 @@ def _views(mut plan: ProgramOptimization, mut removable: List[Bool], reshape: Bo
     var p = plan.program.copy()
     var q = _header(p)
     var changed = 0
-    for k in range(p.n_nodes()):  # driver-loop: topological graph metadata rewrite
+    for k in range(p.n_nodes()):  # driver-loop: over topological graph metadata rewrite
         var args = _args(p, k)
         var ints = _ints(p, k)
         var code = p.code[k]
@@ -161,7 +161,7 @@ def _views(mut plan: ProgramOptimization, mut removable: List[Bool], reshape: Bo
                 if len(outer) > 0 and len(outer) == len(inner):
                     ints.clear()
                     ints.append(0)
-                    for axis in range(len(outer)):  # small-loop(rank: at most eight axes): composition metadata
+                    for axis in range(len(outer)):  # driver-loop: over explicit permutation axes
                         ints.append(inner[outer[axis]])
                     args[0] = q.args[q.a_at[j]]
                     removable[j] = True
@@ -196,35 +196,35 @@ def _views(mut plan: ProgramOptimization, mut removable: List[Bool], reshape: Bo
 def _prune(mut plan: ProgramOptimization, removable: List[Bool]):
     var p = plan.program.copy()
     var needed = List[Bool](length=p.n_nodes(), fill=False)
-    for k in range(p.n_nodes()):  # driver-loop: preserve original execution/validation roots
+    for k in range(p.n_nodes()):  # driver-loop: over preserve original execution/validation roots
         needed[k] = not removable[k]
-    for i in range(len(p.outs)):  # driver-loop: preserve every output, including aliases
+    for i in range(len(p.outs)):  # driver-loop: over preserve every output, including aliases
         if p.outs[i] >= p.n_in:
             needed[p.outs[i] - p.n_in] = True
     var k = p.n_nodes() - 1
-    while k >= 0:  # driver-loop: reverse reachability through graph references
+    while k >= 0:  # driver-loop: over reverse reachability through graph references
         if needed[k]:
-            for i in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: predecessor references
+            for i in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over predecessor references
                 if p.args[i] >= p.n_in:
                     needed[p.args[i] - p.n_in] = True
         k -= 1
     var q = _header(p)
     var refs = List[Int]()
     var origins = List[Int]()
-    for i in range(p.n_in):  # driver-loop: input reference identity
+    for i in range(p.n_in):  # driver-loop: over input reference identity
         refs.append(i)
-    for i in range(p.n_nodes()):  # driver-loop: compact proven dead intermediates
+    for i in range(p.n_nodes()):  # driver-loop: over compact proven dead intermediates
         if not needed[i]:
             refs.append(-1)
             continue
         var args = _args(p, i)
-        for j in range(len(args)):  # driver-loop: remap graph references
+        for j in range(len(args)):  # driver-loop: over remap graph references
             if args[j] >= 0:
                 args[j] = refs[args[j]]
         refs.append(q.n_values())
         origins.append(plan.source_nodes[i])
         _append(p, i, q, p.code[i], args, _ints(p, i))
-    for i in range(len(p.outs)):  # driver-loop: remap outputs
+    for i in range(len(p.outs)):  # driver-loop: over remap outputs
         var r = p.outs[i]
         q.outs.append(r if r < 0 else refs[r])
     plan.program = q^
@@ -237,16 +237,16 @@ def _duplicates(mut plan: ProgramOptimization):
     var q = _header(p)
     var refs = List[Int]()
     var origins = List[Int]()
-    for k in range(p.n_in):  # driver-loop: input reference identity
+    for k in range(p.n_in):  # driver-loop: over input reference identity
         refs.append(k)
-    for k in range(p.n_nodes()):  # driver-loop: exact deterministic node matching
+    for k in range(p.n_nodes()):  # driver-loop: over exact deterministic node matching
         var args = _args(p, k)
-        for i in range(len(args)):  # driver-loop: canonical predecessor references
+        for i in range(len(args)):  # driver-loop: over canonical predecessor references
             if args[i] >= 0:
                 args[i] = refs[args[i]]
         var found = -1
         if _cse_safe(p.code[k]):
-            for j in range(q.n_nodes()):  # driver-loop: earlier nodes, same attribute words
+            for j in range(q.n_nodes()):  # driver-loop: over earlier nodes, same attribute words
                 if _same_node(p, k, q, j, args):
                     found = j
                     break
@@ -256,7 +256,7 @@ def _duplicates(mut plan: ProgramOptimization):
             refs.append(q.n_values())
             origins.append(plan.source_nodes[k])
             _append(p, k, q, p.code[k], args, _ints(p, k))
-    for k in range(len(p.outs)):  # driver-loop: preserve output reference order
+    for k in range(len(p.outs)):  # driver-loop: over preserve output reference order
         var r = p.outs[k]
         q.outs.append(r if r < 0 else refs[r])
     plan.program = q^
@@ -281,13 +281,13 @@ def program_optimize(p: OpsProgram, enabled: Bool = True) -> ProgramOptimization
     var graph = plan.program.copy()
     plan.last_use = List[Int](length=graph.n_values(), fill=-1)
     plan.uses = List[Int](length=graph.n_values(), fill=0)
-    for k in range(graph.n_nodes()):  # driver-loop: logical reference liveness only
-        for i in range(graph.a_at[k], graph.a_at[k + 1]):  # driver-loop: node input uses
+    for k in range(graph.n_nodes()):  # driver-loop: over logical reference liveness only
+        for i in range(graph.a_at[k], graph.a_at[k + 1]):  # driver-loop: over node input uses
             var r = graph.args[i]
             if r >= 0:
                 plan.last_use[r] = k
                 plan.uses[r] += 1
-    for i in range(len(graph.outs)):  # driver-loop: outputs remain live through consumption
+    for i in range(len(graph.outs)):  # driver-loop: over outputs remain live through consumption
         var r = graph.outs[i]
         if r >= 0:
             plan.last_use[r] = graph.n_nodes()
