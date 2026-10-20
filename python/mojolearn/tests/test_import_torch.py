@@ -327,3 +327,85 @@ def test_import_equals_onnx_twin(tmp_path, name):
     d = np.abs(a[0].astype(np.float64) - ref.astype(np.float64))
     print(f"IMPORT_TORCH_REFERENCE torch_{name} max_abs={float(d.max()):.3e} "
           f"max_rel={float((d / np.maximum(np.abs(ref), 1e-30)).max()):.3e}")
+
+
+# ------------------------------------------------- the attention-mask ops (lane ag-import-lm-ops) --
+
+def _mask_ops_module():
+    class MaskOps(torch.nn.Module):
+        """aten.any / all, bitwise_and / or / not on booleans, cumsum and an index with several index
+        tensors (leading and middle axes): the ops transformers' attention-mask construction exports."""
+
+        def __init__(self):
+            super().__init__()
+            self.register_buffer("cols", torch.tensor([[0, 4, 2]]))
+
+        def forward(self, x):
+            pos = x > 0
+            small = x < 0.5
+            any_ = torch.any(pos, dim=2)
+            all_ = torch.all(small, dim=-1, keepdim=True)
+            mixed = torch.bitwise_or(torch.bitwise_and(pos, small), torch.bitwise_not(small))
+            cs = torch.cumsum(x, dim=1)
+            rows = torch.arange(2).view(2, 1)
+            lead = cs[rows, self.cols]
+            middle = x[:, rows, self.cols]
+            return any_.float(), all_.float(), mixed.float(), cs, lead, middle
+
+    return MaskOps().eval()
+
+
+@needs_torch
+def test_mask_ops_read():
+    from mojolearn.importers import torch_export
+    m = _mask_ops_module()
+    ep = torch.export.export(m, (torch.zeros(2, 5, 6),))
+    g = torch_export.read(ep)
+    ops = {n.op for n in g.nodes}
+    for op in ("ReduceMax", "ReduceMin", "And", "Or", "Not", "CumSum", "GatherND"):
+        assert op in ops, (op, sorted(ops))
+    r = resolve(g)
+    assert not r.problems and not r.no_rule, (r.problems, r.no_rule)
+    want = [(2, 5), (2, 5, 1), (2, 5, 6), (2, 5, 6), (2, 3, 6), (2, 2, 3)]
+    assert [r.shapes[o[0]] for o in g.outputs] == want
+
+
+@needs_torch
+def test_bitwise_on_integers_refused():
+    from mojolearn.importers import torch_export
+
+    class M(torch.nn.Module):
+        def forward(self, x):
+            return torch.bitwise_and(x.long(), 3).float()
+
+    ep = torch.export.export(M().eval(), (torch.zeros(2, 3),))
+    with pytest.raises(UnsupportedModel) as e:
+        torch_export.read(ep)
+    assert any(op == "aten.bitwise_and" for _, op, _ in e.value.problems), e.value.problems
+
+
+@needs_torch
+def test_mask_ops_import_matches_torch():
+    if not _can_import():
+        pytest.skip("the import lowering or the sequence binding's Program entries are not available")
+    import mojolearn
+    m = _mask_ops_module()
+    x = np.round(np.random.default_rng(31).uniform(-2, 2, size=(2, 5, 6)) * 2).astype(np.float32) / 2
+    ep = torch.export.export(m, (torch.from_numpy(x),))
+    prog = mojolearn.importers.import_model(ep)
+    a = _outs(prog.run(x))
+    a2 = _outs(prog.run(x))
+    for u, v in zip(a, a2):
+        assert np.array_equal(_words(u), _words(v)), "a second run differs"
+    with torch.no_grad():
+        ref = [t.numpy() for t in m(torch.from_numpy(x))]
+    assert len(a) == len(ref)
+    names = ("any", "all", "bitwise", "cumsum", "index_lead", "index_middle")
+    for name, u, v in zip(names, a, ref):
+        assert u.shape == v.shape, (name, u.shape, v.shape)
+        if name in ("any", "all", "bitwise"):
+            np.testing.assert_array_equal(u, v, err_msg=name)
+        else:
+            # torch sums in another order: a reference within float32 rounding, never bits
+            np.testing.assert_allclose(u, v, rtol=1e-5, atol=1e-5, err_msg=name)
+    print(f"IMPORT_DIGEST torch_mask_ops {_digest(a)}")
