@@ -86,6 +86,27 @@ class NativeRuntimeAuditTests(unittest.TestCase):
         self.assertTrue(any("lambda" in row["function"]
                             for row in result.report()["python_frames"]))
 
+    def test_old_controller_cycles_are_collected_before_operation(self):
+        finalized = []
+        class Controller:
+            def __del__(self):
+                finalized.append(True)
+        value = Controller()
+        value.cycle = value
+        del value
+        self.assertEqual(AUDIT.audit_native_call(sum, [1, 2]).assert_native(), 3)
+        self.assertEqual(finalized, [True])
+
+    def test_finalizer_invoked_by_operation_remains_visible(self):
+        class Value:
+            def __del__(self):
+                pass
+        values = [Value()]
+        result = AUDIT.audit_native_call(values.clear)
+        self.assertFalse(result.passed)
+        self.assertTrue(any("__del__" in row["function"]
+                            for row in result.report()["python_frames"]))
+
 
 if __name__ == "__main__":
     unittest.main()
