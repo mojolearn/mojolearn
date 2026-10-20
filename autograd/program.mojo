@@ -56,10 +56,10 @@ comptime PROGRAM_RECORD_VERSION = 2
 comptime PROGRAM_IN_FLOAT = 0
 comptime PROGRAM_IN_IDS = 1
 # The largest operation code a program may hold (autograd/ops_api.mojo OPS_*):
-# OPS_PAD 73, the last of the import family (lane ag-import-kernels), so a
-# saved imported model that uses those operations loads again. Code 47 is
-# reserved and refused below.
-comptime PROGRAM_MAX_CODE = 73
+# OPS_INDEX 76, the last of the import family (lanes ag-import-kernels and
+# ag-import-lm-ops), so a saved imported model that uses those operations
+# loads again. Code 47 is reserved and refused below.
+comptime PROGRAM_MAX_CODE = 76
 
 
 struct OpsLog(Movable):

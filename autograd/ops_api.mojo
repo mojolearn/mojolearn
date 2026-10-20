@@ -91,15 +91,17 @@ from autograd.rankn_api import (
     rn_mask_axes, rn_reduced, rn_resolve, rn_shape, rn_softmax_along,
 )
 # The import elementwise family (lane ag-import-kernels, docs/plans/
-# MODEL_IMPORT.md 3.3): session codes 48..73 below, kernels in
+# MODEL_IMPORT.md 3.3): session codes 48..76 below, kernels in
 # autograd/import_ops.mojo, tape calls and ImportRules in autograd/import_api.mojo.
 from autograd.import_ops import (
     IMP_ERF, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTPLUS, IMP_SILU, IMP_LEAKY_RELU, IMP_ELU,
     IMP_HARD_SIGMOID, IMP_HARD_SWISH, IMP_CLIP, IMP_ABS, IMP_FLOOR, IMP_CEIL, IMP_ROUND, IMP_SIN,
     IMP_COS, IMP_SIGN, IMP_RECIPROCAL, IMP_NOT, IMP_POW_SCALAR, IMP_POW, IMP_MINIMUM, IMP_MAXIMUM,
-    IMP_EQ, IMP_AND, IMP_OR,
+    IMP_EQ, IMP_AND, IMP_OR, IMP_BOOL,
 )
-from autograd.import_api import ImportRules, imp_unary, imp_binary, imp_where, imp_expand, imp_argmax, imp_pad
+from autograd.import_api import (
+    ImportRules, imp_unary, imp_binary, imp_where, imp_expand, imp_argmax, imp_pad, imp_cumsum, imp_gather_nd,
+)
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -201,8 +203,12 @@ comptime OPS_LOGICAL = 70        # [kind: 0 not (one tensor), 1 and, 2 or]
 comptime OPS_EXPAND = 71         # [dims...]
 comptime OPS_ARGMAX = 72         # [axis, keepdims (0, 1), form: 0 int32 words, 1 float values]
 comptime OPS_PAD = 73            # [before 0 .. before n-1, after 0 .. after n-1], floats [value]
+# lane ag-import-lm-ops: the attention-mask ops of transformer exports
+comptime OPS_ANY_ALL = 74        # [kind: 0 any, 1 all, keepdims (-1, 0, 1), axes...]; no axes: every element
+comptime OPS_CUMSUM = 75         # [axis, exclusive (0, 1), reverse (0, 1)]
+comptime OPS_INDEX = 76          # tensors (x, index 0, index 1, ...); [axis of index 0, axis of index 1, ...]
 comptime OPS_IMP_FIRST = OPS_ERF
-comptime OPS_IMP_LAST = OPS_PAD
+comptime OPS_IMP_LAST = OPS_INDEX
 
 # Metric codes of ops_metric.
 comptime OPS_METRIC_ACCURACY = 1
@@ -1457,6 +1463,33 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if n != 1 or nf < 1:
                 raise Error("ops: pad takes one tensor, its pads and the value")
             return imp_pad(self.tape, self.ex, x[0], ints, fs[0])
+        if code == OPS_ANY_ALL:
+            # any: the largest of the nonzero tests (0 or 1, order-free);
+            # all: not any of the zero tests. No gradient.
+            if n != 1 or ni < 2:
+                raise Error("ops: any and all take one tensor, the kind, keepdims and the axes")
+            if ints[0] != 0 and ints[0] != 1:
+                raise Error("ops: the kind must be 0 (any) or 1 (all)")
+            var tests = imp_unary(self.tape, self.ex, x[0], IMP_BOOL if ints[0] == 0 else IMP_NOT)
+            var rest = List[Int]()
+            for k in range(1, ni):  # small-loop(ints: keepdims and at most 8 axes): argument parsing, no data
+                rest.append(ints[k])
+            var m = self._reduce_n(tests, rest, False, True)
+            if ints[0] == 1:
+                return imp_unary(self.tape, self.ex, m, IMP_NOT)
+            return m
+        if code == OPS_CUMSUM:
+            _need("cumsum", n, 1, 3, ni, 0, nf)
+            if (ints[1] != 0 and ints[1] != 1) or (ints[2] != 0 and ints[2] != 1):
+                raise Error("ops: cumsum exclusive and reverse must be 0 or 1")
+            return imp_cumsum(self.tape, self.ex, x[0], ints[0], ints[1] == 1, ints[2] == 1)
+        if code == OPS_INDEX:
+            if n < 2 or ni != n - 1:
+                raise Error("ops: index takes a tensor, its index tensors and one axis for each")
+            var idx = List[Tensor]()
+            for k in range(1, n):  # small-loop(x: the index tensors, at most 8): handle lists, no data
+                idx.append(x[k])
+            return imp_gather_nd(self.tape, self.ex, x[0], idx, ints)
         raise Error("ops: unknown operation code " + String(code))
 
     # ------------------------------------------------------------ rank-N helpers
