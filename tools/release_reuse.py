@@ -138,6 +138,23 @@ def digest_of(identity):
     return hashlib.sha256(canonical(identity).encode()).hexdigest()
 
 
+def amd_compile_jobs(root=ROOT):
+    """The gfx sets' compiler workers, as packaging/linux/build_sets.sh picks
+    them: MOJOLEARN_AMD_COMPILE_JOBS, else its AMD_COMPILE_JOBS_DEFAULT line
+    (lane/amd-compile-speed, 2026-10-20). At the old value 1 every recorded
+    identity is unchanged; another value is a new identity, so a release
+    rebuilds its AMD bindings once instead of reusing bytes built at -j 1."""
+    env = os.environ.get("MOJOLEARN_AMD_COMPILE_JOBS", "").strip()
+    if env:
+        return env
+    try:
+        text = (Path(root) / "packaging/linux/build_sets.sh").read_text()
+    except OSError:
+        return "1"
+    m = re.search(r"^AMD_COMPILE_JOBS_DEFAULT=([0-9]+)$", text, re.M)
+    return m.group(1) if m else "1"
+
+
 def git(*args, root=ROOT):
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
                           check=True).stdout
@@ -447,7 +464,7 @@ class Binding:
                             linux_cpu="x86-64-v3", compile_jobs="2", package_byte_lm="1")
             return dict(numeric_mode=self.tier, target_column="nvidia" if self.vendor == "cuda" else "amd",
                         gpu_archs=self.arch, linux_cpu="x86-64-v3",
-                        compile_jobs="1" if self.arch.startswith("gfx") else "2", package_byte_lm="1")
+                        compile_jobs=amd_compile_jobs() if self.arch.startswith("gfx") else "2", package_byte_lm="1")
         if self.host:
             return dict(numeric_mode="identical", target_column="cpu", gpu_archs=None, compile_jobs="1",
                         package_byte_lm="1")
@@ -1284,6 +1301,8 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                     raise SystemExit(f"release_reuse: {r['archive_path']} is not in the published {prev['version']} wheel")
                 target = sdir / r["set_rel"]
                 rebuilt = sha256(target) if target.is_file() else None
+                # the gfx rebuild's bytes, read before the published copy replaces them (canonical class below)
+                rebuilt_gfx = target.read_bytes() if rebuilt is not None and vendor != "cuda" else None
                 got = extract_member(z, r["archive_path"], target, want)
                 if rebuilt is not None and rebuilt != got:
                     # RELEASE OWNER OVERRIDE (Andrew 2026-10-13): a row reused only because it is not in
@@ -1297,6 +1316,16 @@ def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
                                          "unchanged; an NVIDIA rebuild must reproduce. Find the cause before reusing.")
                     why = ("reused by the release owner's MOJOLEARN_RELEASE_BUILD_ONLY; its source changed"
                            if vendor == "cuda" else "gfx942 codegen is not reproducible run to run")
+                    if vendor != "cuda":
+                        # WHAT KIND OF DIFFERENCE (lane/amd-compile-speed): the canonical class of
+                        # tools/compare_gpu_builds.py, REORDERED or SAME-KERNELS (layout only) or
+                        # CODE-DIFFERS (compiler output). Informational: the published bytes ship either way.
+                        try:
+                            import compare_gpu_builds as cgb
+                            why += "; canonical class " + cgb.classify(cgb.manifest(rebuilt_gfx),
+                                                                         cgb.manifest(target.read_bytes()))
+                        except Exception as exc:  # glue: a note, never a gate
+                            why += f"; canonical class not read ({type(exc).__name__})"
                     say(f"  NOTE {key} {r['set_rel']}: the leg's rebuild differs ({rebuilt[:12]}); the published "
                         f"bytes {got[:12]} are packed ({why})")
                 reused[r["set_rel"]] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r["identity_digest"],
