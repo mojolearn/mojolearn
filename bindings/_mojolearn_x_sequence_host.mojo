@@ -27,6 +27,7 @@ from autograd.pyapi import (
     ops_profile_reset_py, ops_profile_report_py, ops_op_packed_py,
     ops_optimizer_py, ops_step_py, ops_scheduler_step_py, ops_learning_rate_py, ops_zero_grad_py,
     ops_optimizer_state_py, ops_load_optimizer_state_py,
+    ops_backward_graph_py, ops_backward_seed_py, ops_grad_handle_py, ops_vjp_py, ops_hvp_py, ops_jvp_py,
 )
 from autograd.ops_api import OPS_HOST
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
@@ -215,6 +216,35 @@ def ops_load_optimizer_state_binding(
     return ops_load_optimizer_state_py[HostExec, OPS_HOST](sid, opt, h, ip, fp)
 
 
+# Higher-order gradients (lane ag-ho-session; autograd/ops_api.mojo).
+def ops_backward_graph_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    return ops_backward_graph_py[HostExec, OPS_HOST](sid, h)
+
+
+def ops_backward_seed_binding(
+    sid: PythonObject, h: PythonObject, seed: PythonObject, create_graph: PythonObject,
+) raises -> PythonObject:
+    return ops_backward_seed_py[HostExec, OPS_HOST](sid, h, seed, create_graph)
+
+
+def ops_grad_handle_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
+    return ops_grad_handle_py[HostExec, OPS_HOST](sid, h)
+
+
+def ops_vjp_binding(
+    sid: PythonObject, out_h: PythonObject, inputs: PythonObject, seed: PythonObject, create_graph: PythonObject,
+) raises -> PythonObject:
+    return ops_vjp_py[HostExec, OPS_HOST](sid, out_h, inputs, seed, create_graph)
+
+
+def ops_hvp_binding(sid: PythonObject, loss: PythonObject, params: PythonObject, vs: PythonObject) raises -> PythonObject:
+    return ops_hvp_py[HostExec, OPS_HOST](sid, loss, params, vs)
+
+
+def ops_jvp_binding(sid: PythonObject, out_h: PythonObject, inputs: PythonObject, us: PythonObject) raises -> PythonObject:
+    return ops_jvp_py[HostExec, OPS_HOST](sid, out_h, inputs, us)
+
+
 def ops_profile_reset_binding() raises -> PythonObject:
     return ops_profile_reset_py()
 
@@ -346,6 +376,12 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[ops_zero_grad_binding]("ops_zero_grad")
         m.def_function[ops_optimizer_state_binding]("ops_optimizer_state")
         m.def_function[ops_load_optimizer_state_binding]("ops_load_optimizer_state")
+        m.def_function[ops_backward_graph_binding]("ops_backward_graph")
+        m.def_function[ops_backward_seed_binding]("ops_backward_seed")
+        m.def_function[ops_grad_handle_binding]("ops_grad_handle")
+        m.def_function[ops_vjp_binding]("ops_vjp")
+        m.def_function[ops_hvp_binding]("ops_hvp")
+        m.def_function[ops_jvp_binding]("ops_jvp")
         m.def_function[ops_profile_reset_binding]("ops_profile_reset")
         m.def_function[ops_profile_report_binding]("ops_profile_report")
         m.def_function[adafactor_step_binding]("adafactor_step")
