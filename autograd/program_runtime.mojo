@@ -100,14 +100,13 @@ def release_training_buffers[E: Exec](
     mut ex: E, full: List[FP], batches: List[FP], ty: FP, yb: FP,
     indices: FP, batch_losses: FP, losses: FP,
 ) raises:
-    for k in range(len(full)):  # driver-loop: over input buffer owners
+    for k in range(len(full)):  # driver-loop: over acquired full input buffers
         ex.free(full[k])
+    for k in range(len(batches)):  # driver-loop: over acquired minibatch buffers
         ex.free(batches[k])
-    ex.free(ty)
-    ex.free(yb)
-    ex.free(indices)
-    ex.free(batch_losses)
-    ex.free(losses)
+    for buffer in [ty, yb, indices, batch_losses, losses]:  # driver-loop: over nullable setup buffer owners
+        if Int(buffer) != 0:
+            ex.free(buffer)
 
 
 def train_program_control[E: Exec & Movable & Deinitable](
@@ -157,32 +156,41 @@ def train_program_control[E: Exec & Movable & Deinitable](
             raise Error("Program.fit inputs must have equal sample counts and their captured ranks")
     if loss_kind != 0 and target.rows != n:
         raise Error("Program.fit targets must match the input sample count")
-    for k in range(len(srcs)):  # driver-loop: over program input arrays
-        var buf = s.ex.alloc(srcs[k].count())
-        if p.in_kinds[k] == PROGRAM_IN_IDS:
-            upload_cast_i32(s.ex, buf, srcs[k], "program ids")
-        else:
-            upload_cast(s.ex, buf, srcs[k])
-        full.append(buf)
-        batches.append(s.ex.alloc(bs * (shapes[k].count() // n)))
-    var ty = s.ex.alloc(max(1, target.count()))
-    var yb = s.ex.alloc(max(1, bs * target.cols))
-    if loss_kind != 0:
-        upload_cast(s.ex, ty, target)
-    for j in range(len(params)):  # driver-loop: over trainable parameter state
-        if trainable[j]:
-            states[j] = s._state_of(oi, p.params[j], p.param_shapes[j].count())
-            s.wants_grad[s._slot(p.params[j])] = True
-    var indices = s.ex.alloc(n)
-    var batch_losses = s.ex.alloc(n_batches)
-    var losses = s.ex.alloc(epochs)
+    var ty = FP(unsafe_from_address=0)
+    var yb = FP(unsafe_from_address=0)
+    var indices = FP(unsafe_from_address=0)
+    var batch_losses = FP(unsafe_from_address=0)
+    var losses = FP(unsafe_from_address=0)
     var held = Tape()
-    swap(held, s.prog_tape)
-    swap(held, s.tape)
+    var swapped = False
     var temps = List[Int]()
     var true_batches = 0
     var false_batches = 0
     try:
+        for k in range(len(srcs)):  # driver-loop: over program input arrays
+            var buf = s.ex.alloc(srcs[k].count())
+            # Register ownership before upload: a failed copy must not leave
+            # an executor allocation unreachable until session destruction.
+            full.append(buf)
+            if p.in_kinds[k] == PROGRAM_IN_IDS:
+                upload_cast_i32(s.ex, buf, srcs[k], "program ids")
+            else:
+                upload_cast(s.ex, buf, srcs[k])
+            batches.append(s.ex.alloc(bs * (shapes[k].count() // n)))
+        ty = s.ex.alloc(max(1, target.count()))
+        yb = s.ex.alloc(max(1, bs * target.cols))
+        if loss_kind != 0:
+            upload_cast(s.ex, ty, target)
+        for j in range(len(params)):  # driver-loop: over trainable parameter state
+            if trainable[j]:
+                states[j] = s._state_of(oi, p.params[j], p.param_shapes[j].count())
+                s.wants_grad[s._slot(p.params[j])] = True
+        indices = s.ex.alloc(n)
+        batch_losses = s.ex.alloc(n_batches)
+        losses = s.ex.alloc(epochs)
+        swap(held, s.prog_tape)
+        swap(held, s.tape)
+        swapped = True
         s.tape.record()
         for e in range(epochs):  # driver-loop: over epochs
             var epoch = s.opts[oi].epoch
@@ -283,10 +291,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
         s.ex.sync()
         s.ex.download(curve, losses, epochs)
     except err:
-        s._drop_temps(temps)
-        s.tape.no_grad()
-        swap(held, s.tape)
-        swap(held, s.prog_tape)
+        if swapped:
+            s._drop_temps(temps)
+            s.tape.no_grad()
+            swap(held, s.tape)
+            swap(held, s.prog_tape)
         release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
         raise err
     s._drop_temps(temps)
