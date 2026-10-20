@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The public autograd surface as its documentation shows it: every Python
 block of docs-site/user_guide/autograd.md runs verbatim (the Sequential
-quickstart, the operation-session quickstart and the two-expert mixture
-classifier), and every ``>>>`` example of the Sequential and ops.Session
+quickstart, the operation-session quickstart, the two-expert mixture
+classifier and the shapes section), and every ``>>>`` example of the Sequential and ops.Session
 docstrings runs. Small sizes. Each case checks shapes and finite values,
 runs twice for the same digest, and prints PUBLIC_DIGEST lines to diff
 across CPU, Metal, NVIDIA and AMD."""
@@ -37,7 +37,7 @@ def _blocks():
         pytest.skip(f"no guide at {GUIDE} (run from the repository tree)")
     found = re.findall(r"<!-- block: ([a-z0-9-]+) -->\n```python\n(.*?)```", GUIDE.read_text(), flags=re.S)
     blocks = dict(found)
-    assert len(found) == len(blocks) >= 9, f"named python blocks in {GUIDE.name}: {sorted(blocks)}"
+    assert len(found) == len(blocks) >= 11, f"named python blocks in {GUIDE.name}: {sorted(blocks)}"
     return blocks
 
 
@@ -133,6 +133,44 @@ def test_guide_mixture_classifier(capsys):
         _emit("guide_mixture_params", _digest(*flat))
         _emit("guide_mixture_accuracy", _digest([accuracy]))
 
+
+
+def test_guide_shapes(capsys):
+    b = _blocks()
+    ns = _run(b["shapes"])
+    grads = {"grad_k": (4, 1, 3, 3), "grad_kb": (1, 4), "grad_w": (64, 2),
+             "attention": (2, 6, 16), "grad_q": (2, 4, 6, 4)}
+    for name, shape in grads.items():
+        assert ns[name].shape == shape and np.isfinite(ns[name]).all(), name
+    assert np.any(ns["grad_k"] != 0) and np.any(ns["grad_q"] != 0)
+    printed = capsys.readouterr().out
+    assert ns["digest"].hexdigest()[:16] in printed
+    ns2 = _run(b["shapes"])
+    capsys.readouterr()
+    assert _digest(*[ns[k] for k in grads]) == _digest(*[ns2[k] for k in grads])
+    with capsys.disabled():
+        _emit("guide_shapes_conv_grads", _digest(ns["grad_k"], ns["grad_kb"], ns["grad_w"]))
+        _emit("guide_shapes_attention", _digest(ns["attention"]))
+        _emit("guide_shapes_attention_grad", _digest(ns["grad_q"]))
+
+
+def test_guide_shapes_sequential(capsys):
+    b = _blocks()
+    ns = _run(b["shapes-seq"])
+    cnn, proba, proba_flat = ns["cnn"], ns["proba"], ns["proba_flat"]
+    assert proba.shape == (64, 2) and np.isfinite(proba).all()
+    assert np.allclose(proba.sum(axis=1), 1.0, atol=1e-5)
+    assert np.array_equal(proba, proba_flat)
+    assert cnn.params_.size == 4 * 1 * 3 * 3 + 4 + 64 * 2 + 2 and np.isfinite(cnn.params_).all()
+    assert cnn.loss_curve_[-1] < cnn.loss_curve_[0]
+    printed = capsys.readouterr().out
+    assert hashlib.sha256(cnn.params_.tobytes() + proba.tobytes()).hexdigest()[:16] in printed
+    ns2 = _run(b["shapes-seq"])
+    capsys.readouterr()
+    assert _digest(cnn.params_, proba) == _digest(ns2["cnn"].params_, ns2["proba"])
+    with capsys.disabled():
+        _emit("guide_shapes_seq_params", _digest(cnn.params_))
+        _emit("guide_shapes_seq_proba", _digest(proba))
 
 def _docstring_examples():
     import mojolearn

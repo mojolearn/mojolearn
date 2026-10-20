@@ -110,6 +110,7 @@ step, call `zero_grad`, then `backward(loss, accumulate=True)` for each loss.
 | Metrics | `loss_curve_` | `accuracy`, `log_loss`, `roc_auc` |
 | Optimizers | `sgd`, `momentum` (optionally Nesterov), `adam`, `adamw`, with weight decay | `optimizer` (`sgd` with optional momentum and Nesterov, `adam`, `adamw`, with weight decay) and `step`, in place on the device; `zero_grad`; `optimizer_state` and `load_optimizer_state` for checkpoints |
 | Schedules and stopping | `constant`, `step`, `exponential`; stop after `n_iter_no_change` epochs without improvement | `constant`, `step`, `exponential`, advanced by `scheduler_step`; your own stopping rule |
+| Shapes | `Sequential(input_shape=...)`, `conv2d`, `max_pool2d`, `avg_pool2d`, `reshape`, `permute`, `flatten` | tensors of up to 8 dimensions; `shape`; batched `matmul`; `reshape`, `flatten`, `squeeze`, `unsqueeze`, `permute`, `transpose` of any two axes; `sum`, `mean`, `max` over axes; `softmax`, `log_softmax` along an axis; `concat`, `split`, `take`; `conv2d`, `max_pool2d`, `avg_pool2d` |
 | Data | shuffling and batching from `seed` | `permutation` (a seeded row order), `gather_rows` (a batch of rows), `dropout` (a seeded mask) |
 
 ## Example: a two-expert mixture classifier
@@ -177,6 +178,104 @@ print("digest", hashlib.sha256(proba.tobytes()).hexdigest()[:16])
 
 The last line prints a digest of the predicted probabilities. Run the script on an Apple, an NVIDIA and
 an AMD GPU: in `identical` mode the three digests are the same.
+
+## Shapes
+
+Tensors are not limited to matrices. `tensor` keeps the shape of an array of up to 8 dimensions (an
+array of 3 or more dimensions must be C-contiguous: pass `numpy.ascontiguousarray(x)`), `shape`
+returns every dimension, and `numpy` returns an array of that shape. The operations follow NumPy's
+conventions:
+
+- `matmul` multiplies the last two axes; the leading axes are batch axes and broadcast, so a
+  `(batch, heads, m, k)` tensor times a `(batch, heads, k, n)` or a `(k, n)` tensor gives
+  `(batch, heads, m, n)`.
+- `sum`, `mean` and `max` take `axis` (an integer or a tuple, negative axes counting from the end)
+  and `keepdims`. `softmax` and `log_softmax` take `axis`, the last axis by default.
+- `reshape` (one dimension may be -1), `flatten`, `squeeze`, `unsqueeze`, `permute` and `transpose`
+  (any two axes; the last two by default) rearrange a tensor. `concat` joins tensors along an axis,
+  `split` cuts one into pieces and `take` picks slices at integer indices.
+- `linear` acts on the last axis, and `cross_entropy` takes `(..., classes)` logits with one class
+  code per position of the leading axes.
+- `conv2d`, `max_pool2d` and `avg_pool2d` work on `(N, C, H, W)` images.
+
+Every one of these records its gradient in a recording session. A small image classifier and an
+attention-style product, each with one backward pass:
+
+<!-- block: shapes -->
+```python
+import hashlib
+import numpy as np
+from mojolearn import ops
+
+rng = np.random.default_rng(0)
+images = rng.standard_normal((8, 1, 8, 8), dtype=np.float32)        # (batch, channels, height, width)
+left, right = images[:, 0, :4].mean(axis=(1, 2)), images[:, 0, 4:].mean(axis=(1, 2))
+codes = (left > right).astype(np.float32).reshape(-1, 1)             # one class code per image
+K = 0.3 * rng.standard_normal((4, 1, 3, 3), dtype=np.float32)        # 4 filters of 3 x 3
+W = 0.1 * rng.standard_normal((64, 2), dtype=np.float32)             # 4 x 4 x 4 features -> 2 classes
+
+with ops.Session(record=True) as s:
+    k = s.tensor(K, requires_grad=True)
+    kb = s.tensor(np.zeros((1, 4), np.float32), requires_grad=True)
+    w = s.tensor(W, requires_grad=True)
+    h = s.relu(s.conv2d(s.tensor(images), k, kb, padding=1))        # (8, 4, 8, 8)
+    h = s.max_pool2d(h, 2)                                           # (8, 4, 4, 4)
+    logits = s.linear(s.flatten(h), w)                               # (8, 64) -> (8, 2)
+    s.backward(s.cross_entropy(logits, s.tensor(codes)))
+    grad_k, grad_kb, grad_w = s.grad(k), s.grad(kb), s.grad(w)       # (4, 1, 3, 3), (1, 4), (64, 2)
+
+Q = rng.standard_normal((2, 4, 6, 4), dtype=np.float32)              # (batch, heads, queries, features)
+Kv = rng.standard_normal((2, 4, 6, 4), dtype=np.float32)             # keys, also used as values
+
+with ops.Session(record=True) as s:
+    q, kv = s.tensor(Q, requires_grad=True), s.tensor(Kv)
+    scores = s.scale(s.matmul(q, s.transpose(kv)), 0.5)              # (2, 4, 6, 6), 1 / sqrt(4)
+    out = s.matmul(s.softmax(scores), kv)                            # (2, 4, 6, 4)
+    merged = s.reshape(s.permute(out, (0, 2, 1, 3)), (2, 6, 16))     # the heads side by side
+    s.backward(s.mean(merged))
+    attention = s.numpy(merged)
+    grad_q = s.grad(q)                                               # (2, 4, 6, 4)
+
+digest = hashlib.sha256()
+for a in (grad_k, grad_kb, grad_w, attention, grad_q):
+    digest.update(a.tobytes())
+print("digest", digest.hexdigest()[:16])
+```
+
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs: run this script on
+each and the printed digests are the same.
+
+`Sequential` takes the same shapes. Give it the shape of one sample with `input_shape`, or let `fit`
+take it from `X`, and build with `conv2d`, `max_pool2d`, `avg_pool2d`, `reshape`, `permute` and
+`flatten`. A `linear` layer acts on the last axis of each sample; the model must end with one vector
+per sample, so a model on images ends with `flatten` and a `linear` layer:
+
+<!-- block: shapes-seq -->
+```python
+import hashlib
+import numpy as np
+import mojolearn
+
+rng = np.random.default_rng(0)
+images = rng.standard_normal((64, 1, 8, 8), dtype=np.float32)
+labels = (images[:, 0, :4].mean(axis=(1, 2)) > images[:, 0, 4:].mean(axis=(1, 2))).astype(np.int64)
+
+cnn = (mojolearn.Sequential(input_shape=(1, 8, 8))
+       .conv2d(4, 3, padding=1).relu()      # 4 filters of 3 x 3: (4, 8, 8) per image
+       .max_pool2d(2)                       # (4, 4, 4)
+       .flatten()                           # 64 values
+       .linear(2)
+       .compile(loss="cross_entropy", optimizer="adam", lr=0.01))
+cnn.fit(images, labels, epochs=10, batch_size=16, seed=0)
+
+proba = cnn.predict_proba(images)                   # (64, 2)
+proba_flat = cnn.predict_proba(images.reshape(64, -1))   # rows of 64 values, read as (1, 8, 8)
+print("digest", hashlib.sha256(cnn.params_.tobytes() + proba.tobytes()).hexdigest()[:16])
+```
+
+With an `input_shape`, `fit` and `predict` also take a 2-D `X` whose rows hold each sample's values
+in row-major order, and give the same results. `params_` holds a conv2d layer's weight
+`(out_channels, in_channels, kernel_size, kernel_size)` row-major, then its bias.
 
 ## Second derivatives
 
