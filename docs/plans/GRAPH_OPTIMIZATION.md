@@ -45,6 +45,18 @@ The existing post-optimization training oracle now includes transpose chains.
 The source enumerates 20 cases and 88 numerical digests. Cheap controller tests
 validate the reporting and audit machinery; they do not qualify native execution.
 
+The first native optimizer run exposed a preexisting layout inconsistency: eager
+and unoptimized materialized permutations/transposes flushed subnormals through
+`ld/st`, while identity views and the optimized identity retained them. The
+isolated CPU probe preserved this failure. A separate correctness repair makes
+forward rank-N strided copies and transposes copy raw words on every executor.
+Their VJP routes retain the existing FTZ behavior, as do arithmetic and reductions.
+This deliberately changes affected forward bits within the new version and needs
+matching Apple/NVIDIA/AMD evidence before admission. It is not a performance
+candidate, an optimizer FTZ emulation, or a relaxation of the exact-bit oracle.
+The fixture checks eager, original-program and optimized results against the
+same original words, including the sign and payload of special values.
+
 Remaining: the parent integrates and compiles changed sequence source once per
 freeze, runs native positive/refusal controls, and qualifies installed packages
 and required physical vendors. The known standard-library ownership leak remains
