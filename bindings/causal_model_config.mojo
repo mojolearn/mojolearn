@@ -81,7 +81,7 @@ def model_checkpoint_names_binding(plan: PythonObject) raises -> PythonObject:
     return names
 
 
-def _config_int(data: PythonObject, field: String, default: PythonObject = PythonObject(None), required: Bool = True) raises -> PythonObject:
+def _config_int(data: PythonObject, field: String, default: PythonObject, required: Bool = True) raises -> PythonObject:
     var v = data.get(field, default)
     var bi = Python.import_module("builtins")
     if v is None and not required:
@@ -89,6 +89,10 @@ def _config_int(data: PythonObject, field: String, default: PythonObject = Pytho
     if bi.type(v) is not bi.int:
         raise Error("model config: " + field + " requires an integer")
     return v
+
+
+def _config_int(data: PythonObject, field: String) raises -> PythonObject:
+    return _config_int(data, field, PythonObject(None), True)
 
 
 def _config_refuse(data: PythonObject, field: String, why: String) raises:
