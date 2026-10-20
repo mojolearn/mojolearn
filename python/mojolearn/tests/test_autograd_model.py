@@ -341,7 +341,7 @@ def test_rank4_conv_model():
     assert _digest(flat) == digests[0]
     assert np.array_equal(flat.predict_proba(X), p)
     with pytest.raises(ValueError, match="input_shape"):
-        flat.fit(X[:, :, :6], y, epochs=1)
+        flat.fit(np.ascontiguousarray(X[:, :, :6]), y, epochs=1)
     with pytest.raises(Exception, match="one vector per sample"):
         ml.Sequential().conv2d(2, 3).linear(1).compile(loss="mse").fit(X, y.astype(np.float32), epochs=1)
 
