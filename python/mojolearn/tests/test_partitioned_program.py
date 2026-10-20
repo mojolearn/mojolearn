@@ -170,3 +170,43 @@ def test_shared_parameter_alias_gradient_is_not_lost():
             d.fit(x, targets=y, epochs=1, batch_size=4, shuffle=False)
             np.testing.assert_array_equal(d.state()["parameters"][0], [[.5]])
             np.testing.assert_array_equal(d.run(x), np.ones((4, 1), np.float32))
+
+
+def test_source_adam_moments_are_column_partitioned_before_resume():
+    x = np.ones((8, 1), np.float32)
+    y = np.full((8, 4), 2, np.float32)
+    with ops.Session(numeric_mode="identical") as s:
+        p = _linear(s)
+        opt = s.optimizer("adam", lr=.01)
+        p.fit(x, targets=y, optimizer=opt, epochs=3, batch_size=4, shuffle=False)
+        with p.partition((0,), stages=2, tensor_shards=2, microbatches=1, optimizer=opt) as d:
+            st = d.state()
+            assert (st["epoch"], st["step"]) == (3, 6)
+            assert any(np.any(a != 0) for a in st["first_moments"])
+            d.fit(x, targets=y, epochs=1, batch_size=4, shuffle=False)
+            actual = np.concatenate(d.state()["parameters"], axis=1)
+        p.fit(x, targets=y, optimizer=opt, epochs=1, batch_size=4, shuffle=False)
+        np.testing.assert_array_equal(actual.view(np.uint32), s.numpy(p.params[0]).view(np.uint32))
+
+
+def test_partition_constructor_admission_and_checkpoint_integrity(tmp_path):
+    with ops.Session(numeric_mode="identical") as s:
+        p = _linear(s)
+        opt = s.optimizer("sgd", lr=.125)
+        for kwargs in ({"stages": 0}, {"stages": 1, "tensor_shards": 2},
+                       {"microbatches": 0}, {"seed": -1}, {"seed": 1 << 63},
+                       {"parameters": (99999999,)}, {"devices": (0, 0)}):
+            with pytest.raises(Exception):
+                p.partition(optimizer=opt, **kwargs)
+        path = str(tmp_path / "bad.ckpt")
+        with p.partition((0,), stages=2, tensor_shards=2, optimizer=opt) as d:
+            with pytest.raises(Exception, match="sample count|targets"):
+                d.fit(np.ones((3, 1), np.float32), targets=np.ones((2, 4), np.float32))
+            assert d.state()["step"] == 0
+            d.save(path)
+        from pathlib import Path
+        data = bytearray(Path(path).read_bytes())
+        data[len(data)//2] ^= 1
+        Path(path).write_bytes(data)
+        with pytest.raises(Exception):
+            s.load_partitioned(path)
