@@ -16,6 +16,14 @@
 # for word (value and gradient), argmax with ties and NaN in both output
 # forms, constant pad with a negative pad. Shapes are small, odd and off any
 # board row; one fold has two leaves (R = 70).
+# Lane ag-import-lm-ops: the nonzero test (bool) with the step kinds; any and
+# all over one and two axes against host loops; cumsum on one leaf, on one
+# level of leaf totals (L = 150) and on two levels (L = 4500), forward,
+# reverse and exclusive, value and gradient bit for bit against a host
+# replica of THE SCAN ORDER (autograd/import_ops.mojo) and within tolerance
+# of a float64 running sum; index with two index tensors on leading,
+# middle (consecutive) and split axes, a negative and a repeated position,
+# value bit for bit and gradient against a host scatter-add.
 from std.memory import bitcast
 from std.math import nan, exp, log, sqrt, tanh, sin, cos, erf
 from std.collections import InlineArray
@@ -28,10 +36,14 @@ from autograd.import_ops import (
     IMP_HARD_SIGMOID, IMP_HARD_SWISH, IMP_CLIP, IMP_ABS, IMP_FLOOR, IMP_CEIL, IMP_ROUND, IMP_SIN,
     IMP_COS, IMP_SIGN, IMP_RECIPROCAL, IMP_NOT, IMP_POW_SCALAR, IMP_POW, IMP_MINIMUM, IMP_MAXIMUM,
     IMP_EQ, IMP_GT, IMP_LT, IMP_GE, IMP_LE, IMP_NE, IMP_AND, IMP_OR, IMP_ARGMAX_INT32,
-    IMP_ARGMAX_FLOAT, imp_unary_value, imp_unary_vjp_value, imp_binary_value, imp_binary_vjp_value,
+    IMP_ARGMAX_FLOAT, IMP_BOOL, IMP_SCAN_LEAF, imp_unary_value, imp_unary_vjp_value, imp_binary_value, imp_binary_vjp_value,
     unary_has_gradient, binary_has_gradient,
 )
-from autograd.import_api import ImportRules, imp_unary, imp_binary, imp_where, imp_expand, imp_argmax, imp_pad
+from autograd.import_api import (
+    ImportRules, imp_unary, imp_binary, imp_where, imp_expand, imp_argmax, imp_pad, imp_cumsum, imp_gather_nd,
+)
+from autograd.rankn_fold import rankn_max
+from sequence.ops import add
 from autograd.checks.support import check_values
 from sequence.exec_trait import Exec
 from checks.numerics import ftz
@@ -173,6 +185,8 @@ def _name(kind: Int) -> String:
         return "reciprocal"
     if kind == IMP_NOT:
         return "not"
+    if kind == IMP_BOOL:
+        return "bool"
     return "pow_scalar"
 
 
@@ -554,6 +568,204 @@ def _pad_case[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
     return d^
 
 
+# ---------------------------------------------------------------- any and all
+def _any_all_case[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
+    """any / all of x [5, 7, 6] (mostly zeros, some NaN) over axis 1 and
+    over axes (0, 2), composed as the session composes them (the nonzero or
+    zero test, the max fold, not), against host loops."""
+    var sx = _shape3(5, 7, 6)
+    var n = sx.count()
+    var xv = _quarters(n, 5)
+    for i in range(n):  # small-loop(n: check data, host side)
+        if i % 3 != 0 and i % 7 != 0:
+            xv[i] = Float32(0)
+    for i in range(6):  # small-loop(6: rows that are all nonzero, for all)
+        xv[(2 * 7 + i) * 6 + 1] = Float32(0.75)
+    tape.reset()
+    var x = tape.tensor_nd(ex, xv, sx, False)
+    var ax1: List[Int] = [1]
+    var ax02: List[Int] = [0, 2]
+    var any1 = rankn_max(tape, ex, imp_unary(tape, ex, x, IMP_BOOL), ax1)
+    var all1 = imp_unary(tape, ex, rankn_max(tape, ex, imp_unary(tape, ex, x, IMP_NOT), ax1), IMP_NOT)
+    var any02 = rankn_max(tape, ex, imp_unary(tape, ex, x, IMP_BOOL), ax02)
+    var all02 = imp_unary(tape, ex, rankn_max(tape, ex, imp_unary(tape, ex, x, IMP_NOT), ax02), IMP_NOT)
+    var w_any1 = List[Float32](length=30, fill=Float32(0))
+    var w_all1 = List[Float32](length=30, fill=Float32(1))
+    var w_any02 = List[Float32](length=7, fill=Float32(0))
+    var w_all02 = List[Float32](length=7, fill=Float32(1))
+    for i in range(5):  # small-loop(check oracle, host side)
+        for j in range(7):  # small-loop(check oracle, host side)
+            for k in range(6):  # small-loop(check oracle, host side)
+                var nz = xv[(i * 7 + j) * 6 + k] != Float32(0)
+                if nz:
+                    w_any1[i * 6 + k] = Float32(1)
+                    w_any02[j] = Float32(1)
+                else:
+                    w_all1[i * 6 + k] = Float32(0)
+                    w_all02[j] = Float32(0)
+    var d = _same("any/5x7x6/axis1", tape.values(ex, any1), w_any1)
+    d = _mix(d, _same("all/5x7x6/axis1", tape.values(ex, all1), w_all1))
+    d = _mix(d, _same("any/5x7x6/axes02", tape.values(ex, any02), w_any02))
+    d = _mix(d, _same("all/5x7x6/axes02", tape.values(ex, all02), w_all02))
+    print("IMPORT any_all 5x7x6 digest", d)
+    return d^
+
+
+# ---------------------------------------------------------------- cumsum
+def _host_leaf(v: List[Float32], o: Int, lo: Int, hi: Int, q: Int, L: Int, I: Int, rev: Bool) -> Float32:
+    var s = Float32(0)
+    for j in range(lo, hi + 1):  # small-loop(at most 64: one leaf, check oracle)
+        var r = L - 1 - j if rev else j
+        var w = ftz(v[(o * L + r) * I + q])
+        s = w if j == lo else add(s, w)
+    return s
+
+
+def _host_scan(v: List[Float32], O: Int, L: Int, I: Int, rev: Bool, excl: Bool) -> List[Float32]:
+    """THE SCAN ORDER of autograd/import_ops.mojo replayed on the host."""
+    var out = List[Float32](length=O * L * I, fill=Float32(0))
+    var nb = (L + IMP_SCAN_LEAF - 1) // IMP_SCAN_LEAF
+    var q_scan = List[Float32]()
+    if nb > 1:
+        var totals = List[Float32](length=O * nb * I, fill=Float32(0))
+        for o in range(O):  # small-loop(check oracle, host side)
+            for b in range(nb):  # small-loop(check oracle, host side)
+                for q in range(I):  # small-loop(check oracle, host side)
+                    var lo = b * IMP_SCAN_LEAF
+                    var hi = min(lo + IMP_SCAN_LEAF, L) - 1
+                    totals[(o * nb + b) * I + q] = _host_leaf(v, o, lo, hi, q, L, I, rev)
+        q_scan = _host_scan(totals, O, nb, I, False, False)
+    for o in range(O):  # small-loop(check oracle, host side)
+        for r in range(L):  # small-loop(check oracle, host side)
+            for q in range(I):  # small-loop(check oracle, host side)
+                var j = L - 1 - r if rev else r
+                if excl:
+                    j -= 1
+                var w = Float32(0)
+                if j >= 0:
+                    var b = j // IMP_SCAN_LEAF
+                    w = _host_leaf(v, o, b * IMP_SCAN_LEAF, j, q, L, I, rev)
+                    if nb > 1 and b > 0:
+                        w = add(q_scan[(o * nb + b - 1) * I + q], w)
+                out[(o * L + r) * I + q] = w
+    return out^
+
+
+def _f64_scan(v: List[Float32], O: Int, L: Int, I: Int, rev: Bool, excl: Bool) -> List[Float64]:
+    var out = List[Float64](length=O * L * I, fill=Float64(0))
+    for o in range(O):  # small-loop(check oracle, host side)
+        for q in range(I):  # small-loop(check oracle, host side)
+            var acc = Float64(0)
+            for k in range(L):  # small-loop(check oracle, host side)
+                var r = L - 1 - k if rev else k
+                var x = Float64(ftz(v[(o * L + r) * I + q]))
+                if excl:
+                    out[(o * L + r) * I + q] = acc
+                    acc += x
+                else:
+                    acc += x
+                    out[(o * L + r) * I + q] = acc
+    return out^
+
+
+def _cumsum_case[E: Exec](
+    mut ex: E, mut tape: Tape, O: Int, L: Int, I: Int, rev: Bool, excl: Bool,
+) raises -> UInt64:
+    """cumsum of x [O, L, I] along axis 1: value and gradient bit for bit
+    against the host replica of the scan order, and within tolerance of a
+    float64 running sum."""
+    var sx = _shape3(O, L, I)
+    var n = sx.count()
+    var xv = _data(n, 111 + L)
+    var gv = _data(n, 112 + L)
+    var name = String("cumsum/") + String(O) + "x" + String(L) + "x" + String(I)
+    if rev:
+        name += "/reverse"
+    if excl:
+        name += "/exclusive"
+    tape.reset()
+    var x = tape.tensor_nd(ex, xv, sx, True)
+    var y = imp_cumsum(tape, ex, x, 1, excl, rev)
+    if not tape.shape_of(y).same(sx):
+        raise Error(name + ": the output shape differs from the input's")
+    tape.backward_with_rules(ex, y, tape.tensor_nd(ex, gv, sx, False), ImportRules())
+    var yv = tape.values(ex, y)
+    var dx = tape.gradients(ex, x)
+    var d = _same(name + "/value", yv, _host_scan(xv, O, L, I, rev, excl))
+    d = _mix(d, _same_grad(name + "/dx", dx, _host_scan(gv, O, L, I, not rev, excl)))
+    d = _mix(d, _close(name + "/value-f64", yv, _f64_scan(xv, O, L, I, rev, excl)))
+    d = _mix(d, _close(name + "/dx-f64", dx, _f64_scan(gv, O, L, I, not rev, excl)))
+    print("IMPORT", name, "digest", d)
+    return d^
+
+
+# ---------------------------------------------------------------- index
+def _index_case[E: Exec](mut ex: E, mut tape: Tape, a0: Int, a1: Int) raises -> UInt64:
+    """x [4, 5, 6] indexed on axes (a0, a1) by i [3, 1] and j [1, 2] (a
+    negative and a repeated position): the result is [3, 2, rest] with the
+    broadcast axes first, or in place of the indexed axes when they are
+    consecutive and not leading. Value bit for bit against a host gather;
+    x's gradient against a host scatter-add in ascending position order."""
+    var sx = _shape3(4, 5, 6)
+    var nx = sx.count()
+    var xv = _data(nx, 121 + a0 + a1)
+    var other = 3 - a0 - a1
+    var dims: List[Int] = [4, 5, 6]
+    var iv: List[Float32] = [Float32(1), Float32(-1), Float32(1)]
+    var jv: List[Float32] = [Float32(2), Float32(0)]
+    var d0 = dims[a0]
+    var d1 = dims[a1]
+    var rest = dims[other]
+    var name = String("index/4x5x6/axes") + String(a0) + String(a1)
+    tape.reset()
+    var x = tape.tensor_nd(ex, xv, sx, True)
+    var si = InlineArray[Int, RN_MAX_RANK](fill=1)
+    si[0] = 3
+    var sj = InlineArray[Int, RN_MAX_RANK](fill=1)
+    sj[1] = 2
+    var ti = tape.tensor_nd(ex, iv, ShapeN(2, si), False)
+    var tj = tape.tensor_nd(ex, jv, ShapeN(2, sj), False)
+    var idx = List[Tensor]()
+    idx.append(ti)
+    idx.append(tj)
+    var axes: List[Int] = [a0, a1]
+    var y = imp_gather_nd(tape, ex, x, idx, axes)
+    var middle = a0 == 1 and a1 == 2
+    var so = _shape3(3, 2, rest)
+    if middle:
+        so = _shape3(rest, 3, 2)
+    if not tape.shape_of(y).same(so):
+        raise Error(name + ": the output shape is wrong")
+    var no = so.count()
+    var gv = _data(no, 131 + a0 + a1)
+    tape.backward_with_rules(ex, y, tape.tensor_nd(ex, gv, so, False), ImportRules())
+    var want = List[Float32](length=no, fill=Float32(0))
+    var wdx = List[Float32](length=nx, fill=Float32(0))
+    var seen = List[Bool](length=nx, fill=False)
+    # the gather's position order: broadcast index (p, q), then the rest axis
+    for p in range(3):  # small-loop(check oracle, host side)
+        for q in range(2):  # small-loop(check oracle, host side)
+            for r in range(rest):  # small-loop(check oracle, host side)
+                var c = InlineArray[Int, 3](fill=0)
+                var vi = Int(iv[p])
+                c[a0] = vi + d0 if vi < 0 else vi
+                c[a1] = Int(jv[q])
+                c[other] = r
+                var src = (c[0] * 5 + c[1]) * 6 + c[2]
+                var o = (p * 2 + q) * rest + r
+                if middle:
+                    o = (r * 3 + p) * 2 + q
+                want[o] = ftz(xv[src])
+                var g = ftz(gv[o])
+                wdx[src] = g if not seen[src] else add(wdx[src], g)
+                seen[src] = True
+    _ = d1
+    var d = _same(name + "/value", tape.values(ex, y), want)
+    d = _mix(d, _same_grad(name + "/dx", tape.gradients(ex, x), wdx))
+    print("IMPORT", name, "digest", d)
+    return d^
+
+
 def run_import_checks[E: Exec](mut ex: E) raises:
     var tape = Tape()
     var summary = UInt64(1469598103934665603)
@@ -577,8 +789,8 @@ def run_import_checks[E: Exec](mut ex: E) raises:
     summary = _mix(summary, _unary_case(ex, tape, IMP_POW_SCALAR, pos, Float32(2.5), Float32(0)))
     cases += 8
     # the piecewise-constant kinds on quarters with NaN (gradient zero)
-    var step_kinds: List[Int] = [IMP_FLOOR, IMP_CEIL, IMP_ROUND, IMP_SIGN, IMP_NOT]
-    for i in range(len(step_kinds)):  # small-loop(5: check kinds)
+    var step_kinds: List[Int] = [IMP_FLOOR, IMP_CEIL, IMP_ROUND, IMP_SIGN, IMP_NOT, IMP_BOOL]
+    for i in range(len(step_kinds)):  # small-loop(6: check kinds)
         summary = _mix(summary, _unary_case(ex, tape, step_kinds[i], steps, Float32(0), Float32(0)))
         cases += 1
     # binary kinds: a middle-axis broadcast b [3, 1, 5] and a leading-and-
@@ -612,4 +824,15 @@ def run_import_checks[E: Exec](mut ex: E) raises:
     summary = _mix(summary, _argmax_case(ex, tape, True))
     summary = _mix(summary, _pad_case(ex, tape))
     cases += 6
+    # lane ag-import-lm-ops: the attention-mask ops
+    summary = _mix(summary, _any_all_case(ex, tape))
+    summary = _mix(summary, _cumsum_case(ex, tape, 3, 7, 5, False, False))
+    summary = _mix(summary, _cumsum_case(ex, tape, 2, 150, 3, False, False))
+    summary = _mix(summary, _cumsum_case(ex, tape, 2, 150, 3, True, False))
+    summary = _mix(summary, _cumsum_case(ex, tape, 2, 150, 3, False, True))
+    summary = _mix(summary, _cumsum_case(ex, tape, 1, 4500, 2, True, True))
+    summary = _mix(summary, _index_case(ex, tape, 0, 1))
+    summary = _mix(summary, _index_case(ex, tape, 1, 2))
+    summary = _mix(summary, _index_case(ex, tape, 0, 2))
+    cases += 9
     print("PASS import cases", cases, "summary", summary)
