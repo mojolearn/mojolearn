@@ -44,7 +44,8 @@ def test_direct_program_constructor_preserves_integer_input_metadata():
         assert program.params == captured.params
         assert program.input_kinds == (1,)
         actual = audit_native_call(program.run, inputs).assert_native()
-        np.testing.assert_array_equal(actual, weights[inputs])
+        # Session.embedding documents one row per id, flattened row-major.
+        np.testing.assert_array_equal(actual, weights[inputs.reshape(-1)])
 
 
 @pytest.mark.parametrize("legacy", [False, True])
@@ -67,11 +68,15 @@ def test_direct_program_constructor_accepts_builtin_metadata_iterators(legacy):
         np.testing.assert_array_equal(actual, np.maximum(inputs, np.float32(0)))
 
 
-def test_direct_program_constructor_invalid_metadata_has_no_python_runtime():
+@pytest.mark.parametrize("invalid, expected", [
+    ("invalid", ValueError), (None, TypeError),
+    (float("nan"), ValueError), (float("inf"), OverflowError),
+])
+def test_direct_program_constructor_invalid_metadata_has_no_python_runtime(invalid, expected):
     with ops.Session() as session:
         value = ops.Program.__new__(ops.Program)
-        result = audit_native_call(value.__init__, session, ["invalid", [], [], []])
-        assert isinstance(result.exception, ValueError), result.report()
+        result = audit_native_call(value.__init__, session, [invalid, [], [], []])
+        assert isinstance(result.exception, expected), result.report()
         for key in ("python_frames", "forbidden_native_calls", "wrapper_work",
                     "unobserved_existing_threads"):
             assert not result.report()[key], result.report()
