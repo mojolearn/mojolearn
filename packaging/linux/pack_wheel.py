@@ -260,15 +260,30 @@ from verify_linux_surface_qualification import (  # noqa: E402
 # THE SPLIT (2026-09-25): which plugin ships which vendor directory, read from
 # python/mojolearn/gpu_plugins.py by path, the table the loader reads too.
 gpu_plugins = load_gpu_plugins()
-#: The profiles that emit THREE wheels from the same inputs: `mojolearn`
-#: (core-linux), `mojolearn-nvidia` and `mojolearn-amd`. `split` is the
+#: The profiles that emit the split wheels from the same inputs:
+#: `mojolearn-core` (core-linux), `mojolearn-nvidia`, `mojolearn-nvidia-ptx`,
+#: `mojolearn-amd` and the file-free `mojolearn` (meta-linux, requiring the
+#: core and both vendors; 2026-10-20). `split` is the
 #: default and checks sets the way `generic` does; `release-split` checks
 #: them the way `release-linux3` does, per plugin (split_release_slots).
 SPLIT_PROFILE = "split"
 RELEASE_SPLIT_PROFILE = "release-split"
 SPLIT_PROFILES = (SPLIT_PROFILE, RELEASE_SPLIT_PROFILE)
 #: The wheels a split profile can emit; `--wheels` picks a subset.
-WHEEL_KINDS = (gpu_plugins.CORE_PROFILE,) + tuple(r["profile"] for r in gpu_plugins.distribution_rows(include_experimental=True))
+WHEEL_KINDS = ((gpu_plugins.CORE_PROFILE,)
+               + tuple(r["profile"] for r in gpu_plugins.distribution_rows(include_experimental=True))
+               + (gpu_plugins.META_PROFILE,))
+#: The profiles that carry no vendor: the core and the meta wheel.
+NON_VENDOR_KINDS = (gpu_plugins.CORE_PROFILE, gpu_plugins.META_PROFILE)
+
+
+def kind_distribution(kind):
+    """The PyPI project of a split wheel kind (None is the core)."""
+    if kind in (None, gpu_plugins.CORE_PROFILE):
+        return gpu_plugins.CORE_DISTRIBUTION
+    if kind == gpu_plugins.META_PROFILE:
+        return gpu_plugins.META_DISTRIBUTION
+    return gpu_plugins.package(kind)["distribution"]
 #: The platform tag the split profiles write. MEASURED, not typed: auditwheel
 #: measured the combined 0.8.16 and 0.8.18 wheels at manylinux_2_35_x86_64
 #: (packaging/linux/audit.sh, show.txt), and every split wheel holds a subset
@@ -575,14 +590,40 @@ def metadata_text(proj, readme):
     return "\n".join(lines) + "\n\n" + readme
 
 
+#: The note the core's README opens with (user voice, short).
+CORE_README_NOTE = (
+    "# mojolearn-core\n\n"
+    "The mojolearn Python package and CPU runtime for Linux x86-64, with no GPU binaries. "
+    "`pip install mojolearn` installs it with NVIDIA and AMD support; "
+    "`pip install mojolearn-nvidia` or `pip install mojolearn-amd` installs it with one vendor. "
+    "There is no macOS wheel of mojolearn-core: on a Mac, `pip install mojolearn`.\n\n")
+
+
 def core_project(proj, version):
-    """The split core's pyproject-shaped fields: the combined wheel's, with
-    BOTH GPU plugins appended to its requirements at this very version
-    (gpu_plugins.core_requirements), so `pip install mojolearn` on Linux
-    installs mojolearn-nvidia and mojolearn-amd with it."""
+    """The split core's pyproject-shaped fields: the combined wheel's under
+    the name mojolearn-core, with no vendor requirement
+    (gpu_plugins.core_requirements is empty since 2026-10-20: each vendor
+    requires the core, and `mojolearn` requires all of them)."""
     out = dict(proj)
+    out["name"] = gpu_plugins.CORE_DISTRIBUTION
+    out["description"] = ("mojolearn for Linux x86-64 without GPU binaries; "
+                          "add mojolearn-nvidia or mojolearn-amd, or pip install mojolearn for both")
     out["dependencies"] = list(proj.get("dependencies", [])) + gpu_plugins.core_requirements(version)
     return out
+
+
+def meta_project(proj, version):
+    """The Linux `mojolearn` wheel's fields: no files, no extras, and exactly
+    the core and both vendors at this version (gpu_plugins.meta_requirements)."""
+    out = {k: proj[k] for k in ("name", "authors", "maintainers", "license", "urls", "keywords",
+                                "classifiers", "requires-python", "license-files", "description") if k in proj}
+    out.update(name=gpu_plugins.META_DISTRIBUTION, version=version,
+               dependencies=gpu_plugins.meta_requirements(version))
+    readme = (f"# mojolearn\n\n"
+              f"On Linux x86-64, `pip install mojolearn` installs mojolearn-core with NVIDIA "
+              f"(mojolearn-nvidia) and AMD (mojolearn-amd) support. "
+              f"To install one vendor only: `pip install mojolearn-nvidia` or `pip install mojolearn-amd`.\n")
+    return out, readme
 
 
 def plugin_project(proj, vendor, version, arches):
@@ -592,11 +633,12 @@ def plugin_project(proj, vendor, version, arches):
                                 "classifiers", "requires-python", "license-files") if k in proj}
     out.update(name=row["distribution"], version=version,
                description=(f"{row['label']} GPU binaries for mojolearn {version} "
-                            f"({', '.join(sorted(arches))}); installed by pip install mojolearn"),
+                            f"({', '.join(sorted(arches))}); installs mojolearn-core with them"),
                dependencies=gpu_plugins.package_requirements(vendor, version))
     readme = (f"# {row['distribution']}\n\n"
               f"{row['label']} {row['role']} for mojolearn {version}. "
-              "The default Linux install includes both vendor packages and all released native targets. "
+              f"`pip install {row['distribution']}` installs mojolearn-core and this package; "
+              "`pip install mojolearn` installs both vendor packages and all released native targets. "
               "Each vendor wheel contains its native architecture sets; the loader selects the matching set.\n")
     # tools/release.py sets this when a native set of the release had no installed smoke (2026-10-08: releases rent
     # nothing, so sm_90a is smoked only when a Hopper box is held); the wheel says so instead of implying a test
@@ -1047,14 +1089,14 @@ def main(argv=None, _gates=True):
     if a.profile == RELEASE_PROFILE:
         inventory = release_inventory(sets, a.build_proof, version)
     elif a.profile == RELEASE_SPLIT_PROFILE:
-        plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds if k != gpu_plugins.CORE_PROFILE}
+        plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds if k not in NON_VENDOR_KINDS}
         # A plugin is packed from its own vendor's sets and nothing else; the
         # core alone (host bindings and runtime) from whichever release sets
         # were given. Either way every set given is proven like release-linux3's,
         # the PTX set by its own leg's proof.
         package_slots = set()
         for kind in kinds:
-            if kind == gpu_plugins.CORE_PROFILE:
+            if kind in NON_VENDOR_KINDS:
                 continue
             package = gpu_plugins.package(kind)
             if package["role"] == "vendor":
@@ -1281,7 +1323,7 @@ def main(argv=None, _gates=True):
     if oversize:
         wheels = {}
         for whl, vendor in built:
-            distribution = (gpu_plugins.package(vendor)["distribution"] if vendor else gpu_plugins.CORE_DISTRIBUTION)
+            distribution = kind_distribution(vendor)
             limit = gpu_plugins.wheel_size_limit(distribution)
             wheels[whl.name] = dict(distribution=distribution, compressed_bytes=whl.stat().st_size,
                                     pypi_limit_bytes=limit, over_limit=whl.stat().st_size > limit,
@@ -1353,8 +1395,7 @@ def main(argv=None, _gates=True):
         wheels = {}
         for whl, vendor in built:
             size = whl.stat().st_size
-            distribution = (gpu_plugins.package(vendor)["distribution"] if vendor
-                            else gpu_plugins.CORE_DISTRIBUTION)
+            distribution = kind_distribution(vendor)
             limit = gpu_plugins.wheel_size_limit(distribution)
             wheels[whl.name] = {
                 "distribution": distribution,
@@ -1392,7 +1433,7 @@ def oversize_report(built):
     """Report lines for every built wheel when any is over its PyPI limit, else []."""
     rows = []
     for whl, vendor in built:
-        distribution = (gpu_plugins.package(vendor)["distribution"] if vendor else gpu_plugins.CORE_DISTRIBUTION)
+        distribution = kind_distribution(vendor)
         rows.append((whl, whl.stat().st_size, gpu_plugins.wheel_size_limit(distribution)))
     if not any(size > limit for _, size, limit in rows):
         return []
@@ -1426,10 +1467,13 @@ def wheel_payload_sizes(whl):
 def split_kinds(text, vendors_given, keys=None):
     """The wheels a split profile emits, in WHEEL_KINDS order: `--wheels`
     when given, else the core plus the plugin of every vendor a set was given
-    for. A plugin asked for with no set of its vendor is refused."""
+    for, plus the meta `mojolearn` wheel when every vendor was given. A
+    plugin (or the meta wheel) asked for with no set of its vendor(s) is refused."""
     if not text:
         kinds = [gpu_plugins.CORE_PROFILE] + [row["profile"] for row in gpu_plugins.distribution_rows()
                                              if row["vendor"] in vendors_given]
+        if set(gpu_plugins.vendors()) <= set(vendors_given):
+            kinds.append(gpu_plugins.META_PROFILE)
     else:
         kinds = [k.strip() for k in text.split(",") if k.strip()]
         unknown = [k for k in kinds if k not in WHEEL_KINDS]
@@ -1437,6 +1481,12 @@ def split_kinds(text, vendors_given, keys=None):
             raise SystemExit(f"pack_wheel: --wheels {text!r}: name each of {', '.join(WHEEL_KINDS)} "
                              "at most once, nothing else")
     for kind in kinds:
+        if kind == gpu_plugins.META_PROFILE:
+            missing = [v for v in gpu_plugins.vendors() if v not in vendors_given]
+            if missing:
+                raise SystemExit(f"pack_wheel: --wheels names {kind}, which requires every vendor, "
+                                 f"but no {', '.join(missing)} set was given")
+            continue
         if kind != gpu_plugins.CORE_PROFILE and gpu_plugins.by_profile(kind) not in vendors_given:
             raise SystemExit(f"pack_wheel: --wheels names {kind} but no "
                              f"{gpu_plugins.by_profile(kind)} set was given")
@@ -1472,7 +1522,9 @@ def split_payload(entries, generated, dist):
 def write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets, readme, bundled_ptx=None):
     """Write the split wheels `kinds` asks for from the combined payload.
     Returns [(wheel path, profile or None for the core), ...]. Native bytes
-    are preserved while GPU roots move to disjoint equal-depth directories."""
+    are preserved while GPU roots move to disjoint equal-depth directories.
+    The core's .dist-info is mojolearn_core-<v>.dist-info (2026-10-20); the
+    meta `mojolearn` wheel carries only its .dist-info."""
     parts = split_payload(entries, generated, dist)
     core_entries, core_payload = parts.get(None, ({}, {}))
     licenses = {k: v for k, v in generated.items() if k.startswith(f"{dist}/licenses/")}
@@ -1488,6 +1540,7 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
     try:
         for kind in kinds:
             if kind == gpu_plugins.CORE_PROFILE:
+                cdist = f"{gpu_plugins.CORE_WHEEL_NAME}-{version}.dist-info"
                 core_generated = {}
                 for arc, data in generated.items():
                     if not arc.startswith(dist + "/"):
@@ -1495,13 +1548,32 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
                     if arc == f"{dist}/LINUX_PAYLOAD.json":
                         data = payload_doc(kind, gpu_plugins.CORE_DISTRIBUTION, core_entries)
                     elif arc == f"{dist}/METADATA":
-                        data = metadata_text(core_project(proj, version), readme).encode()
-                    core_generated[arc] = data
-                core_generated[f"{dist}/{gpu_plugins.CORE_MARKER}"] = (
+                        data = metadata_text(core_project(proj, version), CORE_README_NOTE + readme).encode()
+                    core_generated[cdist + arc[len(dist):]] = data
+                core_generated[f"{cdist}/{gpu_plugins.CORE_MARKER}"] = (
                     json.dumps(gpu_plugins.core_marker(version), sort_keys=True, indent=2) + "\n").encode()
                 core_generated.update(core_payload)
-                whl = out / f"mojolearn-{version}-{tag}.whl"
-                built.append((write_wheel(whl, core_entries, core_generated, dist), None))
+                whl = out / f"{gpu_plugins.CORE_WHEEL_NAME}-{version}-{tag}.whl"
+                built.append((write_wheel(whl, core_entries, core_generated, cdist), None))
+                continue
+            if kind == gpu_plugins.META_PROFILE:
+                # THE LINUX `mojolearn` WHEEL (2026-10-20): metadata only. Its
+                # requirements install the core and both vendors; its marker is
+                # an aggregate, which audit.sh admits without auditwheel.
+                mdist = f"{gpu_plugins.META_WHEEL_NAME}-{version}.dist-info"
+                mproj, mreadme = meta_project(proj, version)
+                mgen = {
+                    f"{mdist}/METADATA": metadata_text(mproj, mreadme).encode(),
+                    f"{mdist}/WHEEL": wheel_file_text(tag).encode(),
+                }
+                if inventory is not None:
+                    mgen[f"{mdist}/LINUX_PAYLOAD.json"] = payload_doc(kind, gpu_plugins.META_DISTRIBUTION, {})
+                for arc, data in licenses.items():
+                    mgen[mdist + arc[len(dist):]] = data
+                mgen[f"{mdist}/{gpu_plugins.PLUGIN_MARKER}"] = (json.dumps(
+                    gpu_plugins.meta_marker(version), sort_keys=True, indent=2) + "\n").encode()
+                whl = out / f"{gpu_plugins.META_WHEEL_NAME}-{version}-{tag}.whl"
+                built.append((write_wheel(whl, {}, mgen, mdist), kind))
                 continue
             vendor = gpu_plugins.by_profile(kind)
             row = gpu_plugins.package(kind)
@@ -1535,7 +1607,7 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
             whl.unlink(missing_ok=True)
         raise
     for whl, vendor in built:
-        print(f"pack_wheel: wrote {whl.name} ({'core' if vendor is None else vendor + ' plugin'})")
+        print(f"pack_wheel: wrote {whl.name} ({'core' if vendor is None else 'meta' if vendor == gpu_plugins.META_PROFILE else vendor + ' plugin'})")
     return built
 
 if __name__ == "__main__":
