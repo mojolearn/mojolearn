@@ -292,6 +292,87 @@ def ops_grad_py[E: Exec & Movable & Deinitable, KIND: Int](
     return PythonObject(0)
 
 
+# Session optimizers (autograd/ops_api.mojo OpsSession.optimizer / step):
+# one call each, handles and options only; every number is computed in the
+# session.
+def _param_handles(p: PythonObject) raises -> List[Int]:
+    var out = List[Int]()
+    for i in range(len(p)):  # driver-loop: over the step's parameter handles, argument parsing, no data
+        out.append(ival(p, i))
+    return out^
+
+
+def ops_optimizer_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, ip: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    """ip = [kind (sequence/ops.mojo OPT_SGD, OPT_ADAM, OPT_ADAMW), nesterov,
+    schedule (autograd/model.mojo SCHED_*), step size]; fp = [lr, momentum,
+    beta1, beta2, eps, weight_decay, gamma]. Returns the optimizer's id."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(p[].optimizer(_arg_ints(ip), _arg_floats(fp)))
+
+
+def ops_step_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, opt: PythonObject, hs: PythonObject,
+) raises -> PythonObject:
+    """One in-place update of the parameter handles `hs` by optimizer `opt`."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].step(Int(py=opt), _param_handles(hs))
+    return PythonObject(0)
+
+
+def ops_scheduler_step_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, opt: PythonObject,
+) raises -> PythonObject:
+    """Advance optimizer `opt`'s learning-rate schedule by one epoch."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].scheduler_step(Int(py=opt))
+    return PythonObject(0)
+
+
+def ops_learning_rate_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, opt: PythonObject,
+) raises -> PythonObject:
+    """Optimizer `opt`'s current learning rate."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    return PythonObject(Float64(p[].learning_rate(Int(py=opt))))
+
+
+def ops_zero_grad_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject) raises -> PythonObject:
+    """Forget every trainable tensor's gradient."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].zero_grad()
+    return PythonObject(0)
+
+
+def ops_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, opt: PythonObject, h: PythonObject,
+) raises -> PythonObject:
+    """[step count, beta1^t, beta2^t, mu product, buffer handle 1, 2, 3]
+    (0 for a buffer the optimizer does not use)."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    var st = p[].optimizer_state(Int(py=opt), Int(py=h))
+    var out = Python.list()
+    out.append(PythonObject(st[0]))
+    out.append(PythonObject(Float64(st[1])))
+    out.append(PythonObject(Float64(st[2])))
+    out.append(PythonObject(Float64(st[3])))
+    out.append(PythonObject(st[4]))
+    out.append(PythonObject(st[5]))
+    out.append(PythonObject(st[6]))
+    return out
+
+
+def ops_load_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, opt: PythonObject, h: PythonObject, ip: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    """ip = [step count, buffer handle 1, 2, 3]; fp = [beta1^t, beta2^t, mu
+    product]: the words ops_optimizer_state returns."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].load_optimizer_state(Int(py=opt), Int(py=h), _arg_ints(ip), _arg_floats(fp))
+    return PythonObject(0)
+
+
 # The process-wide launch profile (autograd/profile.mojo; MOJOLEARN_AG_PROFILE),
 # read by tools/ag_opbench.py per op.
 def ops_profile_reset_py() raises -> PythonObject:

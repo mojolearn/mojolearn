@@ -24,6 +24,8 @@ from autograd.pyapi import (
     ops_open_py, ops_close_py, ops_upload_py, ops_download_py, ops_op_py, ops_scalar_py,
     ops_shape_py, ops_free_py, ops_reset_py, ops_metric_py, ops_backward_py, ops_grad_py,
     ops_profile_reset_py, ops_profile_report_py, ops_op_packed_py,
+    ops_optimizer_py, ops_step_py, ops_scheduler_step_py, ops_learning_rate_py, ops_zero_grad_py,
+    ops_optimizer_state_py, ops_load_optimizer_state_py,
 )
 from autograd.ops_api import OPS_DEVICE
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
@@ -263,6 +265,36 @@ def ops_grad_binding(sid: PythonObject, h: PythonObject, addr: PythonObject) rai
     return ops_grad_py[DeviceExec, OPS_DEVICE](sid, h, addr)
 
 
+def ops_optimizer_binding(sid: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    return ops_optimizer_py[DeviceExec, OPS_DEVICE](sid, ip, fp)
+
+
+def ops_step_binding(sid: PythonObject, opt: PythonObject, hs: PythonObject) raises -> PythonObject:
+    return ops_step_py[DeviceExec, OPS_DEVICE](sid, opt, hs)
+
+
+def ops_scheduler_step_binding(sid: PythonObject, opt: PythonObject) raises -> PythonObject:
+    return ops_scheduler_step_py[DeviceExec, OPS_DEVICE](sid, opt)
+
+
+def ops_learning_rate_binding(sid: PythonObject, opt: PythonObject) raises -> PythonObject:
+    return ops_learning_rate_py[DeviceExec, OPS_DEVICE](sid, opt)
+
+
+def ops_zero_grad_binding(sid: PythonObject) raises -> PythonObject:
+    return ops_zero_grad_py[DeviceExec, OPS_DEVICE](sid)
+
+
+def ops_optimizer_state_binding(sid: PythonObject, opt: PythonObject, h: PythonObject) raises -> PythonObject:
+    return ops_optimizer_state_py[DeviceExec, OPS_DEVICE](sid, opt, h)
+
+
+def ops_load_optimizer_state_binding(
+    sid: PythonObject, opt: PythonObject, h: PythonObject, ip: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    return ops_load_optimizer_state_py[DeviceExec, OPS_DEVICE](sid, opt, h, ip, fp)
+
+
 def ops_profile_reset_binding() raises -> PythonObject:
     return ops_profile_reset_py()
 
@@ -438,6 +470,13 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[ops_metric_binding]("ops_metric")
         m.def_function[ops_backward_binding]("ops_backward")
         m.def_function[ops_grad_binding]("ops_grad")
+        m.def_function[ops_optimizer_binding]("ops_optimizer")
+        m.def_function[ops_step_binding]("ops_step")
+        m.def_function[ops_scheduler_step_binding]("ops_scheduler_step")
+        m.def_function[ops_learning_rate_binding]("ops_learning_rate")
+        m.def_function[ops_zero_grad_binding]("ops_zero_grad")
+        m.def_function[ops_optimizer_state_binding]("ops_optimizer_state")
+        m.def_function[ops_load_optimizer_state_binding]("ops_load_optimizer_state")
         m.def_function[ops_profile_reset_binding]("ops_profile_reset")
         m.def_function[ops_profile_report_binding]("ops_profile_report")
         m.def_function[adafactor_step_binding]("adafactor_step")
