@@ -105,10 +105,12 @@ def test_native_samba_complete_gradient_matches_explicit_chain(monkeypatch, laye
     assert model.generator.state_dict() == before_rng
 
 
-def test_native_samba_worker_state_gradient_matches_live_model(monkeypatch):
+@pytest.mark.parametrize("length", [2, 3, 5])
+def test_native_samba_worker_state_gradient_matches_live_model(monkeypatch, length):
     model = _model(["attention", "mamba3"], True)
-    inputs = np.array([[1, 2, 3]], dtype="i4")
-    targets = np.array([[2, 3, 4]], dtype="i4")
+    inputs = np.arange(1, length + 1, dtype="i4").reshape(1, length)
+    targets = np.arange(2, length + 2, dtype="i4").reshape(1, length)
+    targets[0, 1] = -100
     state = model.state_dict()
     expected = _reference(model, inputs, targets, None, 27, 9)
     with monkeypatch.context() as patch:
