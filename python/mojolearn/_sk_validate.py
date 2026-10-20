@@ -472,7 +472,10 @@ def _array_like(obj):
     if (obj is None or isinstance(obj, (list, tuple, str, bytes))
             or not callable(getattr(obj, "__array__", None))):
         return obj
-    from ._array import Array  # glue: our own array is already the array; memoryview(Array) needs Python 3.12+ (__buffer__)
+    # Array already exposes native storage. Its Python buffer protocol needs
+    # Python 3.12+, so a memoryview probe on 3.10/3.11 would call __array__
+    # and unnecessarily require NumPy.
+    from ._array import Array
     if isinstance(obj, Array):
         return obj
     try:
