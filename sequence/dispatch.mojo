@@ -154,6 +154,8 @@ from sequence.gemm_split import OP_GK_FIRST, OP_GK_LAST, OP_GK_SPLIT, op_gk_spli
 from sequence.moe_backward import OP_MOEB_FIRST, OP_MOEB_LAST, apply_moe_backward
 from autograd.embedding_ops import OP_EMB_FIRST, OP_EMB_LAST, apply_embedding
 from autograd.cast_ops import OP_CAST_FIRST, OP_CAST_LAST, apply_cast
+# ---- lane ag-rankn-conv (AUTOGRAD_RANKN.md 2.8): rank-4 conv2d and pools, 4500..4519
+from autograd.rankn_conv_ops import OP_RNV_FIRST, OP_RNV_LAST, apply_rankn_conv
 
 
 @always_inline
@@ -358,6 +360,15 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_CAST_FIRST or OP_CELL_FWD_SCAN > OP_CAST_LAST) and (
         OP_CELL_BWD_SCAN < OP_CAST_FIRST or OP_CELL_BWD_SCAN > OP_CAST_LAST
     ), "cast opcode collides with recurrent scan"
+    # ---- lane ag-rankn-conv: the rank-4 conv2d / pool family (autograd/
+    # rankn_conv_ops.mojo OP_RNV_*, 4500..4519), above every lower family.
+    comptime assert OP_RNV_FIRST <= OP_RNV_LAST, "rank-N conv opcode range is empty"
+    comptime assert OP_RNV_FIRST > OP_CAST_LAST and OP_RNV_FIRST > OP_EMB_LAST and OP_RNV_FIRST > OP_MOEB_LAST and OP_RNV_FIRST > OP_AGH_LAST and OP_RNV_FIRST > OP_AGS_LAST and OP_RNV_FIRST > OP_ROW_LAST and OP_RNV_FIRST > OP_GK_LAST and OP_RNV_FIRST > OP_AGC_LAST, "rank-N conv opcodes overlap a lower family"
+    comptime assert OP_RNV_FIRST > OP_AG_LAST and OP_RNV_FIRST > OP_AGD_LAST and OP_RNV_FIRST > OP_AGO_LAST and OP_RNV_FIRST > OP_LS_LAST and OP_RNV_FIRST > OP_AGM_LAST and OP_RNV_FIRST > OP_AGK_LAST and OP_RNV_FIRST > OP_P1_LAST and OP_RNV_FIRST > OP_AGF_LAST and OP_RNV_FIRST > OP_MLP_LB_LAST, "rank-N conv opcodes overlap an autograd family"
+    comptime assert (OP_CELL_FWD_SCAN < OP_RNV_FIRST or OP_CELL_FWD_SCAN > OP_RNV_LAST) and (
+        OP_CELL_BWD_SCAN < OP_RNV_FIRST or OP_CELL_BWD_SCAN > OP_RNV_LAST
+    ), "rank-N conv opcode collides with recurrent scan"
+    # ---- end lane ag-rankn-conv
     # MOJOLEARN_IDN_ROW_COOP (autograd/row_ops.mojo): the softmax rows in the
     # fold32 order on the host and the device's one-thread rows, the twin of
     # the coop cell DeviceExec runs for rows of >= 32 columns
@@ -400,6 +411,9 @@ def apply[OP: Int](t: Int, a: Args):
         apply_embedding[OP](t, a)
     elif OP >= OP_CAST_FIRST and OP <= OP_CAST_LAST:
         apply_cast[OP](t, a)
+    elif OP >= OP_RNV_FIRST and OP <= OP_RNV_LAST:
+        # lane ag-rankn-conv: rank-4 conv2d and pools
+        apply_rankn_conv[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
