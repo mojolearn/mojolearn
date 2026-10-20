@@ -261,43 +261,7 @@ class SambaStack(object):
                  betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01,
                  lr_schedule=None, max_norm=None, accumulation_steps=1,
                  numeric_mode=None):
-        if not isinstance(config, SambaConfig):
-            raise TypeError("mojolearn.SambaStack: config must be a SambaConfig")
-        if (weights is None) == (generator is None):
-            raise ValueError("mojolearn.SambaStack: pass exactly one of "
-                             "weights= or generator=")
-        self.config = config
-        self.numeric_mode = numeric_mode
-        self.names = [n for n, _ in config.registry()]  # glue: registry of named tensors
-        self.shapes = {n: tuple(s) for n, s in config.registry()}  # glue: registry of named tensors
-        self.offsets = [0]
-        for n in self.names:  # glue: offsets over named tensors
-            self.offsets.append(self.offsets[-1] + int(math.prod(self.shapes[n])))  # glue: offsets over named tensors
-        self.n_total = self.offsets[-1]
-        self.flat = _buffers.zeros(self.n_total, '<f4')
-        self.arrays = {}
-        for j, n in enumerate(self.names):  # glue: views per named tensor
-            self.arrays[n] = _Array.from_buffer(_checks.flat_view(self.flat, 'f')[self.offsets[j]:self.offsets[j + 1]]).reshape(self.shapes[n])
-        self.generator = generator if generator is not None else T.Generator(0, numeric_mode)
-        if weights is not None:
-            self.load_weights(weights)
-        else:
-            for n in self.names:  # glue: copies each named tensor
-                _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(_init_tensor(self.generator, n, self.shapes[n]), 'f')
-        self.max_norm = None if max_norm is None else float(max_norm)
-        self.optimizer = T.AdamW([self.arrays[n] for n in self.names], lr=lr,  # glue: optimizer gets named tensors
-                                 betas=betas, eps=eps, weight_decay=weight_decay,
-                                 lr_schedule=lr_schedule,
-                                 accumulation_steps=accumulation_steps,
-                                 numeric_mode=numeric_mode)
-        # The block wrappers retain views of ``self.flat``; optimizer steps
-        # and checkpoint restores update that storage in place.  Constructing
-        # them again for every forward/backward only repeats Python shape and
-        # option validation, and also prevents TransformerBlock from reusing
-        # its per-instance runtime resources.  Keep one wrapper per registry
-        # block, just as SambaInference does.  No tensor is copied or cached.
-        self._blocks = [self._make_block(i) for i in range(len(config.layers))]  # glue: builds one block per layer
-        self.last_ = None
+        return _native_samba_bridge.RUNTIME.samba_native_call("construct", (self, (config, weights, generator, lr, betas, eps, weight_decay, lr_schedule, max_norm, accumulation_steps, numeric_mode)), _native_samba_bridge.CONTEXT)
 
     # -- weights ----------------------------------------------------------
     def load_weights(self, weights):
@@ -305,28 +269,11 @@ class SambaStack(object):
 
         The key set and every shape must match exactly; values must be float32.
         """
-        missing = [n for n in self.names if n not in weights]  # glue: checks weight dict names
-        extra = [n for n in weights if n not in self.shapes]  # glue: checks weight dict names
-        if missing or extra:
-            raise ValueError("mojolearn.SambaStack: weight dict mismatch; "
-                             "missing %r, unknown %r" % (missing, extra))
-        for n in self.names:  # glue: checks each named tensor
-            a = weights[n]
-            pb = _checks.probe(a)
-            if not _checks.is_native_f32(pb.format):
-                raise TypeError("mojolearn.SambaStack: %s has dtype %s; float32 only"
-                                % (n, pb.format))
-            if pb.shape != self.shapes[n]:
-                raise ValueError("mojolearn.SambaStack: %s has shape %r, want %r"
-                                 % (n, pb.shape, self.shapes[n]))
-            a = _buffers.as_f32_c(a, ndim=None, name=n)[0]
-            if not _buffers.all_finite(a):
-                raise ValueError("mojolearn.SambaStack: %s is not finite" % n)
-            _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(a, 'f')
+        return _native_samba_bridge.RUNTIME.samba_native_call("load_weights", (self, weights), _native_samba_bridge.CONTEXT)
 
     def parameters(self):
         """The parameters as ``{name: array}``, views of the flat buffer in registry order."""
-        return {n: self.arrays[n] for n in self.names}  # glue: dict of named tensors
+        return _native_samba_bridge.RUNTIME.samba_native_call("parameters", (self,), _native_samba_bridge.CONTEXT)
 
     def _make_block(self, i):
         kind = self.config.layers[i]

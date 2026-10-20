@@ -6,6 +6,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.samba_state_native import samba_snapshot, samba_validate_state, samba_from_state, samba_publish, samba_apply_gradients_from_state
 from bindings.samba_training_native import samba_gradients, samba_gradients_from_state
 from bindings.generator_state_native import generator_init, generator_snapshot, generator_restore, generator_next
+from bindings.samba_construct_native import samba_construct, samba_load_weights, samba_parameters
 
 
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -15,7 +16,13 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var values = args[1]
         var context = args[2]
         var result = PythonObject(None)
-        if operation == "generator_init":
+        if operation == "construct":
+            result = samba_construct(values[0], values[1], context)
+        elif operation == "load_weights":
+            result = samba_load_weights(values[0], values[1], context)
+        elif operation == "parameters":
+            result = samba_parameters(values[0])
+        elif operation == "generator_init":
             result = generator_init(values[0], values[1], values[2])
         elif operation == "generator_snapshot":
             result = generator_snapshot(values[0])
