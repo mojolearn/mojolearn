@@ -739,7 +739,10 @@ def _runtime_bound(expr):
     return True
 
 
-_DRIVE = re.compile(r"\bDeviceContext\s*\(|\.enqueue_\w+|\bctx\.synchronize\(")
+# A captured-program worker owns an Exec: DeviceExec in the GPU binding,
+# HostExec only in the CPU binding (which admits one physical worker). Its
+# explicit drain is the same native GPU-driver boundary as ctx.synchronize.
+_DRIVE = re.compile(r"\bDeviceContext\s*\(|\.enqueue_\w+|\bctx\.synchronize\(|\.session\.ex\.sync\(")
 
 
 def _driver_lines(lines):

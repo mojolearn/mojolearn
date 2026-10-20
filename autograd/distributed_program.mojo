@@ -24,7 +24,7 @@ from checks.numerics import identical_mul, identical_div, identical_mul_add, ftz
 
 
 struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
-    var session: OpsSession[E]
+    var session: OpsSession[Self.E]
     var program: OpsProgram
     var params: List[FP]
     var trainable: List[Bool]
@@ -45,9 +45,9 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
     var first: List[Int]
     var width: List[Int]
 
-    def __init__(out self, var ex: E, p: OpsProgram, values: List[List[Float32]],
+    def __init__(out self, var ex: Self.E, p: OpsProgram, values: List[List[Float32]],
                  trainable: List[Bool], cfg: OptimizerConfig, rank: Int, world: Int) raises:
-        self.session = OpsSession[E](ex^, False)
+        self.session = OpsSession[Self.E](ex^, False)
         self.program = p.copy()
         self.params = List[FP]()
         self.trainable = trainable.copy()
@@ -178,7 +178,7 @@ struct ProgramReplica[E: Exec & Movable & Deinitable](Movable):
 
 
 struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
-    var workers: List[ProgramReplica[E]]
+    var workers: List[ProgramReplica[Self.E]]
     var program: OpsProgram
     var trainable: List[Bool]
     var devices: List[Int]
@@ -205,7 +205,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
             for j in range(i):  # small-loop(i: preceding device IDs): distinct ownership
                 if devices[i] == devices[j]:
                     raise Error("distributed program: duplicate physical device ID")
-        self.workers = List[ProgramReplica[E]]()
+        self.workers = List[ProgramReplica[Self.E]]()
         self.program = p.copy()
         self.trainable = trainable.copy()
         self.devices = devices.copy()
@@ -227,7 +227,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
         # Reduction always visits logical shard 0,1,... . Physical owners
         # operate on disjoint element ranges and never reduce each other.
         # Host staging is a byte copy; arithmetic stays on the owning Exec.
-        var wp = rebind[MutPointer[ProgramReplica[E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
+        var wp = rebind[MutPointer[ProgramReplica[Self.E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
         for j in range(len(self.program.params)):  # driver-loop: parameters
             if not self.trainable[j]:
                 continue
@@ -247,7 +247,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                 wp[rank].session.ex.launch[OP_AG_ACCUMULATE](a, n)
 
     def broadcast(mut self) raises:
-        var wp = rebind[MutPointer[ProgramReplica[E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
+        var wp = rebind[MutPointer[ProgramReplica[Self.E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
         for j in range(len(self.program.params)):  # driver-loop: parameters
             if not self.trainable[j]:
                 continue
@@ -284,7 +284,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
         try:
             for rank in range(len(self.workers)):  # driver-loop: input residency
                 self.workers[rank].prepare(srcs, shapes, target, bs, loss_kind)
-            var wp = rebind[MutPointer[ProgramReplica[E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
+            var wp = rebind[MutPointer[ProgramReplica[Self.E], MutUntrackedOrigin]](self.workers.unsafe_ptr())
             for e in range(epochs):  # driver-loop: epochs
                 for rank in range(len(self.workers)):  # driver-loop: native row permutations
                     epoch_order(wp[rank].session.ex, shuffle, self.seed, self.epoch, n, wp[rank].indices)
@@ -310,6 +310,8 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                                 var hi = count * (shard + 1) // shards
                                 # Stream coordinates are logical, not physical.
                                 wp[rank].gradient(start + lo, hi - lo, loss_kind, delta, step * logical + shard)
+                                # One native executor per rank; join queued work before folding.
+                                wp[rank].session.ex.sync()
                             except err:
                                 fp[rank] = String(err)
                         if active == 1:
@@ -317,7 +319,7 @@ struct DistributedProgram[E: Exec & Movable & Deinitable](Movable):
                         else:
                             host_parallelize(task, active)
                         for rank in range(active):  # driver-loop: propagate every failed shard
-                            if len(failed[rank]) > 0:
+                            if failed[rank].byte_length() > 0:
                                 raise Error("distributed logical shard " + String(base + rank) + ": " + failed[rank])
                         for rank in range(active):  # driver-loop: immutable logical left fold
                             var shard = base + rank

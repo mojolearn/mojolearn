@@ -101,7 +101,7 @@ def distributed_graph(ck: Checkpoint) raises -> OpsProgram:
         raise Error("damaged distributed graph integer record")
     if len(ck.ext_floats) != 7 + nf + 3 * K or K != ck.j_count():
         raise Error("damaged distributed graph float record")
-    if x[1] < 1 or x[2] < 0 or x[3] < 0 or ck.t != x[3]:
+    if x[1] < 1 or x[2] < 0 or x[3] < 0 or ck.t != Int(x[3]):
         raise Error("damaged distributed training counters")
     if x[4] < 0 or x[4] > 0xffffffff or x[5] < 0 or x[5] > 0xffffffff:
         raise Error("damaged distributed random seed")
