@@ -219,6 +219,15 @@ def executed_control_vjp():
         _equal(grown["outputs"], np.full((4, 1), 1.25, np.float32))
         _equal(grown["input_gradients"][0], np.array([[4]], np.float32))
         outputs.extend((grown["outputs"], grown["input_gradients"][0]))
+        integer_body = s.capture(x, s.argmax(x, keepdims=True, int32=True))
+        _refuses(lambda: _invoke(integer_body.vjp_while, [[1.25]], condition=loop_condition,
+                                max_iterations=1, seeds=seed), "outputs must hold floating", ValueError)
+        integer_x = s.ids(np.array([[0]], np.int32))
+        integer_identity = s.capture(integer_x, integer_x)
+        _refuses(lambda: _invoke(integer_identity.vjp_while, np.array([[0]], np.int32),
+                                condition=integer_identity, max_iterations=1, seeds=seed),
+                 "inputs must hold floating", ValueError)
+        _equal(_invoke(body.vjp_if, condition, otherwise, [[1.25]], seeds=seed)["outputs"], outputs[0])
     return outputs
 
 

@@ -117,6 +117,16 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
     var maximum = _integer(limit, "max_iterations", 0)
     if is_loop and len(body.outs) != body.n_in:
         raise Error("ValueError: while_loop body must return one tensor per input")
+    if is_loop:
+        for k in range(body.n_in):  # driver-loop: over loop state input kinds
+            if body.in_kinds[k] == PROGRAM_IN_IDS:
+                raise Error("ValueError: while_loop state inputs must hold floating-point values")
+        for k in range(len(body.outs)):  # driver-loop: over loop state output metadata
+            var ref = body.outs[k]
+            if ref >= body.n_in:
+                var node = ref - body.n_in
+                if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
+                    raise Error("ValueError: while_loop state outputs must hold floating-point values")
     var prepared = program_inputs(body, arrays, True, True)
     var buffers = List[FP]()
     var temps = List[Int]()
@@ -167,6 +177,9 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
                 if iterations == maximum:
                     break
                 outputs = _replay_handles(s[], body, outputs, leaves, temps, True)
+                for k in range(len(outputs)):  # driver-loop: over loop state output kinds
+                    if s[].int_words[s[]._slot(outputs[k])]:
+                        raise Error("ValueError: while_loop state outputs must hold floating-point values")
                 iterations += 1
         elif _decision(s[], condition, initial, leaves, temps):
             outputs = _replay_handles(s[], body, initial, leaves, temps, True)
