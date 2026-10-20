@@ -21,7 +21,11 @@ def parameter_buffers[E: Exec & Movable & Deinitable](
 ) raises -> List[FP]:
     var out = List[FP]()
     for j in range(len(p.params)):  # driver-loop: over program parameters
-        var slot = s._slot(p.params[j])
+        var slot: Int
+        try:
+            slot = s._slot(p.params[j])
+        except:
+            raise Error("program parameter was freed or changed shape")
         if s.owned[slot] == 0 or not same_shape(s.shapes[slot], p.param_shapes[j]):
             raise Error("program parameter was freed or changed shape")
         out.append(FP(unsafe_from_address=s.owned[slot]))

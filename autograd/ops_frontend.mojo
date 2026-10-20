@@ -6,7 +6,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session
 from autograd.program_pyapi import ProgramInput, _integer
-from autograd.program_arrays import output_array, is_integer_input
+from autograd.program_arrays import output_array, is_integer_input, uint64_input
 from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
 from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from autograd.program_save import ops_program_save_native_py
@@ -57,8 +57,7 @@ def _keep(x: PythonObject) raises -> Int:
 def _seed_words(x: PythonObject) raises -> List[Int]:
     if not _is_int(x):
         raise Error("TypeError: seed must be an integer")
-    # UInt64 conversion checks the full range without a signed Int narrowing.
-    var seed = UInt64(py=x)
+    var seed = uint64_input(x, "seed")
     var out = List[Int]()
     out.append(Int(seed & 0xffffffff))
     out.append(Int(seed >> 32))
@@ -176,7 +175,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         var res = ops_load_state_py[E, KIND](sid, native_path(args[0]), PythonObject(Int(grad)), PythonObject(opt))
         var result = Python.import_module("builtins").dict()
         result["params"] = res[0]
-        result["seed"] = (UInt64(py=res[3]) << 32) | UInt64(py=res[2])
+        result["seed"] = res[3].__lshift__(32).__or__(res[2])
         result["epoch"] = res[4]
         result["step"] = res[5]
         return result

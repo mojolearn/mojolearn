@@ -8,7 +8,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
-from autograd.program_arrays import output_array, is_integer_input
+from autograd.program_arrays import output_array, is_integer_input, uint64_input
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
@@ -375,9 +375,7 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var count = _integer(epochs, "epochs", 1)
     var batch = _integer(batch_size, "batch_size", 1)
     var opt = _integer(optimizer, "optimizer", 1)
-    if Bool(py=b.isinstance(seed, b.bool)) or not Bool(py=b.hasattr(seed, "__index__")):
-        raise Error("TypeError: seed must be an integer")
-    var seed_word = UInt64(py=seed)
+    var seed_word = uint64_input(seed, "seed")
     var params = p.params.copy()
     if String(py=b.type(parameters).__name__) != "NoneType":
         if is_integer_input(parameters):
