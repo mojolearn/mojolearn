@@ -224,9 +224,9 @@ def _is_float(dt: Int) -> Bool:
 def _desc_inputs(op: String) -> List[Int]:
     """The inputs of an op that are description (static integers folded at import), not data."""
     var d = List[Int]()
-    if op == "Reshape" or op == "Expand" or op == "Squeeze" or op == "Unsqueeze" or op == "Split" \
-            or op == "ReduceSum" or op == "ReduceMean" or op == "ReduceMax" or op == "ReduceMin" \
-            or op == "ReduceL2" or op == "Trilu" or op == "Gather":
+    if (op == "Reshape" or op == "Expand" or op == "Squeeze" or op == "Unsqueeze" or op == "Split"
+            or op == "ReduceSum" or op == "ReduceMean" or op == "ReduceMax" or op == "ReduceMin"
+            or op == "ReduceL2" or op == "Trilu" or op == "Gather"):
         d.append(1)
     elif op == "Slice":
         d.append(1)
@@ -295,8 +295,8 @@ def _is_unary(op: String) -> Bool:
 
 
 def _is_binary(op: String) -> Bool:
-    return op == "Add" or op == "Sub" or op == "Mul" or op == "Div" or op == "Equal" or op == "Greater" \
-        or op == "Less" or op == "GreaterOrEqual" or op == "LessOrEqual" or op == "And" or op == "Or"
+    return (op == "Add" or op == "Sub" or op == "Mul" or op == "Div" or op == "Equal" or op == "Greater"
+        or op == "Less" or op == "GreaterOrEqual" or op == "LessOrEqual" or op == "And" or op == "Or")
 
 
 def _is_reduce(op: String) -> Bool:
@@ -307,16 +307,16 @@ def _in_table(op: String) -> Bool:
     """The ops importers/_lower.py's _TABLE lowers."""
     if _is_unary(op) or _is_binary(op) or _is_reduce(op):
         return True
-    return op == "Reshape" or op == "Flatten" or op == "Squeeze" or op == "Unsqueeze" or op == "Shape" \
-        or op == "Size" or op == "Identity" or op == "Dropout" or op == "Cast" or op == "Neg" \
-        or op == "LeakyRelu" or op == "Elu" or op == "HardSigmoid" or op == "Gelu" or op == "Pow" \
-        or op == "Max" or op == "Min" or op == "Where" or op == "Clip" or op == "MatMul" or op == "Gemm" \
-        or op == "Softmax" or op == "LogSoftmax" or op == "LayerNormalization" or op == "RMSNormalization" \
-        or op == "BatchNormalization" or op == "InstanceNormalization" or op == "GroupNormalization" \
-        or op == "Transpose" or op == "Expand" or op == "Concat" or op == "Split" or op == "Slice" \
-        or op == "Gather" or op == "ArgMax" or op == "GlobalAveragePool" or op == "GlobalMaxPool" \
-        or op == "Conv" or op == "MaxPool" or op == "AveragePool" or op == "Pad" or op == "Trilu" \
-        or op == "ConstantOfShape" or op == "Constant"
+    return (op == "Reshape" or op == "Flatten" or op == "Squeeze" or op == "Unsqueeze" or op == "Shape"
+        or op == "Size" or op == "Identity" or op == "Dropout" or op == "Cast" or op == "Neg"
+        or op == "LeakyRelu" or op == "Elu" or op == "HardSigmoid" or op == "Gelu" or op == "Pow"
+        or op == "Max" or op == "Min" or op == "Where" or op == "Clip" or op == "MatMul" or op == "Gemm"
+        or op == "Softmax" or op == "LogSoftmax" or op == "LayerNormalization" or op == "RMSNormalization"
+        or op == "BatchNormalization" or op == "InstanceNormalization" or op == "GroupNormalization"
+        or op == "Transpose" or op == "Expand" or op == "Concat" or op == "Split" or op == "Slice"
+        or op == "Gather" or op == "ArgMax" or op == "GlobalAveragePool" or op == "GlobalMaxPool"
+        or op == "Conv" or op == "MaxPool" or op == "AveragePool" or op == "Pad" or op == "Trilu"
+        or op == "ConstantOfShape" or op == "Constant")
 
 
 # ------------------------------------------------------------ the analysis --
