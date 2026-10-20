@@ -69,8 +69,8 @@ case "${5:-}" in
     exit 2 ;;
   *) echo "expected --light-smoke <results.json>, --full or --preverified" >&2; exit 2 ;;
 esac
-# A manylinux wheel is the combined Linux wheel, or one package of the split
-# set: the core mojolearn-*, the plugins mojolearn_nvidia-* / mojolearn_amd-*.
+# A manylinux wheel is one package of the split set: the core mojolearn_core-*,
+# the plugins mojolearn_nvidia-* / mojolearn_amd-*, or the file-free mojolearn-*.
 case "$WHL" in
   *manylinux*) ;;
   *macosx*)
@@ -159,11 +159,10 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): one package per release.
   case "$(basename "$WHL")" in
     mojolearn_nvidia_ptx-*) NOTES="mojolearn-nvidia-ptx: the NVIDIA PTX set of mojolearn $VERSION for Linux x86-64, installed through the exact dependency of mojolearn-nvidia; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
-    mojolearn_nvidia-*) NOTES="mojolearn-nvidia: the NVIDIA (CUDA) sets of mojolearn $VERSION for Linux x86-64, installed by pip install mojolearn (the Linux core $VERSION requires it; published before the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
-    mojolearn_amd-*) NOTES="mojolearn-amd: the AMD (ROCm/HIP) sets of mojolearn $VERSION for Linux x86-64, installed by pip install mojolearn (the Linux core $VERSION requires it; published before the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
-    *manylinux*) if python3 -c 'import sys,zipfile; sys.exit(0 if any(n.endswith(".dist-info/gpu_plugins.json") for n in zipfile.ZipFile(sys.argv[1]).namelist()) else 1)' "$WHL"; then
-        NOTES="mojolearn $VERSION Linux x86-64 core (Python, host bindings, MAX runtime); it requires mojolearn-nvidia and mojolearn-amd $VERSION, and NVIDIA requires mojolearn-nvidia-ptx at that version. pip install mojolearn installs all four packages; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
-      fi ;;
+    mojolearn_nvidia-*) NOTES="mojolearn-nvidia: the NVIDIA (CUDA) sets of mojolearn $VERSION for Linux x86-64; pip install mojolearn-nvidia installs it with mojolearn-core and mojolearn-nvidia-ptx $VERSION (published after the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
+    mojolearn_amd-*) NOTES="mojolearn-amd: the AMD (ROCm/HIP) sets of mojolearn $VERSION for Linux x86-64; pip install mojolearn-amd installs it with mojolearn-core $VERSION (published after the core); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
+    mojolearn_core-*) NOTES="mojolearn-core $VERSION: the Linux x86-64 core (Python, host bindings, MAX runtime) with no vendor dependency; mojolearn-nvidia and mojolearn-amd $VERSION each require it, and pip install mojolearn installs all of them; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
+    mojolearn-*manylinux*) NOTES="mojolearn $VERSION for Linux x86-64: a file-free wheel requiring mojolearn-core, mojolearn-nvidia and mojolearn-amd $VERSION (published last), so pip install mojolearn installs everything; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
   esac
   [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -z "$LIGHT_ASSET" ] || NOTES="$NOTES Exact installed wheel passed the expanded smoke; its receipt is attached."
