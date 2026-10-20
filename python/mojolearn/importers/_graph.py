@@ -308,7 +308,6 @@ def _r_gemm(c, n):
         raise _Refuse(f"inner dimensions differ: {tuple(a)} and {tuple(b)} (transA={n.attrs.get('transA', 0)}, "
                       f"transB={n.attrs.get('transB', 0)})")
     if len(n.inputs) > 2 and n.inputs[2]:
-        _bcast(c.shape(n.inputs[2]), (m, nn))
         if len(_bcast(c.shape(n.inputs[2]), (m, nn))) != 2:
             raise _Refuse(f"bias {tuple(c.shape(n.inputs[2]))} does not broadcast to {(m, nn)}")
     return [_out((m, nn), c.dtype(n.inputs[0]))]
@@ -644,7 +643,7 @@ def _r_size(c, n):
 
 def _r_constant_of_shape(c, n):
     shape = tuple(c.ints(n.inputs[0], "the shape"))
-    if min(shape, default=0) < 0:
+    if any(d < 0 for d in shape):  # cpu-route: model graph description on the host (one per axis)
         raise _Refuse(f"negative size in {shape}")
     t = n.attrs.get("value")
     dt = t.dtype if isinstance(t, TensorInfo) else "f32"
@@ -745,7 +744,7 @@ def resolve(g, shapes=None):
             if len(want) != len(dims) or any(want[i] != d for i, d in fixed):  # cpu-route: model graph description on the host (one per axis)
                 problems.append((name, None, f"shape {want} does not match the model's {tuple(dims)}"))
                 continue
-            if min(want, default=1) <= 0:
+            if any(d <= 0 for d in want):  # cpu-route: model graph description on the host (one per axis)
                 problems.append((name, None, f"shape {want} has an empty or negative axis"))
                 continue
             S[name] = want
@@ -764,7 +763,7 @@ def resolve(g, shapes=None):
     F = {}
     ctx = _Ctx(g, S, D, F)
     no_rule = []
-    for n in g.nodes:  # driver-loop: over graph nodes  # cpu-route: model graph description on the host (graph nodes)
+    for n in g.nodes:  # cpu-route: model graph description on the host (graph nodes)
         if any(i and i not in S for i in n.inputs):  # cpu-route: model graph description on the host (node inputs)
             continue  # an upstream node is already reported
         rule = SHAPE_RULES.get(n.op) if n.domain in ("", "ai.onnx") else None
