@@ -82,3 +82,9 @@ Program.input_kinds	ids inputs of captured programs: PROGRAM_DIGEST lines pendin
 # <<< lane ag-program-embedding
 _catalog.catalog	model catalog: no verified entry yet (tools/model_catalog.py build from NVIDIA+AMD runs); remove once one lands
 _catalog.verify_catalog_entry	model catalog: no verified entry yet; remove once one lands
+# >>> lane ag-import-lm-ops: remove a line once the IMPORT any_all / cumsum / index and OPS_IMPORT_DIGEST lm-ops lines match on CPU, Apple, NVIDIA and AMD.
+Session.any	attention-mask ops: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
+Session.all	attention-mask ops: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
+Session.cumsum	the blocked scan: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
+Session.index	several index tensors: IMPORT and OPS_IMPORT_DIGEST lines pending on CPU, Apple, NVIDIA and AMD
+# <<< lane ag-import-lm-ops
