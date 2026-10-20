@@ -147,6 +147,8 @@ def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
     out["schema"] = "mojolearn-graph-passes/1"
     out["scope"] = "inference only; original graph and derivative order unchanged"
     out["storage_reuse"] = False
+    out["rewritten_relu_elements_before"] = plan.relu_elements_before
+    out["rewritten_relu_elements_after"] = plan.relu_elements_after
     out["liveness_scope"] = "logical values only; tape owns aliases and storage"
     var passes = Python.list()
     for k in range(len(plan.pass_names)):  # driver-loop: over graph transformation report

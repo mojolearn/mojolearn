@@ -24,8 +24,9 @@ EXPECTED_CASES = (
     "executed_control_vjp", "executor_accounting", "control_checkpoint", "gradient_diagnostics",
     "structural_view_optimization", "structural_control_and_derivatives", "optimizer_validation_preservation",
     "conditional_training", "conditional_training_refusals", "conditional_training_resume",
+    "broadcast_relu_words_and_cost", "broadcast_relu_validation", "broadcast_relu_control_and_training",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9)))
 
 
 _AUDITS = []
@@ -701,6 +702,171 @@ def optimizer_validation_preservation():
         _equal(left, a)
         _equal(right, a)
         return [left, right]
+
+
+
+def _hoist_count(report):
+    return next(row["rewrites"] for row in report["pass_report"]["passes"]
+                if row["name"] == "broadcast_relu_hoist")
+
+
+def broadcast_relu_words_and_cost():
+    import numpy as np
+    from . import ops
+    words = np.array([0, 0x80000000, 1, 0x80000001, 0x007FFFFF, 0x807FFFFF,
+                      0x00800000, 0x80800000, 0x7F800000, 0xFF800000,
+                      0x7FC00123, 0xFFC00456, 0x7F800123, 0xFF800456,
+                      0x3F000000, 0xBF000000], np.uint32)
+    a = words.view(np.float32).reshape(1, 16)
+    # Independent integer-word oracle: ReLU after FTZ returns the original
+    # positive normal/infinity word, and positive zero for everything else.
+    expected_words = np.where((words >= 0x00800000) & (words <= 0x7F800000), words, 0).astype(np.uint32)
+    expected = np.broadcast_to(expected_words.view(np.float32), (3, 16)).copy()
+    outputs = []
+    with ops.Session() as s:
+        x, parameter = s.tensor(a), s.tensor(a)
+        expanded = s.expand(parameter, (3, 16))
+        activated = s.relu(expanded)
+        p = s.capture(x, activated)
+        original = _invoke(p.inspect)
+        report = _invoke(p.inspect, optimize=True)
+        assert [n["op"] for n in original["nodes"]] == ["expand", "relu"]
+        assert [n["op"] for n in report["nodes"]] == ["relu", "expand"]
+        assert [n["source_node"] for n in report["nodes"]] == [1, 0]
+        assert _hoist_count(report) == 1 and report["nodes_removed"] == 0
+        assert report["pass_report"]["rewritten_relu_elements_before"] == 48
+        assert report["pass_report"]["rewritten_relu_elements_after"] == 16
+        plain = _invoke(p.profile, a)
+        optimized = _invoke(p.profile, a, optimize=True)
+        _equal(plain["outputs"], expected)
+        _equal(optimized["outputs"], expected)
+        assert [n["op"] for n in optimized["profile"]["nodes"]] == ["relu", "expand"]
+        assert [n["output_bytes"] for n in plain["profile"]["nodes"]] == [192, 192]
+        assert [n["output_bytes"] for n in optimized["profile"]["nodes"]] == [64, 192]
+        assert _invoke(p.inspect) == original
+        outputs.append(optimized["outputs"])
+
+        shaped = s.reshape(x, (1, 16))
+        explicit = s.capture(x, s.relu(s.expand(shaped, (3, 16))))
+        assert _hoist_count(_invoke(explicit.inspect, optimize=True)) == 1
+        result = _invoke(explicit.run_dynamic, a.reshape(2, 2, 4), optimize=True)
+        _equal(result, expected)
+        _equal(result, _invoke(explicit.run_dynamic, a.reshape(2, 2, 4)))
+        outputs.append(result)
+
+        # An observable expand or second consumer makes the rewrite illegal.
+        observable = s.capture(x, [expanded, activated])
+        second_user = s.capture(x, [activated, s.abs(expanded)])
+        for model in (observable, second_user):
+            assert _hoist_count(_invoke(model.inspect, optimize=True)) == 0
+            before = _invoke(model.run, a)
+            after = _invoke(model.run, a, optimize=True)
+            for actual, wanted in zip(after, before):
+                _equal(actual, wanted)
+                outputs.append(actual)
+        # A no-op expand has no elementwise work to save.
+        same = s.capture(x, s.relu(s.expand(parameter, (1, 16))))
+        assert _hoist_count(_invoke(same.inspect, optimize=True)) == 0
+    return outputs
+
+
+def broadcast_relu_validation():
+    import numpy as np
+    from . import ops
+    a = np.array([[-1, 0.5, 2]], np.float32)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        ambiguous = s.capture(x, s.relu(s.expand(x, (4, 3))))
+        assert _hoist_count(_invoke(ambiguous.inspect, optimize=True)) == 0
+        varying = a.reshape(1, 1, 3)
+        output = _invoke(ambiguous.run_dynamic, varying, optimize=True)
+        _equal(output, _invoke(ambiguous.run_dynamic, varying))
+        _equal(output, np.broadcast_to(np.array([0, 0.5, 2], np.float32), (1, 4, 3)).copy())
+        explicit = s.capture(x, s.relu(s.expand(s.reshape(x, (1, 3)), (4, 3))))
+        assert _hoist_count(_invoke(explicit.inspect, optimize=True)) == 1
+        for optimize in (False, True):
+            _refuses(lambda: _invoke(ambiguous.run_dynamic, np.ones((2, 3), np.float32), optimize=optimize), "broadcast")
+            _refuses(lambda: _invoke(explicit.run_dynamic, np.ones((1, 4), np.float32), optimize=optimize), "reshape")
+        recovered = _invoke(explicit.run_dynamic, a.reshape(3), optimize=True)
+        _equal(recovered, _invoke(explicit.run, a))
+        # Inferred reshape shapes remain ambiguous even if this capture
+        # happened to have a compatible size. Do not specialize to that size.
+        inferred = s.capture(x, s.relu(s.expand(s.reshape(x, (1, -1)), (4, 3))))
+        assert _hoist_count(_invoke(inferred.inspect, optimize=True)) == 0
+        _refuses(lambda: _invoke(inferred.run_dynamic, np.ones((1, 2), np.float32), optimize=True), "broadcast")
+        return [output, recovered]
+
+
+def broadcast_relu_control_and_training():
+    import numpy as np
+    from . import ops
+    a = np.array([[-0.5, 0.25, 0.75]], np.float32)
+    expected = np.broadcast_to(np.array([[0, 0.25, 0.75]], np.float32), (4, 3)).copy()
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-broadcast-pass-") as d, ops.Session() as s:
+        x = s.tensor(a)
+        expanded = s.relu(s.expand(s.reshape(x, (1, 3)), (4, 3)))
+        p = s.capture(x, s.sum(expanded))
+        body = s.capture(x, expanded)
+        condition = s.capture(x, s.full((1, 1), 1))
+        assert _hoist_count(_invoke(p.inspect, optimize=True)) == 1
+        original = _invoke(p.inspect)
+        dead = s.tensor(np.ones((3, 1), np.float32))
+        other = s.capture(x, s.sum(s.matmul(x, dead)))
+        s.free(dead)
+        result = _invoke(p.run_if, condition, other, a, optimize=True)
+        _equal(result, np.array([[4]], np.float32))
+        _equal(result, _invoke(p.run, a))
+        vjp = _invoke(p.vjp_if, condition, p, a, seeds=np.ones((1, 1), np.float32))
+        dx = vjp["input_gradients"][0]
+        _equal(dx, np.array([[0, 4, 4]], np.float32))
+        delta = np.float32(1 / 128)
+        finite = np.empty_like(a)
+        for index in np.ndindex(a.shape):
+            plus, minus = a.copy(), a.copy()
+            plus[index] += delta
+            minus[index] -= delta
+            high = _invoke(p.run, plus, optimize=True)
+            low = _invoke(p.run, minus, optimize=True)
+            finite[index] = (high.item() - low.item()) / (2 * delta)
+        _equal(finite, dx)
+        loop = _invoke(body.while_loop, a, condition=condition, max_iterations=1, optimize=True)
+        assert loop["iterations"] == 1 and loop["stopped"] is False
+        _equal(loop["outputs"], expected)
+        outputs.extend((result, dx, loop["outputs"]))
+        assert _invoke(p.inspect) == original
+        plain, control = Path(d) / "program.mjl", Path(d) / "control.mjl"
+        _invoke(p.save, plain)
+        _invoke(p.save_control, control, condition=condition, otherwise=p)
+        with ops.Session() as restored:
+            rp = _invoke(restored.load_program, plain)
+            loaded = _invoke(restored.load_control, control)
+            assert _invoke(rp.inspect)["nodes"] == original["nodes"]
+            for value in (_invoke(rp.run, a, optimize=True),
+                          _invoke(loaded["body"].run_if, loaded["condition"], loaded["otherwise"], a, optimize=True)):
+                _equal(value, result)
+                outputs.append(value)
+
+    trained = []
+    data = np.zeros((4, 3), np.float32)
+    for optimize_first in (False, True):
+        with ops.Session() as s:
+            x, w = s.tensor(data), s.tensor(a)
+            p = s.capture(x, s.add(x, s.relu(s.expand(w, (4, 3)))))
+            assert _hoist_count(_invoke(p.inspect, optimize=True)) == 1
+            original = _invoke(p.inspect)
+            _invoke(p.run, data, optimize=optimize_first)
+            opt = s.optimizer("adam", lr=0.03125)
+            _invoke(p.fit, data, targets=data, optimizer=opt, parameters=[w],
+                    epochs=2, batch_size=4, shuffle=False)
+            state = _invoke(s.optimizer_state, opt, w)
+            assert state["step"] == 2 and _invoke(p.inspect) == original
+            trained.append([_invoke(s.numpy, w), np.asarray(p.loss_curve_, np.float32),
+                            _invoke(s.numpy, state["exp_avg"]), _invoke(s.numpy, state["exp_avg_sq"])])
+    for actual, expected in zip(*trained):
+        _equal(actual, expected)
+    outputs.extend(trained[0])
+    return outputs
 
 
 def node_diagnostics_and_profile():

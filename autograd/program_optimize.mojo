@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Opt-in graph metadata passes. No element arithmetic or storage ownership edits.
 from autograd.program import OpsProgram
+from autograd.rankn import RN_MAX_COUNT, RN_MAX_RANK
 from autograd.program_tools import _same_node, _cse_safe
 
 
@@ -51,6 +52,8 @@ struct ProgramOptimization(Movable):
     var rewrites: List[Int]
     var last_use: List[Int]
     var uses: List[Int]
+    var relu_elements_before: Int
+    var relu_elements_after: Int
 
     def __init__(out self, p: OpsProgram):
         self.program = p.copy()
@@ -63,6 +66,8 @@ struct ProgramOptimization(Movable):
         self.rewrites = List[Int]()
         self.last_use = List[Int]()
         self.uses = List[Int]()
+        self.relu_elements_before = 0
+        self.relu_elements_after = 0
 
     def record(mut self, name: String, before: Int, rewrites: Int):
         self.pass_names.append(name)
@@ -264,6 +269,101 @@ def _duplicates(mut plan: ProgramOptimization):
     plan.record("exact_duplicate_elimination", p.n_nodes(), p.n_nodes() - plan.program.n_nodes())
 
 
+
+def _fixed_shape(p: OpsProgram, value: Int) -> List[Int]:
+    # Parameters retain their exact shape at every replay. An explicit
+    # positive reshape validates its element count before the candidate runs.
+    # Captured input shapes are not proof: run_dynamic can change them.
+    var dims = List[Int]()
+    if value < 0:
+        var index = -value - 1
+        if index < len(p.param_shapes):
+            var shape = p.param_shapes[index]
+            for k in range(shape.ndim):  # driver-loop: over fixed parameter shape metadata
+                dims.append(shape.d[k])
+    elif value >= p.n_in:
+        var node = value - p.n_in
+        if _reshape_count(p, node) > 0:
+            var start = p.i_at[node] + (1 if p.code[node] == 33 else 0)
+            for k in range(start, p.i_at[node + 1]):  # driver-loop: over explicit reshape metadata
+                dims.append(p.ints[k])
+    return dims^
+
+
+def _expand_counts(p: OpsProgram, node: Int) -> Tuple[Int, Int]:
+    if p.code[node] != 71 or p.a_at[node + 1] - p.a_at[node] != 1 or p.f_at[node + 1] != p.f_at[node]:
+        return (0, 0)
+    var source = _fixed_shape(p, p.args[p.a_at[node]])
+    var target = _ints(p, node)
+    if len(source) < 1 or len(source) > RN_MAX_RANK or len(target) < 1 or len(target) > RN_MAX_RANK:
+        return (0, 0)
+    var before = 1
+    var after = 1
+    var target_count = 1
+    var rank = max(len(source), len(target))
+    for axis in range(rank):  # driver-loop: over statically proven broadcast dimensions
+        var a = source[axis - rank + len(source)] if axis >= rank - len(source) else 1
+        var b = target[axis - rank + len(target)] if axis >= rank - len(target) else 1
+        # Match the existing positive/addressable shape contract; never elide
+        # a failing broadcast or move arithmetic ahead of its refusal.
+        if a < 1 or b < 1 or (a != b and a != 1 and b != 1):
+            return (0, 0)
+        var size = max(a, b)
+        if after > RN_MAX_COUNT // a or before > RN_MAX_COUNT // size or target_count > RN_MAX_COUNT // b:
+            return (0, 0)
+        after *= a
+        before *= size
+        target_count *= b
+    return (before, after)
+
+
+def _hoist_relu(mut plan: ProgramOptimization):
+    # GRAPH_BROADCAST_RELU_20261020: opt-in only. ReLU is F(relu(F(x)))
+    # and expand either aliases or copies through F (the same FTZ map).
+    # F(F(x)) == F(x), so moving ReLU before expand preserves every word,
+    # including signed zero, NaNs and subnormals. No floating arithmetic is
+    # reassociated and no reduction is rewritten. Training stays original.
+    # Adjacent, single-consumer, non-output expands only. Static shapes prove
+    # that the retained expand cannot newly fail after the moved arithmetic.
+    var p = plan.program.copy()
+    var q = _header(p)
+    var uses = List[Int](length=p.n_values(), fill=0)
+    for k in range(len(p.args)):  # driver-loop: over captured graph references
+        if p.args[k] >= 0:
+            uses[p.args[k]] += 1
+    for k in range(len(p.outs)):  # driver-loop: over externally consumed graph values
+        if p.outs[k] >= 0:
+            uses[p.outs[k]] += 1
+    var origins = List[Int]()
+    var changed = 0
+    var k = 0
+    while k < p.n_nodes():  # driver-loop: over adjacent graph metadata candidates
+        var counts = (0, 0)
+        if k + 1 < p.n_nodes() and uses[p.n_in + k] == 1:
+            var following = k + 1
+            if p.code[following] == 6 and p.a_at[following + 1] - p.a_at[following] == 1 and p.args[p.a_at[following]] == p.n_in + k and p.i_at[following + 1] == p.i_at[following] and p.f_at[following + 1] == p.f_at[following]:
+                counts = _expand_counts(p, k)
+        # A real broadcast has more elementwise work than its source. This
+        # cost rule covers every positive shape, not a benchmark dimension.
+        if counts[0] > counts[1] and counts[1] > 0:
+            _append(p, k + 1, q, 6, [p.args[p.a_at[k]]], List[Int]())
+            _append(p, k, q, 71, [p.n_in + k], _ints(p, k))
+            origins.append(plan.source_nodes[k + 1])
+            origins.append(plan.source_nodes[k])
+            plan.relu_elements_before += counts[0]
+            plan.relu_elements_after += counts[1]
+            changed += 1
+            k += 2
+        else:
+            _append(p, k, q, p.code[k], _args(p, k), _ints(p, k))
+            origins.append(plan.source_nodes[k])
+            k += 1
+    q.outs = p.outs.copy()
+    plan.program = q^
+    plan.source_nodes = origins^
+    plan.record("broadcast_relu_hoist", p.n_nodes(), changed)
+
+
 def program_optimize(p: OpsProgram, enabled: Bool = True) -> ProgramOptimization:
     # GRAPH_STRUCTURAL_20261020 is caller opt-in, default OFF at public entry.
     # No performance promotion before full-workload NVIDIA+AMD A/B and the
@@ -277,6 +377,7 @@ def program_optimize(p: OpsProgram, enabled: Bool = True) -> ProgramOptimization
         _views(plan, removable, True)
         _views(plan, removable, False)
         _prune(plan, removable)
+        _hoist_relu(plan)
         _duplicates(plan)
     var graph = plan.program.copy()
     plan.last_use = List[Int](length=graph.n_values(), fill=-1)
