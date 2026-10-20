@@ -102,6 +102,21 @@ GPU composition lane (2026-10-19, lane ag-board-twins):
                        every torch setting of the box. Quality: the loss, each
                        gradient's and updated parameter's max difference from
                        ours, and every arm's gradient digests.
+GPU captured-program lane (2026-10-19, lane ag-program):
+  program-run          one inference forward of a captured model,
+                       mojolearn.ops.Program.run: the batch to the device,
+                       relu(linear), linear, softmax, the probabilities back
+                       on the host, in one call (Session.capture of the same
+                       composition, the weights resident on the device as the
+                       program's parameters, before the clock). The worker
+                       checks once, before the clock, that the program's
+                       output words equal the eager session's; the A/B
+                       operation `program_eager` times the eager session (one
+                       call per operation) for the comparison. The opponent is
+                       the same forward in torch under no_grad (weights on the
+                       device before the clock), at every torch setting of the
+                       box. Quality: every arm's max error from a float64
+                       forward and its difference from ours.
 The Mamba blocks and TransformerBlock expose a backward (a VJP), not a
 training step; they have no optimizer, so they race forward only.
 
@@ -287,7 +302,9 @@ SYNTH_FIT_LANES = ("sequential-fit",)
 FIT_PREDICT_IN_CLOCK = ("sequential-fit",)
 #: 2026-10-19 (lane ag-board-twins): one recorded training step through mojolearn.ops.Session
 OPS_LANES = ("ops-session-step",)
-LANES = LANES + FIT_LANES + OPS_LANES
+#: 2026-10-19 (lane ag-program): one inference forward through a captured mojolearn.ops.Program
+PROGRAM_LANES = ("program-run",)
+LANES = LANES + FIT_LANES + OPS_LANES + PROGRAM_LANES
 #: The model each lane runs.
 MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "transformer-forward": "transformer", "transformer-infer": "transformer",
@@ -301,7 +318,8 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "mamba2-decode": "mamba2", "mamba3-decode": "mamba3", "samba-decode": "samba",
             "mlp-predict": "mlp",
             "mlp-fit": "mlpfit", "lstm-fit": "rnnfit", "gru-fit": "rnnfit", "rnn-fit": "rnnfit",
-            "tape-user-model": "tapefit", "sequential-fit": "tapefit", "ops-session-step": "opsstep"}
+            "tape-user-model": "tapefit", "sequential-fit": "tapefit", "ops-session-step": "opsstep",
+            "program-run": "program"}
 #: The recurrent cell of each recurrent fit lane.
 FIT_CELL = {"lstm-fit": "lstm", "gru-fit": "gru", "rnn-fit": "rnn"}
 #: GPU incremental-decode lanes: one public step call per token over the
@@ -446,6 +464,9 @@ NOT_COVERED = [
     "sequential-fit times the fit and the held-out predict_proba together; ops-session-step times one "
     "recorded step (no multi-step loop, no optimizer state); the session's other operations are timed per "
     "operation by tools/ag_opbench.py, not on the board.",
+    # 2026-10-19 (lane ag-program)
+    "program-run times one Program.run of a two-layer forward (inference only); the eager session's time "
+    "for the same forward is the A/B operation program_eager, not a board arm.",
 ]
 
 # FAIRNESS FIX (2026-10-13 audit): the torch twins of these lanes are pure-PyTorch REFERENCE
@@ -703,7 +724,7 @@ def _dims_of(lane, shape):
         d = dict(SAMBA_SHAPES[shape])
     elif model == "mlp":
         d = dict(MLP_SHAPES[shape])
-    elif model == "opsstep":
+    elif model == "opsstep" or model == "program":
         return dict(OPS_SHAPES[shape])
     elif lane in FIT_LANES:
         d = dict(FIT_ROWS[shape], batch=FIT_BATCH, epochs=FIT_EPOCHS)
@@ -749,6 +770,9 @@ def shape_record(lane, shape):
             d["epochs"]) + (" + predict_proba" if lane in FIT_PREDICT_IN_CLOCK else "")
     elif model == "opsstep":
         rec["label"] = "B%d %d-%d-%d linear relu linear CE sgd" % (d["batch"], d["d_in"], d["hidden"], d["classes"])
+    elif model == "program":
+        rec["label"] = "B%d %d-%d-%d linear relu linear softmax, one Program.run" % (
+            d["batch"], d["d_in"], d["hidden"], d["classes"])
     else:
         rec["label"] = "B%d L%d DM%d" % (d["batch"], d["length"], d["d_model"])
     return rec
@@ -875,6 +899,11 @@ LANE_TEXT = {
                          "the same tensors .to(dev) as leaves with requires_grad; relu(x @ w1 + b1) @ w2 + b2; "
                          "F.cross_entropy(logits, y); backward; loss.item(); each .grad .cpu(); "
                          "torch.optim.SGD(lr, momentum=0, weight_decay=0).step(); each updated parameter .cpu()"),
+    "program-run": ("mojolearn.ops.Session(): tensor(X), tensor(w1, b1, w2, b2); softmax(linear(relu(linear(x, w1, "
+                    "b1)), w2, b2)); capture(inputs=[x], outputs=[p]) before the clock; Program.run(X) inside it: "
+                    "X to the device, every captured operation, the probabilities back on the host, one call",
+                    "the weights .to(dev) before the clock; under torch.no_grad: X .to(dev), softmax(relu(x @ w1 "
+                    "+ b1) @ w2 + b2), .cpu()"),
 }
 
 
@@ -892,6 +921,12 @@ def lane_settings(lane):
                  "default_rng(%d) file; torch arms also call torch.manual_seed(%d); ours' neural "
                  "classes take no seed argument (nothing in them draws)" % (SEED, SEED, SEED))
     s["explicit_params"] = _lane_params(lane)
+    if lane in PROGRAM_LANES:
+        # 2026-10-19 (lane ag-program): one round = one inference forward of the captured program
+        s["clock"] = PROGRAM_SPAN["inside_clock"]
+        s["seed_rule"] = ("seed %d: every weight and input of every arm comes from the conductor's "
+                          "default_rng(%d) file; torch arms also call torch.manual_seed(%d); nothing in the "
+                          "forward draws" % (SEED, SEED, SEED))
     if lane in OPS_LANES:
         # 2026-10-19 (lane ag-board-twins): one round = the same one recorded step
         s["clock"] = OPS_SPAN["inside_clock"]
@@ -1288,7 +1323,8 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
         arrays["X"] = rng.standard_normal((steps, d["batch"], 8)).astype(np.float32)
         arrays["y"] = rng.integers(0, 3, (steps, d["batch"])).astype(np.int32)
         rec["inputs"] = "weights uniform(+-1/sqrt(fan_in)); X standard normal; labels 0..2"
-    elif model == "opsstep":
+    elif model == "opsstep" or model == "program":
+        # program-run reads the same weights and batch (its labels unused)
         arrays.update(ops_arrays(shape, rng, rec))
     elif lane in FIT_LANES:
         arrays.update(fit_arrays(lane, shape, rec))
@@ -1495,6 +1531,8 @@ def _lane_params(lane):
         return fit_params(lane)
     if lane in OPS_LANES:
         return ops_params()
+    if lane in PROGRAM_LANES:
+        return program_params()
     if lane in TRAIN_LANES:
         out.update(lr=ADAMW["lr"], betas=list(ADAMW["betas"]), eps=ADAMW["eps"],
                    weight_decay=ADAMW["weight_decay"], amsgrad=False)
@@ -1558,6 +1596,34 @@ def ops_record(library, implementation, shape="full", **readback):
     if implementation is not None:
         rec["__implementation__"] = implementation
     rec.update(ops_params(shape, **readback))
+    return rec
+
+
+def program_layers(d_in, hidden, classes):
+    """program-run's forward as every arm reads it back from what it built."""
+    return ["linear %d %d bias" % (int(d_in), int(hidden)), "relu",
+            "linear %d %d bias" % (int(hidden), int(classes)), "softmax"]
+
+
+def program_params(shape="full", **readback):
+    """program-run's work settings, the same explicit values on every arm (readback overrides a value with
+    what the arm read back from what it built)."""
+    d = OPS_SHAPES[shape]
+    out = dict(mode="inference", batch_size=int(d["batch"]), steps=1,
+               layers=program_layers(d["d_in"], d["hidden"], d["classes"]), seed=SEED)
+    for k, v in readback.items():
+        if k not in out:
+            raise KeyError("program_params: %r is not one of the lane's settings" % (k,))
+        out[k] = list(v) if isinstance(v, tuple) else v
+    return out
+
+
+def program_record(library, implementation, shape="full", **readback):
+    """A program-run arm's parameter record for tools/bench_board_params.py."""
+    rec = {"__library__": library}
+    if implementation is not None:
+        rec["__implementation__"] = implementation
+    rec.update(program_params(shape, **readback))
     return rec
 
 
@@ -2611,6 +2677,74 @@ class OursOpsStep(Ours):
         return _ops_digest(self.np, self.grads)
 
 
+# ---------------------------------------------------------------------------
+# program-run (2026-10-19, lane ag-program): one inference forward through a captured mojolearn.ops.Program
+# ---------------------------------------------------------------------------
+
+class OursProgramRun(Ours):
+    """program-run through mojolearn.ops: one Session() per worker, the four weights uploaded once, the forward
+    softmax(linear(relu(linear(x, w1, b1)), w2, b2)) composed once and captured (Session.capture, inputs [x],
+    outputs [p]) before the clock. A round is Program.run(X): the batch to the device, every captured operation,
+    the probabilities back on the host, one call. Before the clock the worker checks that the program's output
+    words equal the eager composition's (REFUSED otherwise). With the A/B operation `program_eager` a round is
+    the eager composition instead (one call per operation, the same weights), reset first."""
+
+    def __init__(self, lane, shape, data, eager=False):
+        import importlib
+        import numpy as np
+        self.np, self.lane, self.shape, self.eager = np, lane, shape, bool(eager)
+        ml = _ours_module()
+        self.ml = ml
+        try:
+            ops = importlib.import_module("mojolearn.ops")
+        except ImportError as exc:
+            raise ImportError("REFUSED: program-run races mojolearn.ops.Program; this mojolearn (%s, %s) has no "
+                              "ops module (%r)" % (getattr(ml, "__version__", "?"), getattr(ml, "__file__", "?"), exc))
+        if not hasattr(ops.Session, "capture"):
+            raise ImportError("REFUSED: program-run races Session.capture; this mojolearn (%s) has none"
+                              % (getattr(ml, "__version__", "?"),))
+        w = _weights(data)
+        self.p0 = [np.ascontiguousarray(w[n], dtype=np.float32) for n in OPS_PARAMS]
+        self.X = np.ascontiguousarray(data["X"], dtype=np.float32)
+        self.s = ops.Session()
+        self.ws = [self.s.tensor(p) for p in self.p0]               # driver-loop: over the four parameters
+        x = self.s.tensor(self.X)
+        prob = self._forward(x)
+        eager_words = self.s.numpy(prob)
+        self.program = self.s.capture(inputs=[x], outputs=[prob])
+        self.s.reset()
+        first = self.program.run(self.X)
+        if not np.array_equal(first.view(np.uint32), eager_words.view(np.uint32)):
+            raise RuntimeError("REFUSED: program-run: Program.run's output words differ from the eager session's")
+        self._x = x
+        self.out = None
+        d_in, hidden = (int(v) for v in self.p0[0].shape)
+        classes = int(self.p0[2].shape[1])
+        self.info = _ours_info(ml, getattr(sys.modules[ops.Session.__module__], "__file__", None),
+                               ml.numeric_mode(), "gpu")
+        self.info.update(call=LANE_TEXT[lane][0], words_equal_eager=True,
+                         timed=("the eager session, one call per operation (A/B operation program_eager)"
+                                if self.eager else "Program.run, one call"),
+                         session="one Session() per worker; weights uploaded and the forward captured before "
+                                 "the clock")
+        self.record = program_record("mojolearn", ops.Program, shape, batch_size=int(self.X.shape[0]),
+                                     layers=program_layers(d_in, hidden, classes))
+
+    def _forward(self, x):
+        s, (w1, b1, w2, b2) = self.s, self.ws
+        return s.softmax(s.linear(s.linear(x, w1, b1, activation="relu"), w2, b2))
+
+    def call(self):
+        if self.eager:
+            s = self.s
+            s.free(self._x)
+            s.reset()
+            self._x = s.tensor(self.X)
+            self.out = s.numpy(self._forward(self._x))
+        else:
+            self.out = self.program.run(self.X)
+
+
 OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
         "mamba2": OursBlock, "mamba3": OursBlock, "samba": OursSamba, "mlp": OursMLP}
 
@@ -3545,6 +3679,81 @@ class TorchOpsStepArm:
         return _ops_digest(self.np, self.grads)
 
 
+class TorchProgramArm:
+    """program-run's torch opponent at one setting (2026-10-19, lane ag-program): the same forward under
+    torch.no_grad. The four weights are on the device before the clock (ours' are the program's resident
+    parameters); a round moves the batch to the device, runs softmax(relu(x @ w1 + b1) @ w2 + b2) under the
+    setting's autocast and brings the probabilities back on the host. A compile arm compiles the forward in its
+    untimed warm-up round."""
+
+    def __init__(self, lane, shape, data, arm):
+        import numpy as np
+        self.np, self.lane, self.shape, self.arm = np, lane, shape, arm
+        where, setting = arm_setting(arm)
+        if where != "gpu":
+            raise RuntimeError("REFUSED: %s: program-run races torch on the GPU only" % arm)
+        twin = _load("torch_lm_step_opponent")
+        col = twin.COLUMNS[setting.replace("-", "_")]
+        torch, dev, kind, name, sync = _torch_device()
+        self.torch, self.dev, self.kind, self._sync = torch, dev, kind, sync
+        torch.manual_seed(SEED)
+        hip = getattr(torch.version, "hip", None)
+        if col["tf32"] and not (kind == "cuda" and not hip):
+            raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA matmul mode; torch on %s "
+                               "accepts the flag and changes nothing" % (arm, "ROCm" if hip else kind))
+        precision = twin.set_precision(torch, col["tf32"])
+        self.autocast, probe = None, None
+        if col["autocast"]:
+            probe = twin.probe_autocast(torch, dev, col["autocast"], sync)
+            if not probe.get("applicable"):
+                raise RuntimeError("REFUSED: %s: torch.autocast(%r, %s) does not work on this box: %s"
+                                   % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
+            self.autocast = getattr(torch, col["autocast"])
+        self.compile = bool(col["compile"])
+        self.ws = [torch.from_numpy(np.ascontiguousarray(data["w:" + n], dtype=np.float32)).to(dev)
+                   for n in OPS_PARAMS]
+        self.X = torch.from_numpy(np.ascontiguousarray(data["X"], dtype=np.float32))
+
+        def forward(x, w1, b1, w2, b2):
+            h = torch.relu(x @ w1 + b1)
+            return torch.softmax((h @ w2 + b2).float(), dim=-1)
+        self.fn = torch.compile(forward) if self.compile else forward
+        d_in, hidden = (int(v) for v in self.ws[0].shape)
+        classes = int(self.ws[2].shape[1])
+        self.record = program_record("torch", torch.nn.functional.softmax, shape, batch_size=int(self.X.shape[0]),
+                                     layers=program_layers(d_in, hidden, classes))
+        self.info = {"library": "torch", "version": torch.__version__,
+                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
+                     "torch_backend": kind, "device": "gpu", "device_name": name,
+                     "setting": setting, "precision": precision_text(setting),
+                     "compile": "torch.compile (inductor, default mode)" if self.compile else "eager",
+                     "mode": "torch %s, %s" % ("compile" if self.compile else "eager", precision_text(setting)),
+                     "precision_readback": precision, "autocast_probe": probe,
+                     "column": setting.replace("-", "_") + " (tools/torch_lm_step_opponent.py COLUMNS)",
+                     "torch_threads": torch.get_num_threads(), "pre_clock_fit": False, "input_home": "host",
+                     "call": LANE_TEXT[lane][1]}
+        self.out = None
+        sync()
+
+    def call(self):
+        import contextlib
+        torch = self.torch
+        with torch.no_grad(), contextlib.ExitStack() as stack:
+            if self.autocast is not None:
+                stack.enter_context(torch.autocast(device_type=self.dev.type, dtype=self.autocast))
+            y = self.fn(self.X.to(self.dev), *self.ws)
+        self.out = y.float().cpu().numpy()
+
+    def sync(self):
+        self._sync()
+
+    def outputs(self):
+        return {"y": self.np.asarray(self.out)}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self.np.asarray(self.out)).data)[:16]
+
+
 class MlxFitArm:
     """The fit lanes' MLX opponent on Apple silicon (2026-10-19, lane ag-bench): mlx.nn (Linear/ReLU,
     LSTM/GRU/RNN with a Linear head on the last hidden state), mlx.optimizers.Adam with bias correction,
@@ -4105,7 +4314,8 @@ def hf_layer_call(layer, x, cos, sin, position_ids, **extra):
 def build_runner(lane, arm, shape, data, ab_config=None):
     operation = _neural_ab_operation(ab_config)
     supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
-                 "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp")
+                 "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp",
+                 "program_eager")
     if operation not in supported:
         raise RuntimeError("REFUSED: no actual public workload implementation for neural A/B operation " + str(operation))
     if arm in OUR_ARMS:
@@ -4122,6 +4332,12 @@ def build_runner(lane, arm, shape, data, ab_config=None):
             if operation != "model_default":
                 raise RuntimeError("REFUSED: ops-session-step has no experimental operation")
             return OursOpsStep(lane, shape, data)
+        if lane in PROGRAM_LANES:
+            if operation not in ("model_default", "program_eager"):
+                raise RuntimeError("REFUSED: program-run's operations are model_default and program_eager")
+            return OursProgramRun(lane, shape, data, eager=operation == "program_eager")
+        if operation == "program_eager":
+            raise RuntimeError("REFUSED: program_eager requires program-run")
         if operation == "residual_dropout_forward_vjp":
             return OursResidualDropout(lane, shape, data, runtime)
         if operation == "mlp_inference_sessions":
@@ -4159,6 +4375,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
         if arm in MAMBA_SSM_ARMS:
             raise RuntimeError("REFUSED: %s races the Mamba lanes only" % arm)
         return TorchOpsStepArm(lane, shape, data, arm)
+    if lane in PROGRAM_LANES:            # 2026-10-19 (lane ag-program): one inference forward
+        if arm in MAMBA_SSM_ARMS:
+            raise RuntimeError("REFUSED: %s races the Mamba lanes only" % arm)
+        return TorchProgramArm(lane, shape, data, arm)
     if arm in MAMBA_SSM_ARMS:            # FAIRNESS FIX (2026-10-13 audit): the real Mamba kernels
         return MambaSsmArm(lane, shape, data, arm)
     return TorchArm(lane, shape, data, arm)
@@ -4484,6 +4704,8 @@ def scorer_preflight(lane, shape, data_path, arms, operation):
             need += ["X_test", "y_test"]
         if lane in OPS_LANES:
             need += ["X", "y", "y_codes"]
+        if lane in PROGRAM_LANES:
+            need += ["X"] + ["w:" + n for n in OPS_PARAMS]
         absent = [k for k in need if k not in keys]
         receipt["checks"].append({"check": "reference data", "need": need, "absent": absent,
                                   "status": "failed" if absent else "ok"})
@@ -4624,6 +4846,44 @@ def ops_quality(outs):
     return q
 
 
+def program_quality(data, outs):
+    """program-run's quality (2026-10-19, lane ag-program), float64: every arm's max abs error of its
+    probabilities from a float64 forward of the same weights and batch, its output digest, and every other
+    arm's max abs / rel difference from ours'."""
+    import numpy as np
+    x = np.asarray(data["X"], dtype=np.float64)
+    w1, b1, w2, b2 = (np.asarray(data["w:" + n], dtype=np.float64) for n in OPS_PARAMS)
+    z = np.maximum(x @ w1 + b1, 0.0) @ w2 + b2
+    z = np.exp(z - z.max(axis=1, keepdims=True))
+    ref64 = z / z.sum(axis=1, keepdims=True)
+    q = {}
+    for arm, o in outs.items():
+        y = np.asarray(o["y"], dtype=np.float64)
+        row = {"output_digest": _sha(np.ascontiguousarray(o["y"], dtype=np.float32).tobytes())[:16],
+               "finite": bool(np.isfinite(y).all())}
+        if y.shape == ref64.shape:
+            row["max_abs_err_vs_fp64"] = float(np.abs(y - ref64).max())
+        else:
+            row["shape_mismatch_vs_fp64"] = "%s vs %s" % (list(y.shape), list(ref64.shape))
+        q[arm] = row
+    ref_arm = "ours" if "ours" in outs else ("ours-fast" if "ours-fast" in outs else None)
+    if ref_arm is None:
+        return q
+    r = np.asarray(outs[ref_arm]["y"], dtype=np.float64)
+    for arm, o in outs.items():
+        if arm == ref_arm:
+            continue
+        y = np.asarray(o["y"], dtype=np.float64)
+        if y.shape != r.shape:
+            q[arm]["shape_mismatch_vs_ours"] = "%s vs %s" % (list(y.shape), list(r.shape))
+            continue
+        diff = float(np.abs(y - r).max())
+        q[arm]["max_abs_diff_vs_ours"] = diff
+        q[arm]["max_rel_diff_vs_ours"] = diff / (float(np.abs(r).max()) or 1.0)
+        q[arm]["digest_equal_ours"] = q[arm]["output_digest"] == q[ref_arm]["output_digest"]
+    return q
+
+
 def quality(lane, data, outs, *, shape="full"):
     import numpy as np
     q = {}
@@ -4631,6 +4891,8 @@ def quality(lane, data, outs, *, shape="full"):
         return fit_quality(lane, data, outs)
     if lane in OPS_LANES:
         return ops_quality(outs)
+    if lane in PROGRAM_LANES:
+        return program_quality(data, outs)
     if lane in TRAIN_LANES:
         for arm, o in outs.items():
             losses = [float(x) for x in o["losses"]]
@@ -4719,6 +4981,12 @@ OPS_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": N
                             "forward, softmax cross-entropy, backward, the loss and every gradient back on the "
                             "host, the SGD update on the device, every updated parameter back on the host, "
                             "synchronized"}
+#: program-run's span (2026-10-19, lane ag-program), the same on every arm: the weights are resident on the
+#: device before the clock on both sides (ours' as the program's parameters)
+PROGRAM_SPAN = {"input_home": "host", "pre_clock_fit": False, "upload_ms_untimed": None,
+                "inside_clock": "one inference forward: the batch from the host to the device, linear, relu, "
+                                "linear, softmax, the probabilities back on the host, synchronized; the weights "
+                                "on the device before the clock"}
 
 
 def fit_span(lane):
@@ -4986,7 +5254,7 @@ def race(args):
                 print("NEURAL-DIGEST lane=%s arm=%s digest=%s"
                       % (lane, arm, result["arms"][arm]["outputs_digest"]), flush=True)
                 if (getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES
-                        or lane in FIT_LANES or lane in OPS_LANES):
+                        or lane in FIT_LANES or lane in OPS_LANES or lane in PROGRAM_LANES):
                     # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
@@ -5055,7 +5323,7 @@ def race(args):
         # and one timed round has nothing to compare against either
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
         a["span"] = (fit_span(lane) if lane in FIT_LANES else dict(OPS_SPAN) if lane in OPS_LANES
-                     else dict(SPAN))
+                     else dict(PROGRAM_SPAN) if lane in PROGRAM_LANES else dict(SPAN))
         print("NEURAL lane=%s arm=%s status=%s median_ms=%s quality=%s"
               % (lane, arm, a["status"], a["median_ms"],
                  json.dumps(result["quality"].get(arm, {}), sort_keys=True)), flush=True)
