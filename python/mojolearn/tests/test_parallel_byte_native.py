@@ -22,9 +22,10 @@ def state_fixture():
     shape = ByteLanguageModelConfig(batch=1, length=4, d_model=8, n_heads=2,
                                    n_kv=1, head_dim=4, intermediate=16,
                                    n_layers=1, vocab_size=16)
+    mode = _backend.default_mode()
     state = dict(schema='mojolearn.small-byte-lm-state.v1',
-                 profile=_byte_lm_impl._runtime_profile(shape, 'identical'),
-                 numeric_mode='identical', model_shape=shape.to_dict(),
+                 profile=_byte_lm_impl._runtime_profile(shape, mode),
+                 numeric_mode=mode, model_shape=shape.to_dict(),
                  parameter_names=list(shape.parameter_names),
                  parameter_shapes=[list(x) for x in shape.parameter_shapes],
                  parameter_offsets=list(shape.offsets),
@@ -65,6 +66,7 @@ def test_constructor_owns_arrays_schedule_and_accepts_portable_registry():
     owner = construct(state, logical_shards=3)
     try:
         assert owner._shape.to_dict() == shape.to_dict()
+        assert owner._state['numeric_mode'] == _backend.default_mode()
         assert owner._state['parameter_offsets'] == list(shape.offsets)
         state['parameters'][0] = 11
         state['data_schedule']['offsets'][0] = 99
