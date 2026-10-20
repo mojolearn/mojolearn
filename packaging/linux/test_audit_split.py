@@ -14,6 +14,11 @@ the way auditwheel does for a library it was not told to exclude), and twine
 says PASSED. What is checked is audit.sh's own part: which libraries it
 excludes for each wheel, where each wheel's logs go, and that a grafted
 top-level `.libs/` fails the run.
+
+`MergedAuditSplit` reruns every case on the merged-bindings layout (each set
+directory holds one merged native file plus its index _mojolearn_merged.json,
+packaging/linux/merged_layout.py) and checks that the repaired wheel keeps
+every index, and that a repair which drops one fails.
 """
 import json
 import os
@@ -57,6 +62,13 @@ elif cmd.startswith("auditwheel repair"):
     src = pathlib.Path(host(words[-1]))
     dest = pathlib.Path(host(words[words.index("-w") + 1])) / src.name
     shutil.copyfile(src, dest)
+    if os.environ.get("FAKE_DROP_INDEX"):
+        tmp = dest.with_suffix(".tmp")
+        with zipfile.ZipFile(dest) as zin, zipfile.ZipFile(tmp, "w") as zout:
+            for info in zin.infolist():
+                if not info.filename.endswith("/_mojolearn_merged.json"):
+                    zout.writestr(info, zin.read(info.filename))
+        tmp.replace(dest)
     if os.environ.get("FAKE_GRAFT"):
         with zipfile.ZipFile(dest, "a") as z:
             z.writestr(src.name.split("-")[0] + ".libs/libgrafted-1234.so", b"grafted")
@@ -66,12 +78,38 @@ elif "twine check" in cmd:
 '''
 
 
+INDEX = "_mojolearn_merged.json"
+
+
+def merge_sets(root):
+    """Rewrite make_sets' per-binding set directories into the merged layout:
+    in each tier directory (<arch>/, <arch>/identical/) and host/, the
+    members' own .so files become one merged native file and the index that
+    names them, as bindings/merged_build.sh leaves a directory."""
+    for adir in sorted((root / "sets").glob("*/*")):
+        for d, stem, pattern in ((adir, "_mojolearn_native", "_mojolearn*.so"),
+                                 (adir / "identical", "_mojolearn_native", "_mojolearn*.so"),
+                                 (adir / "host", "_mojolearn_native_host", "_mojolearn_*_host.so")):
+            own = sorted(d.glob(pattern))
+            if not own:
+                continue
+            members = [p.stem for p in own]
+            for p in own:
+                p.unlink()
+            (d / f"{stem}.so").write_bytes(f"merged {d.relative_to(root)} {' '.join(members)}".encode())
+            (d / INDEX).write_text(json.dumps({"format": 1, "files": {f"{stem}.so": members}}) + "\n")
+
+
 class AuditSplit(unittest.TestCase):
+    MERGED = False
+
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.tmp.name)
         cls.set_dirs = tsw.make_sets(cls.root)
+        if cls.MERGED:
+            merge_sets(cls.root)
         args = [a for s in cls.set_dirs for a in ("--set", s)]
         cls.packed = cls.root / "packed"
         assert tsw.pw.main(args + ["--out", str(cls.packed)], _gates=False) == 0
@@ -172,6 +210,25 @@ class AuditSplit(unittest.TestCase):
         r = self.audit(self.wheel("mojolearn_nvidia"), FAKE_GRAFT="1")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("top-level *.libs entries (want 0): 1", r.stdout)
+
+    def test_the_binding_layout_is_reported_and_the_indexes_kept(self):
+        r = self.audit(self.wheel("mojolearn_nvidia"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        if not self.MERGED:
+            self.assertIn("binding layout: per-binding", r.stdout)
+            return
+        self.assertIn("binding layout: merged", r.stdout)
+        with zipfile.ZipFile(self.wheel("mojolearn_nvidia")) as z:
+            self.assertTrue(any(n.endswith("/" + INDEX) for n in z.namelist()))
+
+
+class MergedAuditSplit(AuditSplit):
+    MERGED = True
+
+    def test_a_repair_that_drops_an_index_fails(self):
+        r = self.audit(self.wheel("mojolearn_nvidia"), FAKE_DROP_INDEX="1")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn(f"/{INDEX} is gone after the repair", r.stdout)
 
 
 if __name__ == "__main__":
