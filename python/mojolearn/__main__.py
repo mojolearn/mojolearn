@@ -634,6 +634,8 @@ def build_parser():
 
     from . import _verify_model
     _verify_model.add_parser(sub)
+    from . import _verify_generation
+    _verify_generation.add_parser(sub)
 
     c.set_defaults(func=lambda _args: (c.print_help(),
                                        _verify.EXIT_USAGE)[1])
