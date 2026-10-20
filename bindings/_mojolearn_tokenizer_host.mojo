@@ -83,6 +83,7 @@ from core.host_parallel import host_parallelize
 from bindings.hostptr import i32_ptr
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from bindings.causal_model_config import model_config_c
+from bindings.causal_checkpoint import checkpoint_c
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1847,6 +1848,23 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(model_config_c[4], "model_layer_weights")
         module.def_py_c_function(model_config_c[5], "model_checkpoint_names")
         module.def_py_c_function(model_config_c[6], "model_plan_for")
+        module.def_py_c_function(checkpoint_c[0], "tensor_info_init")
+        module.def_py_c_function(checkpoint_c[1], "tensor_info_size")
+        module.def_py_c_function(checkpoint_c[2], "safetensors_init")
+        module.def_py_c_function(checkpoint_c[3], "safetensors_info")
+        module.def_py_c_function(checkpoint_c[4], "safetensors_map")
+        module.def_py_c_function(checkpoint_c[5], "safetensors_read")
+        module.def_py_c_function(checkpoint_c[6], "safetensors_close")
+        module.def_py_c_function(checkpoint_c[7], "checkpoint_init")
+        module.def_py_c_function(checkpoint_c[8], "checkpoint_open")
+        module.def_py_c_function(checkpoint_c[9], "checkpoint_file")
+        module.def_py_c_function(checkpoint_c[10], "checkpoint_index")
+        module.def_py_c_function(checkpoint_c[11], "checkpoint_access")
+        module.def_py_c_function(checkpoint_c[12], "checkpoint_read")
+        module.def_py_c_function(checkpoint_c[13], "checkpoint_close")
+        module.def_py_c_function(checkpoint_c[14], "checkpoint_enter")
+        module.def_py_c_function(checkpoint_c[15], "safetensors_names")
+        module.def_py_c_function(checkpoint_c[16], "safetensors_contains")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[generation_initialize_binding]("generation_initialize")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
