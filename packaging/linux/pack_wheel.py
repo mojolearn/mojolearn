@@ -556,9 +556,10 @@ def read_version(root=REPO):
 def metadata_text(proj, readme):
     """Metadata 2.4, field order as setuptools 84 wrote it for 0.1.0.
 
-    The split core's METADATA is the combined wheel's plus exactly the two
-    exact plugin requirements (core_project); verification stays optional. Each plugin pins
-    the core back (plugin_project)."""
+    The split core's METADATA is the combined wheel's under the name
+    mojolearn-core, with no vendor requirement (core_project); verification
+    stays optional. Each plugin pins the core (plugin_project); the Linux
+    mojolearn pins the core and both vendors (meta_project)."""
     lines = ["Metadata-Version: 2.4", f"Name: {proj['name']}",
              f"Version: {proj['version']}", f"Summary: {proj['description']}"]
     if proj.get("authors"):

@@ -876,7 +876,8 @@ def merge_split(wheels, out):
     LINUX_PAYLOAD.json's `split` role dropped. A plugin that was not
     published leaves its members out; assembly then refuses to take them."""
     # the core: mojolearn_core-* since 2026-10-20, mojolearn-* (with files) before
-    core = next(w for w in wheels if Path(w).name.startswith((GPU_PACKAGES["CORE_WHEEL_NAME"] + "-", "mojolearn-")))
+    core = next((w for w in wheels if Path(w).name.startswith(GPU_PACKAGES["CORE_WHEEL_NAME"] + "-")), None) \
+        or next(w for w in wheels if Path(w).name.startswith("mojolearn-"))
     members = {}
     for w in wheels:
         with zipfile.ZipFile(w) as z:
