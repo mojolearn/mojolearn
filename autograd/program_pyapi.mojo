@@ -96,7 +96,7 @@ struct ProgramInput(Movable):
         self.ids = List[Int64]()
         var b = Python.import_module("builtins")
         if Bool(py=b.hasattr(a, "dtype")) and Bool(py=b.hasattr(a, "strides")):
-            var parsed = array_input(a, "program input")
+            var parsed = array_input(a, "numeric program input")
             self.src = parsed[0]
             self.shape = parsed[1]
             if integer and self.src.kind != CAST_KIND_SIGNED and self.src.kind != CAST_KIND_UNSIGNED:
