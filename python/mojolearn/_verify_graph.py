@@ -112,7 +112,7 @@ def lazy_conditional():
         _equal(out, a * np.float32(2))
         # The freed parameter proves the unselected branch was not replayed
         # or eagerly validated. Selecting it must fail, then recovery works.
-        _refuses(lambda: _invoke(body.run_if, condition, other, -a), "not a live")
+        _refuses(lambda: _invoke(body.run_if, condition, other, -a), "freed")
         _equal(_invoke(body.run_if, condition, other, a), out)
         return [out]
 
