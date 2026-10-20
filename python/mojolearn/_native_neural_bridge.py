@@ -22,7 +22,7 @@ def connect_training(backend, vendor, inference_bindings):
             "transformer_session_forward_tape", "transformer_session_backward_tape")),
         "mamba": ("_mojolearn_mamba", (
             "mamba_vendor", "mamba_numeric_mode", "mamba1_backward", "mamba2_backward",
-            "mamba3_backward", "mamba3_prefill_session_create",
+            "mamba3_backward", "mamba3_forward", "mamba3_decode_step", "mamba3_prefill_session_create",
             "mamba3_prefill_session_backward", "mamba3_prefill_session_backward_owned",
             "mamba3_prefill_session_forward", "mamba3_prefill_session_forward_owned",
             "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_close",

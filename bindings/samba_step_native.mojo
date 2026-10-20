@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native standard Samba step with the existing resident and accumulation ABIs.
 
-This private entry does not invoke arbitrary caller schedule callbacks. The
-legacy public custom-callback interface remains distinct runtime debt.
+This public execution owner accepts native built-in schedule configurations;
+arbitrary Python callbacks are refused before state mutation.
 """
 from std.python import Python, PythonObject
 from std.memory import memcpy

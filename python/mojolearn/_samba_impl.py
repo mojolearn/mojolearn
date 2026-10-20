@@ -179,9 +179,8 @@ class SambaState(object):
     `SambaStack.step` update every piece in place."""
 
     def __init__(self, batch_size, max_tokens, layers):
-        self.batch_size = int(batch_size)
-        self.max_tokens = int(max_tokens)
-        self.layers = list(layers)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "state_construct", (self, batch_size, max_tokens, layers), _native_samba_bridge.CONTEXT)
 
 
 # Accumulation follows optimizer contract clause 9.2 (leaf size, T mod L, A divides P, A a power of
@@ -549,21 +548,8 @@ class SambaStack(object):
         -------
         logits : mojolearn.Array, shape (B, L, vocab)
         """
-        if lengths is not None:
-            if state is not None:
-                raise ValueError("mojolearn.SambaStack.forward: lengths= applies to the "
-                                 "stateless forward only; pass state=None")
-            ids = self._ids(inputs, "inputs")
-            return _ragged.ragged_forward(self.forward, ids, None, lengths, "<i4",
-                                          "SambaStack.forward")[0]
-        if state is not None:
-            return self._forward_state(inputs, state, step=False)
-        resident = self._resident()
-        if resident is not None:
-            return self._forward_resident(resident, self._ids(inputs, "inputs"))
-        acts = self._forward(inputs)
-        b, l = acts["ids"].shape
-        return acts["logits"].reshape((b, l, self.config.vocab))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "forward", (self, inputs, state, lengths), _native_samba_bridge.CONTEXT)
 
     # -- decode (2026-09-15) --------------------------------------------------
     def allocate_state(self, batch_size, max_tokens):
@@ -581,16 +567,8 @@ class SambaStack(object):
         -------
         SambaState
         """
-        b, smax = int(batch_size), int(max_tokens)
-        if b < 1 or smax < 1:
-            raise ValueError("mojolearn.SambaStack.allocate_state: batch_size "
-                             "and max_tokens must be positive")
-        layers = []
-        for i, kind in enumerate(self.config.layers):  # glue: allocates state per layer
-            blk = self._block(i)
-            layers.append(blk.allocate_state(b) if kind == "mamba3"
-                          else blk.allocate_state(b, smax))
-        return SambaState(b, smax, layers)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "allocate_state", (self, batch_size, max_tokens), _native_samba_bridge.CONTEXT)
 
     def step(self, inputs, state):
         """Decode one token per row, updating `state` in place.
@@ -608,17 +586,8 @@ class SambaStack(object):
         -------
         logits : mojolearn.Array, shape (B, vocab)
         """
-        if state is None:
-            raise ValueError("mojolearn.SambaStack.step: state is required "
-                             "(allocate_state(B, max_tokens) makes the fresh one)")
-        pb = _checks.probe(inputs)
-        if not _checks.is_integer(pb.format) or len(pb.shape) not in (1, 2) \
-                or (len(pb.shape) == 2 and pb.shape[1] != 1):
-            raise ValueError("mojolearn.SambaStack.step: inputs must be (B,) or "
-                             "(B, 1) integer ids")
-        ids = _buffers.as_i32_c(inputs, ndim=None, name="inputs")[0].reshape((pb.shape[0], 1))
-        out = self._forward_state(ids, state, step=True)
-        return out.reshape((pb.shape[0], self.config.vocab))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "step", (self, inputs, state), _native_samba_bridge.CONTEXT)
 
     def _forward_state(self, inputs, state, step):
         c = self.config
@@ -646,9 +615,8 @@ class SambaStack(object):
 
     def loss(self, inputs, targets):
         """Mean cross-entropy of `targets` given `inputs`, both (B, L) ids; no dropout, no gradient."""
-        acts = self._forward(inputs)
-        y = self._ids(targets, "targets").reshape(-1)
-        return float(T.cross_entropy(acts["logits"], y, numeric_mode=self.numeric_mode))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "loss", (self, inputs, targets), _native_samba_bridge.CONTEXT)
 
     # -- backward -----------------------------------------------------------
     def _refuse_no_backward(self):
@@ -710,57 +678,6 @@ class SambaStack(object):
         return _native_samba_bridge.RUNTIME.samba_native_call(
             "model_train_step", (self, inputs, targets), _native_samba_bridge.CONTEXT)
 
-    # Historical implementation retained while custom Python schedule and
-    # externally rebound optimizer ownership remain explicit runtime debt.
-    # No product entry routes here as an implicit Python fallback.
-    def _legacy_train_step(self, inputs, targets):
-        ids = self._ids(inputs, "inputs")
-        y = self._ids(targets, "targets")
-        if y.shape != ids.shape:
-            raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
-        b, l = ids.shape
-        a = self.optimizer.accumulation_steps
-        tokens = b * l
-        if b % a != 0:
-            raise ValueError("mojolearn.SambaStack.train_step: batch rows B=%d "
-                             "are not divisible by accumulation_steps=%d" % (b, a))
-        if a > 1 and not T.accumulation_is_aligned(tokens, a, self.numeric_mode):
-            raise ValueError(
-                "mojolearn.SambaStack.train_step: MISALIGNED microbatch split, "
-                "T = %d tokens at A = %d does not satisfy optimizer contract "
-                "clause 9.2 (leaf size, T mod L, A divides P, A a power of "
-                "two); refused before any gradient is computed "
-                "(python/mojolearn/_samba_impl.py)" % (tokens, a))
-        if a == 1:
-            resident = self._resident()
-            if resident is not None:
-                out = self._train_step_resident(resident, ids, y)
-                if out is not None:
-                    return out
-        count = _count_targets(y)
-        stream = (self.generator.next_stream()
-                  if self.config.dropout > 0.0 else None)
-        rows = b // a
-        losses, parts = [], []
-        for k in range(a):  # glue: dispatches each microbatch binding call
-            sl = slice(k * rows, (k + 1) * rows)
-            loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,
-                                              dropout_stream=stream,
-                                              token_offset=k * rows * l)
-            losses.append(_Array.from_list([loss_k], '<f4'))
-            parts.append(g_k)
-        if a == 1:
-            loss = float(losses[0][0])
-            total = self.optimizer.step(parts[0], max_norm=self.max_norm)
-        else:
-            loss = float(T.accumulate_grads(losses, tokens=None,
-                                            numeric_mode=self.numeric_mode)[0])
-            total = self.optimizer.step_accumulated(parts, tokens,
-                                                    max_norm=self.max_norm)
-        self.last_ = {"loss": loss, "lr": self.optimizer.lr_,
-                      "step": self.optimizer.t, "total_norm": total}
-        return dict(self.last_)
-
     # -- state ----------------------------------------------------------------
     def _experiment_profile(self):
         """Native numerical-contract metadata; no tensor work in this shell."""
@@ -777,31 +694,8 @@ class SambaStack(object):
         step, schedule, generator state and numeric mode, so `load_state_dict` resumes
         training exactly.
         """
-        o = self.optimizer
-        sched = None if o.lr_schedule is None else o.lr_schedule.config()
-        return {
-            "schema": _STATE_SCHEMA, "profile": PROFILE,
-            "experiment_profile": self._experiment_profile(),
-            "numeric_mode": _backend._CODE_MODE.get(
-                T._load(self.numeric_mode).training_numeric_mode(), "unknown"),
-            "config": self.config.to_dict(),
-            "registry": [{"name": n, "shape": list(self.shapes[n]),
-                          "offset": self.offsets[j],
-                          "size": self.offsets[j + 1] - self.offsets[j]}
-                         for j, n in enumerate(self.names)],  # glue: checkpoint registry of tensors
-            "parameters": self.flat.copy() if _copy_arrays else self.flat,
-            "exp_avg": o.exp_avg.copy() if _copy_arrays else o.exp_avg,
-            "exp_avg_sq": o.exp_avg_sq.copy() if _copy_arrays else o.exp_avg_sq,
-            "buf_initialized": (o.buf_initialized.copy() if _copy_arrays
-                                else o.buf_initialized), "t": int(o.t),
-            "optimizer": {"kind": "adamw", "lr": o.lr, "beta1": o.betas[0],
-                          "beta2": o.betas[1], "eps": o.eps,
-                          "weight_decay": o.weight_decay,
-                          "max_norm": self.max_norm,
-                          "accumulation_steps": o.accumulation_steps},
-            "schedule": sched,
-            "rng": self.generator.state_dict(),
-        }
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "snapshot", (self, _copy_arrays), _native_samba_bridge.CONTEXT)
 
     def load_state_dict(self, state):
         """Restore a state made by `state_dict`; returns self.
@@ -809,38 +703,8 @@ class SambaStack(object):
         Raises `ValueError` when the schema, configuration, numeric profile or sizes do
         not match this stack.
         """
-        if state.get("schema") != _STATE_SCHEMA or state.get("profile") != PROFILE:
-            raise ValueError("mojolearn.SambaStack: state schema/profile mismatch")
-        if state.get("experiment_profile", "baseline") != self._experiment_profile():
-            raise ValueError("mojolearn.SambaStack: experiment numerical profile mismatch")
-        if state["config"] != self.config.to_dict():
-            raise ValueError("mojolearn.SambaStack: state config differs from this stack's")
-        # A state written under another numeric profile is refused by name; a
-        # state with no field is fp32_v1, which is what this stack computes.
-        _numeric_profile.check_saved(state, _numeric_profile.TRAINING_DEFAULT, "mojolearn.SambaStack state")
-        p = _buffers.as_f32_c(state['parameters'], ndim=1, name='parameters')[0]
-        if p.shape != (self.n_total,):
-            raise ValueError("mojolearn.SambaStack: parameters hold %d floats, "
-                             "the registry is %d" % (p.size, self.n_total))
-        _checks.flat_view(self.flat, 'f')[:] = _checks.flat_view(p, 'f')
-        self.optimizer.load_state_dict({
-            "t": state["t"], "exp_avg": state["exp_avg"],
-            "exp_avg_sq": state["exp_avg_sq"],
-            "buf_initialized": state["buf_initialized"]})
-        oc = state["optimizer"]
-        self.optimizer.lr = float(oc["lr"])
-        self.optimizer.betas = (float(oc["beta1"]), float(oc["beta2"]))
-        self.optimizer.eps = float(oc["eps"])
-        self.optimizer.weight_decay = float(oc["weight_decay"])
-        self.max_norm = None if oc["max_norm"] is None else float(oc["max_norm"])
-        if int(oc["accumulation_steps"]) != self.optimizer.accumulation_steps:
-            raise ValueError("mojolearn.SambaStack: accumulation_steps in the "
-                             "state differs from this stack's; the microbatch "
-                             "count is part of the run's numerical specification")
-        self.optimizer.lr_schedule = (None if state["schedule"] is None
-                                      else T._Schedule.from_config(state["schedule"]))
-        self.generator.load_state_dict(state["rng"])
-        return self
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "publish", (self, state), _native_samba_bridge.CONTEXT)
 
     # -- checkpoint (streamed arrays; legacy JSON remains readable) --------
     _ARRAYS = (("parameters", "<f4"), ("exp_avg", "<f4"),
@@ -925,4 +789,4 @@ class SambaStack(object):
 from . import _native_samba_bridge
 _native_samba_bridge.RUNTIME = _native_neural_bridge.RUNTIME
 _native_samba_bridge.CONTEXT = _native_samba_bridge.connect(
-    SambaConfig, SambaStack, T, _native_neural_bridge)
+    SambaConfig, SambaStack, T, _native_neural_bridge, SambaState)

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Samba snapshots and publication over the existing ordered flat state.
 
-Only supported built-in schedules are admitted by this private distributed
-bridge. The legacy public callback interface remains separate runtime debt.
+Built-in schedules are native configurations. Python callback schedules are
+refused before execution under the native-only public runtime contract.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -78,7 +78,7 @@ def samba_schedule_snapshot(schedule: PythonObject, context: PythonObject) raise
         if bi.type(schedule) is context["schedule_classes"][kinds[i]]:
             kind = String(kinds[i])
     if kind == "":
-        raise Error("NotImplementedError: native Samba state requires a built-in learning-rate schedule; custom callback interfaces remain on the legacy public surface")
+        raise Error("NotImplementedError: Samba requires ConstantLR, WarmupLinearLR or WarmupCosineLR; Python schedule callbacks cannot execute in the native runtime")
     var fields = samba_fields(schedule)
     var result = bi.dict()
     result["kind"] = kind
