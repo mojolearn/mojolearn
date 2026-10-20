@@ -117,6 +117,13 @@ from tokenizer.train.bpe_train import (
     TrainedVocabulary,
     train_bpe,
 )
+from bindings.generation_buffers import generation_initialize_binding
+from bindings.causal_lm_public import (
+    GenerationHandle, causal_lm_admit_binding, causal_lm_allocate_binding,
+    causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
+    causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
+    causal_lm_text_stream_binding, causal_lm_generate_text_binding,
+)
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
 comptime TOKENIZER_BATCH_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_BATCH_SABOTAGE"]()
@@ -1326,6 +1333,66 @@ def vocab_decode_binding(
     return PythonObject(len(out))
 
 
+def vocab_encode_public_binding(
+    tokenizer: PythonObject, var text: PythonObject, add_special: PythonObject,
+    allow_special: PythonObject, bytes_only: PythonObject,
+) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var is_text = Bool(py=bi.isinstance(text, bi.str))
+    if is_text and Bool(py=bytes_only):
+        raise Error("tokenizer: encode_bytes takes bytes; use encode for str")
+    if is_text:
+        if tokenizer.normalizer is not None and String(tokenizer.normalizer) == "NFC":
+            # CPython's Unicode normalization is a compiled native extension.
+            # Keep its existing Unicode version and semantics; no Python
+            # tokenizer method or normalization loop is invoked.
+            var normalize = Python.import_module("unicodedata").normalize
+            if bi.type(normalize) is not bi.type(bi.len):
+                raise Error("tokenizer: NFC normalization requires the native Unicode entry")
+            text = normalize("NFC", text)
+        text = text.encode("utf-8")
+    else:
+        text = bi.memoryview(text).tobytes()
+    var bytes = List[UInt8](capacity=len(text))
+    for i in range(len(text)):
+        bytes.append(UInt8(Int(py=text[i])))
+    var ids = owner[].tok.value().encode(bytes, Bool(py=allow_special))
+    var out = bi.list()
+    if Bool(py=add_special):
+        out.extend(tokenizer.bos_ids)
+    comptime if TOKENIZER_HOST_SABOTAGE:
+        for i in range(len(ids)):
+            out.append(ids[len(ids) - i - 1])
+    else:
+        for i in range(len(ids)):
+            out.append(ids[i])
+    if Bool(py=add_special):
+        out.extend(tokenizer.eos_ids)
+    return out
+
+
+def vocab_decode_public_binding(tokenizer: PythonObject, seq: PythonObject, bytes_only: PythonObject, errors: PythonObject) raises -> PythonObject:
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var bi = Python.import_module("builtins")
+    if Bool(py=bi.isinstance(seq, bi.str)) or Bool(py=bi.isinstance(seq, bi.bytes)) or Bool(py=bi.isinstance(seq, bi.bytearray)):
+        raise Error("tokenizer: ids must be an integer sequence")
+    var ids = _ids_from_seq(seq)
+    var out = List[UInt8]()
+    for k in range(len(ids)):
+        owner[].tok.value().append_decoded(out, ids[k], k)
+    var raw = bi.bytearray()
+    for i in range(len(out)):
+        raw.append(Int(out[i]))
+    if Bool(py=bytes_only):
+        return bi.bytes(raw)
+    return raw.decode("utf-8", errors)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1364,6 +1431,20 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[vocab_encode_binding]("vocab_encode")
         module.def_function[vocab_pretokenize_binding]("vocab_pretokenize")
         module.def_function[vocab_decode_binding]("vocab_decode")
+        module.def_function[vocab_encode_public_binding]("vocab_encode_public")
+        module.def_function[vocab_decode_public_binding]("vocab_decode_public")
+        module.def_function[generation_initialize_binding]("generation_initialize")
+        _ = module.add_type[GenerationHandle]("_GenerationHandle")
+        module.def_function[causal_lm_admit_binding]("causal_lm_admit")
+        module.def_function[causal_lm_allocate_binding]("causal_lm_allocate")
+        module.def_function[causal_lm_reset_binding]("causal_lm_reset")
+        module.def_function[causal_lm_forward_binding]("causal_lm_forward")
+        module.def_function[causal_lm_stream_binding]("causal_lm_stream")
+        module.def_function[causal_lm_read_binding]("causal_lm_read")
+        module.def_function[causal_lm_info_binding]("causal_lm_info")
+        module.def_function[causal_lm_generate_binding]("causal_lm_generate")
+        module.def_function[causal_lm_text_stream_binding]("causal_lm_text_stream")
+        module.def_function[causal_lm_generate_text_binding]("causal_lm_generate_text")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))
