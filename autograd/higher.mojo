@@ -341,6 +341,13 @@ def backward_recorded[E: Exec](mut tape: Tape, mut ex: E, output: Tensor, seed: 
                 if tape.rows(c) != p.rows or tape.cols(c) != p.cols:
                     raise Error("autograd: internal: a recorded VJP has the wrong shape for operation kind "
                                 + String(n.op))
+                # Primitive VJP kernels use flattened matrix storage. Publish
+                # each contribution in its parent's full shape before fanout
+                # accumulation. A distinct recorded view preserves derivative
+                # links without changing a seed or another aliased node's shape.
+                var parent_shape = tape._shapes[parent]
+                if not tape.shape_of(c).same(parent_shape):
+                    c = tape.view_nd(ex, c, parent_shape)
                 # the canonical order: the first contribution is the
                 # gradient, later ones are added to it ((c1 + c2) + c3)
                 if grad_node[parent] < 0:
@@ -359,7 +366,7 @@ def backward_recorded[E: Exec](mut tape: Tape, mut ex: E, output: Tensor, seed: 
             if grad_node[i] < 0:
                 var zero = tape._alloc(ex, count)
                 _fill(ex, zero, count)
-                grad_node[i] = tape.variable(ex, zero, n.rows, n.cols, False)._index
+                grad_node[i] = tape.variable_nd(ex, zero, tape._shapes[i], False)._index
                 _fill(ex, n.own_grad, count)
             else:
                 var held = tape.value_of(ex, tape._handle(grad_node[i]))
