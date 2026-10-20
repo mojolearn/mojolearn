@@ -244,6 +244,29 @@ launches, the tape, the backward walk, the optimizer) runs in Mojo; `ops.Session
 call that walks the tape in Mojo. A user composing operations one call at a time is the API, not a runtime loop; a
 Python loop inside the package that walks a tape, a batch or a model is a violation.
 
+Andrew, 2026-10-20 (explicit clarification): NO CALLS BACK INTO PYTHON FROM
+MOJO OR ANY OTHER NATIVE PRODUCT CODE. "No Python in runtime" is transitive:
+it forbids invoking Python functions, methods, callbacks, property/descriptor
+hooks and input protocols during a product operation. This includes custom
+trainers, learning-rate functions, batch suppliers, commit/step hooks and
+Python orchestration reached through a native extension. Putting a PythonObject
+inside a Mojo struct, or moving the call site into Mojo, does not compile its
+Python methods. No compatibility branch, callback exception or Python fallback
+is permitted. Use native implementations, explicit native configuration/data
+objects and native event/checkpoint mechanisms instead.
+
+Holding buffer references or invoking a verified native extension entry point
+can be binding work; audit its transitive callees rather than assuming that a
+C/native entry point cannot call Python. Ordinary supported buffers and native
+interfaces must retain their semantics. Refuse unsupported Python callback or
+protocol objects before invoking their hooks, with a clear native alternative.
+Python application code may call the API and consume a completed result; do not
+move required product execution into caller callbacks to evade this rule.
+Audit the actual public operation, including constructors, input preparation,
+workers, callbacks and output handling. A passing private native helper does
+not qualify an unchanged Python public wrapper. Retained checker debt is never
+an exception to these requirements.
+
 Python test/benchmark controllers, test-data preparation and independent test
 oracles remain allowed as testing tools. Keep their work explicitly distinguished
 from product execution and accurately included in or excluded from declared timing
