@@ -825,7 +825,21 @@ def host_witnesses(set_paths):
     binding built for this release is proven there by the leg that built and
     read it back, byte for byte (release_reuse's linux-wait requires the host
     bindings to be byte-identical across the legs). A merged host directory's
-    index is witnessed the same way, under the key MERGED_INDEX."""
+    index is witnessed the same way, under the key MERGED_INDEX.
+
+    The layout check comes first: host files of a merged and a per-binding set
+    differ by construction, so a mix is refused as a mix (the same message as
+    main's per-set check), never as a byte mismatch."""
+    layouts = {}
+    for sp in set_paths:
+        sp = pathlib.Path(sp).resolve()
+        for adir in sorted(d for d in sp.iterdir() if d.is_dir() and ARCH_RE.match(d.name)):
+            if (adir / "readback.txt").is_file() and (adir / "host").is_dir():
+                layouts[f"{sp.name}/{adir.name}"] = ("merged" if (adir / "host" / MERGED_INDEX).is_file()
+                                                     else "per-binding")
+    if len(set(layouts.values())) > 1:
+        raise SystemExit("pack_wheel: the sets mix the merged and per-binding layouts: "
+                         + ", ".join(f"{k}={v}" for k, v in sorted(layouts.items())))
     out = {}
     for sp in set_paths:
         sp = pathlib.Path(sp).resolve()

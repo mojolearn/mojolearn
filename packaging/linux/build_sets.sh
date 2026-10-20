@@ -94,9 +94,12 @@ export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 # compares them).
 AMD_COMPILE_JOBS_DEFAULT=8
 GPU_COMPILE_JOBS=2
-case "${MOJOLEARN_GPU_ARCHS:-}" in
-  gfx*) GPU_COMPILE_JOBS="${MOJOLEARN_AMD_COMPILE_JOBS:-$AMD_COMPILE_JOBS_DEFAULT}" ;;
-esac
+# (an if and no nested ${..:-$X}, not a case: tools/release_reuse.py shell_view
+# models neither and would then see every later list line whole)
+if [[ "${MOJOLEARN_GPU_ARCHS:-}" == gfx* ]]; then
+  GPU_COMPILE_JOBS="${MOJOLEARN_AMD_COMPILE_JOBS:-}"
+  [[ -n "$GPU_COMPILE_JOBS" ]] || GPU_COMPILE_JOBS=$AMD_COMPILE_JOBS_DEFAULT
+fi
 [[ "$GPU_COMPILE_JOBS" =~ ^[1-9][0-9]?$ && "$GPU_COMPILE_JOBS" -le 32 ]] \
   || { echo 'MOJOLEARN_AMD_COMPILE_JOBS must be 1..32' >&2; exit 2; }
 # The CPU cap covers the widest compile: JOBS scripts at once, each with up to

@@ -66,7 +66,7 @@ class DeviceGlue(unittest.TestCase):
 
     def test_unregistered_missing_image_still_fails_packer(self):
         with tempfile.TemporaryDirectory() as tmp:
-            paths = make_sets(Path(tmp), [('hip', 'gfx942')]); adir = Path(paths[0]) / 'gfx942'
+            paths = make_sets(Path(tmp), [('hip', 'gfx942')], include_byte_lm=True); adir = Path(paths[0]) / 'gfx942'
             witness = adir / 'arch_readback.txt'
             witness.write_text(witness.read_text().replace('fast _mojolearn_gp gfx942', 'fast _mojolearn_gp '+NO_IMAGE))
             with self.assertRaisesRegex(SystemExit, 'unregistered'):
