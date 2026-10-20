@@ -204,7 +204,7 @@ def _download(url, dest):
 
 def _onnx_opset(path):
     """The default-domain opset of an ONNX file, read by mojolearn's own parser (no onnx package)."""
-    from mojolearn.importers import _onnx_proto as proto
+    from mojolearn.tests import _onnx_proto_oracle as proto  # the test oracle's wire reader (no binding needed)
     m = proto.model(Path(path).read_bytes())
     for o in m["opset_import"]:
         if o["domain"] in ("", "ai.onnx"):

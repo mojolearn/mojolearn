@@ -528,6 +528,13 @@ tools/check_autograd.py (lane 5 only).
 
 ### Lane 1: ag-import-onnx (reader and IR; merges first, with lane 3)
 
+(Lane ag-native-onnx-reader, 2026-10-20: the reader and the static shape resolution of a read
+graph now run in Mojo, autograd/import_proto.mojo, import_reader.mojo and import_resolve.mojo,
+through the x_sequence binding entries onnx_read / onnx_info / onnx_copy_blob / onnx_resolve /
+onnx_close; importers/onnx.py only wraps the tables in the GraphIR classes. The Python reader
+below is the test oracle, python/mojolearn/tests/_onnx_reader_oracle.py and
+_onnx_proto_oracle.py. Step 2 moves _lower.py into Mojo against this graph.)
+
 - Files: python/mojolearn/importers/__init__.py (the package, `UnsupportedModel`,
   `supported_ops` placeholder reading lane 2's table lazily),
   python/mojolearn/importers/_graph.py (section 7), python/mojolearn/importers/_onnx_proto.py
