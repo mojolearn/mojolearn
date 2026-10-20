@@ -220,7 +220,7 @@ def distributed_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
     var curve = output_array(ShapeN.of([ne]))
     var p = distributed[E, KIND](id)
     p[].fit(srcs, shapes, target, kind, Float32(Float64(py=delta)), ne, Int(py=batch), Bool(py=shuffle),
-            FP(unsafe_from_address=Int(py=curve.ctypes.data)))
+            FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])))
     return curve
 
 
@@ -254,7 +254,7 @@ def distributed_run_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObje
         var outs = replay_values(w.session, p, buffers, shapes, w.params, trainable, w.temps, phs)
         var sh = w.session.shapes[w.session._slot(outs[0])]
         var result = output_array(sh)
-        w.session.download(outs[0], FP(unsafe_from_address=Int(py=result.ctypes.data)))
+        w.session.download(outs[0], FP(unsafe_from_address=Int(py=result.__array_interface__["data"][0])))
         w.session._drop_temps(w.temps)
         w.temps.clear()
         for k in range(len(buffers)):  # driver-loop: temporary inputs
@@ -285,9 +285,9 @@ def distributed_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
         var p = output_array(sh)
         var m = output_array(sh)
         var v = output_array(sh)
-        memcpy(dest=FP(unsafe_from_address=Int(py=p.ctypes.data)), src=ck.param.unsafe_ptr() + ck.offsets[j], count=sh.count())
-        memcpy(dest=FP(unsafe_from_address=Int(py=m.ctypes.data)), src=ck.m_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
-        memcpy(dest=FP(unsafe_from_address=Int(py=v.ctypes.data)), src=ck.v_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
+        memcpy(dest=FP(unsafe_from_address=Int(py=p.__array_interface__["data"][0])), src=ck.param.unsafe_ptr() + ck.offsets[j], count=sh.count())
+        memcpy(dest=FP(unsafe_from_address=Int(py=m.__array_interface__["data"][0])), src=ck.m_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
+        memcpy(dest=FP(unsafe_from_address=Int(py=v.__array_interface__["data"][0])), src=ck.v_state.unsafe_ptr() + ck.offsets[j], count=sh.count())
         params.append(p)
         first.append(m)
         second.append(v)
