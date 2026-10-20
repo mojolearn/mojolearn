@@ -78,7 +78,9 @@ source or installed-package versions recorded in their evidence.
   native boundaries in existing paths, including model orchestration and
   distributed execution. Public Python methods hand buffers to compiled
   bindings; training, decoding, graph traversal and stopping decisions belong
-  in Mojo.
+  in Mojo. Verify the complete call, including data preparation, worker
+  scheduling, callbacks and output handling. Check that model, graph and
+  buffer ownership is released correctly when operations finish or fail.
 - **Performance tuning per backend.** The numerical contract fixes results,
   not tiling, thread layout or scheduling, so each backend can be tuned on its
   own. Priorities are fixed per-fit costs in tree learners, synchronization
@@ -103,9 +105,14 @@ coverage and usability while keeping claims tied to verified execution.
   cross-vendor identity, including shared parameters, branching graphs,
   saved-tensor lifetimes, mutation and complete optimizer steps.
 - **Graph optimization and broader program coverage.** Build on captured
-  programs and export with graph optimizations that preserve the numerical
-  contract. Extend operator, shape and control-flow coverage explicitly, and
-  verify optimized and exported execution against the original model.
+  programs and export with a native optimization pass pipeline beyond
+  duplicate-operation elimination. Extend structural simplification,
+  dead-operation removal and memory planning, with inspectable decisions
+  for each pass. Add operator fusion where it preserves the numerical
+  contract. Extend operator, shape and control-flow coverage explicitly;
+  verify outputs, derivatives, aliases and checkpoint replay against the
+  original model. Keep performance claims separate from correctness and
+  measure complete workloads before promoting an optimization default.
   Use supported Mojo/Modular interfaces; record missing upstream capabilities
   and wait for support rather than introducing unsupported compiler modes or
   Python execution fallbacks.
