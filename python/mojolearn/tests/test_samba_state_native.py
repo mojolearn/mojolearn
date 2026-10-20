@@ -106,3 +106,28 @@ def test_native_samba_state_validation_refuses_corruption_before_publish(corrupt
     assert target.flat.tobytes() == before
     for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
         assert not result.report()[key], result.report()
+
+
+@pytest.mark.parametrize("schedule", ["constant", "linear", "cosine"])
+def test_native_samba_update_matches_existing_optimizer_and_schedule(monkeypatch, schedule):
+    stack = _stack()
+    cls = {"constant": training.ConstantLR, "linear": training.WarmupLinearLR,
+           "cosine": training.WarmupCosineLR}[schedule]
+    stack.optimizer.lr_schedule = cls(0.003, warmup_steps=3, total_steps=17, min_lr=0.0001)
+    state = stack.state_dict()
+    before = {name: state[name].tobytes() for name in ARRAY_FIELDS}
+    rng = np.random.default_rng(935)
+    gradients = [rng.normal(0, 0.02, stack.shapes[name]).astype("f4") for name in stack.names]
+    reference_gradients = [value.copy() for value in gradients]
+    stack.optimizer.step(reference_gradients, max_norm=stack.max_norm)
+    expected = stack.state_dict()
+    with monkeypatch.context() as patch:
+        _poison(patch)
+        patch.setattr(training.AdamW, "step", lambda *a, **k: pytest.fail("Python optimizer loop"))
+        patch.setattr(training._Schedule, "lr_at", lambda *a: pytest.fail("Python schedule loop"))
+        actual = _call("apply", state, gradients)
+    _assert_state_equal(actual, expected)
+    for name in ARRAY_FIELDS:
+        assert state[name].tobytes() == before[name]
+    assert state["t"] == 7 and actual["t"] == 8
+    assert state["rng"] == actual["rng"]

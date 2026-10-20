@@ -16,6 +16,7 @@ def connect(config_cls, model_cls, training, neural):
         "embedding_forward", "embedding_backward", "rms_norm_forward", "rms_norm_backward",
         "linear_forward", "linear_backward", "ce_loss", "accumulate", "neural_rng",
         "optimizer_step", "optimizer_resident_download", "optimizer_resident_upload",
+        "optimizer_parallel_available", "accumulate_parallel_available", "clip_parallel_available",
         "samba_head_loss", "training_chunked_lm_head_enabled", "chunked_lm_head_v2_train",
         "samba_afn_norm_head_forward", "samba_afn_tail_train", "samba_afn_embedding_backward_tied",
     )
