@@ -233,6 +233,12 @@ def pins(argv):
     root = pathlib.Path(argv[0]).resolve()
     target = _one(r'^DEFAULT_MACOS_TARGET = "([^"]+)"', root / "python/setup.py")
     scripts = sorted((root / "bindings").glob("build*.sh"))
+    # The merged build (one native file per group, the release layout) pins
+    # the same floor and baselines; it is named apart so loops over build*.sh
+    # never run it.
+    merged = root / "bindings" / "merged_build.sh"
+    if scripts and merged.is_file():
+        scripts.append(merged)
     if not scripts:
         print("FAIL no bindings/build*.sh found", file=sys.stderr)
         return 1
