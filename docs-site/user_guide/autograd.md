@@ -112,6 +112,7 @@ step, call `zero_grad`, then `backward(loss, accumulate=True)` for each loss.
 | Schedules and stopping | `constant`, `step`, `exponential`; stop after `n_iter_no_change` epochs without improvement | `constant`, `step`, `exponential`, advanced by `scheduler_step`; your own stopping rule |
 | Shapes | `Sequential(input_shape=...)`, `conv2d`, `max_pool2d`, `avg_pool2d`, `reshape`, `permute`, `flatten` | tensors of up to 8 dimensions; `shape`; batched `matmul`; `reshape`, `flatten`, `squeeze`, `unsqueeze`, `permute`, `transpose` of any two axes; `sum`, `mean`, `max` over axes; `softmax`, `log_softmax` along an axis; `concat`, `split`, `take`; `conv2d`, `max_pool2d`, `avg_pool2d` |
 | Data | shuffling and batching from `seed` | `permutation` (a seeded row order), `gather_rows` (a batch of rows), `dropout` (a seeded mask) |
+| Import weights | `load_state_dict` (a PyTorch `state_dict` or a safetensors checkpoint) | `load_weights` |
 
 ## Example: a two-expert mixture classifier
 
@@ -374,6 +375,91 @@ on the machine that trained it. To keep training later, save with `save_checkpoi
 clf.export("model.ckpt")
 served = mojolearn.Sequential.load("model.ckpt")
 labels_served = served.predict(X)
+```
+
+## Run a captured model
+
+Each operation of a session is one call from Python. Once a composition works, `capture` turns it into a
+`Program` that runs the whole model in one call: `run` uploads new input arrays, runs every captured
+operation on the device and returns the outputs, the same values to the bit as calling the operations
+one by one. Capture from an inference session (`Session()`, without `record=True`). The tensors the
+outputs read that are not inputs, such as the weights, are the program's parameters: `run` reads them
+where they are, so they are not copied per call. `save` writes the program and its parameters, and
+`load_program` reads the file back on any install, a GPU install or the CPU-only install.
+
+<!-- block: program -->
+```python
+import numpy as np
+from mojolearn import ops
+
+rng = np.random.default_rng(0)
+K = 0.3 * rng.standard_normal((4, 1, 3, 3), dtype=np.float32)       # 4 filters of 3 x 3
+W = 0.1 * rng.standard_normal((64, 2), dtype=np.float32)            # 4 x 4 x 4 features -> 2 classes
+batch1 = rng.standard_normal((8, 1, 8, 8), dtype=np.float32)
+batch2 = rng.standard_normal((8, 1, 8, 8), dtype=np.float32)
+
+with ops.Session() as s:
+    images = s.tensor(batch1)
+    h = s.max_pool2d(s.relu(s.conv2d(images, s.tensor(K), padding=1)), 2)
+    proba = s.softmax(s.linear(s.flatten(h), s.tensor(W)))         # (8, 2)
+    eager = s.numpy(proba)
+    model = s.capture(inputs=[images], outputs=[proba])
+    s.reset()                         # the program keeps what it needs
+    first = model.run(batch1)         # equal to eager, bit for bit
+    second = model.run(batch2)        # one call per batch
+    model.save("cnn.program")
+
+with ops.Session() as s:
+    served = s.load_program("cnn.program")
+    served_second = served.run(batch2)   # equal to second
+```
+
+Each input array must have the shape the captured input had. `embedding` and `take` read an index array
+from Python, so a composition that uses them cannot be captured.
+
+## Import weights
+
+`load_state_dict` loads weights trained in PyTorch or published as a Hugging Face safetensors
+checkpoint into a `Sequential` model. Pass a PyTorch `state_dict()` (tensors on the CPU, or NumPy
+arrays), or the path of a `.safetensors` file or of a checkpoint directory. Each layer with parameters
+takes `<index>.weight` and `<index>.bias`, the names a `torch.nn.Sequential` of the same layers uses
+(activations count as layers). Use `names={0: "fc1", 2: "fc2"}` and `prefix="model."` for tensors named
+another way. Weights keep PyTorch's layouts: a `linear` weight is `(out_features, in_features)`, a
+`conv2d` weight `(out_channels, in_channels, kernel_size, kernel_size)`. float16, bfloat16, float32 and
+float64 tensors are converted to float32 on the device. A missing tensor, a tensor of the wrong shape,
+and (unless `strict=False`) a tensor the model does not use raise an error that names it. After
+loading, `predict` uses the weights, and the next `fit` starts from them.
+
+In a session, `load_weights` writes named tensors into tensors you made with `tensor`. Add
+`"transpose"` to load a PyTorch linear weight into the `(inputs, outputs)` weight `linear` takes.
+
+<!-- block: import-weights -->
+```python
+import numpy as np
+import mojolearn
+from mojolearn import ops
+
+# the state_dict of torch.nn.Sequential(Linear(4, 16), ReLU(), Linear(16, 2))
+rng = np.random.default_rng(0)
+state = {"0.weight": rng.standard_normal((16, 4), dtype=np.float32),
+         "0.bias": np.zeros(16, dtype=np.float32),
+         "2.weight": rng.standard_normal((2, 16), dtype=np.float32),
+         "2.bias": np.zeros(2, dtype=np.float32)}
+X_new = rng.standard_normal((32, 4), dtype=np.float32)
+
+imported = mojolearn.Sequential().linear(16).relu().linear(2).load_state_dict(state)
+logits = imported.predict(X_new)
+
+# the same weights in a session
+with ops.Session() as s:
+    w1 = s.tensor(np.zeros((4, 16), dtype=np.float32))
+    b1 = s.tensor(np.zeros((1, 16), dtype=np.float32))
+    w2 = s.tensor(np.zeros((16, 2), dtype=np.float32))
+    b2 = s.tensor(np.zeros((1, 2), dtype=np.float32))
+    s.load_weights(state, [(w1, "0.weight", "transpose"), (b1, "0.bias"),
+                           (w2, "2.weight", "transpose"), (b2, "2.bias")])
+    hidden = s.linear(s.tensor(X_new), w1, b1, activation="relu")
+    logits_session = s.numpy(s.linear(hidden, w2, b2))
 ```
 
 ## Numeric modes

@@ -21,11 +21,15 @@ from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
 from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
+from autograd.program import OpsProgram
+from autograd.rankn import ShapeN
+from sequence.ops import FP
 from autograd.rankn_api import rn_dims, rn_shape
 from autograd.profile import ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from core.cast_in import CastIn, cast_in_kind, label_kind_of
 from autograd.cast_ops import gather_labels
+from autograd.weight_import import WI_RECORD, model_import_params, session_load_check, wi_source
 
 # Training options ahead of the per-layer float table in model_fit's fp.
 comptime FIT_INTS = 14
@@ -191,6 +195,38 @@ def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonOb
     return out
 
 
+def _names(p: PythonObject) raises -> List[String]:
+    var out = List[String]()
+    for i in range(len(p)):  # small-loop(p: one name per source weight tensor): argument parsing, no data
+        out.append(String(py=p[i]))
+    return out^
+
+
+def _record_ints(p: PythonObject) raises -> List[Int]:
+    var out = List[Int]()
+    for i in range(len(p)):  # small-loop(p: WI_RECORD words per source weight tensor): argument parsing, no data
+        out.append(ival(p, i))
+    return out^
+
+
+def model_import_params_py[E: Exec](
+    mut ex: E, prog: PythonObject, ptab: PythonObject, recs: PythonObject, names: PythonObject,
+    params_addr: PythonObject,
+) raises -> PythonObject:
+    """Sequential.load_state_dict: the model's parameters from source
+    tensors (autograd/weight_import.mojo: WI_RECORD integers per tensor in
+    `recs`, its name in `names`) into the caller's float32 params buffer
+    (model_n_params' count). Returns [parameter count, output width, input
+    values per sample]."""
+    var spec = parse_model(_ints(prog), _floats(ptab, 0))
+    model_import_params(ex, spec, _record_ints(recs), _names(names), fptr(params_addr, "params"))
+    var out = Python.list()
+    out.append(PythonObject(spec.n_params))
+    out.append(PythonObject(spec.out_features()))
+    out.append(PythonObject(spec.n_inputs))
+    return out
+
+
 # ---------------------------------------------------------------- operation sessions
 # (autograd/ops_api.mojo). E is the binding's executor, KIND its tag
 # (OPS_DEVICE or OPS_HOST): a session opened by one binding is refused by the
@@ -250,6 +286,29 @@ def ops_upload_py[E: Exec & Movable & Deinitable, KIND: Int](
     for k in range(nd):  # small-loop(nd: the tensor rank, at most 8): argument parsing, no data
         dims.append(ival(ip, 2 + k))
     return PythonObject(p[].upload_nd(src, rn_shape(dims, "ops: tensor"), ival(ip, 0) != 0))
+
+
+def ops_load_weights_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, recs: PythonObject, names: PythonObject,
+) raises -> PythonObject:
+    """Session.load_weights: source tensors (autograd/weight_import.mojo
+    records, the target handle in word 0) into the session's uploaded
+    tensors, in place. Every record is checked before any tensor is
+    written. Returns the number of tensors written."""
+    var r_ = _record_ints(recs)
+    var nm = _names(names)
+    var n = len(nm)
+    if n < 1 or len(r_) != n * WI_RECORD:
+        raise Error("load_weights: the import takes " + String(WI_RECORD) + " integers per source tensor")
+    var p = ops_session[E, KIND](Int(py=sid))
+    var views = List[CastIn]()
+    for r in range(n):  # small-loop(n: one per source weight tensor): checks metadata, no data
+        var h = r_[r * WI_RECORD]
+        var src = wi_source(r_, r, nm[r])
+        views.append(session_load_check(src, r_[r * WI_RECORD + 2], rn_dims(p[].shape_nd(h))))
+    for r in range(n):  # small-loop(n: one per source weight tensor): one cast launch each
+        p[].load_into(r_[r * WI_RECORD], views[r])
+    return PythonObject(n)
 
 
 def ops_download_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -498,3 +557,73 @@ def ops_profile_reset_py() raises -> PythonObject:
 def ops_profile_report_py() raises -> PythonObject:
     """The launch profile as text (AG_PROFILE lines)."""
     return PythonObject(ag_profile_report())
+
+
+# ---------------------------------------------------------------- captured programs
+# (autograd/program.mojo; OpsSession.capture / run_program). One call each:
+# the replay is the session's, on its executor.
+def _dims_out(shapes: List[ShapeN]) raises -> PythonObject:
+    var out = Python.list()
+    for k in range(len(shapes)):  # small-loop(shapes: a program's inputs or outputs): result packing, no data
+        var dims = rn_dims(shapes[k])
+        var d = Python.list()
+        for j in range(len(dims)):  # small-loop(dims: a tensor's rank, at most 8): result packing, no data
+            d.append(PythonObject(dims[j]))
+        out.append(d)
+    return out
+
+
+def program_info(pid: Int, p: OpsProgram) raises -> PythonObject:
+    """[program id, input shapes, output shapes, parameter handles]."""
+    var res = Python.list()
+    res.append(PythonObject(pid))
+    res.append(_dims_out(p.in_shapes))
+    res.append(_dims_out(p.out_shapes))
+    var ph = Python.list()
+    for j in range(len(p.params)):  # small-loop(params: a program's parameter handles): result packing, no data
+        ph.append(PythonObject(p.params[j]))
+    res.append(ph)
+    return res
+
+
+def ops_capture_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, inputs: PythonObject, outputs: PythonObject,
+) raises -> PythonObject:
+    """Capture the logged operations computing the handles `outputs` from
+    the handles `inputs`; returns program_info."""
+    var p = ops_session[E, KIND](Int(py=sid))
+    var pid = p[].capture(_input_handles(inputs), _input_handles(outputs))
+    return program_info(pid, p[].program(pid))
+
+
+def ops_program_info_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject,
+) raises -> PythonObject:
+    var p = ops_session[E, KIND](Int(py=sid))
+    var pid_i = Int(py=pid)
+    return program_info(pid_i, p[].program(pid_i))
+
+
+def ops_program_run_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject, descs: PythonObject, addrs: PythonObject,
+) raises -> PythonObject:
+    """Run program `pid`: descs holds one input descriptor (`cast_in_of`)
+    per input, addrs one float32 destination address per output (an array
+    of the output's shape)."""
+    var srcs = List[CastIn]()
+    for k in range(len(descs)):  # small-loop(descs: one descriptor per program input): argument parsing, no data
+        srcs.append(cast_in_of(descs[k], "program input"))
+    var dsts = List[FP]()
+    for k in range(len(addrs)):  # small-loop(addrs: one destination per program output): argument parsing, no data
+        dsts.append(fptr(addrs[k], "program output"))
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].run_program(Int(py=pid), srcs, dsts)
+    return PythonObject(0)
+
+
+def ops_program_free_py[E: Exec & Movable & Deinitable, KIND: Int](
+    sid: PythonObject, pid: PythonObject,
+) raises -> PythonObject:
+    var p = ops_session[E, KIND](Int(py=sid))
+    p[].program_free(Int(py=pid))
+    return PythonObject(0)

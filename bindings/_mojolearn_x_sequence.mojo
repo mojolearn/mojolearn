@@ -18,6 +18,7 @@ from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
+from autograd.pyapi import model_import_params_py, ops_load_weights_py
 from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
 from autograd.pyapi import (
@@ -27,11 +28,12 @@ from autograd.pyapi import (
     ops_optimizer_py, ops_step_py, ops_scheduler_step_py, ops_learning_rate_py, ops_zero_grad_py,
     ops_optimizer_state_py, ops_load_optimizer_state_py,
     ops_backward_graph_py, ops_backward_seed_py, ops_grad_handle_py, ops_vjp_py, ops_hvp_py, ops_jvp_py,
+    ops_capture_py, ops_program_info_py, ops_program_run_py, ops_program_free_py,
 )
 from autograd.ops_api import OPS_DEVICE
 from autograd.model_checkpoint import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
-    ops_save_state_py,
+    ops_save_state_py, ops_load_program_py, ops_save_program_py,
 )
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.pyapi import moe_backward_py, moe_backward_run
@@ -216,6 +218,19 @@ def model_n_params_binding(prog: PythonObject, ptab: PythonObject) raises -> Pyt
     return model_n_params_py(prog, ptab)
 
 
+def model_import_params_binding(
+    prog: PythonObject, ptab: PythonObject, recs: PythonObject, names: PythonObject, params_addr: PythonObject,
+) raises -> PythonObject:
+    """Sequential.load_state_dict (autograd/weight_import.mojo)."""
+    var ex = DeviceExec()
+    return model_import_params_py(ex, prog, ptab, recs, names, params_addr)
+
+
+def ops_load_weights_binding(sid: PythonObject, recs: PythonObject, names: PythonObject) raises -> PythonObject:
+    """Session.load_weights (autograd/weight_import.mojo)."""
+    return ops_load_weights_py[DeviceExec, OPS_DEVICE](sid, recs, names)
+
+
 # The operation session (autograd/ops_api.mojo): one DeviceExec and one tape kept
 # between calls, tensors by handle.
 def ops_open_binding(record: PythonObject) raises -> PythonObject:
@@ -240,6 +255,32 @@ def ops_op_binding(sid: PythonObject, code: PythonObject, hs: PythonObject, ip: 
 
 def ops_op_packed_binding(sid: PythonObject, code: PythonObject, block: PythonObject) raises -> PythonObject:
     return ops_op_packed_py[DeviceExec, OPS_DEVICE](sid, code, block)
+
+
+
+# captured programs (autograd/program.mojo; OpsSession.capture / run_program)
+def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: PythonObject) raises -> PythonObject:
+    return ops_capture_py[DeviceExec, OPS_DEVICE](sid, inputs, outputs)
+
+
+def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
+    return ops_program_info_py[DeviceExec, OPS_DEVICE](sid, pid)
+
+
+def ops_program_run_binding(sid: PythonObject, pid: PythonObject, descs: PythonObject, addrs: PythonObject) raises -> PythonObject:
+    return ops_program_run_py[DeviceExec, OPS_DEVICE](sid, pid, descs, addrs)
+
+
+def ops_program_free_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
+    return ops_program_free_py[DeviceExec, OPS_DEVICE](sid, pid)
+
+
+def ops_save_program_binding(sid: PythonObject, pid: PythonObject, path: PythonObject) raises -> PythonObject:
+    return ops_save_program_py[DeviceExec, OPS_DEVICE](sid, pid, path)
+
+
+def ops_load_program_binding(sid: PythonObject, path: PythonObject) raises -> PythonObject:
+    return ops_load_program_py[DeviceExec, OPS_DEVICE](sid, path)
 
 
 def ops_scalar_binding(sid: PythonObject, h: PythonObject) raises -> PythonObject:
@@ -519,6 +560,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[model_labels_binding]("model_labels")
         m.def_function[model_gather_labels_binding]("model_gather_labels")
+        m.def_function[model_import_params_binding]("model_import_params")
+        m.def_function[ops_load_weights_binding]("ops_load_weights")
         # the operation session (autograd/ops_api.mojo)
         m.def_function[ops_open_binding]("ops_open")
         m.def_function[ops_close_binding]("ops_close")
@@ -546,6 +589,12 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[ops_vjp_binding]("ops_vjp")
         m.def_function[ops_hvp_binding]("ops_hvp")
         m.def_function[ops_jvp_binding]("ops_jvp")
+        m.def_function[ops_capture_binding]("ops_capture")
+        m.def_function[ops_program_info_binding]("ops_program_info")
+        m.def_function[ops_program_run_binding]("ops_program_run")
+        m.def_function[ops_program_free_binding]("ops_program_free")
+        m.def_function[ops_save_program_binding]("ops_save_program")
+        m.def_function[ops_load_program_binding]("ops_load_program")
         m.def_function[ops_profile_reset_binding]("ops_profile_reset")
         m.def_function[ops_profile_report_binding]("ops_profile_report")
         m.def_function[model_save_checkpoint_binding]("model_save_checkpoint")

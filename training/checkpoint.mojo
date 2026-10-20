@@ -161,7 +161,9 @@ comptime CKPT_SECTION_SEQUENTIAL = 1
 state of `Sequential.fit` and the data layer's seed, epoch and step."""
 comptime CKPT_SECTION_SESSION = 2
 """Parameters and optimizer state saved from an operation session."""
-comptime CKPT_SECTION_MAX = 2
+comptime CKPT_SECTION_PROGRAM = 3
+"""A captured operation-session program: its description and parameters."""
+comptime CKPT_SECTION_MAX = 3
 comptime CKPT_EXT_HEAD_BYTES = 8
 
 

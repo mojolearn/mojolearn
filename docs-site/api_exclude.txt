@@ -66,3 +66,11 @@ ops.Session	operation session: checks pending on CPU, Apple, NVIDIA and AMD
 MoEBlock.backward	new tape backward; no NVIDIA+AMD reference records yet (sequence/checks/moe_backward_check.mojo)
 Session.embedding	operation session embedding: its tape checks (embedding_check tape case, autograd embedding_gpu/cpu) pending on CPU, Apple, NVIDIA and AMD
 # Rank-N tensors (docs/plans/AUTOGRAD_RANKN.md): remove a line once its checks' digests match on CPU, Apple, NVIDIA and AMD.
+# Captured programs (autograd/program.mojo): remove a line once test_ops_program.py's PROGRAM_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
+ops.Program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
+Program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
+Session.capture	captured program: checks pending on CPU, Apple, NVIDIA and AMD
+Session.run	captured program: checks pending on CPU, Apple, NVIDIA and AMD
+Session.load_program	captured program: checks pending on CPU, Apple, NVIDIA and AMD
+Sequential.load_state_dict	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD
+Session.load_weights	weight import: test_weight_import.py and the import-weights guide block digests pending on CPU, Apple, NVIDIA and AMD

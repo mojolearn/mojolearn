@@ -157,8 +157,10 @@ STUB_NEURAL = textwrap.dedent(r'''
     data = "bytes" if a.lane.split("-")[0] in ("lm", "samba") else "gaussian"
     if a.lane.endswith("-fit") or a.lane == "tape-user-model":
         data = "higgs"                    # the fit lanes (bench_board_neural.FIT_LANES)
-    if a.lane == "sequential-fit":
+    if a.lane in ("sequential-fit", "sequential-predict"):
         data = "synthetic"                # bench_board_neural.SYNTH_FIT_LANES
+    if a.lane.startswith("causal-lm-generate"):     # bench_board_neural.GEN_LANES: the checkpoint is the dataset
+        data = "smollm2-135m" if a.lane.endswith("-smollm2") else "mojolearn-162m"
     arms, qual = {}, {}
     for i, arm in enumerate(a.arms.split(",")):
         ours = arm in ("ours", "ours-cpu")
@@ -499,8 +501,11 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # 335, gbdt-depthwise races `ours-prebinned` beside `ours` (+1 cell x 2 datasets)
     # 2026-10-19 (lane ag-bench): 104 races, 365 cells with the five neural fit lanes, each on Apple
     # ours-fast + 4 torch GPU settings + mlx-fp32 (+5 races, +30 cells)
-    assert len(before) == 104 and sum(len(r["arms"]) for r in before) == 365
-    assert "TOTAL races=%d cells=%d" % (104 + len(algos), 365 + sum(len(r["arms"]) for r in algos)) in text
+    # 2026-10-20 (lane ag-inference-board): 109 races with sequential-fit, ops-session-step, sequential-predict and the two
+    # causal-lm-generate lanes; the cell total is derived from the plan so a new arm does not stale this line.
+    cells = sum(len(r["arms"]) for r in before)
+    assert len(before) == 118  # 2026-10-20: + program-run, sequential-predict, the two causal-lm-generate lanes
+    assert "TOTAL races=%d cells=%d" % (118 + len(algos), cells + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -515,10 +520,10 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # (2026-10-19) the five fit lanes race ours-fast only on Apple (identical is never timed there), so an
     # identical-only Apple plan has none of them and the full plan adds 5 races of 6 cells each
     neural = bb.plan_races("apple", ["identical"], ["neural"])
-    assert len(neural) == 18 and sum(len(r["arms"]) for r in neural) == 64
+    assert len(neural) == 23  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes (cells vary by vendor)
     both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
-    assert len(both) == 23 and sum(len(r["arms"]) for r in both) == 112
-    assert "family neural     races=23 cells=112" in text
+    assert len(both) == 37  # 2026-10-20: + sequential-predict and the two causal-lm-generate lanes at both shapes
+    assert "family neural     races=%d cells=%d" % (len(both), sum(len(r["arms"]) for r in both)) in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -744,31 +749,49 @@ def test_render_board_on_an_empty_result_has_no_direction_words():
 
 # --- the neural family ------------------------------------------------------
 
-NEURAL_IDS = [
-    "neural/lm-train-step/bytes/shape=full", "neural/lm-forward/bytes/shape=full",
+NEURAL_IDS = [  # the planner's order (bench_board.plan_races, identical on apple/nvidia/amd; regenerated 2026-10-20)
+    "neural/lm-train-step/bytes/shape=full",
+    "neural/lm-forward/bytes/shape=full",
     "neural/gemm/gaussian/shape=full",
     "neural/transformer-forward/gaussian/shape=full",
     "neural/mamba1-forward/gaussian/shape=full",
     "neural/mamba2-forward/gaussian/shape=full",
     "neural/mamba3-forward/gaussian/shape=full",
-    "neural/samba-train-step/bytes/shape=full", "neural/samba-forward/bytes/shape=full",
+    "neural/samba-train-step/bytes/shape=full",
+    "neural/samba-forward/bytes/shape=full",
     "neural/mlp-train-step/gaussian/shape=full",
-    # the GPU inference lanes (Oct 7 2026, 347f4b2d9)
     "neural/transformer-decode/gaussian/shape=full",
     "neural/mamba1-decode/gaussian/shape=full",
     "neural/mamba2-decode/gaussian/shape=full",
     "neural/mamba3-decode/gaussian/shape=full",
     "neural/samba-decode/bytes/shape=full",
     "neural/mlp-predict/gaussian/shape=full",
-    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full",
-    # the whole-fit lanes of the tape-trained models (2026-10-19, lane ag-bench)
-    "neural/mlp-fit/higgs/shape=full", "neural/lstm-fit/higgs/shape=full",
-    "neural/gru-fit/higgs/shape=full", "neural/rnn-fit/higgs/shape=full",
+    "neural/gemm-bf16/gaussian/shape=full",
+    "neural/gemm-int8/gaussian/shape=full",
+    "neural/mlp-fit/higgs/shape=full",
+    "neural/lstm-fit/higgs/shape=full",
+    "neural/gru-fit/higgs/shape=full",
+    "neural/rnn-fit/higgs/shape=full",
     "neural/tape-user-model/higgs/shape=full",
-    # the public tape API lanes (2026-10-19, lane ag-board-twins)
-    "neural/sequential-fit/synthetic/shape=full", "neural/ops-session-step/gaussian/shape=full"]
+    "neural/sequential-fit/synthetic/shape=full",
+    "neural/sequential-predict/synthetic/shape=full",
+    "neural/ops-session-step/gaussian/shape=full",
+    "neural/program-run/gaussian/shape=full",
+    "neural/mlp-fit/higgs/shape=full",
+    "neural/lstm-fit/higgs/shape=full",
+    "neural/gru-fit/higgs/shape=full",
+    "neural/rnn-fit/higgs/shape=full",
+    "neural/tape-user-model/higgs/shape=full",
+    "neural/sequential-fit/synthetic/shape=full",
+    "neural/sequential-predict/synthetic/shape=full",
+    "neural/ops-session-step/gaussian/shape=full",
+    "neural/causal-lm-generate/mojolearn-162m/shape=full",
+    "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full",
+]
 #: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch
-FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i or "/sequential-fit/" in i}
+FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i or "/sequential-fit/" in i or "/sequential-predict/" in i}
+#: fit lanes with no MLX twin (bench_board_neural.PREDICT_LANES)
+NO_MLX_IDS = {i for i in NEURAL_IDS if "/sequential-predict/" in i}
 #: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
 #: minus DECODE_TORCH_TWIN); transformer-decode's twin is a per-token loop, never compiled
 NO_TWIN_DECODE = ("mamba1-decode", "mamba2-decode", "mamba3-decode", "samba-decode")
@@ -793,8 +816,9 @@ def test_plan_neural_fast_on_apple_only(vendor):
         fit = r["id"] in FIT_IDS
         if fit and vendor == "apple":
             assert r["our_arms"] == {"ours-fast": "fast"} and r["modes"] == ["fast"], r["id"]
-            assert r["opponents"] == GPU_ARMS[vendor] + ["mlx-fp32"], r["id"]
-            assert r["arms"] == ["ours-fast"] + GPU_ARMS[vendor] + ["mlx-fp32"]
+            mlx = [] if r["id"] in NO_MLX_IDS else ["mlx-fp32"]
+            assert r["opponents"] == GPU_ARMS[vendor] + mlx, r["id"]
+            assert r["arms"] == ["ours-fast"] + GPU_ARMS[vendor] + mlx
             continue
         assert r["our_arms"] == ({"ours": "identical", "ours-fast": "fast"} if vendor == "apple"
                                  else {"ours": "identical"})
@@ -806,7 +830,8 @@ def test_plan_neural_fast_on_apple_only(vendor):
             want = [a for a in want if a.endswith("bf16")]
         if r["lane"] == "gemm-int8":
             want = ["torch-eager-int8", "torch-compile-int8"] if vendor == "nvidia" else []
-        if r["lane"].startswith("mamba1-") or r["lane"] == "transformer-decode":
+        if (r["lane"].startswith("mamba1-") or r["lane"] == "transformer-decode"
+                or r["lane"].startswith("causal-lm-generate")):
             # the per-token reference scan / decode loop is not a compile target (NOT_PLANNED)
             want = [a for a in want if "-compile-" not in a]
         if r["lane"] in NO_TWIN_DECODE:
@@ -836,8 +861,12 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # nvidia ours + 6 torch (+35)
     # + sequential-fit (a fit lane: apple +6, amd +5, nvidia +7) and ops-session-step (apple ours + ours-fast
     # + 4 torch +6, amd +5, nvidia +7), 2026-10-19 lane ag-board-twins
-    assert cells == {"apple": 124, "amd": 102, "nvidia": 143}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 25, "cells": cells}}
+    # + program-run (the same arms as ops-session-step: apple +6, amd +5, nvidia +7), lane ag-program
+    # + sequential-predict (a fit lane without MLX: apple ours-fast + 4 torch +5, amd +5, nvidia +7) and the two
+    # causal-lm-generate lanes (eager torch only: apple ours + ours-fast + 2 +4 each, amd ours + 2 +3 each,
+    # nvidia ours + 3 +4 each), 2026-10-19 lane ag-inference-board; totals regenerated from the planner 2026-10-20
+    assert cells == {"apple": 190, "amd": 158, "nvidia": 221}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 37, "cells": cells}}
 
 
 def test_fast_for_neural_is_the_apple_tier(env):
@@ -884,16 +913,18 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # gbdt-depthwise `ours-prebinned` beside `ours` (+2 more): Apple 335, NVIDIA 268, AMD 233.
 # 2026-10-19 (lane ag-bench): + the five neural fit lanes: apple 5 x (ours-fast + 4 torch + mlx-fp32) = +30,
 # nvidia 5 x (ours + 6 torch) = +35, amd 5 x (ours + 4 torch) = +25; +5 races everywhere
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 365, 128, 112),
-                                                      ("nvidia", 303, 88, 129),
-                                                      ("amd", 258, 84, 92)])
+# 2026-10-19 (lanes ag-board-twins + ag-inference-board): + sequential-fit and ops-session-step (apple +12, nvidia
+# +14, amd +10) and sequential-predict + the two causal-lm-generate lanes (apple +13, nvidia +15, amd +11); +5 races
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 443, 128, 190),
+                                                      ("nvidia", 395, 88, 221),
+                                                      ("amd", 324, 84, 158)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=104 cells=%d" % cells in text
+    assert "TOTAL races=118 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=23 cells=%d" % neural in text
+    assert "family neural     races=37 cells=%d" % neural in text
     assert "neural: ours IDENTICAL" in text
     assert ("ours-fast, the Apple tier" in text) == (vendor == "apple")
     # what is left off the plan is printed by name, never dropped silently
@@ -1060,6 +1091,41 @@ def test_neural_driver_tables_and_arm_refusals(tmp_path):
                   str(tmp_path / "o"), "--work", str(tmp_path / "w"), "--rounds", "1"])
 
 
+def test_neural_inference_lanes_tables_and_quality():
+    # 2026-10-19 (lane ag-inference-board): the generate lanes' checkpoint is the dataset, eager torch only;
+    # sequential-predict is a fit lane whose clock is the prediction alone; the generate quality names the
+    # first new-token position where an arm leaves ours
+    np = pytest.importorskip("numpy")
+    assert bbn.DATA_OF["causal-lm-generate"] == "mojolearn-162m"
+    assert bbn.DATA_OF["causal-lm-generate-smollm2"] == "smollm2-135m"
+    assert bbn.DATA_OF["sequential-predict"] == "synthetic" and "sequential-predict" in bbn.FIT_LANES
+    assert bbn.fit_span("sequential-predict")["pre_clock_fit"] is True
+    assert bbn.opponents("nvidia", "causal-lm-generate") == ("torch-eager-fp32", "torch-eager-tf32",
+                                                             "torch-eager-bf16")
+    assert bbn.opponents("apple", "sequential-predict") == tuple("torch-" + s for s in bbn.GPU_SETTINGS["apple"])
+    assert bbn.gen_params("causal-lm-generate")["new_tokens"] == bbn.GEN_SHAPES["full"]["new_tokens"]
+    prompt = np.arange(6, dtype=np.int32).reshape(2, 3)
+    ours = {"ids": np.array([[0, 1, 2, 9, 9, 9], [3, 4, 5, 7, 7, 7]], np.int32),
+            "first": np.array([[0, 1, 2, 9], [3, 4, 5, 7]], np.int32)}
+    theirs = {"ids": np.array([[0, 1, 2, 9, 9, 8], [3, 4, 5, 7, 6, 7]], np.int32), "first": ours["first"].copy()}
+    q = bbn.gen_quality({"prompt_ids": prompt}, {"ours": ours, "torch-eager-fp32": theirs})
+    row = q["torch-eager-fp32"]
+    assert row["tokens_equal_ours"] is False and row["first_divergence_index"] == 1
+    assert row["matching_prefix_tokens"] == 1 and row["prefill_token_equal_ours"] is True
+    assert q["ours"]["new_tokens"] == 3 and q["ours"]["prompt_echoed"] is True
+    same = bbn.gen_quality({"prompt_ids": prompt}, {"ours": ours, "torch-eager-bf16": ours})
+    assert same["torch-eager-bf16"]["tokens_equal_ours"] is True
+    assert same["torch-eager-bf16"]["first_divergence_index"] is None
+    a = {"round_extra": [{"prefill_ms": 9.0, "generate_ms": 99.0, "warmup": True},
+                         {"prefill_ms": 2.0, "generate_ms": 20.0, "decode_ms_per_token": 1.5, "new_tokens": 13,
+                          "warmup": False}],
+         "device_memory": [{"peak_bytes": {"process": 10, "device": None}, "resident_bytes": {"process": 6},
+                            "process_peak_bytes": 12, "method": "m"}]}
+    got = bbn.inference_summary(a)
+    assert got["prefill_ms"] == 2.0 and got["generate_ms"] == 20.0 and got["decode_ms_per_token"] == 1.5
+    assert got["peak_bytes_process"] == 10 and got["resident_bytes_process"] == 6 and got["process_peak_bytes"] == 12
+
+
 def test_neural_tape_api_lanes_tables_fixtures_and_quality(tmp_path):
     # 2026-10-19 (lane ag-board-twins): sequential-fit is a fit lane on its own synthetic data, its
     # predict_proba inside the clock; ops-session-step is one recorded step with its own span
@@ -1089,6 +1155,29 @@ def test_neural_tape_api_lanes_tables_fixtures_and_quality(tmp_path):
     t = q["torch-eager-fp32"]
     assert t["loss_abs_diff_vs_ours"] == 0.25 and t["grad_max_abs_diff_vs_ours_w1"] == 1.0
     assert t["param_max_abs_diff_vs_ours_b2"] == 0.0 and t["grad_digests_equal_ours"] is False
+
+
+def test_neural_program_run_lane_tables_fixtures_and_quality(tmp_path):
+    # 2026-10-19 (lane ag-program): program-run is one inference forward of a captured Program, with
+    # ops-session-step's weights and batch and its own span
+    np = pytest.importorskip("numpy")
+    assert "program-run" in bbn.PROGRAM_LANES and bbn.DATA_OF["program-run"] == "gaussian"
+    assert bbn.DEVICE_OF["program-run"] == "gpu" and bbn.MODEL_OF["program-run"] == "program"
+    assert bbn.program_params("small")["layers"] == ["linear 16 32 bias", "relu", "linear 32 4 bias", "softmax"]
+    assert bbn.lane_settings("program-run")["clock"] == bbn.PROGRAM_SPAN["inside_clock"]
+    rec = bbn.make_inputs("program-run", "small", 2, str(tmp_path / "program-run.npz"))
+    assert rec["lane"] == "program-run"
+    with np.load(str(tmp_path / "program-run.npz")) as z:
+        data = {k: z[k] for k in z.files}
+    assert data["X"].shape == (64, 16) and data["w:w2"].shape == (32, 4)
+    x = data["X"].astype(np.float64)
+    z = np.maximum(x @ data["w:w1"] + data["w:b1"], 0) @ data["w:w2"] + data["w:b2"]
+    p = np.exp(z - z.max(axis=1, keepdims=True))
+    p = (p / p.sum(axis=1, keepdims=True)).astype(np.float32)
+    q = bbn.quality("program-run", data, {"ours": {"y": p}, "torch-eager-fp32": {"y": p + np.float32(0.5)}})
+    assert q["ours"]["max_abs_err_vs_fp64"] < 1e-6 and q["ours"]["finite"]
+    t = q["torch-eager-fp32"]
+    assert abs(t["max_abs_diff_vs_ours"] - 0.5) < 1e-6 and t["digest_equal_ours"] is False
 
 
 def test_neural_driver_inputs_and_quality(tmp_path, monkeypatch):

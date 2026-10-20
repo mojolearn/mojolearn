@@ -485,6 +485,11 @@ class Sequential:
         sample = self._sample_of(X)
         if resume and sample != getattr(self, "_sample_shape", None):
             raise ValueError("resume=True takes inputs of the shape the model was fitted on")
+        # after load_state_dict the fit starts from the imported parameters
+        warm = not resume and getattr(self, "_imported", False)
+        if warm and (d != self.n_features_in_ or sample != getattr(self, "_sample_shape", None)):
+            raise ValueError(f"X has {d} values per sample and shape {sample}; the imported weights take "
+                             f"{self.n_features_in_} values per sample and shape {self._sample_shape}")
         prog = self._program(d, sample)
         table = self._table()
         b = self._binding()
@@ -496,7 +501,7 @@ class Sequential:
             params, m, v, state, prev = self.params_, self._opt_m, self._opt_v, self._fit_state, self._curve
             curve = np.zeros(self.n_iter_ + int(epochs), dtype=np.float32)
         else:
-            params = np.zeros(n_params, dtype=np.float32)
+            params = self.params_ if warm else np.zeros(n_params, dtype=np.float32)
             m = np.zeros(n_params, dtype=np.float32)
             v = np.zeros(n_params, dtype=np.float32)
             state = np.zeros(_FIT_STATE_WORDS, dtype=np.int64)
@@ -505,7 +510,7 @@ class Sequential:
         seed = int(seed)
         ip = [n, _LOSS[o["loss"]], target, o["opt"], o["flags"], o["sched"], o["step_size"],
               int(batch_size), int(epochs), int(bool(shuffle)), seed & 0xFFFFFFFF, seed >> 32,
-              o["n_iter_no_change"], 0 if resume else 1, 1 if resume else 0]
+              o["n_iter_no_change"], 0 if (resume or warm) else 1, 1 if resume else 0]
         fp = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0.0, o["tol"], o["gamma"],
               o["huber_delta"]] + table
         addrs = [xd, yd, params.ctypes.data, curve.ctypes.data, m.ctypes.data, v.ctypes.data,
@@ -524,11 +529,167 @@ class Sequential:
         self._fit_batch = int(batch_size)
         self._fit_shuffle = bool(shuffle)
         self._opt_m, self._opt_v, self._fit_state, self._curve = m, v, state, curve
+        self._imported = False
         return self
+
+    # ------------------------------------------------------------ weight import
+    def _param_layers(self):
+        # (layer index, has bias) of every layer that holds parameters
+        out = []
+        for i, (code, a0, a1, _, args) in enumerate(self._layers):  # glue: one entry per parameter layer
+            if code == _LAYER["linear"]:
+                out.append((i, a1 == 1))
+            elif code == _LAYER["layer_norm"]:
+                out.append((i, True))
+            elif code == _LAYER["conv2d"]:
+                out.append((i, args[4] == 1))
+        return out
+
+    def load_state_dict(self, state, *, source=None, names=None, prefix="", strict=True):
+        """Load trained weights from PyTorch or a safetensors checkpoint.
+
+        Each layer with parameters takes the tensors ``<name>.weight`` and
+        ``<name>.bias``, where ``<name>`` is the layer's index in the model
+        (as in a ``torch.nn.Sequential`` of the same layers, activations
+        included) with ``prefix`` in front. Weights use PyTorch's layouts:
+        a ``linear`` weight is ``(out_features, in_features)``, a
+        ``conv2d`` weight ``(out_channels, in_channels, kernel_size,
+        kernel_size)``, a ``layer_norm`` weight and bias ``(width,)``.
+        float16, bfloat16, float32 and float64 tensors are accepted and
+        converted to float32 on the device (float16 and bfloat16 exactly,
+        float64 rounded to the nearest float32).
+
+        After loading, :meth:`predict` uses the weights, and the next
+        :meth:`fit` (without ``resume``) starts from them.
+
+        Parameters
+        ----------
+        state : mapping or str or path-like
+            A mapping of names to tensors, such as ``module.state_dict()``
+            (tensors on the CPU, or NumPy arrays), or the path of a
+            ``.safetensors`` file or of a checkpoint directory
+            (``model.safetensors``, or ``model.safetensors.index.json`` and
+            its shards).
+        source : {'torch', 'safetensors'} or None, default None
+            ``'torch'`` for a mapping, ``'safetensors'`` for a path. None
+            takes ``'safetensors'`` for a path and ``'torch'`` otherwise.
+        names : dict or None, default None
+            ``{layer index: name}`` for layers whose tensors are named
+            differently, for example ``{0: "fc1", 2: "fc2"}``.
+        prefix : str, default ''
+            Put in front of every name, for example ``"model."``.
+        strict : bool, default True
+            Refuse a source that holds tensors the model does not use.
+
+        Returns
+        -------
+        Sequential
+            The model, with ``params_``, ``n_features_in_`` and
+            ``n_outputs_`` set.
+
+        Raises
+        ------
+        ValueError
+            A tensor is missing, unused (with ``strict``) or of the wrong
+            shape, or the model needs ``input_shape`` to size its layers.
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> rng = np.random.default_rng(0)
+        >>> state = {"0.weight": rng.standard_normal((8, 4), dtype=np.float32),
+        ...          "0.bias": np.zeros(8, dtype=np.float32),
+        ...          "2.weight": rng.standard_normal((1, 8), dtype=np.float32),
+        ...          "2.bias": np.zeros(1, dtype=np.float32)}
+        >>> model = mojolearn.Sequential().linear(8).relu().linear(1)
+        >>> model = model.load_state_dict(state)
+        >>> pred = model.predict(rng.random((16, 4), dtype=np.float32))
+        """
+        from ._weight_import import LAYOUT_TORCH, SLOT_BIAS, SLOT_WEIGHT, WeightSource
+        if not self._layers:
+            raise ValueError("add at least one layer before load_state_dict")
+        if not isinstance(prefix, str):
+            raise TypeError("prefix must be a string")
+        if names is not None and not hasattr(names, "get"):
+            raise TypeError("names must be a dict of layer index to name")
+        layers = self._param_layers()
+        if not layers:
+            raise ValueError("the model has no layers with parameters")
+        entries = []  # (key, layer, slot)
+        for i, bias in layers:  # glue: one name per layer parameter
+            stem = prefix + str(i if names is None else names.get(i, i))
+            entries.append((stem + ".weight", i, SLOT_WEIGHT))
+            if bias:
+                entries.append((stem + ".bias", i, SLOT_BIAS))
+        keys = [k for k, _, _ in entries]  # glue: the requested tensor names
+        with WeightSource(state, source) as src:
+            missing = src.missing(keys)
+            if missing:
+                held = src.names()
+                raise ValueError(f"load_state_dict: the source has no tensor {missing[0]!r}"
+                                 + (f" ({len(missing)} missing)" if len(missing) > 1 else "")
+                                 + f"; it holds {held[:6]}" + (" ..." if len(held) > 6 else ""))
+            if strict:
+                unused = src.unused(keys)
+                if unused:
+                    raise ValueError(f"load_state_dict: the model does not use {unused[:6]}"
+                                     + (" ..." if len(unused) > 6 else "")
+                                     + "; pass strict=False to skip them")
+            sample, d = self._import_shape(src, layers, entries)
+            prog = self._program(d, sample)
+            table = self._table()
+            b = self._binding()
+            n_params, _ = (int(v) for v in b.model_n_params(prog, table))  # glue: two counts returned by Mojo
+            recs = []
+            for key, i, slot in entries:  # glue: one record per source tensor
+                recs += src.record(key, i, slot, LAYOUT_TORCH)
+            params = np.empty(n_params, dtype=np.float32)
+            # Mojo checks every dtype and shape, then writes every parameter
+            counts = b.model_import_params(prog, table, recs, keys, params.ctypes.data)
+            n_params, n_out, n_in = (int(v) for v in counts)  # glue: three counts returned by Mojo
+        self.params_ = params
+        self.n_features_in_ = n_in
+        self.n_outputs_ = n_out
+        self._sample_shape = sample
+        self.n_iter_ = 0
+        self.loss_curve_ = []
+        self._fit_state = None
+        self._imported = True
+        return self
+
+    def _import_shape(self, src, layers, entries):
+        # the per-sample shape (None: a version-1 description) and the input
+        # width of the description load_state_dict passes to Mojo
+        if hasattr(self, "params_") and hasattr(self, "n_features_in_"):
+            return getattr(self, "_sample_shape", None), self.n_features_in_
+        uses_shape = self.input_shape is not None or any(
+            c in _SHAPE_LAYERS for c, _, _, _, _ in self._layers)  # glue: a layer-kind check
+        if uses_shape:
+            if self.input_shape is None:
+                raise ValueError("load_state_dict: set input_shape on a model with reshape, permute, flatten, "
+                                 "conv2d or pooling layers")
+            return self.input_shape, 0
+        # a 2-D model: the input width is the first parameter layer's
+        # (the layers before it keep the width)
+        first = layers[0][0]
+        key = entries[0][0]
+        shape = src.shape(key)
+        if self._layers[first][0] == _LAYER["linear"]:
+            if len(shape) != 2:
+                raise ValueError(f"load_state_dict: {key!r} has shape {shape}; layer {first} (linear) takes a "
+                                 "weight of shape (out_features, in_features)")
+            return None, int(shape[1])
+        if len(shape) != 1:
+            raise ValueError(f"load_state_dict: {key!r} has shape {shape}; layer {first} (layer_norm) takes a "
+                             "weight of shape (width,)")
+        return None, int(shape[0])
 
     # ------------------------------------------------------------ checkpoints
     def _save(self, path, export):
         if not hasattr(self, "params_"):
+            raise ValueError("call fit before saving the model")
+        if not hasattr(self, "_target"):
+            # weights from load_state_dict without a fit: no loss or training options to save
             raise ValueError("call fit before saving the model")
         if not export and getattr(self, "_fit_state", None) is None:
             raise ValueError("this model holds no training state (it was loaded from an export); use export")

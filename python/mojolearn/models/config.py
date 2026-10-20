@@ -149,7 +149,9 @@ class ModelPlan:
         return out
 
     def checkpoint_names(self):
-        names = [self.embed_name, self.norm_name]
+        names = [self.embed_name]
+        if self.norm_name is not None:      # None: no final norm (the byte-LM format)
+            names.append(self.norm_name)
         if self.head_name is not None:
             names.append(self.head_name)
         for i in range(self.n_layers):  # glue: names the checkpoint weights per layer
@@ -393,6 +395,49 @@ def _plan_phi3(cfg, mt):
     return p
 
 
+#: The byte-LM checkpoint format (`config.json` "format": "mojolearn.byte-lm",
+#: tensors `embed`, `block{i}.*`, `lm_head`): the same Llama layer order and
+#: (out, in) projection layout as `_LLAMA_LAYER`, rotate-half rotary, and NO
+#: final norm (the head reads the last residual stream). `norm_name` is None.
+BYTE_LM_FORMAT = "mojolearn.byte-lm"
+BYTE_LM_MODEL_TYPE = "mojolearn-byte-lm"
+
+_BYTE_LM_LAYER = [
+    ("input_layernorm.weight", "block{i}.norm1_w", None),
+    ("post_attention_layernorm.weight", "block{i}.norm2_w", None),
+    ("q_proj.weight", "block{i}.w_q", None),
+    ("k_proj.weight", "block{i}.w_k", None),
+    ("v_proj.weight", "block{i}.w_v", None),
+    ("o_proj.weight", "block{i}.w_o", None),
+    ("gate_proj.weight", "block{i}.w_gate", None),
+    ("up_proj.weight", "block{i}.w_up", None),
+    ("down_proj.weight", "block{i}.w_down", None),
+]
+
+#: byte-LM config field -> the value the stack spells (anything else is refused by name)
+_BYTE_LM_FIXED = {"positional_encoding": "rotary", "rope_pairing": "rotate_half", "norm": "rmsnorm",
+                  "norm_placement": "pre-norm, no final norm", "mlp": "swiglu", "bias": False,
+                  "tie_word_embeddings": False}
+
+
+def _plan_byte_lm(cfg, mt):
+    """A byte-LM `config.json`: its fields renamed to the Llama ones, the
+    common transformer checks, then the byte-LM tensor names and no final
+    norm."""
+    for field, want in _BYTE_LM_FIXED.items():  # cpu-route: reads the model config file fields (file input)
+        if field in cfg and cfg.get(field) != want:
+            _refuse(mt, field, cfg.get(field), f"the byte-LM stack spells {field}={want!r} only")
+    rename = {"hidden_size": "d_model", "num_attention_heads": "n_heads", "num_key_value_heads": "n_kv",
+              "head_dim": "head_dim", "intermediate_size": "intermediate", "num_hidden_layers": "n_layers",
+              "vocab_size": "vocab_size", "rms_norm_eps": "rms_norm_eps", "rope_theta": "rope_theta",
+              "max_position_embeddings": "max_position_embeddings"}
+    hf = {k: cfg.get(v) for k, v in rename.items() if cfg.get(v) is not None}  # cpu-route: reads the model config file fields (file input)
+    hf["tie_word_embeddings"] = False
+    p = _transformer_common(HFConfig(hf, cfg.path), mt)
+    p.update(layer_map=list(_BYTE_LM_LAYER), embed_name="embed", norm_name=None, head_name="lm_head")
+    return p
+
+
 def _plan_mamba(cfg, mt):
     d_model = _int(cfg, mt, "hidden_size")
     n_layers = _int(cfg, mt, "num_hidden_layers")
@@ -471,11 +516,21 @@ FAMILIES = {
 }
 
 
+#: The byte-LM format's row (not in FAMILIES: it is keyed by `format`, not `model_type`).
+BYTE_LM_ROW = (_plan_byte_lm, "bytelevel-bpe (GPT-2 pattern)", "byte-LM format: no final norm, untied head")
+
+
 def plan_for(config):
     """The `ModelPlan` of an `HFConfig` (or a dict), or an `UnsupportedModel`
     that names the unsupported model type or field."""
     if isinstance(config, dict):
         config = HFConfig(config)
+    if config.get("model_type") is None and config.get("format") == BYTE_LM_FORMAT:
+        # the byte-LM format names no model_type; it is its own row
+        mt, row = BYTE_LM_MODEL_TYPE, BYTE_LM_ROW
+        fields = _plan_byte_lm(config, mt)
+        layer_map = fields.pop("layer_map")
+        return ModelPlan(model_type=mt, config=config, family=row, _layer_map=layer_map, **fields)
     mt = config.model_type
     row = FAMILIES.get(mt)
     if row is None:

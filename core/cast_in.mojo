@@ -18,7 +18,8 @@ Conversions, integer operations only, so every backend (and the host
 column) gives the same bits:
   * to float32 (`cast_f32_bits`): float32 as is (the bits, subnormals
     included); float16 by its exact bit expansion (`f16_to_f32_bits`, NaN ->
-    the quiet NaN 0x7FC00000); float64 by round-to-nearest-even narrowing
+    the quiet NaN 0x7FC00000); bfloat16 (weight import's CAST_KIND_BFLOAT)
+    by the exact 16-bit shift (`bf16_to_f32_bits`); float64 by round-to-nearest-even narrowing
     (`checks/soft_f64.mojo::sf64_to_f32`'s statements, the native
     `cast_f64_to_f32` the estimators' input path takes, NaN -> the quiet
     NaN 0x7FC00000); integers by round-to-nearest-even from their exact
@@ -43,6 +44,10 @@ comptime CAST_KIND_UNSIGNED = 0
 comptime CAST_KIND_SIGNED = 1
 comptime CAST_KIND_FLOAT = 2
 comptime CAST_KIND_BOOL = 3
+# bfloat16 (2-byte items): weight import only (autograd/weight_import.mojo
+# names it; NumPy has no bfloat16 dtype number, so `cast_in_kind` never
+# returns it and no other entry sees it)
+comptime CAST_KIND_BFLOAT = 4
 
 # NumPy's dtype numbers (numpy/_core/include/numpy/ndarraytypes.h NPY_TYPES)
 comptime NPY_BOOL = 0
@@ -350,8 +355,18 @@ def f16_to_f32_bits(h: UInt64) -> UInt32:
 
 
 @always_inline
+def bf16_to_f32_bits(h: UInt64) -> UInt32:
+    """The exact float32 of bfloat16 `h` (low 16 bits): a bfloat16 is the
+    top half of a float32, so the widening is a 16-bit shift and nothing
+    rounds (infinities, NaN payloads and subnormals keep their bits)."""
+    return UInt32(h & UInt64(0xFFFF)) << 16
+
+
+@always_inline
 def cast_f32_bits(raw: UInt64, kind: Int, itemsize: Int) -> UInt32:
     """The float32 (bits) of one item `raw` (`cast_raw_bits`)."""
+    if kind == CAST_KIND_BFLOAT:
+        return bf16_to_f32_bits(raw)
     if kind == CAST_KIND_FLOAT:
         if itemsize == 4:
             return UInt32(raw)

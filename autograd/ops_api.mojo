@@ -43,7 +43,14 @@ section 5): `backward_graph` records the backward pass itself
 (autograd/higher.mojo backward_scalar_recorded), so `grad_handle` returns a
 gradient as a session tensor that later operations and a second backward
 can use; `backward_seed`, `vjp`, `hvp` and `jvp` are built from it with tape
-operations only (no new kernels)."""
+operations only (no new kernels).
+
+Captured programs (lane ag-program, autograd/program.mojo): an inference
+session logs its operation calls; `capture(inputs, outputs)` keeps the
+logged operations the outputs depend on as a program, and `run_program`
+replays it in one call (inputs uploaded, every node through `_op_run` with
+its recorded arguments on a scratch tape, parameters read in place,
+outputs downloaded). No new kernels."""
 from std.ffi import _Global
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
@@ -57,6 +64,7 @@ from autograd.data import permutation, gather_rows
 from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
 from core.cast_in import CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast, upload_cast_i32
+from autograd.program import OpsLog, OpsProgram, program_refuses_code, same_shape, shape_text
 from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
 # Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
@@ -240,6 +248,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     #: the session's optimizers (id = index + 1) and their per-parameter state
     var opts: List[_OpsOptimizer]
     var opt_states: List[_OpsOptState]
+    #: lane ag-program (autograd/program.mojo): the operation calls of an
+    #: inference session since its last reset, the captured programs (id =
+    #: index + 1) and the scratch tape their replays run on (its storage
+    #: reused run after run, returned at close)
+    var oplog: OpsLog
+    var programs: List[OpsProgram]
+    var prog_tape: Tape
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -259,6 +274,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.retired = List[Int]()
         self.opts = List[_OpsOptimizer]()
         self.opt_states = List[_OpsOptState]()
+        self.oplog = OpsLog()
+        self.programs = List[OpsProgram]()
+        self.prog_tape = Tape()
+        self.prog_tape.no_grad()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -365,6 +384,23 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var t = self.tape.variable_nd(self.ex, buf, shape, requires_grad)
         return self._add(t, Int(buf), requires_grad, 0)
 
+    def load_into(mut self, h: Int, src: CastIn) raises:
+        """Overwrite the values of uploaded tensor h with the caller's
+        array (any accepted dtype and strides, bfloat16 included, cast on
+        the executor by upload_cast): the weight import's write
+        (autograd/weight_import.mojo). The array must hold the tensor's
+        element count, row-major; a computed tensor is refused (its storage
+        belongs to the tape)."""
+        var slot = self._slot(h)
+        if self.owned[slot] == 0:
+            raise Error("ops: load_weights writes tensors made with tensor(); handle " + String(h)
+                        + " is a computed tensor")
+        src.check("ops: load_weights")
+        if src.count() != self.rows[slot] * self.cols[slot]:
+            raise Error("ops: load_weights: the source holds " + String(src.count())
+                        + " values, the tensor " + String(self.rows[slot] * self.cols[slot]))
+        upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
+
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
         var slot = self._slot(h)
@@ -391,6 +427,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """Drop every computed tensor and the recorded graph; uploaded tensors
         stay (each a fresh leaf of the next graph)."""
         self.tape.reset()
+        # the computed tensors the log names are gone; captured programs stay
+        self.oplog.clear()
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if not self.live[slot]:
                 continue
@@ -432,6 +470,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.ex.free(r.parts)
             self.ex.free(r.cell)
         self.opt_states.clear()
+        self.prog_tape.release(self.ex)
+        self.programs.clear()
+        self.oplog.clear()
         self.ex.sync()
 
     # ------------------------------------------------------------ gradients
@@ -886,7 +927,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """Run operation `code` on the tensors `hs` with integer and float
-        arguments; returns the new tensor's handle."""
+        arguments; returns the new tensor's handle. An inference session
+        logs the call (autograd/program.mojo OpsLog) for `capture`."""
+        var h = self._op_run(code, hs, ints, fs)
+        if not self.tape.is_recording():
+            self.oplog.add(code, hs, ints, fs, h)
+        return h
+
+    def _op_run(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        """`op` without the log: the eager call and a program's replay."""
         var x = List[Tensor]()
         for i in range(len(hs)):  # small-loop(hs: an op's input handles, three or a concat's list): handle lookup, no data
             x.append(self.tensor(hs[i]))
@@ -1400,6 +1449,233 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         for i in range(nf):  # small-loop(nf: an op's float arguments, at most four): argument parsing, no data
             fs.append(f[i])
         return self.op(code, hs, ints, fs)
+
+    # ------------------------------------------------------------ captured programs
+    def _capture_param(self, h: Int, mut p: OpsProgram) raises -> Int:
+        """The ref of session tensor h as a parameter of p: an uploaded
+        tensor, read in place at each run."""
+        var slot = (h & _SLOT_MASK) - 1
+        var gen = h >> _SLOT_BITS
+        if h <= 0 or slot < 0 or slot >= len(self.live) or not self.live[slot] or self.generation[slot] != gen:
+            raise Error("ops: capture: a tensor the outputs depend on was freed")
+        if self.owned[slot] == 0:
+            raise Error("ops: capture: the outputs depend on a tensor computed before the last reset; "
+                        + "name it as an input or compute it again")
+        for j in range(len(p.params)):  # driver-loop: over program parameters
+            if p.params[j] == h:
+                return -(j + 1)
+        p.params.append(h)
+        p.param_shapes.append(self.shapes[slot])
+        return -len(p.params)
+
+    def capture(mut self, inputs: List[Int], outputs: List[Int]) raises -> Int:
+        """A program of the logged operations that compute `outputs` from
+        `inputs` (autograd/program.mojo); returns its id (>= 1). Uploaded
+        tensors the outputs read that are not inputs become parameters,
+        read in place at each run."""
+        if self.tape.is_recording():
+            raise Error("ops: capture takes an inference session (Session(record=False))")
+        if len(inputs) < 1 or len(outputs) < 1:
+            raise Error("ops: capture takes at least one input and one output")
+        var p = OpsProgram()
+        p.n_in = len(inputs)
+        var value_of = Dict[Int, Int]()
+        for k in range(len(inputs)):  # driver-loop: over program inputs
+            var s = self._slot(inputs[k])
+            if inputs[k] in value_of:
+                raise Error("ops: capture: an input is named twice")
+            value_of[inputs[k]] = k
+            p.in_shapes.append(self.shapes[s])
+        var need = Dict[Int, Int]()
+        for k in range(len(outputs)):  # driver-loop: over program outputs
+            var s = self._slot(outputs[k])
+            p.out_shapes.append(self.shapes[s])
+            if outputs[k] not in value_of:
+                need[outputs[k]] = 1
+        # back from the outputs: keep the logged operations they depend on
+        var n = self.oplog.count()
+        var keep = List[Bool](length=n, fill=False)
+        var back = n - 1
+        while back >= 0:  # driver-loop: over logged operations, last to first
+            var r = self.oplog.res[back]
+            if r in need:
+                _ = need.pop(r)
+                keep[back] = True
+                for j in range(self.oplog.h_at[back], self.oplog.h_at[back + 1]):  # small-loop(hs: an op's input handles): graph walk, no data
+                    var h = self.oplog.hs[j]
+                    if h not in value_of:
+                        need[h] = 1
+            back -= 1
+        # forward: number the kept operations, in their order
+        for i in range(n):  # driver-loop: over logged operations
+            if not keep[i]:
+                continue
+            var code = self.oplog.code[i]
+            if program_refuses_code(code):
+                raise Error("ops: capture: embedding and take read the caller's index array, "
+                            + "which a program cannot hold")
+            p.code.append(code)
+            for j in range(self.oplog.h_at[i], self.oplog.h_at[i + 1]):  # small-loop(hs: an op's input handles): description words, no data
+                var h = self.oplog.hs[j]
+                if h in value_of:
+                    p.args.append(value_of[h])
+                else:
+                    var pr = self._capture_param(h, p)
+                    value_of[h] = pr
+                    p.args.append(pr)
+            for j in range(self.oplog.i_at[i], self.oplog.i_at[i + 1]):  # small-loop(ints: an op's integer arguments): description words, no data
+                p.ints.append(self.oplog.ints[j])
+            for j in range(self.oplog.f_at[i], self.oplog.f_at[i + 1]):  # small-loop(fs: an op's float arguments): description words, no data
+                p.fs.append(self.oplog.fs[j])
+            p.end_node()
+            value_of[self.oplog.res[i]] = p.n_in + p.n_nodes() - 1
+        for o in range(len(outputs)):  # driver-loop: over program outputs
+            var h = outputs[o]
+            if h in value_of:
+                p.outs.append(value_of[h])
+            else:
+                var pr = self._capture_param(h, p)
+                value_of[h] = pr
+                p.outs.append(pr)
+        return self.add_program(p^)
+
+    def add_program(mut self, var p: OpsProgram) raises -> Int:
+        """Register a program (captured, or read from a file with its
+        parameters uploaded); returns its id."""
+        if self.tape.is_recording():
+            raise Error("ops: programs run in an inference session (Session(record=False))")
+        self.programs.append(p^)
+        return len(self.programs)
+
+    def _program_index(self, pid: Int) raises -> Int:
+        if pid < 1 or pid > len(self.programs) or not self.programs[pid - 1].live:
+            raise Error("ops: program " + String(pid) + " is not a program of this session")
+        return pid - 1
+
+    def program(self, pid: Int) raises -> OpsProgram:
+        """A copy of program pid's description."""
+        return self.programs[self._program_index(pid)].copy()
+
+    def program_free(mut self, pid: Int) raises:
+        var pi = self._program_index(pid)
+        self.programs[pi] = OpsProgram()
+        self.programs[pi].live = False
+
+    def _leaf(mut self, buf: FP, sh: ShapeN) raises -> Int:
+        """A temporary handle of a leaf over `buf` on the current tape."""
+        var t: Tensor
+        if sh.ndim == 2:
+            t = self.tape.variable(self.ex, buf, sh.d[0], sh.d[1], False)
+        else:
+            t = self.tape.variable_nd(self.ex, buf, sh, False)
+        return self._add(t, 0, False, 0)
+
+    def _drop_temps(mut self, temps: List[Int]):
+        for i in range(len(temps)):  # driver-loop: over a replay's temporary handles
+            var slot = (temps[i] & _SLOT_MASK) - 1
+            if slot >= 0 and slot < len(self.live) and self.live[slot]:
+                self._retire(slot)
+
+    def run_program(mut self, pid: Int, srcs: List[CastIn], dsts: List[FP]) raises:
+        """Replay program pid on the caller's input arrays `srcs` and write
+        its outputs into `dsts` (each float32, row-major, of the output's
+        shape): the inputs are uploaded into the session's scratch tape,
+        every node runs through `_op_run` with its recorded arguments (the
+        eager call's kernels and words), the parameters are read in place,
+        and the scratch tape's storage is kept for the next run."""
+        if self.tape.is_recording():
+            raise Error("ops: programs run in an inference session (Session(record=False))")
+        var pi = self._program_index(pid)
+        var n_in = self.programs[pi].n_in
+        if len(srcs) != n_in:
+            raise Error("ops: this program takes " + String(n_in) + " inputs")
+        if len(dsts) != len(self.programs[pi].outs):
+            raise Error("ops: this program has " + String(len(self.programs[pi].outs)) + " outputs")
+        for k in range(n_in):  # driver-loop: over program inputs
+            var sh = self.programs[pi].in_shapes[k]
+            srcs[k].check("ops: program input")
+            if srcs[k].rows != sh.rows() or srcs[k].cols != sh.cols():
+                raise Error("ops: program input " + String(k) + " must have the shape " + shape_text(sh))
+        var pbufs = List[Int]()
+        for j in range(len(self.programs[pi].params)):  # driver-loop: over program parameters
+            var h = self.programs[pi].params[j]
+            var slot = (h & _SLOT_MASK) - 1
+            var gen = h >> _SLOT_BITS
+            if (h <= 0 or slot < 0 or slot >= len(self.live) or not self.live[slot]
+                    or self.generation[slot] != gen or self.owned[slot] == 0):
+                raise Error("ops: a parameter of program " + String(pid) + " was freed")
+            if not same_shape(self.shapes[slot], self.programs[pi].param_shapes[j]):
+                raise Error("ops: a parameter of program " + String(pid) + " changed shape")
+            pbufs.append(self.owned[slot])
+        # the scratch tape in, the session's tape held aside
+        var held = Tape()
+        swap(held, self.prog_tape)
+        swap(held, self.tape)
+        var temps = List[Int]()
+        try:
+            self.tape.reset()
+            self._replay(pi, srcs, dsts, pbufs, temps)
+        except e:
+            self._drop_temps(temps)
+            swap(held, self.tape)
+            swap(held, self.prog_tape)
+            raise e
+        self._drop_temps(temps)
+        swap(held, self.tape)
+        swap(held, self.prog_tape)
+
+    def _replay(
+        mut self, pi: Int, srcs: List[CastIn], dsts: List[FP], pbufs: List[Int], mut temps: List[Int],
+    ) raises:
+        var vals = List[Int]()
+        for k in range(len(srcs)):  # driver-loop: over program inputs
+            var sh = self.programs[pi].in_shapes[k]
+            var buf = self.tape.reserve(self.ex, sh.count())
+            upload_cast(self.ex, buf, srcs[k])
+            var h = self._leaf(buf, sh)
+            temps.append(h)
+            vals.append(h)
+        var phs = List[Int]()
+        for j in range(len(pbufs)):  # driver-loop: over program parameters
+            var sh = self.programs[pi].param_shapes[j]
+            var h = self._leaf(FP(unsafe_from_address=pbufs[j]), sh)
+            temps.append(h)
+            phs.append(h)
+        var nn = self.programs[pi].n_nodes()
+        for k in range(nn):  # driver-loop: over program nodes
+            var code = self.programs[pi].code[k]
+            var a0 = self.programs[pi].a_at[k]
+            var a1 = self.programs[pi].a_at[k + 1]
+            var hs = List[Int](capacity=a1 - a0)
+            for j in range(a0, a1):  # small-loop(args: a node's input refs): handle lookup, no data
+                var rf = self.programs[pi].args[j]
+                if rf < 0:
+                    hs.append(phs[-rf - 1])
+                else:
+                    hs.append(vals[rf])
+            var i0 = self.programs[pi].i_at[k]
+            var i1 = self.programs[pi].i_at[k + 1]
+            var ints = List[Int](capacity=i1 - i0)
+            for j in range(i0, i1):  # small-loop(ints: a node's integer arguments): argument words, no data
+                ints.append(self.programs[pi].ints[j])
+            var f0 = self.programs[pi].f_at[k]
+            var f1 = self.programs[pi].f_at[k + 1]
+            var fs = List[Float32](capacity=f1 - f0)
+            for j in range(f0, f1):  # small-loop(fs: a node's float arguments): argument words, no data
+                fs.append(self.programs[pi].fs[j])
+            var h = self._op_run(code, hs, ints, fs)
+            temps.append(h)
+            vals.append(h)
+        for k in range(len(dsts)):  # driver-loop: over program outputs
+            var rf = self.programs[pi].outs[k]
+            var h: Int
+            if rf < 0:
+                h = phs[-rf - 1]
+            else:
+                h = vals[rf]
+            if not same_shape(self.shapes[self._slot(h)], self.programs[pi].out_shapes[k]):
+                raise Error("ops: program output " + String(k) + " no longer has its recorded shape")
+            self.download(h, dsts[k])
 
     def metric(mut self, kind: Int, hs: List[Int]) raises -> Float32:
         """A forward-only metric of (y_true, prediction); one value read back."""

@@ -341,10 +341,14 @@ class CausalLM:
             raise UnsupportedModel(
                 f"mojolearn.models: model_type {plan.model_type!r}: vocab_size={self.vocab_size} and "
                 f"hidden_size={self.d_model} but {plan.embed_name} has shape {tuple(embed.shape)}")
-        norm = _float_weight(weights["norm"], plan.norm_name)
-        if tuple(norm.shape) != (self.d_model,):
-            raise UnsupportedModel(
-                f"mojolearn.models: model_type {plan.model_type!r}: {plan.norm_name} has shape {tuple(norm.shape)}, want ({self.d_model},)")
+        if plan.norm_name is None:
+            # no final norm (the byte-LM format): the head reads the last residual stream
+            norm = None
+        else:
+            norm = _float_weight(weights["norm"], plan.norm_name)
+            if tuple(norm.shape) != (self.d_model,):
+                raise UnsupportedModel(
+                    f"mojolearn.models: model_type {plan.model_type!r}: {plan.norm_name} has shape {tuple(norm.shape)}, want ({self.d_model},)")
         if plan.head_name is None:
             head = embed
         else:
@@ -354,7 +358,7 @@ class CausalLM:
                     f"mojolearn.models: model_type {plan.model_type!r}: {plan.head_name} has shape "
                     f"{tuple(head.shape)}, want ({self.vocab_size}, {self.d_model})")
         for name, a in ((plan.embed_name, embed), (plan.norm_name, norm), (plan.head_name, head)):  # glue: three named top-level weights
-            if name is not None and not all_finite(a):
+            if name is not None and a is not None and not all_finite(a):
                 raise ValueError(f"mojolearn.models.CausalLM: {name} is not finite")
         self._embed, self._norm, self._head = embed, norm, head
         self.norm_eps = float(plan.norm_eps)
@@ -443,7 +447,9 @@ class CausalLM:
                 f"mojolearn.models: model_type {plan.model_type!r}: the checkpoint lacks {len(missing)} of the "
                 f"{len(need)} tensors the plan names; first missing: {missing[:5]}")
         projections = _PROJECTIONS[plan.kind]
-        out = {"embed": ckpt.read(plan.embed_name), "norm": ckpt.read(plan.norm_name)}
+        out = {"embed": ckpt.read(plan.embed_name)}
+        if plan.norm_name is not None:
+            out["norm"] = ckpt.read(plan.norm_name)
         if plan.head_name is not None:
             out["head"] = ckpt.read(plan.head_name)
         layers = []
@@ -539,7 +545,9 @@ class CausalLM:
                 x = blk.step(x, state.layers[i])
             else:
                 x = blk.forward(x, state.layers[i])
-        hn = self._prims.rms_norm(x.reshape((n, d)), self._norm, self.norm_eps)
+        hn = x.reshape((n, d))
+        if self._norm is not None:          # None: no final norm (the byte-LM format)
+            hn = self._prims.rms_norm(hn, self._norm, self.norm_eps)
         if self._head_int15 is not None:
             logits = self._prims.linear_int15(hn, self._head_int15)
         else:
@@ -644,6 +652,10 @@ class CausalLM:
         from .._buffer import hotpath_enabled
         from .._transformer_impl import TransformerDecodeSession, _exports
         if self.device != "gpu" or self.kind != "transformer" or not hotpath_enabled():
+            return None
+        # the resident session always applies a final norm; a model without one
+        # (the byte-LM format) takes the per-layer route below
+        if self._norm is None:
             return None
         # lane/lowbit-default (2026-09-29): under fixed15_v1 the resident
         # session opens through the profile's entries (the blocks' planes
