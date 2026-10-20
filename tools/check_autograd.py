@@ -15,12 +15,22 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 # The 48 mlp_cases digests (case, epochs, digest), recorded on host, Metal, NVIDIA and AMD.
 MLP_DIGESTS = ROOT / 'autograd/checks/mlp_cases_digests.tsv'
+# The generated higher-order suite names its expected counts on its first line
+# (autograd/checks/generate_higher_oracles.py): '# HIGHER_EXPECT cases=N refusals=K fused=F'.
+HIGHER_SUITE = ROOT / 'autograd/checks/higher.mojo'
+
+
+def higher_expect():
+    first = HIGHER_SUITE.read_text().splitlines()[0].split()
+    if first[:2] != ['#', 'HIGHER_EXPECT']:
+        raise RuntimeError(f'{HIGHER_SUITE} has no HIGHER_EXPECT line (regenerate it)')
+    return {k: int(v) for k, v in (field.split('=') for field in first[2:])}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', choices=('cpu', 'gpu', 'both'), default='cpu')
-    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example'), default='all')
+    parser.add_argument('--only', choices=('all', 'gradients', 'mlp', 'infer', 'example', 'higher'), default='all')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--mojo', default='mojo')
     args = parser.parse_args()
@@ -161,6 +171,46 @@ def main():
                                           'results': len(a), 'mismatches': mismatches})
             if mismatches:
                 raise RuntimeError(f'local CPU/GPU fixture bits differ: {mismatches}')
+        if args.only == 'higher':
+            # Higher-order gradients (create_graph): the generated suite on each
+            # backend; HIGHER_DIGEST <case> <digest> lines are kept per backend
+            # for the cross-vendor diff (CPU, Metal, NVIDIA, AMD: 0 differing).
+            expect = higher_expect()
+            higher = {}
+            for backend in backends:
+                path = native(f'{backend}-higher', f'autograd/checks/higher_{backend}.mojo')
+                text = path.read_text()
+                for need in (f"PASS higher-order cases={expect['cases']}", f"PASS higher refusals={expect['refusals']}",
+                             'PASS higher lifecycle repeated_graphs=30 release=1'):
+                    if need not in text:
+                        raise RuntimeError(f'incomplete higher-order coverage: no "{need}" in {path}')
+                found = {}
+                matches = None
+                for line in text.splitlines():
+                    fields = line.split()
+                    if len(fields) == 3 and fields[0] == 'HIGHER_DIGEST':
+                        if fields[1] in found:
+                            raise RuntimeError(f'duplicate HIGHER_DIGEST {fields[1]}')
+                        found[fields[1]] = fields[2]
+                    elif len(fields) == 2 and fields[0] == 'FIRST_ORDER_MATCH':
+                        matches = fields[1]
+                if len(found) != expect['cases']:
+                    raise RuntimeError(f"{backend}: {len(found)} HIGHER_DIGEST lines, expected {expect['cases']}")
+                digests = out / f'higher-digests-{backend}.tsv'
+                digests.write_text(''.join(f'{case}\t{found[case]}\n' for case in sorted(found)))
+                report['comparisons'].append({'backend': backend, 'kind': 'higher-order suite',
+                                              'cases': len(found), 'refusals': expect['refusals'],
+                                              'fused': expect.get('fused'), 'digests': str(digests),
+                                              'first_order_match': matches})
+                save()
+                higher[backend] = found
+            if len(higher) == 2:
+                a, b = higher['cpu'], higher['gpu']
+                mismatches = sorted(k for k in a.keys() | b.keys() if a.get(k) != b.get(k))
+                report['comparisons'].append({'kind': 'local CPU/GPU HIGHER_DIGEST comparison',
+                                              'results': len(a), 'mismatches': mismatches})
+                if mismatches:
+                    raise RuntimeError(f'local CPU/GPU higher-order bits differ: {mismatches}')
         if args.only in ('all', 'example'):
             native('custom-regression', 'autograd/examples/custom_regression.mojo')
         report['status'] = 'passed'
