@@ -1253,11 +1253,11 @@ class Session:
 
     def load_partitioned(self, path, devices=(0,)):
         """Restore a complete partitioned program onto physical devices."""
-        return _PartitionedProgram(self._b, self._b.ops_partitioned_load(path, devices))
+        return self._b.ops_partitioned_load(path, devices, _PartitionedProgram, self._b)
 
     def load_distributed(self, path, devices=(0,)):
         """Restore a complete distributed program onto the given devices."""
-        return _DistributedProgram(self._b, self._b.ops_distributed_load(path, devices))
+        return self._b.ops_distributed_load(path, devices, _DistributedProgram, self._b)
 
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
@@ -1689,9 +1689,9 @@ class Program:
         when restoring a checkpoint. Eligible matrix products split independent
         output columns; stage-owned parameters and moments stay on one device.
         """
-        return _PartitionedProgram(self._s._b, self._s._b.ops_partitioned_open(
+        return self._s._b.ops_partitioned_open(
             self._s._id, self._id, devices, stages, tensor_shards,
-            microbatches, optimizer, parameters, seed))
+            microbatches, optimizer, parameters, seed, _PartitionedProgram, self._s._b)
 
     def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
                    parameters=(), seed=0):
@@ -1702,8 +1702,9 @@ class Program:
         ``parameters`` lists trainable handles, or is empty to train every
         floating-point parameter. ``seed`` controls native row permutations.
         """
-        return _DistributedProgram(self._s._b, self._s._b.ops_distributed_open(
-            self._s._sid(), self._id, devices, logical_shards, optimizer, parameters, seed))
+        return self._s._b.ops_distributed_open(
+            self._s._id, self._id, devices, logical_shards, optimizer, parameters, seed,
+            _DistributedProgram, self._s._b)
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,

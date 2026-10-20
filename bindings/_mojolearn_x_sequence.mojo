@@ -18,6 +18,7 @@ from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py
 from autograd.distributed_pyapi import (
+    distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
     distributed_run_py, distributed_state_py, distributed_residency_py,
     distributed_save_py, distributed_close_py,
@@ -289,7 +290,7 @@ def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> Pyt
 
 
 def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    stages: PythonObject, tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject,
+    stages: PythonObject, tensor_shards: PythonObject, microbatches: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[DeviceExec]()
@@ -298,10 +299,11 @@ def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: 
     for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
         var context = DeviceContext(device_id=ids[k])
         executors.append(DeviceExec(context))
-    return partition_open[DeviceExec, OPS_DEVICE](sid, pid, ids, stages, tensor_shards, microbatches, optimizer, parameters, seed, executors^)
+    var handle = partition_open[DeviceExec, OPS_DEVICE](sid, pid, ids, stages, tensor_shards, microbatches, optimizer, parameters, seed, executors^)
+    return distributed_object(cls, binding, handle)
 
 
-def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject) raises -> PythonObject:
+def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[DeviceExec]()
     if len(ids) > 1 and launch_profile_level() != 0:
@@ -309,7 +311,9 @@ def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject) rais
     for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
         var context = DeviceContext(device_id=ids[k])
         executors.append(DeviceExec(context))
-    return partition_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+    var handle = partition_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+    return distributed_object(cls, binding, handle)
+
 
 
 def ops_partitioned_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -343,7 +347,7 @@ def ops_partitioned_profile_binding(id: PythonObject) raises -> PythonObject:
 
 
 def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
-    logical_shards: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject,
+    logical_shards: PythonObject, optimizer: PythonObject, parameters: PythonObject, seed: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[DeviceExec]()
@@ -352,10 +356,11 @@ def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: 
     for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
         var context = DeviceContext(device_id=ids[k])
         executors.append(DeviceExec(context))
-    return distributed_open[DeviceExec, OPS_DEVICE](sid, pid, ids, logical_shards, optimizer, parameters, seed, executors^)
+    var handle = distributed_open[DeviceExec, OPS_DEVICE](sid, pid, ids, logical_shards, optimizer, parameters, seed, executors^)
+    return distributed_object(cls, binding, handle)
 
 
-def ops_distributed_load_binding(path: PythonObject, devices: PythonObject) raises -> PythonObject:
+def ops_distributed_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
     var ids = distributed_devices(devices)
     var executors = List[DeviceExec]()
     if len(ids) > 1 and launch_profile_level() != 0:
@@ -363,7 +368,9 @@ def ops_distributed_load_binding(path: PythonObject, devices: PythonObject) rais
     for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
         var context = DeviceContext(device_id=ids[k])
         executors.append(DeviceExec(context))
-    return distributed_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+    var handle = distributed_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+    return distributed_object(cls, binding, handle)
+
 
 
 def ops_distributed_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,

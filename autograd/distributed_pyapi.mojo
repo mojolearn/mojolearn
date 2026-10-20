@@ -27,6 +27,16 @@ comptime _DISTRIBUTED_NAME = "MojoCapturedDistributedIdentical" if GLOBAL_NUMERI
 comptime _DISTRIBUTED = _Global[StorageType=_OpsStore, name=_DISTRIBUTED_NAME, init_fn=_OpsStore.__init__]
 
 
+def distributed_object(cls: PythonObject, binding: PythonObject, handle: PythonObject) raises -> PythonObject:
+    # Allocate the Python-facing shell through C builtins, without executing
+    # its Python __init__. The native registry owns all execution state.
+    var b = Python.import_module("builtins")
+    var out = b.object.__new__(cls)
+    b.setattr(out, "_b", binding)
+    b.setattr(out, "_id", handle)
+    return out
+
+
 def distributed_devices(devices: PythonObject) raises -> List[Int]:
     var out = List[Int]()
     for k in range(len(devices)):  # small-loop(devices: physical device IDs): metadata
