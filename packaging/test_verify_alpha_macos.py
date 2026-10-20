@@ -83,7 +83,7 @@ class FreshMacosTests(unittest.TestCase):
         self.assertTrue(result['passed'])
 
     def test_without_a_macos_smoke_receipt_it_is_refused(self):
-        self.refused(self.stage(smoke=False), 'light-smoke-macos.json')
+        self.refused(self.stage(smoke=False), 'needs a smoke source')
 
     def test_a_receipt_from_another_source_is_refused(self):
         self.refused(self.stage(source='b' * 40), 'source witness differs')
