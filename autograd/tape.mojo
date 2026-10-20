@@ -1004,6 +1004,289 @@ struct Tape(Movable):
     def cols(self, x: Tensor) raises -> Int:
         return self._nodes[self._check(x)].cols
 
+    # ---- rank-N shapes and views (lane ag-rankn-core, docs/plans/AUTOGRAD_RANKN.md 1.1-1.4) ----
+    # Storage is one flat row-major buffer per tensor; the shape is metadata
+    # (_shapes). rows(x) and cols(x) stay the matrix view. Nothing here
+    # changes a word an existing operation writes: the existing methods only
+    # gain metadata writes (_with_shape), and the new ones are new nodes.
+    def shape_of(self, x: Tensor) raises -> ShapeN:
+        """The shape of x (rank 2, (rows, cols), unless x was recorded with
+        a rank-N shape or inherits one)."""
+        return self._shapes[self._check(x)]
+
+    def ndim(self, x: Tensor) raises -> Int:
+        """The rank of x."""
+        return self._shapes[self._check(x)].ndim
+
+    def dim(self, x: Tensor, k: Int) raises -> Int:
+        """The extent of axis k of x (negative k counts from the end)."""
+        var s = self._shapes[self._check(x)]
+        return s.d[rn_normalize_axis(k, s.ndim)]
+
+    @always_inline
+    def _with_shape(mut self, t: Tensor, shape: ShapeN) -> Tensor:
+        """Set the rank-N shape of node t (its count equals rows * cols)."""
+        self._shapes[t._index] = shape
+        return t
+
+    def _lead_shape(self, i: Int, cols: Int) -> ShapeN:
+        """The shape of a row-wise result of node i with `cols` columns: i's
+        leading dims and cols when i has rank 3 or more, else the matrix
+        (rows of i, cols)."""
+        var s = self._shapes[i]
+        if s.ndim >= 3:
+            return s.with_last(cols)
+        return ShapeN.matrix(self._nodes[i].rows, cols)
+
+    def _binary_shape(self, a_at: Int, b_at: Int, rows: Int, cols: Int) -> ShapeN:
+        """The shape of an elementwise binary result over the matrix views:
+        the operands' shape when they agree; the full operand's shape when
+        the other is a (1, 1), (1, cols) or (rows, 1) broadcast of it (the
+        trailing-dims broadcast); otherwise the matrix (rows, cols)."""
+        var sa = self._shapes[a_at]
+        var sb = self._shapes[b_at]
+        if sa.same(sb):
+            return sa
+        var a_full = self._nodes[a_at].rows == rows and self._nodes[a_at].cols == cols
+        var b_full = self._nodes[b_at].rows == rows and self._nodes[b_at].cols == cols
+        if a_full and not b_full:
+            return sa
+        if b_full and not a_full:
+            return sb
+        return ShapeN.matrix(rows, cols)
+
+    def _record_nd[E: Exec](
+        mut self, mut ex: E, value: FP, shape: ShapeN,
+        op: Int, parents: List[Tensor], saved: Args, leaf_grad: Bool = False,
+        grad_storage: FP = dummy_ptr(), caller_grad: Bool = False,
+    ) raises -> Tensor:
+        """_record with a rank-N shape: the node's matrix view is
+        (shape.rows(), shape.cols())."""
+        rn_check(shape)
+        var t = self._record(ex, value, shape.rows(), shape.cols(), op, parents, saved, leaf_grad,
+                             grad_storage, caller_grad)
+        return self._with_shape(t, shape)
+
+    def variable_nd[E: Exec](
+        mut self, mut ex: E, data: FP, shape: ShapeN, requires_grad: Bool = True,
+    ) raises -> Tensor:
+        """variable() with a shape of any rank up to 8: `data` holds
+        shape.count() floats, row-major."""
+        rn_check(shape)
+        var t = self.variable(ex, data, shape.rows(), shape.cols(), requires_grad)
+        return self._with_shape(t, shape)
+
+    def variable_into_nd[E: Exec](
+        mut self, mut ex: E, data: FP, grad_destination: FP, shape: ShapeN,
+    ) raises -> Tensor:
+        """variable_into() with a shape of any rank up to 8."""
+        rn_check(shape)
+        var t = self.variable_into(ex, data, grad_destination, shape.rows(), shape.cols())
+        return self._with_shape(t, shape)
+
+    def tensor_nd[E: Exec](
+        mut self, mut ex: E, values: List[Float32], shape: ShapeN, requires_grad: Bool = False,
+    ) raises -> Tensor:
+        """tensor() with a shape of any rank up to 8: `values` holds
+        shape.count() floats, row-major."""
+        rn_check(shape)
+        var t = self.tensor(ex, values, shape.rows(), shape.cols(), requires_grad)
+        return self._with_shape(t, shape)
+
+    def custom_nd[E: Exec](
+        mut self, mut ex: E, inputs: List[Tensor], output: FP, shape: ShapeN, tag: Int, saved: Args,
+    ) raises -> Tensor:
+        """custom() with a shape of any rank up to 8 (the rule sees the
+        matrix view rows x cols)."""
+        rn_check(shape)
+        var t = self.custom(ex, inputs, output, shape.rows(), shape.cols(), tag, saved)
+        return self._with_shape(t, shape)
+
+    def custom_into_nd[E: Exec](
+        mut self, mut ex: E, inputs: List[Tensor], output: FP, grad_destination: FP, shape: ShapeN,
+        tag: Int, saved: Args,
+    ) raises -> Tensor:
+        """custom_into() with a shape of any rank up to 8."""
+        rn_check(shape)
+        var t = self.custom_into(ex, inputs, output, grad_destination, shape.rows(), shape.cols(), tag, saved)
+        return self._with_shape(t, shape)
+
+    def descriptor[E: Exec](mut self, mut ex: E, words: List[Int]) raises -> FP:
+        """Tape storage holding `words` as int32 bit patterns, one a word,
+        until the next reset: the shapes and strides a rank-N kernel reads
+        (bind it to Args.p11; read it with autograd.rankn.rn_word). One
+        upload, never per element."""
+        if len(words) < 1:
+            raise Error("descriptor: at least one word is needed")
+        var host = List[Float32](length=len(words), fill=Float32(0))
+        for i in range(len(words)):  # small-loop(descriptor words: shape metadata, a few 17-word records, no data)
+            var w = words[i]
+            if w < -(1 << 31) or w >= (1 << 31):
+                raise Error("descriptor: a shape or stride does not fit in 32 bits")
+            host[i] = bitcast[DType.float32](Int32(w))
+        var p = self._alloc(ex, len(words))
+        ex.upload(p, FP(unsafe_from_address=Int(host.unsafe_ptr())), len(words))
+        return p
+
+    def strided_view_args[E: Exec](
+        mut self, mut ex: E, source: FP, base: Int, shape: ShapeN, strides: InlineArray[Int, RN_MAX_RANK],
+    ) raises -> Args:
+        """The saved Args of a pending strided view (autograd.rankn
+        RN_VIEW_MARK): element c of the view is source[base + sum_k c_k *
+        strides[k]]. Record it with PERMUTE_N, or with custom_nd and a tag in
+        RN_TAG_FIRST .. RN_TAG_END, and an output buffer of shape.count()
+        floats that the tape fills at the first dense read."""
+        rn_check(shape)
+        var words = List[Int]()
+        rn_desc_view(words, shape, strides)
+        var a = Args()
+        a.p0 = source
+        a.p11 = self.descriptor(ex, words)
+        a.i0 = base
+        a.i1 = strides[0]
+        a.i2 = strides[1]
+        a.i3 = strides[2]
+        a.i4 = strides[3]
+        a.i5 = strides[4]
+        a.i6 = strides[5]
+        a.i7 = strides[6]
+        a.i8 = strides[7]
+        a.i9 = 1
+        a.i10 = RN_VIEW_MARK
+        return a
+
+    def _view_strides(self, i: Int) -> InlineArray[Int, RN_MAX_RANK]:
+        """A pending strided view's strides (saved.i1 .. i8)."""
+        var a = self._nodes[i].saved
+        var st = InlineArray[Int, RN_MAX_RANK](fill=0)
+        st[0] = a.i1
+        st[1] = a.i2
+        st[2] = a.i3
+        st[3] = a.i4
+        st[4] = a.i5
+        st[5] = a.i6
+        st[6] = a.i7
+        st[7] = a.i8
+        return st^
+
+    def operand_nd[E: Exec](
+        self, mut ex: E, x: Tensor,
+    ) raises -> Tuple[FP, Int, ShapeN, InlineArray[Int, RN_MAX_RANK]]:
+        """x as a strided read, without a copy: (buffer, base offset, shape,
+        element strides). Element c of x is buffer[base + sum_k c_k *
+        strides[k]]. A dense tensor is (its values, 0, its shape, row-major
+        strides); a pending view is its source read through the view's
+        strides."""
+        var i = self._check(x)
+        var s = self._shapes[i]
+        var zero: Int = 0
+        if self._pending(i):
+            if self._nodes[i].op == TRANSPOSE:
+                # element (r, c) is the source's (c, r): strides (1, rows)
+                var st = InlineArray[Int, RN_MAX_RANK](fill=0)
+                st[0] = 1
+                st[1] = self._nodes[i].rows
+                return (self._nodes[i].saved.p0, zero, s, st^)
+            return (self._nodes[i].saved.p0, self._nodes[i].saved.i0, s, self._view_strides(i))
+        return (self._nodes[i].value, zero, s, s.strides())
+
+    def _gemm_view(self, i: Int) -> Tuple[Bool, Int, Int]:
+        """Whether node i's matrix view reads as a GEMM operand in place:
+        (True, row stride, column stride) for a dense node, a pending
+        transpose, or a pending strided view at base 0 whose leading axes
+        collapse to one stride; else (False, 0, 0) and the caller
+        materializes it first."""
+        var zero: Int = 0
+        var one: Int = 1
+        if not self._pending(i):
+            return (True, self._nodes[i].cols, one)
+        if self._nodes[i].op == TRANSPOSE:
+            return (True, one, self._nodes[i].rows)
+        if self._nodes[i].saved.i0 != 0:
+            return (False, zero, zero)
+        var s = self._shapes[i]
+        var st = self._view_strides(i)
+        if s.ndim < 1:
+            return (True, zero, zero)
+        var lead_d = InlineArray[Int, RN_MAX_RANK](fill=1)
+        var lead_s = InlineArray[Int, RN_MAX_RANK](fill=0)
+        for k in range(s.ndim - 1):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+            lead_d[k] = s.d[k]
+            lead_s[k] = st[k]
+        var lead = ShapeN(s.ndim - 1, lead_d^)
+        var ls = List[InlineArray[Int, RN_MAX_RANK]]()
+        ls.append(lead_s^)
+        rn_collapse(lead, ls)
+        if lead.ndim != 1:
+            return (False, zero, zero)
+        return (True, ls[0][0], st[s.ndim - 1])
+
+    def view_nd[E: Exec](mut self, mut ex: E, x: Tensor, shape: ShapeN) raises -> Tensor:
+        """x's elements, row-major, in a new shape with the same element
+        count (reshape, flatten, squeeze, unsqueeze). No copy: the result
+        shares x's storage, and its gradient passes through unchanged. A
+        pending view is copied once first."""
+        rn_check(shape)
+        var n_at = self._use(ex, x)
+        var n = self._nodes[n_at]
+        if shape.count() != n.rows * n.cols:
+            raise Error("view_nd must preserve the element count")
+        return self._record_nd(ex, n.value, shape, RESHAPE, [x], Args())
+
+    def permute[E: Exec](mut self, mut ex: E, x: Tensor, axes: List[Int]) raises -> Tensor:
+        """x with its axes reordered: axis j of the result is axis axes[j]
+        of x (negative axes count from the end; every axis once).
+
+        No copy at record time: the result is a view read in place by
+        strided readers (matmul when its matrix view has two strides, and
+        the rank-N operations); any other reader copies it once. Its
+        gradient is the upstream gradient permuted back.
+
+        Example::
+
+            var x = tape.tensor_nd(ex, data, ShapeN.of([2, 3, 4]), True)
+            var y = tape.permute(ex, x, [0, 2, 1])   # (2, 4, 3)
+        """
+        var xi = self._check(x)
+        var s = self._shapes[xi]
+        if len(axes) != s.ndim:
+            raise Error("permute: axes must name every axis of the tensor once")
+        var perm = InlineArray[Int, RN_MAX_RANK](fill=0)
+        var seen = InlineArray[Bool, RN_MAX_RANK](fill=False)
+        var identity = True
+        for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+            var k = rn_normalize_axis(axes[j], s.ndim)
+            if seen[k]:
+                raise Error("permute: axes must name every axis of the tensor once")
+            seen[k] = True
+            perm[j] = k
+            if k != j:
+                identity = False
+        if identity:
+            return self.view_nd(ex, x, s)
+        # the source as x is read (a view of a view composes its strides)
+        var src = self.operand_nd(ex, x)
+        var src_strides = src[3]
+        var od = InlineArray[Int, RN_MAX_RANK](fill=1)
+        var fs = InlineArray[Int, RN_MAX_RANK](fill=0)
+        for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+            od[j] = s.d[perm[j]]
+            fs[j] = src_strides[perm[j]]
+        var o = ShapeN(s.ndim, od^)
+        var saved = self.strided_view_args(ex, src[0], src[1], o, fs)
+        # VJP record (saved.p1): x's gradient (dense, x's shape) element c
+        # reads the upstream (dense, o's shape) at sum_k c_k * so[inv[k]],
+        # inv[perm[j]] = j
+        var so = o.strides()
+        var vs = InlineArray[Int, RN_MAX_RANK](fill=0)
+        for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
+            vs[perm[j]] = so[j]
+        var vjp_words = List[Int]()
+        rn_desc_view(vjp_words, s, vs)
+        saved.p1 = self.descriptor(ex, vjp_words)
+        var output = self._alloc(ex, o.count())
+        return self._record_nd(ex, output, o, PERMUTE_N, [x], saved)
+
     def values[E: Exec](self, mut ex: E, x: Tensor) raises -> List[Float32]:
         """Download a tensor into a row-major host list."""
         var vi = self._check(x)
