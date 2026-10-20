@@ -644,6 +644,16 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.ex.launch[OP_COPY](a, rows * cols)
         return self._constant(dst, rows, cols, 0)
 
+    def _copy_constant_nd(mut self, src: FP, shape: ShapeN) raises -> Int:
+        # VJP results retain the input's full rank, rather than publishing the
+        # tape's flattened matrix storage as the public tensor shape.
+        var dst = self.tape.reserve(self.ex, shape.count())
+        var a = Args()
+        a.p0 = src
+        a.p1 = dst
+        self.ex.launch[OP_COPY](a, shape.count())
+        return self._leaf(dst, shape)
+
     def _zeros(mut self, rows: Int, cols: Int) raises -> Int:
         """A new constant session tensor of zeros."""
         var dst = self.tape.reserve(self.ex, rows * cols)
@@ -686,14 +696,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: backward needs a recording session (Session(record=True))")
         var t = self.tensor(h)
         var seed = self.tensor(seed_h)
-        var a = self.shape(h)
-        var b = self.shape(seed_h)
-        if a[0] != b[0] or a[1] != b[1]:
-            raise Error("ops: the seed must have the output's shape")
+        if not same_shape(self.shape_nd(h), self.shape_nd(seed_h)):
+            raise Error("ValueError: ops: the seed must have the output's full shape")
         if create_graph:
             backward_recorded(self.tape, self.ex, t, seed)
         else:
-            self.tape.backward_with_rules(self.ex, t, seed, NeuralRules(), False)
+            # First-order seeded and scalar backward accept the same supported
+            # rank-N and import operations. Recorded higher derivatives keep
+            # their existing explicit operation contract above.
+            self.tape.backward_with_rules(self.ex, t, seed, ImportRules(), False)
 
     def grad_handle(mut self, h: Int) raises -> Int:
         """The gradient of tensor `h` from the last recorded backward, as a
@@ -716,9 +727,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var g = self.tape.grad_of(x)
                 res.append(self._add(g, 0, False, 0))
             else:
-                var s = self.shape(hs[i])
+                var shape = self.shape_nd(hs[i])
                 var gbuf = self.tape.gradient(x)
-                res.append(self._copy_constant(gbuf, s[0], s[1]))
+                res.append(self._copy_constant_nd(gbuf, shape))
         return res^
 
     def hvp(mut self, loss_h: Int, hs: List[Int], vs: List[Int]) raises -> List[Int]:
