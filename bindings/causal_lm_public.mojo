@@ -16,14 +16,15 @@ from bindings.generation_buffers import (
 from bindings.generation_policy import generation_pick
 from bindings.hostptr import f32_ptr, i32_ptr
 from std.math import isfinite
+from std.os import getenv
 
 
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var fn = g[].bi.getattr(module, name)
-    if g[].bi.type(fn) is not g[].bi.type(g[].bi.len):
+    var entry = g[].bi.getattr(module, name)
+    if g[].bi.type(entry) is not g[].bi.type(g[].bi.len):
         raise Error("CausalLM: " + name + " must be a compiled native extension entry")
-    return fn
+    return entry
 
 
 def causal_lm_admit_binding(
@@ -48,6 +49,7 @@ def causal_lm_admit_binding(
         # Preserve the existing resident GPU route for fixed-length greedy
         # generation. No performance default changes with this migration.
         if Bool(py=g[].bi.hasattr(block_binding, "causal_lm_session_run")):
+            entries["resident_vendor"] = _native_function(block_binding, "transformer_vendor")()
             for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),
                          String("transformer_decode_session_close"), String("causal_lm_session_create"),
                          String("causal_lm_session_open"), String("causal_lm_session_run"), String("causal_lm_session_close")]:
@@ -281,7 +283,8 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> 
         raise error
 
 
-def causal_lm_forward_binding(model: PythonObject, value: PythonObject, var state: PythonObject, step: PythonObject) raises -> PythonObject:
+def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied_state: PythonObject, step: PythonObject) raises -> PythonObject:
+    var state = supplied_state
     var one = Bool(py=step)
     var ids = generation_ids(value, Int(py=model.vocab_size), one)
     if state is None:
@@ -295,6 +298,78 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, var stat
         out.strides = g[].bi.tuple(py_ints([Int(py=model.vocab_size) * 4, 4]))
         out.ndim = PythonObject(2)
     return out
+
+
+def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
+    entries["causal_lm_session_close"](lm)
+    for i in range(len(sessions)):
+        entries["transformer_decode_session_close"](sessions[i])
+
+
+def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:
+    var e = model._native_entries
+    if not Bool(py=e.__contains__("causal_lm_session_run")) or model._norm is None:
+        return PythonObject(None)
+    var int15 = model._head_int15 is not None
+    if int15 and String(e["resident_vendor"]) != "cuda":
+        return PythonObject(None)
+    var ids = generation_ids(value, Int(py=model.vocab_size))
+    var n = Int(py=maximum)
+    if n == 0:
+        return ids
+    if n < 0:
+        raise Error("generation: max_new_tokens must be nonnegative")
+    var b = Int(py=ids.shape[0])
+    var l = Int(py=ids.shape[1])
+    var state = supplied_state
+    if state is None:
+        state = causal_lm_allocate_binding(model, PythonObject(b), PythonObject(l + n))
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var sessions = g[].bi.list()
+    var lm = e["causal_lm_session_create"]()
+    var keep = List[PythonObject]()
+    var out = generation_array([b, n], "i")
+    try:
+        for i in range(len(model._blocks)):
+            var blk = model._blocks[i]
+            var st = state.layers[i]
+            var a = _transformer_args(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
+            var open_a = g[].bi.list()
+            for j in range(1, 12):
+                open_a.append(a[j])
+            for j in range(13, len(a)):
+                open_a.append(a[j])
+            var p = _transformer_params(blk, st, b, l)
+            var open_p = g[].bi.list()
+            for j in range(len(p)):
+                if j != 1:
+                    open_p.append(p[j])
+            var ss = e["transformer_decode_session_create"]()
+            sessions.append(ss)
+            e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"](ss, open_a, open_p)
+        var top = py_ints([_addr(model._embed, keep), _addr(model._norm, keep)])
+        if int15:
+            for i in range(3):
+                top.append(_addr(model._head_int15[i], keep))
+        else:
+            top.append(0 if model._head is model._embed else _addr(model._head, keep))
+        var tp = py_ints([b, Int(py=model.vocab_size), Int(py=model.d_model)])
+        tp.append(model.norm_eps)
+        e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"](lm, top, tp)
+        e["causal_lm_session_run"](lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
+    except error:
+        _resident_close(e, lm, sessions)
+        raise error
+    _resident_close(e, lm, sessions)
+    var result = generation_array([b, l + n], "i")
+    var dst = i32_ptr(Int(py=result._addr))
+    var prompt = i32_ptr(Int(py=ids._addr))
+    var generated = i32_ptr(Int(py=out._addr))
+    for r in range(b):
+        memcpy(dest=dst + r * (l + n), src=prompt + r * l, count=l)
+        memcpy(dest=dst + r * (l + n) + l, src=generated + r * n, count=n)
+    _ = keep^
+    return result
 
 
 struct GenerationHandle(Movable, Writable):
@@ -518,6 +593,10 @@ def causal_lm_info_binding(stream: PythonObject) raises -> PythonObject:
 def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var stream = causal_lm_stream_binding(model, value, maximum, options)
     var s = stream._native.downcast_value_ptr[GenerationHandle]()
+    if s[].greedy and len(s[].eos) == 0:
+        var resident = causal_lm_resident_binding(model, value, maximum, PythonObject(None), s[].state)
+        if resident is not None:
+            return resident
     var continuation = _read(s[], max(1, s[].max_new))
     var b = len(s[].lengths)
     var l = Int(py=s[].prompt.shape[1])
