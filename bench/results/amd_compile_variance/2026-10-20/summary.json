@@ -1,0 +1,146 @@
+{
+  "schema": "mojolearn.amd-compile-variance.v1",
+  "date": "2026-10-20",
+  "source_commit": "6bf016f25eabf29f44e2cfed160d0d62151ce31a",
+  "source_dirty": false,
+  "hardware": {
+    "provider": "DigitalOcean",
+    "droplet_id": 610916725,
+    "gpu": "AMD Instinct MI325X",
+    "target": "gfx942",
+    "logical_processors": 20
+  },
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "cold_cache": true,
+  "builds": [
+    {
+      "name": "b1_j1",
+      "workers": 1,
+      "compile_exit": 0,
+      "seconds": 69.795,
+      "binary_sha256": "d86f44805102ed9636ece657e1175662749ac49ed165b74fb6a373f2fa530e98",
+      "verify_exit": 0,
+      "digest": "f71678fdc3973528:18cells",
+      "difference_count": 0,
+      "cache_files": 187
+    },
+    {
+      "name": "b2_j8",
+      "workers": 8,
+      "compile_exit": 0,
+      "seconds": 38.232,
+      "binary_sha256": "46fabe82d563c755002ddcdc34297d42138d9c965adec2771ce52ad0dec02090",
+      "verify_exit": 0,
+      "digest": "f71678fdc3973528:18cells",
+      "difference_count": 0,
+      "cache_files": 187
+    },
+    {
+      "name": "b3_j1",
+      "workers": 1,
+      "compile_exit": 0,
+      "seconds": 69.921,
+      "binary_sha256": "d86f44805102ed9636ece657e1175662749ac49ed165b74fb6a373f2fa530e98",
+      "verify_exit": 0,
+      "digest": "f71678fdc3973528:18cells",
+      "difference_count": 0,
+      "cache_files": 187
+    },
+    {
+      "name": "b4_j8",
+      "workers": 8,
+      "compile_exit": 0,
+      "seconds": 38.603,
+      "binary_sha256": "46fabe82d563c755002ddcdc34297d42138d9c965adec2771ce52ad0dec02090",
+      "verify_exit": 0,
+      "digest": "f71678fdc3973528:18cells",
+      "difference_count": 0,
+      "cache_files": 187
+    },
+    {
+      "name": "b5_j8",
+      "workers": 8,
+      "compile_exit": 0,
+      "seconds": 37.133,
+      "binary_sha256": "46fabe82d563c755002ddcdc34297d42138d9c965adec2771ce52ad0dec02090",
+      "verify_exit": 0,
+      "digest": "f71678fdc3973528:18cells",
+      "difference_count": 0,
+      "cache_files": 187
+    }
+  ],
+  "means_seconds": {
+    "1": 69.858,
+    "8": 37.989333333333335
+  },
+  "canonical": {
+    "kernel_count": 137,
+    "kernel_digest": "256dd2c50b8fc589",
+    "code_object_set": "ea8448e3eee9aca8",
+    "cross_worker_class": "REORDERED",
+    "numerical_verdict": "RESULTS-EQUAL"
+  },
+  "numerical_scope": {
+    "lanes": [
+      "gmm",
+      "gmm-random-init"
+    ],
+    "cells_per_build": 18,
+    "builds": 5
+  },
+  "merged_builds": [
+    {
+      "workers": 1,
+      "exit_code": 139,
+      "seconds": 515.196,
+      "output_files": 0,
+      "cache_files": 0
+    },
+    {
+      "workers": 8,
+      "exit_code": 0,
+      "seconds": 794.29,
+      "output_files": 1,
+      "cache_files": 3924
+    }
+  ],
+  "decision": {
+    "previous_workers": 1,
+    "default_workers": 8,
+    "override": "MOJOLEARN_AMD_COMPILE_JOBS",
+    "reason": "Repeated GMM numerical results agree; eight workers compiled mixture faster and completed the merged tier."
+  },
+  "limitations": [
+    "Only the GMM/GMM random-init fixtures were compared across all five mixture builds.",
+    "Merged one-worker build crashed with rc=139; no merged cross-worker numerical equivalence or timing ratio is established.",
+    "The merged canonical report compared zero files against zero; it is not acceptance evidence.",
+    "This is compilation evidence, not end-to-end estimator performance evidence."
+  ],
+  "evidence": {
+    "local_root": "/Users/andrewhendel/mojolearn-evidence/merged-bindings/boxes/amd/amd-variance",
+    "files": {
+      "SUMMARY.txt": "baa48d7f66538662e7a367ccd4e76b3e4e452a57a9a3b527ec54dee71bdd223f",
+      "builds.tsv": "f51452aedc33254632282b071accc9744ab8a9679971cd70c74151ef31d928ce",
+      "merged.tsv": "5e7830c9cdbd70b5b3f3ce8ed279ea63f88f3a3d3ab0e1825b59cd981a22141d",
+      "facts.txt": "c3e5edd53375502d0914fd15e29cc87c1c5b16e20a75d64b15616f84e9085453"
+    },
+    "retained_artifacts": {
+      "local_path": "/Users/andrewhendel/mojolearn-evidence/ptx-qualification-20261020/amd-retained-artifacts.tar.gz",
+      "sha256": "82afc251ca447333b07742e0353b08a2d4cdfd30ba15753033c91ba2eb0e8854",
+      "bytes": 82811867,
+      "status": "verified",
+      "r2_key": "measurements/records/v1/82afc251ca447333b07742e0353b08a2d4cdfd30ba15753033c91ba2eb0e8854.tar.gz",
+      "r2_bucket": "mojolearn-data",
+      "verification": "GET sha256"
+    },
+    "retained_files": 73,
+    "retained_uncompressed_bytes": 322614190
+  },
+  "teardown": {
+    "status": "DELETED",
+    "delete_http": 204,
+    "confirmation_http": 404,
+    "log": "/Users/andrewhendel/mojolearn-evidence/ptx-qualification-20261020/amd-down.log",
+    "log_archive": "measurements/box-archive/do-amd-610916725/do-amd-610916725-20261020T1842Z.tgz"
+  }
+}
