@@ -197,7 +197,7 @@ def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
     raise Error("transport: JSON header contains an unsupported object")
 
 
-def transport_send(socket: PythonObject, header: PythonObject, payload: PythonObject = PythonObject(None)) raises:
+def transport_send(socket: PythonObject, header: PythonObject, payload: PythonObject) raises:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
     if not Bool(py=t[].bi.isinstance(socket, t[].socket)) or t[].bi.type(header) is not t[].bi.dict:
         raise Error("transport: send requires a native socket and dict header")
