@@ -256,7 +256,7 @@ def cross_vendor_refuse(owner: PythonObject, reason: String) raises:
     header["reason"] = PythonObject(reason)
     for i in range(len(owner.peers)):  # driver-loop: over connected worker refusal notices
         try:
-            transport_send(owner.peers[i]["sock"], header)
+            transport_send(owner.peers[i]["sock"], header, PythonObject(None))
         except:
             pass
     raise Error("CrossVendorMismatch: " + reason)
@@ -333,7 +333,7 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
             head["step"] = PythonObject(step)
             head["chained"] = PythonObject(chained)
             head["first"] = PythonObject(chained and i == 0)
-            transport_send(peers[i]["sock"], head)
+            transport_send(peers[i]["sock"], head, PythonObject(None))
         var gradients = bi.dict()
         var losses = bi.dict()
         for i in range(count):  # driver-loop: over worker gradient replies
@@ -422,7 +422,7 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
     var done = bi.dict()
     done["cmd"] = PythonObject("done")
     for i in range(count):  # driver-loop: over group completion notices
-        transport_send(peers[i]["sock"], done)
+        transport_send(peers[i]["sock"], done, PythonObject(None))
     return rows
 
 
@@ -626,7 +626,7 @@ def cross_vendor_worker_run(owner: PythonObject) raises -> PythonObject:
     while True:  # driver-loop: over initial tunnel handshakes within the retry deadline
         socket = cross_vendor_worker_connect(owner)
         try:
-            transport_send(socket, hello)
+            transport_send(socket, hello, PythonObject(None))
             response = transport_receive(socket, n * 4)
             break
         except error:
@@ -685,7 +685,7 @@ def cross_vendor_worker_run(owner: PythonObject) raises -> PythonObject:
                     if not on_device:
                         held = parts
                         total = PythonObject(None)
-                    transport_send(socket, reply)
+                    transport_send(socket, reply, PythonObject(None))
                 else:
                     transport_send(socket, reply, bi.bytes().join(parts))
             elif command == "fold":
@@ -736,7 +736,7 @@ def cross_vendor_worker_run(owner: PythonObject) raises -> PythonObject:
                 var reply = bi.dict()
                 reply["completed"] = done
                 reply["state"] = digest
-                transport_send(socket, reply)
+                transport_send(socket, reply, PythonObject(None))
             elif command == "done":
                 transport_close(socket)
                 return PythonObject(committed)
