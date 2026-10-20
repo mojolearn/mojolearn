@@ -11,6 +11,8 @@ Today a tape tensor is a float32 matrix: `_Node.rows`, `_Node.cols`
 n_features)` (python/mojolearn/_x_sequence_model.py:28). Users want
 `[B, C, H, W]`, `[B, T, F]`, `[B, heads, Q, K]`.
 
+> Opcode ranges shifted by +500 on 2026-10-20 (orchestrator): 3600-4019 collided with docs/plans/AUTOGRAD_HIGHER_ORDER.md (3600-3619); rank-N uses 4100-4519.
+
 ## 0. Decisions in ten lines
 
 1. Storage stays one flat row-major float32 device buffer per tensor. The
@@ -618,8 +620,8 @@ tools/check_autograd.py (python lane).
 ### Lane 1: ag-rankn-core (merges first)
 
 - Files: `autograd/rankn.mojo` (new: `ShapeN`, `rn_*`, descriptor layout),
-  `autograd/rankn_ops.mojo` (new: `OP_RN_COPY_STRIDED` 3600; range
-  3600..3609, `OP_RNC_FIRST/LAST`), `autograd/tape.mojo` (the `_shapes` side
+  `autograd/rankn_ops.mojo` (new: `OP_RN_COPY_STRIDED` 4100; range
+  4100..4109, `OP_RNC_FIRST/LAST`), `autograd/tape.mojo` (the `_shapes` side
   table, `_record_nd`, `custom_nd`, `custom_into_nd`, `tensor_nd`,
   `variable_nd`, `variable_into_nd`, `shape_of`/`ndim`/`dim`, `view_nd`,
   `permute` with PERMUTE_N 37, `operand_nd`, `descriptor`, the pending-view
@@ -634,17 +636,17 @@ tools/check_autograd.py (python lane).
   for the transpose view); shape inheritance through relu, softmax, linear
   and the trailing-broadcast add; every existing suite's digests unchanged
   (the orchestrator's existing stages).
-- Opcode range 3600..3609; kind 37.
+- Opcode range 4100..4109; kind 37.
 
 ### Lane 2: ag-rankn-fold
 
 - Files: `autograd/rankn_fold.mojo` (new: `rankn_binary`, `rankn_sum`,
   `rankn_mean`, `rankn_max`, `rankn_softmax(axis)`, `RankNFoldRules
   (BackwardRules)`), `autograd/rankn_fold_ops.mojo` (new bodies:
-  `OP_RN_BIN_FWD` 3700, `OP_RN_BIN_VJP` 3701, `OP_RN_BIN_VJP_PART` 3702,
-  `OP_RN_REDUCE_PART` 3703, `OP_RN_BCAST_VJP` 3704, `OP_RN_MAX_PART` 3705,
-  `OP_RN_MAX_LEVEL` 3706, `OP_RN_MAX_FOLD` 3707, `OP_RN_MAX_VJP` 3708; range
-  3700..3719), `sequence/dispatch.mojo` (range). Reuses `_bin_value`,
+  `OP_RN_BIN_FWD` 4200, `OP_RN_BIN_VJP` 4201, `OP_RN_BIN_VJP_PART` 4202,
+  `OP_RN_REDUCE_PART` 4203, `OP_RN_BCAST_VJP` 4204, `OP_RN_MAX_PART` 4205,
+  `OP_RN_MAX_LEVEL` 4206, `OP_RN_MAX_FOLD` 4207, `OP_RN_MAX_VJP` 4208; range
+  4200..4219), `sequence/dispatch.mojo` (range). Reuses `_bin_value`,
   `_bin_vjp_at`'s arithmetic, `_fold_chain`, `ag_part_finish`, the fold's
   level and finish launches, `identical_div`.
 - Check `rankn_fold_cases.mojo`: middle-axis broadcast add/mul/div forward
@@ -664,8 +666,8 @@ tools/check_autograd.py (python lane).
 ### Lane 3: ag-rankn-bmm
 
 - Files: `autograd/rankn_bmm.mojo` (new: `rankn_matmul`, `RankNBmmRules`),
-  `autograd/rankn_bmm_ops.mojo` (new: `OP_RN_BMM` 3800; 3801 reserved for
-  the phase-2 tiled dispatch; range 3800..3809), `sequence/dispatch.mojo`.
+  `autograd/rankn_bmm_ops.mojo` (new: `OP_RN_BMM` 4300; 4301 reserved for
+  the phase-2 tiled dispatch; range 4300..4309), `sequence/dispatch.mojo`.
   Reuses `gemm_dot`, `seq_gemm_route` (phase 2), `operand_nd`.
 - Check `rankn_bmm_cases.mojo`: `[2, 3, 23, 37] @ [2, 3, 37, 19]` forward
   and both gradients equal, slice by slice, `Tape.matmul` on the slices
@@ -680,8 +682,8 @@ tools/check_autograd.py (python lane).
 
 - Files: `autograd/rankn_layout.mojo` (new: `rankn_concat`, `rankn_narrow`,
   `rankn_split`, `rankn_take`, `RankNLayoutRules`),
-  `autograd/rankn_layout_ops.mojo` (new: `OP_RN_SLAB_COPY` 3900, 3901
-  reserved for `OP_RN_SLAB_ADD`; range 3900..3909), `sequence/dispatch.mojo`.
+  `autograd/rankn_layout_ops.mojo` (new: `OP_RN_SLAB_COPY` 4400, 4401
+  reserved for `OP_RN_SLAB_ADD`; range 4400..4409), `sequence/dispatch.mojo`.
   Reuses `Tape.embedding`, `Tape.ids`, `embedding_refuse_ids`, `permute`,
   `operand_nd`.
 - Check `rankn_layout_cases.mojo`: concat of three `[3, k, 5]` pieces then
@@ -697,10 +699,10 @@ tools/check_autograd.py (python lane).
 
 - Files: `autograd/rankn_conv.mojo` (new: `rankn_conv2d`, `rankn_max_pool2d`,
   `rankn_avg_pool2d`), `autograd/rules_conv2d.mojo` (new: `Conv2dRules`),
-  `autograd/rankn_conv_ops.mojo` (new bodies: `OP_RN_IM2COL` 4000,
-  `OP_RN_CONV_OUT` 4001, `OP_RN_CONV_GROWS` 4002, `OP_RN_COL2IM` 4003,
-  `OP_RN_MAXPOOL_FWD` 4004, `OP_RN_MAXPOOL_VJP` 4005, `OP_RN_AVGPOOL_FWD`
-  4006, `OP_RN_AVGPOOL_VJP` 4007; range 4000..4019),
+  `autograd/rankn_conv_ops.mojo` (new bodies: `OP_RN_IM2COL` 4500,
+  `OP_RN_CONV_OUT` 4501, `OP_RN_CONV_GROWS` 4502, `OP_RN_COL2IM` 4503,
+  `OP_RN_MAXPOOL_FWD` 4504, `OP_RN_MAXPOOL_VJP` 4505, `OP_RN_AVGPOOL_FWD`
+  4506, `OP_RN_AVGPOOL_VJP` 4507; range 4500..4519),
   `sequence/dispatch.mojo`. Reuses the arithmetic of x_cnn/ops.mojo
   `im2col_val`, the NCHW layout rule (:237, :261), `_col2im_pages`'s tap
   order, `maxpool_fwd_at` / `maxpool_bwd_val`, `avgpool_fwd_at` /
@@ -755,11 +757,11 @@ each fenced in sequence/dispatch.mojo as the cast family is, :354):
 
 | range | family | lane |
 |---|---|---|
-| 3600..3609 | `OP_RNC_*` views (copy strided) | core |
-| 3700..3719 | `OP_RNF_*` broadcast, reductions, max | fold |
-| 3800..3809 | `OP_RNB_*` batched matmul | bmm |
-| 3900..3909 | `OP_RNL_*` slab copy / add | layout |
-| 4000..4019 | `OP_RNV_*` conv2d, pools | conv |
+| 4100..4109 | `OP_RNC_*` views (copy strided) | core |
+| 4200..4219 | `OP_RNF_*` broadcast, reductions, max | fold |
+| 4300..4309 | `OP_RNB_*` batched matmul | bmm |
+| 4400..4409 | `OP_RNL_*` slab copy / add | layout |
+| 4500..4519 | `OP_RNV_*` conv2d, pools | conv |
 
 Node kinds and custom tags: PERMUTE_N 37 (tape kind, core); tags 128..135
 core (reserved), 136..151 fold, 152..159 bmm, 160..175 layout, 176..191
@@ -774,8 +776,8 @@ conv; 99..111 stay x_cnn's. Session op codes 33..47 (python).
 - Integer tensors as first-class tensors: not in this plan (ids and
   argmax are int32 patterns in float storage, as today).
 - Phase-2 speed work, each its own A/B with the define pattern of
-  CLAUDE.md "Experiments": the tiled batched GEMM (3801), the in-place slab
-  add (3901), a split order for the bmm broadcast chain (a bit version),
+  CLAUDE.md "Experiments": the tiled batched GEMM (4301), the in-place slab
+  add (4401), a split order for the bmm broadcast chain (a bit version),
   reading NCHW gradients through two-stride operands instead of
   `OP_RN_CONV_GROWS`.
 - Attention and the transformer trainer keep their fused kernels
