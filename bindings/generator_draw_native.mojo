@@ -59,6 +59,27 @@ def _generator_input(value: PythonObject, context: PythonObject) raises -> Pytho
     return _model_f32(value, "Generator input", context["neural"])
 
 
+def _generator_sqrt(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var x = bi.float(value)
+    if Bool(py=x < 0):
+        raise Error("Generator initializer: math domain error")
+    var entry = context["generator_sqrt"]
+    if bi.type(entry) is bi.str:
+        raise Error("OSError: Generator initializer requires portable math: " + String(entry))
+    if bi.type(entry) is not context["generator_sqrt_type"]:
+        raise Error("TypeError: Generator initializer requires its connected portable-math C entry")
+    # This is the original mojolearn_sqrt C ABI, connected once at import.
+    # No replacement square-root approximation or Python math wrapper runs.
+    return entry(x)
+
+
+def _generator_div(numerator: PythonObject, denominator: PythonObject) raises -> PythonObject:
+    if Bool(py=denominator == 0):
+        raise Error("ZeroDivisionError: float division by zero")
+    return numerator / denominator
+
+
 def _generator_run(entry: PythonObject, shape: PythonObject, count: PythonObject,
                    kind: Int, offset: PythonObject, seed: PythonObject,
                    stream: PythonObject, a: PythonObject, b: PythonObject,
@@ -83,6 +104,33 @@ def generator_draw(operation: String, values: PythonObject, context: PythonObjec
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var owner = values[0]
     var fields = generator_fields(owner)
+    # Builtin binary64 scalar operations retain Python's separate rounding
+    # boundaries and evaluation order. The loops, ABI calls, and dispatch
+    # remain in this native owner, including the following draw operation.
+    if operation == "kaiming_uniform":
+        var slope = values[3]
+        if slope is None:
+            slope = _generator_sqrt(PythonObject(5.0), context)
+        var square = bi.float(slope) * bi.float(slope)
+        var gain = _generator_sqrt(_generator_div(PythonObject(2.0), PythonObject(1.0) + square), context)
+        var bound = gain * _generator_sqrt(_generator_div(PythonObject(3.0), bi.float(bi.int(values[2]))), context)
+        return generator_draw("uniform", Python.tuple(owner, values[1], -bound, bound), context)
+    if operation == "xavier_uniform" or operation == "xavier_normal":
+        var gain = bi.float(values[4])
+        var fan = bi.float(bi.int(values[2]) + bi.int(values[3]))
+        var ratio = _generator_div(PythonObject(6.0 if operation == "xavier_uniform" else 2.0), fan)
+        var scale = gain * _generator_sqrt(ratio, context)
+        if operation == "xavier_uniform":
+            return generator_draw("uniform", Python.tuple(owner, values[1], -scale, scale), context)
+        return generator_draw("normal", Python.tuple(owner, values[1], 0.0, scale), context)
+    if operation == "kaiming_normal":
+        var gain = values[3]
+        if gain is None:
+            gain = _generator_sqrt(PythonObject(2.0), context)
+        var numerator = bi.float(gain)
+        var denominator = _generator_sqrt(bi.float(bi.int(values[2])), context)
+        var scale = _generator_div(numerator, denominator)
+        return generator_draw("normal", Python.tuple(owner, values[1], 0.0, scale), context)
     if operation == "uniform":
         var shaped = _generator_shape(values[1], context)
         var lo = _generator_f32(values[2])
@@ -149,4 +197,8 @@ def generator_draw_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
             return raise_python_exception(error, ExceptionType.TypeError)
         if message.startswith("ImportError:"):
             return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
+        if message.startswith("OSError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_OSError"))
+        if message.startswith("ZeroDivisionError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_ZeroDivisionError"))
         return raise_python_exception(error, ExceptionType.ValueError)
