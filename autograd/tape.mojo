@@ -1266,7 +1266,7 @@ struct Tape(Movable):
             return self.view_nd(ex, x, s)
         # the source as x is read (a view of a view composes its strides)
         var src = self.operand_nd(ex, x)
-        var src_strides = src[3]
+        var src_strides = src[3].copy()
         var od = InlineArray[Int, RN_MAX_RANK](fill=1)
         var fs = InlineArray[Int, RN_MAX_RANK](fill=0)
         for j in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
@@ -1353,7 +1353,8 @@ struct Tape(Movable):
             args.p1 = b.value
         args.p2 = output
         ex.launch[OP_AG_BIN_FWD](args, rows * cols)
-        return self._record(ex, output, rows, cols, op, [x, y], args)
+        var shape = self._binary_shape(a_at, b_at, rows, cols)  # rank-N metadata only
+        return self._with_shape(self._record(ex, output, rows, cols, op, [x, y], args), shape)
 
     def add[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor) raises -> Tensor:
         """Add tensors with scalar, row, or column broadcasting."""
@@ -1404,7 +1405,8 @@ struct Tape(Movable):
             a.i0 = op
             a.f0 = scale
             ex.launch[OP_AG_UNARY_FWD](a, n.rows * n.cols)
-        return self._record(ex, output, n.rows, n.cols, op, [x], a)
+        var shape = self._shapes[n_at]  # rank-N metadata only: the input's shape
+        return self._with_shape(self._record(ex, output, n.rows, n.cols, op, [x], a), shape)
 
     def relu[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         return self._unary(ex, x, RELU)
@@ -1464,12 +1466,31 @@ struct Tape(Movable):
         a.p0 = n.value
         a.p1 = output
         ex.launch[OP_AG_DROPOUT_FWD](a, n.rows * n.cols)
-        return self._record(ex, output, n.rows, n.cols, DROPOUT, [x], dropout_args(seed, counter, p, scale))
+        var shape = self._shapes[n_at]  # rank-N metadata only: the input's shape
+        return self._with_shape(
+            self._record(ex, output, n.rows, n.cols, DROPOUT, [x], dropout_args(seed, counter, p, scale)), shape,
+        )
 
     def matmul[E: Exec](mut self, mut ex: E, x: Tensor, y: Tensor) raises -> Tensor:
-        """Multiply two matrices using the existing native GEMM executor."""
+        """Multiply two matrices using the existing native GEMM executor.
+
+        x may have any rank: its leading axes are rows of the product, and
+        the result keeps them."""
         var xi = self._check(x)
         var yi = self._check(y)
+        # lane ag-rankn-core: a pending rank-N view whose matrix view needs
+        # more than two strides (or a base offset) is copied once here; a
+        # dense operand or a pending transpose is untouched (no new launch on
+        # any existing call)
+        comptime if AUTOGRAD_TRANSPOSE_VIEW:
+            if not self._gemm_view(xi)[0]:
+                self._materialize_at(ex, xi)
+            if not self._gemm_view(yi)[0]:
+                self._materialize_at(ex, yi)
+        else:
+            self._materialize_at(ex, xi)
+            self._materialize_at(ex, yi)
+        var shape = self._lead_shape(xi, self._nodes[yi].cols)  # rank-N metadata only
         var a = self._nodes[xi]
         var b = self._nodes[yi]
         if a.cols != b.rows:
@@ -1493,10 +1514,10 @@ struct Tape(Movable):
             saved.i4 = r[1]
             saved.i5 = r[2]
             saved.i6 = 1
-            return self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved)
+            return self._with_shape(self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], saved), shape)
         else:
             _gemm(ex, output, a.value, b.value, a.rows, b.cols, a.cols, a.cols, 1, b.cols, 1)
-            return self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args())
+            return self._with_shape(self._record(ex, output, a.rows, b.cols, MATMUL, [x, y], Args()), shape)
 
     def linear[E: Exec](
         mut self, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
@@ -1626,7 +1647,8 @@ struct Tape(Movable):
             saved.i1 = 1
         saved.f0 = l2
         saved.f1 = divisor
-        return self._record(ex, output, rows, cols, LINEAR, parents, saved)
+        var shape = self._lead_shape(a_at, cols)  # rank-N metadata only
+        return self._with_shape(self._record(ex, output, rows, cols, LINEAR, parents, saved), shape)
 
     def transpose[E: Exec](mut self, mut ex: E, x: Tensor) raises -> Tensor:
         var n_at = self._use(ex, x)
@@ -1647,13 +1669,19 @@ struct Tape(Movable):
 
     def _operand(self, i: Int) -> Tuple[FP, Int, Int, Int]:
         """matmul's view of node i: (buffer, row stride, column stride,
-        1 when the node is a pending transpose view read through strides).
+        1 when the node is a pending view read through strides).
         A dense node is (value, cols, 1, 0); a view of a rows x cols node
-        P is (P's value, 1, rows, 1): element (r, c) is P's (c, r) word."""
+        P is (P's value, 1, rows, 1): element (r, c) is P's (c, r) word.
+        A pending rank-N view (lane ag-rankn-core) is (its source, the
+        strides _gemm_view gives, 1); matmul copies one _gemm_view refuses
+        before it gets here."""
         var n = self._nodes[i]
         var one: Int = 1
         var zero: Int = 0
         if self._pending(i):
+            if n.op != TRANSPOSE:
+                var g = self._gemm_view(i)
+                return (n.saved.p0, g[1], g[2], one)
             return (n.saved.p0, one, n.rows, one)
         return (n.value, n.cols, one, zero)
 
@@ -1669,7 +1697,8 @@ struct Tape(Movable):
         """Create a constant view of x that stops gradient propagation."""
         var n_at = self._use(ex, x)
         var n = self._nodes[n_at]
-        return self.variable(ex, n.value, n.rows, n.cols, False)
+        var shape = self._shapes[n_at]  # rank-N metadata only: x's shape
+        return self._with_shape(self.variable(ex, n.value, n.rows, n.cols, False), shape)
 
     def _reduce[E: Exec](mut self, mut ex: E, x: Tensor, axis: Int, mean: Bool) raises -> Tensor:
         if axis < -1 or axis > 1:
@@ -1696,6 +1725,9 @@ struct Tape(Movable):
         a.i0 = axis
         a.f0 = factor
         var out = self._record(ex, output, rows, cols, REDUCE, [x], a)
+        if axis == AXIS_COLS:
+            # rank-N metadata only: the leading dims and (1,) for rank >= 3
+            _ = self._with_shape(out, self._lead_shape(n_at, 1))
         if word:
             self._word_node = out._index
         return out
@@ -2620,6 +2652,11 @@ struct Tape(Movable):
                     elif n.op == TRANSPOSE:
                         # n is (p.cols, p.rows); its upstream transposes back.
                         _transpose(ex, contribution, n.grad, n.rows, n.cols)
+                    elif n.op == PERMUTE_N:
+                        # lane ag-rankn-core: the upstream read through the
+                        # inverse permutation (saved.p1, a view record over
+                        # p's shape) into p's gradient; every word written once
+                        rn_copy_strided(ex, contribution, n.grad, 0, n.saved.p1, 0, p.rows * p.cols)
                     elif n.op == REDUCE:
                         var a = Args()
                         a.p0 = n.grad
