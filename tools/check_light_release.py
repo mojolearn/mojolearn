@@ -44,7 +44,7 @@ def wheel_kind(path):
     """(platform, role, vendors a receipt may report) of one manifest wheel.
 
     macOS: the Metal wheel. Linux: the combined wheel (the NVIDIA smoke, as
-    always); the split core `mojolearn` (either vendor's smoke installed it,
+    always); the split core `mojolearn-core` (either vendor's smoke installed it,
     with its plugin); a split plugin (only its own vendor's smoke, whose
     receipt names the plugin by name and sha256)."""
     name = path.name
@@ -112,7 +112,7 @@ def check(directory, source_commit, platform="all"):
             if row['role'] in ('vendor', 'payload'):
                 require(report.get('installed', {}).get('gpu_arch') in row['arches'],
                         'payload receipt loaded another GPU architecture')
-            require(core.split('-')[:2] == ['mojolearn', wheel.split('-')[1]],
+            require(core.split('-')[:2] == [_GPU_PACKAGES.CORE_WHEEL_NAME, wheel.split('-')[1]],
                     'plugin receipt installed a core of another version')
         else:
             require(report.get('wheel_sha256') == wheels[wheel] == digest(directory / wheel), 'wheel digest mismatch')
