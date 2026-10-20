@@ -1,0 +1,187 @@
+ssssssssssssssssssssssssssF.ssssssssssssssss..........Fssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss
+=================================== FAILURES ===================================
+_______________ test_refusals_list_every_node_before_any_upload ________________
+
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-149/test_refusals_list_every_node_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x14f59f820>
+
+    def test_refusals_list_every_node_before_any_upload(tmp_path, monkeypatch):
+        # the refusal pass runs in the one onnx_import call before any upload
+        # (autograd/import_lower.mojo); the session it was given is closed again
+        from mojolearn.importers import _program
+    
+        opened = []
+        real = _program.Session
+    
+        def tracked(*a, **k):
+            s = real(*a, **k)
+            opened.append(s)
+            return s
+    
+        monkeypatch.setattr(_program, "Session", tracked)
+        path = _refused_model(str(tmp_path))
+        with pytest.raises(UnsupportedModel) as e:
+>           importers.import_model(path)
+
+python/mojolearn/tests/test_import_lower.py:448: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/mojolearn/importers/_program.py:262: in import_model
+    s = Session(record=False, numeric_mode=numeric_mode)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/mojolearn/tests/test_import_lower.py:441: in tracked
+    s = real(*a, **k)
+        ^^^^^^^^^^^^^
+python/mojolearn/ops.py:221: in __init__
+    self._b = _backend.binding("_mojolearn_x_sequence", numeric_mode)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/mojolearn/_backend.py:2305: in binding
+    module = getattr(selected, name)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn binaries: identical>, name = '_mojolearn_x_sequence'
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        try:
+            return self._modules[name]
+        except KeyError:
+            pass
+        path = self._deferred.pop(name, None)
+        if path is not None:
+            self._modules[name] = _load_member(self.mode, name, path)
+            return self._modules[name]
+        if not _offers(name, self.mode):
+            raise ImportError(
+                f"mojolearn: {name} has no {self.mode!r} tier. "
+                f"{_identical_only_reason(name)} See _IDENTICAL_ONLY."
+            )
+        if name in self.missing:
+>           raise ImportError(
+                f"mojolearn: numeric_mode={self.mode!r} needs "
+                f"python/mojolearn/{'' if self.mode == 'fast' else self.mode + '/'}"
+                f"{name}.so, which is not built. Build it with\n    "
+                f"{'' if self.mode == 'fast' else 'MOJOLEARN_NUMERIC_MODE=' + self.mode + ' '}"
+                f"bash bindings/{_build_script(name)}"
+            )
+E           ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_x_sequence.so, which is not built. Build it with
+E               MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_x_sequence.sh
+
+python/mojolearn/_backend.py:2098: ImportError
+_____________________________ test_source_dispatch _____________________________
+
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-149/test_source_dispatch0')
+
+    @needs_torch
+    def test_source_dispatch(tmp_path):
+        f = fx.write_fixture("linear_layernorm_linear", tmp_path)
+>       assert importers._read_source(f.path).source == f.path
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_import_torch.py:265: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/mojolearn/importers/__init__.py:57: in _read_source
+    return read(source)
+           ^^^^^^^^^^^^
+python/mojolearn/importers/onnx.py:197: in read
+    b = _binding(binding)
+        ^^^^^^^^^^^^^^^^^
+python/mojolearn/importers/onnx.py:38: in _binding
+    b = _backend.binding("_mojolearn_x_sequence")
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/mojolearn/_backend.py:2305: in binding
+    module = getattr(selected, name)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn binaries: identical>, name = '_mojolearn_x_sequence'
+
+    def __getattr__(self, name):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        try:
+            return self._modules[name]
+        except KeyError:
+            pass
+        path = self._deferred.pop(name, None)
+        if path is not None:
+            self._modules[name] = _load_member(self.mode, name, path)
+            return self._modules[name]
+        if not _offers(name, self.mode):
+            raise ImportError(
+                f"mojolearn: {name} has no {self.mode!r} tier. "
+                f"{_identical_only_reason(name)} See _IDENTICAL_ONLY."
+            )
+        if name in self.missing:
+>           raise ImportError(
+                f"mojolearn: numeric_mode={self.mode!r} needs "
+                f"python/mojolearn/{'' if self.mode == 'fast' else self.mode + '/'}"
+                f"{name}.so, which is not built. Build it with\n    "
+                f"{'' if self.mode == 'fast' else 'MOJOLEARN_NUMERIC_MODE=' + self.mode + ' '}"
+                f"bash bindings/{_build_script(name)}"
+            )
+E           ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_x_sequence.so, which is not built. Build it with
+E               MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_x_sequence.sh
+
+python/mojolearn/_backend.py:2098: ImportError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _SambaResidentSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteParallelTrainer has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteOffloadedReplay has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteModelPool has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba1DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba2DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3ForwardTape has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3PrefillSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3DecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerForwardTape has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerDecodeSession has no __module__ attribute
+
+<frozen importlib._bootstrap>:491
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _CausalLMSession has no __module__ attribute
+
+mojolearn/tests/test_import_torch.py::test_read_fixture[linear_layernorm_linear]
+mojolearn/tests/test_import_torch.py::test_read_fixture[conv_relu_maxpool_flatten_gemm]
+mojolearn/tests/test_import_torch.py::test_read_fixture[attention_two_head_causal]
+mojolearn/tests/test_import_torch.py::test_read_fixture[batchnorm_relu]
+mojolearn/tests/test_import_torch.py::test_half_weights_are_bit_patterns[bfloat16-bf16]
+mojolearn/tests/test_import_torch.py::test_half_weights_are_bit_patterns[float16-f16]
+mojolearn/tests/test_import_torch.py::test_dynamic_batch_resolves_through_sym_size
+mojolearn/tests/test_import_torch.py::test_unsupported_ops_listed_together
+mojolearn/tests/test_import_torch.py::test_training_mode_export_refused
+  /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/lib/python3.14/copyreg.py:104: FutureWarning: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+    return cls.__new__(cls, *args)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED python/mojolearn/tests/test_import_lower.py::test_refusals_list_every_node_before_any_upload
+FAILED python/mojolearn/tests/test_import_torch.py::test_source_dispatch - Im...
+2 failed, 11 passed, 108 skipped, 23 warnings in 9.83s

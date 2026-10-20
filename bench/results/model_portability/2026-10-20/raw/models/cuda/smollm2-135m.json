@@ -1,0 +1,92 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 0.00031280517578125,
+   "max_rel": 0.08940832955496651,
+   "shape": [
+    1,
+    32,
+    49152
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 32
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 6546.380238956772,
+ "import_shapes": null,
+ "input_digest": "9f99e3d38169b0b2",
+ "input_shapes": [
+  [
+   1,
+   32
+  ]
+ ],
+ "inputs": [
+  [
+   "input_ids",
+   [
+    1,
+    32
+   ],
+   "int64"
+  ]
+ ],
+ "kind": "hf-causal-lm",
+ "model": "smollm2-135m",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": 2182.0,
+  "device_memory_method": "nvidia-smi used_memory for this pid after our arm (context and pools)",
+  "digest": "78418aafcfb91a05",
+  "first_run_ms": 97.25592902395874,
+  "latency_ms": 25.792071013711393,
+  "output_shapes": [
+   [
+    1,
+    32,
+    49152
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "view_784",
+   [
+    1,
+    32,
+    49152
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "device": "cuda",
+  "first_run_ms": 1174.327566055581,
+  "latency_ms": 24.441226036287844,
+  "library": "torch",
+  "peak_device_mb": 535.080078125,
+  "peak_device_method": "torch.cuda.max_memory_allocated (the caching allocator's peak)"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "export_ms": 3079.686918994412,
+  "repo": "HuggingFaceTB/SmolLM2-135M",
+  "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "torch_version": "2.14.1+cu130",
+  "transformers_version": "5.17.0"
+ },
+ "status": "ok",
+ "vendor": "cuda"
+}

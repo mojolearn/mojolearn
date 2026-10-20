@@ -1,0 +1,95 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 5.7220458984375e-06,
+   "max_rel": 1.9390479071734112e-05,
+   "shape": [
+    1,
+    1000
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 1
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 293.4355830075219,
+ "import_shapes": null,
+ "input_digest": "f58703a9ac8ecda4",
+ "input_shapes": [
+  [
+   1,
+   3,
+   224,
+   224
+  ]
+ ],
+ "inputs": [
+  [
+   "x",
+   [
+    1,
+    3,
+    224,
+    224
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "torchvision",
+ "model": "squeezenet1_1",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": null,
+  "device_memory_method": "Apple unified memory: no per-process GPU counter",
+  "digest": "115451c9646ef838",
+  "first_run_ms": 59.57020801724866,
+  "latency_ms": 15.499500033911318,
+  "output_shapes": [
+   [
+    1,
+    1000
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "view",
+   [
+    1,
+    1000
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "device": "mps",
+  "first_run_ms": 600.9302090387791,
+  "latency_ms": 7.858041033614427,
+  "library": "torch",
+  "peak_device_mb": null,
+  "peak_device_method": "Apple unified memory: no per-process GPU counter"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "export_ms": 173.04562497884035,
+  "published_eval": "ImageNet-1K validation (50,000 images), as published with the torchvision weights",
+  "published_top1": 0.58178,
+  "torch_version": "2.11.0",
+  "torchvision_version": "0.26.0",
+  "weights": "SqueezeNet1_1_Weights.IMAGENET1K_V1",
+  "weights_url": "https://download.pytorch.org/models/squeezenet1_1-b8a52dc0.pth"
+ },
+ "status": "ok",
+ "vendor": "metal"
+}

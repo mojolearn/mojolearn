@@ -1,0 +1,80 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 42.54308296367526,
+ "import_shapes": null,
+ "input_digest": "8014bf117b718b39",
+ "input_shapes": [
+  [
+   1,
+   1,
+   28,
+   28
+  ]
+ ],
+ "inputs": [
+  [
+   "Input3",
+   [
+    1,
+    1,
+    28,
+    28
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "onnx",
+ "model": "mnist-12",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": null,
+  "device_memory_method": "Apple unified memory: no per-process GPU counter",
+  "digest": "2950c80e2947459a",
+  "first_run_ms": 8.383958018384874,
+  "latency_ms": 1.0034579900093377,
+  "output_shapes": [
+   [
+    1,
+    10
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "Plus214_Output_0",
+   [
+    1,
+    10
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "error": "not installed: No module named 'onnxruntime'",
+  "library": "onnxruntime"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "converted_file": "/Users/andrewhendel/.cache/mojolearn-real-models/mnist-12-opset13.onnx",
+  "converted_opset": 13,
+  "converted_sha256": "d50d717f86c12bcc125c54890e346879ac8b3d40247bc2d60f284834a87ce43e",
+  "file": "/Users/andrewhendel/.cache/mojolearn-real-models/mnist-12.onnx",
+  "onnx_version": "1.23.2",
+  "opset": 12,
+  "opset_conversion": "onnx.version_converter.convert_version(model, 13)",
+  "sha256": "5c688690f8bacf667d4c2074af5ad0646ca328d7ab03eccf944a65b320171bdd",
+  "url": "https://github.com/onnx/models/raw/main/validated/vision/classification/mnist/model/mnist-12.onnx"
+ },
+ "status": "ok",
+ "vendor": "metal"
+}

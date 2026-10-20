@@ -1,0 +1,435 @@
+{
+  "catalog": "raw/catalog.json",
+  "date": "2026-10-20",
+  "files": {
+    "raw/audit/catalog-crosscheck.log": {
+      "bytes": 577,
+      "sha256": "7cab00e8a79fd811449b7bc367196c98785df7bc28d513a0b03069e7866747b8",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/catalog-crosscheck.log"
+    },
+    "raw/audit/evidence-check.log": {
+      "bytes": 174,
+      "sha256": "910cd218c1740e150535ecd57546b4038edf99dc6168960972a94cf1ba3a9f9b",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/evidence-check.log"
+    },
+    "raw/audit/evidence-checker-tests.log": {
+      "bytes": 98,
+      "sha256": "aa779ab29c79464be52ac99280231538603b6da668a0df6198c317b8cd352bc7",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/evidence-checker-tests.log"
+    },
+    "raw/catalog.json": {
+      "bytes": 27311,
+      "sha256": "87e468bc707a9b8fdbe4a316a3ddfe68adaf131958338ac5d3d36611d3a72efb",
+      "source": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/models/catalog.json"
+    },
+    "raw/context/cuda-corrected-status.txt": {
+      "bytes": 234,
+      "sha256": "fd0027103586691bfbb4cc2f8d8ef00b5d170637108ceb7380dd6595be1ef6c9",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/pytest-main.status"
+    },
+    "raw/context/cuda-initial-missing-pytest.log": {
+      "bytes": 63,
+      "sha256": "659aa08c98e847bd8dc6c823b55e6a77549f9732c11ff1f2cfc5fe1fee9e93ed",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/pytest.log"
+    },
+    "raw/context/cuda-newchecks.log": {
+      "bytes": 3805,
+      "sha256": "f994286215cedb6a4d304f1ef69aa4ce6723ab9bca861c28d1d1f12e3ed9ea63",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks.log"
+    },
+    "raw/context/cuda-realmodels.log": {
+      "bytes": 715,
+      "sha256": "6bbc0cd1e9d6c9f73fa99b9d39a025d228f01d23a4ded1d56b4d14082c3855b3",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/realmodels.log"
+    },
+    "raw/context/cuda-source-summary.json": {
+      "bytes": 9690,
+      "sha256": "b18e4325af59f3fe0a945d93798806ac8ca99225a361d71b7daa7993dbaae830",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/check_autograd/summary.json"
+    },
+    "raw/context/cuda-torch-followup.log": {
+      "bytes": 1768,
+      "sha256": "9ca4aba5efd4ad7a53f06478f8eab67b2d2803324b32d8876a3859d42cf307be",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/torch-followup.log"
+    },
+    "raw/context/hip-newchecks.log": {
+      "bytes": 3738,
+      "sha256": "148f4cd8db5315105f52f00c73dfe9fa19e35ef92074c1ec28cc67b183a417a2",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks.log"
+    },
+    "raw/context/hip-source-summary.json": {
+      "bytes": 9705,
+      "sha256": "e422f6dee21eeffd7660de920482045437c6e0747b450a6819278203a0f698cd",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/check_autograd/summary.json"
+    },
+    "raw/context/metal-initial-all.sh": {
+      "bytes": 2033,
+      "sha256": "ca4d63407b8444161fd2502f471cfcc168ce7959d685cdff1359a94eb7fd849d",
+      "source": "/Users/andrewhendel/mojolearn-evidence/autograd-buildout-20261019/compile-52/all.sh"
+    },
+    "raw/context/metal-initial-pytest-metal.log": {
+      "bytes": 9530,
+      "sha256": "35428b5dc06118c30850b99904e812ee81192116737cb1333b19df3bf9108e1b",
+      "source": "/Users/andrewhendel/mojolearn-evidence/autograd-buildout-20261019/compile-52/pytest-metal.log"
+    },
+    "raw/context/metal-initial-summary.txt": {
+      "bytes": 217,
+      "sha256": "b040528ddd68fdc0ceb82c0ca5b8b423eab8606dffeda3e8c432eb29282daa2f",
+      "source": "/Users/andrewhendel/mojolearn-evidence/autograd-buildout-20261019/compile-52/summary.txt"
+    },
+    "raw/models/cuda/mnist-12.json": {
+      "bytes": 2170,
+      "sha256": "d8fcf8006222fd69650faa0fee36da56f39840b468ad1c1ce252d5246d5719a8",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/mnist-12.json"
+    },
+    "raw/models/cuda/mnist-12.log": {
+      "bytes": 63,
+      "sha256": "7457a3f4e0953e7283702dca045782b839b9c7d6df90b7aa46e49934a9db4081",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/mnist-12.log"
+    },
+    "raw/models/cuda/mobilenet_v3_small.json": {
+      "bytes": 2049,
+      "sha256": "54dea19b20a298949900bcea5ce989bd9ab7907cdde59764fb8b100faf432f5c",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/mobilenet_v3_small.json"
+    },
+    "raw/models/cuda/mobilenet_v3_small.log": {
+      "bytes": 343,
+      "sha256": "79e9d9f37b4501e6ee54a82800fa802a9f98204106a3f7819300bba055c0551b",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/mobilenet_v3_small.log"
+    },
+    "raw/models/cuda/resnet18.json": {
+      "bytes": 2006,
+      "sha256": "7657782b62671bac72284518b88af56d3764515c2f748b6a5c1347a04b9d59a3",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/resnet18.json"
+    },
+    "raw/models/cuda/resnet18.log": {
+      "bytes": 63,
+      "sha256": "50af5c63d8518b3aae9269ecca9a5cacc4583f16e39389ad6cbc22425472bdc0",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/resnet18.log"
+    },
+    "raw/models/cuda/resnet50-v1-12.json": {
+      "bytes": 2249,
+      "sha256": "70860ed77dac1f1f2b241fb8c8a61da4edcab35af53e9f36ee62f2657b7e8a3c",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/resnet50-v1-12.json"
+    },
+    "raw/models/cuda/resnet50-v1-12.log": {
+      "bytes": 70,
+      "sha256": "25858fa52b7f558daba962f81a54d2a27092a4295f04ac703b14944db8fff3e5",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/resnet50-v1-12.log"
+    },
+    "raw/models/cuda/smollm2-135m.json": {
+      "bytes": 1846,
+      "sha256": "257eeac9da3ec9d07ea442721eda263cfd57ef4d7f1550b9752a1a26a1ca2c23",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/smollm2-135m.json"
+    },
+    "raw/models/cuda/smollm2-135m.log": {
+      "bytes": 418,
+      "sha256": "c2be30a59343d14856fa001b8fc77e85015bac9f9a37e95b9bb2ba40372814ac",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/smollm2-135m.log"
+    },
+    "raw/models/cuda/squeezenet1_1.json": {
+      "bytes": 2017,
+      "sha256": "f4966fddc3e8a7c77160514fc85bc2f50dcacfbf81980c482a558955c5700724",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/squeezenet1_1.json"
+    },
+    "raw/models/cuda/squeezenet1_1.log": {
+      "bytes": 329,
+      "sha256": "e8ab7b5d6593270adc644d77a9bfafc03f35cb880237ea257ad7656f4f061ee4",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/squeezenet1_1.log"
+    },
+    "raw/models/cuda/summary.json": {
+      "bytes": 1175,
+      "sha256": "19040eeca8c8e9accbe5c21fc68c7086fce16a9bb402d3bea8e99d7445cac6ac",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/real-models/summary.json"
+    },
+    "raw/models/hip/mnist-12.json": {
+      "bytes": 2161,
+      "sha256": "3c84e14f9cdb43c17264b72f0884b876e49f07283219e457f7cedaa932842e7b",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/mnist-12.json"
+    },
+    "raw/models/hip/mnist-12.log": {
+      "bytes": 63,
+      "sha256": "424c444d5efbe6bcd86731a18fef89b49276d50f3b2daf0bbc7505b4c1e41e3c",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/mnist-12.log"
+    },
+    "raw/models/hip/mobilenet_v3_small.json": {
+      "bytes": 1931,
+      "sha256": "900fb01fdea3bc9484daf87d5f3204bb7de7b06b6ccbd8264cc3d9b68927712e",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/mobilenet_v3_small.json"
+    },
+    "raw/models/hip/mobilenet_v3_small.log": {
+      "bytes": 73,
+      "sha256": "1325a8df87290e83892d4e109126ccc1cedfd1e545cbfd67ee546e9f013ecf9b",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/mobilenet_v3_small.log"
+    },
+    "raw/models/hip/resnet18.json": {
+      "bytes": 1889,
+      "sha256": "b71b07f34f35453a89b19d33c317d70f41079911dd1c5ef60371c32fa369a43c",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/resnet18.json"
+    },
+    "raw/models/hip/resnet18.log": {
+      "bytes": 63,
+      "sha256": "5f914498593400b1b8ddc8c82cf238336df8c1cee9b77f9ab7f951c68dd78ac5",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/resnet18.log"
+    },
+    "raw/models/hip/resnet50-v1-12.json": {
+      "bytes": 2237,
+      "sha256": "5d8991d3c9c7b9323e65c87e7750be15f36c5a860b16ccf75c9ad5e6e7479e9c",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/resnet50-v1-12.json"
+    },
+    "raw/models/hip/resnet50-v1-12.log": {
+      "bytes": 69,
+      "sha256": "ccae9b9ad53e3d54d5dce2142918b24974b06deb834b98496e7ff7b5796e5197",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/resnet50-v1-12.log"
+    },
+    "raw/models/hip/smollm2-135m.json": {
+      "bytes": 1736,
+      "sha256": "9b727be4e702a70b4beaf3350118b390c3eb1361d2779033503cecb6a9a1065a",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/smollm2-135m.json"
+    },
+    "raw/models/hip/smollm2-135m.log": {
+      "bytes": 418,
+      "sha256": "27b0b323a5fb48707630212c472fd436dfa2902f2ae5275306ea76426256f8cb",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/smollm2-135m.log"
+    },
+    "raw/models/hip/squeezenet1_1.json": {
+      "bytes": 1902,
+      "sha256": "ae030183cb5872b4cbb3868feb27e18e88b29c845daed9db59b6eb7727a5b12f",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/squeezenet1_1.json"
+    },
+    "raw/models/hip/squeezenet1_1.log": {
+      "bytes": 68,
+      "sha256": "a6e26de26628851088243503deb77731d6a4c1cb4e077425c04fa5c94f9e623f",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/squeezenet1_1.log"
+    },
+    "raw/models/hip/summary.json": {
+      "bytes": 1175,
+      "sha256": "19040eeca8c8e9accbe5c21fc68c7086fce16a9bb402d3bea8e99d7445cac6ac",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/real-models/summary.json"
+    },
+    "raw/models/metal/mnist-12.json": {
+      "bytes": 1861,
+      "sha256": "20659d2cfcf47c5561671970f1372258cfd0d60c35f32333423e4fc6081aa36a",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/mnist-12.json"
+    },
+    "raw/models/metal/mnist-12.log": {
+      "bytes": 50,
+      "sha256": "0dab3a747b43c790f6ad25c19e0c41edb0e6d511b57e3b7f4d4777992c43544b",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/mnist-12.log"
+    },
+    "raw/models/metal/mobilenet_v3_small.json": {
+      "bytes": 1989,
+      "sha256": "f326ff79a202841b3c05b895bc9d5bcddeeb68f42a7529e1e655b6d83f28d567",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/mobilenet_v3_small.json"
+    },
+    "raw/models/metal/mobilenet_v3_small.log": {
+      "bytes": 332,
+      "sha256": "8f02e91f9d8061f45b648ea2ece6b7e296973412ecfb32894cb872801f2b8c10",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/mobilenet_v3_small.log"
+    },
+    "raw/models/metal/resnet18.json": {
+      "bytes": 1946,
+      "sha256": "328d6c4f2a0d041f6f2da1fd77e6fc4b15f0f872f0933b8c842990c641e0da7b",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/resnet18.json"
+    },
+    "raw/models/metal/resnet18.log": {
+      "bytes": 322,
+      "sha256": "b107abb8b438363dcc9d21335127666cd772c29cd94f8efdb4b2239875cfc540",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/resnet18.log"
+    },
+    "raw/models/metal/resnet50-v1-12.json": {
+      "bytes": 1940,
+      "sha256": "603e236c39619289542c126812c78bda145d30fc4ee9634b950bcc91d43ebd1a",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/resnet50-v1-12.json"
+    },
+    "raw/models/metal/resnet50-v1-12.log": {
+      "bytes": 58,
+      "sha256": "9845b06a4b2f424612ec76632b4a5498e87ab2f560f8d1315d7d1b752c9d0a40",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/resnet50-v1-12.log"
+    },
+    "raw/models/metal/smollm2-135m.json": {
+      "bytes": 1793,
+      "sha256": "97ecdba108439439604e5e06050c8308c1f3d5f17c0908e8eadaabdefa8f6316",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/smollm2-135m.json"
+    },
+    "raw/models/metal/smollm2-135m.log": {
+      "bytes": 677,
+      "sha256": "2be92a92a8b9291b44e25bf47c2d7eb002017bdd35d5146a929c03d10af8da99",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/smollm2-135m.log"
+    },
+    "raw/models/metal/squeezenet1_1.json": {
+      "bytes": 1961,
+      "sha256": "d679e90300096a2d4ca5c78b6532bd67f82e88556d1bcabdd6217d3d60c8bda3",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/squeezenet1_1.json"
+    },
+    "raw/models/metal/squeezenet1_1.log": {
+      "bytes": 327,
+      "sha256": "a28488a78c9ac6ea29fa70396a2c8e8e5d8087ddfdb22057ba82d87bc41e6d03",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/squeezenet1_1.log"
+    },
+    "raw/models/metal/summary.json": {
+      "bytes": 347,
+      "sha256": "a4610d3c35f91ddfea0eb15b8951c119de8e2d44aa940135b4ec08c684015301",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/summary.json"
+    },
+    "raw/reload/cuda.json": {
+      "bytes": 830,
+      "sha256": "7804cdb7c872fc4a26b8b59674281afb0eb424dd08731a6883381b858697e0ae",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/xvendor/resnet18.program.verify.json"
+    },
+    "raw/reload/metal.json": {
+      "bytes": 809,
+      "sha256": "281473c3d6c2b28db28461c7fe00580f5d79753e9c0bb6f017ef80ba7b22decd",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/resnet18-metal.verify.json"
+    },
+    "raw/reload/model-retention.json": {
+      "bytes": 336,
+      "sha256": "5e04e260f5767cbbef33841fdef939b1b1ae3a0559cdbd0a5748ef3826600f75",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/model-retention.json"
+    },
+    "raw/reload/resnet18-metal-verify-run.json": {
+      "bytes": 769,
+      "sha256": "79d95a179a080a2e25cfa77c926ebe468430cdd155f588f63e1556273299547a",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/resnet18-metal-verify-run.json"
+    },
+    "raw/reload/resnet18-metal-verify.log": {
+      "bytes": 103,
+      "sha256": "04c1608016ec245ec247b8fbba2782b1e5c226592598b83e57cdd17d6a0ffc8e",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/resnet18-metal-verify.log"
+    },
+    "raw/reload/resnet18-metal-verify2-run.json": {
+      "bytes": 831,
+      "sha256": "d16f3f5056004d7899661c92d5f4e10bc79cc5b237d4b235f2c599bea804cd7a",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/resnet18-metal-verify2-run.json"
+    },
+    "raw/reload/resnet18-metal-verify2.log": {
+      "bytes": 605,
+      "sha256": "de6db0722db3120e4621b8a55db96129e00ba4c2be5b1313b8817be1134ae77f",
+      "source": "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/resnet18-metal-verify2.log"
+    },
+    "raw/training/cuda.log": {
+      "bytes": 14247,
+      "sha256": "9502a688b7e7f6569e939adc267bff988653f0e05d50f29c269b61e2a7ee0518",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/nv1/final/newchecks-out/pytest-main.log"
+    },
+    "raw/training/hip.log": {
+      "bytes": 11282,
+      "sha256": "7459c175c1c27473c7c7a8185292b29b33edc9a2a9b80316b0b9d2f81542f169",
+      "source": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/amd4/final/newchecks-out/pytest.log"
+    },
+    "raw/training/metal.log": {
+      "bytes": 10050,
+      "sha256": "f6a7ab510486b2eedddf2c76c7a4dfa8c83e73f3bc44122ebed15a37eb3ec1aa",
+      "source": "/Users/andrewhendel/mojolearn-evidence/autograd-buildout-20261019/compile-52/pytest2-metal.log"
+    },
+    "source/autograd.md": {
+      "bytes": 29729,
+      "sha256": "964b87bc0f217c2350f613afba3b35f110f5dde033b0044954f99770dcc3e635",
+      "source": "/Users/andrewhendel/CascadeProjects/mojolearn/docs-site/user_guide/autograd.md"
+    },
+    "source/check_model_portability_evidence.py.txt": {
+      "bytes": 6850,
+      "sha256": "caf9a55b8391501eddb952d214a86d05995f7ad314bb8c3d3565e67ae8d448cc",
+      "source": "/Users/andrewhendel/CascadeProjects/mojolearn/tools/check_model_portability_evidence.py"
+    },
+    "source/model_catalog.py.txt": {
+      "bytes": 15072,
+      "sha256": "a492af8aa865da0a84727159eaad3274509050cef6e5ef24a2eb61e037e3a947",
+      "source": "/Users/andrewhendel/CascadeProjects/mojolearn/tools/model_catalog.py"
+    },
+    "source/real_model_import.py.txt": {
+      "bytes": 32469,
+      "sha256": "84cc2a6b8e4fd58e61ea3a40684f771aab28a5e77dcd8a5255a179528dcf1145",
+      "source": "/Users/andrewhendel/CascadeProjects/mojolearn/tools/real_model_import.py"
+    },
+    "source/test_autograd_public.py.txt": {
+      "bytes": 15730,
+      "sha256": "66090847cee188f0a26a12a0de8e7100c9078164f48d8ecd726d83c0dc981550",
+      "source": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn/tests/test_autograd_public.py"
+    }
+  },
+  "gpu_source_revision": "457c727d48fd298f56cfd8fb371da0aadf7dca45",
+  "models": {
+    "cuda": [
+      "raw/models/cuda/mnist-12.json",
+      "raw/models/cuda/mobilenet_v3_small.json",
+      "raw/models/cuda/resnet18.json",
+      "raw/models/cuda/resnet50-v1-12.json",
+      "raw/models/cuda/smollm2-135m.json",
+      "raw/models/cuda/squeezenet1_1.json"
+    ],
+    "hip": [
+      "raw/models/hip/mnist-12.json",
+      "raw/models/hip/mobilenet_v3_small.json",
+      "raw/models/hip/resnet18.json",
+      "raw/models/hip/resnet50-v1-12.json",
+      "raw/models/hip/smollm2-135m.json",
+      "raw/models/hip/squeezenet1_1.json"
+    ],
+    "metal": [
+      "raw/models/metal/mnist-12.json",
+      "raw/models/metal/mobilenet_v3_small.json",
+      "raw/models/metal/resnet18.json",
+      "raw/models/metal/resnet50-v1-12.json",
+      "raw/models/metal/smollm2-135m.json",
+      "raw/models/metal/squeezenet1_1.json"
+    ]
+  },
+  "raw_records_archive": {
+    "bytes": 55631,
+    "download_sha256": "3ec06e7ca34350281cb14e94bdc1de857b717600bdb6acf711a47e6ce5f9dfa9",
+    "r2_key": "measurements/model-portability/2026-10-20/3ec06e7ca34350281cb14e94bdc1de857b717600bdb6acf711a47e6ce5f9dfa9/raw-records.tar.gz",
+    "scope": "Every file listed in manifest.files; manifest, review and README remain in the versioned repository. Saved model bytes are retained separately.",
+    "sha256": "3ec06e7ca34350281cb14e94bdc1de857b717600bdb6acf711a47e6ce5f9dfa9"
+  },
+  "release_context": "0.8.55",
+  "retained_model": {
+    "bytes": 140283612,
+    "local_path": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/xvendor/resnet18.program",
+    "r2_key": "measurements/model-portability/2026-10-20/0bf3e6e4d1786408ebdf090eb9af53bb0a0fbcbf08c0c74b7c080c6a3b8c1259/resnet18.program",
+    "r2_verified": true,
+    "retention_receipt": "raw/reload/model-retention.json",
+    "sha256": "0bf3e6e4d1786408ebdf090eb9af53bb0a0fbcbf08c0c74b7c080c6a3b8c1259"
+  },
+  "saved_program": {
+    "cuda": "raw/reload/cuda.json",
+    "metal": "raw/reload/metal.json",
+    "run": "raw/reload/resnet18-metal-verify2-run.json"
+  },
+  "schema": "mojolearn-model-portability/1",
+  "scope": [
+    "Correctness evidence only; recorded timings are not admitted as comparative performance results.",
+    "Source-built records, not a fresh installed-wheel qualification on every vendor.",
+    "Imported models use fixed seeded inputs, batch 1; image/checkpoint task accuracy is not established by these fixtures.",
+    "Apple custom-training logs come from the corrected compile-52 run; exact worktree HEAD was not retained. NVIDIA and AMD were frozen at the stated revision.",
+    "The current release catalog carries the recorded 0.8.54 version-string results forward to 0.8.55; these are not new 0.8.55 model runs.",
+    "The saved NVIDIA program was reloaded on Apple M4 on 2026-10-20 to retain a missing comparison receipt; its local binding has version 0.8.55.",
+    "Initial environment failures and corrected runs are retained separately; the layer-pool two-GPU check is outside this record and remains incomplete."
+  ],
+  "selected_training_digests": [
+    "guide_sequential_params",
+    "guide_sequential_proba",
+    "guide_mixture_params",
+    "guide_mixture_proba",
+    "guide_session_trained",
+    "guide_export_labels"
+  ],
+  "snapshot_revision": "cdfeb4984f63c82c58825a42f4fed349675e4fca",
+  "training": {
+    "cuda": {
+      "log": "raw/training/cuda.log",
+      "source_provenance": "457c727d48fd298f56cfd8fb371da0aadf7dca45; corrected environment run",
+      "summary": "253 passed, 14 warnings in 29.13s"
+    },
+    "hip": {
+      "log": "raw/training/hip.log",
+      "source_provenance": "457c727d48fd298f56cfd8fb371da0aadf7dca45",
+      "summary": "214 passed, 14 warnings in 11.82s"
+    },
+    "metal": {
+      "log": "raw/training/metal.log",
+      "source_provenance": "compile-52 native-lowering worktree, corrected run; exact worktree HEAD not retained",
+      "summary": "121 passed, 31 warnings in 14.30s"
+    }
+  }
+}

@@ -1,0 +1,3 @@
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/lib/python3.14/copyreg.py:104: FutureWarning: `isinstance(treespec, LeafSpec)` is deprecated, use `isinstance(treespec, TreeSpec) and treespec.is_leaf()` instead.
+  return cls.__new__(cls, *args)
+REAL_MODEL squeezenet1_1 ok 115451c9646ef838 1.0000 5.722e-06 15.500

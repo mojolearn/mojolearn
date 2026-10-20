@@ -1,0 +1,105 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 4.5299530029296875e-06,
+   "max_rel": 0.0007868953844150772,
+   "shape": [
+    1,
+    1000
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 1
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 428.0667170005472,
+ "import_shapes": {
+  "data": [
+   1,
+   3,
+   224,
+   224
+  ]
+ },
+ "input_digest": "f58703a9ac8ecda4",
+ "input_shapes": [
+  [
+   1,
+   3,
+   224,
+   224
+  ]
+ ],
+ "inputs": [
+  [
+   "data",
+   [
+    1,
+    3,
+    224,
+    224
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "onnx",
+ "model": "resnet50-v1-12",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": 1698.51171875,
+  "device_memory_method": "KFD /sys/class/kfd/kfd/proc/232913/vram_* bytes for this pid after our arm",
+  "digest": "db5b017454229e2a",
+  "first_run_ms": 8.353055000043241,
+  "latency_ms": 7.176103999881889,
+  "output_shapes": [
+   [
+    1,
+    1000
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "resnetv17_dense0_fwd",
+   [
+    1,
+    1000
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "first_run_ms": 3.8199220016394975,
+  "latency_ms": 3.1815330003155395,
+  "library": "onnxruntime",
+  "onnxruntime_version": "1.31.0",
+  "providers": [
+   "CPUExecutionProvider"
+  ]
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "converted_file": "/root/.cache/mojolearn-real-models/resnet50-v1-12-opset13.onnx",
+  "converted_opset": 13,
+  "converted_sha256": "6866e397b292b5cf7d678e15b85f44e2369ddf818d88a951db392a79a3d908d2",
+  "file": "/root/.cache/mojolearn-real-models/resnet50-v1-12.onnx",
+  "onnx_version": "1.23.2",
+  "opset": 12,
+  "opset_conversion": "onnx.version_converter.convert_version(model, 13)",
+  "sha256": "3f03fdef724b22947eed826f1eef1dc5c34151bb4c37d634f1db89dfa2dd1526",
+  "url": "https://github.com/onnx/models/raw/main/validated/vision/classification/resnet/model/resnet50-v1-12.onnx"
+ },
+ "status": "ok",
+ "vendor": "hip"
+}

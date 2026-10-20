@@ -1,0 +1,43 @@
+{
+ "batch": 1,
+ "rows": [
+  {
+   "json": "/root/newchecks-out/real-models/resnet18.json",
+   "log": "/root/newchecks-out/real-models/resnet18.log",
+   "model": "resnet18",
+   "status": "ok"
+  },
+  {
+   "json": "/root/newchecks-out/real-models/squeezenet1_1.json",
+   "log": "/root/newchecks-out/real-models/squeezenet1_1.log",
+   "model": "squeezenet1_1",
+   "status": "ok"
+  },
+  {
+   "json": "/root/newchecks-out/real-models/mobilenet_v3_small.json",
+   "log": "/root/newchecks-out/real-models/mobilenet_v3_small.log",
+   "model": "mobilenet_v3_small",
+   "status": "ok"
+  },
+  {
+   "json": "/root/newchecks-out/real-models/resnet50-v1-12.json",
+   "log": "/root/newchecks-out/real-models/resnet50-v1-12.log",
+   "model": "resnet50-v1-12",
+   "status": "ok"
+  },
+  {
+   "json": "/root/newchecks-out/real-models/mnist-12.json",
+   "log": "/root/newchecks-out/real-models/mnist-12.log",
+   "model": "mnist-12",
+   "status": "ok"
+  },
+  {
+   "json": "/root/newchecks-out/real-models/smollm2-135m.json",
+   "log": "/root/newchecks-out/real-models/smollm2-135m.log",
+   "model": "smollm2-135m",
+   "status": "ok"
+  }
+ ],
+ "schema": "mojolearn-real-model/1-summary",
+ "seed": 0
+}

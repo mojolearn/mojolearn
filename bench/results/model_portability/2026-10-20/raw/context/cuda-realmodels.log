@@ -1,0 +1,13 @@
+start Tue Oct 20 11:13:35 UTC 2026 nvidia
+TV_INSTALL rc=0
+PYTEST_LATE rc=0 52 passed, 14 warnings in 17.24s
+RACE program-run rc=0 NEURAL lane=program-run arm=ours status=ok median_ms=2.6524499990046024 NEURAL-DIGEST lane=program-run arm=ours digest=b7d1c754d2672ec2
+REAL_MODELS rc=0
+REAL_MODEL resnet18 ok 73e68e7ea7a39c38 1.0000 2.652e-06 6.055
+REAL_MODEL squeezenet1_1 ok 115451c9646ef838 1.0000 5.722e-06 1.906
+REAL_MODEL mobilenet_v3_small ok af1e0d0b246571bf 1.0000 7.987e-06 3.267
+REAL_MODEL resnet50-v1-12 ok db5b017454229e2a 1.0000 4.172e-06 12.870
+REAL_MODEL mnist-12 ok 2950c80e2947459a 1.0000 3.338e-06 0.140
+REAL_MODEL smollm2-135m ok 78418aafcfb91a05 1.0000 3.128e-04 25.792
+REALMODELS_DONE
+CHAIN_DONE

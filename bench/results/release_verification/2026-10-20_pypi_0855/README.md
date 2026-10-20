@@ -19,3 +19,12 @@ One identity check per release: the admitted reference table (python/mojolearn/v
 Finish line: macOS: pip install mojolearn==0.8.55 on this Mac: OK; Linux: pip resolves mojolearn==0.8.55 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-nvidia: pip resolves mojolearn-nvidia==0.8.55 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-nvidia-ptx: pip resolves mojolearn-nvidia-ptx==0.8.55 for manylinux_2_35_x86_64; bytes are the published wheel's; mojolearn-amd: pip resolves mojolearn-amd==0.8.55 for manylinux_2_35_x86_64; bytes are the published wheel's.
 
 Provenance of every leg and column (built, or taken and why): release-provenance.json.
+
+## Custom models and imported inference
+
+The [October 20 model-portability record](../../model_portability/2026-10-20/README.md)
+retains the separate custom-training, six-model cross-vendor inference and
+NVIDIA-to-Apple saved-program results. It includes raw records, provenance,
+an evidence checker and a retained model artifact. These source-built checks
+are separate from the wheel-publication checks above and carry no new
+performance claim.

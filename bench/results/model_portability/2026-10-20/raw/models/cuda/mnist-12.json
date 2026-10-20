@@ -1,0 +1,99 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 3.337860107421875e-06,
+   "max_rel": 5.994748001276082e-06,
+   "shape": [
+    1,
+    10
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 1
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 1069.5378159871325,
+ "import_shapes": null,
+ "input_digest": "8014bf117b718b39",
+ "input_shapes": [
+  [
+   1,
+   1,
+   28,
+   28
+  ]
+ ],
+ "inputs": [
+  [
+   "Input3",
+   [
+    1,
+    1,
+    28,
+    28
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "onnx",
+ "model": "mnist-12",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": 258.0,
+  "device_memory_method": "nvidia-smi used_memory for this pid after our arm (context and pools)",
+  "digest": "2950c80e2947459a",
+  "first_run_ms": 0.6585669470950961,
+  "latency_ms": 0.1401199260726571,
+  "output_shapes": [
+   [
+    1,
+    10
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "Plus214_Output_0",
+   [
+    1,
+    10
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "first_run_ms": 0.7000169716775417,
+  "latency_ms": 0.28953910805284977,
+  "library": "onnxruntime",
+  "onnxruntime_version": "1.31.0",
+  "providers": [
+   "CPUExecutionProvider"
+  ]
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "converted_file": "/root/.cache/mojolearn-real-models/mnist-12-opset13.onnx",
+  "converted_opset": 13,
+  "converted_sha256": "d50d717f86c12bcc125c54890e346879ac8b3d40247bc2d60f284834a87ce43e",
+  "downloaded": true,
+  "file": "/root/.cache/mojolearn-real-models/mnist-12.onnx",
+  "onnx_version": "1.23.2",
+  "opset": 12,
+  "opset_conversion": "onnx.version_converter.convert_version(model, 13)",
+  "sha256": "5c688690f8bacf667d4c2074af5ad0646ca328d7ab03eccf944a65b320171bdd",
+  "url": "https://github.com/onnx/models/raw/main/validated/vision/classification/mnist/model/mnist-12.onnx"
+ },
+ "status": "ok",
+ "vendor": "cuda"
+}

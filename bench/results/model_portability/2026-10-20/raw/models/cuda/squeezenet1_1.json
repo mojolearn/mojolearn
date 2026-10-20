@@ -1,0 +1,95 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 5.7220458984375e-06,
+   "max_rel": 2.182830526717006e-05,
+   "shape": [
+    1,
+    1000
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 1
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 1351.9550169585273,
+ "import_shapes": null,
+ "input_digest": "f58703a9ac8ecda4",
+ "input_shapes": [
+  [
+   1,
+   3,
+   224,
+   224
+  ]
+ ],
+ "inputs": [
+  [
+   "x",
+   [
+    1,
+    3,
+    224,
+    224
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "torchvision",
+ "model": "squeezenet1_1",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": 370.0,
+  "device_memory_method": "nvidia-smi used_memory for this pid after our arm (context and pools)",
+  "digest": "115451c9646ef838",
+  "first_run_ms": 5.334940040484071,
+  "latency_ms": 1.905782031826675,
+  "output_shapes": [
+   [
+    1,
+    1000
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "view",
+   [
+    1,
+    1000
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "device": "cuda",
+  "first_run_ms": 230.2715400001034,
+  "latency_ms": 1.8679130589589477,
+  "library": "torch",
+  "peak_device_mb": 10.5166015625,
+  "peak_device_method": "torch.cuda.max_memory_allocated (the caching allocator's peak)"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "export_ms": 471.9937179470435,
+  "published_eval": "ImageNet-1K validation (50,000 images), as published with the torchvision weights",
+  "published_top1": 0.58178,
+  "torch_version": "2.14.1+cu130",
+  "torchvision_version": "0.29.1+cu130",
+  "weights": "SqueezeNet1_1_Weights.IMAGENET1K_V1",
+  "weights_url": "https://download.pytorch.org/models/squeezenet1_1-b8a52dc0.pth"
+ },
+ "status": "ok",
+ "vendor": "cuda"
+}

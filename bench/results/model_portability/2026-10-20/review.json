@@ -1,0 +1,140 @@
+{
+  "date": "2026-10-20",
+  "imported_models": [
+    {
+      "input_digest": "8014bf117b718b39",
+      "input_shapes": [
+        [
+          1,
+          1,
+          28,
+          28
+        ]
+      ],
+      "model": "mnist-12",
+      "output_digest": "2950c80e2947459a",
+      "vendors": [
+        "metal",
+        "cuda",
+        "hip"
+      ]
+    },
+    {
+      "input_digest": "f58703a9ac8ecda4",
+      "input_shapes": [
+        [
+          1,
+          3,
+          224,
+          224
+        ]
+      ],
+      "model": "mobilenet_v3_small",
+      "output_digest": "af1e0d0b246571bf",
+      "vendors": [
+        "metal",
+        "cuda",
+        "hip"
+      ]
+    },
+    {
+      "input_digest": "f58703a9ac8ecda4",
+      "input_shapes": [
+        [
+          1,
+          3,
+          224,
+          224
+        ]
+      ],
+      "model": "resnet18",
+      "output_digest": "73e68e7ea7a39c38",
+      "vendors": [
+        "metal",
+        "cuda",
+        "hip"
+      ]
+    },
+    {
+      "input_digest": "f58703a9ac8ecda4",
+      "input_shapes": [
+        [
+          1,
+          3,
+          224,
+          224
+        ]
+      ],
+      "model": "resnet50-v1-12",
+      "output_digest": "db5b017454229e2a",
+      "vendors": [
+        "metal",
+        "cuda",
+        "hip"
+      ]
+    },
+    {
+      "input_digest": "9f99e3d38169b0b2",
+      "input_shapes": [
+        [
+          1,
+          32
+        ]
+      ],
+      "model": "smollm2-135m",
+      "output_digest": "78418aafcfb91a05",
+      "vendors": [
+        "metal",
+        "cuda",
+        "hip"
+      ]
+    },
+    {
+      "input_digest": "f58703a9ac8ecda4",
+      "input_shapes": [
+        [
+          1,
+          3,
+          224,
+          224
+        ]
+      ],
+      "model": "squeezenet1_1",
+      "output_digest": "115451c9646ef838",
+      "vendors": [
+        "metal",
+        "cuda",
+        "hip"
+      ]
+    }
+  ],
+  "performance_results_admitted": false,
+  "saved_program": {
+    "destination": {
+      "device": "Apple M4 / Mac16,12",
+      "mojolearn_version": "0.8.55",
+      "numeric_mode": "identical",
+      "platform": "Darwin arm64",
+      "vendor": "metal"
+    },
+    "input_digest": "b6842f5f8a82bbe7",
+    "model_sha256": "0bf3e6e4d1786408ebdf090eb9af53bb0a0fbcbf08c0c74b7c080c6a3b8c1259",
+    "output_digest": "b71faa2876f07f24",
+    "source": {
+      "device": "NVIDIA NVIDIA GeForce RTX 3090, 580.65.06",
+      "mojolearn_version": "0.8.54",
+      "numeric_mode": "identical",
+      "platform": "Linux x86_64",
+      "vendor": "cuda"
+    }
+  },
+  "schema": "mojolearn-model-portability-review/1",
+  "training_digests": {
+    "guide_export_labels": "1924fa1ca48922ec",
+    "guide_mixture_params": "790706a65ea8e56a",
+    "guide_mixture_proba": "d2688c89ab0e25be",
+    "guide_sequential_params": "672665adde8b44b2",
+    "guide_sequential_proba": "1895f8777920840c",
+    "guide_session_trained": "34b5cad9b0eeb907"
+  }
+}

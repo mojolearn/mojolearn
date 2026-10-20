@@ -1,0 +1,12 @@
+start Tue Oct 20 11:09:54 UTC 2026 nvidia
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+TORCH 2.11.0+cu128 True
+PYTEST_TORCH rc=0 18 passed, 31 warnings in 8.60s
+torch digests 9
+RACE sequential-predict rc=0 NEURAL lane=sequential-predict arm=ours status=ok median_ms=6.51916500646621 NEURAL-DIGEST lane=sequential-predict arm=ours digest=0f700b49d711eb61
+RACE program-run rc=0 NEURAL lane=program-run arm=ours status=ok median_ms=2.2258820245042443 NEURAL-DIGEST lane=program-run arm=ours digest=b7d1c754d2672ec2
+RACE ops-session-step rc=0 NEURAL lane=ops-session-step arm=ours status=ok median_ms=5.187190021388233 NEURAL-DIGEST lane=ops-session-step arm=ours digest=bbd9d8db79bc52d1
+RACE causal-lm-generate rc=0 NEURAL lane=causal-lm-generate arm=ours status=ok median_ms=12095.585486968048 NEURAL-DIGEST lane=causal-lm-generate arm=ours digest=a78e51361c3614d0
+RACE causal-lm-generate-smollm2 rc=0 NEURAL lane=causal-lm-generate-smollm2 arm=ours status=ok median_ms=1860.206175944768 NEURAL-DIGEST lane=causal-lm-generate-smollm2 arm=ours digest=07daaa15d9e74953
+TORCH_FOLLOWUP_DONE

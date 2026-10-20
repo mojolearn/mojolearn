@@ -1,0 +1,13 @@
+{
+ "batch": 1,
+ "rows": [
+  {
+   "json": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/smollm2-135m.json",
+   "log": "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/metal-real-models/smollm2-135m.log",
+   "model": "smollm2-135m",
+   "status": "ok"
+  }
+ ],
+ "schema": "mojolearn-real-model/1-summary",
+ "seed": 0
+}

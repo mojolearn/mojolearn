@@ -1,0 +1,8 @@
+{
+  "r2_key": "measurements/model-portability/2026-10-20/0bf3e6e4d1786408ebdf090eb9af53bb0a0fbcbf08c0c74b7c080c6a3b8c1259/resnet18.program",
+  "upload_exit_code": 0,
+  "download_exit_code": 0,
+  "download_sha256": "0bf3e6e4d1786408ebdf090eb9af53bb0a0fbcbf08c0c74b7c080c6a3b8c1259",
+  "bytes": 140283612,
+  "download_bytes": 140283612
+}

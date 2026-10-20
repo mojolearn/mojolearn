@@ -1,0 +1,92 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 0.00011444091796875,
+   "max_rel": 0.33168441111002195,
+   "shape": [
+    1,
+    32,
+    49152
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 32
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 5253.491791023407,
+ "import_shapes": null,
+ "input_digest": "9f99e3d38169b0b2",
+ "input_shapes": [
+  [
+   1,
+   32
+  ]
+ ],
+ "inputs": [
+  [
+   "input_ids",
+   [
+    1,
+    32
+   ],
+   "int64"
+  ]
+ ],
+ "kind": "hf-causal-lm",
+ "model": "smollm2-135m",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": null,
+  "device_memory_method": "Apple unified memory: no per-process GPU counter",
+  "digest": "78418aafcfb91a05",
+  "first_run_ms": 2515.311916009523,
+  "latency_ms": 907.676667033229,
+  "output_shapes": [
+   [
+    1,
+    32,
+    49152
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "view_784",
+   [
+    1,
+    32,
+    49152
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "device": "mps",
+  "first_run_ms": 1492.5275000277907,
+  "latency_ms": 20.60154196806252,
+  "library": "torch",
+  "peak_device_mb": null,
+  "peak_device_method": "Apple unified memory: no per-process GPU counter"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "export_ms": 1296.5041249990463,
+  "repo": "HuggingFaceTB/SmolLM2-135M",
+  "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+  "torch_version": "2.11.0",
+  "transformers_version": "5.17.0"
+ },
+ "status": "ok",
+ "vendor": "metal"
+}

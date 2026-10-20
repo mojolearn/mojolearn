@@ -1,0 +1,93 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 4.76837158203125e-06,
+   "max_rel": 2.9846812756324734e-05,
+   "shape": [
+    1,
+    1000
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 1
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 517.9565730013564,
+ "import_shapes": null,
+ "input_digest": "f58703a9ac8ecda4",
+ "input_shapes": [
+  [
+   1,
+   3,
+   224,
+   224
+  ]
+ ],
+ "inputs": [
+  [
+   "x",
+   [
+    1,
+    3,
+    224,
+    224
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "torchvision",
+ "model": "squeezenet1_1",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": 1698.4375,
+  "device_memory_method": "KFD /sys/class/kfd/kfd/proc/232765/vram_* bytes for this pid after our arm",
+  "digest": "115451c9646ef838",
+  "first_run_ms": 1.8365220003033755,
+  "latency_ms": 1.1817129998235032,
+  "output_shapes": [
+   [
+    1,
+    1000
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "view",
+   [
+    1,
+    1000
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "device": "cpu",
+  "first_run_ms": 9.602597001503455,
+  "latency_ms": 4.511023000304704,
+  "library": "torch"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "export_ms": 167.97405100078322,
+  "published_eval": "ImageNet-1K validation (50,000 images), as published with the torchvision weights",
+  "published_top1": 0.58178,
+  "torch_version": "2.14.1+cu130",
+  "torchvision_version": "0.29.1+cu130",
+  "weights": "SqueezeNet1_1_Weights.IMAGENET1K_V1",
+  "weights_url": "https://download.pytorch.org/models/squeezenet1_1-b8a52dc0.pth"
+ },
+ "status": "ok",
+ "vendor": "hip"
+}

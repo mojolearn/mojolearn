@@ -1,0 +1,6 @@
+BUILD host rc=1
+BUILD seq rc=1
+PYTEST metal rc=1 2 failed, 11 passed, 108 skipped, 23 warnings in 9.83s
+PYTEST cpu rc=1 2 failed, 11 passed, 108 skipped, 9 warnings in 1.90s
+DIGESTS metal-vs-cpu EQUAL n=       0
+DONE

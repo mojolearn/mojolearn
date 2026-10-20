@@ -1,0 +1,95 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 5.245208740234375e-06,
+   "max_rel": 0.000769967679263696,
+   "shape": [
+    1,
+    1000
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 1
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 639.1159170307219,
+ "import_shapes": null,
+ "input_digest": "f58703a9ac8ecda4",
+ "input_shapes": [
+  [
+   1,
+   3,
+   224,
+   224
+  ]
+ ],
+ "inputs": [
+  [
+   "x",
+   [
+    1,
+    3,
+    224,
+    224
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "torchvision",
+ "model": "resnet18",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": null,
+  "device_memory_method": "Apple unified memory: no per-process GPU counter",
+  "digest": "73e68e7ea7a39c38",
+  "first_run_ms": 293.8274999614805,
+  "latency_ms": 81.05012495070696,
+  "output_shapes": [
+   [
+    1,
+    1000
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "addmm",
+   [
+    1,
+    1000
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "device": "mps",
+  "first_run_ms": 1147.163791989442,
+  "latency_ms": 11.628208041656762,
+  "library": "torch",
+  "peak_device_mb": null,
+  "peak_device_method": "Apple unified memory: no per-process GPU counter"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "export_ms": 258.2722090301104,
+  "published_eval": "ImageNet-1K validation (50,000 images), as published with the torchvision weights",
+  "published_top1": 0.69758,
+  "torch_version": "2.11.0",
+  "torchvision_version": "0.26.0",
+  "weights": "ResNet18_Weights.IMAGENET1K_V1",
+  "weights_url": "https://download.pytorch.org/models/resnet18-f37072fd.pth"
+ },
+ "status": "ok",
+ "vendor": "metal"
+}

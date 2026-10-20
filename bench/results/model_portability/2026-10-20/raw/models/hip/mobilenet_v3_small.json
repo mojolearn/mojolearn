@@ -1,0 +1,93 @@
+{
+ "batch": 1,
+ "clock": {
+  "ours": "whole: input host->device copy + Program.run + output device->host copy",
+  "reference": "whole: torch.from_numpy(x).to(device) + forward + .cpu(); onnxruntime session.run from host arrays",
+  "runs_per_arm": "one untimed (digest / warm), then one timed"
+ },
+ "compare": [
+  {
+   "finite": true,
+   "max_abs": 9.5367431640625e-06,
+   "max_rel": 0.0019163404752654963,
+   "shape": [
+    1,
+    1000
+   ],
+   "top1_agree": 1.0,
+   "top1_rows": 1
+  }
+ ],
+ "gate": false,
+ "gpu_arch": null,
+ "import_ms": 819.4255320013326,
+ "import_shapes": null,
+ "input_digest": "f58703a9ac8ecda4",
+ "input_shapes": [
+  [
+   1,
+   3,
+   224,
+   224
+  ]
+ ],
+ "inputs": [
+  [
+   "x",
+   [
+    1,
+    3,
+    224,
+    224
+   ],
+   "float32"
+  ]
+ ],
+ "kind": "torchvision",
+ "model": "mobilenet_v3_small",
+ "mojolearn_version": "0.8.54",
+ "numeric_mode": "identical",
+ "ours": {
+  "device_memory_mb": 1698.61328125,
+  "device_memory_method": "KFD /sys/class/kfd/kfd/proc/232840/vram_* bytes for this pid after our arm",
+  "digest": "af1e0d0b246571bf",
+  "first_run_ms": 5.706485000700923,
+  "latency_ms": 3.218231999198906,
+  "output_shapes": [
+   [
+    1,
+    1000
+   ]
+  ],
+  "repeat_equal": true
+ },
+ "outputs": [
+  [
+   "addmm_1",
+   [
+    1,
+    1000
+   ],
+   "float32"
+  ]
+ ],
+ "reference": {
+  "device": "cpu",
+  "first_run_ms": 10.704571001042495,
+  "latency_ms": 3.834223000012571,
+  "library": "torch"
+ },
+ "schema": "mojolearn-real-model/1",
+ "seed": 0,
+ "source": {
+  "export_ms": 375.1153579996753,
+  "published_eval": "ImageNet-1K validation (50,000 images), as published with the torchvision weights",
+  "published_top1": 0.6766800000000001,
+  "torch_version": "2.14.1+cu130",
+  "torchvision_version": "0.29.1+cu130",
+  "weights": "MobileNet_V3_Small_Weights.IMAGENET1K_V1",
+  "weights_url": "https://download.pytorch.org/models/mobilenet_v3_small-047dcff4.pth"
+ },
+ "status": "ok",
+ "vendor": "hip"
+}

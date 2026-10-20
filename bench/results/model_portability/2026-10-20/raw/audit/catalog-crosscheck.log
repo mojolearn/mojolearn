@@ -1,0 +1,6 @@
+CATALOG mnist-12 verified cuda=2950c80e2947459a,hip=2950c80e2947459a,metal=2950c80e2947459a
+CATALOG mobilenet_v3_small verified cuda=af1e0d0b246571bf,hip=af1e0d0b246571bf,metal=af1e0d0b246571bf
+CATALOG resnet18 verified cuda=73e68e7ea7a39c38,hip=73e68e7ea7a39c38,metal=73e68e7ea7a39c38
+CATALOG resnet50-v1-12 verified cuda=db5b017454229e2a,hip=db5b017454229e2a,metal=db5b017454229e2a
+CATALOG smollm2-135m verified cuda=78418aafcfb91a05,hip=78418aafcfb91a05,metal=78418aafcfb91a05
+CATALOG squeezenet1_1 verified cuda=115451c9646ef838,hip=115451c9646ef838,metal=115451c9646ef838

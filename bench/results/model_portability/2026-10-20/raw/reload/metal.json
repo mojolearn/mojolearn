@@ -1,0 +1,42 @@
+{
+  "format": "mojolearn-model-verify/1",
+  "input_source": "seeded",
+  "inputs": [
+    {
+      "digest": "b6842f5f8a82bbe7",
+      "dtype": "float32",
+      "name": "x",
+      "shape": [
+        1,
+        3,
+        224,
+        224
+      ]
+    }
+  ],
+  "install": {
+    "device": "Apple M4 / Mac16,12",
+    "mojolearn_version": "0.8.55",
+    "numeric_mode": "identical",
+    "platform": "Darwin arm64",
+    "vendor": "metal"
+  },
+  "model": {
+    "bytes": 140283612,
+    "description_hash": "608aa3f73561913e",
+    "file": "resnet18.program",
+    "kind": "program",
+    "sha256": "0bf3e6e4d1786408ebdf090eb9af53bb0a0fbcbf08c0c74b7c080c6a3b8c1259"
+  },
+  "outputs": [
+    {
+      "digest": "b71faa2876f07f24",
+      "name": "addmm",
+      "shape": [
+        1,
+        1000
+      ]
+    }
+  ],
+  "seed": 0
+}

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python",
+    "-m",
+    "mojolearn",
+    "verify-model",
+    "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/xvendor/resnet18.program",
+    "--expect",
+    "/Users/andrewhendel/mojolearn-evidence/boxes-20261020/xvendor/resnet18.program.verify.json",
+    "--out",
+    "/Users/andrewhendel/mojolearn-evidence/mlsys-custom-results-20261020T132446/resnet18-metal.verify.json",
+    "--numeric-mode",
+    "identical"
+  ],
+  "exit_code": 0,
+  "source_commit": "cdfeb4984f63c82c58825a42f4fed349675e4fca",
+  "environment": "Existing test environment with explicit source-checkout PYTHONPATH; not an installed-wheel qualification",
+  "purpose": "Retain the missing Apple comparison receipt for the saved NVIDIA artifact; no timing measurement."
+}

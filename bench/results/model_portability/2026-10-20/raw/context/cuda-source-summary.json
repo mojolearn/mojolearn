@@ -1,0 +1,346 @@
+{
+  "source_commit": "457c727d48fd298f56cfd8fb371da0aadf7dca45",
+  "source_status": [
+    " D python/mojolearn/_mojolearn_byte_lm.so"
+  ],
+  "scope": "Correctness tests only; no performance or cross-vendor qualification.",
+  "stages": [
+    {
+      "name": "gpu-gradients-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-gradients"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-gradients-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 60.363
+    },
+    {
+      "name": "gpu-gradients-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-gradients"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-gradients-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.669
+    },
+    {
+      "name": "gpu-mlp-autograd-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/mlp_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-mlp-autograd"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-mlp-autograd-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 58.632
+    },
+    {
+      "name": "gpu-mlp-autograd-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-mlp-autograd"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-mlp-autograd-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.818
+    },
+    {
+      "name": "gpu-infer-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/infer_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-infer"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-infer-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 56.218
+    },
+    {
+      "name": "gpu-infer-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-infer"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-infer-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.718
+    },
+    {
+      "name": "gpu-rankn-core-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/rankn_core_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-rankn-core"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-core-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 58.074
+    },
+    {
+      "name": "gpu-rankn-core-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-rankn-core"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-core-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.668
+    },
+    {
+      "name": "gpu-rankn-fold-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/rankn_fold_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-rankn-fold"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-fold-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 58.629
+    },
+    {
+      "name": "gpu-rankn-fold-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-rankn-fold"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-fold-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.717
+    },
+    {
+      "name": "gpu-rankn-bmm-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/rankn_bmm_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-rankn-bmm"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-bmm-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 57.269
+    },
+    {
+      "name": "gpu-rankn-bmm-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-rankn-bmm"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-bmm-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.668
+    },
+    {
+      "name": "gpu-rankn-layout-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/rankn_layout_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-rankn-layout"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-layout-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 57.334
+    },
+    {
+      "name": "gpu-rankn-layout-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-rankn-layout"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-layout-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.618
+    },
+    {
+      "name": "gpu-rankn-conv-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/rankn_conv_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-rankn-conv"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-conv-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 57.517
+    },
+    {
+      "name": "gpu-rankn-conv-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-rankn-conv"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-rankn-conv-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 2.018
+    },
+    {
+      "name": "gpu-import-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/checks/import_gpu.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/gpu-import"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-import-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 64.832
+    },
+    {
+      "name": "gpu-import-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/gpu-import"
+      ],
+      "log": "/root/newchecks-out/check_autograd/gpu-import-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 1.817
+    },
+    {
+      "name": "custom-regression-build",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/nc/.pixi/envs/default/bin/mojo",
+        "build",
+        "-j",
+        "2",
+        "-D",
+        "MOJOLEARN_NUMERIC_IDENTICAL=1",
+        "-I",
+        "/root/nc",
+        "/root/nc/autograd/examples/custom_regression.mojo",
+        "-o",
+        "/root/newchecks-out/check_autograd/custom-regression"
+      ],
+      "log": "/root/newchecks-out/check_autograd/custom-regression-build.log",
+      "exit_code": 0,
+      "elapsed_seconds": 19.85
+    },
+    {
+      "name": "custom-regression-run",
+      "command": [
+        "bash",
+        "/root/nc/tools/with_build_lock.sh",
+        "/root/newchecks-out/check_autograd/custom-regression"
+      ],
+      "log": "/root/newchecks-out/check_autograd/custom-regression-run.log",
+      "exit_code": 0,
+      "elapsed_seconds": 0.033
+    }
+  ],
+  "comparisons": [
+    {
+      "backend": "gpu",
+      "kind": "MLP stored-digest regression",
+      "cases": 48,
+      "digests_compared": 48,
+      "reference": "autograd/checks/mlp_cases_digests.tsv",
+      "failures": []
+    },
+    {
+      "backend": "gpu",
+      "kind": "import elementwise family",
+      "lines": 50,
+      "digests": "/root/newchecks-out/check_autograd/import-digests-gpu.txt"
+    }
+  ],
+  "status": "passed"
+}

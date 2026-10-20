@@ -1,0 +1,7 @@
+model    resnet18.program  kind=program  sha256=0bf3e6e4d1786408ebdf090eb9af53bb0a0fbcbf08c0c74b7c080c6a3b8c1259
+         description=608aa3f73561913e  bytes=140283612
+install  mojolearn 0.8.55  numeric_mode=identical  vendor=metal  device=Apple M4 / Mac16,12
+input    x  shape=1x3x224x224  dtype=float32  digest=b6842f5f8a82bbe7  (seeded, seed 0)
+output   addmm  shape=1x1000  digest=b71faa2876f07f24  MATCH
+expected /Users/andrewhendel/mojolearn-evidence/boxes-20261020/xvendor/resnet18.program.verify.json: mojolearn 0.8.54  vendor=cuda  device=NVIDIA NVIDIA GeForce RTX 3090, 580.65.06
+verdict  MATCH
