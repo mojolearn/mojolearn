@@ -95,12 +95,23 @@ def check_training_fault(kind: Int, at: Int, conditional: Bool) raises:
     var dst = CastIn.f32_c(Int(target.unsafe_ptr()), 2, 1)
     var x = s.upload_nd(src, ShapeN.of([2, 1]), False)
     var w = s.upload_nd(CastIn.f32_c(Int(weight.unsafe_ptr()), 1, 1), ShapeN.of([1, 1]), True)
-    var output = s.op(OPS_MATMUL, List[Int](x, w), List[Int](), List[Float32]())
+    var operands = one(x)
+    operands.append(w)
+    var output = s.op(OPS_MATMUL, operands, List[Int](), List[Float32]())
     var pid = s.capture(one(x), one(output))
     var condition = s.capture(one(x), one(w)) if conditional else 0
     var otherwise = s.capture(one(x), one(output)) if conditional else 0
-    var opt = s.optimizer(List[Int](OPT_SGD, 0, 0, 1),
-                          List[Float32](0.01, 0.0, 0.9, 0.999, 1e-8, 0.0, 1.0))
+    var integers = one(OPT_SGD)
+    integers.append(0)
+    integers.append(0)
+    integers.append(1)
+    var scalars = List[Float32](length=7, fill=0.0)
+    scalars[0] = 0.01
+    scalars[2] = 0.9
+    scalars[3] = 0.999
+    scalars[4] = 1e-8
+    scalars[6] = 1.0
+    var opt = s.optimizer(integers, scalars)
     var sources = List[CastIn]()
     sources.append(src)
     var shapes = List[ShapeN]()
