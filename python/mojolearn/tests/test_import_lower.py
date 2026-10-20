@@ -6,9 +6,12 @@ Each shared fixture of tests/_onnx_fixture.py (written without ``onnx`` or
 with an eager ``ops.Session`` composition of the same operations on the same
 weights; a second run gives the same words; ``save`` then
 ``Session.load_program`` gives them again; the BatchNorm prologue equals the
-eager fold; a ``Gemm`` ``transB`` weight equals the transposed weight. The
-refusals (Resize, Conv group=2, a data-dependent Reshape, Gather by an index
-input) come in one error naming every node, before anything is uploaded.
+eager fold; a ``Gemm`` ``transB`` weight equals the transposed weight; the
+embedding fixture (a ``Gather`` by an int64 ids input) equals the eager
+``embedding`` on an ids tensor and on the ids array. The refusals (Resize,
+Conv group=2, a data-dependent Reshape, Gather by indices the model also
+reads as values) come in one error naming every node, before anything is
+uploaded.
 Prints IMPORT_DIGEST lines to diff across CPU, Metal, NVIDIA and AMD."""
 import hashlib
 
@@ -234,6 +237,50 @@ def test_mixed_ops_equal_eager(tmp_path):
     print(f"IMPORT_DIGEST mixed {_digest(m, p, a)}")
 
 
+EMB_VOCAB, EMB_T, EMB_D = 11, 4, 6
+
+
+def _ref_embedding_linear(s, f, ids):
+    """``ids``: an ids tensor (Session.ids) or the ids array (the caller-array form)."""
+    e = s.reshape(s.embedding(s.tensor(_init(f, "table")), ids), (BATCH, EMB_T, EMB_D))
+    m = s.matmul(e, s.tensor(_init(f, "proj")))
+    return s.add(m, s.tensor(_row(_init(f, "proj_b"))))
+
+
+@needs_binding
+def test_embedding_fixture_equals_eager(tmp_path):
+    f = fx.write_fixture("embedding_linear", tmp_path)
+    prog = importers.import_model(f.path, shapes={"ids": (BATCH, EMB_T)})
+    assert prog.inputs == [("ids", (BATCH, EMB_T), "int64")]
+    assert prog.input_kinds == (1,)
+    assert [(o[0], o[1]) for o in prog.outputs] == [("y", (BATCH, EMB_T, 3))]
+    rng = np.random.default_rng(13)
+    ids = rng.integers(0, EMB_VOCAB, size=(BATCH, EMB_T))
+    other = rng.integers(0, EMB_VOCAB, size=(BATCH, EMB_T))
+    y = prog.run(ids)
+    _same(prog.run(ids), y, "embedding_linear: a second run")
+    moved = prog.run(other)
+    ops = _ops()
+    with ops.Session() as s:
+        want = s.numpy(_ref_embedding_linear(s, f, s.ids(ids)))
+        want_arr = s.numpy(_ref_embedding_linear(s, f, ids))
+        want_other = s.numpy(_ref_embedding_linear(s, f, s.ids(other)))
+    _same(y, want, "embedding_linear: the program against the eager composition")
+    _same(want_arr, want, "embedding_linear: the ids tensor against the ids array")
+    _same(moved, want_other, "embedding_linear: new ids against the eager composition")
+    _same(prog.run(ids=ids.astype(np.int32)), y, "embedding_linear: int32 ids by name")
+    with pytest.raises(TypeError, match="integer"):
+        prog.run(ids.astype(np.float32))
+    path = tmp_path / "embedding_linear.mlprog"
+    prog.save(path)
+    with ops.Session() as s2:
+        loaded = s2.load_program(path)
+        assert loaded.input_kinds == (1,)
+        _same(loaded.run(ids.reshape(BATCH, EMB_T)), y, "embedding_linear: the saved program")
+    print(f"IMPORT_DIGEST embedding_linear {_digest(y)}")
+    print(f"IMPORT_DIGEST embedding_linear_new_ids {_digest(moved)}")
+
+
 # ------------------------------------------------------------ refusals ----
 
 def _refused_model(directory):
@@ -244,11 +291,13 @@ def _refused_model(directory):
              fx.node("Floor", ["y"], ["yf"], name="floor"),
              fx.node("Cast", ["yf"], ["target"], name="cast", to=7),
              fx.node("Reshape", ["x2", "target"], ["xr"], name="reshape_dd"),
-             fx.node("Gather", ["table", "ids"], ["e"], name="emb", axis=0)]
+             fx.node("Gather", ["table", "ids"], ["e"], name="emb", axis=0),
+             fx.node("Cast", ["ids"], ["idf"], name="ids_values", to=1)]
     return fx.make_model(f"{directory}/refused.onnx", nodes,
                          [("x", "f32", (2, 4, 6, 6)), ("y", "f32", (2,)), ("x2", "f32", (2, 6)),
                           ("ids", "i64", (5,))],
-                         [("r", "f32", (2, 4, 8, 8)), ("xr", "f32", (3, 4)), ("e", "f32", (5, 3))], inits)
+                         [("r", "f32", (2, 4, 8, 8)), ("xr", "f32", (3, 4)), ("e", "f32", (5, 3)),
+                          ("idf", "f32", (5,))], inits)
 
 
 def test_refusals_list_every_node_before_any_upload(tmp_path, monkeypatch):
