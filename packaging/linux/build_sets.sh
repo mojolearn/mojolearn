@@ -8,10 +8,13 @@
 # Output, under <dest-dir>:
 #   sets/<vendor>/_mojolearn*.so                 the FAST set
 #   sets/<vendor>/identical/_mojolearn*.so       the IDENTICAL set
+#     (merged layout, the default: _mojolearn_native.so + _mojolearn_merged.json
+#      per tier and _mojolearn_native_host.so + its index in host/; see
+#      MERGED BINDINGS below)
 #   sets/<vendor>/.libs/*.so                     the MAX runtime closure
 #   sets/<vendor>/manifest.json                  sizes, hashes, read-backs
 #   sets/<vendor>.tar.gz                         the same, for the fetch
-#   build_logs/<tier>_<binding>.log              one per build
+#   build_logs/<tier>_<binding>.log              one per build (merged: <tier>_merged.log)
 #   SIZES.txt                                    the numbers, human readable
 #
 # <vendor> is NOT an argument. It is READ BACK from the first binary built,
@@ -137,6 +140,25 @@ IDENTICAL_ONLY_NAMES="$IDENTICAL_ONLY_NAMES${_xn:+ $_xn}"
 PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR
+# MERGED BINDINGS (lane merged-bindings, 2026-10-20). MOJOLEARN_MERGED_BINDINGS=1
+# (the default) builds each tier, and the host set, as ONE merged native file
+# per group of bindings/merged_groups.json (bindings/merged_build.sh), so the
+# code the bindings share is compiled and shipped once: <dir>/_mojolearn_native.so
+# exports every member's PyInit and <dir>/_mojolearn_merged.json names the
+# members python/mojolearn/_merged.py loads from it. MOJOLEARN_MERGED_BINDINGS=0
+# is the per-binding layout exactly as before (one script, one .so per binding),
+# kept for the size A/B and for bisecting. Every check below covers every
+# MEMBER in either layout: the vendor and architecture read-back load or read
+# each member from the file that serves it (packaging/linux/merged_layout.py).
+MERGED=$(python3 packaging/linux/merged_layout.py enabled) || exit 2
+ML="python3 $REPO/packaging/linux/merged_layout.py"
+if [[ "$MERGED" = 1 ]]; then
+  # merged_build.sh compiles one --target-accelerator for every member, so a
+  # Linux GPU set must name it; the per-binding scripts that read it from the
+  # box GPU when unset have no merged equivalent.
+  [[ -n "${MOJOLEARN_GPU_ARCHS:-}" ]] || { echo 'MOJOLEARN_MERGED_BINDINGS=1 needs one explicit MOJOLEARN_GPU_ARCHS (or MOJOLEARN_MERGED_BINDINGS=0)' >&2; exit 2; }
+  [[ -z "${MOJOLEARN_BUILD_SCRIPTS:-}" ]] || { echo 'MOJOLEARN_BUILD_SCRIPTS selects per-binding scripts; set MOJOLEARN_MERGED_BINDINGS=0 with it' >&2; exit 2; }
+fi
 tier_names() {
   printf '%s' "$EXT_NAMES"
   if [[ "$1" = identical ]]; then printf ' %s' "$IDENTICAL_ONLY_NAMES"; fi
@@ -182,10 +204,37 @@ HOST_FAMILIES=$(python3 python/mojolearn/host_surface.py --wheel-families) || ex
 HOST_NAMES=$(python3 python/mojolearn/host_surface.py --wheel-bindings) || exit 2
 [[ -n "$HOST_FAMILIES" && -n "$HOST_NAMES" ]] || { echo 'the manifest names no wheel host family' >&2; exit 2; }
 host_so() { printf 'python/mojolearn/host/%s.so' "$1"; }
+tier_dir() { case "$1" in fast) printf 'python/mojolearn' ;; *) printf 'python/mojolearn/%s' "$1" ;; esac; }
+# The file a member loads from: its own .so (per-binding) or the merged file
+# the directory's index names (merged); the loader's rule, read here.
+member_so() { $ML member "$1" "$2"; }
 say() { echo "[$(date +%T) build_sets] $*"; }
 
 say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS, gpu compile workers: $GPU_COMPILE_JOBS, per-binding bound: ${BINDING_TIMEOUT}s"
 say "pixi env: $PIXI_ENV"
+if [[ "$MERGED" = 1 ]]; then
+  BINDING_TIMEOUT_MERGED=$(merged_timeout_seconds) || exit 2
+  say "binding layout: merged (one compile per directory set, bound ${BINDING_TIMEOUT_MERGED}s)"
+  # THE MANIFEST MUST BE THE PACKER'S LIST. bindings/merged_groups.json decides
+  # what the merged files hold; tier_names / HOST_NAMES decide what the wheel
+  # must serve. A binding in one and not the other would build a set that
+  # loads fine until someone touches the missing module, so refuse it here.
+  for t in $TIERS; do
+    python3 tools/merged_bindings.py check --dir "$t" --platform linux --byte-lm "$PACKAGE_BYTE_LM" \
+      --expect "$(tier_names "$t")" || exit 2
+  done
+  if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
+    python3 tools/merged_bindings.py check --dir host --platform linux --byte-lm "$PACKAGE_BYTE_LM" \
+      --expect "$HOST_NAMES" || exit 2
+  fi
+  # The cache key (tools/bincache.py) hashes every .mojo file of the tree for
+  # a merged build (its compile line names a generated root), every MOJOLEARN_*
+  # variable and the scripts; the root generator and the group manifest are
+  # neither, so their digest rides in as a variable.
+  MERGED_KEY=$(cat bindings/merged_groups.json tools/merged_bindings.py | sha256sum | cut -c1-64)
+else
+  say "binding layout: per-binding (MOJOLEARN_MERGED_BINDINGS=0)"
+fi
 export PATH="$HOME/.pixi/bin:$PATH"
 command -v pixi >/dev/null || { say "no pixi on PATH"; exit 2; }
 
@@ -194,13 +243,18 @@ command -v pixi >/dev/null || { say "no pixi on PATH"; exit 2; }
 # script refuses stale files by mtime; here they are removed first.
 for t in $TIERS; do
   case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
-  rm -f "$d"/_mojolearn*.so
+  rm -f "$d"/_mojolearn*.so "$d"/_mojolearn_merged.json
 done
 # The host bindings sit BESIDE the tiers, so the loop above never reaches
 # them, and bindings/build_host_family.sh REFUSES to overwrite an existing
 # output rather than silently replacing it. A leftover from an earlier leg
 # would therefore fail this build instead of being reused.
 for n in $HOST_NAMES; do rm -f "$(host_so "$n")"; done
+# and the merged host file(s) and index, whichever layout ran last here
+for f in $(python3 tools/merged_bindings.py plan --dir host --platform linux --byte-lm 1 | awk '{print $1}'); do
+  rm -f "python/mojolearn/host/$f.so"
+done
+rm -f python/mojolearn/host/_mojolearn_merged.json
 
 # ---------------------------------------------------------------- the cache
 # THE BINDING CACHE (tools/bincache.py, 2026-09-22). ON only where a runner
@@ -217,8 +271,15 @@ BINCACHE_MAP=${MOJOLEARN_BINCACHE_MAP:-/root/.mojolearn_bincache/urls.tsv}
 USE_BINCACHE=0
 if [[ "${MOJOLEARN_BINCACHE:-}" != 0 && -f "$BINCACHE_MAP" ]]; then USE_BINCACHE=1; fi
 say "binding cache: $([[ $USE_BINCACHE = 1 ]] && echo "ON ($BINCACHE_MAP)" || echo off)"
-declared_output() {   # tier script -> the one .so it writes, repo-relative
+declared_output() {   # tier script -> the .so it writes, repo-relative (merged: the files + index)
   local tier="$1" s="$2" name dir
+  if [[ "$s" = merged_build.sh ]]; then
+    local key=$tier; dir=$(tier_dir "$tier")
+    [[ "$tier" = host ]] && dir=python/mojolearn/host
+    python3 tools/merged_bindings.py plan --dir "$key" --platform linux --byte-lm "$PACKAGE_BYTE_LM" \
+      | awk -v d="$dir" '{printf "%s%s/%s.so", (NR>1?" ":""), d, $1} END{printf " %s/_mojolearn_merged.json", d}'
+    return
+  fi
   if [[ "$s" = build_*_host.sh ]]; then
     name="${s#build_}"; name="${name%.sh}"
     printf 'python/mojolearn/host/_mojolearn_%s.so' "$name"; return
@@ -228,15 +289,21 @@ declared_output() {   # tier script -> the one .so it writes, repo-relative
   printf '%s/%s.so' "$dir" "$name"
 }
 run_binding() {   # tier script env-prefix...: the build, through the cache when it is on
-  local tier="$1" s="$2"
+  local tier="$1" s="$2" outputs args=""
   shift 2
+  outputs=$(declared_output "$tier" "$s")
+  case "$s" in
+    merged_build.sh) args=$([[ "$tier" = host ]] && echo host || echo gpu) ;;
+  esac
   if [[ "$USE_BINCACHE" = 1 ]]; then
+    # shellcheck disable=SC2086  # $args is one word or empty
     "$@" MOJOLEARN_BINCACHE_MAP="$BINCACHE_MAP" MOJOLEARN_BINCACHE_OUT="$DEST/bincache" \
       MOJOLEARN_BINCACHE_HOT_DIR="${MOJOLEARN_BINCACHE_HOT_DIR:-/root/.mojolearn_bincache/hot}" \
-      MOJOLEARN_BINCACHE_SHELL=bash MOJOLEARN_BINCACHE_OUTPUTS="$(declared_output "$tier" "$s")" \
-      pixi run -e "$PIXI_ENV" python3 tools/bincache.py build "bindings/$s"
+      MOJOLEARN_BINCACHE_SHELL=bash MOJOLEARN_BINCACHE_OUTPUTS="$outputs" \
+      pixi run -e "$PIXI_ENV" python3 tools/bincache.py build "bindings/$s" $args
   else
-    "$@" pixi run -e "$PIXI_ENV" bash "bindings/$s"
+    # shellcheck disable=SC2086
+    "$@" pixi run -e "$PIXI_ENV" bash "bindings/$s" $args
   fi
 }
 
@@ -244,9 +311,28 @@ run_binding() {   # tier script env-prefix...: the build, through the cache when
 build_one() {
   local tier="$1" s="$2"
   local log="$DEST/build_logs/${tier}_${s%.sh}.log"
+  [[ "$s" = merged_build.sh ]] && log="$DEST/build_logs/${tier}_merged.log"
+  local bound="$BINDING_TIMEOUT"
+  [[ "$s" = merged_build.sh ]] && bound="$BINDING_TIMEOUT_MERGED"
   local rc=0
   { echo "start $(date -u +%FT%TZ)"; } > "$log"
-  if [[ "$s" = build_*_host.sh ]]; then
+  if [[ "$s" = merged_build.sh ]]; then
+    # ONE MERGED COMPILE PER DIRECTORY SET, under its own larger bound. Same
+    # environment as the per-binding builds of that set: GPU tiers keep the
+    # vendor's GPU_COMPILE_JOBS (ONE worker on AMD, see the top), the host set
+    # two workers, the CPU column and no accelerator target, exactly as the
+    # host branch below.
+    if [[ "$tier" = host ]]; then
+      MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=2 \
+        MOJOLEARN_PACKAGE_BYTE_LM="$PACKAGE_BYTE_LM" MOJOLEARN_MERGED_KEY="$MERGED_KEY" \
+        with_binding_timeout "$BINDING_TIMEOUT_MERGED" "$log" \
+        run_binding host "$s" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR || rc=$?
+    else
+      MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=$GPU_COMPILE_JOBS \
+        MOJOLEARN_PACKAGE_BYTE_LM="$PACKAGE_BYTE_LM" MOJOLEARN_MERGED_KEY="$MERGED_KEY" \
+        with_binding_timeout "$BINDING_TIMEOUT_MERGED" "$log" run_binding "$tier" "$s" env || rc=$?
+    fi
+  elif [[ "$s" = build_*_host.sh ]]; then
     # A HOST BUILD MUST NOT SEE AN ACCELERATOR TARGET. Every release leg
     # exports MOJOLEARN_GPU_ARCHS (gfx942, sm_89, sm_90a) and a host binding
     # has no device code, so bindings/build_host_family.sh refuses that
@@ -275,7 +361,7 @@ build_one() {
   else
     echo "end $(date -u +%FT%TZ) FAILED" >> "$log"
     if [[ "$rc" = 124 ]]; then
-      say "FINDING: $tier bindings/$s TIMED OUT after ${BINDING_TIMEOUT}s (RELEASE_BINDING_TIMEOUT_SECONDS); log $log"
+      say "FINDING: $tier bindings/$s TIMED OUT after ${bound}s (RELEASE_BINDING_TIMEOUT_SECONDS, merged: RELEASE_MERGED_TIMEOUT_SECONDS); log $log"
       return 1
     fi
     say "FINDING: $tier bindings/$s did not build; first error:"
@@ -295,9 +381,17 @@ ordered_tiers=""
 for tier in $TIERS; do [[ "$tier" = identical ]] && ordered_tiers="identical"; done
 for tier in $TIERS; do [[ "$tier" = identical ]] || ordered_tiers="$ordered_tiers $tier"; done
 running=0
+pool_jobs() {   # tier -> "tier:script" per build of that tier
+  if [[ "$MERGED" = 1 ]]; then
+    printf '%s:merged_build.sh\n' "$1"
+    if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf 'host:merged_build.sh\n'; fi
+  else
+    for s in $(tier_scripts "$1"); do printf '%s:%s\n' "$1" "$s"; done
+  fi
+}
 for tier in $ordered_tiers; do
-  for s in $(tier_scripts "$tier"); do
-    build_one "$tier" "$s" &
+  for job in $(pool_jobs "$tier"); do
+    build_one "${job%%:*}" "${job#*:}" &
     running=$((running + 1))
     if (( running >= JOBS )); then
       wait -n || BUILD_RC=1
@@ -315,12 +409,71 @@ say "builds finished in $(( $(date +%s) - T0 ))s (rc=$BUILD_RC, jobs=$JOBS, cpus
 # THE VENDOR COMES OUT OF THE BINARY. A bare ExtensionFileLoader import, no
 # package, no GPU: `<prefix>_vendor()` is a folded constant and PyInit never
 # opens a device. Every binary is asked; they must all agree.
+# THE LAYOUT FIRST. Each tier directory (and host/) must serve exactly its
+# bindings in ONE layout: per-binding files, or the merged files its index
+# names, the index equal to the bindings/merged_groups.json plan, and no
+# member's own file beside them (it would shadow the merged one). A failure is
+# a FINDING and fails the leg; the rows below still record what each member
+# answers so the evidence names the culprit.
+for t in $TIERS; do
+  d=$(tier_dir "$t")
+  if [[ "$MERGED" = 1 ]]; then
+    $ML check "$d" --names "$(tier_names "$t")" --plan "$t" --byte-lm "$PACKAGE_BYTE_LM" \
+      || { say "FINDING: the $t merged set does not serve its bindings (above)"; BUILD_RC=1; }
+  else
+    # per-binding: recorded only; the rows below refuse a missing member as before
+    $ML check "$d" --names "$(tier_names "$t")" || say "note: the $t per-binding set differs from its bindings (above)"
+  fi
+done
+if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
+  if [[ "$MERGED" = 1 ]]; then
+    $ML check python/mojolearn/host --glob '_mojolearn_*_host.so' --names "$HOST_NAMES" --plan host --byte-lm 1 \
+      || { say "FINDING: the merged host set does not serve its bindings (above)"; BUILD_RC=1; }
+  else
+    $ML check python/mojolearn/host --glob '_mojolearn_*_host.so' --names "$HOST_NAMES" \
+      || say "note: the host per-binding set differs from its bindings (above)"
+  fi
+fi
+# THE MERGED FILE ITSELF ANSWERS TOO: loaded by its own stem it names its
+# members (merged_members()), which must equal its index row. One line per
+# merged file in merged_readback.txt (readback.txt stays one row per member).
+MERGED_READBACK="$DEST/merged_readback.txt"
+: > "$MERGED_READBACK"
+if [[ "$MERGED" = 1 ]]; then
+  merged_dirs=""
+  for t in $TIERS; do merged_dirs="$merged_dirs $t:$(tier_dir "$t")"; done
+  [[ "$PACKAGE_BYTE_LM" = 1 ]] && merged_dirs="$merged_dirs host:python/mojolearn/host"
+  for td in $merged_dirs; do
+    t=${td%%:*}; d=${td#*:}
+    [[ -f "$d/_mojolearn_merged.json" ]] || { echo "$t - NO-INDEX" >> "$MERGED_READBACK"; continue; }
+    pixi run -e "$PIXI_ENV" python3 - "$d" "$t" >> "$MERGED_READBACK" 2>&1 <<'PY'
+import importlib.machinery, importlib.util, json, os, sys
+d, t = sys.argv[1], sys.argv[2]
+for f, members in sorted(json.load(open(os.path.join(d, "_mojolearn_merged.json")))["files"].items()):
+    stem = f[:-3]
+    so = os.path.join(d, f)
+    try:
+        loader = importlib.machinery.ExtensionFileLoader(stem, so)
+        m = importlib.util.module_from_spec(importlib.util.spec_from_loader(stem, loader, origin=so))
+        loader.exec_module(m)
+        got = str(m.merged_members()).split(",")
+        print(t, stem, "OK" if got == members else "DIFFERS", len(members))
+    except Exception as exc:  # recorded, then refused below
+        print(t, stem, "LOAD-FAILED", type(exc).__name__)
+PY
+  done
+  sed 's/^/    merged: /' "$MERGED_READBACK"
+  if awk '$3!="OK"{bad=1} END{exit !bad}' "$MERGED_READBACK"; then
+    say "FINDING: a merged file does not name the members its index lists (merged_readback.txt)"; BUILD_RC=1
+  fi
+fi
+
 READBACK="$DEST/readback.txt"
 : > "$READBACK"
 for t in $TIERS; do
-  case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
+  d=$(tier_dir "$t")
   for n in $(tier_names "$t"); do
-    so="$d/$n.so"
+    so=$(member_so "$d" "$n")
     [ -f "$so" ] || { echo "$t $n MISSING" >> "$READBACK"; continue; }
     v=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" <<'PY' 2>&1 | tail -1
 import importlib.machinery, importlib.util, sys
@@ -349,7 +502,7 @@ done
 # kernel matrix's CPU column and never as the leg's GPU column.
 if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
   for n in $HOST_NAMES; do
-    so=$(host_so "$n")
+    so=$(member_so python/mojolearn/host "$n")
     if [[ -f "$so" ]]; then
       hv=$(pixi run -e "$PIXI_ENV" python3 - "$so" "$n" <<'PY' 2>&1 | tail -1
 import importlib.machinery, importlib.util, sys
@@ -389,15 +542,23 @@ sed 's/^/    /' "$READBACK"
 # 2026-08-21) and what MOJOLEARN_GPU_ARCHS might therefore do here.
 ARCHBACK="$DEST/arch_readback.txt"
 : > "$ARCHBACK"
-arch_of() {
+arch_of_raw() {
   { strings -a "$1" 2>/dev/null || tr -c '[:print:]' '\n' < "$1"; } \
     | grep -oE '\b(sm_[0-9]+[a-z]*|compute_[0-9]+[a-z]*|gfx[0-9a-f]+)\b' \
     | sort -u | tr '\n' ',' | sed 's/,$//'
 }
+# A merged file serves every member of its directory, so its architectures are
+# read once and recorded on every member's row (each member's device code is
+# in that file). An own file is read as before.
+declare -A ARCH_CACHE=()
+arch_of() {
+  if [[ -z "${ARCH_CACHE[$1]+x}" ]]; then ARCH_CACHE[$1]=$(arch_of_raw "$1"); fi
+  printf '%s' "${ARCH_CACHE[$1]}"
+}
 for t in $TIERS; do
-  case "$t" in fast) d=python/mojolearn ;; *) d=python/mojolearn/$t ;; esac
+  d=$(tier_dir "$t")
   for n in $(tier_names "$t"); do
-    so="$d/$n.so"
+    so=$(member_so "$d" "$n")
     [ -f "$so" ] || { echo "$t $n MISSING" >> "$ARCHBACK"; continue; }
     a=$(arch_of "$so")
     if [[ -z "$a" ]]; then
@@ -414,7 +575,7 @@ done
 # name rather than by being allowed to look like a GPU set.
 if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
   for n in $HOST_NAMES; do
-    so=$(host_so "$n")
+    so=$(member_so python/mojolearn/host "$n")
     if [[ -f "$so" ]]; then
       ha=$(arch_of "$so")
       if [[ -n "$ha" ]]; then
@@ -504,20 +665,35 @@ fi
 # pack_wheel.py mirror this layout (docs/LINUX_WHEEL.md).
 SET="$DEST/sets/$VENDOR/$ARCH"
 rm -rf "$DEST/sets/$VENDOR"; mkdir -p "$SET/identical"
+# Merged: every merged file the index names AND the index move together (the
+# loader needs the index to find the members); per-binding: one file each.
+move_dir() {   # src dst names...: move what src ships for these bindings
+  local src="$1" dst="$2"; shift 2
+  if [[ -f "$src/_mojolearn_merged.json" ]]; then
+    local f
+    for f in $(python3 -c 'import json,sys; print(" ".join(sorted(json.load(open(sys.argv[1]))["files"])))' "$src/_mojolearn_merged.json"); do
+      [ -f "$src/$f" ] && mv "$src/$f" "$dst/$f"
+    done
+    mv "$src/_mojolearn_merged.json" "$dst/_mojolearn_merged.json"
+  else
+    local n
+    for n in "$@"; do [ -f "$src/$n.so" ] && mv "$src/$n.so" "$dst/$n.so"; done
+  fi
+  return 0
+}
 for t in $TIERS; do
-  case "$t" in fast) src=python/mojolearn; dst="$SET" ;; *) src=python/mojolearn/$t; dst="$SET/$t" ;; esac
-  for n in $(tier_names "$t"); do
-    [ -f "$src/$n.so" ] && mv "$src/$n.so" "$dst/$n.so"
-  done
+  case "$t" in fast) dst="$SET" ;; *) dst="$SET/$t" ;; esac
+  # shellcheck disable=SC2046
+  move_dir "$(tier_dir "$t")" "$dst" $(tier_names "$t")
 done
 # host/ sits beside the tiers, not inside one, mirroring where the runtime
 # looks for them in an installed package.
 if [[ "$PACKAGE_BYTE_LM" = 1 ]]; then
   mkdir -p "$SET/host"
-  for n in $HOST_NAMES; do
-    [[ -f "$(host_so "$n")" ]] && mv "$(host_so "$n")" "$SET/host/$n.so"
-  done
+  # shellcheck disable=SC2086
+  move_dir python/mojolearn/host "$SET/host" $HOST_NAMES
 fi
+cp "$MERGED_READBACK" "$SET/merged_readback.txt"
 cp "$READBACK" "$SET/readback.txt"
 cp "$ARCHBACK" "$SET/arch_readback.txt"
 
@@ -693,7 +869,7 @@ pixi run -e pkg python packaging/linux/stage_libs.py --set "$SET" --env-lib "$EN
   --manifest "$SET/manifest.json" --patchelf "$PATCHELF" \
   2>&1 | tee "$DEST/build_logs/stage.log"
 STAGE_RC=${PIPESTATUS[0]}
-if [[ "$STAGE_RC" = 0 && "$PACKAGE_BYTE_LM" = 1 && -f "$SET/identical/_mojolearn_byte_lm.so" ]]; then
+if [[ "$STAGE_RC" = 0 && "$PACKAGE_BYTE_LM" = 1 ]] && $ML members "$SET/identical" | grep -qx _mojolearn_byte_lm; then
   python3 - "$SET/manifest.json" <<'PYBYTE'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
@@ -726,8 +902,15 @@ fi
   for t in $TIERS; do
     case "$t" in fast) d="$SET" ;; *) d="$SET/$t" ;; esac
     echo "set_${t}_count=$(ls "$d"/_mojolearn*.so 2>/dev/null | wc -l | tr -d ' ')"
+    echo "set_${t}_members=$($ML members "$d" 2>/dev/null | grep -c .)"
     echo "set_${t}_bytes=$(cat "$d"/_mojolearn*.so 2>/dev/null | wc -c | tr -d ' ')"
   done
+  if [[ -d "$SET/host" ]]; then
+    echo "set_host_count=$(ls "$SET"/host/_mojolearn*.so 2>/dev/null | wc -l | tr -d ' ')"
+    echo "set_host_members=$($ML members "$SET/host" 2>/dev/null | grep -c .)"
+    echo "set_host_bytes=$(cat "$SET"/host/_mojolearn*.so 2>/dev/null | wc -c | tr -d ' ')"
+  fi
+  echo "binding_layout=$([[ "$MERGED" = 1 ]] && echo merged || echo per-binding)"
   echo "runtime_libs_bytes=$(cat "$SET"/.libs/* 2>/dev/null | wc -c | tr -d ' ')"
   echo "runtime_libs=$(ls "$SET"/.libs 2>/dev/null | tr '\n' ' ')"
   echo "driver_libs_not_staged=$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["driver_libs_not_staged"]))' "$SET/manifest.json" 2>/dev/null)"
