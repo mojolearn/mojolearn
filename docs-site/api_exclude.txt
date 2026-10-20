@@ -78,6 +78,12 @@ Session.load_weights	weight import: test_weight_import.py and the import-weights
 importers.UnsupportedModel	model import: the lowering and its IMPORT_DIGEST checks are pending
 importers.supported_ops	model import: the lowering table is pending
 onnx.read	model import: ONNX reader; the lowering and its IMPORT_DIGEST checks are pending
+# >>> lane ag-import-lower: remove a line once test_import_lower.py's IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
+import_model	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
+importers.import_model	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
+ImportedProgram	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
+importers.ImportedProgram	model import: IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
+# <<< lane ag-import-lower
 # The import elementwise family (docs/plans/MODEL_IMPORT.md 3.3): remove a line once the IMPORT and OPS_IMPORT_DIGEST lines match on CPU, Apple, NVIDIA and AMD.
 Session.erf	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
 Session.gelu	import elementwise family: IMPORT and OPS_IMPORT_DIGEST checks pending on CPU, Apple, NVIDIA and AMD
