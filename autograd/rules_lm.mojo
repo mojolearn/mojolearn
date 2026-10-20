@@ -17,7 +17,7 @@
 #   head    v1 only: identical_gemm_backward_a_into[ROLE_HEAD] tb.d_h <-
 #           ce_dlogits . lm_w; identical_gemm_backward_b_into tb.dw_lm <-
 #           ce_dlogits, fwd[n-1].residual2 (OP_NT, tb.head_bwd_ws)
-#   layers  for k = n-1 .. 0: llama_decoder_layer_backward_device(bst[k],
+#   layers  for k = n-1 .. 0: llama_decoder_layer_backward_device (deleted) (bst[k],
 #           fwd[k], d_out = tb.d_h (k = n-1) or bst[k+1].d_x, x = tb.x (k = 0)
 #           or fwd[k-1].residual2): per layer the refusal scan R of d_out,
 #           27 + A launches (rules_transformer.mojo's inventory; + 1 bit
@@ -333,7 +333,7 @@ struct LmRules(BackwardRules):
             raise Error("unknown language-model backward rule")
 
     def _refuse_nonfinite(self, upstream: FP, n: Int, layer: Int) raises:
-        # llama_decoder_layer_backward_device's first device read: the
+        # the deleted hand layer walk's first device read: the
         # incoming gradient is refused by bits before any of its stages.
         var d = _view(self.ctx, upstream, n)
         comptime if LM_REFUSE_DEFER:

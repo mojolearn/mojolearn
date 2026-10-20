@@ -30,7 +30,7 @@ NO NEW ARITHMETIC, SAME BITS. Every launch below is the function arm B calls
 for the same stage, on the same operands, in the same order:
 `identical_embedding_forward_into`, `mamba3_block_forward` /
 `mamba3_prefill_backward_on`, `llama_decoder_layer_forward` /
-`llama_decoder_layer_backward_device`, `llama_rms_norm` / `bwd_rms_norm`,
+`llama_decoder_layer_backward_autograd`, `llama_rms_norm` / `bwd_rms_norm`,
 the `OP_NT` head GEMM and its two backward GEMMs at `ROLE_HEAD`,
 `identical_ce_loss_resident`, `identical_embedding_backward_into`, the
 clause 9.2 pair add of the tied gradient, `identical_optimizer_step` through
@@ -692,65 +692,10 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
             _d2d(s.ctx, s.acts[i + 1], 0, s.t_stages[j].residual2, m * dm)
 
 
-def _backward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
-    """`dh` holds d loss / d(last block output) on entry; every block's VJP
-    runs on the stages its forward recorded this call (the input is
-    `acts[i]`), its nine weight gradients are copied into `grad` at their
-    registry offsets and `dh` becomes d loss / d(block input)."""
-    var m = b * l
-    var dm = s.dm
-    var trace = IdentityTrace.disabled()
-    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
-    for ii in range(s.n_layers()):
-        var i = s.n_layers() - 1 - ii
-        var j = s.slot[i]
-        var base = 1 + SAMBA_BLOCK_TENSORS * i
-        if s.kinds[i] == SAMBA_LAYER_MAMBA3:
-            var d3 = s.m3_w[j].dims.copy()
-            var tk = Int(perf_counter_ns())
-            var g = mamba3_prefill_backward_on(
-                s.ctx, s.m3_w[j], s.m3_stages[j], s.acts[i], s.dh, b, l, d3, ton, tk
-            )
-            _d2d(s.ctx, s.grad, s.offsets[base + 0], g.block_norm_weight, s.tensor_size(base + 0))
-            _d2d(s.ctx, s.grad, s.offsets[base + 1], g.in_proj_weight, s.tensor_size(base + 1))
-            _d2d(s.ctx, s.grad, s.offsets[base + 2], g.dt_bias, s.tensor_size(base + 2))
-            _d2d(s.ctx, s.grad, s.offsets[base + 3], g.B_norm_weight, s.tensor_size(base + 3))
-            _d2d(s.ctx, s.grad, s.offsets[base + 4], g.C_norm_weight, s.tensor_size(base + 4))
-            _d2d(s.ctx, s.grad, s.offsets[base + 5], g.B_bias, s.tensor_size(base + 5))
-            _d2d(s.ctx, s.grad, s.offsets[base + 6], g.C_bias, s.tensor_size(base + 6))
-            _d2d(s.ctx, s.grad, s.offsets[base + 7], g.D, s.tensor_size(base + 7))
-            _d2d(s.ctx, s.grad, s.offsets[base + 8], g.out_proj_weight, s.tensor_size(base + 8))
-            _d2d(s.ctx, s.dh, 0, g.x, m * dm)
-            # the gradient buffers stay alive past the copies' completion
-            s.ctx.synchronize()
-            _ = g^
-        else:
-            # A default attention block's backward through the transformer
-            # tape entry (the same launches, the same bst fields); the
-            # Mamba-3 blocks stay hand-chained.
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_LM_OFF (hand LM backward walk; superseded by the tape, NV 1.02 / AMD 1.00, same bits) deleted 2026-10-19 by a54a5fb2e; code recoverable at a54a5fb2e^.
-            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch; record in docs/TOMBSTONES.md.
-            var on_tape = s.t_w[j].opts.is_default()
-            if on_tape:
-                llama_decoder_layer_backward_autograd(
-                    s.ctx, s.t_bst[j], s.t_stages[j], s.t_w[j], s.rope.value().cos, s.rope.value().sin,
-                    s.acts[i], s.dh, b, l, 0, trace, String("samba.resident.attn.bwd"),
-                )
-            else:
-                llama_decoder_layer_backward_device(
-                    s.ctx, s.t_bst[j], s.t_stages[j], s.t_w[j], s.rope.value().cos, s.rope.value().sin,
-                    s.acts[i], s.dh, b, l, 0, trace, String("samba.resident.attn.bwd"),
-                )
-            _d2d(s.ctx, s.grad, s.offsets[base + 0], s.t_bst[j].dw_norm1, s.tensor_size(base + 0))
-            _d2d(s.ctx, s.grad, s.offsets[base + 1], s.t_bst[j].dw_norm2, s.tensor_size(base + 1))
-            _d2d(s.ctx, s.grad, s.offsets[base + 2], s.t_bst[j].dw_q, s.tensor_size(base + 2))
-            _d2d(s.ctx, s.grad, s.offsets[base + 3], s.t_bst[j].dw_k, s.tensor_size(base + 3))
-            _d2d(s.ctx, s.grad, s.offsets[base + 4], s.t_bst[j].dw_v, s.tensor_size(base + 4))
-            _d2d(s.ctx, s.grad, s.offsets[base + 5], s.t_bst[j].dw_o, s.tensor_size(base + 5))
-            _d2d(s.ctx, s.grad, s.offsets[base + 6], s.t_bst[j].dw_gate, s.tensor_size(base + 6))
-            _d2d(s.ctx, s.grad, s.offsets[base + 7], s.t_bst[j].dw_up, s.tensor_size(base + 7))
-            _d2d(s.ctx, s.grad, s.offsets[base + 8], s.t_bst[j].dw_down, s.tensor_size(base + 8))
-            _d2d(s.ctx, s.dh, 0, s.t_bst[j].d_x, m * dm)
+# TOMBSTONE: llama_decoder_layer_backward_device (hand decoder-layer backward walk; superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# Restore: git apply experiments/removed/LLAMA_DECODER_LAYER_BACKWARD_HAND_WALK.patch
+# (the uncalled _backward_blocks body that the del-samba merge kept, with its non-default-options fallback to the hand
+# walk, goes with it: the session builds every attention block at the default options and the tape entry refuses others.)
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_SAMBA_OFF (DELETED: the tape is the only Samba train-step backward) deleted 2026-10-19 by 70ce81192; code recoverable at 70ce81192^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch
 # (_backward_blocks: the hand walk's per-block VJP loop and its 9 + 1 copies per block; the tape's
