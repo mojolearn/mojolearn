@@ -76,6 +76,8 @@ from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.program import (
     OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, program_refuses_node, same_shape, shape_text,
 )
+from autograd.program_tools import ProgramTrace, program_op_name
+from std.time import perf_counter_ns
 from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
 # Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
@@ -316,6 +318,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var oplog: OpsLog
     var programs: List[OpsProgram]
     var prog_tape: Tape
+    var program_trace: ProgramTrace
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -340,6 +343,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.programs = List[OpsProgram]()
         self.prog_tape = Tape()
         self.prog_tape.no_grad()
+        self.program_trace = ProgramTrace()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -1826,6 +1830,43 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if slot >= 0 and slot < len(self.live) and self.live[slot]:
                 self._retire(slot)
 
+    def _program_op(mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        var start = 0
+        if self.program_trace.enabled:
+            start = Int(perf_counter_ns())
+            self.ex.sync()
+            self.program_trace.sync_ns += Int(perf_counter_ns()) - start
+            self.program_trace.sync_count += 1
+            start = Int(perf_counter_ns())
+        var h: Int
+        try:
+            h = self._op_run(code, hs, ints, fs)
+        except err:
+            var context = String("program node ") + String(node) + " (" + program_op_name(code) + ") inputs=["
+            for j in range(len(hs)):  # driver-loop: failed node's input shapes
+                if j > 0:
+                    context += ", "
+                context += shape_text(self.shapes[self._slot(hs[j])])
+            raise Error(context + "]: " + String(err))
+        if self.program_trace.enabled:
+            var issued = Int(perf_counter_ns())
+            self.ex.sync()
+            var waited = Int(perf_counter_ns()) - issued
+            self.program_trace.sync_count += 1
+            self.program_trace.sync_ns += waited
+            self.program_trace.nodes.append(node)
+            self.program_trace.codes.append(code)
+            self.program_trace.enqueue_ns.append(issued - start)
+            self.program_trace.wait_ns.append(waited)
+            var shape = self.shapes[self._slot(h)]
+            self.program_trace.shapes.append(shape_text(shape))
+            self.program_trace.output_bytes.append(shape.count() * 4)
+            var reserved = 0
+            for j in range(len(self.tape._capacities)):  # driver-loop: scratch allocation slots, profiling only
+                reserved += self.tape._capacities[j] * 4
+            self.program_trace.peak_tape_bytes = max(self.program_trace.peak_tape_bytes, reserved)
+        return h
+
     def run_program(mut self, pid: Int, srcs: List[CastIn], dsts: List[FP]) raises:
         """Replay program pid on the caller's input arrays `srcs` and write
         its outputs into `dsts` (each float32, row-major, of the output's
@@ -1917,7 +1958,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var fs = List[Float32](capacity=f1 - f0)
             for j in range(f0, f1):  # small-loop(fs: a node's float arguments): argument words, no data
                 fs.append(self.programs[pi].fs[j])
-            var h = self._op_run(code, hs, ints, fs)
+            var h = self._program_op(k, code, hs, ints, fs)
             temps.append(h)
             vals.append(h)
         for k in range(len(dsts)):  # driver-loop: over program outputs

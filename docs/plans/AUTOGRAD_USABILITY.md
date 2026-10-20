@@ -86,3 +86,38 @@ speedup is claimed. Installed-wheel qualification remains a release task.
 Earlier plans, especially `AUTOGRAD_HIGHER_ORDER.md`, describe the original
 refusal set. This implementation supersedes their LayerNorm refusal and
 their fixed-shape-only program status.
+
+## Graph completion source round (2026-10-20, qualification pending)
+
+The `finish/graph-20261020` round adds native `Program.run_if` and bounded
+`Program.while_loop` over captured component programs. Conditions return one
+finite scalar; only the selected branch executes. Loop state stays on the
+executor, may change dimensions while keeping rank, and returns an explicit
+`stopped` flag alongside the final values and iteration count. Loop state is
+floating-point and execution is inference-only. Components save/load through
+the existing program format; the control-flow composition itself is not yet a
+single serialized graph. This does not add differentiation through control
+flow, arbitrary Python callbacks, or symbolic tracing.
+
+Fixed and dynamic array preparation now share one native binding boundary,
+including shape checks, numeric list marshaling, allocation, upload and output
+packing. Parameters and all input descriptors are checked before allocation;
+partial-upload failures release already acquired input buffers. Node failures
+name their index, operation and actual input shapes, with replay cleanup before
+rethrowing.
+
+`Program.inspect` exposes graph references, attributes and shape metadata.
+`Program.profile` returns outputs plus per-node host enqueue and synchronized
+wait time, logical transfer bytes, parameter storage and retained scratch
+capacity. Synchronization serializes the queue; these are diagnostic host
+intervals, not GPU timestamps or end-to-end performance evidence. Scratch
+capacity includes retained buffers from earlier replays and is not a complete
+process or allocator memory total.
+
+`optimize=True` is an inference-only, opt-in candidate that shares exactly
+identical deterministic nodes. Float attributes compare by their bits;
+random, copy and detach operations are excluded. It does not reassociate
+arithmetic, fuse reductions, alter the saved graph or change graph training.
+The default remains false. Full-dataset NVIDIA+AMD A/B, identity qualification,
+source-build tests and installed-package checks remain pending for this round.
+No speedup or default promotion is claimed.

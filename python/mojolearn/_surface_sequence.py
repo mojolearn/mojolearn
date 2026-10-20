@@ -77,6 +77,11 @@ FAMILIES = (
             # captured programs (OpsSession.capture / run_program)
             "ops_capture", "ops_program_info", "ops_program_run", "ops_program_free",
             "ops_save_program", "ops_load_program",
+            "ops_program_dynamic", "ops_program_fit", "ops_program_execute",
+            "ops_program_inspect", "ops_program_control",
+            "ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
+            "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",
+            "ops_distributed_save", "ops_distributed_close",
             # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
             "model_import_params", "ops_load_weights",
             # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)

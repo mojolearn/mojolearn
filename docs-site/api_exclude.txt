@@ -59,3 +59,7 @@ _mojolearn_linalg.public_fast_to_bf16	experimental Apple BF16 candidate; install
 _mojolearn_linalg.public_fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 Session.profile_reset	diagnostic launch profile for development, not user API
 Session.profile_report	diagnostic launch profile for development, not user API
+Program.inspect	graph diagnostics; installed-release qualification pending
+Program.profile	graph diagnostics; installed-release qualification pending
+Program.run_if	native conditional execution; cross-vendor qualification pending
+Program.while_loop	native loop execution; cross-vendor qualification pending
