@@ -435,7 +435,7 @@ class UMAP(NumericModeMixin):
         Returns
         -------
         embedding : Array of shape (n_samples, n_components)
-            The float32 embedding, the same object as ``embedding_``.
+            The float32 embedding, sharing memory with ``embedding_``.
         """
         return self.fit(X, y).embedding_
 

@@ -57,7 +57,12 @@ class UMAPSurfaceTests(unittest.TestCase):
         model = self.estimator()
         before = self.x.copy()
         layout = model.fit_transform(self.x)
-        self.assertIs(layout, model.embedding_)
+        # Public attribute reads may return distinct NumPy views of the stored
+        # Array. Require the same storage and bits, not Python object identity.
+        stored = np.asarray(model.embedding_)
+        self.assertTrue(np.shares_memory(np.asarray(layout), stored))
+        np.testing.assert_array_equal(np.asarray(layout).view(np.uint32),
+                                      stored.view(np.uint32))
         self.assertEqual(layout.shape, (8, 2))
         # DEVIATION 2460: the layout is a mojolearn.Array; dtype and bits are
         # read through np.asarray (zero-copy), the checks are unchanged.
