@@ -179,7 +179,7 @@ def _concat_case[E: Exec](mut ex: E, mut tape: Tape, axis: Int) raises -> UInt64
                           _slab_host(seed_host, full_dims, axis, start, sizes[j])))
         start += sizes[j]
     print("RANKN layout", name, "digest", d)
-    return d
+    return d^
 
 
 def _concat_permuted_run[E: Exec](mut ex: E, mut tape: Tape, dense: Bool) raises -> List[List[Float32]]:
@@ -207,7 +207,7 @@ def _concat_permuted[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
     var d = _same("concat/permuted/value", v[0], w[0])
     d = _mix(d, _same("concat/permuted/grad", v[1], w[1]))
     print("RANKN layout concat/permuted digest", d)
-    return d
+    return d^
 
 
 # ---------------------------------------------------------------- narrow
@@ -239,7 +239,7 @@ def _second_consumer[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
     if not refused:
         raise Error("narrow: a slab past the end of the axis was not refused")
     print("RANKN layout narrow/second_consumer digest", d)
-    return d
+    return d^
 
 
 # ---------------------------------------------------------------- take
@@ -274,7 +274,7 @@ def _take_axis1[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
         dx[i] = dw[c[1] * 15 + c[0] * 5 + c[2]]
     d = _mix(d, _same("take/axis1/grad", tape.gradients(ex, x), dx))
     print("RANKN layout take/axis1 digest", d)
-    return d
+    return d^
 
 
 def _take_axis0_rank2[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
@@ -296,7 +296,7 @@ def _take_axis0_rank2[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
     var d = _same("take/axis0_rank2/value", r[0], r[2])
     d = _mix(d, _same("take/axis0_rank2/grad", r[1], r[3]))
     print("RANKN layout take/axis0_rank2 digest", d)
-    return d
+    return d^
 
 
 def _take_refused[E: Exec](mut ex: E, mut tape: Tape) raises:

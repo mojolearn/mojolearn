@@ -82,7 +82,7 @@ def _report(name: String, parts: List[List[Float32]]) -> UInt64:
     for p in parts:  # small-loop(len(parts): compared buffers)
         d = _digest(p, d)
     print("RANKN bmm", name, "digest", d)
-    return d
+    return d^
 
 
 # ------------------------------------------------------------------ slices

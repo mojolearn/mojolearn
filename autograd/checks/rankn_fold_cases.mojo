@@ -148,7 +148,7 @@ def _bin_case[E: Exec](mut ex: E, mut tape: Tape, op: Int, so: ShapeN, sy: Shape
         check_values(name + "/dy-oracle", dy, w32)
         d = _mix(d, _digest(dy))
     print("RANKN fold", name, "digest", d)
-    return d
+    return d^
 
 
 # ---------------------------------------------------------------- sums
@@ -180,7 +180,7 @@ def _sum_perm_case[E: Exec](mut ex: E, mut tape: Tape, sx: ShapeN, mean: Bool) r
     var d = _same(name + "/value", rv, tape.values(ex, r2))
     d = _mix(d, _same(name + "/dx", dx, tape.gradients(ex, x2)))
     print("RANKN fold", name, "digest", d)
-    return d
+    return d^
 
 
 def _sum_middle_case[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
@@ -207,7 +207,7 @@ def _sum_middle_case[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
     var d = _same("sum1/value", tape.values(ex, r), want)
     d = _mix(d, _same("sum1/dx", tape.gradients(ex, x), wdx))
     print("RANKN fold sum1/3x4x5 digest", d)
-    return d
+    return d^
 
 
 def _sum_routes_case[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
@@ -228,7 +228,7 @@ def _sum_routes_case[E: Exec](mut ex: E, mut tape: Tape) raises -> UInt64:
     d = _mix(d, _same("routes/all", tape.values(ex, rankn_mean(tape, ex, x, none)),
                       tape.values(ex, tape.mean(ex, x, -1))))
     print("RANKN fold routes/3x4x5 digest", d)
-    return d
+    return d^
 
 
 # ---------------------------------------------------------------- max
@@ -324,7 +324,7 @@ def _max_case[E: Exec](mut ex: E, mut tape: Tape, sx: ShapeN, axes: List[Int], w
         d = _mix(d, UInt64(bi))
     d = _mix(d, _same(name + "/dx", dx, wdx))
     print("RANKN fold", name, "digest", d)
-    return d
+    return d^
 
 
 # ---------------------------------------------------------------- softmax
@@ -369,7 +369,7 @@ def _softmax_case[E: Exec](mut ex: E, mut tape: Tape, log: Bool) raises -> UInt6
     var d = _same(name + "/value", sv, want)
     d = _mix(d, _same(name + "/dx", dx, wdx))
     print("RANKN fold", name, "digest", d)
-    return d
+    return d^
 
 
 def run_rankn_fold_checks[E: Exec](mut ex: E) raises:

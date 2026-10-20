@@ -56,7 +56,7 @@ def _dense_strides(s: ShapeN) -> InlineArray[Int, RN_MAX_RANK]:
     var r = InlineArray[Int, RN_MAX_RANK](fill=0)
     for k in range(s.ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         r[k] = s.stride(k)
-    return r
+    return r^
 
 
 def _put_record(

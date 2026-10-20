@@ -78,7 +78,7 @@ def _row_major(s: ShapeN) -> InlineArray[Int, RN_MAX_RANK]:
         r[k] = acc
         acc *= s.d[k]
         k -= 1
-    return r
+    return r^
 
 
 def _as_shape[E: Exec](mut tape: Tape, mut ex: E, t: Tensor, s: ShapeN) raises -> Tensor:

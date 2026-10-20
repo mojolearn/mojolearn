@@ -46,6 +46,11 @@ struct ShapeN(ImplicitlyCopyable, Movable, Writable):
     var ndim: Int
     var d: InlineArray[Int, RN_MAX_RANK]
 
+    def __init__(out self, ndim: Int, d: InlineArray[Int, RN_MAX_RANK]):
+        """`ndim` dims from `d` (copied: an InlineArray is not implicitly copyable)."""
+        self.ndim = ndim
+        self.d = d.copy()
+
     def __init__(out self, *, copy: Self):
         self.ndim = copy.ndim
         self.d = copy.d.copy()
