@@ -210,6 +210,111 @@ def expected_bindings(mode, byte_lm=False):
     raise ValueError('unknown numeric mode: ' + mode)
 
 
+# THE MERGED BINDINGS (lane merged-bindings, 2026-10-20). A Linux set
+# directory (<vendor>/<arch>/, <vendor>/<arch>/identical/, host/) ships either
+# one <name>.so per binding ('per-binding') or one <stem>.so per group of
+# bindings/merged_groups.json plus the index _mojolearn_merged.json that names
+# each file's members ('merged'). The layout is read from the directory (an
+# index present means merged), never from MOJOLEARN_MERGED_BINDINGS. The one
+# reader is packaging/linux/merged_layout.py, loaded here by path so this
+# module still never imports the package. Inventories keyed on .so keep the
+# binaries in `extensions` / `host_extension`; the indexes, shipped and hashed
+# like a binary, ride beside them in `merged_indexes`
+# ({'<dir>/_mojolearn_merged.json': {'sha256': hex, 'files': {'<stem>.so': [members]}}}).
+MERGED_INDEX = '_mojolearn_merged.json'
+LAYOUTS = ('merged', 'per-binding')
+HOST_GLOB = '_mojolearn_*_host.so'
+_MERGED_LAYOUT = Path(__file__).resolve().parent.parent / 'packaging/linux/merged_layout.py'
+_MERGED_LAYOUT_MODULE = None
+
+
+def merged_layout():
+    """packaging/linux/merged_layout.py, loaded by path once."""
+    global _MERGED_LAYOUT_MODULE
+    if _MERGED_LAYOUT_MODULE is None:
+        spec = importlib.util.spec_from_file_location('mojolearn_merged_layout_admission', _MERGED_LAYOUT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _MERGED_LAYOUT_MODULE = module
+    return _MERGED_LAYOUT_MODULE
+
+
+def expected_set_files(dir_key, byte_lm=False, layout='merged'):
+    """{'<file>.so': [members]} one set directory ships in `layout`.
+
+    `dir_key` is a numeric mode ('fast', 'identical') or 'host'. per-binding:
+    one file per binding; merged: the bindings/merged_groups.json plan (its
+    members are exactly the per-binding names; the plan and the binding
+    lists are held equal by packaging/linux/build_sets.sh's manifest check)."""
+    require(layout in LAYOUTS, 'Unknown binding layout: ' + str(layout))
+    names = sorted(wheel_host_bindings()) if dir_key == 'host' else sorted(expected_bindings(dir_key, byte_lm))
+    if layout == 'per-binding':
+        return {n + '.so': [n] for n in names}
+    plan = {f: sorted(m) for f, m in merged_layout().plan(dir_key, byte_lm).items()}
+    require(sorted(n for m in plan.values() for n in m) == names,
+            'bindings/merged_groups.json plan differs from the ' + dir_key + ' bindings')
+    return plan
+
+
+def expected_shipped_files(dir_key, byte_lm=False, layout='merged'):
+    """Every file name one set directory ships in `layout`: its binaries, and
+    the index when merged (sorted)."""
+    files = sorted(expected_set_files(dir_key, byte_lm, layout))
+    return files + ([MERGED_INDEX] if layout == 'merged' else [])
+
+
+def index_record(path):
+    """{'sha256': hex, 'files': {...}} of one on-disk index (merged_indexes row)."""
+    files = merged_layout().read_index(Path(path).parent)
+    require(files is not None, 'Missing merged index: ' + str(path))
+    return {'sha256': sha(path), 'files': {f: list(m) for f, m in sorted(files.items())}}
+
+
+def set_layout(prefix, binaries, indexes, names):
+    """('merged' | 'per-binding', {'<file>.so': [members]}) of one set
+    directory read from an inventory, never from the disk.
+
+    `prefix` is the directory's member prefix ending in '/' (e.g.
+    'mojolearn/cuda/sm_89/identical/'), `binaries` the .so basenames the
+    inventory holds directly in it, `indexes` a merged_indexes map and `names`
+    the bindings the directory must serve. Refuses a directory that mixes an
+    own member file with the index, as merged_layout.layout does on disk."""
+    names = set(names)
+    binaries = set(binaries)
+    row = indexes.get(prefix + MERGED_INDEX)
+    if row is None:
+        require(binaries == {n + '.so' for n in names},
+                'Per-binding set differs from its bindings: ' + prefix)
+        return 'per-binding', {n + '.so': [n] for n in sorted(names)}
+    files = row.get('files') if isinstance(row, dict) else None
+    require(isinstance(files, dict) and files and isinstance(row.get('sha256'), str)
+            and re.fullmatch('[0-9a-f]{64}', row['sha256'])
+            and all(isinstance(f, str) and f.endswith('.so') and '/' not in f and isinstance(m, list) and m
+                    for f, m in files.items()), 'Invalid merged index record: ' + prefix)
+    members = [n for m in files.values() for n in m]
+    require(len(members) == len(set(members)), 'A member is in two merged files: ' + prefix)
+    require(set(members) == names, 'Merged index members differ from the set bindings: ' + prefix)
+    require(binaries == set(files), 'Merged files differ from their index: ' + prefix)
+    return 'merged', {f: list(m) for f, m in files.items()}
+
+
+def member_file(prefix, name, indexes):
+    """The member path `name` loads from in the directory `prefix`: its merged
+    file when the directory's index names it, else its own file."""
+    row = indexes.get(prefix + MERGED_INDEX) or {}
+    for f, m in (row.get('files') or {}).items():
+        if name in m:
+            return prefix + f
+    return prefix + name + '.so'
+
+
+def one_layout(layouts):
+    """The one binding layout of an inventory; refuses mixing across sets."""
+    layouts = set(layouts)
+    require(len(layouts) <= 1, 'Sets mix the merged and per-binding layouts')
+    return next(iter(layouts), 'per-binding')
+
+
 def check_byte_lm_host(installed, audit):
     """The CPU TRAINING binding of an installed release wheel (DEVIATION 2680).
 
@@ -223,7 +328,8 @@ def check_byte_lm_host(installed, audit):
     require(isinstance(host, dict), 'Installed record carries no CPU training binding')
     require(host.get('vendor') == 'cpu' and host.get('numeric_mode') == 1,
             'Installed CPU training binding vendor/mode differs')
-    member = 'host/' + '_mojolearn_byte_lm_host.so'
+    # Its own file, or the merged host file the audited index names.
+    member = member_file('host/', '_mojolearn_byte_lm_host', audit.get('merged_indexes') or {})
     require(host.get('sha256') == audit.get('host_extension_hashes', {}).get(member),
             'Installed CPU training binding differs from the wheel')
 
@@ -243,7 +349,7 @@ def check_host_bindings(installed, audit):
         require(isinstance(row, dict), 'Installed record lacks the host binding ' + name)
         require(row.get('vendor') == 'cpu' and row.get('numeric_mode') == 1 and row.get('column') == 'cpu',
                 'Installed host binding read-back differs: ' + name)
-        require(row.get('sha256') == hashes.get('host/' + name + '.so'),
+        require(row.get('sha256') == hashes.get(member_file('host/', name, audit.get('merged_indexes') or {})),
                 'Installed host binding differs from the wheel: ' + name)
     require(set(rows) == set(wheel_host_bindings()), 'Installed host binding inventory differs from the manifest')
 
