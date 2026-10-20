@@ -29,8 +29,12 @@ def connect_training(backend, vendor, inference_bindings):
     validator = _buffer._native("all_finite_f32")
     if not isinstance(validator, BuiltinFunctionType):
         raise TypeError("neural training input validation must be a compiled native entry")
-    modes = [selected_mode] if route == "cpu" else [
-        key.split(":", 1)[1] for key in inference_bindings if key.startswith("gpu:")]
+    modes = [selected_mode]
+    if route == "gpu":
+        modes = []
+        for key in inference_bindings:  # glue: enumerate modules already connected at import
+            if key.startswith("gpu:"):
+                modes.append(key.split(":", 1)[1])
     for mode in modes:  # glue: reuse the already connected native mode modules
         connected = {}
         for family, (target, names) in families.items():  # glue: connect native ABI symbols at import
