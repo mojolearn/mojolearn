@@ -2,8 +2,10 @@
 """Numerical operations to compose your own algorithms on the GPU.
 
 A :class:`Session` holds tensors on the device and runs one native operation
-per call: matrix products, elementwise math, reductions, softmax, dense and
-layer-norm layers, dropout, row permutations and gathers, losses and metrics.
+per call: matrix and batched products, elementwise math with broadcasting,
+reductions over any axes, reshapes and axis permutations, concatenation and
+splitting, softmax, dense and layer-norm layers, 2-D convolution and
+pooling, dropout, row permutations and gathers, losses and metrics.
 Chain them to build an inference or hybrid algorithm (a mixture of experts,
 an ensemble with learned routing, statistics combined with a learned
 representation) without writing a kernel.
@@ -12,8 +14,10 @@ In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GP
 Every operation here is the one mojolearn's own trainers run, so a
 composition gives the same output bits on every vendor for the same inputs.
 
-Tensors are 2-D float32 matrices addressed by integer handles; a scalar is a
-``(1, 1)`` tensor and a 1-D input becomes one column. Values stay on the
+Tensors are float32 arrays of up to 8 dimensions addressed by integer
+handles; a scalar is a ``(1, 1)`` tensor and a 1-D input becomes one column.
+Operations on a matrix keep the shapes they always had: ``sum(x, axis=0)``
+of an ``(n, k)`` matrix is ``(1, k)``. Values stay on the
 device until you read them back with :meth:`Session.numpy` or
 :meth:`Session.scalar`. A read-back is a host step: use :meth:`Session.scalar`
 when your Python code must branch on a computed value, and keep everything
@@ -54,7 +58,12 @@ _OP = {
     "permutation": 23, "mse": 24, "mae": 25, "huber": 26, "bce_with_logits": 27,
     "cross_entropy": 28, "detach": 29, "full": 30, "copy": 31,
     "embedding": 32,
+    "reshape_n": 33, "permute": 34, "sum_n": 35, "mean_n": 36, "max": 37, "matmul_n": 38,
+    "concat": 39, "narrow": 40, "take": 41, "softmax_n": 42, "log_softmax_n": 43,
+    "conv2d": 44, "max_pool2d": 45, "avg_pool2d": 46,
 }
+# the largest tensor rank (autograd/rankn.mojo RN_MAX_RANK)
+_MAX_RANK = 8
 _METRIC = {"accuracy": 1, "log_loss": 2, "roc_auc": 3}
 _ACTIVATION = {None: 0, "none": 0, "relu": 1, "sigmoid": 2, "tanh": 3, "softmax": 4}
 _REDUCTION = {"mean": 0, "sum": 1}
@@ -97,6 +106,32 @@ def _axis(axis):
     if isinstance(axis, bool) or axis not in _AXIS:
         raise ValueError("axis must be None (all elements), 0 (down the rows) or 1 (across the columns)")
     return _AXIS[axis]
+
+
+def _axes(axis, name="axis"):
+    """[] for None, else the listed axes as integers (Mojo normalizes them)."""
+    if axis is None:
+        return []
+    if isinstance(axis, (tuple, list)):
+        if len(axis) > _MAX_RANK:
+            raise ValueError(f"{name} lists more than {_MAX_RANK} axes")
+        return [_int(a, name) for a in axis]  # glue: at most eight axis arguments
+    return [_int(axis, name)]
+
+
+def _keepdims(keepdims):
+    if keepdims is None:
+        return -1
+    return 1 if keepdims else 0
+
+
+def _dims(shape, name="shape", low=None):
+    if isinstance(shape, (int, np.integer)) and not isinstance(shape, bool):
+        shape = (shape,)
+    shape = tuple(shape)
+    if not shape or len(shape) > _MAX_RANK:
+        raise ValueError(f"{name} must have 1 to {_MAX_RANK} dimensions")
+    return [_int(d, name, low) for d in shape]  # glue: at most eight dimension arguments
 
 
 class Session:
@@ -220,30 +255,43 @@ class Session:
     def tensor(self, x, requires_grad=False):
         """Copy an array to the device; returns its handle.
 
-        ``x`` is a scalar, a 1-D array (one column) or a 2-D array of bool,
-        integers, float16, float32 or float64 in any memory layout, used as
-        float32.
+        ``x`` is a scalar or an array of up to 8 dimensions of bool,
+        integers, float16, float32 or float64, used as float32. A scalar is
+        a ``(1, 1)`` tensor and a 1-D array one column; a 2-D array may have
+        any memory layout; an array of 3 or more dimensions keeps its shape
+        and must be C-contiguous (pass ``numpy.ascontiguousarray(x)``).
         ``requires_grad=True`` (recording sessions only) makes it a
         trainable input whose gradient :meth:`grad` returns after
         :meth:`backward`.
         """
         from ._cast_in import as_input, describe
         a = as_input(x)
-        if a.ndim > 2:
-            raise ValueError("x must be a scalar, a 1-D or a 2-D array")
+        if a.ndim > _MAX_RANK:
+            raise ValueError(f"x must have at most {_MAX_RANK} dimensions")
         if a.size == 0:
             raise ValueError("x must not be empty")
+        flag = 1 if requires_grad else 0
+        if a.ndim > 2:
+            if not a.flags.c_contiguous:
+                raise ValueError("x with more than two dimensions must be C-contiguous; "
+                                 "pass numpy.ascontiguousarray(x)")
+            # the same memory as its row-major (rows, last axis) matrix view,
+            # plus the full shape; it stays referenced until the binding has
+            # copied it
+            m = a.reshape(-1, a.shape[-1])
+            return int(self._b.ops_upload(self._sid(), describe(m, "x"), [flag, a.ndim] + list(a.shape)))
         # `a` as it is (Mojo casts it to float32 on the executor); it stays
         # referenced until the binding has copied it
-        return int(self._b.ops_upload(self._sid(), describe(a, "x"), [1 if requires_grad else 0]))
+        return int(self._b.ops_upload(self._sid(), describe(a, "x"), [flag]))
 
     def shape(self, h):
-        """The ``(rows, cols)`` of tensor ``h``."""
-        r, c = self._b.ops_shape(self._sid(), _int(h, "handle", 1))
-        return int(r), int(c)
+        """The shape of tensor ``h`` as a tuple: ``(rows, cols)`` for a
+        matrix, every dimension for a tensor of another rank."""
+        dims = self._b.ops_shape(self._sid(), _int(h, "handle", 1))
+        return tuple(int(d) for d in dims)  # glue: at most eight dimensions
 
     def numpy(self, h):
-        """Tensor ``h``'s values as a new ``(rows, cols)`` float32 array."""
+        """Tensor ``h``'s values as a new float32 array of its shape."""
         out = np.empty(self.shape(h), dtype=np.float32)
         self._b.ops_download(self._sid(), h, out.ctypes.data)
         return out
@@ -254,9 +302,9 @@ class Session:
         return float(self._b.ops_scalar(self._sid(), _int(h, "handle", 1)))
 
     def full(self, shape, value):
-        """A new ``shape`` tensor with every element ``value``."""
-        rows, cols = shape
-        return self._op("full", (), [_int(rows, "rows", 1), _int(cols, "cols", 1)], [float(value)])
+        """A new tensor of ``shape`` (up to 8 dimensions) with every
+        element ``value``."""
+        return self._op("full", (), _dims(shape, low=1), [float(value)])
 
     def copy(self, x):
         """A copy of ``x`` that carries no gradient."""
@@ -283,11 +331,18 @@ class Session:
 
     # ------------------------------------------------------------ elementwise and products
     def matmul(self, a, b):
-        """The matrix product ``a @ b``."""
+        """The matrix product of the last two axes, ``a @ b``.
+
+        Leading axes are batch axes and broadcast as in NumPy: a
+        ``(batch, heads, m, k)`` tensor times a ``(batch, heads, k, n)`` or
+        a ``(k, n)`` tensor gives ``(batch, heads, m, n)``.
+        """
         return self._op("matmul", (a, b))
 
     def add(self, a, b):
-        """``a + b``; a ``(1, 1)``, ``(1, cols)`` or ``(rows, 1)`` operand broadcasts."""
+        """``a + b`` with NumPy broadcasting: shapes are aligned on the
+        right and an axis of length 1 stretches. For matrices, a ``(1, 1)``,
+        ``(1, cols)`` or ``(rows, 1)`` operand broadcasts."""
         return self._op("add", (a, b))
 
     def sub(self, a, b):
@@ -331,37 +386,168 @@ class Session:
         return self._op("scale", (x,), (), [float(factor)])
 
     # ------------------------------------------------------------ shape and reductions
-    def transpose(self, x):
-        """The transpose of ``x``."""
-        return self._op("transpose", (x,))
+    def transpose(self, x, a=-2, b=-1):
+        """``x`` with axes ``a`` and ``b`` swapped; the matrix transpose by
+        default."""
+        if a == -2 and b == -1:
+            return self._op("transpose", (x,))
+        return self._op("permute", (x,), [1, _int(a, "a"), _int(b, "b")])
+
+    def permute(self, x, axes):
+        """``x`` with its axes reordered: output axis ``k`` is input axis
+        ``axes[k]``.
+
+        Example
+        -------
+        >>> with ops.Session() as s:
+        ...     x = s.tensor(np.zeros((2, 3, 4), dtype=np.float32))
+        ...     s.shape(s.permute(x, (2, 0, 1)))
+        (4, 2, 3)
+        """
+        return self._op("permute", (x,), [0] + _axes(tuple(axes), "axes"))
 
     def reshape(self, x, shape):
-        """``x``'s elements, row-major, as a ``shape`` matrix."""
-        rows, cols = shape
-        return self._op("reshape", (x,), [_int(rows, "rows", 1), _int(cols, "cols", 1)])
+        """``x``'s elements, row-major, in a new ``shape`` with the same
+        number of elements; one dimension may be -1 and is inferred."""
+        dims = _dims(shape)
+        if len(dims) == 2 and -1 not in dims:
+            return self._op("reshape", (x,), [_int(dims[0], "rows", 1), _int(dims[1], "cols", 1)])
+        return self._op("reshape_n", (x,), [0] + dims)
 
-    def sum(self, x, axis=None):
-        """The sum of all elements (``axis=None``, a ``(1, 1)`` tensor), of
-        each column (``axis=0``, ``(1, cols)``) or of each row (``axis=1``,
-        ``(rows, 1)``)."""
-        return self._op("sum", (x,), [_axis(axis)])
+    def flatten(self, x, start=1, end=-1):
+        """``x`` with axes ``start`` to ``end`` (inclusive) merged into
+        one; by default every axis after the first."""
+        return self._op("reshape_n", (x,), [1, _int(start, "start"), _int(end, "end")])
 
-    def mean(self, x, axis=None):
-        """The mean over the elements, the columns or the rows, as :meth:`sum`."""
-        return self._op("mean", (x,), [_axis(axis)])
+    def squeeze(self, x, axis=None):
+        """``x`` without its length-1 axes (all of them, or those listed in
+        ``axis``)."""
+        return self._op("reshape_n", (x,), [2] + _axes(axis))
 
-    def softmax(self, x):
-        """The softmax of each row."""
-        return self._op("softmax", (x,))
+    def unsqueeze(self, x, axis):
+        """``x`` with a new length-1 axis at position ``axis``."""
+        return self._op("reshape_n", (x,), [3, _int(axis, "axis")])
 
-    def log_softmax(self, x):
-        """The log-softmax of each row."""
-        return self._op("log_softmax", (x,))
+    def sum(self, x, axis=None, keepdims=None):
+        """The sum over ``axis``.
+
+        ``axis=None`` sums every element into a ``(1, 1)`` tensor; an
+        integer or a tuple of integers sums over those axes (negative axes
+        count from the end). ``keepdims=True`` keeps each summed axis with
+        length 1 and ``False`` removes it; the default keeps it for a
+        matrix and removes it otherwise, so ``sum(x, axis=0)`` of an
+        ``(n, k)`` matrix is ``(1, k)``.
+        """
+        return self._op("sum_n", (x,), [_keepdims(keepdims)] + _axes(axis))
+
+    def mean(self, x, axis=None, keepdims=None):
+        """The mean over ``axis``, with the axes and shapes of :meth:`sum`."""
+        return self._op("mean_n", (x,), [_keepdims(keepdims)] + _axes(axis))
+
+    def max(self, x, axis=None, keepdims=None):
+        """The largest value over ``axis``, with the axes and shapes of
+        :meth:`sum`. A NaN is larger than any number; among equal values the
+        first position wins, and the gradient flows to that position only."""
+        return self._op("max", (x,), [_keepdims(keepdims)] + _axes(axis))
+
+    def softmax(self, x, axis=-1):
+        """The softmax along ``axis``; by default the last axis (each row
+        of a matrix)."""
+        if axis == -1:
+            return self._op("softmax", (x,))
+        return self._op("softmax_n", (x,), [_int(axis, "axis")])
+
+    def log_softmax(self, x, axis=-1):
+        """The log-softmax along ``axis``; by default the last axis."""
+        if axis == -1:
+            return self._op("log_softmax", (x,))
+        return self._op("log_softmax_n", (x,), [_int(axis, "axis")])
+
+    # ------------------------------------------------------------ joining, splitting, picking
+    def concat(self, xs, axis=0):
+        """The tensors ``xs`` joined along ``axis``; every other axis must
+        match."""
+        hs = tuple(xs)
+        if not hs:
+            raise ValueError("concat needs at least one tensor")
+        return self._op("concat", hs, [_int(axis, "axis")])
+
+    def split(self, x, sizes_or_sections, axis=0):
+        """``x`` cut along ``axis`` into a list of tensors.
+
+        ``sizes_or_sections`` is the number of equal pieces, or a list of
+        piece lengths that sum to the axis length. Each piece is a view of
+        ``x`` (no copy); in a recording session the gradients of the pieces
+        flow back into their places in ``x``'s gradient.
+        """
+        axis = _int(axis, "axis")
+        if isinstance(sizes_or_sections, (int, np.integer)) and not isinstance(sizes_or_sections, bool):
+            count = _int(sizes_or_sections, "sections", 1)
+            tail = [1, count]
+        else:
+            sizes = [_int(v, "sizes", 1) for v in sizes_or_sections]  # glue: the piece lengths
+            if not sizes:
+                raise ValueError("sizes must list at least one length")
+            count = len(sizes)
+            tail = [0] + sizes
+        return [self._op("narrow", (x,), [axis, k] + tail) for k in range(count)]  # glue: one view per piece
+
+    def take(self, x, indices, axis=0):
+        """The slices of ``x`` at ``indices`` along ``axis``.
+
+        ``indices`` is an array of integers (any integer dtype), flattened
+        in row-major order; the result replaces ``axis`` by one slice per
+        index. An index outside ``[0, x.shape[axis])`` raises an error. In a
+        recording session the gradient of ``x`` sums the gradients of every
+        slice taken from each position, in ascending index position.
+        """
+        from ._cast_in import as_input, describe
+        a = as_input(indices)
+        if a.dtype.kind not in "iu":
+            raise TypeError(f"indices must be integers, got dtype {a.dtype}")
+        if a.size == 0:
+            raise ValueError("indices must not be empty")
+        if a.ndim > 2:
+            if not a.flags.c_contiguous:
+                raise ValueError("indices with more than two dimensions must be C-contiguous; "
+                                 "pass numpy.ascontiguousarray(indices)")
+            a = a.reshape(-1)
+        # `a` as it is (Mojo casts it to int32 on the executor, row-major);
+        # it stays referenced until the binding has copied it
+        return self._op("take", (x,), describe(a, "indices") + [_int(axis, "axis")])
+
+    # ------------------------------------------------------------ convolution and pooling
+    def conv2d(self, x, weight, bias=None, stride=1, padding=0):
+        """A 2-D convolution (cross-correlation) of ``x``.
+
+        ``x`` is ``(N, C, H, W)``, ``weight`` ``(out_channels, C, kh, kw)``
+        and ``bias`` an optional tensor of ``out_channels`` values. The
+        input is padded with ``padding`` zeros on every side and the kernel
+        moves ``stride`` positions at a time; the result is
+        ``(N, out_channels, H_out, W_out)``.
+        """
+        handles = (x, weight) if bias is None else (x, weight, bias)
+        return self._op("conv2d", handles, [_int(stride, "stride", 1), _int(padding, "padding", 0)])
+
+    def max_pool2d(self, x, kernel_size, stride=None):
+        """The largest value of each ``kernel_size`` window of an
+        ``(N, C, H, W)`` tensor, windows ``stride`` apart (by default
+        ``kernel_size``)."""
+        k = _int(kernel_size, "kernel_size", 1)
+        return self._op("max_pool2d", (x,), [k, k if stride is None else _int(stride, "stride", 1)])
+
+    def avg_pool2d(self, x, kernel_size, stride=None):
+        """The mean of each ``kernel_size`` window of an ``(N, C, H, W)``
+        tensor, windows ``stride`` apart (by default ``kernel_size``)."""
+        k = _int(kernel_size, "kernel_size", 1)
+        return self._op("avg_pool2d", (x,), [k, k if stride is None else _int(stride, "stride", 1)])
 
     # ------------------------------------------------------------ layers
     def linear(self, x, weight, bias=None, activation=None):
         """A dense layer ``activation(x @ weight + bias)``.
 
+        The last axis of ``x`` is the feature axis: an ``(..., inputs)``
+        tensor gives ``(..., outputs)``.
         ``weight`` is ``(inputs, outputs)``, ``bias`` an optional
         ``(1, outputs)`` tensor, ``activation`` one of None, ``'relu'``,
         ``'sigmoid'``, ``'tanh'`` or ``'softmax'``.
@@ -372,8 +558,9 @@ class Session:
         return self._op("linear", handles, [_ACTIVATION[activation]])
 
     def layer_norm(self, x, weight, bias, eps=1e-5):
-        """Normalize each row to zero mean and unit variance, then scale by
-        ``weight`` and shift by ``bias`` (both ``(1, cols)``)."""
+        """Normalize along the last axis to zero mean and unit variance,
+        then scale by ``weight`` and shift by ``bias`` (both ``(1, features)``,
+        the last axis's length)."""
         if not eps > 0:
             raise ValueError("eps must be positive")
         return self._op("layer_norm", (x, weight, bias), (), [float(eps)])
@@ -461,8 +648,9 @@ class Session:
         return self._op("bce_with_logits", (logits, target), [_reduction(reduction)])
 
     def cross_entropy(self, logits, codes, reduction="mean"):
-        """Softmax cross-entropy of ``(rows, classes)`` logits against class
-        codes ``(rows, 1)`` (the class index as a float)."""
+        """Softmax cross-entropy of ``(..., classes)`` logits against class
+        codes (the class index as a float), one per position of the leading
+        axes: ``(rows, 1)`` codes for ``(rows, classes)`` logits."""
         return self._op("cross_entropy", (logits, codes), [_reduction(reduction)])
 
     # ------------------------------------------------------------ metrics (values)
