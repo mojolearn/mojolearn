@@ -840,7 +840,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _opt_index(self, o: Int) raises -> Int:
         if o < 1 or o > len(self.opts):
-            raise Error("ops: " + String(o) + " is not an optimizer of this session")
+            raise Error("ValueError: ops: " + String(o) + " is not an optimizer of this session")
         return o - 1
 
     def learning_rate(self, o: Int) raises -> Float32:

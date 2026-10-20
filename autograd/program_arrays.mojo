@@ -12,11 +12,13 @@ struct _ProgramArrays(Defaultable, Movable):
     var ready: Bool
     var builtins: PythonObject
     var ndarray: PythonObject
+    var integer_type: PythonObject
 
     def __init__(out self):
         self.ready = False
         self.builtins = PythonObject(None)
         self.ndarray = PythonObject(None)
+        self.integer_type = PythonObject(None)
 
 
 comptime _PROGRAM_ARRAYS = _Global[
@@ -28,7 +30,9 @@ def initialize_program_arrays() raises:
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
     if not state[].ready:
         state[].builtins = Python.import_module("builtins")
-        state[].ndarray = Python.import_module("numpy").ndarray
+        var numpy = Python.import_module("numpy")
+        state[].ndarray = numpy.ndarray
+        state[].integer_type = numpy.integer
         state[].ready = True
 
 
@@ -43,3 +47,12 @@ def output_array(shape: ShapeN, dtype: String = "float32") raises -> PythonObjec
     # The C ndarray constructor retains storage as .base. Native executor
     # writes every value; no Python ndarray constructor/helper is involved.
     return state[].ndarray(dims, dtype=PythonObject(dtype), buffer=storage)
+
+
+def is_integer_input(value: PythonObject) raises -> Bool:
+    # ndarray exposes __index__ too, but an array is never a tensor handle
+    # or an integer option. Match the public int/np.integer contract exactly.
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    var b = state[].builtins
+    return not Bool(py=b.isinstance(value, b.bool)) and (
+        Bool(py=b.isinstance(value, b.int)) or Bool(py=b.isinstance(value, state[].integer_type)))
