@@ -505,6 +505,41 @@ names every node the import cannot run, so one attempt shows every change the mo
 Imported models run inference only; to train, build the model with `Sequential` or a session and load
 its weights as in [Import weights](#import-weights).
 
+## Import a pretrained model
+
+A pretrained PyTorch model imports the same way: put it in evaluation mode, export it with
+`torch.export.export` and an example input of the shape you will run, and pass the exported program to
+`mojolearn.import_model`. The example below imports torchvision's ResNet-18 with its published ImageNet
+weights and classifies a batch of four images. PyTorch is only needed to export the model; the saved
+program runs without it.
+
+<!-- block: import-pretrained -->
+```python
+import numpy as np
+import torch
+import torchvision
+import mojolearn
+
+weights = torchvision.models.ResNet18_Weights.DEFAULT
+net = torchvision.models.resnet18(weights=weights).eval()
+example = torch.zeros(4, 3, 224, 224)
+exported = torch.export.export(net, (example,))
+
+model = mojolearn.import_model(exported)
+print(model.inputs)    # [('x', (4, 3, 224, 224), 'float32')]
+
+# four normalized 224 x 224 RGB images, as weights.transforms() prepares them
+rng = np.random.default_rng(0)
+images = rng.standard_normal((4, 3, 224, 224), dtype=np.float32)
+logits = model.run(images)            # (4, 1000)
+classes = logits.argmax(axis=1)
+labels = [weights.meta["categories"][c] for c in classes]
+model.save("resnet18.program")
+```
+
+The program takes inputs of the example's shape. To run another batch size, export with that size, or
+mark the batch axis as dynamic with `torch.export.Dim` and set it with `shapes` at import.
+
 ## Numeric modes
 
 Both entry points take `numeric_mode`: `Sequential(numeric_mode=...)` and
