@@ -81,7 +81,7 @@ from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_fwd_scan_kernel, scan_block
-from autograd.kernels.recurrent import cell_bwd_scan_kernel
+from autograd.kernels.recurrent_scan import cell_bwd_scan_kernel
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
