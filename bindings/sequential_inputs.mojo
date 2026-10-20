@@ -70,7 +70,7 @@ def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises ->
     var dummy_size = 0
     _promote(dummy_kind, dummy_size, kind, size)
     var dtype = context["numeric_dtypes"][Python.tuple(kind, size)]
-    if len(prefix) > 0 and kind != "b":
+    if prefix.byte_length() > 0 and kind != "b":
         dtype = PythonObject(prefix + kind + String(size))
     if Bool(py=view.contiguous):
         # Both C and Fortran contiguous buffers are borrowed without a copy.

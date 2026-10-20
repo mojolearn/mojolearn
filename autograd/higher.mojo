@@ -366,7 +366,8 @@ def backward_recorded[E: Exec](mut tape: Tape, mut ex: E, output: Tensor, seed: 
             if grad_node[i] < 0:
                 var zero = tape._alloc(ex, count)
                 _fill(ex, zero, count)
-                grad_node[i] = tape.variable_nd(ex, zero, tape._shapes[i], False)._index
+                var leaf_shape = tape._shapes[i]
+                grad_node[i] = tape.variable_nd(ex, zero, leaf_shape, False)._index
                 _fill(ex, n.own_grad, count)
             else:
                 var held = tape.value_of(ex, tape._handle(grad_node[i]))
