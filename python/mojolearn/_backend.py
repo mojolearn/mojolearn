@@ -123,8 +123,9 @@ selects it by name, like any architecture directory. See `_ptx_base`.
 
 THE PLUGIN PACKAGES (2026-09-25, gpu_plugins.py)
 -----------------------------------------------
-Since the split, the Linux `mojolearn` wheel carries no GPU set: the CUDA sets
-come from `mojolearn-nvidia` and the HIP sets from `mojolearn-amd`, each of
+Since the split, the Linux core (`mojolearn-core` since 2026-10-20) carries no
+GPU set: the CUDA sets come from `mojolearn-nvidia` and the HIP sets from
+`mojolearn-amd`, each of
 which installs its files at the very paths above (mojolearn/cuda/...,
 mojolearn/hip/...) so every RUNPATH resolves exactly as it did in the combined
 wheel. `_layout()` therefore finds a plugin's sets the way it always found
@@ -133,10 +134,10 @@ them, on disk, and ADDS three refusals when this install is the split core (a
 `select()` never turns into the CPU-only set:
 
   * a box whose probe shows a GPU for which no plugin is installed beside
-    this core refuses at import. The core requires BOTH plugins at its own
-    version (gpu_plugins.core_requirements), so this fires only on a broken
-    install; it says the install is incomplete and names the repair
-    (`pip install --force-reinstall "mojolearn==<version>"`);
+    this core (and no installed plugin matches another GPU on it) refuses at
+    import. The core requires no vendor (2026-10-20: core alone, core +
+    nvidia, core + amd and all are each valid), so the refusal names the
+    package to install (`pip install "mojolearn-nvidia==<version>"`);
     MOJOLEARN_VENDOR=cpu runs the CPU bindings on purpose instead;
   * a plugin whose version is not this core's exactly refuses, naming both;
   * sets under mojolearn/<vendor>/ that no installed plugin owns refuse.
@@ -640,9 +641,9 @@ def _read_plugin_marker(dist, filename, expected):
 def _check_plugins(pkg, present):
     """Validate both vendor wheels and every registered architecture slot."""
     _PLUGINS_FOUND.clear()
-    fix = gpu_plugins.reinstall_command(_CORE_VERSION)
     for vendor in gpu_plugins.vendors():
         row = gpu_plugins.plugin(vendor)
+        fix = gpu_plugins.reinstall_command(_CORE_VERSION, row["distribution"])
         dist = _find_distribution(row["distribution"], [_site_dir()])
         vdir = os.path.join(pkg, gpu_plugins.native_directory(vendor))
         if _vendor_has_set(os.path.join(pkg, vendor)):
@@ -653,7 +654,7 @@ def _check_plugins(pkg, present):
                                      f"is installed beside this core; incomplete install; {fix}")
             continue
         if dist.version != _CORE_VERSION:
-            raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and mojolearn "
+            raise GpuPluginError(f"mojolearn: {row['distribution']} {dist.version} and {gpu_plugins.CORE_DISTRIBUTION} "
                                  f"{_CORE_VERSION} must be the same version exactly; {fix}")
         arches = _arch_dirs(vdir)
         if not gpu_plugins.valid_arches(row["profile"], arches):
@@ -814,9 +815,9 @@ def _missing_plugin_error(vendors, probe, present, forced=None):
         lines.append(
             f"mojolearn: {why} for {row['label']}, and {row['distribution']}, the "
             f"package that carries the {row['label']} binaries, is not installed "
-            f"beside this mojolearn {_CORE_VERSION} ({_site_dir()}). mojolearn requires "
-            f"it, so this install is incomplete; reinstall it:\n"
-            f"    {gpu_plugins.reinstall_command(_CORE_VERSION)}")
+            f"beside this {gpu_plugins.CORE_DISTRIBUTION} {_CORE_VERSION} ({_site_dir()}). "
+            f"Install it:\n"
+            f"    {gpu_plugins.install_command(row['distribution'], _CORE_VERSION)}")
         if elsewhere:
             lines.append(
                 f"  A {row['distribution']} {elsewhere} is importable, but a plugin "
