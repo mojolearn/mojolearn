@@ -57,6 +57,5 @@ _mojolearn_linalg.fast_from_bf16	experimental Apple BF16 candidate; installed-re
 _mojolearn_linalg.fast_matmul_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.public_fast_to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 _mojolearn_linalg.public_fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
-Sequential.dropout	needs the tape's dropout in the build (-D MOJOLEARN_AUTOGRAD_HAS_DROPOUT); refused by name in the shipped bindings
 Session.profile_reset	diagnostic launch profile for development, not user API
 Session.profile_report	diagnostic launch profile for development, not user API

@@ -42,6 +42,22 @@ dropout resume, validation vocabulary/stopping/restoration, failed replay
 recovery, native graph training versus eager training, custom objectives,
 frozen parameters, changing batch/sequence dimensions, and checkpoint resume.
 
+| Executor | Passed | Skipped | Digest keys matching Apple |
+|---|---:|---:|---:|
+| Apple GPU | 106 | 0 | 96 |
+| NVIDIA RTX 3090 | 106 | 0 | 96 |
+| AMD MI325X | 106 | 0 | 96 |
+| CPU | 104 | 2 GPU comparison cases | 96 |
+
+All 21 runtime-fence tests passed. GPU runs explicitly read back the sequence
+binding's vendor and native numeric-mode enum. The final NVIDIA and AMD runs
+are `cuda-test-03` and `hip-test-03`; earlier Linux runs are not GPU evidence:
+an incomplete binary layout selected the host binding, and the initial AMD
+environment lacked Mojo's shared runtime. Those failures, selection records
+and the corrected runs are retained. No numerical rebuild was needed for
+these test-environment repairs. The checkpoint suite now probes the actual
+sequence binding instead of a generic vendor query.
+
 Full build/test logs, source snapshots and native binaries are retained under
 `~/mojolearn-evidence/autograd-usability-20261020/`.
 The initial failed compile, initial fence fixture failure and their repairs
