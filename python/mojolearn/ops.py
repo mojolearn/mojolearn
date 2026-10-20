@@ -943,6 +943,87 @@ class Session:
         hs, _, lo, hi, epoch, step = self._b.ops_load_state(self._sid(), path, grad, opt)  # cpu-route: checkpoint file read on the host
         hs = [int(h) for h in hs]  # glue: the new handles
         return dict(params=hs, seed=(int(hi) << 32) | int(lo), epoch=int(epoch), step=int(step))
+    def load_weights(self, path, names, *, source=None):
+        """Load named tensors from a safetensors checkpoint (or a PyTorch
+        state_dict) into tensors of this session.
+
+        Each tensor in ``names`` must have been made with :meth:`tensor`;
+        its values are replaced in place, so the handle, its
+        ``requires_grad`` and its optimizer state stay. float16, bfloat16,
+        float32 and float64 sources are converted to float32 on the device
+        (float16 and bfloat16 exactly, float64 rounded to the nearest
+        float32).
+
+        Parameters
+        ----------
+        path : str, path-like or mapping
+            The path of a ``.safetensors`` file or of a checkpoint directory
+            (``model.safetensors``, or ``model.safetensors.index.json`` and
+            its shards), or a mapping of names to tensors such as
+            ``module.state_dict()``.
+        names : list of tuple
+            ``(handle, name)`` pairs: tensor ``name`` of the source goes
+            into tensor ``handle``, which has the source's shape (size-1
+            axes aside: a ``(n,)`` bias fills a ``(1, n)`` tensor).
+            ``(handle, name, "transpose")`` loads a 2-D ``(a, b)`` source
+            into an ``(b, a)`` tensor, for example a PyTorch linear weight
+            ``(out_features, in_features)`` into the ``(inputs, outputs)``
+            weight :meth:`linear` takes.
+        source : {'torch', 'safetensors'} or None, default None
+            None takes ``'safetensors'`` for a path and ``'torch'`` for a
+            mapping.
+
+        Returns
+        -------
+        list of int
+            The handles, in the order given.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> rng = np.random.default_rng(0)
+        >>> state = {"fc.weight": rng.standard_normal((2, 4), dtype=np.float32),
+        ...          "fc.bias": np.zeros(2, dtype=np.float32)}
+        >>> with ops.Session() as s:
+        ...     w = s.tensor(np.zeros((4, 2), dtype=np.float32))
+        ...     b = s.tensor(np.zeros((1, 2), dtype=np.float32))
+        ...     _ = s.load_weights(state, [(w, "fc.weight", "transpose"), (b, "fc.bias")])
+        ...     x = s.tensor(rng.standard_normal((8, 4), dtype=np.float32))
+        ...     probs = s.numpy(s.linear(x, w, b, activation="softmax"))
+        """
+        from ._weight_import import LAYOUT_AS_IS, LAYOUT_TRANSPOSE, WeightSource
+        pairs = list(names)
+        if not pairs:
+            raise ValueError("names must hold at least one (handle, name) pair")
+        entries = []
+        for pair in pairs:  # glue: the (handle, name[, layout]) arguments
+            if not isinstance(pair, (tuple, list)) or len(pair) not in (2, 3):
+                raise ValueError("names takes (handle, name) or (handle, name, 'transpose') pairs")
+            layout = LAYOUT_AS_IS
+            if len(pair) == 3:
+                if pair[2] != "transpose":
+                    raise ValueError("the third item of a names entry must be 'transpose'")
+                layout = LAYOUT_TRANSPOSE
+            if not isinstance(pair[1], str):
+                raise TypeError("a tensor name must be a string")
+            entries.append((_int(pair[0], "handle", 1), pair[1], layout))
+        keys = [k for _, k, _ in entries]  # glue: the requested tensor names
+        sid = self._sid()
+        with WeightSource(path, source, what="load_weights") as src:
+            missing = src.missing(keys)
+            if missing:
+                held = src.names()
+                raise ValueError(f"load_weights: the source has no tensor {missing[0]!r}"
+                                 + (f" ({len(missing)} missing)" if len(missing) > 1 else "")
+                                 + f"; it holds {held[:6]}" + (" ..." if len(held) > 6 else ""))
+            recs = []
+            for h, key, layout in entries:  # glue: one record per source tensor
+                recs += src.record(key, h, 0, layout)
+            # Mojo checks every dtype and shape, then writes every tensor
+            self._b.ops_load_weights(sid, recs, keys)
+        return [h for h, _, _ in entries]  # glue: the handles, in the order given
+
     def zero_grad(self):
         """Clear the gradient of every tensor made with ``requires_grad=True``.
 
