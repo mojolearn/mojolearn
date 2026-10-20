@@ -1,11 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """A feed-forward model you assemble layer by layer and train on the GPU."""
-# Engineering note: `Sequential` is trained by the native autograd tape
-# (autograd/model.mojo). Python is the API shell only: it records the layers
-# and options as a flat integer program and a float table, checks the
-# arguments, and makes one call into Mojo per fit or prediction.
-# Initialisation, shuffling, batching, the forward and backward passes, the
-# optimizer and the loss curve all run in Mojo on the executor.
+# Native model descriptions and numerical execution retain the existing
+# Sequential ABI. Remaining fit/import/checkpoint shells are migrated in
+# separate source freezes; one migrated method delegates one native call.
 import os
 
 from ._optional_numpy import require_numpy
@@ -143,10 +140,7 @@ class Sequential:
     """
 
     def __init__(self, numeric_mode=None, *, input_shape=None):
-        self.numeric_mode = numeric_mode
-        self.input_shape = None if input_shape is None else tuple(_shape_arg(input_shape, "input_shape"))
-        self._layers = []
-        self._options = None
+        return _SEQUENTIAL_ENTRY(self, "construct", (numeric_mode, input_shape), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ building
     def add(self, kind, *args, **kwargs):
@@ -176,115 +170,70 @@ class Sequential:
         >>> import mojolearn
         >>> model = mojolearn.Sequential().add("linear", 8).add("relu").add("linear", 1)
         """
-        if not isinstance(kind, str) or kind.lower() not in _LAYER:
-            raise ValueError(f"kind must be one of {sorted(_LAYER)}")
-        kind = kind.lower()
-        if kind == "linear":
-            return self._linear(*args, **kwargs)
-        if kind == "layer_norm":
-            return self._layer_norm(*args, **kwargs)
-        if kind == "dropout":
-            return self._dropout(*args, **kwargs)
-        if kind == "residual":
-            return self._residual(*args, **kwargs)
-        if kind == "reshape":
-            return self.reshape(*args, **kwargs)
-        if kind == "permute":
-            return self.permute(*args, **kwargs)
-        if kind == "conv2d":
-            return self.conv2d(*args, **kwargs)
-        if kind == "max_pool2d":
-            return self.max_pool2d(*args, **kwargs)
-        if kind == "avg_pool2d":
-            return self.avg_pool2d(*args, **kwargs)
-        if args or kwargs:
-            raise TypeError(f"{kind} takes no arguments")
-        self._append(_LAYER[kind])
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", (kind, args, kwargs), _SEQUENTIAL_CONTEXT)
 
     def _append(self, code, a0=0, a1=0, f=0.0, args=None):
         # one layer: (code, arg0, arg1, float argument, the six integer
         # arguments of a version-2 description record)
-        args = [a0, a1, 0, 0, 0, 0] if args is None else list(args)
-        self._layers.append((code, a0, a1, f, tuple(args)))
+        return _SEQUENTIAL_ENTRY(self, "append", (code, a0, a1, f, args), _SEQUENTIAL_CONTEXT)
 
     def _linear(self, units, bias=True):
-        if isinstance(units, bool) or not isinstance(units, (int, np.integer)) or units < 1:
-            raise ValueError("units must be a positive integer")
-        self._append(_LAYER["linear"], int(units), 1 if bias else 0)
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("linear", (units, bias), {}), _SEQUENTIAL_CONTEXT)
 
     def _layer_norm(self, eps=1e-5):
-        if not eps > 0:
-            raise ValueError("eps must be positive")
-        self._append(_LAYER["layer_norm"], f=float(eps))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("layer_norm", (eps,), {}), _SEQUENTIAL_CONTEXT)
 
     def _dropout(self, p):
-        if not 0 <= p < 1:
-            raise ValueError("p must be in [0, 1)")
-        self._append(_LAYER["dropout"], f=float(p))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("dropout", (p,), {}), _SEQUENTIAL_CONTEXT)
 
     def _residual(self, source=-1):
-        if isinstance(source, bool) or not isinstance(source, (int, np.integer)):
-            raise ValueError("source must be -1 or the index of an earlier layer")
-        self._append(_LAYER["residual"], int(source))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("residual", (source,), {}), _SEQUENTIAL_CONTEXT)
 
     def linear(self, units, bias=True):
         """Append a fully connected layer with ``units`` outputs."""
-        return self._linear(units, bias)
+        return _SEQUENTIAL_ENTRY(self, "add", ("linear", (units, bias), {}), _SEQUENTIAL_CONTEXT)
 
     def relu(self):
         """Append a ReLU activation."""
-        return self.add("relu")
+        return _SEQUENTIAL_ENTRY(self, "add", ("relu", (), {}), _SEQUENTIAL_CONTEXT)
 
     def sigmoid(self):
         """Append a logistic sigmoid activation."""
-        return self.add("sigmoid")
+        return _SEQUENTIAL_ENTRY(self, "add", ("sigmoid", (), {}), _SEQUENTIAL_CONTEXT)
 
     def tanh(self):
         """Append a hyperbolic tangent activation."""
-        return self.add("tanh")
+        return _SEQUENTIAL_ENTRY(self, "add", ("tanh", (), {}), _SEQUENTIAL_CONTEXT)
 
     def softmax(self):
         """Append a row-wise softmax."""
-        return self.add("softmax")
+        return _SEQUENTIAL_ENTRY(self, "add", ("softmax", (), {}), _SEQUENTIAL_CONTEXT)
 
     def layer_norm(self, eps=1e-5):
         """Append a layer normalization with a learned weight and bias."""
-        return self._layer_norm(eps)
+        return _SEQUENTIAL_ENTRY(self, "add", ("layer_norm", (eps,), {}), _SEQUENTIAL_CONTEXT)
 
     def dropout(self, p):
         """Append dropout with drop probability ``p`` (active in fit only)."""
-        return self._dropout(p)
+        return _SEQUENTIAL_ENTRY(self, "add", ("dropout", (p,), {}), _SEQUENTIAL_CONTEXT)
 
     def residual(self, source=-1):
         """Add the output of layer ``source`` (-1: the model input) to the current output."""
-        return self._residual(source)
+        return _SEQUENTIAL_ENTRY(self, "add", ("residual", (source,), {}), _SEQUENTIAL_CONTEXT)
 
     def reshape(self, shape):
         """Append a reshape of each sample to ``shape`` (up to 6
         dimensions, one of them -1 to infer it)."""
-        dims = _shape_arg(shape, "shape", allow_infer=True)
-        self._append(_LAYER["reshape"], args=dims + [0] * (_SPEC2_ARGS - len(dims)))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("reshape", (shape,), {}), _SEQUENTIAL_CONTEXT)
 
     def permute(self, axes):
         """Append a reordering of each sample's axes: output axis ``k`` is
         input axis ``axes[k]`` (axes count from 0 within a sample)."""
-        values = tuple(axes)
-        if not 1 <= len(values) <= _SPEC2_ARGS:
-            raise ValueError(f"axes must list 1 to {_SPEC2_ARGS} axes")
-        order = [_positive(a, "axes", 0) for a in values]  # glue: at most six axes
-        self._append(_LAYER["permute"], args=order + [-1] * (_SPEC2_ARGS - len(order)))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("permute", (axes,), {}), _SEQUENTIAL_CONTEXT)
 
     def flatten(self):
         """Append a flattening of each sample into one vector."""
-        self._append(_LAYER["flatten"])
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("flatten", (), {}), _SEQUENTIAL_CONTEXT)
 
     def conv2d(self, out_channels, kernel_size, stride=1, padding=0, bias=True, groups=1):
         """Append a 2-D convolution of ``(channels, height, width)``
@@ -299,31 +248,19 @@ class Sequential:
 
             model.conv2d(32, 3, padding=1, groups=32)
         """
-        oc = _positive(out_channels, "out_channels")
-        k = _positive(kernel_size, "kernel_size")
-        st = _positive(stride, "stride")
-        pad = _positive(padding, "padding", 0)
-        g = _positive(groups, "groups")
-        self._append(_LAYER["conv2d"], oc, k, args=[oc, k, st, pad, 1 if bias else 0, g])
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("conv2d", (out_channels, kernel_size, stride, padding, bias, groups), {}), _SEQUENTIAL_CONTEXT)
 
     def max_pool2d(self, kernel_size, stride=None):
         """Append a max pooling of ``(channels, height, width)`` samples
         over square ``kernel_size`` windows, ``stride`` apart (by default
         ``kernel_size``)."""
-        k = _positive(kernel_size, "kernel_size")
-        st = k if stride is None else _positive(stride, "stride")
-        self._append(_LAYER["max_pool2d"], k, st)
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("max_pool2d", (kernel_size, stride), {}), _SEQUENTIAL_CONTEXT)
 
     def avg_pool2d(self, kernel_size, stride=None):
         """Append an average pooling of ``(channels, height, width)``
         samples over square ``kernel_size`` windows, ``stride`` apart (by
         default ``kernel_size``)."""
-        k = _positive(kernel_size, "kernel_size")
-        st = k if stride is None else _positive(stride, "stride")
-        self._append(_LAYER["avg_pool2d"], k, st)
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("avg_pool2d", (kernel_size, stride), {}), _SEQUENTIAL_CONTEXT)
 
     @property
     def layers(self):
@@ -331,9 +268,7 @@ class Sequential:
         and ``(kind, arguments, float_arg)`` for ``reshape``, ``permute``,
         ``flatten``, ``conv2d`` and the pools, with ``arguments`` the
         layer's six integer arguments."""
-        names = {v: k for k, v in _LAYER.items()}  # glue: inverts the layer name table
-        return [(names[c], args, f) if c in _SHAPE_LAYERS else (names[c], a0, a1, f)
-                for c, a0, a1, f, args in self._layers]  # glue: describes the recorded layers
+        return _SEQUENTIAL_ENTRY(self, "layers", (), _SEQUENTIAL_CONTEXT)
 
     def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=0.9, nesterov=False,
                 beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
@@ -377,58 +312,21 @@ class Sequential:
         >>> model = mojolearn.Sequential().linear(8).relu().linear(1)
         >>> model = model.compile(loss="huber", optimizer="momentum", lr=0.01, nesterov=True)
         """
-        if loss not in _LOSS:
-            raise ValueError(f"loss must be one of {sorted(_LOSS)}")
-        if optimizer not in _OPT:
-            raise ValueError(f"optimizer must be one of {sorted(_OPT)}")
-        if schedule not in _SCHED:
-            raise ValueError(f"schedule must be one of {sorted(_SCHED)}")
-        mu = float(momentum) if optimizer == "momentum" else 0.0
-        if optimizer == "adam" or optimizer == "adamw":
-            f1, f2 = float(beta1), float(beta2)
-        else:
-            f1, f2 = mu, 0.0
-        flags = 1 if (optimizer == "momentum" and nesterov) else 0
-        self._options = dict(loss=loss, opt=_OPT[optimizer], flags=flags, lr=float(lr), f1=f1, f2=f2,
-                             eps=float(eps), weight_decay=float(weight_decay), sched=_SCHED[schedule],
-                             step_size=int(step_size), gamma=float(gamma), huber_delta=float(huber_delta),
-                             tol=float(tol), n_iter_no_change=int(n_iter_no_change))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _binding(self):
         return _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
 
     def _program(self, n_features, sample=None):
-        if sample is None:
-            prog = [_SPEC_VERSION, int(n_features), len(self._layers)]
-            for code, a0, a1, _, _ in self._layers:  # glue: one description record per layer
-                prog += [code, a0, a1, 0]
-            return prog
-        # version 2: the per-sample shape, padded with 1, then 8 words a layer
-        prog = [_SPEC2_VERSION, len(sample)] + list(sample) + [1] * (_SPEC2_DIMS - len(sample))
-        prog.append(len(self._layers))
-        for code, _, _, _, args in self._layers:  # glue: one description record per layer
-            prog += [code] + list(args) + [0]
-        return prog
+        return _SEQUENTIAL_ENTRY(self, "program", (n_features, sample), _SEQUENTIAL_CONTEXT)
 
     def _table(self):
-        return [f for _, _, _, f, _ in self._layers]  # glue: one float argument per layer
+        return _SEQUENTIAL_ENTRY(self, "table", (), _SEQUENTIAL_CONTEXT)
 
     def _sample_of(self, X):
         # the per-sample shape of a version-2 model (None: version 1)
-        uses_shape = self.input_shape is not None or X.ndim > 2 or any(
-            c in _SHAPE_LAYERS for c, _, _, _, _ in self._layers)  # glue: a layer-kind check
-        if not uses_shape:
-            return None
-        if self.input_shape is None:
-            if X.ndim - 1 > _SPEC2_DIMS - 1:
-                raise ValueError(f"a sample has at most {_SPEC2_DIMS - 1} dimensions")
-            return tuple(int(d) for d in X.shape[1:])  # glue: at most seven dimensions
-        if X.ndim > 2 and tuple(X.shape[1:]) != self.input_shape:
-            raise ValueError(f"X samples have shape {tuple(X.shape[1:])}, the model's input_shape is "
-                             f"{self.input_shape}")
-        return self.input_shape
+        return _SEQUENTIAL_ENTRY(self, "sample", (X,), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
@@ -1025,3 +923,15 @@ class Sequential:
             # [1 - p, p] written by the binding (`OP_PROBA2`)
             return self._forward(X, _OUT_PROBA2, width=2)
         raise ValueError("predict_proba needs a model fitted with cross_entropy or bce_with_logits")
+
+
+# Package-import ABI connection. No model operation calls this setup again.
+from .tokenizer import _binding as _sequential_tokenizer_binding
+_SEQUENTIAL_ENTRY = _sequential_tokenizer_binding()._module.sequential_native_call
+_SEQUENTIAL_CONTEXT = {
+    "integer": np.integer, "layer_codes": _LAYER, "loss_codes": _LOSS,
+    "optimizer_codes": _OPT, "schedule_codes": _SCHED,
+    "layer_names": ("", "linear", "relu", "sigmoid", "tanh", "softmax",
+                    "layer_norm", "dropout", "residual", "reshape", "permute",
+                    "flatten", "conv2d", "max_pool2d", "avg_pool2d"),
+}
