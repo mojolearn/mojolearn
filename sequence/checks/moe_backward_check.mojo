@@ -26,7 +26,7 @@ from sequence.exec_device import DeviceExec
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, add, mul
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
-from sequence.moe_backward import moe_bwd_cell, moe_bwd_segment_cell, op_moeb_dgu, op_moeb_route_vjp
+from autograd.kernels.moe import moe_bwd_cell, moe_bwd_segment_cell, op_moeb_dgu, op_moeb_route_vjp
 from autograd.route_ops import moe_tape_train_step
 
 
