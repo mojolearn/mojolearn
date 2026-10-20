@@ -33,6 +33,7 @@ from core.step_phase import (
     step_count_launch,
     step_count_sync,
 )
+from autograd.kernels.checks.readback import _download
 # DEVIATION 2645: the RMSNorm row launch geometry arm (core/step_glue.mojo).
 # Its launch path is compiled under -D MOJOLEARN_STEP_GLUE_TRIAL=1, and since
 # DEVIATION 2649 also on a shipped build whose column default carries a rows
@@ -173,30 +174,6 @@ def _upload(
     ctx.synchronize()
     _ = host^
     return dev^
-
-
-def _download(
-    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
-) raises -> List[Float32]:
-    """Read a device span for checks or nonfinite-error classification."""
-    step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    step_count_sync()
-    ctx.synchronize()
-    if n == len(buf):
-        step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
-    else:
-        var view = buf.create_sub_buffer[DType.float32](0, n)
-        step_count_d2h()
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
-    step_count_sync()
-    ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
-    return out^
 
 
 def _zeros[wait: Bool = True](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
