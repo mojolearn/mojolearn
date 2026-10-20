@@ -66,10 +66,15 @@ if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
         "$PY" - <<'PYCOUNTS'
 import sys
 sys.path.insert(0, 'tools')
-from verify_linux_surface_qualification import MODES, expected_bindings
+from verify_linux_surface_qualification import MODES, expected_bindings, expected_set_files, merged_layout
 import os
 byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0') == '1'
 print(' '.join(f'expected_bindings_{m}={len(expected_bindings(m, byte_lm))}' for m in MODES))
+# The layout build_sets.sh is asked for (MOJOLEARN_MERGED_BINDINGS); the
+# provenance records the layout read back from the built directories.
+layout = 'merged' if merged_layout().enabled() else 'per-binding'
+print(f'binding_layout_requested={layout} ' + ' '.join(
+    f'expected_files_{m}={len(expected_set_files(m, byte_lm, layout))}' for m in MODES))
 PYCOUNTS
         echo "expected_tiers=${MOJOLEARN_BUILD_TIERS:-fast identical}"
         echo "build_jobs=$BUILD_JOBS cpu_affinity_max=$BUILD_CORES compiler_jobs=2 blas_threads=1"
@@ -103,38 +108,79 @@ root, out = map(pathlib.Path, sys.argv[1:3])
 status, action = int(sys.argv[3]), sys.argv[4]
 files = json.loads((out / 'source-inventory.json').read_text())
 assert all(hashlib.sha256((root / p).read_bytes()).hexdigest() == h for p, h in files), 'Sources changed during build'
-outputs = {}
-host_outputs = {}
-for path in sorted((out / 'sets').rglob('_mojolearn*.so')):
-    member = 'mojolearn/' + path.relative_to(out / 'sets').as_posix()
-    # DEVIATION 2680: the CPU TRAINING binding is vendor-neutral and sits at
-    # <vendor>/<arch>/host/, BESIDE the tiers rather than inside one. It is not
-    # part of the per-tier GPU inventory that expected_bindings() counts, and
-    # folding it in there breaks `len(outputs) == expected_count` below and
-    # `len(proof['extensions']) == 45` in the audit. Counted separately.
-    if '/host/' in member:
-        host_outputs[member] = hashlib.sha256(path.read_bytes()).hexdigest()
-        continue
-    outputs[member] = hashlib.sha256(path.read_bytes()).hexdigest()
 commit = next(line.split('=', 1)[1] for line in (out / 'source-provenance.txt').read_text().splitlines() if line.startswith('source_commit='))
 byte_lm = os.environ.get('MOJOLEARN_PACKAGE_BYTE_LM', '0')
 assert byte_lm in ('0', '1'), 'Invalid byte-LM build flag'
 sys.path.insert(0, str(root / 'tools'))
-from verify_linux_surface_qualification import MODES, expected_bindings
-full_count = sum(len(expected_bindings(mode, byte_lm == '1')) for mode in MODES)
-expected_count = full_count if action == 'build' else len(expected_bindings(os.environ['MOJOLEARN_BUILD_TIERS'], byte_lm == '1'))
-byte_members = [n for n in outputs if n.endswith('/_mojolearn_byte_lm.so')]
-assert len(byte_members) == (1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0), 'Incorrect byte-LM inventory'
+from verify_linux_surface_qualification import (MODES, HOST_GLOB, MERGED_INDEX, expected_bindings, expected_set_files,
+                                                 index_record, merged_layout, one_layout, wheel_host_bindings)
+ml = merged_layout()
+built_modes = list(MODES) if action == 'build' else [os.environ['MOJOLEARN_BUILD_TIERS']]
+host_wanted = byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical')
+sets = out / 'sets'
+member_of = lambda path: 'mojolearn/' + path.relative_to(sets).as_posix()
+outputs = {}
+host_outputs = {}
+for path in sorted(sets.rglob('_mojolearn*.so')):
+    member = member_of(path)
+    # DEVIATION 2680: the CPU TRAINING binding is vendor-neutral and sits at
+    # <vendor>/<arch>/host/, BESIDE the tiers rather than inside one. It is not
+    # part of the per-tier GPU inventory that expected_bindings() counts, and
+    # folding it in there breaks `len(outputs) == expected_count` below and
+    # the complete-set check in the audit. Counted separately.
+    if '/host/' in member:
+        host_outputs[member] = hashlib.sha256(path.read_bytes()).hexdigest()
+        continue
+    outputs[member] = hashlib.sha256(path.read_bytes()).hexdigest()
+# THE MERGED BINDINGS (lane merged-bindings, 2026-10-20). `extensions` and
+# `host_extension` hold the SHIPPED BINARIES (the merged files in the merged
+# layout); every index (_mojolearn_merged.json, shipped and trusted by the
+# loader) is hashed into `merged_indexes` with the members it names. Each set
+# directory's layout is read from the directory (packaging/linux/merged_layout.py),
+# must serve exactly the bindings of its mode, and a merged index must be the
+# bindings/merged_groups.json plan. One layout per build.
+merged_indexes = {member_of(p): index_record(p) for p in sorted(sets.rglob(MERGED_INDEX))}
+layouts, layout_errors = [], []
+for arch_dir in sorted(d for d in sets.glob('*/*') if d.is_dir()):
+    dirs = [(m, arch_dir / ('' if m == 'fast' else m), sorted(expected_bindings(m, byte_lm == '1')), '_mojolearn*.so')
+            for m in built_modes]
+    if host_wanted:
+        dirs.append(('host', arch_dir / 'host', sorted(wheel_host_bindings()), HOST_GLOB))
+    for key, directory, names, glob in dirs:
+        try:
+            kind, _served = ml.layout(directory, names, glob)
+            ml.check_plan(directory, key, byte_lm == '1')
+            layouts.append(kind)
+        except ml.LayoutError as exc:
+            layout_errors.append(str(exc))
+try:
+    binding_layout = one_layout(layouts)
+except ValueError as exc:
+    layout_errors.append(str(exc))
+    binding_layout = 'mixed'
+counted = binding_layout if binding_layout in ('merged', 'per-binding') else 'per-binding'
+full_count = sum(len(expected_set_files(mode, byte_lm == '1', counted)) for mode in MODES)
+expected_count = full_count if action == 'build' else len(expected_set_files(os.environ['MOJOLEARN_BUILD_TIERS'], byte_lm == '1', counted))
+byte_wanted = 1 if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else 0
+if counted == 'merged':
+    # The byte LM is a member of the identical index exactly once, of no fast one.
+    byte_members = [k for k, row in merged_indexes.items() for _f, m in row['files'].items() if '_mojolearn_byte_lm' in m]
+    assert not any(n.endswith('/_mojolearn_byte_lm.so') for n in outputs), 'Byte-LM own file beside the merged index'
+else:
+    byte_members = [n for n in outputs if n.endswith('/_mojolearn_byte_lm.so')]
+assert len(byte_members) == byte_wanted, 'Incorrect byte-LM inventory'
 assert all('/identical/' in n for n in byte_members), 'Byte-LM is IDENTICAL only'
 host_members = sorted(host_outputs)
-from verify_linux_surface_qualification import wheel_host_bindings
-want_host = {n + '.so' for n in wheel_host_bindings()} if byte_lm == '1' and (action == 'build' or os.environ.get('MOJOLEARN_BUILD_TIERS') == 'identical') else set()
+want_host = set(expected_set_files('host', byte_lm == '1', counted)) if host_wanted else set()
 assert all('/host/' + n.rsplit('/', 1)[1] == n[n.index('/host/'):] for n in host_members), ('Unexpected host binding', host_members)
 assert {n.rsplit('/', 1)[1] for n in host_members} == want_host and len(host_members) == len(want_host), ('Incorrect host binding inventory', host_members, sorted(want_host))
 record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit, action=action, build_exit=status,
               source_inventory=files, source_sha256=hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest(),
               extensions=outputs, host_extension=host_outputs,
-              complete=(status == 0 and action == 'build' and len(outputs) == full_count))
+              merged_indexes=merged_indexes, binding_layout=binding_layout,
+              complete=(status == 0 and action == 'build' and len(outputs) == full_count and not layout_errors))
+if layout_errors:
+    record['layout_errors'] = layout_errors
 # THE BOX'S BUILD SIZING (tools/build_sizing.py via release061_remote_build.sh):
 # jobs, RSS cap, usable cores and available memory. Scheduling only; the
 # binaries do not depend on it (MOJOLEARN_BUILD_JOBS is byte-neutral, bincache).
@@ -178,6 +224,7 @@ if cache_rows.is_file():
 (out / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
 assert status == 0, 'Build/staging failed; retained provenance is not admissible'
 assert len(outputs) == expected_count, 'Incomplete build outputs'
+assert not layout_errors, ('Binding layout refused', layout_errors)
 PYBUILT
     exit "$status"
 fi
@@ -222,18 +269,25 @@ wheel, root = pathlib.Path(wheel), pathlib.Path(root)
 assert re.fullmatch(r'[0-9a-f]{64}', expected), 'Invalid expected SHA256'
 assert hashlib.sha256(wheel.read_bytes()).hexdigest() == expected, 'Wheel SHA mismatch'
 assert 'manylinux_' in wheel.name, 'Require repaired manylinux wheel, not raw linux_x86_64'
-names = {'_mojolearn', '_mojolearn_gbdt', '_mojolearn_estimators', '_mojolearn_rf',
-         '_mojolearn_trees', '_mojolearn_svm', '_mojolearn_solver', '_mojolearn_metrics',
-         '_mojolearn_tsa', '_mojolearn_linalg', '_mojolearn_arima', '_mojolearn_training',
-         '_mojolearn_gp', '_mojolearn_mamba', '_mojolearn_transformer'}
 sets = {}
 extension_hashes = {}
 host_extension_hashes = {}
+wheel_indexes = {}
 sys.path.insert(0, str(root / 'tools'))
-from verify_linux_surface_qualification import wheel_host_members
-host_members_wanted = set(wheel_host_members())
+from verify_linux_surface_qualification import (MERGED_INDEX, MODES, expected_bindings, expected_set_files,
+                                                 one_layout, set_layout, wheel_host_bindings)
 proof_path = pathlib.Path(provenance)
 proof = json.loads(proof_path.read_text())
+# THE MERGED BINDINGS: the proof's layout decides which files a set ships
+# (one merged file per group plus its index, or one file per binding); the
+# wheel's sets are then read back from the wheel's own indexes.
+layout = proof.get('binding_layout', 'per-binding')
+assert layout in ('merged', 'per-binding'), 'Unknown binding layout in the build proof'
+proven_indexes = proof.get('merged_indexes') or {}
+assert (layout == 'merged') == bool(proven_indexes), 'Build proof layout and indexes disagree'
+byte_lm = (any('_mojolearn_byte_lm' in m for row in proven_indexes.values() for m in row['files'].values())
+           if layout == 'merged' else any(p.endswith('/_mojolearn_byte_lm.so') for p in proof['extensions']))
+host_members_wanted = {'mojolearn/host/' + f for f in expected_set_files('host', byte_lm, layout)}
 assert proof.get('schema') == 'mojolearn.linux.build-provenance.v1' and proof.get('complete') is True
 assert proof.get('build_exit') == 0 and proof.get('action') == 'build'
 assert re.fullmatch(r'[0-9a-f]{40}', proof.get('source_commit', '')), 'Missing source commit'
@@ -243,7 +297,7 @@ assert len(inventory) == len({p for p, h in inventory}) and inventory, 'Invalid 
 for p, h in inventory:
     assert not pathlib.PurePosixPath(p).is_absolute() and '..' not in pathlib.PurePosixPath(p).parts
     assert hashlib.sha256((root / p).read_bytes()).hexdigest() == h, ('Source differs from build', p)
-assert len(proof['extensions']) == 45, 'Provenance is not a complete vendor set'
+assert len(proof['extensions']) == sum(len(expected_set_files(m, byte_lm, layout)) for m in MODES), 'Provenance is not a complete vendor set'
 with zipfile.ZipFile(wheel) as z:
     paths = z.namelist()
     assert len(paths) == len(set(paths)), 'Duplicate wheel member'
@@ -269,6 +323,11 @@ with zipfile.ZipFile(wheel) as z:
                 assert p in proof['extensions'], ('Unproven extension', p)
                 assert hashlib.sha256(z.read(p)).hexdigest() == proof['extensions'][p], ('Built/wheel binary differs', p)
             sets.setdefault((vendor, arch, mode or 'fast'), set()).add(extension)
+        elif re.fullmatch(r'mojolearn/(?:(?:cuda|hip)/(?:sm_[0-9]+a?|gfx[0-9a-f]+)/(?:identical/)?|host/)' + MERGED_INDEX, p):
+            # A shipped index, hashed like a binary: the loader trusts it.
+            raw = z.read(p)
+            wheel_indexes[p.removeprefix('mojolearn/')] = {'sha256': hashlib.sha256(raw).hexdigest(),
+                                                          'files': json.loads(raw).get('files')}
         elif p in host_members_wanted:
             # DEVIATION 2680. The wheel carries ONE vendor-neutral copy of each
             # host binding; each architecture leg proves its own under
@@ -281,9 +340,28 @@ with zipfile.ZipFile(wheel) as z:
             raise AssertionError('Unexpected extension location: ' + p)
     vendors = {v for v, _, _ in sets}
     assert required_vendor in vendors, 'Wheel lacks requested vendor'
+    layouts, checked = [], set()
     for vendor, arch in {(v, a) for v, a, _ in sets}:
-        for mode in ('fast', 'identical'):
-            assert sets.get((vendor, arch, mode)) == names, ('Incomplete set', vendor, arch, mode)
+        for mode in MODES:
+            prefix = '/'.join((vendor, arch)) + '/' + ('' if mode == 'fast' else mode + '/')
+            files = {n + '.so' for n in sets.get((vendor, arch, mode), ())}
+            kind, _ = set_layout(prefix, files, wheel_indexes, expected_bindings(mode, byte_lm))
+            layouts.append(kind)
+            checked.add(prefix + MERGED_INDEX)
+            if kind == 'merged':
+                assert sorted(files) == sorted(expected_set_files(mode, byte_lm, kind)), ('Merged set differs from the plan', prefix)
+            if vendor == required_vendor:
+                proven = proven_indexes.get('mojolearn/' + prefix + MERGED_INDEX)
+                assert (proven or {}).get('sha256') == (wheel_indexes.get(prefix + MERGED_INDEX) or {}).get('sha256'), ('Built/wheel index differs', prefix)
+    host_files = {m.rsplit('/', 1)[1] for m in host_extension_hashes}
+    if host_files:
+        layouts.append(set_layout('host/', host_files, wheel_indexes, wheel_host_bindings())[0])
+        checked.add('host/' + MERGED_INDEX)
+        if 'host/' + MERGED_INDEX in wheel_indexes:
+            proven = next((r for k, r in proven_indexes.items() if k.endswith('/host/' + MERGED_INDEX)), {})
+            assert proven.get('sha256') == wheel_indexes['host/' + MERGED_INDEX]['sha256'], 'Unproven host index'
+    assert one_layout(layouts) == layout, 'Wheel and build proof binding layouts differ'
+    assert set(wheel_indexes) <= checked, ('Merged index outside a binding set', sorted(set(wheel_indexes) - checked))
     assert set(proof['extensions']) == {p for p in paths if p.startswith('mojolearn/' + required_vendor + '/') and p.endswith('.so') and '/_mojolearn' in p}, 'Provenance/wheel vendor coverage differs'
     assert {'mojolearn/' + m for m in host_extension_hashes} == host_members_wanted, ('Wheel host binding inventory differs from the manifest', sorted(host_extension_hashes))
     # Current wrappers must match the source whose tests will execute.
@@ -296,6 +374,7 @@ print(json.dumps({'sha256': expected, 'wheel': str(wheel),
                   'source_sha256': proof['source_sha256'],
                   'extension_hashes': extension_hashes,
                   'host_extension_hashes': host_extension_hashes,
+                  'merged_indexes': wheel_indexes, 'binding_layout': layout,
                   'sets': {'/'.join(k): len(v) for k, v in sorted(sets.items())}}, indent=2))
 PYAUDIT
 fi
