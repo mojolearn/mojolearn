@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session
-from autograd.program_pyapi import ProgramInput, _integer
+from autograd.program_pyapi import ProgramInput, _integer, ops_program_fit_native_py
 from autograd.program_arrays import output_array, is_integer_input, uint64_input
 from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
 from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, ops_load_state_py
@@ -127,6 +127,26 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("ValueError: this session is closed")
     var sid = session._id
     var s = ops_session[E, KIND](Int(py=sid))
+    if name == "fit" or name == "fit_if":
+        var program = args[0]
+        if program._s is not session:
+            raise Error("ValueError: training components must belong to the same session")
+        var condition = 0
+        var otherwise = 0
+        if name == "fit_if":
+            if args[1]._s is not session or args[2]._s is not session:
+                raise Error("ValueError: training components must belong to the same session")
+            condition = _int(args[1]._id, "condition", 1)
+            otherwise = _int(args[2]._id, "otherwise", 1)
+        var options = args[5]
+        var result = ops_program_fit_native_py[E, KIND](
+            sid, program._id, args[3], args[4], options[0], options[1], options[2], options[3],
+            options[4], options[5], options[6], options[7], condition, otherwise)
+        program.loss_curve_ = result[0]
+        program.n_iter_ = result[1]
+        if name == "fit_if":
+            program.branch_counts_ = result[2]
+        return program
     if name == "gradient_report":
         return gradient_report_py[E, KIND](Int(py=sid), _ints(args[0], "handle", 1), Bool(py=args[1]))
     if name == "execution_profile_begin":

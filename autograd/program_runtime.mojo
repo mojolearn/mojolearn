@@ -2,9 +2,11 @@
 # Native execution and minibatch training of captured operation graphs.
 # All graph/epoch/batch walks, random streams and optimizer state live here.
 from sequence.exec_trait import Exec
+from std.memory import bitcast
 from sequence.ops import FP, Args, OP_COPY, OP_SEQ_IOTA
 from autograd.ops_api import OpsSession, OPS_DROPOUT
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape
+from autograd.program_choice import ProgramChoice, conditional_program
 from autograd.rankn import ShapeN
 from autograd.tape import Tape, Tensor
 from autograd.cast_ops import upload_cast, upload_cast_i32
@@ -36,6 +38,7 @@ def replay_values[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], p: OpsProgram, inputs: List[FP], shapes: List[ShapeN],
     params: List[FP], trainable: List[Bool], mut temps: List[Int], mut phs: List[Int],
     step: Int = -1,
+    random_stride: Int = 0, random_offset: Int = 0,
 ) raises -> List[Int]:
     var vals = List[Int]()
     for j in range(len(inputs)):  # driver-loop: over program inputs
@@ -61,7 +64,8 @@ def replay_values[E: Exec & Movable & Deinitable](
         if step >= 0 and p.code[k] == OPS_DROPOUT:
             # Preserve the caller's stream key; advance its counter per
             # optimizer step and node so distinct layers never share masks.
-            ints[len(ints) - 1] += step * p.n_nodes() + k
+            var stride = random_stride if random_stride > 0 else p.n_nodes()
+            ints[len(ints) - 1] += step * stride + random_offset + k
         var h = s._program_op(k, p.code[k], hs, ints, fs)
         temps.append(h)
         vals.append(h)
@@ -106,12 +110,20 @@ def release_training_buffers[E: Exec](
     ex.free(losses)
 
 
-def train_program[E: Exec & Movable & Deinitable](
+def train_program_control[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
-) raises:
+    condition_id: Int, otherwise_id: Int,
+) raises -> Tuple[Int, Int]:
     var p = s.program(pid)
+    var conditional = condition_id > 0 and otherwise_id > 0
+    if (condition_id > 0) != (otherwise_id > 0):
+        raise Error("ValueError: conditional training needs condition and otherwise Programs")
+    var choice = ProgramChoice()
+    if conditional:
+        choice = conditional_program(p, s.program(condition_id), s.program(otherwise_id))
+        p = choice.body.copy()
     if s.tape.is_recording():
         raise Error("Program.fit uses a captured inference session")
     if epochs < 1 or batch < 1 or len(srcs) != p.n_in or len(parameters) < 1 or len(p.outs) != 1:
@@ -132,6 +144,8 @@ def train_program[E: Exec & Movable & Deinitable](
                 var slot = s._slot(p.params[j])
                 if s.int_words[slot]:
                     raise Error("Program.fit cannot train integer ids")
+                if conditional and not choice.body_parameters[j] and not choice.other_parameters[j]:
+                    raise Error("ValueError: conditional training cannot update a predicate-only parameter")
                 trainable[j] = True
                 found = True
         if not found:
@@ -166,6 +180,8 @@ def train_program[E: Exec & Movable & Deinitable](
     swap(held, s.prog_tape)
     swap(held, s.tape)
     var temps = List[Int]()
+    var true_batches = 0
+    var false_batches = 0
     try:
         s.tape.record()
         for e in range(epochs):  # driver-loop: over epochs
@@ -196,18 +212,56 @@ def train_program[E: Exec & Movable & Deinitable](
                 for j in range(len(states)):  # driver-loop: over optimizer states
                     if states[j] >= 0:
                         step = max(step, s.opt_states[states[j]].t)
-                var outs = replay_values(s, p, batches, batch_shapes, params, trainable, temps, phs, step)
+                var branch = p.copy()
+                var selected = trainable.copy()
+                var random_stride = 0
+                var random_offset = 0
+                if conditional:
+                    # The predicate sees this minibatch and current shared
+                    # parameters, but contributes no derivative. No Python
+                    # callback, unselected branch replay or gradient update.
+                    s.tape.no_grad()
+                    var no_grad = List[Bool](length=len(params), fill=False)
+                    var pred_params = List[Int]()
+                    var decision = replay_values(s, choice.condition, batches, batch_shapes,
+                                                 params, no_grad, temps, pred_params)
+                    if s.shape_nd(decision[0]).count() != 1:
+                        raise Error("ValueError: conditional training predicate must return one scalar")
+                    var scalar = s.scalar(decision[0])
+                    if (bitcast[DType.uint32](scalar) & UInt32(0x7fffffff)) >= UInt32(0x7f800000):
+                        raise Error("ValueError: conditional training predicate must be finite")
+                    var take_body = scalar != 0
+                    if take_body:
+                        true_batches += 1
+                    else:
+                        false_batches += 1
+                        branch = choice.otherwise.copy()
+                    for j in range(len(selected)):  # driver-loop: over chosen branch trainable parameters
+                        selected[j] = trainable[j] and (choice.body_parameters[j] if take_body else choice.other_parameters[j])
+                    s._drop_temps(temps)
+                    temps.clear()
+                    s.tape.reset()
+                    s.tape.record()
+                    # Epoch plus minibatch is a persistent native step key.
+                    # Distinct branch node spans cannot reuse dropout keys.
+                    step = epoch * n_batches + bi
+                    random_stride = p.n_nodes() + choice.otherwise.n_nodes()
+                    random_offset = 0 if take_body else p.n_nodes()
+                var outs = replay_values(s, branch, batches, batch_shapes, params, selected,
+                                         temps, phs, step, random_stride, random_offset)
                 var out = s.tensor(outs[0])
                 var y = s.tape.variable(s.ex, yb, count, max(1, target.cols), False)
                 var loss = program_loss(s.tape, s.ex, out, y, loss_kind, delta)
-                s.tape.backward_scalar_with_rules(s.ex, loss, ImportRules())
+                var differentiable = s.tape.requires_grad(loss)
+                if differentiable or not conditional:
+                    s.tape.backward_scalar_with_rules(s.ex, loss, ImportRules())
                 var weighted = s.tape.scale(s.ex, loss, Float32(count))
                 var a = Args()
                 a.p0 = s.tape.value(weighted)
                 a.p1 = batch_losses + bi
                 s.ex.launch[OP_COPY](a, 1)
                 for j in range(len(params)):  # driver-loop: over optimizer parameter updates
-                    if not trainable[j]:
+                    if not selected[j] or not differentiable:
                         continue
                     var si = states[j]
                     var st = s._state_view(si)
@@ -240,3 +294,13 @@ def train_program[E: Exec & Movable & Deinitable](
     swap(held, s.tape)
     swap(held, s.prog_tape)
     release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
+    return (true_batches, false_batches)
+
+
+def train_program[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
+    target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
+    epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
+) raises:
+    _ = train_program_control(s, pid, srcs, shapes, target, loss_kind, delta, optimizer,
+                              parameters, epochs, batch, shuffle_rows, seed, curve, 0, 0)
