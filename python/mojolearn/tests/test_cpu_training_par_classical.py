@@ -92,18 +92,22 @@ def test_cpu_operations_are_the_python_sharded_drivers():
             for body in bodies:
                 assert "DevicePool(devices)" in body and "cooperative=True" not in body, (
                     f"{op} in {rel} is not sent from a non-cooperative pool")
-    # par-mlp's and par-samba's gradient shards: ParallelNeuralTrainer builds a
-    # plain pool for mlp_gradient/samba_gradient and a cooperative one for the
-    # matching update in the same __init__, so their admission is checked by
-    # name here and below, not by body.
+    # ParallelNeural's public API now enters one native owner. Its native
+    # owner retains the same plain gradient / cooperative update distinction;
+    # complete-operation and child audits live in test_parallel_neural_native.
     trainer = _read("python/mojolearn/parallel_training.py")
-    assert "self._operation = 'mlp_gradient'" in trainer and "self._pool = DevicePool(devices)" in trainer
-    assert "self._operation = 'samba_gradient'" in trainer
-    assert "self._update_pool = DevicePool(self._pool.devices, cooperative=True)" in trainer
-    # the one request per logical shard, and the single update that folds them
-    assert "results = self._pool.map(requests)" in trainer
-    assert "self._operation.replace('_gradient', '_update')" in trainer
-    # the fold is the driver's own Python, in shard order
+    assert 'return _native_parallel_neural("init", (self, model, devices, logical_shards))' in trainer
+    assert 'return _native_parallel_neural("train", (self, shards))' in trainer
+    coordinator = _read("bindings/parallel_neural_native.mojo")
+    assert 'operation = "mlp_gradient"' in coordinator
+    assert 'operation = "samba_gradient"' in coordinator
+    assert 'process_pool_create(devices, False, child_module)' in coordinator
+    assert 'process_pool_create(pool["devices"], True, child_module)' in coordinator
+    assert 'process_pool_map(owner._pool, requests)' in coordinator
+    assert '"samba_update" if samba else "mlp_update"' in coordinator
+    assert 'var grads = neural_ordered_sum(args)' in coordinator
+    # The legacy shared worker retains these private operations for its other
+    # callers; this is not evidence that its Python execution is compliant.
     worker = _read("python/mojolearn/_parallel_worker.py")
     assert "if operation in ('samba_gradient', 'samba_update'):" in worker
     assert "gradients = ordered_sum_gradients(args)" in worker
