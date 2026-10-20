@@ -42,8 +42,10 @@ infinities/subnormals, retained intermediate/repeated outputs, independent outpu
 buffers, variable ranks, invalid reshape/rank refusals and recovery, copy/detach
 boundaries, lazy control flow, bounded loops, serialization and derivatives.
 The existing post-optimization training oracle now includes transpose chains.
-The optimization source round enumerated 20 cases and 88 numerical digests. Cheap controller tests
-validate the reporting and audit machinery; they do not qualify native execution.
+That optimization source freeze enumerated 20 cases and 88 expected numerical
+digests. Cheap controller tests validate the reporting and audit machinery;
+they do not qualify native execution. Later frozen execution evidence is
+recorded below; these historical case counts must not be added together.
 
 The first native optimizer run exposed a preexisting layout inconsistency: eager
 and unoptimized materialized permutations/transposes flushed subnormals through
@@ -82,8 +84,9 @@ Epochs, batches, selection, tape walks, loss aggregation and updates run in Mojo
 Both ordinary and conditional fit now assign public result attributes natively.
 The verifier adds independent scalar SGD, shared-state step counts, inactive
 AdamW state, zero-update branches, lazy invalid branches, scalar/finite predicate
-refusals, session identity and recovery checks. The full source verifier now has
-23 cases and 109 numerical digests; native compilation/execution is pending.
+refusals, session identity and recovery checks. That source freeze enumerated
+23 cases and 109 expected numerical digests; subsequent CPU/Metal execution
+evidence is recorded below.
 This is component composition for conditional minibatch training, not arbitrary
 nested graph regions, loop training, differentiated predicates or distributed
 control flow.
@@ -102,8 +105,10 @@ dropout, changing learning rate, exact parameter/moment/scalar equality, complet
 epoch curves and subsequent inference. It also corrupts a step counter while
 repairing the outer hash and checks the semantic refusal and recovery.
 
-The parent will compile the combined conditional fit/checkpoint source once and
-run its affected native cases plus existing ordinary-fit regression coverage.
+The parent compiled the combined conditional fit/checkpoint freeze. Stage31
+passes its five affected CPU/Metal cases with 34 matching digests and all 11
+ordinary Program regression tests. This is source evidence, not an installed
+release qualification.
 These source changes do not resolve the confirmed std.python ownership leak,
 qualify untested physical vendors, or promote any optimization default.
 
@@ -132,9 +137,10 @@ placement and profiled logical output bytes; declined observable/shared/no-op or
 ambiguous dynamic expansions; invalid-shape refusal and recovery; finite
 differences and original VJPs; lazy branches and bounded loops; plain/control
 checkpoint replay; and unchanged Adam training state after optimized inference.
-The source registry has 26 cases and 126 expected output digests. Source/controller
-checks do not execute or qualify this candidate. Native compilation, physical
-vendor and installed-package evidence remain pending; the default remains off.
+That source registry enumerated 26 cases and 126 expected output digests.
+Source/controller checks do not execute or qualify the candidate. Subsequent
+CPU/Metal evidence is recorded below; current installed NVIDIA/AMD evidence and
+full-workload timing remain pending, and the default remains off.
 The existing upstream PythonObject ownership blocker remains unchanged.
 
 ## Integer loop-state correction
@@ -155,4 +161,45 @@ normal integer embedding/captured-input/checkpoint paths stay available.
 The added verifier case checks direct/parameter/wrapped refusals, recovery,
 zero-iteration behavior, floating argmax/VJP, eager and captured integer
 embedding, and serialization. Registry: 27 cases, 131 expected output digests.
-Native compilation and runtime validation of this repair remain pending.
+CPU/Metal compilation and the affected numerical/refusal cases pass in the
+stage40 evidence below; installed/current NVIDIA/AMD qualification is pending.
+
+## Current frozen evidence and remaining scope
+
+Evidence paths are relative to `~/mojolearn-evidence/core-completion-20261020/`.
+Source overlays and previous installed versions are identified separately.
+
+| Freeze / target | Retained evidence | Result and limit |
+|---|---|---|
+| Stage40 CPU and Metal, source overlay | `stage40-full-graph-{cpu,metal}-summary.json`, `stage40-graph-comparison.json` | Both sequence bindings compile. Each verifier reports 26 passing cases and one failed Session lifetime case; all 128 digests from passing cases match. Includes ReLU/expand motion, integer loop guards, conditional training/resume, layout special values and diagnostics. These are failed full qualification reports, not 27/27 passes. |
+| Stage34 installed AMD, actual HIP gfx942 | `retrieved/amd-round2-stage34/graph.json`, `graph-cpu-comparison.json` | 22 passing cases and the same lifetime failure; all 106 passing digests match the corresponding CPU/Metal source. This earlier binary does not cover the later ReLU/expand and integer-kind changes. |
+| Stage41 CPU and Metal, source overlay | `stage41-graph-{cpu,metal}-summary.json`, `stage41-graph-comparison.json` | Each run retains 26 passing cases and the known lifetime failure after constructor/native boundary integration; 128 passing digests match. This does not substitute for installed current-vendor qualification. |
+
+The original failures remain retained, including the pre-repair layout word
+mismatch and ownership failure. The independent supported-stdlib reproducer
+establishes the PythonObject reference-retention blocker; numerical passes and
+whole-operation Python traces do not repair it. No compensating reference-count
+code, compiler output rewriting or unsupported build mode is part of this work.
+
+Implemented control is explicit composition of captured component Programs.
+Predicates are finite scalar, discrete decisions. Executed-path VJPs cover the
+selected branch or bounded loop iterations; conditional minibatch training
+covers same-session branches and shared parameters. This does not implement
+arbitrary nested control regions inside a captured DAG, loop-based `fit`,
+differentiated predicates, symbolic Python tracing or distributed control graphs.
+Variable-rank replay remains bounded by each existing operation's shape/kind
+contract; it is not arbitrary-shape acceptance by every operator.
+
+Optimization currently covers shape-proven view rewrites, pruning of newly
+redundant intermediates, exact duplicate elimination, and the bounded ReLU/expand
+motion. General fusion, reduction rewrites, a cost-driven scheduler and actual
+storage recycling are absent. The original training graph remains unchanged.
+No whole-workload performance benefit has been established; all optimization
+switches remain opt-in pending full-dataset NVIDIA/AMD A/B and correctness rules.
+
+Diagnostics include node provenance/errors, logical liveness, numerical gradient
+checks and executor allocation/copy/synchronization/launch accounting. Their
+host intervals and tracked storage do not provide a whole-process memory map,
+GPU hardware event timelines or comprehensive distributed critical-path tracing.
+Broader operation/composition/derivative and installed-vendor coverage remains
+completion work, independently of the bounded additions already exercised.
