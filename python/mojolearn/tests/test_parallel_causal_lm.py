@@ -145,7 +145,13 @@ def block_reference(model, ids, state=None, *, step=False):
     x = model._prims.embedding(model._embed, ids.reshape((b * length,)))
     x = x.reshape((b, length, model.d_model))
     for i, block in enumerate(model.blocks):
-        x = block._call(x, None if state is None else state.layers[i], step=step)
+        layer_state = None if state is None else state.layers[i]
+        x = block._call(x, layer_state, step=step)
+        if model.kind == 'mamba1' and layer_state is not None and layer_state.profile_id == 1:
+            # The retained private block driver only tracks positions for its
+            # affine profile. Public model checkpoints track consumed tokens
+            # for both profiles; independently maintain that metadata here.
+            layer_state.absolute_position += length
     x = x.reshape((b * length, model.d_model))
     if model._norm is not None:
         x = model._prims.rms_norm(x, model._norm, model.norm_eps)
@@ -188,9 +194,16 @@ def test_native_owners_match_independent_blocks_and_continue_states(tmp_path, mo
         reference_state = plain.allocate_state(2, 12)
         state = checked(split.allocate_state, 2, 12)
         bits(checked(split.forward, ids, state), block_reference(plain, ids, reference_state))
+        if family == 'mamba':
+            assert [layer.snapshot().absolute_position for layer in state.layers] == [3] * plain.n_layers
+            assert [layer.absolute_position for layer in reference_state.layers] == [3] * plain.n_layers
+        assert state_digest(state) == state_digest(reference_state)
         token = Array.from_list([[5], [6]], '<i4')
         bits(checked(split.step, token, state), block_reference(plain, token, reference_state, step=True)[:, 0])
         assert state.positions == 4
+        if family == 'mamba':
+            assert [layer.snapshot().absolute_position for layer in state.layers] == [4] * plain.n_layers
+            assert [layer.absolute_position for layer in reference_state.layers] == [4] * plain.n_layers
         assert state_digest(state) == state_digest(reference_state)
         checked(split.reset_state, state)
         assert state.positions == 0
@@ -393,8 +406,13 @@ import numpy as np
 from pathlib import Path
 from mojolearn import _backend
 from mojolearn.models import ParallelCausalLM
+from mojolearn.models.causal_lm import _NATIVE_CONTEXT
 from mojolearn._verify_native_runtime import audit_native_call
 assert _backend.vendor() == 'metal' and _backend.default_mode() == 'fast'
+# Parent checkpoint preparation must use its selected tier; only the isolated
+# worker imports identical. Loading both Mojo-owned tiers in one process is
+# correctly refused by the registry and is not a supported escape route.
+assert _NATIVE_CONTEXT['bindings']['gpu:fast']['transformer'].transformer_numeric_mode() == 0
 reports = {}
 model = None
 try:
