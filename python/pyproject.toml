@@ -159,7 +159,7 @@ mojolearn = "mojolearn_diagnostics:main"
 [tool.setuptools]
 # Listed explicitly rather than discovered, so a new subpackage is a
 # deliberate edit and not a silent addition to a published artifact.
-packages = ["mojolearn", "mojolearn.models"]
+packages = ["mojolearn", "mojolearn.models", "mojolearn.importers"]
 py-modules = ["mojolearn_diagnostics"]
 include-package-data = false
 
