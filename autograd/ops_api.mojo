@@ -36,7 +36,14 @@ runs), with the moment buffers and the step count held in the session, per
 is elementwise and its host scalars depend on the step count and the
 learning rate alone, so a parameter stepped here gets the words
 Sequential.fit's one flat launch gives it (sequence/recurrent.mojo
-opt_step: the same OP_OPT arguments, opt_scalars word for word)."""
+opt_step: the same OP_OPT arguments, opt_scalars word for word).
+
+Higher order (lane ag-ho-session, docs/plans/AUTOGRAD_HIGHER_ORDER.md
+section 5): `backward_graph` records the backward pass itself
+(autograd/higher.mojo backward_scalar_recorded), so `grad_handle` returns a
+gradient as a session tensor that later operations and a second backward
+can use; `backward_seed`, `vjp`, `hvp` and `jvp` are built from it with tape
+operations only (no new kernels)."""
 from std.ffi import _Global
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
