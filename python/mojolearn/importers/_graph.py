@@ -544,6 +544,18 @@ def _r_gather(c, n):
     return [_out(out, c.dtype(data), folded)]
 
 
+def _r_gather_nd(c, n):
+    s, si = c.shape(n.inputs[0]), c.shape(n.inputs[1])
+    if n.attrs.get("batch_dims", 0):
+        raise _Refuse("GatherND with batch_dims (only 0 is supported)")
+    if not si:
+        raise _Refuse("GatherND indices of rank 0")
+    k = si[-1]
+    if not isinstance(k, int) or k < 1 or k > len(s):
+        raise _Refuse(f"GatherND index depth {k} for a tensor of rank {len(s)}")
+    return [_out(tuple(si[:-1]) + tuple(s[k:]), c.dtype(n.inputs[0]))]
+
+
 def _r_reduce(c, n):
     s = c.shape(n.inputs[0])
     axes = _axes_of(c, n)
@@ -727,6 +739,7 @@ SHAPE_RULES.update({
     "GlobalMaxPool": _r_global_pool, "Conv": _r_conv, "MaxPool": _r_pool, "AveragePool": _r_pool,
     "Shape": _r_shape, "Size": _r_size, "ConstantOfShape": _r_constant_of_shape, "Range": _r_range,
     "Cast": _r_cast, "Pad": _r_pad, "Constant": _r_constant,
+    "CumSum": _r_same, "GatherND": _r_gather_nd,
 })
 
 

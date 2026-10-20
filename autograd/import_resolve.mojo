@@ -874,6 +874,21 @@ def _r_gather(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
     return res^
 
 
+def _r_gather_nd(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
+    var s = c.shape(_in(n, 0))
+    var si = c.shape(_in(n, 1))
+    if _ai(g, n, "batch_dims", 0) != 0:
+        raise Error("GatherND with batch_dims (only 0 is supported)")
+    if len(si) == 0:
+        raise Error("GatherND indices of rank 0")
+    var k = si[len(si) - 1]
+    if k < 1 or k > len(s):
+        raise Error("GatherND index depth " + String(k) + " for a tensor of rank " + String(len(s)))
+    var res = List[ROut]()
+    res.append(_out(_cat(_slice(si, 0, len(si) - 1), _slice(s, k, len(s))), c.dtype(_in(n, 0))))
+    return res^
+
+
 def _r_reduce(mut c: RCtx, g: OnnxGraph, n: GNode) raises -> List[ROut]:
     var s = c.shape(_in(n, 0))
     var axes = List[Int]()
@@ -1171,8 +1186,10 @@ def _rule(mut c: RCtx, g: OnnxGraph, n: GNode, op: String, mut found: Bool) rais
         return _r_dropout(c, g, n)
     if op == "Where":
         return _r_where(c, g, n)
-    if op == "Clip" or op == "InstanceNormalization" or op == "GroupNormalization":
+    if op == "Clip" or op == "InstanceNormalization" or op == "GroupNormalization" or op == "CumSum":
         return _r_same(c, n)
+    if op == "GatherND":
+        return _r_gather_nd(c, g, n)
     if op == "MatMul":
         return _r_matmul(c, n)
     if op == "Gemm":
