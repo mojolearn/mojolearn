@@ -74,6 +74,15 @@ from pyproject.toml with the same field order setuptools 84 wrote for
 a drift is a visible line rather than a silent difference between the two
 artifacts of one release.
 
+MERGED BINDINGS (2026-10-20, packaging/linux/merged_layout.py). Each set
+directory (`<arch>/`, `<arch>/identical/`, `<arch>/host/`) ships one
+`<name>.so` per binding, or the merged files of bindings/merged_groups.json
+(`_mojolearn_native.so`, `_mojolearn_native_host.so`) plus the index
+`_mojolearn_merged.json` naming each file's members. The layout is read from
+the directory, one per wheel; the exactness checks hold the index members to
+the same binding lists, the index ships beside its files, and
+LINUX_PAYLOAD.json records it in `merged_indexes` with `binding_layout`.
+
 REUSED BINDINGS (2026-09-23, tools/release_reuse.py). A set directory may
 carry `reuse.json`: the bindings, host bindings and runtime libraries in it
 that were TAKEN FROM THE LAST PUBLISHED WHEEL because their identity (source
@@ -149,6 +158,19 @@ except ImportError:  # pragma: no cover
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from device_glue import DEVICE_GLUE, NO_IMAGE, validate as validate_device_glue
+# THE BINDING LAYOUT OF A SET DIRECTORY (merged bindings, 2026-10-20): one
+# <name>.so per binding, or one merged <stem>.so per group of
+# bindings/merged_groups.json plus the index _mojolearn_merged.json that names
+# each file's members. Read from each directory (index present = merged), never
+# from MOJOLEARN_MERGED_BINDINGS; one layout per wheel. The index is shipped in
+# every set directory beside the binaries, so it is in the wheel and its RECORD,
+# and LINUX_PAYLOAD.json carries it in `merged_indexes` (the `.so` maps keep
+# only binaries).
+import merged_layout  # noqa: E402
+MERGED_INDEX = merged_layout.INDEX
+#: The binaries a host/ directory holds; the merged host file
+#: `_mojolearn_native_host.so` matches it too.
+HOST_GLOB = "_mojolearn_*_host.so"
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 PY_DIR = REPO / "python"
@@ -226,7 +248,13 @@ REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 #: built with nothing taken from the published wheel, else
 #: dict(files={set-relative path: record}, origin={version, source_commit,
 #: wheel, wheel_sha256}).
-SetDir = collections.namedtuple("SetDir", "vendor arch files libs manifest hosts reuse")
+#: `layout` is "merged" or "per-binding" (one for the fast, identical and host
+#: directories of the set); `indexes` maps each merged directory's index,
+#: set-relative ("_mojolearn_merged.json", "identical/...", "host/..."), to its
+#: path (None or {} per-binding). `hosts` maps each host binding to the file it
+#: loads from: its own file, or the merged host file for every member.
+SetDir = collections.namedtuple("SetDir", "vendor arch files libs manifest hosts reuse layout indexes",
+                                defaults=("per-binding", None))
 # The combined three-architecture set. The name keeps the number the profile was
 # authored under; the profile itself is RELEASE_PROFILE (`release-linux3`) and
 # ships whatever version python/mojolearn/_version.py says. DEVIATION 2290.
@@ -342,6 +370,13 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                          + ', '.join('/'.join(k) for k in sorted(required))
                          + ' (the Hopper slot spelled sm_90 or sm_90a); given '
                          + (', '.join('/'.join(k) for k in sorted(keys)) or 'none'))
+    # ONE BINDING LAYOUT PER WHEEL (merged bindings): every set merged, or
+    # every set per-binding; load_set already held each set to one.
+    layouts = {s.layout or 'per-binding' for s in sets}
+    if len(layouts) > 1:
+        raise SystemExit(profile + ' requires one binding layout for every set; given '
+                         + ', '.join(f'{s.vendor}/{s.arch}={s.layout}' for s in sets))
+    binding_layout = next(iter(layouts), 'per-binding')
     # A SET A LEG BUILT NEEDS ITS PROOF; a set whose every binding was taken
     # from the published wheel has none (its witnesses are the previous
     # release's), so the proofs number the built sets, not three.
@@ -352,7 +387,11 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     # A HOST BINDING BUILT FOR THIS RELEASE while every GPU set is the
     # published one: one leg (release_reuse's cheapest) built it and read it
     # back, so exactly one proof is required, that leg's.
-    host_built = {n for s in sets for n in (s.hosts or {}) if f'host/{n}.so' not in reused_of[(s.vendor, s.arch)]}
+    # Per file it loads from (its own, or the merged host file and its index).
+    host_built = {n for s in sets for n, p in (s.hosts or {}).items()
+                  if f'host/{p.name}' not in reused_of[(s.vendor, s.arch)]
+                  or (f'host/{MERGED_INDEX}' in (s.indexes or {})
+                      and f'host/{MERGED_INDEX}' not in reused_of[(s.vendor, s.arch)])}
     proofs_needed = len(built_keys) if built_keys else (1 if host_built else 0)
     if len(proof_paths) != proofs_needed:
         raise SystemExit(profile + ' requires one complete build proof per set a leg built: '
@@ -361,8 +400,19 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                          f'{proofs_needed} proof(s) needed, {len(proof_paths)} given')
     # Bindings only: the PTX set's PTX_BASELINE.json is its build manifest, bound
     # by the vendor marker, not a binding a build proof names.
+    # `extensions` are the SHIPPED BINARIES: one per binding, or the merged files.
     payload = {f'mojolearn/{rel}': sha(path).hex()
                for s in sets for rel, path in s.files.items() if rel.endswith('.so')}
+    # The indexes beside them, {'sha256', 'files'} each; the host index is one
+    # copy for the wheel (mojolearn/host/), byte-identical across the sets.
+    merged_indexes = {}
+    for s in sets:
+        for rel, path in sorted((s.indexes or {}).items()):
+            name = f'mojolearn/{rel}' if rel.startswith('host/') else f'mojolearn/{s.vendor}/{s.arch}/{rel}'
+            row = index_record(path)
+            if merged_indexes.setdefault(name, row) != row:
+                raise SystemExit(f'{profile}: the sets disagree on {name}; the host index is vendor-neutral, '
+                                 'so one copy is wrong')
     origin = {}
     for s in sets:
         reused = reused_of[(s.vendor, s.arch)]
@@ -379,25 +429,30 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     # Keyed by basename since 0.8.6: every host family the manifest ships,
     # each with the legs that built it and one digest (the byte compare in
     # main() has already refused legs that disagree).
+    # Merged: every member's record names the merged host file it loads from.
     host_record = {}
     for name in HOST_NAMES:
         seen = {f'{s.vendor}/{s.arch}': sha(s.hosts[name]).hex() for s in sets if name in (s.hosts or {})}
         if seen:
-            taken = [s for s in sets if f'host/{name}.so' in reused_of[(s.vendor, s.arch)]]
-            host_record[name] = dict(archive_path=f'mojolearn/host/{name}.so',
+            leaves = {s.hosts[name].name for s in sets if name in (s.hosts or {})}
+            if len(leaves) != 1:
+                raise SystemExit(f'{profile}: the sets load {name} from different files: {sorted(leaves)}')
+            leaf = leaves.pop()
+            taken = [s for s in sets if f'host/{leaf}' in reused_of[(s.vendor, s.arch)]]
+            host_record[name] = dict(archive_path=f'mojolearn/host/{leaf}',
                                      sha256=sorted(set(seen.values()))[0],
                                      vendor='cpu', supported_modes=['identical'],
                                      unsupported_modes=['fast'],
                                      built_by=sorted(seen),
                                      origin='reused' if taken else 'built',
-                                     **(reuse_origin(taken[0], taken[0].reuse['files'][f'host/{name}.so'])
+                                     **(reuse_origin(taken[0], taken[0].reuse['files'][f'host/{leaf}'])
                                         if taken else dict(from_release=None)),
                                      scope='CPU training and inference with no GPU; one '
                                            'copy for every architecture in this wheel')
-            origin[f'mojolearn/host/{name}.so'] = dict(
+            origin[f'mojolearn/host/{leaf}'] = dict(
                 origin=host_record[name]['origin'], from_release=host_record[name]['from_release'],
                 **({'from_leg': host_record[name]['from_leg']} if 'from_leg' in host_record[name] else {}),
-                identity_digest=taken[0].reuse['files'][f'host/{name}.so'].get('identity_digest') if taken else None,
+                identity_digest=taken[0].reuse['files'][f'host/{leaf}'].get('identity_digest') if taken else None,
                 built_by=[k for k in sorted(seen) if k not in {f'{s.vendor}/{s.arch}' for s in taken}])
     if set(host_record) != set(HOST_NAMES):
         raise SystemExit(profile + ' requires every host binding the manifest ships; missing: '
@@ -420,9 +475,20 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
             raise SystemExit('A build proof was given for a set whose every binding is reused: ' + '/'.join(key))
         expected = {n: h for n, h in payload.items()
                     if n.startswith(f'mojolearn/{key[0]}/{key[1]}/')}
-        required = {f'mojolearn/{key[0]}/{key[1]}/' +
-                    ('' if mode == 'fast' else mode + '/') + name + '.so'
-                    for mode in TIERS for name in tier_names(mode, True)}
+        the_set = next(s for s in sets if (s.vendor, s.arch) == key)
+        # Per-binding: one file per binding; merged: the planned files, their
+        # members checked through the proof's merged_indexes below.
+        if binding_layout == 'merged':
+            required = {f'mojolearn/{key[0]}/{key[1]}/' + ('' if mode == 'fast' else mode + '/') + f
+                        for mode in TIERS for f in merged_layout.plan(mode, True)}
+        else:
+            required = {f'mojolearn/{key[0]}/{key[1]}/' +
+                        ('' if mode == 'fast' else mode + '/') + name + '.so'
+                        for mode in TIERS for name in tier_names(mode, True)}
+        if proof.get('binding_layout', 'per-binding') != binding_layout:
+            raise SystemExit(f'The build proof of {"/".join(key)} records the binding layout '
+                             f'{proof.get("binding_layout", "per-binding")!r}; the set is {binding_layout}')
+        check_proof_indexes(proof, the_set, reused_of[key])
         # The leg built every binding of its set; the proof must name them
         # all, and its digest must be the shipped digest for every binding
         # the release did not take from the published wheel. For the taken
@@ -465,14 +531,17 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                 rows.update({r['relative']:r for r in decoded(proof['canonical_host_stage_witness'])['outputs']
                              if r['relative'].startswith('host/')})
             for rel, row in rows.items():
+                if merged_layout.is_index(rel):
+                    continue  # no binary; its digest is in merged_indexes
                 member = ('mojolearn/'+rel if rel.startswith('host/') else prefix+rel)
                 origin[member].update(origin='staged-admission',
                     compiled_from_commit=row['original_stamp']['commit'],
                     unstaged_sha256=row['original_sha256'], source_closure=row['admitted_closure']['digest'])
                 if rel.startswith('host/'):
-                    rec = host_record[pathlib.Path(rel).stem]
-                    rec['origin'] = 'staged-admission'
-                    rec['admitted_by'] = rec.pop('built_by', rec.get('admitted_by', []))
+                    # every binding the file serves (one per-binding, every member merged)
+                    for rec in (r for r in host_record.values() if r['archive_path'] == member):
+                        rec['origin'] = 'staged-admission'
+                        rec['admitted_by'] = rec.pop('built_by', rec.get('admitted_by', []))
 
     if len(commits) > 1 or any(i != inventories[0] for i in inventories[1:]):
         raise SystemExit('Architecture sets were built from different sources')
@@ -505,6 +574,8 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                 source_commit=commit, source_inventory=inventory,
                 sets=set_records,
                 extensions=payload,
+                merged_indexes=merged_indexes,
+                binding_layout=binding_layout,
                 binding_origin=origin,
                 reuse=dict(built=len(origin) - n_reused - n_admitted, reused=n_reused,
                            **({'staged_admitted': n_admitted} if n_admitted else {}),
@@ -524,6 +595,39 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                 host_native=host_record,
                 qualification='Build and file provenance only; installed runtime and numerical checks required',
                 runtime_coverage={'/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(keys)})
+
+
+def check_proof_indexes(proof, s, reused):
+    """A build proof's `merged_indexes` against set S (one SetDir).
+
+    Merged: one row per merged directory of the set (fast, identical/, and
+    host/ when the set carries host bindings), keyed
+    mojolearn/<vendor>/<arch>/[identical/|host/]_mojolearn_merged.json; each
+    row's members are exactly that directory's bindings (the byte LM once, in
+    the identical index alone) and its sha256 is the shipped index's, unless
+    the set took that index from the published wheel. Per-binding: none."""
+    got = proof.get('merged_indexes') or {}
+    prefix = f'mojolearn/{s.vendor}/{s.arch}/'
+    if (s.layout or 'per-binding') != 'merged':
+        if got:
+            raise SystemExit(f'The build proof of {s.vendor}/{s.arch} carries merged indexes; the set is per-binding')
+        return
+    want = {sub + MERGED_INDEX: (set(tier_names(tier, True)) if tier != 'host' else set(HOST_NAMES))
+            for tier, sub in (('fast', ''), ('identical', 'identical/'), ('host', 'host/'))
+            if sub + MERGED_INDEX in (s.indexes or {})}
+    if not isinstance(got, dict) or set(got) != {prefix + rel for rel in want}:
+        raise SystemExit(f'The build proof of {s.vendor}/{s.arch} names merged indexes '
+                         f'{sorted(got) if isinstance(got, dict) else got!r}; the set ships '
+                         f'{sorted(prefix + rel for rel in want)}')
+    for rel, names in want.items():
+        row = got[prefix + rel]
+        files = row.get('files') if isinstance(row, dict) else None
+        members = [n for m in (files or {}).values() for n in (m if isinstance(m, list) else [None])]
+        if not isinstance(files, dict) or len(members) != len(set(members)) or set(members) != names:
+            raise SystemExit(f'The build proof of {s.vendor}/{s.arch}: {rel} does not index exactly '
+                             'the bindings of its directory, each once')
+        if rel not in reused and row.get('sha256') != sha(s.indexes[rel]).hex():
+            raise SystemExit(f'Duplicate, stale or incomplete architecture proof: {rel} differs from the shipped index')
 
 
 def urlsafe_b64(digest):
@@ -644,15 +748,59 @@ def write_wheel(whl, entries, generated, dist):
 HOST_NAMES = wheel_host_bindings()
 
 
+def _layout_error(exc):
+    return SystemExit(f"pack_wheel: undeclared or missing native payload: {exc}")
+
+
+def set_dir_layout(directory, names, glob="_mojolearn*.so", plan_key=None, byte_lm=False):
+    """("merged" | "per-binding", {file.so: [members]}) of one set directory
+    that must serve exactly `names` (merged_layout.layout). A merged
+    directory's index must also be the bindings/merged_groups.json plan for
+    `plan_key` (fast, identical, host). SystemExit otherwise."""
+    try:
+        kind, files = merged_layout.layout(directory, names, glob)
+        if kind == "merged" and plan_key:
+            merged_layout.check_plan(directory, plan_key, byte_lm)
+    except merged_layout.LayoutError as exc:
+        raise _layout_error(exc) from exc
+    return kind, files
+
+
+def read_set_index(directory):
+    """The directory's merged index {file.so: [members]}, or None (per-binding)."""
+    try:
+        return merged_layout.read_index(directory)
+    except merged_layout.LayoutError as exc:
+        raise _layout_error(exc) from exc
+
+
+def binding_file(directory, name):
+    """The file binding `name` loads from in `directory`: its own file, else
+    the merged file the index names (the loader's rule)."""
+    try:
+        return pathlib.Path(merged_layout.member_file(directory, name))
+    except merged_layout.LayoutError as exc:
+        raise _layout_error(exc) from exc
+
+
+def index_record(path):
+    """{'sha256': hex, 'files': {file.so: [members]}} of one shipped index (a
+    `merged_indexes` row, the shape tools/verify_linux_surface_qualification.py reads)."""
+    files = read_set_index(pathlib.Path(path).parent)
+    return dict(sha256=sha(path).hex(), files={f: list(m) for f, m in sorted(files.items())})
+
+
 def host_witnesses(set_paths):
     """name -> sha256 of every host binding some architecture directory under
     `set_paths` READ BACK as `cpu` (a `host <name> cpu` row in its
-    readback.txt, the binary beside it). A host binding has no device code and
+    readback.txt, the binary it loads from beside it: its own file, or the
+    merged host file). A host binding has no device code and
     the same bytes are placed into every set; a set that reuses every GPU
     binding from the published wheel has no read-back of its own, so a host
     binding built for this release is proven there by the leg that built and
     read it back, byte for byte (release_reuse's linux-wait requires the host
-    bindings to be byte-identical across the legs)."""
+    bindings to be byte-identical across the legs). A merged host directory's
+    index is witnessed the same way, under the key MERGED_INDEX."""
     out = {}
     for sp in set_paths:
         sp = pathlib.Path(sp).resolve()
@@ -660,13 +808,24 @@ def host_witnesses(set_paths):
             rb = adir / "readback.txt"
             if not rb.is_file():
                 continue
+            witnessed = False
             for line in rb.read_text().splitlines():
                 row = line.split()
-                if len(row) == 3 and row[0] == "host" and row[2] == "cpu" and (adir / "host" / f"{row[1]}.so").is_file():
-                    digest = sha(adir / "host" / f"{row[1]}.so")
+                if len(row) != 3 or row[0] != "host" or row[2] != "cpu":
+                    continue
+                so = binding_file(adir / "host", row[1])
+                if so.is_file():
+                    witnessed = True
+                    digest = sha(so)
                     if out.setdefault(row[1], digest) != digest:
                         raise SystemExit(f"pack_wheel: host binding {row[1]} was read back with different bytes in two sets; "
                                          "one of them is not this release's")
+            index = adir / "host" / MERGED_INDEX
+            if witnessed and index.is_file():
+                digest = sha(index)
+                if out.setdefault(MERGED_INDEX, digest) != digest:
+                    raise SystemExit("pack_wheel: the merged host index was read back with different bytes in two "
+                                     "sets; one of them is not this release's")
     return out
 
 
@@ -675,12 +834,13 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
     directory. One tuple per architecture subdirectory. `host_witnesses_by_name`
     (see `host_witnesses`) lets a set that reuses every GPU binding carry a
     host binding built for this release when a witnessed set holds the same
-    bytes."""
+    bytes. Each directory of a set (fast, identical/, host/) is per-binding or
+    merged (merged_layout); a set never mixes the two."""
     path = pathlib.Path(path).resolve()
     vendor = path.name
     if vendor not in LINUX_VENDORS:
         raise SystemExit(f"pack_wheel: set directory must be named cuda or hip: {path}")
-    if any(path.glob("_mojolearn*.so")):
+    if any(path.glob("_mojolearn*.so")) or (path / MERGED_INDEX).exists():
         raise SystemExit(
             f"pack_wheel: {path} holds binaries with NO architecture level. "
             "That set predates the architecture axis (2026-08-30) and would "
@@ -696,23 +856,47 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
         # Experimental baselines use the generic profile, but a full baseline
         # build can include byte LM. Preserve that declared file and enforce
         # complete readbacks when present. Native generic semantics are unchanged.
+        # Merged: the byte LM is a member of the identical index.
         carry_byte_lm = include_byte_lm or (
             vendor == "cuda" and arch == "sm_80"
             and (adir / gpu_plugins.BASELINE_MANIFEST).is_file()
-            and (adir / "identical/_mojolearn_byte_lm.so").is_file())
+            and binding_file(adir / "identical", "_mojolearn_byte_lm").is_file())
         manifest = json.loads((adir / "manifest.json").read_text())
         reuse = load_reuse(adir, vendor, arch)
         reused = reuse["files"] if reuse else {}
-        expected_rels = {("" if tier == "fast" else tier + "/") + name + ".so"
-                         for tier in TIERS for name in tier_names(tier, carry_byte_lm)}
+        # EVERY TIER DIRECTORY'S LAYOUT FIRST, exact both ways: per-binding,
+        # one <name>.so per expected binding; merged, the planned files whose
+        # index members are exactly the expected bindings (the byte LM in the
+        # identical index once and in no fast index), no own member file
+        # beside the index.
+        tier_layouts = {}
+        for tier in TIERS:
+            d = adir if tier == "fast" else adir / tier
+            tier_layouts[tier] = set_dir_layout(d, tier_names(tier, carry_byte_lm),
+                                                plan_key=tier, byte_lm=carry_byte_lm)
+        host_dir = adir / "host"
+        host_index = read_set_index(host_dir)
+
+        def host_rels(names):
+            # set-relative files host/ ships for `names`: their own files, or
+            # the merged files serving them and the index
+            if host_index is None:
+                return {f"host/{n}.so" for n in names}
+            return ({f"host/{f}" for f, m in host_index.items() if set(m) & set(names)}
+                    | {f"host/{MERGED_INDEX}"})
+
+        expected_rels = set()
+        for tier, (kind, tfiles) in tier_layouts.items():
+            sub = "" if tier == "fast" else tier + "/"
+            expected_rels |= {sub + f for f in tfiles} | ({sub + MERGED_INDEX} if kind == "merged" else set())
         all_reused = bool(reuse) and expected_rels <= set(reused) and (
-            not carry_byte_lm or all(f"host/{n}.so" in reused for n in HOST_NAMES))
+            not carry_byte_lm or host_rels(HOST_NAMES) <= set(reused))
         has_witnesses = (adir / "readback.txt").is_file() and (adir / "arch_readback.txt").is_file()
         witnessed_built = []
         if not has_witnesses and not all_reused:
             missing = expected_rels - set(reused)
             if carry_byte_lm:
-                missing |= {f"host/{n}.so" for n in HOST_NAMES if f"host/{n}.so" not in reused}
+                missing |= host_rels(HOST_NAMES) - set(reused)
             built_host = {rel for rel in missing if rel.startswith("host/")}
             if not reuse or built_host != missing or not host_witnesses_by_name:
                 raise SystemExit(
@@ -720,21 +904,29 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                     "in it is taken from the published wheel (reuse.json); a built binding needs its read-back")
             # EVERY GPU BINDING IS THE PUBLISHED ONE; the host bindings built
             # for this release were read back as `cpu` by the leg that built
-            # them, in a set that holds the same bytes.
+            # them, in a set that holds the same bytes (a merged host file:
+            # every member it serves, and the index beside it).
             for rel in sorted(built_host):
-                name = rel[len("host/"):-len(".so")]
+                leaf = rel[len("host/"):]
                 so = adir / rel
-                if not so.is_file() or host_witnesses_by_name.get(name) != sha(so):
+                if leaf == MERGED_INDEX:
+                    served = []
+                    ok = so.is_file() and host_witnesses_by_name.get(MERGED_INDEX) == sha(so)
+                else:
+                    served = list(host_index[leaf]) if host_index is not None else [leaf[:-len(".so")]]
+                    ok = so.is_file() and all(host_witnesses_by_name.get(n) == sha(so) for n in served)
+                if not ok:
                     raise SystemExit(
                         f"pack_wheel: {adir}/{rel} was built for this release and no set with a read-back holds "
                         "the same bytes; a built binding needs its read-back")
-                witnessed_built.append(name)
+                witnessed_built.extend(served)
         if not has_witnesses:
             # EVERY GPU BINDING WAS TAKEN FROM THE PUBLISHED WHEEL. Its vendor and
             # architecture were read back on the box that built it, for the
             # release that shipped it; the bytes verified above are those. A
             # host binding built for this release is witnessed in another set.
-            host_named = [n for n in HOST_NAMES if f"host/{n}.so" in reused or n in witnessed_built]
+            host_named = [n for n in HOST_NAMES
+                          if "host/" + binding_file(host_dir, n).name in reused or n in witnessed_built]
         else:
             # THE HOST ROWS ARE READ SEPARATELY, and by name. The CPU training
             # binding has no device code and answers 'cpu', so folding it into the
@@ -742,6 +934,8 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
             # correct set or force those comparisons to accept 'cpu' from a GPU
             # binary, which is the failure they exist to catch. Rows whose first
             # field is `host` are pulled out here and checked on their own terms.
+            # Rows name each binding in either layout (a merged file's members
+            # are read back one by one).
             rb_lines = [ln.split() for ln in (adir / "readback.txt").read_text().splitlines()]
             host_rows = [r for r in rb_lines if r and r[0] == "host"]
             rb = [w for r in rb_lines if not (r and r[0] == "host") for w in r]
@@ -802,41 +996,59 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
         # older commit must not be refused. A named binding must be on disk;
         # a file on disk that no row names is refused, because an unread
         # binary is one whose vendor and column nobody checked. `host_payload`
-        # is a dict basename -> path, empty when the set carries none, and
-        # `main` says so once rather than shipping an export that cannot work.
+        # is a dict basename -> the file it loads from (its own, or the merged
+        # host file), empty when the set carries none, and `main` says so once
+        # rather than shipping an export that cannot work.
+        indexes = {}
         host_payload = {}
-        for name in host_named:
-            host_so = adir / "host" / f"{name}.so"
-            if not host_so.exists():
+        if host_index is None:
+            for name in host_named:
+                host_so = host_dir / f"{name}.so"
+                if not host_so.exists():
+                    raise SystemExit(
+                        f"pack_wheel: {adir}/readback.txt names {name} but {host_so} is absent")
+                host_payload[name] = host_so
+            on_disk = {p.name[:-3] for p in host_dir.glob(HOST_GLOB)} if host_dir.is_dir() else set()
+            if on_disk - set(host_named):
                 raise SystemExit(
-                    f"pack_wheel: {adir}/readback.txt names {name} but {host_so} is absent")
-            host_payload[name] = host_so
-        on_disk = {p.name[:-3] for p in (adir / "host").glob("_mojolearn_*_host.so")} if (adir / "host").is_dir() else set()
-        if on_disk - set(host_named):
-            raise SystemExit(
-                f"pack_wheel: {adir}/host/ holds bindings readback.txt never read back: "
-                f"{sorted(on_disk - set(host_named))}")
+                    f"pack_wheel: {adir}/host/ holds bindings readback.txt never read back: "
+                    f"{sorted(on_disk - set(host_named))}")
+            host_layout = "per-binding" if host_named else None
+        else:
+            # MERGED HOST: the index's members are exactly the bindings read
+            # back (an indexed member nobody read back is an unread binary),
+            # and the index is the manifest's host plan.
+            _, hfiles = set_dir_layout(host_dir, host_named, HOST_GLOB, plan_key="host", byte_lm=carry_byte_lm)
+            host_payload = {n: host_dir / f for f, m in hfiles.items() for n in m}
+            indexes[f"host/{MERGED_INDEX}"] = host_dir / MERGED_INDEX
+            host_layout = "merged"
+        kinds = {kind for kind, _ in tier_layouts.values()} | ({host_layout} if host_layout else set())
+        if len(kinds) != 1:
+            raise SystemExit(f"pack_wheel: {adir} mixes the merged and per-binding layouts across its "
+                             "fast, identical and host directories; a set is built in one layout")
+        layout = next(iter(kinds))
         files = {}
         for tier in TIERS:
             d = adir if tier == "fast" else adir / tier
-            names = tier_names(tier, carry_byte_lm)
-            actual = {p.name for p in d.glob('_mojolearn*.so')}
-            if actual != {n + '.so' for n in names}:
-                raise SystemExit(f'pack_wheel: undeclared or missing native payload in {d}: {sorted(actual)}')
-            for n in names:
-                so = d / (n + ".so")
+            kind, tfiles = tier_layouts[tier]
+            sub = "" if tier == "fast" else tier + "/"
+            for f in sorted(tfiles):
+                so = d / f
                 if not so.exists():
                     raise SystemExit(
-                        f"pack_wheel: {vendor}/{arch} {tier} set is missing {n}.so")
-                rel = (f"{vendor}/{arch}/{n}.so" if tier == "fast"
-                       else f"{vendor}/{arch}/{tier}/{n}.so")
-                files[rel] = so
+                        f"pack_wheel: {vendor}/{arch} {tier} set is missing {f}")
+                files[f"{vendor}/{arch}/{sub}{f}"] = so
+            if kind == "merged":
+                # the index ships beside its files: the loader trusts it
+                files[f"{vendor}/{arch}/{sub}{MERGED_INDEX}"] = d / MERGED_INDEX
+                indexes[sub + MERGED_INDEX] = d / MERGED_INDEX
         baseline_path = adir / gpu_plugins.BASELINE_MANIFEST
         if vendor == "cuda" and arch == gpu_plugins.PTX_ARCH:
             if not baseline_path.is_file():
                 raise SystemExit("pack_wheel: the PTX set (cuda/sm_80) requires its PTX_BASELINE.json")
             doc = json.loads(baseline_path.read_text())
-            digests = {rel.split("/", 2)[2]: sha(src).hex() for rel, src in files.items()}
+            # binaries only: an index is no PTX row (PTX_BASELINE.json binds it in `indexes`)
+            digests = {rel.split("/", 2)[2]: sha(src).hex() for rel, src in files.items() if rel.endswith(".so")}
             try:
                 gpu_plugins.validate_baseline_manifest(doc, digests)
             except ValueError as exc:
@@ -848,12 +1060,15 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
         if not libs:
             raise SystemExit(f"pack_wheel: {adir}/.libs is empty; stage_libs.py did not run")
         if reuse:
-            # `files` is keyed vendor/arch/<set-relative>; reuse.json is set-relative
+            # `files` is keyed vendor/arch/<set-relative>; reuse.json is set-relative,
+            # one record per shipped file in either layout (an index included)
             packed = {rel.split("/", 2)[2] for rel in files}
-            unknown = set(reused) - packed - {f"host/{n}.so" for n in host_named} - {f".libs/{n}" for n in libs}
+            host_shipped = {f"host/{p.name}" for p in host_payload.values()} | {
+                rel for rel in indexes if rel.startswith("host/")}
+            unknown = set(reused) - packed - host_shipped - {f".libs/{n}" for n in libs}
             if unknown:
                 raise SystemExit(f"pack_wheel: {adir}/reuse.json names files this set does not pack: {sorted(unknown)}")
-        out.append(SetDir(vendor, arch, files, libs, manifest, host_payload, reuse))
+        out.append(SetDir(vendor, arch, files, libs, manifest, host_payload, reuse, layout, indexes))
     return out
 
 
@@ -1021,6 +1236,12 @@ def main(argv=None, _gates=True):
     keys = [(s.vendor, s.arch) for s in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
+    # ONE BINDING LAYOUT PER WHEEL: the loader reads each directory's own
+    # layout, but a wheel whose sets differ is two builds packed as one.
+    if len({s.layout for s in sets}) > 1:
+        raise SystemExit("pack_wheel: the sets mix the merged and per-binding layouts: "
+                         + ", ".join(f"{s.vendor}/{s.arch}={s.layout}" for s in sets))
+    print(f"pack_wheel: binding layout {sets[0].layout}")
     if not strict and a.build_proof:
         raise SystemExit('--build-proof requires an explicit release profile')
     if not strict and any(s.reuse for s in sets):
@@ -1072,7 +1293,7 @@ def main(argv=None, _gates=True):
         if bundle and json.loads(manifest_bytes)["source_commit"] != inventory["source_commit"]:
             raise SystemExit("pack_wheel: the PTX set and the native sets were built from different commits")
         if split:
-            for mapping in ("extensions", "binding_origin"):
+            for mapping in ("extensions", "binding_origin", "merged_indexes"):
                 inventory[mapping] = {gpu_plugins.installed_member(k): v
                                       for k, v in inventory[mapping].items()}
         r = inventory['reuse']
@@ -1116,7 +1337,8 @@ def main(argv=None, _gates=True):
     entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
     entries["mojolearn/models/catalog.json"] = PKG / "models" / "catalog.json"  # mojolearn.models.catalog()
     seen_vendor_libs = set()
-    for vendor, arch, files, libs, _, _, _ in sets:
+    for s in sets:
+        vendor, files, libs = s.vendor, s.files, s.libs
         for rel, p in files.items():
             entries[f"mojolearn/{rel}"] = p
         if not shared and vendor not in seen_vendor_libs:
@@ -1155,12 +1377,29 @@ def main(argv=None, _gates=True):
             raise SystemExit(
                 f"pack_wheel: {name} is carried by {len(host_payloads)} of {len(sets)} sets; "
                 "every leg builds every host binding or none does")
-        entries[f"mojolearn/host/{name}.so"] = next(iter(host_payloads.values()))
+        leaves = {p.name for p in host_payloads.values()}
+        if len(leaves) != 1:
+            raise SystemExit(f"pack_wheel: the architecture legs load {name} from different files: {sorted(leaves)}")
+        # its own file, or the merged host file (one entry for all its members)
+        entries[f"mojolearn/host/{leaves.pop()}"] = next(iter(host_payloads.values()))
         carried += 1
         print(f"pack_wheel: {name} carried once from "
               f"{'/'.join(next(iter(host_payloads)))}, sha256 {next(iter(digests.values()))[:12]}, "
               f"byte-identical across {len(host_payloads)} legs")
     print(f"pack_wheel: {carried} of {len(HOST_NAMES)} host bindings carried")
+    # THE MERGED HOST INDEX, one copy beside the merged host file, held to the
+    # same rule: every set that carries host bindings carries the same bytes.
+    host_index_rel = f"host/{MERGED_INDEX}"
+    host_indexes = {(s.vendor, s.arch): s.indexes[host_index_rel] for s in sets if host_index_rel in (s.indexes or {})}
+    if host_indexes:
+        digests = {k: sha(p).hex() for k, p in host_indexes.items()}
+        carrying = [s for s in sets if s.hosts]
+        if len(set(digests.values())) != 1 or len(host_indexes) != len(carrying):
+            raise SystemExit(
+                "pack_wheel: the architecture legs disagree on the merged host index (or not every leg "
+                "that carries host bindings carries it): "
+                + ", ".join(f"{v}/{a}={d[:12]}" for (v, a), d in sorted(digests.items())))
+        entries[f"mojolearn/{host_index_rel}"] = next(iter(host_indexes.values()))
 
     # THE IDENTITY PAYLOAD (the packaging lane, 2026-09-14; docs/VERIFY.md),
     # the same files packaging/macos/build_release_wheel.sh copies into the
@@ -1333,8 +1572,9 @@ def main(argv=None, _gates=True):
         raise
 
     per_set = {}
-    for vendor, arch, files, libs, manifest, _, _ in sets:
-        per_set[f"{vendor}/{arch}"] = {
+    for s in sets:
+        manifest = s.manifest
+        per_set[f"{s.vendor}/{s.arch}"] = {
             "extensions_bytes": manifest["bytes_extensions"],
             "runtime_libs_bytes": manifest["bytes_staged_libs"],
             "driver_libs_not_staged": manifest["driver_libs_not_staged"],
