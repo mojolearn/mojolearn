@@ -97,16 +97,16 @@ def program_loss[E: Exec](
 
 
 def release_training_buffers[E: Exec](
-    mut ex: E, full: List[FP], batches: List[FP], ty: FP, yb: FP,
-    indices: FP, batch_losses: FP, losses: FP,
+    mut ex: E, full: List[FP], batches: List[FP], ty: Optional[FP], yb: Optional[FP],
+    indices: Optional[FP], batch_losses: Optional[FP], losses: Optional[FP],
 ) raises:
     for k in range(len(full)):  # driver-loop: over acquired full input buffers
         ex.free(full[k])
     for k in range(len(batches)):  # driver-loop: over acquired minibatch buffers
         ex.free(batches[k])
     for buffer in [ty, yb, indices, batch_losses, losses]:  # driver-loop: over nullable setup buffer owners
-        if Int(buffer) != 0:
-            ex.free(buffer)
+        if buffer:
+            ex.free(buffer.value())
 
 
 def train_program_control[E: Exec & Movable & Deinitable](
@@ -156,11 +156,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
             raise Error("Program.fit inputs must have equal sample counts and their captured ranks")
     if loss_kind != 0 and target.rows != n:
         raise Error("Program.fit targets must match the input sample count")
-    var ty = FP(unsafe_from_address=0)
-    var yb = FP(unsafe_from_address=0)
-    var indices = FP(unsafe_from_address=0)
-    var batch_losses = FP(unsafe_from_address=0)
-    var losses = FP(unsafe_from_address=0)
+    var ty = Optional[FP]()
+    var yb = Optional[FP]()
+    var indices = Optional[FP]()
+    var batch_losses = Optional[FP]()
+    var losses = Optional[FP]()
     var held = Tape()
     var swapped = False
     var temps = List[Int]()
@@ -180,7 +180,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
         ty = s.ex.alloc(max(1, target.count()))
         yb = s.ex.alloc(max(1, bs * target.cols))
         if loss_kind != 0:
-            upload_cast(s.ex, ty, target)
+            upload_cast(s.ex, ty.value(), target)
         for j in range(len(params)):  # driver-loop: over trainable parameter state
             if trainable[j]:
                 states[j] = s._state_of(oi, p.params[j], p.param_shapes[j].count())
@@ -195,10 +195,10 @@ def train_program_control[E: Exec & Movable & Deinitable](
         for e in range(epochs):  # driver-loop: over epochs
             var epoch = s.opts[oi].epoch
             if shuffle_rows:
-                permutation(s.ex, seed, epoch, n, indices)
+                permutation(s.ex, seed, epoch, n, indices.value())
             else:
                 var order = Args()
-                order.p0 = indices
+                order.p0 = indices.value()
                 s.ex.launch[OP_SEQ_IOTA](order, n)
             for bi in range(n_batches):  # driver-loop: over minibatches
                 var start = bi * bs
@@ -210,11 +210,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 for k in range(len(full)):  # driver-loop: over program inputs
                     var sh = shapes[k]
                     var width = sh.count() // n
-                    gather_rows(s.ex, full[k], indices, start, count, width, batches[k])
+                    gather_rows(s.ex, full[k], indices.value(), start, count, width, batches[k])
                     sh.d[0] = count
                     batch_shapes.append(sh)
                 if loss_kind != 0:
-                    gather_rows(s.ex, ty, indices, start, count, target.cols, yb)
+                    gather_rows(s.ex, ty.value(), indices.value(), start, count, target.cols, yb.value())
                 var phs = List[Int]()
                 var step = 0
                 for j in range(len(states)):  # driver-loop: over optimizer states
@@ -258,7 +258,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 var outs = replay_values(s, branch, batches, batch_shapes, params, selected,
                                          temps, phs, step, random_stride, random_offset)
                 var out = s.tensor(outs[0])
-                var y = s.tape.variable(s.ex, yb, count, max(1, target.cols), False)
+                var y = s.tape.variable(s.ex, yb.value(), count, max(1, target.cols), False)
                 var loss = program_loss(s.tape, s.ex, out, y, loss_kind, delta)
                 var differentiable = s.tape.requires_grad(loss)
                 if differentiable or not conditional:
@@ -266,7 +266,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 var weighted = s.tape.scale(s.ex, loss, Float32(count))
                 var a = Args()
                 a.p0 = s.tape.value(weighted)
-                a.p1 = batch_losses + bi
+                a.p1 = batch_losses.value() + bi
                 s.ex.launch[OP_COPY](a, 1)
                 for j in range(len(params)):  # driver-loop: over optimizer parameter updates
                     if not selected[j] or not differentiable:
@@ -281,15 +281,15 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     s.opt_states[si].pw1 = st.pw1
                     s.opt_states[si].pw2 = st.pw2
                     s.opt_states[si].mu_prod = st.mu_prod
-            var terms = s.tape.variable(s.ex, batch_losses, 1, n_batches, False)
+            var terms = s.tape.variable(s.ex, batch_losses.value(), 1, n_batches, False)
             var average = s.tape.scale(s.ex, s.tape.sum(s.ex, terms), identical_div(Float32(1), Float32(n)))
             var a = Args()
             a.p0 = s.tape.value(average)
-            a.p1 = losses + e
+            a.p1 = losses.value() + e
             s.ex.launch[OP_COPY](a, 1)
             s.scheduler_step(optimizer)
         s.ex.sync()
-        s.ex.download(curve, losses, epochs)
+        s.ex.download(curve, losses.value(), epochs)
     except err:
         if swapped:
             s._drop_temps(temps)
