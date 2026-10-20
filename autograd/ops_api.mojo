@@ -350,7 +350,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var slot = (h & _SLOT_MASK) - 1
         var gen = h >> _SLOT_BITS
         if h <= 0 or slot < 0 or slot >= len(self.live) or not self.live[slot] or self.generation[slot] != gen:
-            raise Error("ops: handle " + String(h) + " is not a live tensor of this session")
+            raise Error("ValueError: ops: handle " + String(h) + " is not a live tensor of this session")
         return slot
 
     def _add(mut self, t: Tensor, owned: Int, wants_grad: Bool, index_rows: Int) raises -> Int:
