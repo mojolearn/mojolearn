@@ -50,8 +50,8 @@ def _signed64(v):
 def fields(buf, start=0, end=None):
     """Yield ``(field_number, wire_type, value)`` for each field of the
     message in ``buf[start:end]``: an int for a varint, a memoryview for a
-    length-delimited field, the raw little-endian memoryview of 4 or 8 bytes
-    for fixed32/fixed64. Groups are refused (ONNX has none)."""
+    length-delimited field, and the raw little-endian memoryview of 4 or 8
+    bytes of a fixed32 or fixed64 field. Groups are refused (ONNX has none)."""
     if end is None:
         end = len(buf)
     pos = start
