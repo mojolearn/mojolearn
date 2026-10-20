@@ -242,8 +242,8 @@ def samba_validate_state(state: PythonObject, context: PythonObject) raises -> P
     if String(state["optimizer"]["kind"]) != "adamw":
         raise Error("Samba: optimizer kind must be adamw")
     var counter = Int(py=state["rng"]["counter"])
-    if counter < 0 or counter > 0xffffffff:
-        raise Error("Samba: RNG counter must be a 32-bit unsigned integer")
+    if counter < 0 or counter > 4294967296:
+        raise Error("Samba: RNG counter must be in [0, 2^32], including exhaustion")
     if Bool(py=state["rng"]["seed"] < 0) or Bool(py=state["rng"]["seed"] >= bi.int("18446744073709551616")):
         raise Error("Samba: RNG seed must be a 64-bit unsigned integer")
     _ = samba_schedule_from_state(state["schedule"], context)
