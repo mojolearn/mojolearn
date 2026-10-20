@@ -51,30 +51,54 @@ mkdir -p "$DEST/build_logs" "$DEST/sets"
 PIXI_ENV="${MOJOLEARN_BUILD_PIXI_ENV:-gbmbench}"
 JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
 [[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
-BUILD_CORES=$((2 * JOBS))
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
-# AN AMD GPU BINDING COMPILES WITH ONE WORKER, AND IS STILL NOT REPRODUCIBLE
-# (2026-09-22, lane/release-cpu-build-box). The Mojo compiler's gfx942 output
-# varies from run to run with a cold cache: a few register numbers or two
-# swapped instructions inside some embedded AMDGPU code objects
-# (gemm_identical, holtwinters). Measured at d181d9792 on RunPod CPU pods,
-# the Mojo cache wiped before every build:
+# AMD GPU COMPILER WORKERS ARE A CHOICE, NOT A FIXED ONE (lane/amd-compile-speed,
+# 2026-10-20). History: the Mojo compiler's gfx942 output varies run to run with
+# a cold cache, a few register numbers or two swapped instructions inside some
+# embedded AMDGPU code objects (gemm_identical, holtwinters). Measured at
+# d181d9792 on RunPod CPU pods, the Mojo cache wiped before every build:
 #   build_mixture.sh -j 2: 3 distinct binaries in 5 builds; -j 1: 1 in 5
 #   build_tsa.sh     -j 2: 2 in 4;  -j 1: 2 in 12 (8 of one, 4 of the other)
-# The variance is inside one compiler process (idle or loaded box alike), so
-# -j 1 narrows it and does not remove it; disabling ASLR to test the usual
-# cause (pointer-ordered containers) is refused inside a RunPod container.
-# A warm Mojo cache replays the first compile, which is why every single box
-# always looked reproducible. What makes a released AMD binary reproducible is
-# the binding cache: once built, the same key serves the same bytes to every
-# later build (tools/bincache.py). NVIDIA sets and the host bindings (CPU
-# codegen) keep two workers: every pair of cold builds compared matched (the
-# H100 and L40S legs against the CPU box at d181d9792, two cold CPU boxes at
-# 4756f57a9: 264 of 264 NVIDIA binaries, the host bindings on every box). The
-# host bindings in an AMD set also keep two, so they stay byte-identical to
-# the NVIDIA sets' copies (pack_wheel.py compares them).
+# so -j 1 narrows the BYTE variance and does not remove it; it was never the
+# thing that made a release reproducible. Two things are: the release contract
+# is the OUTPUT digest (same bits on Apple, NVIDIA and AMD, decided on the
+# hardware by tools/identity_break.py), and a released AMD binary's bytes are
+# frozen by the binding cache (tools/bincache.py, keyed on the worker count)
+# and by release reuse (tools/release_reuse.py packs the published bytes and
+# notes a gfx942 rebuild that differs, with its canonical class from
+# tools/compare_gpu_builds.py). No gate compares two independent AMD GPU
+# builds' raw bytes. With merged bindings one tier is ONE compile, so -j 1 made
+# the whole AMD set one serial compile.
+#
+# THE BOX RUN THAT DECIDES THE DEFAULT: tools/amd_compile_variance.sh on the
+# MI325X (cold cache; mixture -j 1 x2 and -j 8 x3; merged identical tier -j 1
+# vs -j 8). Results, filled in by the orchestrator:
+#   build times       -j 1: <owed> s   -j 8: <owed> s   merged tier: <owed> s vs <owed> s
+#   distinct bytes    -j 1: <owed>     -j 8: <owed>     canonical classes: <owed>
+#   gmm digests       <owed> (equal across all five builds = RESULTS-EQUAL)
+#   variance source   <owed> (REORDERED/SAME-KERNELS = packaging, canonical
+#                     compare covers it; CODE-DIFFERS = compiler, Modular ask)
+# AMD_COMPILE_JOBS_DEFAULT is the default after that run; it stays 1 until the
+# verdict reads RESULTS-EQUAL. MOJOLEARN_AMD_COMPILE_JOBS=1 keeps the old
+# one-worker path selectable for the A/B; tools/release_reuse.py reads this
+# line and the same variable, so a release's identity names the worker count.
+# NVIDIA sets and the host bindings (CPU codegen) keep two workers: every pair
+# of cold builds compared matched (the H100 and L40S legs against the CPU box
+# at d181d9792, two cold CPU boxes at 4756f57a9: 264 of 264 NVIDIA binaries,
+# the host bindings on every box). The host bindings in an AMD set also keep
+# two, so they stay byte-identical to the NVIDIA sets' copies (pack_wheel.py
+# compares them).
+AMD_COMPILE_JOBS_DEFAULT=1
 GPU_COMPILE_JOBS=2
-case "${MOJOLEARN_GPU_ARCHS:-}" in gfx*) GPU_COMPILE_JOBS=1 ;; esac
+case "${MOJOLEARN_GPU_ARCHS:-}" in
+  gfx*) GPU_COMPILE_JOBS="${MOJOLEARN_AMD_COMPILE_JOBS:-$AMD_COMPILE_JOBS_DEFAULT}" ;;
+esac
+[[ "$GPU_COMPILE_JOBS" =~ ^[1-9][0-9]?$ && "$GPU_COMPILE_JOBS" -le 32 ]] \
+  || { echo 'MOJOLEARN_AMD_COMPILE_JOBS must be 1..32' >&2; exit 2; }
+# The CPU cap covers the widest compile: JOBS scripts at once, each with up to
+# max(2, GPU_COMPILE_JOBS) compiler workers (still never beyond the inherited set).
+CORES_PER_JOB=$(( GPU_COMPILE_JOBS > 2 ? GPU_COMPILE_JOBS : 2 ))
+BUILD_CORES=$((CORES_PER_JOB * JOBS))
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 if [[ "$(uname -s)" != Linux ]]; then
@@ -90,7 +114,7 @@ taskset -pc "$BUILD_CPUS" $$ || exit 2
 # named as a FINDING while the rest of the pool carries on.
 . "$REPO/packaging/linux/binding_timeout.sh"
 BINDING_TIMEOUT=$(binding_timeout_seconds) || exit 2
-python3 -c 'import os, sys; assert 1 <= len(os.sched_getaffinity(0)) <= int(sys.argv[1]), "build affinity exceeds 2 x jobs"' "$BUILD_CORES" || exit 2
+python3 -c 'import os, sys; assert 1 <= len(os.sched_getaffinity(0)) <= int(sys.argv[1]), "build affinity exceeds max(2, gpu compile workers) x jobs"' "$BUILD_CORES" || exit 2
 TIERS="${MOJOLEARN_BUILD_TIERS:-fast identical}"
 # THE TWO LISTS BELOW ARE THE LINUX WHEEL'S CONTENTS AND THEY GO STALE
 # SILENTLY. A binding missing from them is not a build error -- it is a wheel
@@ -319,7 +343,7 @@ build_one() {
   if [[ "$s" = merged_build.sh ]]; then
     # ONE MERGED COMPILE PER DIRECTORY SET, under its own larger bound. Same
     # environment as the per-binding builds of that set: GPU tiers keep the
-    # vendor's GPU_COMPILE_JOBS (ONE worker on AMD, see the top), the host set
+    # vendor's GPU_COMPILE_JOBS (AMD: MOJOLEARN_AMD_COMPILE_JOBS, see the top), the host set
     # two workers, the CPU column and no accelerator target, exactly as the
     # host branch below.
     if [[ "$tier" = host ]]; then
