@@ -9,7 +9,7 @@ are in [Release notes](../community/release_notes.md).
 | Platform | Packages | GPU backend | GPU architectures | CPU |
 |---|---|---|---|---|
 | macOS arm64 | `mojolearn` | Apple Metal | Apple silicon, built at the M1 instruction-set floor | Apple silicon |
-| Linux x86-64 | `mojolearn` plus `mojolearn-nvidia` and `mojolearn-amd`, installed automatically | NVIDIA CUDA, AMD HIP | CUDA {{nvidia_arches}}; HIP {{amd_arches}} | x86-64 |
+| Linux x86-64 | `mojolearn-core` plus `mojolearn-nvidia` and `mojolearn-amd` (`pip install mojolearn` installs all three) | NVIDIA CUDA, AMD HIP | CUDA {{nvidia_arches}}; HIP {{amd_arches}} | x86-64 |
 
 Both platforms carry the CPU bindings, so both train and predict on a machine with no GPU.
 

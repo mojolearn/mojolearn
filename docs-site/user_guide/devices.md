@@ -47,13 +47,13 @@ A GPU architecture the release does not carry needs a [source build](../install.
 
 ## No CPU substitution for a GPU
 
-If the machine has a GPU that mojolearn cannot serve, or a GPU without its plugin package, the import
-raises an error that names what it looked for and what it found. It does not fall back to the CPU,
-because a GPU machine silently computing on the host would mislabel every result. The usual repair is
-to reinstall so the core and both GPU packages are at the same version:
+If the machine has a GPU that mojolearn cannot serve, or a GPU without its package, the import
+raises an error that names what it looked for, what it found and the package to install. It does not
+fall back to the CPU, because a GPU machine silently computing on the host would mislabel every
+result. Install the package for the GPU at the same version as `mojolearn-core`, for example:
 
 ```sh
-pip install --force-reinstall "mojolearn=={{release}}"
+pip install "mojolearn-nvidia=={{release}}"
 ```
 
 To compute on the CPU on such a machine anyway, set `MOJOLEARN_VENDOR=cpu` before import.

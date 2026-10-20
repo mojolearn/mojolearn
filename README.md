@@ -118,8 +118,15 @@ pip install mojolearn   # Mac: Apple GPU; Linux: NVIDIA or AMD GPU, or CPU
 ```
 
 macOS arm64 wheels include Apple Metal support. On Linux x86-64,
-`pip install mojolearn` automatically installs the `mojolearn-nvidia` and
-`mojolearn-amd` GPU packages and selects the backend for the GPU it finds.
+`pip install mojolearn` installs `mojolearn-core` with both GPU packages,
+`mojolearn-nvidia` and `mojolearn-amd`, and selects the backend for the GPU it
+finds. To install one vendor only:
+
+```sh
+pip install mojolearn-nvidia   # Linux: mojolearn-core + NVIDIA
+pip install mojolearn-amd      # Linux: mojolearn-core + AMD
+```
+
 Both platforms also support CPU training and inference.
 
 This release ships native NVIDIA kernels for the sm_89 architecture (Ada:
