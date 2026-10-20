@@ -22,6 +22,7 @@ from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
 from autograd.program_control import ops_program_control_py
+from autograd.program_control_grad import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
@@ -360,6 +361,8 @@ def ops_program_inspect_binding(sid: PythonObject, pid: PythonObject, optimize: 
 
 def ops_program_control_binding(sid: PythonObject, pid: PythonObject, programs: PythonObject,
                                 arrays: PythonObject, limit: PythonObject, optimize: PythonObject) raises -> PythonObject:
+    if len(programs) == 6:
+        return ops_program_control_vjp_py[DeviceExec, OPS_DEVICE](sid, pid, programs, arrays, limit)
     return ops_program_control_py[DeviceExec, OPS_DEVICE](sid, pid, programs[1], programs[3],
                                                programs[0], programs[2], arrays, limit, optimize)
 
