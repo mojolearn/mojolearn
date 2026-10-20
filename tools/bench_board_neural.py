@@ -357,7 +357,7 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "mlp-predict": "mlp",
             "mlp-fit": "mlpfit", "lstm-fit": "rnnfit", "gru-fit": "rnnfit", "rnn-fit": "rnnfit",
             "tape-user-model": "tapefit", "sequential-fit": "tapefit", "ops-session-step": "opsstep",
-            "program-run": "program"}
+            "program-run": "program",
             "sequential-predict": "tapefit", "causal-lm-generate": "causallm",
             "causal-lm-generate-smollm2": "causallm"}
 #: The recurrent cell of each recurrent fit lane.
@@ -5995,8 +5995,7 @@ def race(args):
                 print("NEURAL-DIGEST lane=%s arm=%s digest=%s"
                       % (lane, arm, result["arms"][arm]["outputs_digest"]), flush=True)
                 if (getattr(args, "keep_outputs", False) or lane == "mlp-train-step" or lane in FORWARD_REFERENCE_LANES
-                        or lane in FIT_LANES or lane in OPS_LANES or lane in PROGRAM_LANES):
-                        or lane in FIT_LANES or lane in OPS_LANES or lane in GEN_LANES):
+                        or lane in FIT_LANES or lane in OPS_LANES or lane in PROGRAM_LANES or lane in GEN_LANES):
                     # Retain the measured trainer state for independent identity checks.
                     # tools/afn_ab.sh's judge compares two builds' outputs
                     keep = os.path.join(args.out, "%s-%s.outputs.npz" % (tag, arm))
@@ -6065,7 +6064,7 @@ def race(args):
         # and one timed round has nothing to compare against either
         a["digest_stable"] = (len(set(timed)) == 1) if ok and len(timed) >= 2 else None
         a["span"] = (fit_span(lane) if lane in FIT_LANES else dict(OPS_SPAN) if lane in OPS_LANES
-                     else dict(PROGRAM_SPAN) if lane in PROGRAM_LANES else dict(SPAN))
+                     else dict(PROGRAM_SPAN) if lane in PROGRAM_LANES
                      else dict(GEN_SPAN) if lane in GEN_LANES else dict(SPAN))
         if lane in INFER_LANES:
             a["inference"] = inference_summary(a) if ok else None

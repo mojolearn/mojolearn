@@ -773,11 +773,9 @@ NEURAL_IDS = [
     # the public tape API lanes (2026-10-19, lane ag-board-twins)
     "neural/sequential-fit/synthetic/shape=full", "neural/ops-session-step/gaussian/shape=full",
     # the captured-program lane (2026-10-19, lane ag-program)
-    "neural/program-run/gaussian/shape=full"]
-    "neural/sequential-fit/synthetic/shape=full",
+    "neural/program-run/gaussian/shape=full",
     # the inference lanes (2026-10-19, lane ag-inference-board): sequential-predict is a fit lane
     "neural/sequential-predict/synthetic/shape=full",
-    "neural/ops-session-step/gaussian/shape=full",
     "neural/causal-lm-generate/mojolearn-162m/shape=full",
     "neural/causal-lm-generate-smollm2/smollm2-135m/shape=full"]
 #: the fit lanes race ours-fast only on Apple (identical is never timed there), and MLX beside torch

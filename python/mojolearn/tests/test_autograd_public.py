@@ -207,16 +207,13 @@ def _docstring_examples():
     from mojolearn import ops
     return [("ops", ops), ("ops.Session", ops.Session), ("Sequential", mojolearn.Sequential),
             ("Sequential.add", mojolearn.Sequential.add), ("Sequential.compile", mojolearn.Sequential.compile),
-            ("ops.Program", ops.Program), ("ops.Session.capture", ops.Session.capture)]
-
-
-@pytest.mark.parametrize("name", ["ops", "ops.Session", "Sequential", "Sequential.add", "Sequential.compile",
-                                  "ops.Program", "ops.Session.capture"])
+            ("ops.Program", ops.Program), ("ops.Session.capture", ops.Session.capture),
             ("Sequential.load_state_dict", mojolearn.Sequential.load_state_dict),
             ("ops.Session.load_weights", ops.Session.load_weights)]
 
 
 @pytest.mark.parametrize("name", ["ops", "ops.Session", "Sequential", "Sequential.add", "Sequential.compile",
+                                  "ops.Program", "ops.Session.capture",
                                   "Sequential.load_state_dict", "ops.Session.load_weights"])
 def test_docstring_examples_run(name):
     if name.startswith("ops.Program") or name == "ops.Session.capture":
