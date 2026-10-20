@@ -32,6 +32,7 @@ in the tables after the sections.
 |---|---|---|---|---|
 | [`MOJOLEARN_AUTOGRAD_MLP_OFF`](#mojolearn_autograd_mlp_off) | Neural | DELETED-superseded | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MLP_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MAMBA_OFF`](#mojolearn_autograd_mamba_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch) |
+| [`MOJOLEARN_AUTOGRAD_MAMBA3_OFF`](#mojolearn_autograd_mamba3_off) | Neural | removed (superseded by the tape stage rules) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_LM`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_LM_OFF`](#mojolearn_autograd_lm_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_LM_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LM_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_CNN_OFF`](#mojolearn_autograd_cnn_off) | Neural | removed | 2026-10-19 | [MOJOLEARN_AUTOGRAD_CNN_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch) |
@@ -402,6 +403,40 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 - Timing, one timed series per arm (20 calls, median; host copies in both clocks; `mamba/checks/mamba_tape_backward_time.mojo`; autograd-buildout-20261019/final-01, TM_LM_TIMING_2026-10-19.md): NVIDIA L40S m1 1.942 -> 2.035 ms (1.05), m2 6.462 -> 6.554 ms (1.01); AMD MI325X m1 5.131 -> 5.285 ms (1.03), m2 17.620 -> 18.458 ms (1.05); NV+AMD averages m1 1.04, m2 1.03 (tape 3-4% slower, accepted for one backward path; flip a2f6f51db). The pass-5 (nv-04 NV_PASS5, amd-08 AMD_PASS5) and pass-6 (p6-01 NV_PASS6 / AMD_PASS6) reports carry no Mamba timing; p6-01 ran the word-for-word check only.
 - Bits: unchanged. The tape equals the hand path on every gradient word on Apple Metal (compile-21), NVIDIA (p6-01/nv/checks/mamba-tape-run.log) and AMD (p6-01/amd/checks/mamba-tape-run.log), all three digest sets equal; e.g. m1.case1 x 8834719169517249902, m2.case4 x 2231443176492846100. Those 70 digests (46 gradients + 24 two-block stack rows) are stored in `mamba/checks/mamba_tape_backward_digests.tsv`, which `mamba_tape_backward_check.mojo` now checks, with the Mamba-1 public gradients compared word for word against the host backward oracle.
 - grid_controls: no entry. EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_MAMBA_OFF`, **removed**.
+### MOJOLEARN_AUTOGRAD_MAMBA3_OFF
+
+- What it was: the hand-chained Mamba-3 zero-state prefill backward on the device, `mamba3_prefill_backward` /
+  `mamba3_prefill_backward_on` in `mamba/impl/modules/mamba3_prefill_backward.mojo` (launches D1-D5: out_proj GEMMs,
+  gate/skip, the SSD chain from qkdot to the in_proj pack, in_proj GEMMs, block norm; ~30 launches and one closing
+  wait), and the opaque tape rule `M3_BLOCK` (tag 72, `autograd/rules_mamba3.mojo::Mamba3BlockRules`) that called it
+  and copied its ten gradients into the tape's destinations. No define selected it; the name is the switch a restore
+  would bring back, and it is refused.
+- Replaced by: five stage rules and a launch-free residual per block (`M3_NORM`, `M3_PROJ_IN`, `M3_SSD`, `M3_GATE`,
+  `M3_PROJ_OUT`, `M3_RESID`, tags 73-78; `mamba3_block_record`), each launching the walk's kernels with its arguments
+  in its order on its scratch (`Mamba3TapeScratch`, allocated zeroed at the block's first rule, freed after the
+  walk's closing wait at its last). The Samba train step (`autograd/rules_samba.mojo`, `training/samba_resident.mojo`)
+  composes them per Mamba-3 layer; the GPU binding's Mamba-3 backward entries call `mamba3_tape_backward_on` /
+  `mamba3_tape_backward`. The ten gradients are written in place (the opaque rule's ten copies per block are gone).
+- Verdict: removed, superseded by the tape (the lane brief: decompose the Mamba-3 backward into tape rules and delete
+  the hand chain). Bits: unchanged by construction (the launch sequence and every argument equal the walk's, checked
+  mechanically against `mamba/host/mamba3_prefill_chain.mojo`); confirmed by `check-samba-tape-step`
+  (`training/checks/samba_tape_step_digests.tsv`) and the Mamba-3 binding's backward checks once compiled. No timing yet.
+- The CPU column is unchanged: the walk moved verbatim to `mamba/host/mamba3_prefill_chain.mojo` (generator input
+  only; no device module imports it) and its generated host glue `mamba/host/gen/mamba3_prefill_chain.mojo` is
+  byte-identical to the old generated bodies.
+- Deleted 2026-10-19 by `bc0a9a24e` on `lane/ag-mamba3-tape` (the walk moved out in `ba37327dc`); recoverable at
+  `ba37327dc^` (= main `33196ba55`). Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch` (the lane's code
+  files back to `33196ba55`; it also drops the tombstone comments and the refusal).
+- Files the patch restores: `autograd/rules_mamba3.mojo`, `autograd/rules_samba.mojo`, `training/samba_resident.mojo`,
+  `bindings/_mojolearn_mamba.mojo`, `bindings/_mojolearn_mamba_host.mojo`,
+  `mamba/impl/modules/mamba3_prefill_backward.mojo`, `mamba/host/gen/mamba3_prefill_backward.mojo`,
+  `mamba/host/mamba3_prefill_chain.mojo` and `mamba/host/gen/mamba3_prefill_chain.mojo` (removed again),
+  `tools/mamba_host_gen.py`, `python/mojolearn/host_surface.py`.
+- Guard: `MOJOLEARN_AUTOGRAD_MAMBA3_OFF` refused in `autograd/rules_mamba3.mojo` (`_check_removed_defines`, forced by
+  `mamba3_block_record`), not in core (a core line rebuilds every binding). No `grid_controls` entry existed (two
+  route notes now name the stage rules).
+- EXPERIMENTS.md (Hand-path deletions (2026-10-19)): `MOJOLEARN_AUTOGRAD_MAMBA3_OFF`, **removed**.
+
 ### MOJOLEARN_AUTOGRAD_LM_OFF
 
 - What it was: the hand-written byte LM backward walk in `training/byte_lm.mojo::byte_gradient_device` (CE backward or the

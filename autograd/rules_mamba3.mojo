@@ -137,7 +137,7 @@ from mamba.impl.modules.mamba3_prefill_backward import (
     _mtick,
 )
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the opaque M3_BLOCK rule, tag 72, and the hand Mamba-3 prefill backward walk it called; superseded by the stage rules below) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the opaque M3_BLOCK rule, tag 72, and the hand Mamba-3 prefill backward walk it called; superseded by the stage rules below) deleted 2026-10-19 by bc0a9a24e; code recoverable at ba37327dc^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch
 
 
@@ -145,7 +145,7 @@ def _check_removed_defines() -> Bool:
     """Refusals for the retired Mamba-3 hand backward (lane ag-mamba3-tape, docs/TOMBSTONES.md). They live here, next to the
     code they named, not in core/six_lane_experiment_guards.mojo: a line there marks every binding that imports core as
     changed."""
-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA3_OFF"](), "removed 2026-10-19 (lane/ag-mamba3-tape, SHA_DEL): the hand Mamba-3 prefill backward (mamba3_prefill_backward_on) and the opaque M3_BLOCK rule are deleted; the stage rules in autograd/rules_mamba3.mojo are the only device backward, same kernels in the same order. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch"
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MAMBA3_OFF"](), "removed 2026-10-19 (lane/ag-mamba3-tape, bc0a9a24e): the hand Mamba-3 prefill backward (mamba3_prefill_backward_on) and the opaque M3_BLOCK rule are deleted; the stage rules in autograd/rules_mamba3.mojo are the only device backward, same kernels in the same order. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch"
     return True
 
 

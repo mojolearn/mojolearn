@@ -219,7 +219,7 @@ from mamba.impl.modules.mamba3 import (
 
 
 from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the hand Mamba-3 prefill backward walk; superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the hand Mamba-3 prefill backward walk; superseded by the tape) deleted 2026-10-19 by bc0a9a24e; code recoverable at ba37327dc^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch
 from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
 # The Mamba-1 / Mamba-2 backward entries assemble the VJP on the tape

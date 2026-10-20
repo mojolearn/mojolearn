@@ -1345,7 +1345,7 @@ check-mamba-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . mamb
 check-lm-tape-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/lm_tape_backward_check.mojo"
 # the small MLP train step tape backward (autograd/rules_small_mlp.mojo) against the stored digests (training/checks/mlp_tape_step_digests.tsv), two AdamW steps, every output and state word
 check-mlp-tape-step = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/mlp_tape_step_check.mojo"
-# the Samba resident train step on one tape (autograd/rules_samba.mojo, Mamba-3 as one M3_BLOCK rule) against the hand walk, every gradient and updated parameter word
+# the Samba resident train step on one tape (autograd/rules_samba.mojo, each Mamba-3 layer as its stage rules, autograd/rules_mamba3.mojo) against the stored digests (training/checks/samba_tape_step_digests.tsv), every gradient and updated parameter word
 check-samba-tape-step = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/samba_tape_step_check.mojo"
 check-moe-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . sequence/checks/moe_backward_check.mojo"
 # host only, no GPU: the Mamba-1 host backward oracle against the device VJP (mamba/host/gen) on the 16 corpus cases

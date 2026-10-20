@@ -180,6 +180,6 @@ struct Mamba3DeviceGradients(Movable):
         self.out_proj_weight = out_proj_weight^
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the hand Mamba-3 prefill backward glue, mamba3_prefill_backward and mamba3_prefill_backward_on; superseded by the tape) deleted 2026-10-19 by SHA_DEL; code recoverable at SHA_DEL^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA3_OFF (the hand Mamba-3 prefill backward glue, mamba3_prefill_backward and mamba3_prefill_backward_on; superseded by the tape) deleted 2026-10-19 by bc0a9a24e; code recoverable at ba37327dc^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch
 # (the CPU column keeps the same walk as generator input: mamba/host/mamba3_prefill_chain.mojo)
