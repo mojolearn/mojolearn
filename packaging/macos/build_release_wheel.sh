@@ -845,6 +845,31 @@ rm -rf dist build ./*.egg-info
 pixi run -e pkg python -m build --wheel --no-isolation
 # PyPI refuses a file over 100 MiB: strip local symbols, re-sign, deflate 9, and fail here if still over.
 python3 "$here/packaging/macos/shrink_wheel.py" "$here/python/dist/"*.whl || exit 1
+# THE PACKED WHEEL CARRIES EACH MERGED DIRECTORY'S INDEX, byte for byte the
+# one checked above, and every file it names: without the index the loader
+# finds no member at all.
+if [ "$MERGED" = 1 ]; then
+    for d in $(merged_dirs); do
+        case "$d" in fast) printf '%s\n' "$MERGED_INDEX" ;; *) printf '%s\n' "$d/$MERGED_INDEX" ;; esac
+    done > "$BUILD_LOGS/indexes.txt"
+    python3 - "$PKG" "$BUILD_LOGS/indexes.txt" "$here/python/dist/"*.whl <<'PYINDEX' || exit 1
+import json, pathlib, sys, zipfile
+pkg, listing, wheel = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+with zipfile.ZipFile(wheel) as z:
+    names = set(z.namelist())
+    for rel in pathlib.Path(listing).read_text().split():
+        member = 'mojolearn/' + rel
+        if member not in names:
+            raise SystemExit(f'ERROR: {pathlib.Path(wheel).name} lacks {member}')
+        if z.read(member) != (pkg / rel).read_bytes():
+            raise SystemExit(f'ERROR: {member} in the wheel differs from the checked index')
+        base = member.rsplit('/', 1)[0]
+        for fname in json.loads(z.read(member))['files']:
+            if base + '/' + fname not in names:
+                raise SystemExit(f'ERROR: {member} names {fname}, which the wheel lacks')
+        print(f'wheel index: {member} ({len(json.loads(z.read(member))["files"])} merged file(s))')
+PYINDEX
+fi
 python3 "$here/tools/wheel_api_audit.py" --require-complete \
     --output "$here/python/dist/API-macos.json" "$here/python/dist/"*.whl
 
