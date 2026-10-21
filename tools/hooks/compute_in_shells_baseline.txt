@@ -1,0 +1,1210 @@
+# Compute in shell .mojo files on main 28b8ed11b (2026-10-21): untagged for/while loops and kernel launches.
+# One row per hit: path:line: code. A hit is grandfathered by a row with the same path and code text;
+# the line number is informational. Generated once from main; the thin-* lanes remove rows as they move
+# the work into kernel files (python3 tools/hooks/no_compute_in_shells.py --prune-baseline). Never add a row.
+autograd/import_lower_pyapi.mojo:14: for i in range(len(p)):  # cpu-route: model graph lowered on the host (argument words, converted)
+autograd/import_lower_pyapi.mojo:21: for i in range(len(p)):  # cpu-route: model graph lowered on the host (argument strings, converted)
+autograd/import_lower_pyapi.mojo:28: for i in range(len(found)):  # cpu-route: model graph lowered on the host (one per problem)
+autograd/import_lower_pyapi.mojo:42: for i in range(len(v)):  # cpu-route: model graph lowered on the host (one per axis)
+autograd/import_lower_pyapi.mojo:65: for q in range(len(r.in_names)):  # cpu-route: model graph lowered on the host (graph inputs)
+autograd/import_lower_pyapi.mojo:72: for i in range(len(r.out_names)):  # cpu-route: model graph lowered on the host (graph outputs)
+autograd/import_lower_pyapi.mojo:91: for i in range(len(floats)):  # cpu-route: model graph description (attribute numbers, converted)
+autograd/import_reader_pyapi.mojo:17: for i in range(len(info.words)):  # cpu-route: model file parsing (the graph's words, converted)
+autograd/import_reader_pyapi.mojo:20: for i in range(len(info.strs)):  # cpu-route: model file parsing (the graph's strings, converted)
+autograd/import_reader_pyapi.mojo:23: for i in range(len(info.floats)):  # cpu-route: model file parsing (attribute floats, converted)
+autograd/import_resolve_pyapi.mojo:11: for i in range(len(names)):  # cpu-route: model file parsing (the shapes argument, converted)
+autograd/import_resolve_pyapi.mojo:14: for i in range(len(flat)):  # cpu-route: model file parsing (the shapes argument, converted)
+autograd/import_resolve_pyapi.mojo:18: for i in range(len(r.words)):  # cpu-route: model file parsing (the resolution's words, converted)
+autograd/import_resolve_pyapi.mojo:21: for i in range(len(r.strs)):  # cpu-route: model file parsing (the graph's strings, converted)
+autograd/program_control_pyapi.mojo:89: while True:  # native control-flow driver, bounded by the explicit iteration limit
+autograd/program_pyapi.mojo:73: for k in range(n):  # native input marshaling: elements supplied as Python scalar objects
+bindings/_mojolearn.mojo:1051: while i < body:
+bindings/_mojolearn.mojo:1055: while i < count:
+bindings/_mojolearn.mojo:1114: while r0 < nr:
+bindings/_mojolearn.mojo:1117: while c0 < nc:
+bindings/_mojolearn.mojo:1122: for c in range(c0, c1):
+bindings/_mojolearn.mojo:1124: for r in range(r0, r1):
+bindings/_mojolearn.mojo:1192: for i in range(count):
+bindings/_mojolearn.mojo:1242: for r in range(nr):
+bindings/_mojolearn.mojo:1244: for c in range(nc):
+bindings/_mojolearn.mojo:1286: for i in range(count):
+bindings/_mojolearn.mojo:1294: for i in range(count):
+bindings/_mojolearn.mojo:1377: for r in range(nr):
+bindings/_mojolearn.mojo:1379: for c in range(nc):
+bindings/_mojolearn_arima_host.mojo:264: for i in range(N * batch_size):
+bindings/_mojolearn_arima_host.mojo:268: for b in range(batch_size):
+bindings/_mojolearn_arima_host.mojo:280: for b in range(batch_size):
+bindings/_mojolearn_byte_lm.mojo:143: for i in range(len(st)):
+bindings/_mojolearn_byte_lm.mojo:242: self.ctx = DeviceContext()
+bindings/_mojolearn_byte_lm.mojo:294: for i in range(11):
+bindings/_mojolearn_byte_lm.mojo:304: for i in range(5, 11):
+bindings/_mojolearn_byte_lm.mojo:399: ctx.enqueue_function[_bits_differ_kernel](
+bindings/_mojolearn_byte_lm.mojo:451: for i in range(11):
+bindings/_mojolearn_byte_lm.mojo:643: for i in range(shape.n_tensors()):
+bindings/_mojolearn_byte_lm.mojo:753: for i in range(len(flags)):
+bindings/_mojolearn_byte_lm.mojo:1209: for _ in range(6):
+bindings/_mojolearn_byte_lm.mojo:1231: for i in range(len(shape)):
+bindings/_mojolearn_byte_lm.mojo:1289: for i in range(2):
+bindings/_mojolearn_byte_lm.mojo:1563: for i in range(len(owner[].trainers)):
+bindings/_mojolearn_byte_lm.mojo:1587: for i in range(len(owner[].trainers)):
+bindings/_mojolearn_byte_lm.mojo:1937: for _ in range(10):
+bindings/_mojolearn_byte_lm.mojo:1938: ctx.enqueue_function[_launch_probe_kernel](flag.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+bindings/_mojolearn_byte_lm.mojo:1941: for _ in range(count):
+bindings/_mojolearn_byte_lm.mojo:1942: ctx.enqueue_function[_launch_probe_kernel](flag.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+bindings/_mojolearn_byte_lm.mojo:1990: var ctx = DeviceContext()
+bindings/_mojolearn_byte_lm_host.mojo:72: for i in range(len(shape)):
+bindings/_mojolearn_byte_lm_host.mojo:185: for i in range(len(logits)):
+bindings/_mojolearn_byte_lm_host.mojo:205: for i in range(batch):
+bindings/_mojolearn_byte_lm_host.mojo:323: for i in range(count):
+bindings/_mojolearn_byte_lm_host.mojo:338: for i in range(count):
+bindings/_mojolearn_byte_lm_host.mojo:358: while i < body:
+bindings/_mojolearn_byte_lm_host.mojo:362: while i < count:
+bindings/_mojolearn_core_host.mojo:305: for c in range(nc):
+bindings/_mojolearn_core_host.mojo:307: for r in range(nr):
+bindings/_mojolearn_core_host.mojo:404: for i in range(count):
+bindings/_mojolearn_core_host.mojo:450: for r in range(nr):
+bindings/_mojolearn_core_host.mojo:452: for c in range(nc):
+bindings/_mojolearn_core_host.mojo:552: for i in range(nq * kk):
+bindings/_mojolearn_core_host.mojo:623: for i in range(no):
+bindings/_mojolearn_core_host.mojo:654: for i in range(no):
+bindings/_mojolearn_core_host.mojo:670: for i in range(no):
+bindings/_mojolearn_core_host.mojo:679: for j in range(nq * n_uniq):
+bindings/_mojolearn_core_host.mojo:685: for j in range(nq * no):
+bindings/_mojolearn_core_host.mojo:688: for i in range(no):
+bindings/_mojolearn_core_host.mojo:689: for j in range(len(uniqs[i])):
+bindings/_mojolearn_core_host.mojo:751: for i in range(no):
+bindings/_mojolearn_core_host.mojo:757: for j in range(nq * no):
+bindings/_mojolearn_core_host.mojo:783: for i in range(n_queries * k):
+bindings/_mojolearn_core_host.mojo:820: for i in range(no):
+bindings/_mojolearn_core_host.mojo:834: for i in range(nq * kk):
+bindings/_mojolearn_core_host.mojo:839: for count in n_classes:
+bindings/_mojolearn_core_host.mojo:848: for i in range(no):
+bindings/_mojolearn_core_host.mojo:864: for i in range(no):
+bindings/_mojolearn_core_host.mojo:873: for j in range(nq * n_uniq):
+bindings/_mojolearn_core_host.mojo:879: for j in range(nq * no):
+bindings/_mojolearn_core_host.mojo:882: for i in range(no):
+bindings/_mojolearn_core_host.mojo:883: for j in range(len(uniqs[i])):
+bindings/_mojolearn_core_host.mojo:919: for i in range(nq * kk):
+bindings/_mojolearn_core_host.mojo:927: for i in range(no):
+bindings/_mojolearn_core_host.mojo:933: for j in range(nq * no):
+bindings/_mojolearn_core_host.mojo:1005: for q in range(nq):
+bindings/_mojolearn_core_host.mojo:1062: for q in range(nq):
+bindings/_mojolearn_core_host.mojo:1074: for q in range(nq):
+bindings/_mojolearn_core_host.mojo:1089: for p in range(nnz):
+bindings/_mojolearn_core_host.mojo:1092: for q in range(nq + 1):
+bindings/_mojolearn_core_host.mojo:1154: for i in range(nq * kk):
+bindings/_mojolearn_core_host.mojo:1240: for i in range(nc * nf):
+bindings/_mojolearn_core_host.mojo:1242: for i in range(ns):
+bindings/_mojolearn_core_host.mojo:1294: for i in range(ns):
+bindings/_mojolearn_core_host.mojo:1337: for i in range(ns * nc):
+bindings/_mojolearn_embedding_host.mojo:147: for i in range(cells):
+bindings/_mojolearn_estimators.mojo:432: for i in range(4):
+bindings/_mojolearn_estimators.mojo:961: ctx.enqueue_function[ridge_multi_icpt_kernel](
+bindings/_mojolearn_estimators.mojo:995: for c in range(nf):
+bindings/_mojolearn_estimators.mojo:1232: while i < n_rows:
+bindings/_mojolearn_estimators.mojo:1261: ctx.enqueue_function[qn_sigmoid_kernel](
+bindings/_mojolearn_estimators.mojo:1294: while i < n_rows:
+bindings/_mojolearn_estimators.mojo:1297: for c in range(1, nc):
+bindings/_mojolearn_estimators.mojo:1302: for c in range(nc):
+bindings/_mojolearn_estimators.mojo:1305: for c in range(nc):
+bindings/_mojolearn_estimators.mojo:1340: ctx.enqueue_function[qn_softmax_kernel](
+bindings/_mojolearn_estimators_host.mojo:271: for i in range(n_query):
+bindings/_mojolearn_estimators_host.mojo:318: for i in range(nc * nf):
+bindings/_mojolearn_estimators_host.mojo:320: for i in range(nc):
+bindings/_mojolearn_estimators_host.mojo:324: for i in range(nf):
+bindings/_mojolearn_estimators_host.mojo:361: for i in range(nc * nf):
+bindings/_mojolearn_estimators_host.mojo:363: for i in range(nc):
+bindings/_mojolearn_estimators_host.mojo:367: for i in range(nf):
+bindings/_mojolearn_estimators_host.mojo:400: for i in range(nc * nf):
+bindings/_mojolearn_estimators_host.mojo:402: for i in range(nc):
+bindings/_mojolearn_estimators_host.mojo:460: for i in range(nc * nf):
+bindings/_mojolearn_estimators_host.mojo:462: for i in range(nc):
+bindings/_mojolearn_estimators_host.mojo:616: for i in range(nf):
+bindings/_mojolearn_estimators_host.mojo:644: for i in range(nf):
+bindings/_mojolearn_estimators_host.mojo:750: for i in range(len(coef)):
+bindings/_mojolearn_estimators_host.mojo:828: for i in range(n_refs):
+bindings/_mojolearn_estimators_host.mojo:838: for i in range(n_queries):
+bindings/_mojolearn_estimators_host.mojo:890: for i in range(nr):
+bindings/_mojolearn_estimators_host.mojo:896: for i in range(nr):
+bindings/_mojolearn_estimators_host.mojo:1040: for i in range(len(values)):
+bindings/_mojolearn_estimators_host.mojo:1047: for i in range(count):
+bindings/_mojolearn_estimators_host.mojo:1098: for i in range(4):
+bindings/_mojolearn_estimators_host.mojo:1103: for i in range(4):
+bindings/_mojolearn_estimators_host.mojo:1116: for i in range(nc):
+bindings/_mojolearn_estimators_host.mojo:1304: for value in values:
+bindings/_mojolearn_estimators_host.mojo:1310: for value in values:
+bindings/_mojolearn_estimators_host.mojo:1345: for c in range(d):
+bindings/_mojolearn_estimators_host.mojo:1350: for i in range(n * d):
+bindings/_mojolearn_estimators_host.mojo:1384: for c in range(d):
+bindings/_mojolearn_estimators_host.mojo:1389: for i in range(n * d):
+bindings/_mojolearn_estimators_host.mojo:1429: for i in range(n_rows):
+bindings/_mojolearn_estimators_host.mojo:1472: for i in range(q * t):
+bindings/_mojolearn_estimators_host.mojo:1516: for i in range(m * q):
+bindings/_mojolearn_estimators_host.mojo:1553: for i in range(m * q):
+bindings/_mojolearn_forest_host.mojo:339: for i in range(n_rows * num_outputs):
+bindings/_mojolearn_forest_host.mojo:434: for i in range(n_rows * dim):
+bindings/_mojolearn_forest_host.mojo:465: for i in range(3, 11):
+bindings/_mojolearn_forest_host.mojo:495: for i in range(n_rows * n_cols):
+bindings/_mojolearn_forest_host.mojo:517: for i in range(count):
+bindings/_mojolearn_forest_host.mojo:542: for i in range(count):
+bindings/_mojolearn_gbdt.mojo:706: for i in range(len(info)):
+bindings/_mojolearn_gbdt_host.mojo:582: for i in range(len(x)):
+bindings/_mojolearn_gbdt_host.mojo:586: for i in range(len(ex)):
+bindings/_mojolearn_gbdt_host.mojo:609: for i in range(len(losses)):
+bindings/_mojolearn_gbdt_host.mojo:612: for i in range(len(test_losses)):
+bindings/_mojolearn_gbdt_host.mojo:872: for r in range(1, n_eval_rows):
+bindings/_mojolearn_gbdt_host.mojo:891: for i in range(len(losses)):
+bindings/_mojolearn_gbdt_host.mojo:894: for i in range(len(test_losses)):
+bindings/_mojolearn_gbdt_host.mojo:1003: for i in range(n_class_weights):
+bindings/_mojolearn_gbdt_host.mojo:1046: for g in range(n_groups):
+bindings/_mojolearn_gbdt_host.mojo:1080: for q in range(n_pairs):
+bindings/_mojolearn_gbdt_host.mojo:1514: for f in range(n_flags):
+bindings/_mojolearn_gbdt_host.mojo:1529: for i in range(n_rows * n_features):
+bindings/_mojolearn_gbdt_host.mojo:1536: for i in range(n_eval_rows * n_features):
+bindings/_mojolearn_gbdt_host.mojo:1559: for r in range(n_rows):
+bindings/_mojolearn_gbdt_host.mojo:1702: for i in range(len(losses)):
+bindings/_mojolearn_gbdt_host.mojo:1705: for i in range(len(test_losses)):
+bindings/_mojolearn_gbdt_host.mojo:1749: for piece in line.split(" "):
+bindings/_mojolearn_gbdt_host.mojo:1777: for i in range(digits):
+bindings/_mojolearn_gbdt_host.mojo:1815: for raw in text.split("\n"):
+bindings/_mojolearn_gbdt_host.mojo:1871: for b in range(nb):
+bindings/_mojolearn_gbdt_host.mojo:2077: for i in range(n_rows):
+bindings/_mojolearn_gbdt_host.mojo:2173: for i in range(n_rows * dim):
+bindings/_mojolearn_gbdt_host.mojo:2177: for r in range(n_rows):
+bindings/_mojolearn_gbdt_host.mojo:2182: for k in range(eff):
+bindings/_mojolearn_gbdt_host.mojo:2187: for k in range(eff):
+bindings/_mojolearn_gbdt_host.mojo:2191: for k in range(eff):
+bindings/_mojolearn_gbdt_host.mojo:2195: for i in range(n_rows * dim):
+bindings/_mojolearn_gbdt_host.mojo:2249: for i in range(n_sources):
+bindings/_mojolearn_gbdt_host.mojo:2301: for i in range(n_rows):
+bindings/_mojolearn_gbdt_host.mojo:2322: for i in range(count):
+bindings/_mojolearn_gbdt_host.mojo:2343: for i in range(count):
+bindings/_mojolearn_gbdt_host.mojo:2380: for i in range(n):
+bindings/_mojolearn_gbdt_host.mojo:2385: for i in range(n):
+bindings/_mojolearn_gp.mojo:238: for t in range(n_nodes):
+bindings/_mojolearn_gp.mojo:272: for i in range(ln):
+bindings/_mojolearn_gp.mojo:483: for i in range(n_star):
+bindings/_mojolearn_gp.mojo:489: for i in range(n_star):
+bindings/_mojolearn_gp.mojo:1005: for i in range(n_train * n_train):
+bindings/_mojolearn_gp.mojo:1007: for i in range(n_train):
+bindings/_mojolearn_gp.mojo:1078: for i in range(n_train):
+bindings/_mojolearn_gp.mojo:1112: for t in range(n_star):
+bindings/_mojolearn_gp.mojo:1117: for t in range(n_star):
+bindings/_mojolearn_gp.mojo:1528: for i in range(len(r.theta)):
+bindings/_mojolearn_gp.mojo:1531: for i in range(len(r.runs)):
+bindings/_mojolearn_gp.mojo:1619: for i in range(len(r.grad)):
+bindings/_mojolearn_gp.mojo:1683: for i in range(len(values)):
+bindings/_mojolearn_gp.mojo:1692: for i in range(len(values)):
+bindings/_mojolearn_gp.mojo:1710: for r in range(nr):
+bindings/_mojolearn_gp.mojo:1711: for j in range(nd):
+bindings/_mojolearn_gp_host.mojo:167: for i in range(n_train * n_train):
+bindings/_mojolearn_gp_host.mojo:169: for i in range(n_train):
+bindings/_mojolearn_gp_host.mojo:290: for i in range(n_star * n_samples):
+bindings/_mojolearn_gp_host.mojo:345: for i in range(n_star):
+bindings/_mojolearn_gp_host.mojo:347: for i in range(n_star * n_star):
+bindings/_mojolearn_gp_host.mojo:373: for i in range(n_train * n_train):
+bindings/_mojolearn_gp_host.mojo:375: for i in range(n_train):
+bindings/_mojolearn_gp_host.mojo:429: for i in range(n_train):
+bindings/_mojolearn_gp_host.mojo:487: for i in range(len(r.grad)):
+bindings/_mojolearn_gp_host.mojo:558: for run in range(n_runs):
+bindings/_mojolearn_gp_host.mojo:561: while True:
+bindings/_mojolearn_gp_host.mojo:566: for i in range(n_ls):
+bindings/_mojolearn_gp_host.mojo:573: for i in range(nt):
+bindings/_mojolearn_gp_host.mojo:582: for i in range(nt):
+bindings/_mojolearn_gp_host.mojo:585: for i in range(n_runs * 4):
+bindings/_mojolearn_gp_host.mojo:657: for i in range(len(values)):
+bindings/_mojolearn_gp_host.mojo:665: for i in range(len(values)):
+bindings/_mojolearn_gp_host.mojo:681: for r in range(nr):
+bindings/_mojolearn_gp_host.mojo:682: for j in range(nd):
+bindings/_mojolearn_gp_host.mojo:706: for i in range(n * n):
+bindings/_mojolearn_gp_host.mojo:777: for i in range(n * nrhs):
+bindings/_mojolearn_hdbscan.mojo:128: for i in range(n):
+bindings/_mojolearn_hdbscan.mojo:151: for e in range(ne):
+bindings/_mojolearn_hdbscan.mojo:156: for c in range(out.n_clusters):
+bindings/_mojolearn_hdbscan.mojo:162: for i in range(n):
+bindings/_mojolearn_hdbscan.mojo:346: for c in range(n_clusters):
+bindings/_mojolearn_hdbscan.mojo:348: for c in range(n_selected):
+bindings/_mojolearn_hdbscan.mojo:352: for j in range(pd.n_exemplars):
+bindings/_mojolearn_hdbscan.mojo:354: for e in range(n_edges + 1):
+bindings/_mojolearn_hdbscan_host.mojo:150: for i in range(n):
+bindings/_mojolearn_hdbscan_host.mojo:166: for e in range(ne):
+bindings/_mojolearn_hdbscan_host.mojo:171: for c in range(out.n_clusters):
+bindings/_mojolearn_hdbscan_host.mojo:177: for i in range(n):
+bindings/_mojolearn_hdbscan_host.mojo:230: for c in range(n_clusters):
+bindings/_mojolearn_hdbscan_host.mojo:232: for c in range(n_selected):
+bindings/_mojolearn_hdbscan_host.mojo:236: for j in range(pd.n_exemplars):
+bindings/_mojolearn_hdbscan_host.mojo:238: for e in range(n_edges + 1):
+bindings/_mojolearn_ivf.mojo:145: for i in range(m):
+bindings/_mojolearn_ivf_host.mojo:125: for i in range(m * k):
+bindings/_mojolearn_ivf_host.mojo:127: for i in range(m):
+bindings/_mojolearn_kernel_methods.mojo:191: for i in range(n):
+bindings/_mojolearn_kernel_methods.mojo:390: for i in range(q):
+bindings/_mojolearn_kernel_methods.mojo:511: for i in range(q):
+bindings/_mojolearn_kernel_methods_host.mojo:121: for i in range(n * t):
+bindings/_mojolearn_kernel_methods_host.mojo:165: for i in range(n):
+bindings/_mojolearn_kernel_methods_host.mojo:211: for i in range(q * t):
+bindings/_mojolearn_kernel_methods_host.mojo:243: for i in range(q * d):
+bindings/_mojolearn_kernel_methods_host.mojo:245: for i in range(q):
+bindings/_mojolearn_kernel_methods_host.mojo:248: for i in range(q * q):
+bindings/_mojolearn_kernel_methods_host.mojo:336: for i in range(m * q):
+bindings/_mojolearn_kernel_methods_host.mojo:377: for i in range(d * q):
+bindings/_mojolearn_kernel_methods_host.mojo:379: for i in range(q):
+bindings/_mojolearn_kernel_methods_host.mojo:415: for i in range(m * q):
+bindings/_mojolearn_linalg.mojo:861: ctx.enqueue_function[f16_widen_kernel](
+bindings/_mojolearn_linalg.mojo:914: for i in range(n_cols * n_cols):
+bindings/_mojolearn_linalg.mojo:972: for i in range(n_cols):
+bindings/_mojolearn_linalg_host.mojo:224: for i in range(m * n):
+bindings/_mojolearn_linalg_host.mojo:250: for i in range(n * n):
+bindings/_mojolearn_linalg_host.mojo:332: for i in range(n * nrhs):
+bindings/_mojolearn_linalg_host.mojo:385: for i in range(m * n):
+bindings/_mojolearn_linalg_host.mojo:423: for i in range(m * n):
+bindings/_mojolearn_linalg_host.mojo:451: for i in range(rows * cols):
+bindings/_mojolearn_linalg_host.mojo:453: for r in range(rows):
+bindings/_mojolearn_linalg_host.mojo:482: for i in range(rows * cols):
+bindings/_mojolearn_linalg_host.mojo:504: for i in range(count):
+bindings/_mojolearn_linalg_host.mojo:525: for i in range(count):
+bindings/_mojolearn_linalg_host.mojo:545: for i in range(count):
+bindings/_mojolearn_linalg_host.mojo:575: for i in range(n_cols * n_cols):
+bindings/_mojolearn_linalg_host.mojo:634: for i in range(n_cols):
+bindings/_mojolearn_linalg_host.mojo:684: for i in range(m * n):
+bindings/_mojolearn_linalg_host.mojo:711: for i in range(rows * cols):
+bindings/_mojolearn_linalg_host.mojo:714: for r in range(rows):
+bindings/_mojolearn_linalg_host.mojo:741: for i in range(rows * cols):
+bindings/_mojolearn_mamba.mojo:524: for i in range(23):
+bindings/_mojolearn_mamba.mojo:1100: for i in range(16):
+bindings/_mojolearn_mamba.mojo:1374: for i in range(13):
+bindings/_mojolearn_mamba.mojo:1420: for i in range(4):
+bindings/_mojolearn_mamba.mojo:1441: for i in range(4):
+bindings/_mojolearn_mamba.mojo:1729: for i in range(25):
+bindings/_mojolearn_mamba.mojo:1835: for i in range(10):
+bindings/_mojolearn_mamba.mojo:1837: for i in range(10):
+bindings/_mojolearn_mamba.mojo:1839: for i in range(10, 15):
+bindings/_mojolearn_mamba.mojo:1972: for i in range(9): weight_addrs.append(a[i])
+bindings/_mojolearn_mamba.mojo:1978: for i in range(10): state_addrs.append(a[9 + i])
+bindings/_mojolearn_mamba.mojo:2172: for s in range(9):
+bindings/_mojolearn_mamba.mojo:2178: while i < body:
+bindings/_mojolearn_mamba.mojo:2184: while i < n:
+bindings/_mojolearn_mamba.mojo:2194: for s in range(9):
+bindings/_mojolearn_mamba.mojo:2198: for s in range(9):
+bindings/_mojolearn_mamba.mojo:2396: while i < body:
+bindings/_mojolearn_mamba.mojo:2402: while i < n:
+bindings/_mojolearn_mamba.mojo:2520: for i in range(9):
+bindings/_mojolearn_mamba.mojo:2567: for i in range(4):
+bindings/_mojolearn_mamba.mojo:2601: for i in range(1, 12):
+bindings/_mojolearn_mamba.mojo:2662: for i in range(10):
+bindings/_mojolearn_mamba.mojo:2666: for i in range(10): a.append(0)
+bindings/_mojolearn_mamba.mojo:2670: for i in range(4): a.append(0)
+bindings/_mojolearn_mamba.mojo:2728: for i in range(11):
+bindings/_mojolearn_mamba.mojo:2782: for i in range(10):
+bindings/_mojolearn_mamba.mojo:2786: for i in range(10):
+bindings/_mojolearn_mamba.mojo:2788: for i in range(10, 15):
+bindings/_mojolearn_mamba.mojo:2834: for i in range(21):
+bindings/_mojolearn_mamba.mojo:2895: for i in range(19):
+bindings/_mojolearn_mamba.mojo:2916: for i in range(6):
+bindings/_mojolearn_mamba.mojo:2935: for i in range(10):
+bindings/_mojolearn_mamba.mojo:2959: for i in range(10):
+bindings/_mojolearn_mamba.mojo:3024: for i in range(21):
+bindings/_mojolearn_mamba.mojo:3078: for i in range(21):
+bindings/_mojolearn_mamba.mojo:3189: for i in range(9):
+bindings/_mojolearn_mamba_host.mojo:101: for i in range(n):
+bindings/_mojolearn_mamba_host.mojo:502: for i in range(10):
+bindings/_mojolearn_mamba_host.mojo:504: for _ in range(10):
+bindings/_mojolearn_mamba_host.mojo:506: for i in range(10, 15):
+bindings/_mojolearn_metrics.mojo:135: while off < n and ok:
+bindings/_mojolearn_metrics.mojo:510: for i in range(m+1):
+bindings/_mojolearn_metrics.mojo:513: for i in range(m):
+bindings/_mojolearn_metrics.mojo:552: for i in range(len(values)):
+bindings/_mojolearn_metrics.mojo:558: for i in range(len(values)):
+bindings/_mojolearn_metrics.mojo:583: for i in range(len(values)):
+bindings/_mojolearn_metrics.mojo:653: for i in range(n_rows):
+bindings/_mojolearn_metrics.mojo:780: for i in range(n_samples):
+bindings/_mojolearn_metrics.mojo:782: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:837: for i in range(n_samples):
+bindings/_mojolearn_metrics.mojo:839: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:906: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:958: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:983: for i in range(len(state.eigenvalues)):
+bindings/_mojolearn_metrics.mojo:985: for i in range(len(state.eigenvectors)):
+bindings/_mojolearn_metrics.mojo:987: for i in range(len(state.diag)):
+bindings/_mojolearn_metrics.mojo:989: for i in range(len(state.centroids)):
+bindings/_mojolearn_metrics.mojo:1031: for i in range(n_samples):
+bindings/_mojolearn_metrics.mojo:1033: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:1072: for i in range(n_samples):
+bindings/_mojolearn_metrics.mojo:1074: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:1123: for i in range(n_samples):
+bindings/_mojolearn_metrics.mojo:1125: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:1166: for i in range(len(embedding)):
+bindings/_mojolearn_metrics.mojo:1214: for i in range(n_queries):
+bindings/_mojolearn_metrics.mojo:1216: for i in range(n_queries * k):
+bindings/_mojolearn_metrics_host.mojo:506: for i in range(n_rows):
+bindings/_mojolearn_metrics_host.mojo:573: for i in range(n_samples):
+bindings/_mojolearn_metrics_host.mojo:575: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:619: for i in range(n_samples):
+bindings/_mojolearn_metrics_host.mojo:621: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:688: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:740: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:763: for i in range(len(state.eigenvalues)):
+bindings/_mojolearn_metrics_host.mojo:765: for i in range(len(state.eigenvectors)):
+bindings/_mojolearn_metrics_host.mojo:767: for i in range(len(state.diag)):
+bindings/_mojolearn_metrics_host.mojo:769: for i in range(len(state.centroids)):
+bindings/_mojolearn_metrics_host.mojo:804: for i in range(n_samples):
+bindings/_mojolearn_metrics_host.mojo:806: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:844: for i in range(n_samples):
+bindings/_mojolearn_metrics_host.mojo:846: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:886: for i in range(n_queries):
+bindings/_mojolearn_metrics_host.mojo:888: for i in range(n_queries * k):
+bindings/_mojolearn_metrics_host.mojo:931: for i in range(n):
+bindings/_mojolearn_metrics_host.mojo:968: for i in range(n):
+bindings/_mojolearn_metrics_host.mojo:1019: for i in range(m + 1):
+bindings/_mojolearn_metrics_host.mojo:1022: for i in range(m):
+bindings/_mojolearn_metrics_host.mojo:1044: for i in range(n):
+bindings/_mojolearn_metrics_host.mojo:1047: for i in range(n * k):
+bindings/_mojolearn_metrics_host.mojo:1061: for i in range(n):
+bindings/_mojolearn_metrics_host.mojo:1077: for i in range(n):
+bindings/_mojolearn_metrics_host.mojo:1102: for i in range(len(values[0])):
+bindings/_mojolearn_metrics_host.mojo:1109: for i in range(len(values[1])):
+bindings/_mojolearn_metrics_host.mojo:1135: for i in range(len(values)):
+bindings/_mojolearn_metrics_host.mojo:1241: for value in embedding:
+bindings/_mojolearn_metrics_host.mojo:1244: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:1298: for value in init:
+bindings/_mojolearn_metrics_host.mojo:1310: for value in embedding:
+bindings/_mojolearn_metrics_host.mojo:1313: for i in range(len(embedding)):
+bindings/_mojolearn_metrics_host.mojo:1362: for value in embedding:
+bindings/_mojolearn_metrics_host.mojo:1365: for i in range(len(embedding)):
+bindings/_mojolearn_mixture.mojo:282: for i in range(n):
+bindings/_mojolearn_mixture.mojo:311: for i in range(n):
+bindings/_mojolearn_mixture_host.mojo:100: for i in range(k):
+bindings/_mojolearn_mixture_host.mojo:103: for i in range(k * d):
+bindings/_mojolearn_mixture_host.mojo:105: for i in range(k * d * d):
+bindings/_mojolearn_neural_host.mojo:150: for i in range(n):
+bindings/_mojolearn_neural_host.mojo:170: for i in range(got):
+bindings/_mojolearn_neural_host.mojo:175: while len(out) < n + BLOCK_OPTION_ADDRS:
+bindings/_mojolearn_neural_host.mojo:189: for i in range(got):
+bindings/_mojolearn_neural_host.mojo:239: for i in range(len(values)):
+bindings/_mojolearn_neural_host.mojo:324: for i in range(10):
+bindings/_mojolearn_neural_host.mojo:329: for i in range(BLOCK_OPTION_ADDRS):
+bindings/_mojolearn_neural_host.mojo:506: for i in range(3):
+bindings/_mojolearn_neural_host.mojo:814: for i in range(10):
+bindings/_mojolearn_neural_host.mojo:816: for _ in range(10):
+bindings/_mojolearn_neural_host.mojo:818: for i in range(10, 15):
+bindings/_mojolearn_preprocessing_host.mojo:72: for value in values:
+bindings/_mojolearn_preprocessing_host.mojo:85: for value in values:
+bindings/_mojolearn_preprocessing_host.mojo:154: for c in range(d):
+bindings/_mojolearn_preprocessing_host.mojo:186: for c in range(d):
+bindings/_mojolearn_preprocessing_host.mojo:213: for c in range(d):
+bindings/_mojolearn_preprocessing_host.mojo:246: for c in range(d):
+bindings/_mojolearn_resample.mojo:406: for i in range(count):
+bindings/_mojolearn_resample_host.mojo:424: for i in range(count):
+bindings/_mojolearn_rf.mojo:412: for t in range(len(trees)):
+bindings/_mojolearn_rf.mojo:417: for i in range(n):
+bindings/_mojolearn_rf.mojo:422: for i in range(len(tree.vector_leaf)):
+bindings/_mojolearn_rf.mojo:492: for t in range(len(trees)):
+bindings/_mojolearn_rf.mojo:494: for i in range(len(tree.sparsetree)):
+bindings/_mojolearn_rf_host.mojo:236: for r in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:237: for c in range(n_cols):
+bindings/_mojolearn_rf_host.mojo:249: for t in range(len(forest.offsets)):
+bindings/_mojolearn_rf_host.mojo:251: for i in range(forest.n_nodes()):
+bindings/_mojolearn_rf_host.mojo:255: for i in range(len(forest.leaves)):
+bindings/_mojolearn_rf_host.mojo:318: for i in range(len(weights)):
+bindings/_mojolearn_rf_host.mojo:344: for i in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:769: for i in range(len(self.sessions)):
+bindings/_mojolearn_rf_host.mojo:906: for i in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:911: for c in range(n_cols):
+bindings/_mojolearn_rf_host.mojo:912: for i in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:1008: for i in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:1012: for i in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:1018: for j in range(n_cols):
+bindings/_mojolearn_rf_host.mojo:1022: for j in range(n_cols):
+bindings/_mojolearn_rf_host.mojo:1031: for j in range(n_cols):
+bindings/_mojolearn_rf_host.mojo:1033: for i in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:1037: for i in range(n_rows):
+bindings/_mojolearn_rf_host.mojo:1079: for t in range(len(model.offsets)):
+bindings/_mojolearn_rf_host.mojo:1081: for i in range(model.n_nodes()):
+bindings/_mojolearn_rf_host.mojo:1158: for i in range(n_rows * num_outputs):
+bindings/_mojolearn_solver_host.mojo:237: for i in range(n_rows):
+bindings/_mojolearn_solver_host.mojo:238: for j in range(n_cols):
+bindings/_mojolearn_solver_host.mojo:262: for j in range(n_cols):
+bindings/_mojolearn_solver_host.mojo:316: for i in range(n_rows):
+bindings/_mojolearn_solver_host.mojo:425: for i in range((n_rows - 1) * 2):
+bindings/_mojolearn_solver_host.mojo:427: for i in range(n_rows):
+bindings/_mojolearn_svm.mojo:215: for i in range(res.n_support):
+bindings/_mojolearn_svm.mojo:400: for i in range(res.n_support):
+bindings/_mojolearn_svm.mojo:641: for i in range(n_query):
+bindings/_mojolearn_svm.mojo:645: for i in range(n_query):
+bindings/_mojolearn_svm_host.mojo:296: for i in range(n_rows):
+bindings/_mojolearn_svm_host.mojo:310: for j in range(n_support):
+bindings/_mojolearn_svm_host.mojo:317: for col in range(n_cols):
+bindings/_mojolearn_svm_host.mojo:407: for i in range(n_rows):
+bindings/_mojolearn_svm_host.mojo:421: for i in range(n_rows):
+bindings/_mojolearn_svm_host.mojo:529: for j in range(n_support):
+bindings/_mojolearn_svm_host.mojo:533: for j in range(n_support):
+bindings/_mojolearn_svm_host.mojo:538: for col in range(n_cols):
+bindings/_mojolearn_svm_host.mojo:617: for i in range(n_rows):
+bindings/_mojolearn_svm_host.mojo:731: for i in range(n_train * n_features):
+bindings/_mojolearn_svm_host.mojo:733: for i in range(n_query * n_features):
+bindings/_mojolearn_svm_host.mojo:798: for i in range(n_train):
+bindings/_mojolearn_svm_host.mojo:806: for i in range(n_query):
+bindings/_mojolearn_svm_host.mojo:811: for i in range(n_query):
+bindings/_mojolearn_svm_host.mojo:814: for i in range(n_query):
+bindings/_mojolearn_svm_host.mojo:819: for i in range(n_query):
+bindings/_mojolearn_svm_host.mojo:823: for i in range(n_query):
+bindings/_mojolearn_tokenizer_host.mojo:271: for i in range(tok.ranks.n_tokens()):
+bindings/_mojolearn_tokenizer_host.mojo:330: for k in range(count):
+bindings/_mojolearn_tokenizer_host.mojo:390: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:404: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:425: for k in range(lo, hi):
+bindings/_mojolearn_tokenizer_host.mojo:436: for j in range(c):
+bindings/_mojolearn_tokenizer_host.mojo:447: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:451: for j in range(counts[k]):
+bindings/_mojolearn_tokenizer_host.mojo:458: for k in range(n_docs - 1):
+bindings/_mojolearn_tokenizer_host.mojo:475: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:479: for j in range(total):
+bindings/_mojolearn_tokenizer_host.mojo:508: for k in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:566: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:580: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:586: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:645: for id in range(v.n_tokens()):
+bindings/_mojolearn_tokenizer_host.mojo:648: for i in range(m):
+bindings/_mojolearn_tokenizer_host.mojo:655: for k in range(nm):
+bindings/_mojolearn_tokenizer_host.mojo:689: for k in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:703: for k in range(len(lengths)):
+bindings/_mojolearn_tokenizer_host.mojo:713: for i in range(table.n_tokens()):
+bindings/_mojolearn_tokenizer_host.mojo:755: for _ in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:757: for k in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:780: for i in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:782: for j in range(len(toks[i])):
+bindings/_mojolearn_tokenizer_host.mojo:791: while at <= total:
+bindings/_mojolearn_tokenizer_host.mojo:793: while stop < total and Int(text[stop]) != 0x0A:
+bindings/_mojolearn_tokenizer_host.mojo:798: for i in range(at, stop):
+bindings/_mojolearn_tokenizer_host.mojo:809: for i in range(8):
+bindings/_mojolearn_tokenizer_host.mojo:834: for k in range(m):
+bindings/_mojolearn_tokenizer_host.mojo:901: for k in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:924: for k in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:955: for s in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:957: for k in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:970: for s in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:990: for k in range(n):
+bindings/_mojolearn_tokenizer_host.mojo:995: for k in range(nm):
+bindings/_mojolearn_tokenizer_host.mojo:1013: for k in range(len(points)):
+bindings/_mojolearn_tokenizer_host.mojo:1017: for s in range(len(cuts) - 1):
+bindings/_mojolearn_tokenizer_host.mojo:1021: while at < b:
+bindings/_mojolearn_tokenizer_host.mojo:1025: while cut >= at and Int(data[cut]) != 0x0A:
+bindings/_mojolearn_tokenizer_host.mojo:1078: for k in range(lo, hi):
+bindings/_mojolearn_tokenizer_host.mojo:1088: for j in range(c):
+bindings/_mojolearn_tokenizer_host.mojo:1097: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:1109: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:1110: while next_point < n_points and points[next_point] < starts[k]:
+bindings/_mojolearn_tokenizer_host.mojo:1121: for k in range(n_docs):
+bindings/_mojolearn_tokenizer_host.mojo:1123: for j in range(counts[k]):
+bindings/_mojolearn_tokenizer_host.mojo:1131: for j in range(n_points):
+bindings/_mojolearn_tokenizer_host.mojo:1169: for k in range(len(starts)):
+bindings/_mojolearn_tokenizer_host.mojo:1196: for b in range(batch):
+bindings/_mojolearn_tokenizer_host.mojo:1212: for k in range(len(bounds)):
+bindings/_mojolearn_tokenizer_host.mojo:1244: for k in range(nm):
+bindings/_mojolearn_tokenizer_host.mojo:1247: for i in range(mlen[2 * k]):
+bindings/_mojolearn_tokenizer_host.mojo:1250: for i in range(mlen[2 * k + 1]):
+bindings/_mojolearn_tokenizer_host.mojo:1319: for k in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:1334: for k in range(len(bounds)):
+bindings/_mojolearn_tokenizer_host.mojo:1350: for k in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:1385: for i in range(len(text)):
+bindings/_mojolearn_tokenizer_host.mojo:1392: for i in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:1395: for i in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:1411: for k in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:1414: for i in range(len(out)):
+bindings/_mojolearn_tokenizer_host.mojo:1428: for i in range(tok.ranks.n_tokens()):
+bindings/_mojolearn_tokenizer_host.mojo:1431: for j in range(tok.ranks.length[i]):
+bindings/_mojolearn_tokenizer_host.mojo:1434: for i in range(len(tok.sp_id)):
+bindings/_mojolearn_tokenizer_host.mojo:1437: for j in range(tok.sp_length[i]):
+bindings/_mojolearn_tokenizer_host.mojo:1440: for value in [tokenizer.pattern, tokenizer.normalizer, tokenizer.unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]:
+bindings/_mojolearn_tokenizer_host.mojo:1468: for i in range(len(keys)):
+bindings/_mojolearn_tokenizer_host.mojo:1479: for i in range(len(input)):
+bindings/_mojolearn_tokenizer_host.mojo:1482: for i in range(len(input)):
+bindings/_mojolearn_tokenizer_host.mojo:1495: for i in range(len(keys)):
+bindings/_mojolearn_tokenizer_host.mojo:1499: for j in range(len(text)):
+bindings/_mojolearn_tokenizer_host.mojo:1517: for i in range(len(raw)):
+bindings/_mojolearn_tokenizer_host.mojo:1529: for i in range(len(entries)):
+bindings/_mojolearn_tokenizer_host.mojo:1532: for j in range(len(bytes)):
+bindings/_mojolearn_tokenizer_host.mojo:1537: for i in range(len(pairs)):
+bindings/_mojolearn_tokenizer_host.mojo:1574: for i in range(len(steps)):
+bindings/_mojolearn_tokenizer_host.mojo:1631: for i in range(len(steps)):
+bindings/_mojolearn_tokenizer_host.mojo:1641: for i in range(len(entries)):
+bindings/_mojolearn_tokenizer_host.mojo:1652: for i in range(len(keys)):
+bindings/_mojolearn_tokenizer_host.mojo:1668: for i in range(len(single)):
+bindings/_mojolearn_tokenizer_host.mojo:1677: for j in range(len(ids)):
+bindings/_mojolearn_tokenizer_host.mojo:1708: for key in [String("bos_token"), String("eos_token")]:
+bindings/_mojolearn_tokenizer_host.mojo:1755: for i in range(len(offsets)):
+bindings/_mojolearn_tokenizer_host.mojo:1764: for i in range(len(raw)):
+bindings/_mojolearn_tokenizer_host.mojo:1771: for i in range(len(offsets) - 1):
+bindings/_mojolearn_training_host.mojo:194: for j in range(n_tensors + 1):
+bindings/_mojolearn_training_host.mojo:203: for j in range(n_tensors):
+bindings/_mojolearn_training_host.mojo:319: for i in range(n_total):
+bindings/_mojolearn_training_host.mojo:325: for j in range(n_tensors):
+bindings/_mojolearn_training_host.mojo:330: for i in range(n_total):
+bindings/_mojolearn_training_host.mojo:335: for i in range(n_total):
+bindings/_mojolearn_training_host.mojo:337: for j in range(n_tensors):
+bindings/_mojolearn_training_host.mojo:414: for i in range(n_rows):
+bindings/_mojolearn_training_host.mojo:421: for i in range(n_rows * vocab):
+bindings/_mojolearn_training_host.mojo:453: for i in range(len(out)):
+bindings/_mojolearn_training_host.mojo:478: for i in range(len(out)):
+bindings/_mojolearn_training_host.mojo:500: for i in range(len(out)):
+bindings/_mojolearn_training_host.mojo:545: for i in range(n_total):
+bindings/_mojolearn_training_host.mojo:551: for i in range(n_total):
+bindings/_mojolearn_training_host.mojo:572: for i in range(want):
+bindings/_mojolearn_training_host.mojo:589: for i in range(len(values)):
+bindings/_mojolearn_transformer.mojo:315: while len(a) < base + BLOCK_OPTION_ADDRS:
+bindings/_mojolearn_transformer.mojo:532: while len(t) < BLOCK_OPTION_ADDRS:
+bindings/_mojolearn_transformer.mojo:575: for i in range(BLOCK_OPTION_ADDRS):
+bindings/_mojolearn_transformer.mojo:874: for s in range(9):
+bindings/_mojolearn_transformer.mojo:880: while i < body:
+bindings/_mojolearn_transformer.mojo:886: while i < n:
+bindings/_mojolearn_transformer.mojo:897: for s in range(9):
+bindings/_mojolearn_transformer.mojo:901: for s in range(9):
+bindings/_mojolearn_transformer.mojo:1161: for i in range(11):  # metadata: fixed input/output pointer list
+bindings/_mojolearn_transformer.mojo:1165: for i in range(10):  # metadata: x and the nine weights
+bindings/_mojolearn_transformer.mojo:1230: for i in range(11):
+bindings/_mojolearn_transformer.mojo:1406: for i in range(21):
+bindings/_mojolearn_transformer.mojo:1557: for i in range(21):  # metadata: fixed pointer list
+bindings/_mojolearn_transformer.mojo:1563: for i in range(9):  # metadata: fixed scalar list
+bindings/_mojolearn_transformer.mojo:1638: for i in range(22):  # metadata: fixed pointer list
+bindings/_mojolearn_transformer.mojo:1651: for i in range(8):  # metadata: fixed scalar list
+bindings/_mojolearn_transformer.mojo:1840: for i in range(3, 10):
+bindings/_mojolearn_transformer.mojo:1852: for i in range(21):
+bindings/_mojolearn_transformer.mojo:2119: for i in range(10):
+bindings/_mojolearn_transformer.mojo:2124: for i in range(BLOCK_OPTION_ADDRS):
+bindings/_mojolearn_transformer.mojo:2463: for i in range(3, 10):
+bindings/_mojolearn_transformer.mojo:2614: for i in range(11):
+bindings/_mojolearn_transformer.mojo:2617: for i in range(BLOCK_OPTION_ADDRS):
+bindings/_mojolearn_transformer.mojo:2679: for i in range(11):
+bindings/_mojolearn_transformer.mojo:3006: while c < v:
+bindings/_mojolearn_transformer.mojo:3016: while active > 0:
+bindings/_mojolearn_transformer.mojo:3097: for i in range(len(layers)):
+bindings/_mojolearn_transformer.mojo:3142: for step in range(n_steps):
+bindings/_mojolearn_transformer.mojo:3173: ctx.enqueue_function[_lm_last_argmax_kernel](
+bindings/_mojolearn_transformer.mojo:3181: for r in range(b):
+bindings/_mojolearn_transformer.mojo:3324: for i in range(n_layers):
+bindings/_mojolearn_transformer.mojo:3332: for i in range(n_layers):
+bindings/_mojolearn_transformer.mojo:3340: for i in range(n_layers):
+bindings/_mojolearn_transformer.mojo:3451: for i in range(21):
+bindings/_mojolearn_transformer.mojo:3525: for i in range(11):
+bindings/_mojolearn_transformer.mojo:3530: for i in range(10):
+bindings/_mojolearn_transformer.mojo:3581: for i in range(11):
+bindings/_mojolearn_transformer_host.mojo:141: for i in range(n):
+bindings/_mojolearn_transformer_host.mojo:165: for i in range(got):
+bindings/_mojolearn_transformer_host.mojo:170: while len(a) < n + BLOCK_OPTION_ADDRS:
+bindings/_mojolearn_transformer_host.mojo:184: for i in range(got):
+bindings/_mojolearn_transformer_host.mojo:288: for i in range(10):
+bindings/_mojolearn_transformer_host.mojo:293: for i in range(BLOCK_OPTION_ADDRS):
+bindings/_mojolearn_transformer_host.mojo:414: for i in range(10):
+bindings/_mojolearn_transformer_host.mojo:501: for i in range(10):
+bindings/_mojolearn_transformer_host.mojo:552: for i in range(10):
+bindings/_mojolearn_trees.mojo:136: for t in range(len(model.forest.trees)):
+bindings/_mojolearn_trees.mojo:138: for i in range(tree.num_nodes()):
+bindings/_mojolearn_trees.mojo:285: for t in range(len(result.forest.trees)):
+bindings/_mojolearn_trees.mojo:289: for i in range(n):
+bindings/_mojolearn_trees.mojo:294: for i in range(len(result.forest.trees[t].vector_leaf)):
+bindings/_mojolearn_trees_host.mojo:205: for r in range(n_rows):
+bindings/_mojolearn_trees_host.mojo:206: for c in range(n_features):
+bindings/_mojolearn_trees_host.mojo:220: for t in range(len(result.forest.trees)):
+bindings/_mojolearn_trees_host.mojo:224: for i in range(n):
+bindings/_mojolearn_trees_host.mojo:229: for i in range(len(result.forest.trees[t].vector_leaf)):
+bindings/_mojolearn_trees_host.mojo:255: for tree in result.forest.trees:
+bindings/_mojolearn_trees_host.mojo:562: for t in range(len(model.forest.trees)):
+bindings/_mojolearn_trees_host.mojo:564: for i in range(tree.num_nodes()):
+bindings/_mojolearn_trees_host.mojo:642: for i in range(n_rows * num_outputs):
+bindings/_mojolearn_tsa_host.mojo:215: for i in range(components_len):
+bindings/_mojolearn_tsa_host.mojo:219: for b in range(batch_size):
+bindings/_mojolearn_tsa_host.mojo:236: for i in range(4 * batch_size):
+bindings/_mojolearn_x_ann.mojo:382: while D < dim:
+bindings/_mojolearn_x_ann_host.mojo:148: for e in range(n * deg):
+bindings/_mojolearn_x_ann_host.mojo:278: while D < dim:
+bindings/_mojolearn_x_cnn.mojo:135: ctx.enqueue_function[_csr_bad_kernel](
+bindings/_mojolearn_x_cnn.mojo:140: ctx.enqueue_function[_label_bad_kernel](
+bindings/_mojolearn_x_cnn.mojo:167: for k in range(Int(py=len(params))):
+bindings/_mojolearn_x_cnn.mojo:511: for k in range(6):
+bindings/_mojolearn_x_cnn.mojo:583: for k in range(7):
+bindings/_mojolearn_x_cnn.mojo:660: for k in range(9):
+bindings/_mojolearn_x_cnn.mojo:702: for k in range(6):
+bindings/_mojolearn_x_cnn.mojo:724: for k in range(nout):
+bindings/_mojolearn_x_cnn.mojo:767: for k in range(9):
+bindings/_mojolearn_x_cnn.mojo:1048: for k in range(7):
+bindings/_mojolearn_x_cnn.mojo:1160: for k in range(6):
+bindings/_mojolearn_x_cnn.mojo:1365: for j in range(nb):
+bindings/_mojolearn_x_cnn.mojo:1509: for r in range(2):
+bindings/_mojolearn_x_cnn.mojo:1510: for e in range(5):
+bindings/_mojolearn_x_cnn.mojo:1522: for st in range(steps):
+bindings/_mojolearn_x_cnn.mojo:1528: for j in range(nb):
+bindings/_mojolearn_x_cnn_host.mojo:70: for k in range(Int(py=len(params))):
+bindings/_mojolearn_x_cnn_host.mojo:381: for i in range(n):
+bindings/_mojolearn_x_cnn_host.mojo:402: for k in range(6):
+bindings/_mojolearn_x_cnn_host.mojo:408: for j in range(len(cnt)):
+bindings/_mojolearn_x_cnn_host.mojo:490: for k in range(7):
+bindings/_mojolearn_x_cnn_host.mojo:529: for r in range(n):
+bindings/_mojolearn_x_cnn_host.mojo:532: for e in range(nnz):
+bindings/_mojolearn_x_cnn_host.mojo:572: for k in range(9):
+bindings/_mojolearn_x_cnn_host.mojo:619: for k in range(6):
+bindings/_mojolearn_x_cnn_host.mojo:641: for k in range(nout):
+bindings/_mojolearn_x_cnn_host.mojo:683: for k in range(9):
+bindings/_mojolearn_x_cnn_host.mojo:688: for j in range(len(cnt)):
+bindings/_mojolearn_x_cnn_host.mojo:760: for i in range(n):
+bindings/_mojolearn_x_cnn_host.mojo:805: for j in range(k):
+bindings/_mojolearn_x_cnn_host.mojo:821: for t in range(2):
+bindings/_mojolearn_x_cnn_host.mojo:825: for r in range(n):
+bindings/_mojolearn_x_cnn_host.mojo:832: for r in range(n):
+bindings/_mojolearn_x_cnn_host.mojo:862: for j in range(nb):
+bindings/_mojolearn_x_cnn_host.mojo:886: for j in range(nb):
+bindings/_mojolearn_x_cnn_host.mojo:920: for st in range(steps):
+bindings/_mojolearn_x_cnn_host.mojo:925: for r in range(m):
+bindings/_mojolearn_x_cnn_host.mojo:927: for r in range(m):
+bindings/_mojolearn_x_cnn_host.mojo:930: for j in range(nb):
+bindings/_mojolearn_x_cnn_host.mojo:945: for i in range(m):
+bindings/_mojolearn_x_cnn_host.mojo:957: for jj in range(nb):
+bindings/_mojolearn_x_cnn_host.mojo:980: for e in range(nh):
+bindings/_mojolearn_x_cnn_host.mojo:983: for j in range(len(cnt)):
+bindings/_mojolearn_x_cnn_host.mojo:1025: for i in range(n):
+bindings/_mojolearn_x_cnn_host.mojo:1052: for t in range(nsteps):
+bindings/_mojolearn_x_cnn_host.mojo:1066: for e in range(nsteps * AH_ROW):
+bindings/_mojolearn_x_cnn_host.mojo:1091: for e in range(steps * nh):
+bindings/_mojolearn_x_cnn_host.mojo:1096: for st in range(steps):
+bindings/_mojolearn_x_cnn_host.mojo:1097: for e in range(5):
+bindings/_mojolearn_x_linear.mojo:50: while off < count:
+bindings/_mojolearn_x_linear_host.mojo:36: for i in range(count):
+bindings/_mojolearn_x_linear_host.mojo:108: for i in range(n_ip):
+bindings/_mojolearn_x_linear_host.mojo:111: for i in range(n_fp):
+bindings/_mojolearn_x_linear_host.mojo:134: for i in range(n_out):
+bindings/_mojolearn_x_linear_host.mojo:148: for i in range(ny):
+bindings/_mojolearn_x_linear_host.mojo:162: for i in range(n):
+bindings/_mojolearn_x_linear_host.mojo:167: for t in range(t_c):
+bindings/_mojolearn_x_linear_host.mojo:170: for i in range(n):
+bindings/_mojolearn_x_linear_host.mojo:207: for t in range(n * k):
+bindings/_mojolearn_x_linear_host.mojo:231: for t in range(n * k):
+bindings/_mojolearn_x_linear_host.mojo:233: for i in range(n):
+bindings/_mojolearn_x_metrics_host.mojo:52: for k in range(no):
+bindings/_mojolearn_x_prep_host.mojo:101: for c in range(nc):
+bindings/_mojolearn_x_sequence.mojo:313: var context = DeviceContext(device_id=ids[k])
+bindings/_mojolearn_x_sequence.mojo:325: var context = DeviceContext(device_id=ids[k])
+bindings/_mojolearn_x_sequence.mojo:380: var context = DeviceContext(device_id=ids[k])
+bindings/_mojolearn_x_sequence.mojo:392: var context = DeviceContext(device_id=ids[k])
+bindings/_mojolearn_x_trees.mojo:38: for i in range(5):
+bindings/_mojolearn_x_trees_host.mojo:50: for i in range(5):
+bindings/_mojolearn_x_trees_host.mojo:59: for i in range(n):
+bindings/_mojolearn_x_trees_host.mojo:106: for i in range(n):
+bindings/_mojolearn_x_trees_host.mojo:126: for i in range(len(targets)):
+bindings/_mojolearn_x_trees_host.mojo:163: for j in range(nt):  # glue: T tree addresses
+bindings/_mojolearn_x_trees_host.mojo:185: for j in range(nt):  # glue: T tree sizes and coefficients
+bindings/_mojolearn_x_trees_host.mojo:189: for c in range(len(inits)):  # glue: k class starts
+bindings/_mojolearn_x_trees_host.mojo:202: for i in range(5):
+bindings/apple_fast_bf16_public.mojo:154: for index in range(len(shape)):
+bindings/arima_exog_layout.mojo:47: for b in range(batch_size):
+bindings/arima_exog_layout.mojo:48: for t in range(n_rows):
+bindings/arima_exog_layout.mojo:49: for i in range(n_exog):
+bindings/arima_host_predict.mojo:84: for i in range(n_steps * batch_size):
+bindings/arima_host_predict.mojo:118: for i in range(ld * batch_size):
+bindings/arima_k3_df_probe.mojo:32: ctx.enqueue_function[k3_df_parts_kernel](
+bindings/arima_k3_df_probe.mojo:37: ctx.enqueue_function[k3_df_finish_kernel](
+bindings/arima_k3_df_probe.mojo:42: ctx.enqueue_function[k3_df_gradient_kernel](
+bindings/array_helpers.mojo:47: while done < total:
+bindings/array_helpers.mojo:48: for j in range(inner):
+bindings/array_helpers.mojo:53: while k >= 0:
+bindings/array_helpers.mojo:81: for k in range(nd):
+bindings/array_helpers.mojo:115: for i in range(n):
+bindings/array_helpers.mojo:144: for i in range(n):
+bindings/array_helpers.mojo:147: for k in range(keep):
+bindings/array_helpers.mojo:149: for k in range(keep, row):
+bindings/array_helpers.mojo:152: for i in range(n):
+bindings/array_helpers.mojo:155: for k in range(keep, row):
+bindings/array_helpers.mojo:158: for i in range(n):
+bindings/array_helpers.mojo:160: for k in range(row):
+bindings/array_helpers.mojo:175: for i in range(1, count):
+bindings/array_helpers.mojo:398: for c in range(kk):
+bindings/array_helpers.mojo:440: for row in range(nq):
+bindings/array_helpers.mojo:442: for r in range(s_count):
+bindings/array_helpers.mojo:448: for j in range(width):
+bindings/array_helpers.mojo:464: for a in range(kk):
+bindings/array_helpers.mojo:469: for a in range(1, kk):
+bindings/array_helpers.mojo:474: while b >= 0:
+bindings/array_helpers.mojo:483: for j in range(kk):
+bindings/byte_checkpoint_native.mojo:75: for key in [String("schema"), String("profile"), String("numeric_mode"), String("parameter_names"), String("parameter_shapes"), String("parameter_offsets"), String("completed_steps"), String("next_batch_index"), String("config"), String("data_schedule")]:
+bindings/byte_checkpoint_native.mojo:90: for i in range(4):
+bindings/byte_checkpoint_native.mojo:94: for key in [String("name"), String("dtype"), String("shape"), String("nbytes"), String("sha256")]:
+bindings/byte_checkpoint_native.mojo:101: for j in range(64):
+bindings/byte_checkpoint_native.mojo:116: for i in range(4):
+bindings/byte_checkpoint_native.mojo:138: for i in range(8):
+bindings/byte_checkpoint_native.mojo:152: for i in range(4):
+bindings/byte_checkpoint_native.mojo:196: for i in range(8):
+bindings/byte_checkpoint_native.mojo:212: for i in range(4):
+bindings/byte_checkpoint_native.mojo:218: for i in range(4):
+bindings/causal_checkpoint.mojo:20: for i in range(len(shape)):
+bindings/causal_checkpoint.mojo:60: for i in range(len(value.shape)):
+bindings/causal_checkpoint.mojo:83: for i in range(8):
+bindings/causal_checkpoint.mojo:104: for i in range(len(names)):
+bindings/causal_checkpoint.mojo:113: for j in range(len(input_shape)):
+bindings/causal_checkpoint.mojo:187: for i in range(count):
+bindings/causal_checkpoint.mojo:225: for i in range(len(names)):
+bindings/causal_checkpoint.mojo:239: for i in range(len(entries)):
+bindings/causal_checkpoint.mojo:270: for i in range(len(value._paths)):
+bindings/causal_checkpoint.mojo:274: for j in range(len(names)):
+bindings/causal_checkpoint.mojo:280: for i in range(len(names)):
+bindings/causal_checkpoint.mojo:309: for i in range(len(files)):
+bindings/causal_lm_construct.mojo:43: for i in range(Int(py=value.size)):
+bindings/causal_lm_construct.mojo:46: for j in range(len(dims)):
+bindings/causal_lm_construct.mojo:496: for i in range(Int(py=value.size)):
+bindings/causal_lm_public.mojo:61: for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:
+bindings/causal_lm_public.mojo:67: for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:
+bindings/causal_lm_public.mojo:86: for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),
+bindings/causal_lm_public.mojo:331: for i in range(len(expected)):
+bindings/causal_lm_public.mojo:348: for i in range(len(copies)):
+bindings/causal_lm_public.mojo:360: for j in range(len(blk["_w"])):
+bindings/causal_lm_public.mojo:365: for j in range(len(blk["_wopt"])):
+bindings/causal_lm_public.mojo:368: for j in range(len(blk["_int15"])):
+bindings/causal_lm_public.mojo:370: for k in range(3):
+bindings/causal_lm_public.mojo:436: for j in range(len(blk["_w"])):
+bindings/causal_lm_public.mojo:575: for i in range(len(sessions)):
+bindings/causal_lm_public.mojo:603: for i in range(len(model._blocks)):
+bindings/causal_lm_public.mojo:608: for j in range(1, 12):
+bindings/causal_lm_public.mojo:610: for j in range(13, len(a)):
+bindings/causal_lm_public.mojo:614: for j in range(len(p)):
+bindings/causal_lm_public.mojo:622: for i in range(3):
+bindings/causal_lm_public.mojo:638: for r in range(b):
+bindings/causal_lm_public.mojo:696: for i in range(len(self.finished)):
+bindings/causal_lm_public.mojo:728: for i in range(len(values)):
+bindings/causal_lm_public.mojo:777: while wrote < capacity and not s.done():
+bindings/causal_lm_public.mojo:783: for r in range(b):
+bindings/causal_lm_public.mojo:787: for j in range(v):
+bindings/causal_lm_public.mojo:791: for i in range(len(s.eos)):
+bindings/causal_lm_public.mojo:804: for r in range(b):
+bindings/causal_lm_public.mojo:805: for t in range(wrote):
+bindings/causal_lm_public.mojo:820: for i in range(n):
+bindings/causal_lm_public.mojo:822: for j in range(len(s.eos)):
+bindings/causal_lm_public.mojo:833: while lead > max(-1, size - 4) and (Int(py=s.pending_bytes[lead]) & 0xC0) == 0x80:
+bindings/causal_lm_public.mojo:848: for i in range(size):
+bindings/causal_lm_public.mojo:888: for r in range(b):
+bindings/causal_lm_public.mojo:920: for i in range(len(ids)):
+bindings/causal_lm_public.mojo:976: for i in range(len(model._blocks)):
+bindings/causal_lm_public.mojo:983: for j in range(len(blk["_wopt"])):
+bindings/causal_lm_public.mojo:990: for j in range(len(blk["_w"])):
+bindings/causal_lm_public.mojo:995: for j in range(len(blk["_int15"])):
+bindings/causal_lm_public.mojo:997: for k in range(3):
+bindings/causal_lm_public.mojo:1000: for k in range(3):
+bindings/causal_lm_public.mojo:1018: for name in [String("schema"), String("model"), String("options"), String("maximum"),
+bindings/causal_lm_public.mojo:1024: for i in range(len(checkpoint["layers"])):
+bindings/causal_lm_public.mojo:1027: for j in range(len(names)):
+bindings/causal_lm_public.mojo:1054: for i in range(len(s[].finished)):
+bindings/causal_lm_public.mojo:1077: for i in range(len(s[].state.layers)):
+bindings/causal_lm_public.mojo:1083: for j in range(len(arrays)):
+bindings/causal_lm_public.mojo:1128: for i in range(b):
+bindings/causal_lm_public.mojo:1138: for i in range(len(s[].state.layers)):
+bindings/causal_lm_public.mojo:1144: for j in range(len(arrays)):
+bindings/causal_model_config.mojo:58: for j in range(len(plan._layer_map)):
+bindings/causal_model_config.mojo:76: for i in range(Int(py=plan.n_layers)):
+bindings/causal_model_config.mojo:78: for j in range(len(layer)):
+bindings/causal_model_config.mojo:113: for i in range(len(names)):
+bindings/causal_model_config.mojo:121: for field in [String("num_local_experts"), String("num_experts"), String("num_experts_per_tok"), String("n_routed_experts")]:
+bindings/causal_model_config.mojo:268: for i in range(len(layers)):
+bindings/causal_model_config.mojo:306: for field in [String("attn_logit_softcapping"), String("final_logit_softcapping"), String("query_pre_attn_scalar")]:
+bindings/causal_model_config.mojo:316: for i in range(len(names)):
+bindings/causal_model_config.mojo:323: for i in range(len(targets)):
+bindings/classical_archive_read.mojo:46: while self.peek() == 32 or self.peek() == 9 or self.peek() == 10 or self.peek() == 13:
+bindings/classical_archive_read.mojo:62: while self.peek() >= 0:
+bindings/classical_archive_read.mojo:86: while True:
+bindings/classical_archive_read.mojo:91: while self.peek() >= 48 and self.peek() <= 57:
+bindings/classical_archive_read.mojo:113: while True:
+bindings/classical_archive_read.mojo:304: while at < len(central):
+bindings/classical_archive_read.mojo:325: while extra_at < extra_end:
+bindings/classical_archive_read.mojo:440: while bi.type(value) is bi.list:
+bindings/classical_arrays.mojo:50: for r in range(rows):  # native input marshaling: input rows, never a model or training loop
+bindings/classical_arrays.mojo:51: for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
+bindings/classical_arrays.mojo:54: for k in range(item):
+bindings/classical_arrays.mojo:87: for i in range(rows):  # native input marshaling: weight validation and scalar expansion
+bindings/classical_pandas.mojo:80: for k in range(size):
+bindings/classical_pandas.mojo:131: for row in range(rows):  # native input marshaling: refuse missing values before numeric preparation
+bindings/classical_pandas.mojo:230: for col in range(len(positions)):  # native input marshaling: columns scatter into logical C-order storage
+bindings/classical_pandas.mojo:235: for row in range(rows):  # native input marshaling: numeric conversion preserves pandas promotion before float32
+bindings/classical_ridge.mojo:182: for k in range(size):  # native output marshaling: exact widening of the completed prediction buffer
+bindings/classical_tsqr.mojo:98: for i in range(rows * cols):
+bindings/classical_tsqr.mojo:108: for i in range(stop - start):
+bindings/classical_tsqr.mojo:235: for r in range(rows):
+bindings/classical_tsqr.mojo:236: for c in range(width):
+bindings/classical_tsqr.mojo:361: for i in range(min(m, n)):
+bindings/cross_vendor_native.mojo:134: for key in [String("parameters"), String("m"), String("v"), String("flags")]:
+bindings/cross_vendor_native.mojo:340: for k in range(len(ids)):
+bindings/cross_vendor_native.mojo:344: for key in [String("state"), String("completed"), String("n_total")]:
+bindings/cross_vendor_native.mojo:350: for k in range(shards):
+bindings/cross_vendor_native.mojo:363: while j > 0 and Int(py=peers[j - 1]["shards"][0]) > Int(py=peer["shards"][0]):
+bindings/cross_vendor_native.mojo:367: for i in range(count):
+bindings/cross_vendor_native.mojo:369: for k in range(len(ids)):
+bindings/cross_vendor_native.mojo:400: for k in range(n):
+bindings/cross_vendor_native.mojo:422: for k in range(shards):
+bindings/cross_vendor_native.mojo:426: for k in range(shards):
+bindings/cross_vendor_native.mojo:521: for i in range(4):
+bindings/cross_vendor_native.mojo:656: for j in range(len(keys)):
+bindings/cross_vendor_native.mojo:662: for k in range(len(losses)):
+bindings/cross_vendor_native.mojo:679: for k in range(64):
+bindings/cross_vendor_native.mojo:693: for i in range(8):
+bindings/cross_vendor_native.mojo:715: for key in [String("parameters"), String("m"), String("v"), String("flags")]:
+bindings/cross_vendor_native.mojo:787: for i in range(len(checkpoint_steps)):
+bindings/cross_vendor_native.mojo:790: for i in range(len(expected_steps)):
+bindings/dbscan_core_device.mojo:106: ctx.enqueue_function[_core_flag_kernel](
+bindings/dbscan_core_device.mojo:133: ctx.enqueue_function[_core_gather_kernel](
+bindings/forest_export_binding.mojo:81: for address in addresses:
+bindings/forest_host_groves_binding.mojo:71: for i in range(trees + 1):
+bindings/forest_host_groves_binding.mojo:73: for i in range(nodes):
+bindings/forest_host_groves_binding.mojo:77: for i in range(nodes * outputs):
+bindings/generation_buffers.mojo:53: for i in range(len(values)):
+bindings/generation_buffers.mojo:62: for i in range(len(dims)):
+bindings/generation_buffers.mojo:84: for i in range(len(dims)):
+bindings/generation_buffers.mojo:143: for i in range(b * l):
+bindings/generation_buffers.mojo:154: for i in range(len(value.shape)):
+bindings/generation_policy.mojo:37: for i in range(n):
+bindings/generation_policy.mojo:47: for i in range(n):
+bindings/generation_policy.mojo:51: while width < n:
+bindings/generation_policy.mojo:53: while start < n:
+bindings/generation_policy.mojo:58: for dest in range(start, end):
+bindings/generation_policy.mojo:66: for i in range(n):
+bindings/generation_policy.mojo:73: for i in range(keep):
+bindings/generation_policy.mojo:82: while count < keep:
+bindings/generation_policy.mojo:91: for i in range(count):
+bindings/gp_host_predict.mojo:65: for t in range(n_nodes):
+bindings/gp_host_predict.mojo:99: for i in range(ln):
+bindings/gp_host_predict.mojo:180: for i in range(n_star):
+bindings/gp_host_predict.mojo:186: for i in range(n_star):
+bindings/gp_host_predict.mojo:307: for t in range(n_star):
+bindings/gp_host_predict.mojo:313: for t in range(n_star):
+bindings/gp_host_predict.mojo:409: for c in range(2, len(addrs)):
+bindings/hdbscan_host_predict.mojo:70: for i in range(nq):
+bindings/hdbscan_host_predict.mojo:80: for i in range(1, len(vals)):
+bindings/hdbscan_host_predict.mojo:85: for i in range(len(vals)):
+bindings/hdbscan_host_predict.mojo:137: for i in range(nq * n_selected):
+bindings/hdbscan_host_predict.mojo:191: for i in range(count * n_selected):
+bindings/holtwinters_host_predict.mojo:140: for i in range(h * batch_size):
+bindings/holtwinters_host_predict.mojo:215: for i in range(written):
+bindings/host_helpers.mojo:55: for i in range(count):
+bindings/host_helpers.mojo:70: for i in range(count):
+bindings/host_helpers.mojo:90: while i < body:
+bindings/host_helpers.mojo:94: while i < count:
+bindings/host_helpers.mojo:120: for i in range(count):
+bindings/host_helpers.mojo:126: for i in range(count):
+bindings/host_helpers.mojo:151: for i in range(count):
+bindings/host_helpers.mojo:157: for i in range(count):
+bindings/host_helpers.mojo:188: for r in range(no):
+bindings/host_helpers.mojo:194: for r in range(no):
+bindings/host_helpers.mojo:222: for r in range(rows):
+bindings/host_helpers.mojo:226: for c in range(1, cols):
+bindings/host_helpers.mojo:251: for r in range(rows):
+bindings/host_helpers.mojo:255: for c in range(1, cols):
+bindings/host_helpers.mojo:287: for r in range(b):
+bindings/host_helpers.mojo:291: for c in range(1, v):
+bindings/host_helpers.mojo:343: for r in range(lo, hi):
+bindings/host_helpers.mojo:345: for c in range(nc):
+bindings/host_helpers.mojo:365: for task in range(tasks):
+bindings/hostptr.mojo:43: while i < body:
+bindings/hostptr.mojo:46: while i < n:
+bindings/hotpath_device.mojo:853: while off < n and ok:
+bindings/hotpath_helpers.mojo:204: while i + HP_W <= hi:
+bindings/hotpath_helpers.mojo:214: while i < hi and not bad:
+bindings/hotpath_helpers.mojo:227: for c in range(tasks):
+bindings/hotpath_helpers.mojo:320: for i in range(n):
+bindings/hotpath_helpers.mojo:349: for i in range(1, n):
+bindings/hotpath_helpers.mojo:354: for i in range(1, n):
+bindings/hotpath_helpers.mojo:359: for i in range(1, n):
+bindings/hotpath_helpers.mojo:370: for i in range(n):
+bindings/hotpath_helpers.mojo:377: for i in range(n):
+bindings/hotpath_helpers.mojo:466: while i + HP_W <= hi:
+bindings/hotpath_helpers.mojo:472: while i < hi:
+bindings/hotpath_helpers.mojo:490: while i < n:
+bindings/hotpath_helpers.mojo:558: for i in range(n):
+bindings/hotpath_helpers.mojo:566: while lo < hi:
+bindings/hotpath_helpers.mojo:579: while j > lo:
+bindings/hotpath_helpers.mojo:585: for i in range(n):
+bindings/hotpath_helpers.mojo:592: while lo < hi:
+bindings/hotpath_helpers.mojo:602: for i in range(n):
+bindings/hotpath_helpers.mojo:689: for i in range(count):
+bindings/hotpath_helpers.mojo:701: for i in range(lo, hi):
+bindings/hotpath_helpers.mojo:740: for i in range(count):
+bindings/hotpath_helpers.mojo:749: for i in range(count):
+bindings/hotpath_helpers.mojo:777: for i in range(na):
+bindings/hotpath_helpers.mojo:784: for i in range(nb):
+bindings/hotpath_helpers.mojo:828: for fold in range(splits):
+bindings/hotpath_helpers.mojo:832: for i in range(offset, offset + size):
+bindings/hotpath_helpers.mojo:845: for i in range(rows):
+bindings/hotpath_helpers.mojo:857: for j in range(len(order)):
+bindings/hotpath_helpers.mojo:860: for fold in range(splits):
+bindings/hotpath_helpers.mojo:871: for i in range(rows):
+bindings/hotpath_helpers.mojo:874: while quota[c * splits + fold] == 0:
+bindings/hotpath_helpers.mojo:880: for c in range(k):
+bindings/hotpath_helpers.mojo:882: for fold in range(splits):
+bindings/hotpath_helpers.mojo:906: for i in range(rows):
+bindings/hotpath_helpers.mojo:935: for i in range(count):
+bindings/hotpath_helpers.mojo:957: for i in range(a, b):
+bindings/hotpath_helpers.mojo:960: for i in range(rows):
+bindings/hotpath_helpers.mojo:984: for r in range(rows):
+bindings/hotpath_helpers.mojo:988: for i in range(count):
+bindings/hotpath_helpers.mojo:1019: for i in range(rows):
+bindings/hotpath_helpers.mojo:1042: for i in range(rows):
+bindings/hotpath_helpers.mojo:1058: while i >= 0 and Int(cp.unsafe_load(i)) == i + rows - k:
+bindings/hotpath_helpers.mojo:1063: for j in range(i, k):
+bindings/hotpath_helpers.mojo:1089: for b in range(count):
+bindings/hotpath_helpers.mojo:1132: for b in range(count):
+bindings/hotpath_helpers.mojo:1176: for i in range(count):
+bindings/hotpath_helpers.mojo:1209: for i in range(count):
+bindings/hotpath_helpers.mojo:1238: for i in range(count):
+bindings/hotpath_helpers.mojo:1274: for j in range(kk):
+bindings/hotpath_helpers.mojo:1279: for i in range(count):
+bindings/hotpath_helpers.mojo:1285: for i in range(count):
+bindings/hotpath_helpers.mojo:1310: for i in range(count):
+bindings/hotpath_helpers.mojo:1336: for i in range(count):
+bindings/hotpath_helpers.mojo:1341: for i in range(count):
+bindings/hotpath_helpers.mojo:1366: for i in range(rows):
+bindings/hotpath_helpers.mojo:1368: for j in range(cols):
+bindings/hotpath_helpers.mojo:1370: for j in range(cols):
+bindings/hotpath_helpers.mojo:1393: for i in range(count):
+bindings/hotpath_helpers.mojo:1419: for i in range(count):
+bindings/hotpath_helpers.mojo:1451: for i in range(count):
+bindings/hotpath_helpers.mojo:1484: for g in range(mm):
+bindings/hotpath_helpers.mojo:1486: for i in range(te + tr):
+bindings/hotpath_helpers.mojo:1522: for i in range(count):
+bindings/hotpath_helpers.mojo:1528: for i in range(count):
+bindings/hotpath_helpers.mojo:1530: for b in range(width):
+bindings/hotpath_helpers.mojo:1557: for i in range(count):
+bindings/hotpath_helpers.mojo:1590: for i in range(count):
+bindings/hotpath_helpers.mojo:1628: while k > 0:
+bindings/hotpath_helpers.mojo:1654: for t in range(ns):
+bindings/hotpath_helpers.mojo:1683: for i in range(count):
+bindings/hotpath_helpers.mojo:1687: for i in range(count):
+bindings/hotpath_helpers.mojo:1711: for j in range(kk):
+bindings/hotpath_helpers.mojo:1713: for i in range(rows):
+bindings/hotpath_helpers.mojo:1752: for c in range(kk):
+bindings/hotpath_helpers.mojo:1754: for i in range(K):
+bindings/hotpath_helpers.mojo:1765: for i in range(m):
+bindings/hotpath_helpers.mojo:1769: while width < m:
+bindings/hotpath_helpers.mojo:1771: while lo < m:
+bindings/hotpath_helpers.mojo:1777: while i < mid and j < hi:
+bindings/hotpath_helpers.mojo:1785: while i < mid:
+bindings/hotpath_helpers.mojo:1789: while j < hi:
+bindings/hotpath_helpers.mojo:1820: for f in range(K):
+bindings/hotpath_helpers.mojo:1825: for f in range(K):
+bindings/hotpath_helpers.mojo:1827: for j in range(start, start + size):
+bindings/hotpath_helpers.mojo:1835: for g in range(mm):
+bindings/hotpath_helpers.mojo:1839: for t in range(mm - 1, -1, -1):
+bindings/hotpath_helpers.mojo:1842: for f in range(1, K):
+bindings/hotpath_helpers.mojo:1847: for g in range(mm):
+bindings/hotpath_helpers.mojo:1880: for i in range(nn):
+bindings/hotpath_helpers.mojo:1888: for c in range(kk):
+bindings/hotpath_helpers.mojo:1895: for j in range(mm):
+bindings/hotpath_helpers.mojo:1898: for j in range(mm):
+bindings/hotpath_helpers.mojo:1902: for j in range(mm):
+bindings/hotpath_helpers.mojo:1905: for c in range(kk):
+bindings/hotpath_helpers.mojo:1909: for c in range(kk):
+bindings/hotpath_helpers.mojo:1917: for t in range(mm):
+bindings/hotpath_helpers.mojo:1922: for f in range(K):
+bindings/hotpath_helpers.mojo:1924: for c in range(kk):
+bindings/hotpath_helpers.mojo:1926: for j in range(K):
+bindings/hotpath_helpers.mojo:1932: for j in range(K):
+bindings/hotpath_helpers.mojo:1941: for c in range(kk):
+bindings/hotpath_helpers.mojo:1945: for f in range(K):
+bindings/hotpath_helpers.mojo:1971: for g in range(mm):
+bindings/hotpath_helpers.mojo:1972: for c in range(kk):
+bindings/hotpath_helpers.mojo:1977: for c in range(kk):
+bindings/hotpath_helpers.mojo:1984: for j in range(mm):
+bindings/hotpath_helpers.mojo:1987: for j in range(mm):
+bindings/hotpath_helpers.mojo:1991: for j in range(mm):
+bindings/hotpath_helpers.mojo:1994: for c in range(kk):
+bindings/hotpath_helpers.mojo:1998: for c in range(kk):
+bindings/hotpath_helpers.mojo:2006: for t in range(mm):
+bindings/hotpath_helpers.mojo:2011: for f in range(K):
+bindings/hotpath_helpers.mojo:2013: for c in range(kk):
+bindings/hotpath_helpers.mojo:2015: for j in range(K):
+bindings/hotpath_helpers.mojo:2021: for j in range(K):
+bindings/hotpath_helpers.mojo:2030: for c in range(kk):
+bindings/hotpath_helpers.mojo:2034: for f in range(K):
+bindings/hotpath_helpers.mojo:2066: for i in range(nn):
+bindings/hotpath_helpers.mojo:2068: for i in range(kk):
+bindings/hotpath_helpers.mojo:2075: for i in range(kk):
+bindings/hotpath_helpers.mojo:2078: for r in range(nn):
+bindings/hotpath_helpers.mojo:2104: for i in range(nn):
+bindings/hotpath_helpers.mojo:2107: for t in range(kk):
+bindings/hotpath_helpers.mojo:2113: while lo < hi:
+bindings/hotpath_helpers.mojo:2144: for _ in range(kk):
+bindings/hotpath_helpers.mojo:2147: for a in range(n):
+bindings/hotpath_helpers.mojo:2157: for a in range(n):
+bindings/hotpath_helpers.mojo:2167: for a in range(n):
+bindings/hotpath_helpers.mojo:2191: for i in range(mm):
+bindings/hotpath_helpers.mojo:2193: for i in range(mm):
+bindings/hotpath_helpers.mojo:2223: for c in range(kk):
+bindings/hotpath_helpers.mojo:2228: for c in range(kk):
+bindings/hotpath_helpers.mojo:2230: for f in range(K):
+bindings/hotpath_helpers.mojo:2231: for _ in range(Int(ap.unsafe_load(f * kk + c))):
+bindings/hotpath_helpers.mojo:2238: for i in range(rows):
+bindings/ivf_host_search.mojo:108: for i in range(n):
+bindings/ivf_index_arrays.mojo:175: for i in range(m * k):
+bindings/ivf_index_arrays.mojo:178: for i in range(m):
+bindings/ivf_index_arrays.mojo:226: for i in range(n_lists * dim):
+bindings/ivf_index_arrays.mojo:228: for i in range(n_lists):
+bindings/ivf_index_arrays.mojo:230: for i in range(n_lists + 1):
+bindings/ivf_index_arrays.mojo:232: for i in range(n_rows):
+bindings/ivf_index_arrays.mojo:241: for i in range(n_rows * dim):
+bindings/ivf_index_arrays.mojo:277: for i in range(n_lists + 1):
+bindings/ivf_index_arrays.mojo:279: for i in range(n_total):
+bindings/ivf_index_arrays.mojo:281: for i in range(n_total * dim):
+bindings/ivf_index_arrays.mojo:283: for j in range(n_new):
+bindings/ivf_index_arrays.mojo:324: for i in range(m * k):
+bindings/ivf_index_arrays.mojo:327: for i in range(m):
+bindings/ivf_index_arrays.mojo:372: for s in range(shards):
+bindings/ivf_index_arrays.mojo:382: for row in range(m):
+bindings/ivf_index_arrays.mojo:386: for s in range(shards):
+bindings/ivf_index_arrays.mojo:395: for j in range(min(k, n)):
+bindings/ivf_index_arrays.mojo:409: while at > 0 and (cd[at - 1] > d or (cd[at - 1] == d and ci[at - 1] > id)):
+bindings/ivf_index_arrays.mojo:422: for j in range(k):
+bindings/ivf_index_arrays.mojo:464: for j in range(n_lists):
+bindings/ivf_index_arrays.mojo:470: for p in range(shards):
+bindings/ivf_index_arrays.mojo:473: for i in range(lo, hi):
+bindings/ivf_index_arrays.mojo:481: for v in range(n):
+bindings/ivf_index_arrays.mojo:487: for i in range(n):
+bindings/ivf_index_arrays.mojo:489: for p in range(shards):
+bindings/ivf_index_arrays.mojo:492: for j in range(L1):
+bindings/kpss_host_test.mojo:85: for i in range(batch_size * n_obs):
+bindings/kpss_host_test.mojo:104: for b in range(batch_size):
+bindings/kpss_host_test.mojo:194: for b in range(batch_size):
+bindings/kpss_host_test.mojo:202: for b in range(batch_size):
+bindings/mixture_host_scoring.mojo:83: for i in range(m.n):
+bindings/mixture_host_scoring.mojo:100: for i in range(m.n * m.k):
+bindings/mixture_host_scoring.mojo:117: for i in range(m.n):
+bindings/mixture_host_scoring.mojo:175: for i in range(n * d):
+bindings/mixture_host_scoring.mojo:186: for i in range(n):
+bindings/msel_host.mojo:135: for s in range(p):
+bindings/native_idna.mojo:42: for entry in [b[].normalize, b[].category, b[].bidi]:
+bindings/native_idna.mojo:51: for j in range(len(points)):
+bindings/native_idna.mojo:123: while delta > 455:
+bindings/native_idna.mojo:140: for i in range(len(label)):
+bindings/native_idna.mojo:154: for cp in points:
+bindings/native_idna.mojo:159: for cp in points:
+bindings/native_idna.mojo:165: while True:
+bindings/native_json.mojo:22: while self.peek() == 32 or self.peek() == 9 or self.peek() == 10 or self.peek() == 13:
+bindings/native_json.mojo:40: for _ in range(4):
+bindings/native_json.mojo:53: while True:
+bindings/native_json.mojo:104: while self.peek() >= 48 and self.peek() <= 57:
+bindings/native_json.mojo:113: while self.peek() >= 48 and self.peek() <= 57:
+bindings/native_json.mojo:122: while self.peek() >= 48 and self.peek() <= 57:
+bindings/native_json.mojo:141: while True:
+bindings/native_json.mojo:157: while True:
+bindings/native_json.mojo:215: for storage in range(2):
+bindings/native_process_pool.mojo:107: for family in [String("KMEANS"), String("GBDT"), String("GRAM"), String("QR"),
+bindings/native_torch_admission.mojo:69: for name in [String("_len_torch_function_stack"), String("_len_torch_dispatch_stack"),
+bindings/native_torch_admission.mojo:87: for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride")]:
+bindings/native_torch_admission.mojo:92: for name in [String("device"), String("dtype"), String("shape")]:
+bindings/native_torch_admission.mojo:123: for name in [String("FAKE"), String("PROXY"), String("FUNCTIONAL")]:
+bindings/native_transport.mojo:199: for i in range(len(keys)):
+bindings/native_transport.mojo:224: for i in range(4):
+bindings/native_transport.mojo:253: for i in range(4):
+bindings/native_transport.mojo:326: for i in range(len(args[1])):
+bindings/native_transport.mojo:328: for i in range(len(args[2])):
+bindings/neural_block_public.mojo:210: for i in range(b):
+bindings/neural_block_public.mojo:237: for row in range(b):
+bindings/neural_block_public.mojo:241: for row in range(b):
+bindings/neural_gemm_boundary_host.mojo:25: for i in range(m*k):
+bindings/neural_gemm_boundary_host.mojo:28: for i in range(n*k):
+bindings/neural_gemm_boundary_host.mojo:32: for i in range(m*n):
+bindings/parallel_byte_native.mojo:68: for name in [String("create"), String("open"), String("open_pooled"), String("close"),
+bindings/parallel_byte_native.mojo:96: for name in [String("numeric_mode"), String("vendor"), String("profile"), String("config_profile")]:
+bindings/parallel_byte_native.mojo:126: for d in dims:
+bindings/parallel_byte_native.mojo:159: for i in range(len(dims)):
+bindings/parallel_byte_native.mojo:173: for axis in range(len(dims)):
+bindings/parallel_byte_native.mojo:176: for i in range(n):
+bindings/parallel_byte_native.mojo:179: for reverse in range(len(dims)):
+bindings/parallel_byte_native.mojo:188: for i in range(n):
+bindings/parallel_byte_native.mojo:229: for i in range(len(keys)):
+bindings/parallel_byte_native.mojo:236: for i in range(len(value)):
+bindings/parallel_byte_native.mojo:270: for i in range(len(keys)):
+bindings/parallel_byte_native.mojo:274: for i in range(7):
+bindings/parallel_byte_native.mojo:281: for i in range(len(names)):
+bindings/parallel_byte_native.mojo:369: for name in names:
+bindings/parallel_byte_native.mojo:387: for name in cfg_names:
+bindings/parallel_byte_native.mojo:395: for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"),
+bindings/parallel_byte_native.mojo:410: for name in [String("parameters"), String("m"), String("v")]:
+bindings/parallel_byte_native.mojo:414: for i in range(n):
+bindings/parallel_byte_native.mojo:418: for i in range(Int(py=shape["n_tensors"])):
+bindings/parallel_byte_native.mojo:448: for i in range(len(ids)):
+bindings/parallel_byte_native.mojo:485: for name in [String("create"), String(open_name), String("close"), String("step"), String("export"), String("rollback"), String("reduction_pool_available")]:
+bindings/parallel_byte_native.mojo:495: for key in [String("kind"), String("lr"), String("beta1"), String("beta2"), String("eps"),
+bindings/parallel_byte_native.mojo:499: for key in [String("parameters"), String("m"), String("v"), String("flags")]:
+bindings/parallel_byte_native.mojo:540: for key in keys:
+bindings/parallel_byte_native.mojo:544: for key in keys:
+bindings/parallel_byte_native.mojo:690: for j in range(len(fields)):
+bindings/parallel_mlp_native.mojo:55: for name in [String("neural_gemm"), String("mlp_bias_activation"), String("mlp_relu_backward"),
+bindings/parallel_mlp_native.mojo:121: for i in range(Int(py=value.size)):
+bindings/parallel_mlp_native.mojo:132: for name in names:
+bindings/parallel_mlp_native.mojo:140: for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:
+bindings/parallel_mlp_native.mojo:155: for i in range(195):
+bindings/parallel_mlp_native.mojo:158: for i in range(4):
+bindings/parallel_mlp_native.mojo:231: for i in range(5):
+bindings/parallel_mlp_native.mojo:288: for i in range(rows):
+bindings/parallel_mlp_native.mojo:358: for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:
+bindings/parallel_mlp_native.mojo:365: for i in range(4):
+bindings/parallel_mlp_native.mojo:441: for axis in range(len(shape)):
+bindings/parallel_mlp_native.mojo:495: for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:
+bindings/parallel_mlp_native.mojo:533: for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:
+bindings/parallel_mlp_native.mojo:535: for i in range(4):
+bindings/parallel_neural_admission.mojo:66: for key in [String("_lock"), String("_pool"), String("_update_pool")]:
+bindings/parallel_neural_native.mojo:146: for i in range(rows * columns):
+bindings/pca_exact.mojo:52: for i in range(Int(py=value.size)):  # native input marshaling: validation of externally mutable fitted arrays
+bindings/pca_exact.mojo:70: for i in range(count):  # native input marshaling: the MLE kernel's binary64 spectrum ABI
+bindings/py2mojo_cluster_est.mojo:47: for i in range(n):
+bindings/py2mojo_cluster_est.mojo:61: for i in range(n):
+bindings/samba_checkpoint_native.mojo:203: while received < len(chunk):
+bindings/samba_construct_native.mojo:84: for j in range(Int(py=output.size)):
+bindings/samba_inference_native.mojo:184: for i in range(b * l):
+bindings/samba_inference_native.mojo:262: for row in range(b):
+bindings/samba_training_native.mojo:29: for i in range(b * l):
+bindings/sequential_inputs.mojo:117: for k in range(len(packed)):  # native input marshaling: packed buffer scalars become sequence storage
+bindings/sequential_inputs.mojo:149: for k in range(n):  # native input marshaling: nested scalar/container values become native storage
+bindings/sequential_inputs.mojo:192: for k in range(len(values)):  # native input marshaling: exact half scalars are serialized as half words
+sequence/ets_team_py.mojo:74: while s0 < B:
+sequence/fit_team_py.mojo:82: while True:
+sequence/fit_team_py.mojo:88: while True:
+sequence/fit_team_py.mojo:100: for i in range(g):
+sequence/fit_team_py.mojo:180: while s0 < B:
+sequence/fit_team_py.mojo:272: while s0 < B:
+sequence/pyapi.mojo:152: for i in range(N):
+sequence/pyapi.mojo:247: for k in range(k0, t):
+sequence/pyapi.mojo:294: for k in range(3, 6):
+sequence/pyapi.mojo:303: for k in range(7, 10):
+sequence/pyapi.mojo:320: for _ in range(4):
+sequence/pyapi.mojo:345: for k in range(4):
+sequence/pyapi.mojo:374: for _ in range(inner):
+sequence/pyapi.mojo:718: for k in range(nh):
+sequence/pyapi.mojo:997: for k in range(nt + 1):
+sequence/pyapi.mojo:1000: for k in range(nt):
+sequence/pyapi.mojo:1012: for k in range(nt + 1):
+sequence/pyapi.mojo:1034: for _ in range(k0, t):
+sequence/pyapi.mojo:1545: while it < max_iter:
+sequence/pyapi.mojo:1547: for i in range(P):
+sequence/pyapi.mojo:1550: for _ in range(npairs):
+sequence/pyapi.mojo:1554: for i in range(P):
+sequence/pyapi.mojo:1566: for i in range(P):
+sequence/pyapi.mojo:1570: for _ in range(npairs):
+sequence/pyapi.mojo:1573: for i in range(P):
+sequence/pyapi.mojo:1576: for i in range(P):
+sequence/pyapi.mojo:1580: for i in range(P):
+sequence/pyapi.mojo:1588: for _ in range(40):
+sequence/pyapi.mojo:1589: for i in range(P):
+sequence/pyapi.mojo:1601: for i in range(P):
+sequence/pyapi.mojo:1607: for i in range(P):
+sequence/pyapi.mojo:1620: for i in range(P):
+sequence/pyapi.mojo:1625: for i in range(P):
+sequence/pyapi.mojo:1705: for b in range(B):
+sequence/pyapi.mojo:1708: for i in range(N):
+sequence/pyapi.mojo:1714: for i in range(N):
+sequence/pyapi.mojo:1722: for j in range(S + 1 + K):
+sequence/pyapi.mojo:1725: for j in range(P):
+x_cluster/out_pyapi.mojo:14: for a in o.f:
+x_cluster/out_pyapi.mojo:17: for a in o.i:
+x_cluster/out_pyapi.mojo:20: for v in o.s:
+x_cluster/out_pyapi.mojo:47: for t in range(len(obj)):
+x_cluster/out_pyapi.mojo:54: for t in range(len(obj)):
+x_neighbors/dev_pyapi.mojo:141: for k in range(5):
+x_neighbors/dev_pyapi.mojo:147: for k in range(5):
+xtrees/api_pyapi.mojo:104: for i in range(5):
+xtrees/api_pyapi.mojo:147: for i in range(5):
+xtrees/api_pyapi.mojo:344: for i in range(EXACT_SUM_LIMBS):
+xtrees/api_pyapi.mojo:885: for j in range(len(cols)):
+xtrees/api_pyapi.mojo:1238: for i in range(n):
+xtrees/api_pyapi.mojo:1260: for i in range(9):
