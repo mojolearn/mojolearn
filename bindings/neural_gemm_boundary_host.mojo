@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU-only training GEMM boundary; no GPU module is imported."""
 from std.python import Python,PythonObject
+from core.neural_gemm_boundary_host_impl import neural_gemm_checked_host_into
 from std.python._cpython import GILReleased
 from std.math import isfinite
 from bindings.hostptr import f32_ptr
@@ -22,14 +23,5 @@ def neural_gemm_binding(a_addr: PythonObject,b_addr: PythonObject,c_addr: Python
     var n = shape[1]
     var k = shape[2]
     with GILReleased(Python()):
-        for i in range(m*k):
-            if not isfinite(ap.unsafe_load(i)):
-                raise Error("SmallMLPTrainer GEMM refuses nonfinite inputs")
-        for i in range(n*k):
-            if not isfinite(bp.unsafe_load(i)):
-                raise Error("SmallMLPTrainer GEMM refuses nonfinite inputs")
-        neural_gemm_host_into(cp,ap,bp,m,n,k,shape[3])
-        for i in range(m*n):
-            if not isfinite(cp.unsafe_load(i)):
-                raise Error("SmallMLPTrainer GEMM returned a nonfinite result")
+        neural_gemm_checked_host_into(ap, bp, cp, m, n, k, shape[3])
     return PythonObject(m*n)

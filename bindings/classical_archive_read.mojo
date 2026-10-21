@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from bindings.classical_archive import _archive_methods
 from bindings.native_json import native_path
 from bindings.sequential_description import sequential_fields
+from core.classical_archive_read_impl import npy_latin1_bytes, npy_peek, npy_skip_ws, npy_string_close, npy_digits_end
 
 
 def _read_uint(raw: PythonObject, at: Int, width: Int) raises -> Int:
@@ -31,20 +32,21 @@ def _read_at(file: PythonObject, methods: PythonObject, at: Int, size: Int) rais
 
 struct NpyHeader(Movable):
     var raw: PythonObject
+    var bytes: List[UInt8]
     var at: Int
     var context: PythonObject
 
-    def __init__(out self, raw: PythonObject, context: PythonObject):
+    def __init__(out self, raw: PythonObject, context: PythonObject) raises:
         self.raw = raw
+        self.bytes = npy_latin1_bytes(String(py=raw.decode("latin-1")))
         self.at = 0
         self.context = context
 
     def peek(self) raises -> Int:
-        return Int(py=self.raw[self.at]) if self.at < len(self.raw) else -1
+        return npy_peek(self.bytes, self.at)
 
     def ws(mut self) raises:
-        while self.peek() == 32 or self.peek() == 9 or self.peek() == 10 or self.peek() == 13:
-            self.at += 1
+        self.at = npy_skip_ws(self.bytes, self.at)
 
     def take(mut self, byte: Int) raises:
         self.ws()
@@ -59,14 +61,11 @@ struct NpyHeader(Movable):
             raise Error("structured npy dtypes are not supported")
         self.at += 1
         var start = self.at
-        while self.peek() >= 0:
-            if self.peek() == quote:
-                var encoded = self.raw[start:self.at]
-                self.at += 1
-                return self.context["archive_literal_decode"](encoded)[0]
-            if self.peek() == 92:
-                self.at += 1
-            self.at += 1
+        var close = npy_string_close(self.bytes, start, quote)
+        if close >= 0:
+            var encoded = self.raw[start:close]
+            self.at = close + 1
+            return self.context["archive_literal_decode"](encoded)[0]
         raise Error("unterminated npy header string")
 
     def literal(mut self, text: String) raises:
@@ -83,13 +82,12 @@ struct NpyHeader(Movable):
         if self.peek() == 41:
             self.at += 1
             return Python.tuple()
-        while True:
+        while True:  # driver-loop: over npy header shape dimensions
             self.ws()
             var start = self.at
             if self.peek() == 43:
                 self.at += 1
-            while self.peek() >= 48 and self.peek() <= 57:
-                self.at += 1
+            self.at = npy_digits_end(self.bytes, self.at)
             if start == self.at:
                 raise Error("npy shape requires nonnegative dimensions")
             dims.append(Python.import_module("builtins").int(self.raw[start:self.at]))
@@ -110,7 +108,7 @@ struct NpyHeader(Movable):
     def parse(mut self) raises -> PythonObject:
         self.take(123)
         var fields = Python.dict()
-        while True:
+        while True:  # driver-loop: over npy header dictionary fields (three)
             self.ws()
             if self.peek() == 125:
                 self.at += 1
@@ -301,7 +299,7 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
     var positions = Python.list()
     at = 0
     var seen = 0
-    while at < len(central):
+    while at < len(central):  # driver-loop: over ZIP central directory records (archive members)
         if _read_uint(central, at, 4) != 0x02014B50 or len(central) - at < 46:
             raise Error("malformed ZIP central directory")
         if _read_uint(central, at + 6, 2) > 63:
@@ -322,7 +320,7 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
         var name = _filename(raw_name, flags, context)
         var extra_at = at + 46 + name_size
         var extra_end = extra_at + extra_size
-        while extra_at < extra_end:
+        while extra_at < extra_end:  # driver-loop: over a ZIP record's extra-field records
             var tag = _read_uint(central, extra_at, 2)
             var length = _read_uint(central, extra_at + 2, 2)
             extra_at += 4
@@ -437,7 +435,7 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
         if Int(py=value.size) == 0:
             raise Error("model string field is empty")
         value = value.flat[0]
-    while bi.type(value) is bi.list:
+    while bi.type(value) is bi.list:  # driver-loop: over the nesting depth of a stored string field
         if len(value) == 0:
             raise Error("model string field is empty")
         value = value[0]

@@ -77,6 +77,18 @@ from training.neural_session_mlp_host import nn_mlp_sessions_host
 
 from std.os import abort
 from std.python import Python, PythonObject
+from core.mojolearn_training_host_impl import (
+    _host_offsets,
+    _host_refuse_hyperparameters,
+    _write_f32,
+    neural_rng_host_into,
+    clip_grad_norm_host_into,
+    mlp_sum_rows_host_into,
+    mlp_relu_backward_host_into,
+    mlp_bias_activation_host_into,
+    ce_loss_host_into,
+    optimizer_step_host_into,
+)
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -183,71 +195,6 @@ def training_vendor_binding() raises -> PythonObject:
 # ===========================================================================
 
 
-def _host_offsets(offsets_ptr: MutPointer[Int32, MutUntrackedOrigin], n_tensors: Int) raises -> List[Int]:
-    """`_offsets_from_ptr`, `training/estimator.mojo:131`, in its words."""
-    if n_tensors < 1:
-        raise Error(
-            String("mojolearn training: n_tensors must be at least 1, got ")
-            + String(n_tensors)
-        )
-    var offsets = List[Int]()
-    for j in range(n_tensors + 1):
-        offsets.append(Int(offsets_ptr[j]))
-    if offsets[0] != 0:
-        raise Error(
-            String("mojolearn training: offsets[0] is ")
-            + String(offsets[0])
-            + String(", must be 0 (offsets index the flat buffer from its")
-            + String(" first element; optimizer contract 3.3)")
-        )
-    for j in range(n_tensors):
-        var count = offsets[j + 1] - offsets[j]
-        if count < 1:
-            raise Error(
-                String("mojolearn training: tensor ")
-                + String(j)
-                + String(" spans ")
-                + String(count)
-                + String(" elements (offsets ")
-                + String(offsets[j])
-                + String(" .. ")
-                + String(offsets[j + 1])
-                + String("); offsets must be strictly ascending and an empty")
-                + String(" tensor is REFUSED, not skipped")
-            )
-    return offsets^
-
-
-def _host_refuse_hyperparameters(cfg: OptimizerConfig) raises:
-    """`_refuse_hyperparameters`, `training/estimator.mojo:186`."""
-    refuse_nonfinite_scalar(String("lr"), cfg.lr)
-    refuse_nonfinite_scalar(String("beta1"), cfg.beta1)
-    refuse_nonfinite_scalar(String("beta2"), cfg.beta2)
-    refuse_nonfinite_scalar(String("eps"), cfg.eps)
-    refuse_nonfinite_scalar(String("weight_decay"), cfg.weight_decay)
-    refuse_nonfinite_scalar(String("momentum"), cfg.momentum)
-    refuse_nonfinite_scalar(String("dampening"), cfg.dampening)
-    refuse_nonfinite_scalar(String("max_norm"), cfg.max_norm)
-    if cfg.kind != OPT_SGD:
-        if cfg.beta1 < Float32(0.0) or cfg.beta1 >= Float32(1.0):
-            raise Error(
-                String("mojolearn training: beta1 must be in [0, 1), got ")
-                + String(cfg.beta1)
-                + String(" (at beta1 = 1 the bias correction 1 - beta1^t is")
-                + String(" exactly 0 and step_scalars divides by it)")
-            )
-        if cfg.beta2 < Float32(0.0) or cfg.beta2 >= Float32(1.0):
-            raise Error(
-                String("mojolearn training: beta2 must be in [0, 1), got ")
-                + String(cfg.beta2)
-            )
-        if cfg.eps < Float32(0.0):
-            raise Error(
-                String("mojolearn training: eps must be >= 0, got ")
-                + String(cfg.eps)
-            )
-
-
 def optimizer_step_binding(
     param_addr: PythonObject,
     grad_addr: PythonObject,
@@ -291,58 +238,10 @@ def optimizer_step_binding(
     var max_norm = Float32(Float64(py=params[11]))
     var n_total = 0
     with GILReleased(Python()):
-        if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
-            raise Error(
-                String("mojolearn training: kind must be 0 (SGD), 1 (Adam) or 2")
-                + String(" (AdamW), got ")
-                + String(kind)
-            )
-        if t < 1:
-            raise Error(
-                String("mojolearn training: t is ONE-BASED and the first step of")
-                + String(" a run is t = 1, got ")
-                + String(t)
-                + String(" (at t = 0 the bias correction 1 - beta^0 is exactly 0")
-                + String(" and step_scalars divides by it)")
-            )
-        var offsets = _host_offsets(op, n_tensors)
-        n_total = offsets[n_tensors]
-        var cfg = OptimizerConfig(
-            kind, lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-            nesterov != 0, max_norm,
+        n_total = optimizer_step_host_into(
+            pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
+            weight_decay, momentum, dampening, max_norm, maximize,
         )
-        _host_refuse_hyperparameters(cfg)
-        var param = List[Float32](length=n_total, fill=Float32(0.0))
-        var grad = List[Float32](length=n_total, fill=Float32(0.0))
-        var m_state = List[Float32](length=n_total, fill=Float32(0.0))
-        var v_state = List[Float32](length=n_total, fill=Float32(0.0))
-        for i in range(n_total):
-            param[i] = pp[i]
-            grad[i] = maximize_negate(gp[i]) if maximize else gp[i]
-            m_state[i] = mp[i]
-            v_state[i] = vp[i]
-        var buf_initialized = List[Bool]()
-        for j in range(n_tensors):
-            buf_initialized.append(ip[j] != Int32(0))
-        var stages = optimizer_step_oracle(
-            param, grad, m_state, v_state, buf_initialized, offsets, cfg, t
-        )
-        for i in range(n_total):
-            pp[i] = param[i]
-            mp[i] = m_state[i]
-            vp[i] = v_state[i]
-        if max_norm > Float32(0.0):
-            for i in range(n_total):
-                gp[i] = maximize_negate(grad[i]) if maximize else grad[i]
-        for j in range(n_tensors):
-            ip[j] = Int32(1) if buf_initialized[j] else Int32(0)
-        fp[0] = Float32(0.0)
-        fp[1] = Float32(0.0)
-        fp[2] = Float32(0.0)
-        if max_norm > Float32(0.0):
-            fp[0] = Float32(1.0)
-            fp[1] = stages.clip_total[1]
-            fp[2] = stages.clip_total[2]
     return PythonObject(n_total)
 
 
@@ -381,45 +280,10 @@ def ce_loss_binding(
     var label_smoothing = Float32(Float64(py=params[6]))
     var count = 0
     with GILReleased(Python()):
-        if reduction != REDUCTION_NONE:
-            if reduction != REDUCTION_SUM and reduction != REDUCTION_MEAN:
-                raise Error(
-                    String("mojolearn training: reduction must be 0 (none), 1")
-                    + String(" (sum) or 2 (mean), got ")
-                    + String(reduction)
-                )
-        if want_grad != 0 and reduction == REDUCTION_NONE:
-            raise Error(
-                String("mojolearn training: REDUCTION_NONE has no backward")
-                + String(" (loss contract section 11); ask for a gradient with")
-                + String(" reduction 'sum' or 'mean'")
-            )
-        if n_rows < 1:
-            raise Error(
-                String("mojolearn training: n_rows must be at least 1, got ")
-                + String(n_rows)
-            )
-        if vocab < 1:
-            raise Error(
-                String("mojolearn training: vocab must be at least 1, got ")
-                + String(vocab)
-            )
-        var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
-        var logits = read_f32(x_address, n_rows * vocab)
-        var targets = read_i32(t_address, n_rows)
-        var st = ce_forward_oracle(logits, targets, cfg)
-        count = st.count
-        if want_grad != 0:
-            ce_backward_oracle(st, targets, cfg)
-        for i in range(n_rows):
-            rp[i] = st.row[i]
-        if reduction != REDUCTION_NONE:
-            lp[0] = st.loss[0]
-        else:
-            lp[0] = Float32(0.0)
-        if want_grad != 0:
-            for i in range(n_rows * vocab):
-                dp[i] = st.dlogits[i]
+        count = ce_loss_host_into(
+            lp, rp, dp, x_address, t_address, n_rows, vocab, ignore_index, reduction, num_items,
+            want_grad, label_smoothing,
+        )
     return PythonObject(count)
 
 
@@ -447,12 +311,7 @@ def mlp_bias_activation_binding(
     var op = f32_ptr(_index(out_addr))
     var count = 0
     with GILReleased(Python()):
-        var x = read_f32(x_address, rows * cols)
-        var b = read_f32(b_address, cols)
-        var out = host_mlp_bias_activation(x, b, rows, cols, relu_flag)
-        for i in range(len(out)):
-            op[i] = out[i]
-        count = len(out)
+        count = mlp_bias_activation_host_into(x_address, b_address, op, rows, cols, relu_flag)
     return PythonObject(count)
 
 
@@ -472,12 +331,7 @@ def mlp_relu_backward_binding(
     var op = f32_ptr(_index(out_addr))
     var count = 0
     with GILReleased(Python()):
-        var a = read_f32(a_address, rows * cols)
-        var g = read_f32(g_address, rows * cols)
-        var out = host_mlp_relu_backward(a, g, rows, cols)
-        for i in range(len(out)):
-            op[i] = out[i]
-        count = len(out)
+        count = mlp_relu_backward_host_into(a_address, g_address, op, rows, cols)
     return PythonObject(count)
 
 
@@ -495,11 +349,7 @@ def mlp_sum_rows_binding(
     var op = f32_ptr(_index(out_addr))
     var count = 0
     with GILReleased(Python()):
-        var x = read_f32(x_address, rows * cols)
-        var out = host_mlp_sum_rows(x, rows, cols)
-        for i in range(len(out)):
-            op[i] = out[i]
-        count = len(out)
+        count = mlp_sum_rows_host_into(x_address, op, rows, cols)
     return PythonObject(count)
 
 
@@ -530,28 +380,7 @@ def clip_grad_norm_binding(
     var max_norm = Float32(Float64(py=params[1]))
     var n_total = 0
     with GILReleased(Python()):
-        if max_norm <= Float32(0.0):
-            raise Error(
-                String("mojolearn training: max_norm must be > 0, got ")
-                + String(max_norm)
-                + String("; this entry point IS the clip, and 'no clipping' is")
-                + String(" spelled by not calling it (the optimizer step takes")
-                + String(" max_norm <= 0 as OFF because it has another job)")
-            )
-        refuse_nonfinite_scalar(String("max_norm"), max_norm)
-        var offsets = _host_offsets(op, n_tensors)
-        n_total = offsets[n_tensors]
-        var grads = List[Float32](length=n_total, fill=Float32(0.0))
-        for i in range(n_total):
-            grads[i] = gp[i]
-        var sumsq = List[Float32]()
-        var norms = List[Float32]()
-        var total = List[Float32]()
-        _ = clip_grad_norm_oracle(grads, offsets, max_norm, sumsq, norms, total)
-        for i in range(n_total):
-            gp[i] = grads[i]
-        fp[0] = total[1]
-        fp[1] = total[2]
+        n_total = clip_grad_norm_host_into(gp, op, fp, n_tensors, max_norm)
     return PythonObject(n_total)
 
 
@@ -569,7 +398,7 @@ def _addrs(addresses: PythonObject, want: Int, name: String) raises -> List[Int]
             + String(len(addresses))
         )
     var out = List[Int]()
-    for i in range(want):
+    for i in range(want):  # small-loop(address argument words: a fixed count per entry point)
         var a = Int(py=addresses[i])
         if a == 0:
             raise Error(name + ": null buffer address at slot " + String(i))
@@ -583,11 +412,6 @@ def _params(params: PythonObject, want: Int, name: String) raises:
             name + ": params must contain " + String(want) + " values, got "
             + String(len(params))
         )
-
-
-def _write_f32(values: List[Float32], dst: MutPointer[Float32, MutUntrackedOrigin]):
-    for i in range(len(values)):
-        dst[i] = values[i]
 
 
 def embedding_forward_binding(
@@ -808,8 +632,8 @@ def neural_rng_binding(
     addresses = [out (n f32, written), inp (n f32 for the dropout kinds,
     else a one-float placeholder)]; params = [n, offset, seed_lo, seed_hi,
     stream_id, kind, a, b]. The draws are `core/philox_neural.mojo`'s
-    kernel over its launch grid, as tools/mamba_host_gen.py writes it out
-    for the host (lane/cpu-training-samba, 2026-09-15)."""
+    kernel over its launch grid, as tools/mamba_host_gen.py writes it out for
+    the host (lane/cpu-training-samba, 2026-09-15)."""
     var a = _addrs(addresses, 2, "neural_rng")
     _params(params, 8, "neural_rng")
     var n = Int(py=params[0])
@@ -822,13 +646,8 @@ def neural_rng_binding(
     var pb = Float32(Float64(py=params[7]))
     var count = 0
     with GILReleased(Python()):
-        var ctx = HostDeviceContext()
-        count = neural_rng_host(
-            ctx, f32_ptr(a[0]), f32_ptr(a[1]), n, offset, seed_lo, seed_hi,
-            stream_id, kind, pa, pb,
-        )
+        count = neural_rng_host_into(a[0], a[1], n, offset, seed_lo, seed_hi, stream_id, kind, pa, pb)
     return PythonObject(count)
-
 
 
 # ===========================================================================

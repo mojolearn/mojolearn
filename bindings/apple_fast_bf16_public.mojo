@@ -151,7 +151,7 @@ def _new_array(shape: PythonObject, bf16: Bool) raises -> PythonObject:
     result.order = PythonObject("C")
     var strides = state[].builtins.list()
     var stride = itemsize
-    for index in range(len(shape)):
+    for index in range(len(shape)):  # small-loop(array shape dimension words)
         var axis = len(shape) - index - 1
         strides.insert(0, stride)
         stride *= Int(py=shape[axis])

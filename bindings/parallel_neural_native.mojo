@@ -2,6 +2,7 @@
 """Native owner and local workers for existing parallel MLP/Samba training."""
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from core.parallel_neural_native_impl import samba_ids_into
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy
@@ -143,12 +144,8 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
     var out = generation_array([rows, columns], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
     var column_major = own and String(value.order) == "F"
-    for i in range(rows * columns):
-        var source = i % columns * rows + i // columns if column_major else i
-        var number = packed[source]
-        if Bool(py=number < -2147483648) or Bool(py=number > 2147483647):
-            raise Error("OverflowError: Samba token id is outside int32")
-        dst[i] = Int32(Int(py=number))
+    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
+    samba_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, columns, column_major, dst)
     _ = packed^
     return out
 

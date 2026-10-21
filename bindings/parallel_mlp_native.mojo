@@ -7,6 +7,7 @@ new numerical kernels or topology-dependent reduction order.
 """
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from core.parallel_mlp_native_impl import mlp_check_finite, mlp_check_optimizer_state, mlp_targets_into
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.math import isfinite
@@ -52,7 +53,7 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
     b[].environ = environ
     b[].mode = mode
     b[].entries = b[].bi.dict()
-    for name in [String("neural_gemm"), String("mlp_bias_activation"), String("mlp_relu_backward"),
+    for name in [String("neural_gemm"), String("mlp_bias_activation"), String("mlp_relu_backward"),  # small-loop(the fixed training entry names)
                  String("mlp_sum_rows"), String("ce_loss"), String("accumulate"), String("optimizer_step"),
                  String("training_numeric_mode"), String("training_vendor"), String("mlp_train_step"),
                  String("optimizer_parallel_available"), String("accumulate_parallel_available"),
@@ -118,9 +119,7 @@ def _mlp_schedule(value: PythonObject) raises -> PythonObject:
 
 def _mlp_finite(value: PythonObject, label: String) raises:
     var data = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
-    for i in range(Int(py=value.size)):
-        if not isfinite(data[i]):
-            raise Error("RuntimeError: SmallMLPTrainer nonfinite " + label)
+    mlp_check_finite(data, Int(py=value.size), label)
 
 
 def mlp_validate_state(state: PythonObject) raises -> PythonObject:
@@ -129,7 +128,7 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
     _mlp_fields(state, "schema|architecture|numeric_mode|parameter_order|weights|optimizer|config|data_schedule")
     var names = _mlp_names()
     var name_list = bi.list()
-    for name in names:
+    for name in names:  # small-loop(the fixed MLP field-name words)
         name_list.append(name)
     if String(state["schema"]) != "mojolearn.small-mlp-trainer.v1" or String(state["numeric_mode"]) != "identical" or Bool(py=state["architecture"] != py_ints([8, 16, 3])) or Bool(py=state["parameter_order"] != name_list):
         raise Error("SmallMLPTrainer state schema/architecture/mode/order mismatch")
@@ -137,7 +136,7 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
     _mlp_fields(state["optimizer"], "kind|step|m|v|flags")
     _mlp_fields(state["config"], "lr|beta1|beta2|eps|weight_decay")
     var config = bi.dict()
-    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:
+    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
         config[name] = Float64(_parallel_float(state["config"][name], name))
     if Float64(py=config["lr"]) <= 0 or Float64(py=config["eps"]) <= 0 or Float64(py=config["weight_decay"]) < 0 or Float64(py=config["beta1"]) < 0 or Float64(py=config["beta1"]) >= 1 or Float64(py=config["beta2"]) < 0 or Float64(py=config["beta2"]) >= 1:
         raise Error("SmallMLPTrainer optimizer configuration outside admitted range")
@@ -152,12 +151,7 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
     optimizer["flags"] = _parallel_array(old["flags"], [4], True)
     var v = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=optimizer["v"]._addr))
     var flags = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(py=optimizer["flags"]._addr))
-    for i in range(195):
-        if v[i] < 0:
-            raise Error("SmallMLPTrainer state requires nonnegative v")
-    for i in range(4):
-        if flags[i] < 0 or flags[i] > 1:
-            raise Error("SmallMLPTrainer state requires binary flags")
+    mlp_check_optimizer_state(v, flags)
     var weights = bi.dict()
     for i in range(4):  # driver-loop: over the existing fixed MLP parameter registry
         weights[names[i]] = _parallel_array(state["weights"][names[i]], _mlp_dims(i))
@@ -228,7 +222,7 @@ def mlp_publish(model: PythonObject, state: PythonObject) raises:
     var offsets = generation_array([5], "i")
     var op = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=offsets._addr))
     var registry = [0, 128, 144, 192, 195]
-    for i in range(5):
+    for i in range(5):  # small-loop(the five fixed offset-registry words)
         op[i] = Int32(registry[i])
     opt.offsets = offsets
     opt.n_total = 195
@@ -285,12 +279,8 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
     packed.frombytes(view.tobytes("C"))
     var output = generation_array([rows], "i")
     var ids = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-    for i in range(rows):
-        # Compare before conversion so unsigned 64-bit invalid targets get
-        # the documented class-range refusal instead of signed overflow.
-        if Bool(py=packed[i] < 0) or Bool(py=packed[i] >= 3):
-            raise Error("SmallMLPTrainer targets require classes 0..2")
-        ids[i] = Int32(Int(py=packed[i]))
+    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
+    mlp_targets_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, ids)
     _ = packed^
     return output
 
@@ -355,14 +345,14 @@ def _mlp_fused_gradients(checked: PythonObject, x: PythonObject, y: PythonObject
         addresses.append(owners[i]._addr)
     var config = checked["config"]
     var params = py_ints([rows, 1, 1])
-    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:
+    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
         params.append(config[name])
     params.append(0)
     var written = b[].entries["mlp_train_step"](addresses, params)
     if Int(py=written) != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer fused gradient returned incomplete output")
     _mlp_finite(owners[9], "loss")
-    for i in range(4):
+    for i in range(4):  # driver-loop: over the four MLP parameter tensors
         _mlp_finite(gradients[i], "parameter gradient")
     var result = b[].bi.list()
     result.append(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=owners[9]._addr))[0]))
@@ -438,7 +428,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
         var shape = first[j].shape if b[].bi.type(first[j]) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
         var axes = List[Int]()
         var n = 1
-        for axis in range(len(shape)):
+        for axis in range(len(shape)):  # small-loop(gradient shape dimension words)
             var dimension = Int(py=shape[axis])
             if dimension < 0 or (dimension != 0 and n > 2147483647 // dimension):
                 raise Error("gradient registry exceeds signed 32-bit kernel indexing")
@@ -492,7 +482,7 @@ def neural_cooperative_admit() raises:
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
     var count = Int(py=b[].bi.int(b[].environ.get(PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode("ascii"), PythonObject("1").encode("ascii"))))
     if count > 1:
-        for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:
+        for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # small-loop(the three cooperative entry names)
             if b[].entries[name] is None:
                 raise Error("ImportError: training binding lacks cooperative neural update entry " + name)
             if Int(py=b[].entries[name]()) != 1:
@@ -530,9 +520,9 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
     op[4] = Int32(offset)
     var cfg = next["config"]
     var plan = py_ints([4, 2, step + 1, 0])
-    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:
+    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
         plan.append(cfg[name])
-    for i in range(4):
+    for i in range(4):  # small-loop(the four trailing plan words)
         plan.append(0)
     var saved = next["optimizer"]
     var written = b[].entries["optimizer_step"](params._addr, grads._addr,

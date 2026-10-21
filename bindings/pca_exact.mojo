@@ -4,6 +4,7 @@
 # mutable at the Python ABI; native shape descriptors are rebuilt on admission
 # so replacing a supported public array preserves its documented semantics.
 from std.memory import memcpy, bitcast
+from core.pca_exact_impl import pca_check_state, pca_widen_spectrum
 from std.python import Python, PythonObject
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
 from bindings.sequential_inputs import sequential_input
@@ -49,11 +50,7 @@ def pca_state_array(fields: PythonObject, name: String, shape: PythonObject,
         raise Error("PCA requires C-order float32 " + name + " with the fitted shape")
     if finite or nonnegative:
         var ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
-        for i in range(Int(py=value.size)):  # native input marshaling: validation of externally mutable fitted arrays
-            if finite and (bitcast[DType.uint32](ptr[i]) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                raise Error("PCA whitening requires finite " + name)
-            if nonnegative and ptr[i] < 0:
-                raise Error("PCA whitening requires nonnegative singular values/variance")
+        pca_check_state(ptr, Int(py=value.size), name, finite, nonnegative)
     return value
 
 
@@ -67,8 +64,7 @@ def pca_mle(spectrum: PythonObject, rows: Int, entries: PythonObject, context: P
     var wide = classical_array(count, 0, context, True)
     var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(spectrum)))
     var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(wide)))
-    for i in range(count):  # native input marshaling: the MLE kernel's binary64 spectrum ABI
-        dst[i] = Float64(src[i])
+    pca_widen_spectrum(src, dst, count)
     var rank = 0
     if String(context["vendor"]) == "cpu":
         if ranks.get("x_decomp_pca_mle_rank") is None:

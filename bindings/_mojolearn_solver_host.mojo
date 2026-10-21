@@ -50,6 +50,7 @@ literal `single_linkage.mojo` returns on the pairwise arm.
 """
 from std.os import abort
 from std.python import Python, PythonObject
+from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -190,79 +191,10 @@ def cd_fit_binding(
         sw_address = _index(params[10])
     var n_iter = 0
     with GILReleased(Python()):
-        # `cd_fit_host`'s guards, then `cd_fit_traced`'s, in their order and
-        # words, before anything is read.
-        if n_rows < 1 or n_cols < 1:
-            raise Error(
-                "cd_fit_host needs n_rows and n_cols >= 1: got "
-                + String(n_rows) + ", " + String(n_cols)
-            )
-        if epochs < 0:
-            raise Error(
-                "cd_fit_host: max_iter cannot be negative, got " + String(epochs)
-            )
-        if n_cols <= 0:
-            raise Error(
-                "Parameter n_cols: number of columns cannot be less than one"
-            )
-        if n_rows <= 1:
-            raise Error("Parameter n_rows: number of rows cannot be less than two")
-        if shuffle:
-            raise Error(
-                "Parameter shuffle: REFUSED BY NAME (cuML selection='random')."
-                " std::shuffle's algorithm is unspecified by the C++ standard,"
-                " so cuML's permutation is not a pure function of its seed; only"
-                " the cyclic order (shuffle=false, selection='cyclic') is implemented."
-                " See solver/impl/shuffle.mojo"
-            )
-        if alpha < Float32(0.0):
-            raise Error("Expected alpha >= 0, got " + String(alpha))
-        if l1_ratio < Float32(0.0) or l1_ratio > Float32(1.0):
-            raise Error(
-                "Expected 0.0 <= l1_ratio <= 1.0, got " + String(l1_ratio)
-            )
-        if alpha != alpha or alpha - alpha != Float32(0.0):
-            raise Error(
-                "Parameter alpha: must be a finite number, got " + String(alpha)
-            )
-        if l1_ratio != l1_ratio:
-            raise Error("Parameter l1_ratio: must not be NaN")
-        if tol != tol:
-            raise Error("Parameter tol: must not be NaN")
-        var x = read_f32(x_address, n_rows * n_cols)
-        if row_major:
-            # C-order in, the oracle's column-major layout out: a copy of
-            # the same float32 words, no arithmetic.
-            var xc = x.copy()
-            for i in range(n_rows):
-                for j in range(n_cols):
-                    xc[j * n_rows + i] = x[i * n_cols + j]
-            x = xc^
-        var y = read_f32(y_address, n_rows)
-        # THE ONE CALL THAT COMPUTES ANYTHING. `coef` starts at zero inside
-        # the oracle, as `cd_fit_host` zeroes it on the device.
-        # lane/fam-linear: the device's rule (solver/impl/cd_gram_rule.mojo):
-        # the Gram sweeps for the shapes the device takes them, the row
-        # sweeps under a trace, as `cd_fit_traced` keeps them.
-        var gram = cd_idn_gram_shape(n_rows, n_cols) and String(getenv("MOJOLEARN_IDENTITY_TRACE")) == ""
-        var out: CdOracleResult
-        if has_sw:
-            # lane sk-kernels: the weighted fit (solver/impl/cd_weighted.mojo)
-            var w = read_f32(sw_address, n_rows)
-            out = cd_oracle_fit_weighted(
-                x, y, w, n_rows, n_cols, fit_intercept, epochs, alpha,
-                l1_ratio, tol, gram,
-            )
-        else:
-            out = cd_oracle_fit(
-                x, y, n_rows, n_cols, fit_intercept, epochs, alpha, l1_ratio, tol, True, False, gram
-            )
-        if len(out.coef) != n_cols:
-            raise Error("cd_fit: the host oracle returned coef of an unexpected length; nothing written")
-        for j in range(n_cols):
-            cp[j] = out.coef[j]
-        ip[0] = out.intercept
-        n_iter = out.n_iter
+        n_iter = cd_fit_host_into(
+            x_address, y_address, sw_address, cp, ip, n_rows, n_cols, fit_intercept, epochs,
+            alpha, l1_ratio, tol, shuffle, has_sw, row_major,
+        )
     return PythonObject(n_iter)
 
 
@@ -295,29 +227,7 @@ def cd_predict_binding(
     var n_cols = _index(params[1])
     var intercept = Float32(Float64(py=params[2]))
     with GILReleased(Python()):
-        # `cd_predict_host`'s guard, then `cd_predict`'s, in their words.
-        if n_rows < 1 or n_cols < 1:
-            raise Error(
-                "cd_predict_host needs n_rows and n_cols >= 1: got "
-                + String(n_rows) + ", " + String(n_cols)
-            )
-        if n_cols <= 0:
-            raise Error(
-                "Parameter n_cols: number of columns cannot be less than one"
-            )
-        # A prediction takes any row count >= 1 (scikit-learn predicts one
-        # row); cuML's two-row floor belongs to the fit (cdFit), not cdPredict.
-        var x = read_f32(x_address, n_rows * n_cols)
-        var coef = read_f32(coef_address, n_cols)
-        # `identical_gemm(ctx, pred, x, coef, n_rows, 1, n_cols, OP_TN)`:
-        # A is k x m row-major (the column-major design read as
-        # n_cols x n_rows), B is k x 1.
-        var pred = gemm_oracle(x, coef, OP_TN, n_rows, 1, n_cols)
-        for i in range(n_rows):
-            var v = pred[i]
-            if intercept != Float32(0.0):
-                v = ftz(v + intercept)
-            op[i] = v
+        cd_predict_host_into(x_address, coef_address, op, n_rows, n_cols, intercept)
     return PythonObject(0)
 
 
@@ -360,74 +270,7 @@ def linkage_fit_binding(
     var metric = _index(params[3])
     var use_knn = _index(params[4]) != 0
     with GILReleased(Python()):
-        # `linkage_fit_host`'s guards, then `cuvs_single_linkage`'s, then
-        # `get_distance_graph`'s, then `pairwise_distances`'s, in the order
-        # the device path reaches them and in their words.
-        if n_rows < 2:
-            raise Error(
-                "linkage_fit_host needs n_rows >= 2, got " + String(n_rows)
-            )
-        if n_cols < 1:
-            raise Error(
-                "linkage_fit_host needs n_cols >= 1, got " + String(n_cols)
-            )
-        if n_clusters > n_rows:
-            raise Error(
-                "hierarchy.single_linkage: n_clusters must be less than or equal"
-                " to the number of data points (n_clusters=" + String(n_clusters)
-                + ", n_rows=" + String(n_rows) + ")"
-            )
-        if n_clusters < 1:
-            raise Error(
-                "hierarchy.single_linkage: n_clusters=" + String(n_clusters)
-                + " < 1 refused by name (their extract_flattened_clusters would"
-                " index children at a negative offset)"
-            )
-        if use_knn:
-            raise Error(
-                "hierarchy.get_distance_graph: Linkage::KNN_GRAPH (connectivity="
-                "'knn', c=15) refused by name: the knn-graph"
-                " connectivity (connectivities.cuh:60-108, knn_graph.cuh) and"
-                " the cross-component connection it needs (mst.cuh:75-123,"
-                " cross_component_nn.cuh) are rung 2 and not implemented;"
-                " use connectivity='pairwise'"
-            )
-        if n_rows > PAIRWISE_MAX_ROWS:
-            raise Error(
-                "hierarchy.pairwise_distances: n_rows=" + String(n_rows)
-                + " > " + String(PAIRWISE_MAX_ROWS)
-                + "; their `int nnz = m * m` (connectivities.cuh:145) overflows"
-                " and the dense connectivity matrix is refused by name"
-            )
-        if metric != DISTANCE_L2_SQRT_EXPANDED and metric != DISTANCE_L2_EXPANDED:
-            raise Error(
-                "hierarchy.pairwise_distances: metric=" + String(metric)
-                + " refused by name; only L2SqrtExpanded (1, cuML's 'euclidean'/"
-                "'l2') and L2Expanded (0) are implemented (pairwise_distance_kmeans"
-                " raises on every other metric too, kmeans_common.cuh:320)"
-            )
-        var x = read_f32(x_address, n_rows * n_cols)
-        # THE FIT: the oracle's four stages, in the oracle's order.
-        # lane cluster-cpu (2026-09-28): the oracle's matrix + Kruskal +
-        # dendrogram, as Prim's walk under the same total order
-        # (hierarchy/host/linkage_host.mojo; same edges, same order, same
-        # children, checked by hierarchy/checks/linkage_host_check.mojo).
-        var mst = host_prim_mst(x, n_rows, n_cols, metric == DISTANCE_L2_SQRT_EXPANDED)
-        if len(mst.lo) != n_rows - 1:
-            raise Error(
-                "linkage_fit: the host MST has " + String(len(mst.lo))
-                + " edges, not n_rows - 1; nothing written"
-            )
-        var children = host_dendrogram_fast(mst.lo, mst.hi, n_rows)
-        var labels = host_extract_flattened_clusters(children, n_clusters, n_rows)
-        if len(children) != (n_rows - 1) * 2 or len(labels) != n_rows:
-            raise Error("linkage_fit: the host dendrogram or labels have an unexpected length; nothing written")
-        for i in range((n_rows - 1) * 2):
-            chp[i] = children[i]
-        for i in range(n_rows):
-            lp[i] = labels[i]
-        ip[0] = Int32(-1)
-        ip[1] = Int32(1)
+        linkage_fit_host_into(x_address, chp, lp, ip, n_rows, n_cols, n_clusters, metric, use_knn)
     return PythonObject(-1)
 
 
