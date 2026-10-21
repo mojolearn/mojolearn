@@ -128,10 +128,18 @@ def test_native_host_preserves_saved_fast_mode_refusal_at_inference(cls, host_cl
 
 @pytest.mark.parametrize("host_cls", [HostRidge, HostLinearRegression])
 def test_native_host_not_fitted_message_uses_the_supported_subclass_name(host_cls):
+    from mojolearn.exceptions import NotFittedError
+    from sklearn.exceptions import NotFittedError as SklearnNotFittedError
+
     model = host_cls()
     x = np.ones((2, 3), dtype="f4")
     with pytest.raises(ValueError) as old:
         model.predict(x)
     audit = audit_native_call(native_predict, model, x)
-    clean(audit, type(old.value))
+    # The legacy Python factory and native factory own distinct bridge class
+    # caches. Their supported relationship is both public exception bases,
+    # not identity with the other factory's private generated subclass.
+    clean(audit, NotFittedError)
+    assert isinstance(audit.exception, SklearnNotFittedError)
+    assert type(audit.exception).__bases__ == type(old.value).__bases__
     assert str(audit.exception) == str(old.value)
