@@ -10,9 +10,7 @@ broadcast modes and float32 scalars, and Python's float64 bound arithmetic
 and stopping test in the same order, so the IDENTICAL words are the Python
 driver's. x_decomp/lda_fit_dev.mojo is the same driver text on DKit."""
 from std.math import inf
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_SCALE, OP_SUB, mat_from,
@@ -24,6 +22,7 @@ comptime LDA_FLT_MIN: Float64 = 1.1754943508222875e-38
 comptime _OP_LGAMMA = 37
 
 
+@fieldwise_init
 struct LdaArgs(Copyable, Movable):
     var max_iter: Int
     var online: Bool
@@ -38,24 +37,6 @@ struct LdaArgs(Copyable, Movable):
     var tol: Float64
     var total: Float64
     var perp_tol: Float64
-
-    def __init__(out self, p: PythonObject, f: PythonObject) raises:
-        """p = [n, v, nc, max_iter, online, bs, mdi, seed, draw, nbi,
-        evaluate_every]; f = [doc_prior, topic_prior, offset, decay,
-        mean_change_tol, total_samples, perp_tol]."""
-        self.max_iter = Int(py=p[3])
-        self.online = Int(py=p[4]) != 0
-        self.bs = Int(py=p[5])
-        self.mdi = Int(py=p[6])
-        self.seed = Int(py=p[7])
-        self.evaluate_every = Int(py=p[10])
-        self.doc_prior = Float64(py=f[0])
-        self.topic_prior = Float64(py=f[1])
-        self.offset = Float64(py=f[2])
-        self.decay = Float64(py=f[3])
-        self.tol = Float64(py=f[4])
-        self.total = Float64(py=f[5])
-        self.perp_tol = Float64(py=f[6])
 
 
 def _online_epoch[E: Exec](mut k: Kit[E], X: Mat, Xh: Mat, mut C: Mat, mut ED: Mat, a: LdaArgs,
@@ -151,32 +132,22 @@ def lda_fit_loop[E: Exec](mut k: Kit[E], X: Mat, Xh: Mat, mut C: Mat, mut ED: Ma
 # ---- end driver
 
 
-def lda_fit_py[E: Exec](
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """x (n x v); comps and exp_dir (nc x v) replaced. Returns (n_iter,
-    draw, n_batch_iter)."""
-    var n = _n(p, 0)
-    var v = _n(p, 1)
-    var nc = _n(p, 2)
-    var draw = Int(py=p[8])
-    var nbi = Int(py=p[9])
+def lda_fit_run[E: Exec](
+    px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, a: LdaArgs, mut draw: Int, mut nbi: Int
+) raises -> Int:
+    """x (n x v) at `px`; comps and exp_dir (nc x v) at `pc`, `pe` replaced.
+    Returns n_iter; `draw` and `nbi` (n_batch_iter) advance in place."""
     if v < 1 or nc < 1 or n * v > 2147483647 or nc * v > 2147483647:
         raise Error("x_decomp: lda fit shape out of range")
-    var a = LdaArgs(p, f)
     if a.online and a.bs < 1:
         raise Error("x_decomp: lda batch size")
-    var px = _f(x)
-    var pc = _f(comps)
-    var pe = _f(exp_dir)
     var it = 0
-    with GILReleased(Python()):
-        var k = Kit[E]()
-        var X = mat_from(px, n, v)
-        var C = mat_from(pc, nc, v)
-        var ED = mat_from(pe, nc, v)
-        it = lda_fit_loop(k, X, X, C, ED, a, draw, nbi)
-        for i in range(nc * v):
-            pc.unsafe_store(i, C.d[i])
-            pe.unsafe_store(i, ED.d[i])
-    return Python.tuple(it, draw, nbi)
+    var k = Kit[E]()
+    var X = mat_from(px, n, v)
+    var C = mat_from(pc, nc, v)
+    var ED = mat_from(pe, nc, v)
+    it = lda_fit_loop(k, X, X, C, ED, a, draw, nbi)
+    for i in range(nc * v):
+        pc.unsafe_store(i, C.d[i])
+        pe.unsafe_store(i, ED.d[i])
+    return it

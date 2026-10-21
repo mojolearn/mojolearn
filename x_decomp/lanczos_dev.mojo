@@ -28,12 +28,11 @@ residual test, which still decides convergence on the host.
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
-from std.python import PythonObject
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
 from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
-from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
+from x_decomp.resident import _ptr, pool_alloc, pool_free
 
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
 #: kernel-pca taxi -9%, istella -12.5%, tags gl2k-kpca-lzdev-taxi/-istella;
@@ -73,27 +72,15 @@ def lz_scale_kernel(w: F32Ptr, dot: F32Ptr, ab: F32Ptr, q: F32Ptr, j: Int32, cap
         q.unsafe_store(i, lz_q(w.unsafe_load(i), s))
 
 
-def kpca_lanczos_dev_on_py() raises -> PythonObject:
-    """1 when this binding carries the device Lanczos route (every GPU build
-    since lane cpu2-l8-decomp)."""
-    comptime if KPCA_FAST_LANCZOS_DEV:
-        return PythonObject(1)
-    return PythonObject(0)
-
-
-def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObject) raises -> PythonObject:
-    """Lanczos steps j0 .. j1-1 (see the module docstring), enqueued.
-    a: n x n; q: the basis, rows 0 .. j0 hold q_0 .. q_j0 on entry, room
-    for cap + 1 rows; ab: 2 cap floats. p = [n, j0, j1, cap]."""
-    var n = _n(p, 0)
-    var j0 = _n(p, 1)
-    var j1 = _n(p, 2)
-    var cap = _n(p, 3)
+def dev_lanczos_run(ia: Int, iq: Int, iab: Int, n: Int, j0: Int, j1: Int, cap: Int) raises -> Int:
+    """`dev_lanczos_py`'s typed body: Lanczos steps j0 .. j1-1 (see the module
+    docstring), enqueued, on pool buffers ia (n x n), iq (the basis, cap + 1
+    rows) and iab (2 cap floats); returns the step count."""
     if j1 > cap or j0 > j1 or n < 1:
         raise Error("x_decomp: dev_lanczos steps out of range")
-    var pa = _ptr(_id(a), n * n)
-    var pq = _ptr(_id(q), (cap + 1) * n)
-    var pab = _ptr(_id(ab), 2 * cap)
+    var pa = _ptr(ia, n * n)
+    var pq = _ptr(iq, (cap + 1) * n)
+    var pab = _ptr(iab, 2 * cap)
     var ns = max(gemm_scratch(n, n, 1), gemm_scratch(cap, n, 1), gemm_scratch(n, cap, 1), gemm_scratch(1, n, 1), 1)
     var wid = pool_alloc(n)
     var tid = pool_alloc(n)
@@ -122,7 +109,7 @@ def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: Python
     pool_free(cid)
     pool_free(tid)
     pool_free(wid)
-    return PythonObject(j1 - j0)
+    return j1 - j0
 
 
 #: lane/apple-fast-gap-linalg2-kpca: IPCA_FAST_DEV, the FAST + Apple default
@@ -139,9 +126,3 @@ comptime IPCA_FAST_DEV = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_IPCA_FAST_DEV_OFF"]()
 )
-
-
-def ipca_dev_on_py() raises -> PythonObject:
-    comptime if IPCA_FAST_DEV:
-        return PythonObject(1)
-    return PythonObject(0)

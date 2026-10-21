@@ -10,31 +10,26 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_decomp.api import (
-    cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
-    geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
-    py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py,
-    rowsum_py, sqdist_py, vendor_py,
-    idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
+from x_decomp.api_pyapi import (
+    cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py, py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py, rowsum_py, sqdist_py, vendor_py, idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
-from x_decomp.select_ops import order_small_py, reduce_py
-from x_decomp.nmf import nmf_nndsvd_py, nmf_solve_py
-from x_decomp.ica import ica_solve_py
-from x_decomp.fa_em import dsum_f32_py, fa_em_main_py
-from x_decomp.chi2 import chi2_cdf_py, chi2_quantile_py, consistency_factor_py, lda_bound_host_py
-from x_decomp.als import als_fit_py
-from x_decomp.mds import mds_fit_py
-from x_decomp.lle_iter import lle_iterate_py
-from x_decomp.pls import pls_fit_py
-from x_decomp.lda_fit import lda_fit_py
-from x_decomp.dictl import dict_learning_py, minibatch_py
-from x_decomp.rotation import ortho_rotation_py
-from x_decomp.lanczos_host import lanczos_py
-from x_decomp.mds_iso import mds_disp_host_py, mds_setup_host_py
-from x_decomp.graph_host import (
-    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py,
-    graph_dijkstra_py,
+from x_decomp.select_ops_pyapi import order_small_py, reduce_py
+from x_decomp.nmf_pyapi import nmf_nndsvd_py, nmf_solve_py
+from x_decomp.ica_pyapi import ica_solve_py
+from x_decomp.fa_em_pyapi import dsum_f32_py, fa_em_main_py
+from x_decomp.chi2_pyapi import chi2_cdf_py, chi2_quantile_py, consistency_factor_py, lda_bound_host_py
+from x_decomp.als_pyapi import als_fit_py
+from x_decomp.mds_pyapi import mds_fit_py
+from x_decomp.lle_iter_pyapi import lle_iterate_py
+from x_decomp.pls_pyapi import pls_fit_py
+from x_decomp.lda_fit_pyapi import lda_fit_py
+from x_decomp.dictl_pyapi import dict_learning_py, minibatch_py
+from x_decomp.rotation_pyapi import ortho_rotation_py
+from x_decomp.lanczos_host_pyapi import lanczos_py
+from x_decomp.mds_iso_pyapi import mds_disp_host_py, mds_setup_host_py
+from x_decomp.graph_host_pyapi import (
+    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py, graph_dijkstra_py,
 )
 
 

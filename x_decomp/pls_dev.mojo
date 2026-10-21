@@ -3,17 +3,14 @@
 """x_decomp/pls.mojo's component loop on resident device matrices (lane
 py-runtime-b): the driver text of pls.mojo on `DKit` (the same cells and
 reads; the SVD is DevExec's solve with its order home). GPU binding only."""
-from std.python import Python, PythonObject
 from experiments.classical_identical_ideas.linear_controls import C27_NORM_VECTOR
-from x_decomp.cells import OP_CLASSICAL_NORM
-from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.cells import F32Ptr, OP_CLASSICAL_NORM
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADDS, OP_DIV, OP_GTS, OP_LE, OP_MUL, OP_RECIP, OP_SCALE, OP_SELECT, OP_SQRT, OP_SUB,
     mat_from,
 )
 from x_decomp.kit_device import DKit, DMat
-from x_decomp.pls import PLS_F32_EPS, PlsArgs, _f32, _pls_args
+from x_decomp.pls import PLS_F32_EPS, PlsArgs, _f32
 
 
 def thin_svd_dev(mut k: DKit, X: DMat, nc: Int, u_based: Bool, mut U: DMat, mut S: DMat, mut Vt: DMat) raises:
@@ -167,40 +164,28 @@ def pls_components_dev(
     return done
 
 
-def pls_fit_dev_py(
-    x: PythonObject, y: PythonObject, outs: PythonObject, its: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`pls_fit_py` on the resident kit."""
-    var n = _n(p, 0)
-    var px = _n(p, 1)
-    var q = _n(p, 2)
-    var a = _pls_args(p, f)
+def pls_fit_dev_run(
+    pxa: F32Ptr, pya: F32Ptr, dst: List[Int], pit: MutPointer[Int32, MutUntrackedOrigin], n: Int, px: Int, q: Int,
+    a: PlsArgs, mut nits: Int,
+) raises -> Int:
+    """`pls_fit_run` on the resident kit."""
     if n * px > 2147483647 or n * q > 2147483647 or a.nc < 1:
         raise Error("x_decomp: pls shape out of range")
-    var pxa = _f(x)
-    var pya = _f(y)
-    var dst = List[Int]()
-    for i in range(6):  # small-loop(i: six output addresses): Python parameter glue
-        dst.append(Int(py=outs[i]))
-    var pit = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=its))
-    var done = 0
-    var nits = 0
-    with GILReleased(Python()):
-        var k = DKit()
-        var res = List[DMat]()
-        var il = List[Int]()
-        done = pls_components_dev(k, k.upload(mat_from(pxa, n, px)), k.upload(mat_from(pya, n, q)), a, res, il)
-        var hs = List[Mat]()
-        for i in range(len(res)):  # small-loop(i: six vectors per component): their words home
-            hs.append(k.get(res[i]))
-        k.sync()
-        for c in range(done):  # small-loop(done: components): column c of each output
-            for t in range(6):  # small-loop(t: six outputs): exact copies
-                var po = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst[t])
-                ref v = hs[c * 6 + t]
-                for i in range(v.n()):
-                    po.unsafe_store(i * a.nc + c, v.d[i])
-        nits = len(il)
-        for i in range(nits):  # small-loop(nits: components): the iteration counts
-            pit.unsafe_store(i, Int32(il[i]))
-    return Python.tuple(done, nits)
+    var k = DKit()
+    var res = List[DMat]()
+    var il = List[Int]()
+    var done = pls_components_dev(k, k.upload(mat_from(pxa, n, px)), k.upload(mat_from(pya, n, q)), a, res, il)
+    var hs = List[Mat]()
+    for i in range(len(res)):  # small-loop(i: six vectors per component): their words home
+        hs.append(k.get(res[i]))
+    k.sync()
+    for c in range(done):  # small-loop(done: components): column c of each output
+        for t in range(6):  # small-loop(t: six outputs): exact copies
+            var po = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst[t])
+            ref v = hs[c * 6 + t]
+            for i in range(v.n()):
+                po.unsafe_store(i * a.nc + c, v.d[i])
+    nits = len(il)
+    for i in range(nits):  # small-loop(nits: components): the iteration counts
+        pit.unsafe_store(i, Int32(il[i]))
+    return done

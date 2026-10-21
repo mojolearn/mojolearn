@@ -12,11 +12,8 @@ this file's driver section).
 Status: the number of components fitted; a constant y residual stops the
 loop there (the caller warns, as Python's StopIteration did)."""
 from std.math import sqrt
-from std.python import Python, PythonObject
 from experiments.classical_identical_ideas.linear_controls import C27_NORM_VECTOR
-from x_decomp.cells import OP_CLASSICAL_NORM
-from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.cells import F32Ptr, OP_CLASSICAL_NORM
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADDS, OP_DIV, OP_GTS, OP_LE, OP_MUL, OP_RECIP, OP_SCALE, OP_SELECT, OP_SQRT, OP_SUB,
@@ -44,12 +41,6 @@ struct PlsArgs(Copyable, Movable):
         self.norm_y = norm_y
         self.canonical = canonical
         self.svd_algo = svd_algo
-
-
-def _pls_args(p: PythonObject, f: PythonObject) raises -> PlsArgs:
-    """p = [n, px, q, nc, max_iter, mode_b, norm_y, canonical, svd_algo]; f = [tol]."""
-    return PlsArgs(_n(p, 3), Int(py=p[4]), Float64(py=f[0]), Int(py=p[5]) != 0, Int(py=p[6]) != 0,
-                   Int(py=p[7]) != 0, Int(py=p[8]) != 0)
 
 
 # ---- driver (the same text on DKit in x_decomp/pls_dev.mojo)
@@ -209,39 +200,28 @@ def pls_components[E: Exec](
 # ---- end driver
 
 
-def pls_fit_py[E: Exec](
-    x: PythonObject, y: PythonObject, outs: PythonObject, its: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """x (n x px) and y (n x q) the centred, scaled data; outs = six
+def pls_fit_run[E: Exec](
+    pxa: F32Ptr, pya: F32Ptr, dst: List[Int], pit: MutPointer[Int32, MutUntrackedOrigin], n: Int, px: Int, q: Int,
+    a: PlsArgs, mut nits: Int,
+) raises -> Int:
+    """x (n x px) and y (n x q) the centred, scaled data; dst = six
     addresses of [xw px x nc, yw q x nc, xs n x nc, ys n x nc, xl px x nc,
-    yl q x nc] (column c written for each fitted component); its (nc int32)
-    the power iteration counts. Returns (fitted, iteration count entries)."""
-    var n = _n(p, 0)
-    var px = _n(p, 1)
-    var q = _n(p, 2)
-    var a = _pls_args(p, f)
+    yl q x nc] (column c written for each fitted component); pit (nc int32)
+    the power iteration counts. Returns the fitted count; nits takes the
+    iteration count entries."""
     if n * px > 2147483647 or n * q > 2147483647 or a.nc < 1:
         raise Error("x_decomp: pls shape out of range")
-    var pxa = _f(x)
-    var pya = _f(y)
-    var dst = List[Int]()
-    for i in range(6):  # small-loop(i: six output addresses): Python parameter glue
-        dst.append(Int(py=outs[i]))
-    var pit = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=its))
-    var done = 0
-    var nits = 0
-    with GILReleased(Python()):
-        var k = Kit[E]()
-        var res = List[Mat]()
-        var il = List[Int]()
-        done = pls_components(k, mat_from(pxa, n, px), mat_from(pya, n, q), a, res, il)
-        for c in range(done):
-            for t in range(6):
-                var po = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst[t])
-                ref v = res[c * 6 + t]
-                for i in range(v.n()):
-                    po.unsafe_store(i * a.nc + c, v.d[i])
-        nits = len(il)
-        for i in range(nits):
-            pit.unsafe_store(i, Int32(il[i]))
-    return Python.tuple(done, nits)
+    var k = Kit[E]()
+    var res = List[Mat]()
+    var il = List[Int]()
+    var done = pls_components(k, mat_from(pxa, n, px), mat_from(pya, n, q), a, res, il)
+    for c in range(done):
+        for t in range(6):
+            var po = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst[t])
+            ref v = res[c * 6 + t]
+            for i in range(v.n()):
+                po.unsafe_store(i * a.nc + c, v.d[i])
+    nits = len(il)
+    for i in range(nits):
+        pit.unsafe_store(i, Int32(il[i]))
+    return done

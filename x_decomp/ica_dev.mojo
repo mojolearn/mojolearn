@@ -7,9 +7,7 @@ the same words as the host column. Each Python scalar read (the largest
 eigenvalue, a norm, a convergence limit) is one word home where Python read
 it. GPU binding only."""
 from experiments.classical_identical_ideas.linear_controls import C27_COMPONENTS
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.ica import ICA_F32_EPS, ICA_FLT_MIN, _recip_or0
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADDS, OP_CUBE, OP_CUBEP, OP_EXPG, OP_EXPGP, OP_MAXS, OP_MUL, OP_ONEMSQ, OP_RECIP,
@@ -107,31 +105,22 @@ def ica_def_dev(mut k: DKit, X1: DMat, mut W: DMat, fun: Int, alpha: Float64, ma
     return best
 
 
-def ica_solve_dev_py(x1: PythonObject, w: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
-    """`ica_solve_py` on the resident kit."""
-    var nc = _n(p, 0)
-    var xr = _n(p, 1)
-    var xc = _n(p, 2)
-    var algo = Int(py=p[3])
-    var fun = Int(py=p[4])
-    var max_iter = Int(py=p[5])
+def ica_solve_dev_run(
+    px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64
+) raises -> Int:
+    """`ica_solve_run` on the resident kit."""
     if xr * xc > 2147483647 or nc * nc > 2147483647 or nc < 1:
         raise Error("x_decomp: fastica shape out of range")
-    var alpha = Float64(py=f[0])
-    var tol = Float64(py=f[1])
-    var px = _f(x1)
-    var pw = _f(w)
     var it = 0
-    with GILReleased(Python()):
-        var k = DKit()
-        var X1 = k.upload(mat_from(px, xr, xc))
-        var W = k.upload(mat_from(pw, nc, nc))
-        if algo == 0:
-            it = ica_par_dev(k, X1, W, fun, alpha, max_iter, tol)
-        else:
-            it = ica_def_dev(k, X1, W, fun, alpha, max_iter, tol)
-        var hw = k.get(W)
-        k.sync()
-        for i in range(nc * nc):
-            pw.unsafe_store(i, hw.d[i])
-    return PythonObject(it)
+    var k = DKit()
+    var X1 = k.upload(mat_from(px, xr, xc))
+    var W = k.upload(mat_from(pw, nc, nc))
+    if algo == 0:
+        it = ica_par_dev(k, X1, W, fun, alpha, max_iter, tol)
+    else:
+        it = ica_def_dev(k, X1, W, fun, alpha, max_iter, tol)
+    var hw = k.get(W)
+    k.sync()
+    for i in range(nc * nc):
+        pw.unsafe_store(i, hw.d[i])
+    return it

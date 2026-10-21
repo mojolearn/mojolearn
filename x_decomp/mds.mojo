@@ -9,9 +9,6 @@ Python's float64 stress tests in the same order, so the IDENTICAL words are
 the Python driver's. x_decomp/mds_dev.mojo runs the same on resident
 matrices with x_decomp/mds_iso_dev.mojo's kernels."""
 from std.math import sqrt
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
@@ -140,30 +137,19 @@ def mds_fit[E: Exec](Dis: Mat, starts: Mat, nc: Int, a: MdsArgs, mut best_y: Mat
     return best_it
 
 
-def _mds_args(p: PythonObject, f: PythonObject) raises -> MdsArgs:
-    """p = [n, nc, n_starts, max_iter, metric, norm]; f = [eps]."""
-    return MdsArgs(Int(py=p[3]), Int(py=p[4]) != 0, Int(py=p[5]) != 0, Float64(py=f[0]))
-
-
-def mds_fit_py[E: Exec](
-    dis: PythonObject, starts: PythonObject, y: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """dis (n x n), starts (n_starts * n x nc), y (n x nc, out). Returns
-    (stress, n_iter)."""
-    var n = _n(p, 0)
-    var nc = _n(p, 1)
-    var ns = _n(p, 2)
+def mds_fit_check(n: Int, nc: Int, ns: Int) raises:
+    """SMACOF's shape check (runs before the arguments and addresses are read)."""
     if n < 1 or ns < 1 or n * n > 2147483647 or ns * n * nc > 2147483647:
         raise Error("x_decomp: mds shape out of range")
-    var a = _mds_args(p, f)
-    var pd = _f(dis)
-    var ps = _f(starts)
-    var py_ = _f(y)
-    var it = 0
-    var st = 0.0
-    with GILReleased(Python()):
-        var Y = Mat(n, nc)
-        it = mds_fit[E](mat_from(pd, n, n), mat_from(ps, ns * n, nc), nc, a, Y, st)
-        for i in range(n * nc):
-            py_.unsafe_store(i, Y.d[i])
-    return Python.tuple(st, it)
+
+
+def mds_fit_run[E: Exec](
+    pd: F32Ptr, ps: F32Ptr, py_: F32Ptr, n: Int, nc: Int, ns: Int, a: MdsArgs, mut st: Float64
+) raises -> Int:
+    """dis (n x n) at pd, starts (ns * n x nc) at ps, y (n x nc, out) at
+    py_. Writes the stress to st and returns n_iter."""
+    var Y = Mat(n, nc)
+    var it = mds_fit[E](mat_from(pd, n, n), mat_from(ps, ns * n, nc), nc, a, Y, st)
+    for i in range(n * nc):
+        py_.unsafe_store(i, Y.d[i])
+    return it

@@ -20,12 +20,11 @@ tree level (`iso_merge`), a max scan of the block heads (log2(G) launches),
 a thread per group (its block mean) and a thread per pair (the scatter)."""
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from std.python import Python, PythonObject
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, _down, xd_ctx
 from x_decomp.mds_iso import ISO_CHUNK, iso_chunk, iso_group_sum, iso_mean, iso_merge
-from x_decomp.resident import X_DECOMP_POOL, _id, _n, _ptr
+from x_decomp.resident import X_DECOMP_POOL, _ptr
 from x_decomp.select_ops import order_less
 
 
@@ -255,17 +254,6 @@ def mds_setup_dev(dis_id: Int, ids: List[Int], n: Int, N2: Int) raises -> Tuple[
     return (m, G)
 
 
-def dev_mds_setup_py(dis: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
-    """ids = [keys, idx, gid, tmp, gst, word] device matrices (keys, idx,
-    gid, tmp: N2 values; gst: N2 + 1; word: 1); p = [n, N2]. Returns (m, G).
-    gid always ends in ids[2] (copied from tmp when the scan ended there)."""
-    var li = List[Int]()
-    for i in range(6):
-        li.append(_id(ids[i]))
-    var r = mds_setup_dev(_id(dis), li, _n(p, 0), _n(p, 1))
-    return Python.tuple(r[0], r[1])
-
-
 def mds_disp_dev(d_id: Int, dst_id: Int, ids: List[Int], n: Int, m: Int, G: Int, first: Bool) raises:
     """One iteration's upper-triangle disparities into dst (n x n), enqueued.
     ids = [keys, idx, gid, gst, sm, wt, end, prv, last, hf, hd0, hd1, gv]
@@ -306,15 +294,3 @@ def mds_disp_dev(d_id: Int, dst_id: Int, ids: List[Int], n: Int, m: Int, G: Int,
         hd = h1
     ctx.enqueue_function[value_kernel](sm, wt, hd, gv, Int32(G), grid_dim=_blocks(G), block_dim=TPB)
     ctx.enqueue_function[scatter_disp_kernel](gv, pg, pi, po, Int32(m), grid_dim=_blocks(m), block_dim=TPB)
-
-
-def dev_mds_disp_py(d: PythonObject, dst: PythonObject, ids: PythonObject, p: PythonObject) raises -> PythonObject:
-    """One iteration's upper-triangle disparities into dst (n x n), enqueued.
-    ids = [keys, idx, gid, gst, sm, wt, end, prv, last, hf, hd0, hd1, gv]
-    device matrices; p = [n, m, G, first]."""
-    var li = List[Int]()
-    for i in range(13):
-        li.append(_id(ids[i]))
-    var m = _n(p, 1)
-    mds_disp_dev(_id(d), _id(dst), li, _n(p, 0), m, _n(p, 2), Int(py=p[3]) != 0)
-    return PythonObject(m)

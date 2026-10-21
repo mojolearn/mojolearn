@@ -23,12 +23,10 @@ from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, xd_ctx, dijkstra_kernel, DIJKSTRA_ROWS
-from x_decomp.resident import pool_alloc, pool_free, _ptr, _id, _n
+from x_decomp.resident import pool_alloc, pool_free, _ptr
 from x_decomp.graph_cells import (
     knn_select_row,
     knn_dense_row,
@@ -259,102 +257,89 @@ def _zero(ctx: DeviceContext, p: F32Ptr, count: Int) raises:
         ctx.enqueue_function[xg_zero_kernel](p, Int32(count), grid_dim=_blocks(count), block_dim=TPB)
 
 
-# ---- Python entries (resident ids) ------------------------------------------
+# ---- typed entries of the Python doors (the sibling shell; resident ids)
 
 
-def dev_graph_knn_py(d: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """idx / dst (n x nn): the nn nearest columns of every row of the
-    resident D (n x m), `knn_select_row`. p = [n, m, nn, excl]."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var nn = _n(p, 2)
-    var excl = Int(py=p[3]) != 0
+def dev_graph_knn_run(i_d: Int, i_idx: Int, i_dst: Int, n: Int, m: Int, nn: Int, ex: Int) raises -> Int:
+    """`dev_graph_knn_py`'s typed body (see its door in the sibling shell)."""
+    var excl = ex != 0
     var take = nn + (1 if excl else 0)
     if take > m or m >= 1 << 24 or n * m > 2147483647:
         raise Error("x_decomp: knn asks for more neighbors than columns")
     if n == 0 or nn == 0:
-        return PythonObject(0)
+        return 0
     var ctx = xd_ctx()
     var sid = pool_alloc(n * take)
     var iid = pool_alloc(n * take)
     ctx.enqueue_function[xg_knn_kernel](
-        _ptr(_id(d), n * m), _ptr(sid, n * take), _ptr(iid, n * take), _ptr(_id(idx), n * nn), _ptr(_id(dst), n * nn),
+        _ptr(i_d, n * m), _ptr(sid, n * take), _ptr(iid, n * take), _ptr(i_idx, n * nn), _ptr(i_dst, n * nn),
         Int32(n), Int32(m), Int32(take), Int32(1 if excl else 0), Int32(nn), grid_dim=_blocks(n), block_dim=TPB,
     )
     pool_free(sid)
     pool_free(iid)
-    return PythonObject(n)
+    return n
 
 
-def dev_graph_knn_dense_py(idx: PythonObject, w: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var nn = _n(p, 1)
+def dev_graph_knn_dense_run(i_idx: Int, i_w: Int, i_wout: Int, n: Int, nn: Int) raises -> Int:
+    """`dev_graph_knn_dense_py`'s typed body (see its door in the sibling shell)."""
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
-    var po = _ptr(_id(wout), n * n)
+    var po = _ptr(i_wout, n * n)
     _zero(ctx, po, n * n)
     if n > 0 and nn > 0:
         ctx.enqueue_function[xg_knn_dense_kernel](
-            _ptr(_id(idx), n * nn), _ptr(_id(w), n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
+            _ptr(i_idx, n * nn), _ptr(i_w, n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
         )
-    return PythonObject(n)
+    return n
 
 
-def dev_graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
+def dev_graph_radius_run(i_d: Int, i_wout: Int, f_r: Float64, n: Int) raises -> Int:
+    """`dev_graph_radius_py`'s typed body (see its door in the sibling shell)."""
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     if n > 0:
         xd_ctx().enqueue_function[xg_radius_kernel](
-            _ptr(_id(d), n * n), _ptr(_id(wout), n * n), Int32(n), Float32(Float64(py=r)),
+            _ptr(i_d, n * n), _ptr(i_wout, n * n), Int32(n), Float32(f_r),
             grid_dim=_blocks(n * n), block_dim=TPB,
         )
-    return PythonObject(n)
+    return n
 
 
-def dev_graph_radius_geo_py(
-    dq: PythonObject, d: PythonObject, g: PythonObject, p: PythonObject, r: PythonObject
-) raises -> PythonObject:
-    """Isomap's radius transform (`radius_geo_cell`), one thread a cell of
-    the nq x n result."""
-    var nq = _n(p, 0)
-    var n = _n(p, 1)
+def dev_graph_radius_geo_run(i_dq: Int, i_d: Int, i_g: Int, f_r: Float64, nq: Int, n: Int) raises -> Int:
+    """`dev_graph_radius_geo_py`'s typed body (see its door in the sibling shell)."""
     if nq * n > 2147483647 or n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     if nq > 0 and n > 0:
         xd_ctx().enqueue_function[xg_radius_geo_kernel](
-            _ptr(_id(dq), nq * n), _ptr(_id(d), n * n), _ptr(_id(g), nq * n), Int32(nq), Int32(n),
-            Float32(Float64(py=r)), grid_dim=_blocks(nq * n), block_dim=TPB,
+            _ptr(i_dq, nq * n), _ptr(i_d, n * n), _ptr(i_g, nq * n), Int32(nq), Int32(n),
+            Float32(f_r), grid_dim=_blocks(nq * n), block_dim=TPB,
         )
-    return PythonObject(nq)
+    return nq
 
 
-def dev_graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var nn = _n(p, 1)
+def dev_graph_lle_iw_run(i_idx: Int, i_wb: Int, i_wout: Int, n: Int, nn: Int) raises -> Int:
+    """`dev_graph_lle_iw_py`'s typed body (see its door in the sibling shell)."""
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
-    var po = _ptr(_id(wout), n * n)
+    var po = _ptr(i_wout, n * n)
     _zero(ctx, po, n * n)
     if n > 0:
         ctx.enqueue_function[xg_lle_iw_kernel](
-            _ptr(_id(idx), n * nn), _ptr(_id(wb), n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
+            _ptr(i_idx, n * nn), _ptr(i_wb, n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
         )
-    return PythonObject(n)
+    return n
 
 
-def dev_graph_components_py(w: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
-    """comp (n floats): every node's component, numbered by lowest node;
-    returns the number of components."""
-    var n = _n(p, 0)
+def dev_graph_components_run(i_w: Int, i_comp: Int, n: Int) raises -> Int:
+    """`dev_graph_components_py`'s typed body (see its door in the sibling shell)."""
     if n == 0:
-        return PythonObject(0)
+        return 0
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
-    var pw = _ptr(_id(w), n * n)
+    var pw = _ptr(i_w, n * n)
     var lid = pool_alloc(n)
     var fid = pool_alloc(n)
     var rid = pool_alloc(n + 1)
@@ -377,7 +362,7 @@ def dev_graph_components_py(w: PythonObject, comp: PythonObject, p: PythonObject
             break
     ctx.enqueue_function[xg_root_flag_kernel](lab, flag, Int32(n), grid_dim=_blocks(n), block_dim=TPB)
     _xscan(ctx, flag, rank, n, n + 1)
-    ctx.enqueue_function[xg_comp_kernel](lab, rank, _ptr(_id(comp), n), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
+    ctx.enqueue_function[xg_comp_kernel](lab, rank, _ptr(i_comp, n), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
     var c = _read_i32(ctx, rank + n)
     pool_free(lid)
     pool_free(fid)
@@ -385,7 +370,7 @@ def dev_graph_components_py(w: PythonObject, comp: PythonObject, p: PythonObject
     pool_free(cid)
     _ = dc^
     _ = hb^
-    return PythonObject(c)
+    return c
 
 
 def xg_clear1_kernel(p: I32Ptr):
@@ -397,18 +382,16 @@ def _clear1(ctx: DeviceContext, p: I32Ptr) raises:
     ctx.enqueue_function[xg_clear1_kernel](p, grid_dim=1, block_dim=1)
 
 
-def dev_graph_join_py(w: PythonObject, d: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`graph_join_py` on resident W (in place), D and comp; p = [n, C]."""
-    var n = _n(p, 0)
-    var C = _n(p, 1)
+def dev_graph_join_run(i_w: Int, i_d: Int, i_comp: Int, n: Int, C: Int) raises -> Int:
+    """`dev_graph_join_py`'s typed body (see its door in the sibling shell)."""
     if C <= 1 or n == 0:
-        return PythonObject(C)
+        return C
     if n * C > 2147483647 or C * C > 2147483647:
         raise Error("x_decomp: too many connected components to join")
     var ctx = xd_ctx()
-    var pw = _ptr(_id(w), n * n)
-    var pd = _ptr(_id(d), n * n)
-    var pc = _ptr(_id(comp), n)
+    var pw = _ptr(i_w, n * n)
+    var pd = _ptr(i_d, n * n)
+    var pc = _ptr(i_comp, n)
     var vid = pool_alloc(n * C)
     var jid = pool_alloc(n * C)
     var kid = pool_alloc(C + 1)
@@ -431,21 +414,18 @@ def dev_graph_join_py(w: PythonObject, d: PythonObject, comp: PythonObject, p: P
     pool_free(kid)
     pool_free(sid)
     pool_free(mid)
-    return PythonObject(C)
+    return C
 
 
-def dev_graph_dijkstra_py(w: PythonObject, dist: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dist (n x n, resident): the shortest paths of the resident W, the
-    arcs compressed on the device (count, scan, fill) and the rows of
-    `dijkstra_kernel`, DIJKSTRA_ROWS a launch."""
-    var n = _n(p, 0)
+def dev_graph_dijkstra_run(i_w: Int, i_dist: Int, n: Int) raises -> Int:
+    """`dev_graph_dijkstra_py`'s typed body (see its door in the sibling shell)."""
     if n == 0:
-        return PythonObject(0)
+        return 0
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
-    var pw = _ptr(_id(w), n * n)
-    var pd = _ptr(_id(dist), n * n)
+    var pw = _ptr(i_w, n * n)
+    var pd = _ptr(i_dist, n * n)
     var kid = pool_alloc(n)
     var rid = pool_alloc(n + 1)
     var cnt = _ip(_ptr(kid, n))
@@ -481,4 +461,4 @@ def dev_graph_dijkstra_py(w: PythonObject, dist: PythonObject, p: PythonObject) 
     pool_free(pid)
     pool_free(hid)
     pool_free(gid)
-    return PythonObject(n)
+    return n

@@ -33,14 +33,13 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.python import PythonObject
 from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceContext
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from x_decomp.cells import F32Ptr, add, mul, sub, div0, exp_c, digamma
 from x_decomp.device import TPB, _blocks, xd_ctx
-from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
+from x_decomp.resident import _ptr, pool_alloc, pool_free
 
 #: The switch: FAST + Apple default ON since the M3 A/B (nb-lda-fused-zones:
 #: LDA taxi-zones 2,721 -> 1,509 ms, -44.5%, perplexity 45.22 same).
@@ -350,33 +349,28 @@ def launch_lda_fused_ss(
     )
 
 
-def dev_lda_estep_ss_py(
-    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, ss: PythonObject, p: PythonObject,
-    f: PythonObject,
-) raises -> PythonObject:
-    """`x_decomp_dev_lda_estep_ss` on device matrices: d and e (n x k)
-    updated in place as `x_decomp_dev_lda_rows` does, and ss (k x v) = the
-    E-step's sufficient statistics. p = [n, k, v, max_iter], f = [prior,
-    tol]. Returns 1, or 0 when the shape is past the kernel's caps (the
-    caller then runs main's chain)."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
-    var max_iter = _n(p, 3)
+def dev_lda_estep_ss_run(
+    xi: Int, wi: Int, di: Int, ei: Int, si: Int, n: Int, k: Int, v: Int, max_iter: Int, prior_f: Float64,
+    tol_f: Float64,
+) raises -> Int:
+    """`x_decomp_dev_lda_estep_ss` on device matrices (resident ids x, ew, d,
+    e, ss): d and e (n x k) updated in place as `x_decomp_dev_lda_rows` does,
+    and ss (k x v) = the E-step's sufficient statistics. Returns 1, or 0 when
+    the shape is past the kernel's caps (the caller then runs main's chain)."""
     if n < 1 or k < 1 or v < 1 or k > LFS_K_CAP or v > LFS_V_CAP:
-        return PythonObject(0)
+        return 0
     var groups = min(LFS_BLOCKS, (n + LFS_DPB - 1) // LFS_DPB)
     var kv = k * v
     if n * v > 2147483647 or groups * kv > 2147483647:
-        return PythonObject(0)
-    var prior = Float32(Float64(py=f[0]))
-    var tol = Float32(Float64(py=f[1]))
-    var px = _ptr(_id(x), n * v)
-    var pw = _ptr(_id(ew), kv)
-    var pd = _ptr(_id(d), n * k)
-    var pe = _ptr(_id(e), n * k)
-    var ps = _ptr(_id(ss), kv)
+        return 0
+    var prior = Float32(prior_f)
+    var tol = Float32(tol_f)
+    var px = _ptr(xi, n * v)
+    var pw = _ptr(wi, kv)
+    var pd = _ptr(di, n * k)
+    var pe = _ptr(ei, n * k)
+    var ps = _ptr(si, kv)
     var sid = pool_alloc(groups * kv)
     launch_lda_fused_ss(xd_ctx(), px, pw, pd, pe, _ptr(sid, groups * kv), ps, n, k, v, prior, max_iter, tol, groups)
     pool_free(sid)
-    return PythonObject(1)
+    return 1

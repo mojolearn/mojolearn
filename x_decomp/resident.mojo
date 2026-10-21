@@ -16,8 +16,6 @@ DeviceContext runs its work in order, so a buffer reused by a later launch
 is written only after every earlier launch that read it. Free capacity past
 POOL_KEEP_BYTES is released after a sync."""
 from std.ffi import _Global
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from std.sys.compile import is_defined
@@ -181,75 +179,40 @@ def _ptr(id: Int, n: Int) raises -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
 
 
-def _id(o: PythonObject) raises -> Int:
-    return Int(py=o)
-
-
-def _n(p: PythonObject, i: Int) raises -> Int:
-    var v = Int(py=p[i])
-    if v < 0 or v > 2147483647:
-        raise Error("x_decomp: dimension out of range")
-    return v
-
-
-# ---- Python entries (GPU binding only)
-def dev_alloc_py(n: PythonObject) raises -> PythonObject:
-    return PythonObject(pool_alloc(Int(py=n)))
-
-
-def dev_free_py(id: PythonObject) raises -> PythonObject:
-    pool_free(_id(id))
-    return PythonObject(None)
-
-
-def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+# ---- Typed entries behind the GPU binding's doors (the shell is x_decomp/resident_py*.mojo)
+def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     """Host floats into the device matrix; waits (the host store may change
     after this returns)."""
-    var cnt = Int(py=n)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    var i = _id(id)
     _ = _ptr(i, cnt)
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        _up_into(ctx, p[].bufs[i], src, cnt)
-        ctx.synchronize()
-    return PythonObject(cnt)
+    var ctx = xd_ctx()
+    _up_into(ctx, p[].bufs[i], src, cnt)
+    ctx.synchronize()
+    return cnt
 
 
-def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+def dev_download_run(i: Int, dst: F32Ptr, cnt: Int) raises -> Int:
     """The device matrix into host floats, after every launch before it."""
-    var cnt = Int(py=n)
-    var dst = F32Ptr(unsafe_from_address=Int(py=addr))
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    var i = _id(id)
     _ = _ptr(i, cnt)
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        _down(ctx, p[].bufs[i], dst, cnt)
-        ctx.synchronize()
-    return PythonObject(cnt)
+    var ctx = xd_ctx()
+    _down(ctx, p[].bufs[i], dst, cnt)
+    ctx.synchronize()
+    return cnt
 
 
-def dev_ew_py(
-    a: PythonObject, b: PythonObject, c: PythonObject, dst: PythonObject, p: PythonObject, s: PythonObject
-) raises -> PythonObject:
+def dev_ew_run(
+    a: Int, b: Int, c: Int, dst: Int, op: Int, count: Int, d: Int, lb: Int, bm: Int, lc: Int, cm: Int, s: Float64
+) raises -> Int:
     # p = [op, count, d, lb, bm, lc, cm], as x_decomp_ew
-    var op = Int(py=p[0])
-    var count = _n(p, 1)
-    var d = _n(p, 2)
-    var lb = _n(p, 3)
-    var bm = Int(py=p[4])
-    var lc = _n(p, 5)
-    var cm = Int(py=p[6])
     if d <= 0:
         raise Error("x_decomp: ew needs a positive row width")
-    var pa = _ptr(_id(a), count)
-    var pb = _ptr(_id(b), lb)
-    var pc = _ptr(_id(c), lc)
-    var po = _ptr(_id(dst), count)
-    launch_ew(xd_ctx(), op, pa, pb, bm, pc, cm, po, count, d, Float32(Float64(py=s)))
-    return PythonObject(count)
+    var pa = _ptr(a, count)
+    var pb = _ptr(b, lb)
+    var pc = _ptr(c, lc)
+    var po = _ptr(dst, count)
+    launch_ew(xd_ctx(), op, pa, pb, bm, pc, cm, po, count, d, Float32(s))
+    return count
 
 
 struct _CovGate(Defaultable, Movable):
@@ -263,12 +226,10 @@ struct _CovGate(Defaultable, Movable):
 comptime MCD_COV_GATE = _Global[StorageType=_CovGate, name="MojoMCDOrderedCovGate", init_fn=_CovGate.__init__]
 
 
-def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_mcd_cov_run(a: Int, c: Int, rows: Int, d: Int) raises -> Int:
     """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
     comptime if not MCD_ORDERED_COV:
         raise Error("ordered MCD covariance is disabled")
-    var rows = _n(p, 0)
-    var d = _n(p, 1)
     if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
         raise Error("ordered covariance invalid shape or Int32 bound exceeded")
     note_cov_route(False, rows, d)
@@ -285,150 +246,118 @@ def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> 
     var gate = state[].bufs[0]
     var gate_ptr = gate.unsafe_ptr[MutAnyOrigin]()
     var sid = pool_alloc(words)
-    launch_mcd_cov_ordered(ctx, _ptr(_id(a), rows*d), _ptr(_id(c), d*d),
+    launch_mcd_cov_ordered(ctx, _ptr(a, rows*d), _ptr(c, d*d),
         _ptr(sid, words), rows, d, 1, rows*d, d*d, gate_ptr, True)
-    # Resident pool reuse is ordered on the same context, as dev_gemm_py.
+    # Resident pool reuse is ordered on the same context, as dev_gemm_run.
     pool_free(sid)
-    return PythonObject(d*d)
+    return d*d
 
 
-def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var k = _n(p, 1)
-    var n = _n(p, 2)
+def dev_gemm_run(a: Int, b: Int, c: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises -> Int:
     if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
         raise Error("x_decomp: gemm exceeds the Int32 index bound")
-    var ta = Int(py=p[3]) != 0
-    var tb = Int(py=p[4]) != 0
     var ns = gemm_scratch(m, k, n)
     var sid = pool_alloc(ns)
-    launch_gemm(xd_ctx(), _ptr(_id(a), m * k), _ptr(_id(b), k * n), _ptr(_id(c), m * n), _ptr(sid, ns),
+    launch_gemm(xd_ctx(), _ptr(a, m * k), _ptr(b, k * n), _ptr(c, m * n), _ptr(sid, ns),
                 m, k, n, ta, tb)
     pool_free(sid)
-    return PythonObject(m * n)
+    return m * n
 
 
-def dev_project_py(a: PythonObject, b: PythonObject, c: PythonObject, flag: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_project_run(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) raises -> Int:
     """c = a b^T (a m x k, b n x k; `dev_gemm` with tb=1's words) by the
     tiled projection kernel, enqueued (no sync), and flag[0] = 1 when an
     entry of a is not finite, else 0 (the random projection's transform;
     lane gap-nb-maxabs-grp). Returns -1, launching nothing, on a column
     whose shared memory does not hold the tile."""
-    var m = _n(p, 0)
-    var k = _n(p, 1)
-    var n = _n(p, 2)
     if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
         raise Error("x_decomp: projection exceeds the Int32 index bound")
     comptime if not PROJECT_TILED:
-        return PythonObject(-1)
-    var pf = _ptr(_id(flag), 1)
-    var pa = _ptr(_id(a), m * k)
-    var pb = _ptr(_id(b), k * n)
-    var pc = _ptr(_id(c), m * n)
+        return -1
+    var pf = _ptr(flag, 1)
+    var pa = _ptr(a, m * k)
+    var pb = _ptr(b, k * n)
+    var pc = _ptr(c, m * n)
     var ctx = xd_ctx()
     var pool = X_DECOMP_POOL.get_or_create_ptr()
-    enqueue_fill(ctx, pool[].bufs[_id(flag)], Float32(0))
+    enqueue_fill(ctx, pool[].bufs[flag], Float32(0))
     launch_project(ctx, pa, pb, pc, pf, m, k, n)
-    return PythonObject(m * n)
+    return m * n
 
 
-def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_rand_run(dst: Int, count: Int, seed_in: Int, stream_in: Int, kind: Int) raises -> Int:
     """p = [count, seed, stream, kind]: `rand_py`'s draws (x_decomp/cells.mojo
     `rand_cell`, the counter-based Philox stream) written into the device
     matrix, enqueued (no sync, no download): the random projections' matrix
     is made where transform reads it (lane gap-nb-maxabs-grp)."""
-    var count = _n(p, 0)
-    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
-    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
-    var kind = Int(py=p[3])
+    var seed = UInt32(seed_in & 0xFFFFFFFF)
+    var stream = UInt32(stream_in & 0xFFFFFFFF)
     if count == 0:
-        return PythonObject(0)
+        return 0
     xd_ctx().enqueue_function[rand_kernel](
-        _ptr(_id(dst), count), Int32(count), seed, stream, Int32(kind), grid_dim=_blocks(count), block_dim=TPB
+        _ptr(dst, count), Int32(count), seed, stream, Int32(kind), grid_dim=_blocks(count), block_dim=TPB
     )
-    return PythonObject(count)
+    return count
 
 
-def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_trisolve_run(lu: Int, idx: Int, src: Int, dst: Int, n: Int, nrhs: Int, trans: Int) raises -> Int:
     """`trisolve_py` on device ids, enqueued (no sync)."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var trans = _n(p, 2)
     if n >= 1 << 24:
         raise Error("x_decomp: trisolve row numbers exceed float32's exact integers")
     var sid = pool_alloc(max(n * nrhs, 1))
-    launch_trisolve(xd_ctx(), _ptr(_id(lu), n * n), _ptr(_id(idx), n), _ptr(_id(src), n * nrhs),
-                    _ptr(_id(dst), n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
+    launch_trisolve(xd_ctx(), _ptr(lu, n * n), _ptr(idx, n), _ptr(src, n * nrhs),
+                    _ptr(dst, n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
     pool_free(sid)
-    return PythonObject(n)
+    return n
 
 
-def dev_knn_select_py(dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_knn_select_run(dmat: Int, dist: Int, idx: Int, n: Int, m: Int, k: Int, ex: Int) raises -> Int:
     """`knn_select_py` on device ids, enqueued (no sync)."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var k = _n(p, 2)
-    var ex = _n(p, 3)
     if m >= 1 << 24 or n * m > 2147483647:
         raise Error("x_decomp: knn_select exceeds the index bounds")
-    launch_knn_select(xd_ctx(), _ptr(_id(dmat), n * m), _ptr(_id(dist), n * k), _ptr(_id(idx), n * k), n, m, k, ex)
-    return PythonObject(n)
+    launch_knn_select(xd_ctx(), _ptr(dmat, n * m), _ptr(dist, n * k), _ptr(idx, n * k), n, m, k, ex)
+    return n
 
 
-def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var d = _n(p, 1)
+def dev_colsum_run(a: Int, dst: Int, n: Int, d: Int) raises -> Int:
     var ns = colsum_scratch(n, d)
     var sid = pool_alloc(ns)
-    launch_colsum(xd_ctx(), _ptr(_id(a), n * d), _ptr(_id(dst), d), _ptr(sid, ns), n, d)
+    launch_colsum(xd_ctx(), _ptr(a, n * d), _ptr(dst, d), _ptr(sid, ns), n, d)
     pool_free(sid)
-    return PythonObject(d)
+    return d
 
 
-def dev_rowsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var d = _n(p, 1)
+def dev_rowsum_run(a: Int, dst: Int, n: Int, d: Int) raises -> Int:
     var ns = rowsum_scratch(n, d)
     var sid = pool_alloc(ns)
-    launch_rowsum(xd_ctx(), _ptr(_id(a), n * d), _ptr(_id(dst), n), _ptr(sid, ns), n, d)
+    launch_rowsum(xd_ctx(), _ptr(a, n * d), _ptr(dst, n), _ptr(sid, ns), n, d)
     pool_free(sid)
-    return PythonObject(n)
+    return n
 
 
-def dev_sqdist_py(a: PythonObject, b: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_sqdist_run(a: Int, b: Int, dst: Int, na: Int, nb: Int, d: Int, kind: Int, pw_in: Float64) raises -> Int:
     # p = [na, nb, d] or [na, nb, d, kind, pw], as x_decomp_sqdist
-    var na = _n(p, 0)
-    var nb = _n(p, 1)
-    var d = _n(p, 2)
     if na * nb > 2147483647:
         raise Error("x_decomp: sqdist exceeds the Int32 index bound")
-    var kind = _n(p, 3) if len(p) > 3 else 0
-    var pw = Float32(Float64(py=p[4])) if len(p) > 4 else Float32(2)
-    launch_sqdist(xd_ctx(), _ptr(_id(a), na * d), _ptr(_id(b), nb * d), _ptr(_id(dst), na * nb), na, nb, d, kind, pw)
-    return PythonObject(na * nb)
+    var pw = Float32(pw_in)
+    launch_sqdist(xd_ctx(), _ptr(a, na * d), _ptr(b, nb * d), _ptr(dst, na * nb), na, nb, d, kind, pw)
+    return na * nb
 
 
-def dev_absmax_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_absmax_run(a: Int, dst: Int, n: Int, d: Int, by_col: Bool) raises -> Int:
     # p = [n, d, by_col], as x_decomp_absmax_sign
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var by_col = Int(py=p[2]) != 0
     var cnt = d if by_col else n
     var ns = absmax_scratch(n, d, by_col)
     var sid = pool_alloc(ns)
-    launch_absmax(xd_ctx(), _ptr(_id(a), n * d), _ptr(_id(dst), cnt), _ptr(sid, ns), n, d, by_col)
+    launch_absmax(xd_ctx(), _ptr(a, n * d), _ptr(dst, cnt), _ptr(sid, ns), n, d, by_col)
     pool_free(sid)
-    return PythonObject(cnt)
+    return cnt
 
 
-def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_orth_run(ia: Int, io: Int, m: Int, l: Int) raises -> Int:
     """dst = the orthonormalized columns of a (DevExec.orth's passes on the
     device copy; a is unchanged)."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
     var cells = m * l
-    var ia = _id(a)
-    var io = _id(dst)
     _ = _ptr(ia, cells)
     _ = _ptr(io, cells)
     var pool = X_DECOMP_POOL.get_or_create_ptr()
@@ -436,22 +365,16 @@ def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> P
     if cells > 0:
         var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
         ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
-        with GILReleased(Python()):
-            orth_on_device(ctx, sub, m, l)
-    return PythonObject(cells)
+        orth_on_device(ctx, sub, m, l)
+    return cells
 
 
-def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`dev_orth_py`, and the host floats at `diag` (l) = the product of the
+def dev_orth_diag_run(ia: Int, io: Int, pd: F32Ptr, m: Int, l: Int) raises -> Int:
+    """`dev_orth_run`, and the host floats at `pd` (l) = the product of the
     two passes' R diagonals (`orth_on_device_diag`, lane neural-pass17)."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
     var cells = m * l
-    var ia = _id(a)
-    var io = _id(dst)
     _ = _ptr(ia, cells)
     _ = _ptr(io, cells)
-    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     var dd = ctx.enqueue_create_buffer[DType.float32](l if l > 0 else 1)
@@ -459,91 +382,77 @@ def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: 
     if cells > 0:
         var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
         ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
-        with GILReleased(Python()):
-            orth_on_device_diag(ctx, sub, m, l, dd, True)
+        orth_on_device_diag(ctx, sub, m, l, dd, True)
     if l > 0:
         ctx.enqueue_copy(dst_ptr=pd, src_buf=dd.create_sub_buffer[DType.float32](0, l))
     ctx.synchronize()
     _ = dd^
-    return PythonObject(cells)
+    return cells
 
 
-def dev_lda_rows_py(
-    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
+def dev_lda_rows_run(
+    x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior_in: Float64, tol_in: Float64
+) raises -> Int:
     """`x_decomp_lda_rows` on device matrices (lane/py-decomp-nbrs): d and e
     (n x k) updated in place on the device; DevExec.lda_rows' kernel and
     launch shape, with no upload, download or sync. p = [n, k, v, max_iter],
     f = [prior, tol], as x_decomp_lda_rows. Before, the host-only entry
     downloaded the resident X (n x v) and uploaded it again every E-step
     (12 GB per iteration at 1M x 1000)."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
-    var max_iter = _n(p, 3)
     if n * (v + k) > 2147483647:
         raise Error("x_decomp: lda_rows exceeds the Int32 index bound")
-    var prior = Float32(Float64(py=f[0]))
-    var tol = Float32(Float64(py=f[1]))
-    var px = _ptr(_id(x), n * v)
-    var pw = _ptr(_id(ew), k * v)
-    var pd = _ptr(_id(d), n * k)
-    var pe = _ptr(_id(e), n * k)
+    var prior = Float32(prior_in)
+    var tol = Float32(tol_in)
+    var px = _ptr(x, n * v)
+    var pw = _ptr(ew, k * v)
+    var pd = _ptr(d, n * k)
+    var pe = _ptr(e, n * k)
     if n == 0:
-        return PythonObject(0)
+        return 0
     var sid = pool_alloc(n * (v + k))
     var iid = pool_alloc(n)
     launch_lda_rows(xd_ctx(), px, pw, pd, pe, _ptr(sid, n * (v + k)), _ptr(iid, n), n, k, v, prior, max_iter, tol)
     pool_free(sid)
     pool_free(iid)
-    return PythonObject(n)
+    return n
 
 
-def dev_lda_bound_py(
-    x: PythonObject, ddt: PythonObject, dcomp: PythonObject, dst: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
+def dev_lda_bound_run(
+    x: Int, ddt: Int, dcomp: Int, dst: Int, n: Int, k: Int, v: Int, floor_in: Float64
+) raises -> Int:
     """LatentDirichletAllocation._approx_bound's word-term cells on device
     matrices (lane gap-lda-als): dst (n x v) = x * logsumexp_t(ddt[:, t] +
     dcomp[t, :]) through the same `ew_cell` chain the composed path runs, with
     no n x v term matrix per topic. p = [n, k, v], f = [floor]."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
     if n * v > 2147483647:
         raise Error("x_decomp: lda_bound exceeds the Int32 index bound")
-    var floor = Float32(Float64(py=f[0]))
+    var floor = Float32(floor_in)
     launch_lda_bound(
-        xd_ctx(), _ptr(_id(x), n * v), _ptr(_id(ddt), n * k), _ptr(_id(dcomp), k * v), _ptr(_id(dst), n * v),
+        xd_ctx(), _ptr(x, n * v), _ptr(ddt, n * k), _ptr(dcomp, k * v), _ptr(dst, n * v),
         n, k, v, floor,
     )
-    return PythonObject(n * v)
+    return n * v
 
 
-def dev_als_rows_py(
-    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
+def dev_als_rows_run(
+    c: Int, y: Int, yty: Int, x: Int, flags: Int, n: Int, m: Int, f: Int, su: Int, si: Int, cl: Int,
+    reg: Float64,
+) raises -> Int:
     """`x_decomp_als_rows` on device matrices (lane gap-lda-als): every row's
     `als_row` into x (n x f) and flags (n), one block per row; element (u, i)
     of the confidences at c[u * su + i * si], so the item half-sweep reads the
     resident user x item matrix with su = 1, si = items (no transpose).
     p = [n, m, f, su, si, c_len]."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var f = _n(p, 2)
-    var su = _n(p, 3)
-    var si = _n(p, 4)
-    var cl = _n(p, 5)
     if n == 0:
-        return PythonObject(0)
+        return 0
     var ns = als_scratch(n, f)
     var sid = pool_alloc(ns if ns > 0 else 1)
     launch_als_rows(
-        xd_ctx(), _ptr(_id(c), cl), _ptr(_id(y), m * f), _ptr(_id(yty), f * f), _ptr(_id(x), n * f),
-        _ptr(sid, ns if ns > 0 else 1), _ptr(_id(flags), n), n, m, f, su, si, Float32(Float64(py=reg)),
+        xd_ctx(), _ptr(c, cl), _ptr(y, m * f), _ptr(yty, f * f), _ptr(x, n * f),
+        _ptr(sid, ns if ns > 0 else 1), _ptr(flags, n), n, m, f, su, si, Float32(reg),
     )
     pool_free(sid)
-    return PythonObject(n)
+    return n
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_CD_RESIDENT (IDENTICAL default) ----
@@ -562,23 +471,18 @@ comptime IDN_CD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-def dev_cd_rows_py(
-    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
-) raises -> PythonObject:
+def dev_cd_rows_run(w: Int, hht: Int, xht: Int, pp: I32Ptr, viol: Int, n: Int, k: Int) raises -> Int:
     """`x_decomp_cd_rows` on device matrices: w (n x k, swept in place), hht
     (k x k), xht (n x k), viol (n, written); perm the host address of k
     int32. p = [n, k]. Waits (the host permutation may die after it returns)."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
     if n == 0 or k == 0:
-        return PythonObject(0)
+        return 0
     if n * k > 2147483647:
         raise Error("x_decomp: cd_rows exceeds the Int32 index bound")
-    var pw = _ptr(_id(w), n * k)
-    var ph = _ptr(_id(hht), k * k)
-    var px = _ptr(_id(xht), n * k)
-    var pv = _ptr(_id(viol), n)
-    var pp = I32Ptr(unsafe_from_address=Int(py=perm))
+    var pw = _ptr(w, n * k)
+    var ph = _ptr(hht, k * k)
+    var px = _ptr(xht, n * k)
+    var pv = _ptr(viol, n)
     var ctx = xd_ctx()
     var dp = _up_i(ctx, pp, k)
     ctx.enqueue_function[cd_rows_kernel](
@@ -587,7 +491,7 @@ def dev_cd_rows_py(
     # the permutation buffer dies here: wait for the launch that reads it
     ctx.synchronize()
     _ = dp^
-    return PythonObject(n)
+    return n
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_SVD_RESIDENT (IDENTICAL default) ----
@@ -605,30 +509,24 @@ comptime IDN_SVD_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-def dev_svd_py(a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_svd_run(ia: Int, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises -> Int:
     """`x_decomp_svd` of the device matrix a (m x n, left as it is: the QR
     overwrites a device copy); s (n) and v (n x n) are host addresses.
     p = [m, n]. Waits."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
     if n <= 0 or m < n:
         raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
     var cells = m * n
     if cells > 2147483647:
         raise Error("x_decomp: svd exceeds the Int32 index bound")
-    var ia = _id(a)
     _ = _ptr(ia, cells)
-    var ps = F32Ptr(unsafe_from_address=Int(py=s))
-    var pv = F32Ptr(unsafe_from_address=Int(py=v))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
-    with GILReleased(Python()):
-        DevExec._svd_on(ctx, da, m, n, ps, pv, QRB_CELLS)
+    DevExec._svd_on(ctx, da, m, n, ps, pv, QRB_CELLS)
     _ = da^
     ctx.synchronize()
-    return PythonObject(n)
+    return n
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_LU_RESIDENT (IDENTICAL default) ----
@@ -650,22 +548,17 @@ comptime IDN_LU_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-def dev_lu_py(a: PythonObject, lu: PythonObject, piv: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_lu_run(ia: Int, il: Int, pp: I32Ptr, pi: F32Ptr, n: Int) raises -> Int:
     """`x_decomp_lu` on device matrices: lu (n x n) = the factor of a (n x n,
     left as it is); piv (n int32) and info (1 float32) are host addresses.
     p = [n]. Waits."""
-    var n = _n(p, 0)
     if n < 1:
         raise Error("x_decomp: the resident lu needs n >= 1")
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: lu exceeds the Int32 index bound")
-    var ia = _id(a)
-    var il = _id(lu)
     _ = _ptr(ia, cells)
     var pl = _ptr(il, cells)
-    var pp = I32Ptr(unsafe_from_address=Int(py=piv))
-    var pi = F32Ptr(unsafe_from_address=Int(py=info))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     if ia != il:
@@ -677,41 +570,31 @@ def dev_lu_py(a: PythonObject, lu: PythonObject, piv: PythonObject, info: Python
     var di = ctx.enqueue_create_buffer[DType.float32](1)
     var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
     var dact = ctx.enqueue_create_buffer[DType.float32](n)
-    with GILReleased(Python()):
-        launch_lu(ctx, pl, I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n)
-        _down_i(ctx, dp, pp, n)
-        _down(ctx, di, pi, 1)
-        ctx.synchronize()
+    launch_lu(ctx, pl, I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n)
+    _down_i(ctx, dp, pp, n)
+    _down(ctx, di, pi, 1)
+    ctx.synchronize()
     _ = dp^
     _ = di^
     _ = ds^
     _ = dact^
-    return PythonObject(n)
+    return n
 
 
-def dev_lu_aux_py(
-    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
-    stats: PythonObject, p: PythonObject,
-) raises -> PythonObject:
+def dev_lu_aux_run(
+    lu: Int, pv: I32Ptr, p1: F32Ptr, p2: F32Ptr, pd: F32Ptr, ps: F32Ptr, n: Int, clamp: Int
+) raises -> Int:
     """`x_decomp_lu_aux` on the device factor lu (n x n, clamped in place
     with p[1]); piv (n int32), pm, im, diag (n each) and stats (4) are host
     addresses. p = [n, clamp]. Waits."""
-    var n = _n(p, 0)
-    var clamp = _n(p, 1)
     if n < 1 or n >= 16777216:
         raise Error("x_decomp: lu_aux needs 1 <= n < 2^24")
     if n * n > 2147483647:
         raise Error("x_decomp: lu_aux exceeds the Int32 index bound")
-    var pl = _ptr(_id(lu), n * n)
-    var pv = I32Ptr(unsafe_from_address=Int(py=piv))
-    var p1 = F32Ptr(unsafe_from_address=Int(py=pm))
-    var p2 = F32Ptr(unsafe_from_address=Int(py=im))
-    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
-    var ps = F32Ptr(unsafe_from_address=Int(py=stats))
+    var pl = _ptr(lu, n * n)
     var ctx = xd_ctx()
-    with GILReleased(Python()):
-        DevExec._lu_aux_on(ctx, pl, pv, p1, p2, pd, ps, n, clamp)
-    return PythonObject(n)
+    DevExec._lu_aux_on(ctx, pl, pv, p1, p2, pd, ps, n, clamp)
+    return n
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_QR_R_RESIDENT (IDENTICAL default) ----
@@ -735,42 +618,35 @@ comptime IDN_QR_R_INPLACE = IDN_QR_R_RESIDENT and not (
 )
 
 
-def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_qr_r_run(ia: Int, pr: F32Ptr, m: Int, n: Int, consume: Bool) raises -> Int:
     """`x_decomp_qr_r` of the device matrix a (m x n); r (n x n) is a host
     address. p = [m, n] or [m, n, consume]. Without consume (or under
     IDN_QR_R_INPLACE_OFF) a is left as it is: the QR destroys a device copy.
     With consume != 0 and IDN_QR_R_INPLACE the QR destroys a itself (the
     caller must not read a again). Returns 1 when a was consumed, else 0.
     Waits."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
-    var consume = len(p) > 2 and Int(py=p[2]) != 0
     if n <= 0 or m < n:
         raise Error("x_decomp: qr_r needs m >= n >= 1")
     _validate_shape(m, n, "qr")
     var cells = m * n
     if cells > 2147483647:
         raise Error("x_decomp: qr_r exceeds the Int32 index bound")
-    var ia = _id(a)
     _ = _ptr(ia, cells)
-    var pr = F32Ptr(unsafe_from_address=Int(py=r))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     comptime if IDN_QR_R_INPLACE:
         if consume:
             var dv = pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells)
-            with GILReleased(Python()):
-                DevExec._qr_r_on(ctx, dv, m, n, pr)
+            DevExec._qr_r_on(ctx, dv, m, n, pr)
             _ = dv^
             ctx.synchronize()
-            return PythonObject(1)
+            return 1
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
-    with GILReleased(Python()):
-        DevExec._qr_r_on(ctx, da, m, n, pr)
+    DevExec._qr_r_on(ctx, da, m, n, pr)
     _ = da^
     ctx.synchronize()
-    return PythonObject(0)
+    return 0
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_CODE_RESIDENT (IDENTICAL default) ----
@@ -789,29 +665,25 @@ comptime IDN_CODE_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
+def dev_code_rows_run(
+    ig: Int, iq: Int, iw: Int, kind: Int, n: Int, k: Int, a: Int, b: Int, alpha_in: Float64, tol_in: Float64
+) raises -> Int:
     """g (k x k), q (n x k) and w (n x k) are device matrices.
     p = [kind, n, k, a, b]: kind 0 Lasso CD (w the warm start, updated in
     place; a = max_iter, b = positive; f = [alpha, tol]), kind 1 Lars (w
     written; a = m, b = nnz), kind 2 OMP (w written; a = nnz). Waits."""
-    var kind = Int(py=p[0])
-    var n = _n(p, 1)
-    var k = _n(p, 2)
-    var a = _n(p, 3)
-    var b = _n(p, 4)
     if n == 0 or k == 0:
-        return PythonObject(0)
+        return 0
     if kind < 0 or kind > 2:
         raise Error("x_decomp: dev_code_rows kind must be 0 (lasso), 1 (lars) or 2 (omp)")
     if n * (k * k + LARS_ROW_EXTRA * k) > 2147483647:
         raise Error("x_decomp: code rows exceed the Int32 index bound")
     var cells = n * k
-    var pg = _ptr(_id(g), k * k)
-    var pq = _ptr(_id(q), cells)
-    var iw = _id(w)
+    var pg = _ptr(ig, k * k)
+    var pq = _ptr(iq, cells)
     var pw = _ptr(iw, cells)
-    var alpha = Float32(Float64(py=f[0]))
-    var tol = Float32(Float64(py=f[1]))
+    var alpha = Float32(alpha_in)
+    var tol = Float32(tol_in)
     var per = cells
     if kind == 1:
         per = n * (k * k + LARS_ROW_EXTRA * k)
@@ -823,30 +695,29 @@ def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: Pytho
     # 7 k) floats up to a power of two)
     var dn = ctx.enqueue_create_buffer[DType.float32](n)
     var ds = ctx.enqueue_create_buffer[DType.float32](per)
-    with GILReleased(Python()):
-        if kind == 0:
-            ctx.enqueue_function[lasso_rows_kernel](
-                pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), alpha, Int32(a), tol,
-                Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
+    if kind == 0:
+        ctx.enqueue_function[lasso_rows_kernel](
+            pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), alpha, Int32(a), tol,
+            Int32(1 if b != 0 else 0), grid_dim=_blocks(n), block_dim=TPB,
+        )
+    else:
+        # the host-address entries start from a zeroed w
+        var wsub = pool[].bufs[iw].create_sub_buffer[DType.float32](0, cells)
+        enqueue_fill(ctx, wsub, Float32(0.0))
+        if kind == 1:
+            ctx.enqueue_function[lars_rows_kernel](
+                pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), Int32(b),
+                grid_dim=_blocks(n), block_dim=TPB,
             )
         else:
-            # the host-address entries start from a zeroed w
-            var wsub = pool[].bufs[iw].create_sub_buffer[DType.float32](0, cells)
-            enqueue_fill(ctx, wsub, Float32(0.0))
-            if kind == 1:
-                ctx.enqueue_function[lars_rows_kernel](
-                    pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), Int32(b),
-                    grid_dim=_blocks(n), block_dim=TPB,
-                )
-            else:
-                ctx.enqueue_function[omp_rows_kernel](
-                    pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), grid_dim=_blocks(n), block_dim=TPB
-                )
-        # the scratch dies here: wait for the launch that uses it
-        ctx.synchronize()
+            ctx.enqueue_function[omp_rows_kernel](
+                pg, pq, pw, _p(ds), _p(dn), Int32(n), Int32(k), Int32(a), grid_dim=_blocks(n), block_dim=TPB
+            )
+    # the scratch dies here: wait for the launch that uses it
+    ctx.synchronize()
     _ = dn^
     _ = ds^
-    return PythonObject(n)
+    return n
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_EIGH_RESIDENT (IDENTICAL default) ----
@@ -863,12 +734,10 @@ comptime IDN_EIGH_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> Int:
     """`x_decomp_eigh` of the device matrix a (n x n, left as it is: the
     solve overwrites a device copy); w (n) and v (n x n) are host addresses.
     p = [n, uplo]. Waits."""
-    var n = _n(p, 0)
-    var uplo = _n(p, 1)
     if n < 1:
         raise Error("x_decomp: the resident eigh needs n >= 1")
     if uplo > 2:
@@ -876,19 +745,15 @@ def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObje
     var cells = n * n
     if cells > 2147483647:
         raise Error("x_decomp: eigh exceeds the Int32 index bound")
-    var ia = _id(a)
     _ = _ptr(ia, cells)
-    var pw = F32Ptr(unsafe_from_address=Int(py=w))
-    var pv = F32Ptr(unsafe_from_address=Int(py=v))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     var da = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
-    with GILReleased(Python()):
-        DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
+    DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
     _ = da^
     ctx.synchronize()
-    return PythonObject(n)
+    return n
 
 
 # ---- lane/apple-fast-gap-cls2 (2026-10-03): GaussianRandomProjection.fit -----
@@ -973,62 +838,40 @@ comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED and not is_defined["MOJOLEARN_XD_FA
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
-def grp_cls2_py() raises -> PythonObject:
-    """The random projections' FAST Apple fit switches compiled in: bit 1
-    NOSCAN, bit 2 DEVSCAN, bit 4 LAZY, bit 8 FUSED, bit 16 SRP_STRAT (0 on
-    every other build)."""
-    var f = 0
-    comptime if GRP_CLS2_NOSCAN:
-        f |= 1
-    comptime if GRP_CLS2_DEVSCAN:
-        f |= 2
-    comptime if GRP_CLS2_LAZY:
-        f |= 4
-    comptime if GRP_FAST_FUSED:
-        f |= 8
-    comptime if GRP_FAST_SRP_STRAT:
-        f |= 16
-    return PythonObject(f)
+# grp_cls2_py (the compiled-in switch bits) lives in the shell next to this file.
 
 
-def dev_first_nonfinite_py(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+def dev_first_nonfinite_run(src: F32Ptr, cnt: Int) raises -> Int:
     """The first flat index of a NaN or infinity among the n floats at
     `addr`, or -1: one upload from the caller's buffer into a pooled device
     buffer (no fresh allocation per fit) and one device scan. Registered
     only under GRP_CLS2_DEVSCAN."""
-    var cnt = Int(py=n)
     if cnt <= 0:
-        return PythonObject(-1)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
+        return -1
     var r = -1
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        var buf = pool_take["MojoXDecompCls2Scan"](ctx, cnt)
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
-        r = device_first_nonfinite(ctx, buf, cnt)
-        pool_give["MojoXDecompCls2Scan"](buf^)
-    return PythonObject(r)
+    var ctx = xd_ctx()
+    var buf = pool_take["MojoXDecompCls2Scan"](ctx, cnt)
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
+    r = device_first_nonfinite(ctx, buf, cnt)
+    pool_give["MojoXDecompCls2Scan"](buf^)
+    return r
 
 
-def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_move_run(
+    src: Int, idx: Int, dst: Int, op: Int, count: Int, a1: Int, a2: Int, a3: Int, ist: Int, ioff: Int,
+    nsrc: Int, ndst: Int, nidx: Int,
+) raises -> Int:
     """`x_decomp_move` on device ids, enqueued (no sync); p = [op, count, a1,
     a2, a3, ist, ioff, nsrc, ndst, nidx] (lane apple-fast-py2mojo-decomp)."""
-    var op = Int(py=p[0])
-    var count = _n(p, 1)
-    var a1 = _n(p, 2)
-    var a2 = _n(p, 3)
-    var a3 = _n(p, 4)
-    var ist = _n(p, 5)
-    var ioff = _n(p, 6)
     if op < MOVE_TAKE_ROWS or op > MOVE_LAST:
         raise Error("x_decomp: unknown move op")
     if op != MOVE_FILL0 and a1 <= 0 and count > 0:
         raise Error("x_decomp: move needs a positive width")
-    var ps = _ptr(_id(src), max(_n(p, 7), 1))
-    var pi = _ptr(_id(idx), max(_n(p, 9), 1))
-    var pd = _ptr(_id(dst), max(_n(p, 8), 1))
+    var ps = _ptr(src, max(nsrc, 1))
+    var pi = _ptr(idx, max(nidx, 1))
+    var pd = _ptr(dst, max(ndst, 1))
     launch_move(xd_ctx(), op, ps, pi, pd, count, a1, a2, a3, ist, ioff)
-    return PythonObject(count)
+    return count
 
 
 # ---- GRP_FAST_FUSED (lane apple-fast-gap-kapprox2)
@@ -1093,76 +936,68 @@ struct _GrpStage(Defaultable, Movable):
 comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedStage", init_fn=_GrpStage.__init__]
 
 
-def grp_fit_fused_py(
-    xaddr: PythonObject, n: PythonObject, dst: PythonObject, hout: PythonObject, p: PythonObject, s: PythonObject
-) raises -> PythonObject:
+def grp_fit_fused_run(
+    src: F32Ptr, cnt: Int, dst: Int, host_out: F32Ptr, count: Int, seed_in: Int, mode: Int, sd: Int, sgrid: Int,
+    sc_in: Float64, thr_in: Float64,
+) raises -> Int:
     """p = [count, seed, mode], s = [scale, threshold]: the first flat
     index of a NaN or infinity among the n floats at xaddr (or -1), the
     count-entry matrix (`grp_rand_scale_kernel` mode) into the device
     matrix dst, and its words copied
     to the host floats at out; one synchronize. Registered only under
-    GRP_FAST_FUSED."""
-    var cnt = Int(py=n)
-    var count = _n(p, 0)
-    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
-    var mode = Int(py=p[2])
-    var sd = 1
-    var sgrid = 0
+    GRP_FAST_FUSED. sd and sgrid are p[3] and p[4] in the stratified sparse
+    mode (mode 3 under GRP_FAST_SRP_STRAT), else 1 and 0."""
+    var seed = UInt32(seed_in & 0xFFFFFFFF)
     comptime if GRP_FAST_SRP_STRAT:
         if mode == 3:
-            sd = _n(p, 3)
-            sgrid = _n(p, 4)
             if sd <= 0 or count % sd != 0 or sgrid <= 0 or sgrid > 16777216:
                 raise Error("x_decomp_grp_fit_fused: stratified sparse mode needs n_features > 0 dividing count and 0 < D <= 2^24")
-    var sc = Float32(Float64(py=s[0]))
-    var thr = Float32(Float64(py=s[1]))
-    var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
-    var host_out = F32Ptr(unsafe_from_address=Int(py=hout))
-    var pd = _ptr(_id(dst), max(count, 1))
+    var sc = Float32(sc_in)
+    var thr = Float32(thr_in)
+    var pd = _ptr(dst, max(count, 1))
     var best = NONFINITE_NONE
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        var st = GRP_STAGE.get_or_create_ptr()
-        if not st[].part:
-            # 512 partials plus the slot their device-folded minimum lands in
-            st[].part = ctx.enqueue_create_buffer[DType.int32](513)
-            st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
-        var blocks = _scan_blocks(cnt) if cnt > 0 else 0
-        var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
-        if cnt > 0:
-            ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
-            ctx.enqueue_function[nonfinite_partial_kernel](
-                st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
-                grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-            )
-            # the partials fold on the device; one word home (lane cpu3-core)
-            ctx.enqueue_function[min_partials_kernel](
-                st[].part.value().unsafe_ptr() + 512, st[].part.value().unsafe_ptr(),
-                Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
-                             src_buf=st[].part.value().create_sub_buffer[DType.int32](512, 1))
-        if count > 0:
-            var strat = False
-            comptime if GRP_FAST_SRP_STRAT:
-                # p = [count, seed, 3, n_features, D]: the stratified sparse
-                # pattern (srp_strat_kernel); modes 0-2 are main's kernel
-                strat = mode == 3
-                if strat:
-                    ctx.enqueue_function[srp_strat_kernel](
-                        pd, Int32(count), Int32(sd), seed, UInt32(sgrid), sc,
-                        grid_dim=_blocks(count), block_dim=TPB,
-                    )
-            if not strat:
-                ctx.enqueue_function[grp_rand_scale_kernel](
-                    pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
+    var ctx = xd_ctx()
+    var st = GRP_STAGE.get_or_create_ptr()
+    if not st[].part:
+        # 512 partials plus the slot their device-folded minimum lands in
+        st[].part = ctx.enqueue_create_buffer[DType.int32](513)
+        st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var blocks = _scan_blocks(cnt) if cnt > 0 else 0
+    var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
+    if cnt > 0:
+        ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
+        ctx.enqueue_function[nonfinite_partial_kernel](
+            st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
+            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+        # the partials fold on the device; one word home (lane cpu3-core)
+        ctx.enqueue_function[min_partials_kernel](
+            st[].part.value().unsafe_ptr() + 512, st[].part.value().unsafe_ptr(),
+            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
+                         src_buf=st[].part.value().create_sub_buffer[DType.int32](512, 1))
+    if count > 0:
+        var strat = False
+        comptime if GRP_FAST_SRP_STRAT:
+            # p = [count, seed, 3, n_features, D]: the stratified sparse
+            # pattern (srp_strat_kernel); modes 0-2 are main's kernel
+            strat = mode == 3
+            if strat:
+                ctx.enqueue_function[srp_strat_kernel](
+                    pd, Int32(count), Int32(sd), seed, UInt32(sgrid), sc,
+                    grid_dim=_blocks(count), block_dim=TPB,
                 )
-            ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(_id(dst), count))
-        ctx.synchronize()
-        if cnt > 0:
-            best = st[].host.value().unsafe_ptr()[0]
-        pool_give["MojoXDecompCls2Scan"](buf^)
-    return PythonObject(-1 if best == NONFINITE_NONE else Int(best))
+        if not strat:
+            ctx.enqueue_function[grp_rand_scale_kernel](
+                pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
+            )
+        ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(dst, count))
+    ctx.synchronize()
+    if cnt > 0:
+        best = st[].host.value().unsafe_ptr()[0]
+    pool_give["MojoXDecompCls2Scan"](buf^)
+    return -1 if best == NONFINITE_NONE else Int(best)
 
 
 def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
@@ -1202,16 +1037,15 @@ def maxabs_slice_kernel(src: F32Ptr, dst: F32Ptr, count: Int32):
         dst.unsafe_store(t, nanv if seen_nan else best)
 
 
-def dev_maxabs_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_maxabs_run(a: Int, dst: Int, count: Int) raises -> Int:
     """dst (a device matrix of >= 1 value) = max |a| over the first p[0]
     values of the device matrix a (NaN if any is NaN). Slices of
     MAXABS_SLICE values per thread, then the slice maxima the same way
     until one value is left: ceil(log_256(count)) launches, no wait."""
-    var count = _n(p, 0)
     if count < 1:
         raise Error("x_decomp: maxabs needs at least one value")
-    var src = _ptr(_id(a), count)
-    var pd = _ptr(_id(dst), 1)
+    var src = _ptr(a, count)
+    var pd = _ptr(dst, 1)
     var ctx = xd_ctx()
     var cur_id = -1
     var cur = src
@@ -1229,18 +1063,14 @@ def dev_maxabs_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises ->
     ctx.enqueue_function[maxabs_slice_kernel](cur, pd, Int32(cnt), grid_dim=1, block_dim=TPB)
     if cur_id >= 0:
         pool_free(cur_id)
-    return PythonObject(1)
+    return 1
 
 
 # Test-only direct batched covariance seam, identical API on both arms.
 # Inactive outputs retain sentinel, partial storage is poisoned before B.
-def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
-                     p: PythonObject) raises -> PythonObject:
+def mcd_cov_probe_run(px: F32Ptr, pg: I32Ptr, pout: F32Ptr, nc: Int, rows: Int, d: Int) raises -> Int:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_FAST or not has_apple_gpu_accelerator():
         raise Error("covariance probe requires FAST Apple")
-    var nc = _n(p, 0)
-    var rows = _n(p, 1)
-    var d = _n(p, 2)
     if nc <= 0 or rows <= 0 or d <= 0 or nc*rows*d > 2147483647 or nc*d*d > 2147483647:
         raise Error("invalid ordered covariance probe shape")
     var ctx = xd_ctx()
@@ -1248,8 +1078,8 @@ def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonOb
     var dg = ctx.enqueue_create_buffer[DType.int32](nc)
     var dc = ctx.enqueue_create_buffer[DType.float32](nc*d*d)
     var scratch = ctx.enqueue_create_buffer[DType.float32](ordered_cov_scratch(nc, rows, d))
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32Ptr(unsafe_from_address=Int(py=xaddr)))
-    ctx.enqueue_copy(dst_buf=dg, src_ptr=I32Ptr(unsafe_from_address=Int(py=gaddr)))
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=px)
+    ctx.enqueue_copy(dst_buf=dg, src_ptr=pg)
     ctx.enqueue_memset(dc, Float32(-123.5))
     ctx.enqueue_memset(scratch, Float32(7654321))
     # Explicit mutable borrows of owned buffers for the legacy launcher API.
@@ -1266,10 +1096,10 @@ def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonOb
     else:
         launch_gemm_mma_batched(ctx, xp, xp, cp,
             d, rows, d, True, False, nc, rows*d, rows*d, d*d, gp, False)
-    ctx.enqueue_copy(dst_ptr=F32Ptr(unsafe_from_address=Int(py=outaddr)), src_buf=dc)
+    ctx.enqueue_copy(dst_ptr=pout, src_buf=dc)
     ctx.synchronize()
     _ = dx^
     _ = dg^
     _ = dc^
     _ = scratch^
-    return PythonObject(1 if MCD_ORDERED_COV else 0)
+    return 1 if MCD_ORDERED_COV else 0

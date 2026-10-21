@@ -25,7 +25,6 @@ is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
 main zeroed its operands and discarded its output (guarded publication).
 """
 from std.ffi import _Global
-from std.python import PythonObject
 from std.atomic import Atomic
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
@@ -556,23 +555,22 @@ def note_cov_route(raw: Bool, rows: Int, d: Int) raises:
                 r[].final_split += 1
 
 
-def mcd_cov_reach_py(which: PythonObject) raises -> PythonObject:
-    var i = Int(py=which)
+def mcd_cov_reach_run(i: Int) raises -> Int:
     var r = COV_REACH.get_or_create_ptr()
     if i == -1:
         r[].raw = 0
         r[].final_count = 0
         r[].raw_split = 0
         r[].final_split = 0
-        return PythonObject(0)
+        return 0
     if i == 0:
-        return PythonObject(1 if MCD_ORDERED_COV else 0)
+        return 1 if MCD_ORDERED_COV else 0
     if i == 1:
-        return PythonObject(r[].raw)
+        return r[].raw
     if i == 2:
-        return PythonObject(r[].final_count)
+        return r[].final_count
     if i == 3:
-        return PythonObject(r[].raw_split)
+        return r[].raw_split
     if i == 4:
-        return PythonObject(r[].final_split)
+        return r[].final_split
     raise Error("unknown ordered covariance reach counter")

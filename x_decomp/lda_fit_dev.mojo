@@ -7,9 +7,7 @@ called the GPU binding (the components go down and come back up around it);
 the E-step takes the FAST Apple fused kernel (`launch_lda_fused_ss`) where
 Python's `_fused_estep_ss` did. GPU binding only."""
 from std.math import inf
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.kit import (
     Mat, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_SCALE, OP_SUB, mat_from,
 )
@@ -134,35 +132,25 @@ def lda_fit_loop_dev(mut k: DKit, X: DMat, Xh: Mat, mut C: DMat, mut ED: DMat, a
     return it
 
 
-def lda_fit_dev_py(
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`lda_fit_py` on the resident kit."""
-    var n = _n(p, 0)
-    var v = _n(p, 1)
-    var nc = _n(p, 2)
-    var draw = Int(py=p[8])
-    var nbi = Int(py=p[9])
+def lda_fit_dev_run(
+    px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, a: LdaArgs, mut draw: Int, mut nbi: Int
+) raises -> Int:
+    """`lda_fit_run` on the resident kit."""
     if v < 1 or nc < 1 or n * v > 2147483647 or nc * v > 2147483647:
         raise Error("x_decomp: lda fit shape out of range")
-    var a = LdaArgs(p, f)
     if a.online and a.bs < 1:
         raise Error("x_decomp: lda batch size")
-    var px = _f(x)
-    var pc = _f(comps)
-    var pe = _f(exp_dir)
     var it = 0
-    with GILReleased(Python()):
-        var k = DKit()
-        var Xh = mat_from(px, n, v)
-        var X = k.upload(Xh)
-        var C = k.upload(mat_from(pc, nc, v))
-        var ED = k.upload(mat_from(pe, nc, v))
-        it = lda_fit_loop_dev(k, X, Xh, C, ED, a, draw, nbi)
-        var hc = k.get(C)
-        var he = k.get(ED)
-        k.sync()
-        for i in range(nc * v):
-            pc.unsafe_store(i, hc.d[i])
-            pe.unsafe_store(i, he.d[i])
-    return Python.tuple(it, draw, nbi)
+    var k = DKit()
+    var Xh = mat_from(px, n, v)
+    var X = k.upload(Xh)
+    var C = k.upload(mat_from(pc, nc, v))
+    var ED = k.upload(mat_from(pe, nc, v))
+    it = lda_fit_loop_dev(k, X, Xh, C, ED, a, draw, nbi)
+    var hc = k.get(C)
+    var he = k.get(ED)
+    k.sync()
+    for i in range(nc * v):
+        pc.unsafe_store(i, hc.d[i])
+        pe.unsafe_store(i, he.d[i])
+    return it

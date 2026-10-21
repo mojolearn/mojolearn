@@ -52,8 +52,6 @@ Python reads which are on through `x_decomp_qfix_flags()`:
 from std.gpu import block_idx, thread_idx
 from std.math import fma
 from std.memory import stack_allocation
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -74,17 +72,6 @@ comptime QF_TPB = 128
 comptime QF_RT = 8
 #: multiply-adds per launch (macOS silently cuts a long Metal command buffer)
 comptime QF_LAUNCH_CELLS = 1 << 30
-
-
-def qfix_flags_py() raises -> PythonObject:
-    """Bit 2 TSVD_QFIX, bit 4 LU_QFIX (0 in IDENTICAL); bit 1 (SVD_QFIX) was
-    deleted 2026-10-09 and is always 0."""
-    var f = 0
-    comptime if TSVD_QFIX:
-        f |= 2
-    comptime if LU_QFIX:
-        f |= 4
-    return PythonObject(f)
 
 
 @always_inline
@@ -149,38 +136,31 @@ def lu_resid_ff_kernel(a: F32Ptr, x: F32Ptr, b: F32Ptr, r: F32Ptr, n_in: Int32, 
                 r.unsafe_store(i * nrhs + c, d[0] + (d[1] - sl[q]))
 
 
-def lu_resid_py(a: PythonObject, x: PythonObject, b: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, nrhs]: host r = b - a x (float-float residual, rounded once);
-    a n x n, x / b / r n x nrhs, row major host float32 buffers."""
-    var n = Int(py=p[0])
-    var nrhs = Int(py=p[1])
+def lu_resid_run(pa: F32Ptr, px: F32Ptr, pb: F32Ptr, pr: F32Ptr, n: Int, nrhs: Int) raises -> Int:
+    """Host r = b - a x (float-float residual, rounded once); a n x n,
+    x / b / r n x nrhs, row major host float32 buffers. Returns n."""
     if n <= 0 or nrhs <= 0 or n * n > 2147483647 or n * nrhs > 2147483647:
         raise Error("x_decomp: lu_resid needs 0 < n, nrhs and n * n inside Int32")
-    var pa = F32Ptr(unsafe_from_address=Int(py=a))
-    var px = F32Ptr(unsafe_from_address=Int(py=x))
-    var pb = F32Ptr(unsafe_from_address=Int(py=b))
-    var pr = F32Ptr(unsafe_from_address=Int(py=r))
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        var da = _up(ctx, pa, n * n)
-        var dx = _up(ctx, px, n * nrhs)
-        var db = _up(ctx, pb, n * nrhs)
-        var dr = ctx.enqueue_create_buffer[DType.float32](n * nrhs)
-        var cols = (nrhs + QF_RT - 1) // QF_RT
-        var per = max(1, QF_LAUNCH_CELLS // max(1, n * nrhs))
-        var row0 = 0
-        while row0 < n:
-            var rows = min(per, n - row0)
-            ctx.enqueue_function[lu_resid_ff_kernel](
-                _p(da), _p(dx), _p(db), _p(dr), Int32(n), Int32(nrhs), Int32(row0),
-                grid_dim=(rows, cols, 1), block_dim=(QF_TPB, 1, 1),
-            )
-            ctx.synchronize()
-            row0 += rows
-        _down(ctx, dr, pr, n * nrhs)
+    var ctx = xd_ctx()
+    var da = _up(ctx, pa, n * n)
+    var dx = _up(ctx, px, n * nrhs)
+    var db = _up(ctx, pb, n * nrhs)
+    var dr = ctx.enqueue_create_buffer[DType.float32](n * nrhs)
+    var cols = (nrhs + QF_RT - 1) // QF_RT
+    var per = max(1, QF_LAUNCH_CELLS // max(1, n * nrhs))
+    var row0 = 0
+    while row0 < n:
+        var rows = min(per, n - row0)
+        ctx.enqueue_function[lu_resid_ff_kernel](
+            _p(da), _p(dx), _p(db), _p(dr), Int32(n), Int32(nrhs), Int32(row0),
+            grid_dim=(rows, cols, 1), block_dim=(QF_TPB, 1, 1),
+        )
         ctx.synchronize()
-        _ = da^
-        _ = dx^
-        _ = db^
-        _ = dr^
-    return PythonObject(n)
+        row0 += rows
+    _down(ctx, dr, pr, n * nrhs)
+    ctx.synchronize()
+    _ = da^
+    _ = dx^
+    _ = db^
+    _ = dr^
+    return n
