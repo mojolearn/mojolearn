@@ -63,6 +63,7 @@ from ensemble.host.oob import rf_host_oob
 from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -141,7 +142,10 @@ def _index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("rf host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=operator_module.index(value))
+    # operator.index through the balanced call: PythonObject.__call__ keeps one
+    # reference on each argument (bindings/py_balanced.mojo), which leaked every
+    # buffer address passed to a host entry.
+    return Int(py=_balanced_call(operator_module.index, value))
 
 
 def rf_host_numeric_mode_binding() raises -> PythonObject:
