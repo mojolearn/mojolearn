@@ -565,7 +565,6 @@
       "CausalLMState",
       "Checkpoint",
       "FAMILIES",
-      "GenerationStream",
       "HFConfig",
       "ModelPlan",
       "PATTERNS",
@@ -5963,15 +5962,6 @@
       "symbol_origin": "mojolearn.models.config.FAMILIES"
     },
     {
-      "algorithm": "mojolearn.models.GenerationStream",
-      "status": "not_algorithm",
-      "cases": [],
-      "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
-      "source": "python/mojolearn/models/__init__.py",
-      "canonical_algorithm": "mojolearn.models.GenerationStream",
-      "symbol_origin": "mojolearn.models.causal_lm.GenerationStream"
-    },
-    {
       "algorithm": "mojolearn.models.HFConfig",
       "status": "not_algorithm",
       "cases": [],
@@ -7114,9 +7104,9 @@
   ],
   "inventory_note": "Inventory includes public aliases, metadata and namespace exports. not_algorithm rows are explicit exclusions from algorithm coverage; missing rows remain visible. ready means a source fixture exists, never that compile/runtime/backend validation passed.",
   "census": {
-    "public_export_rows": 603,
+    "public_export_rows": 602,
     "alias_rows": 101,
-    "canonical_non_algorithm_exports": 60,
+    "canonical_non_algorithm_exports": 59,
     "canonical_algorithm_entries": 442,
     "canonical_status_counts": {
       "blocked": 9,
