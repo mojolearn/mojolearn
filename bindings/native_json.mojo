@@ -193,29 +193,31 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
 
 
 def native_path(value: PythonObject) raises -> PythonObject:
-    """Read standard paths natively; preserve an explicit caller PathLike protocol."""
+    """Read standard path storage without invoking caller path protocols."""
     var bi = Python.import_module("builtins")
     if bi.type(value) is bi.str:
         return value
     if bi.type(value) is bi.bytes:
         return value.decode("utf-8", "surrogateescape")
     var cls = bi.type(value)
-    var module = String(cls.__module__)
-    var name = String(cls.__name__)
-    if (module != "pathlib" and module != "pathlib._local") or (name != "PosixPath" and name != "PurePosixPath"):
-        # os.fspath is a C builtin. A caller-defined __fspath__ may execute
-        # caller Python; preserve that explicitly supplied protocol while no
-        # package path preparation/orchestration executes in Python.
-        var result = Python.import_module("os").fspath(value)
-        return result.decode("utf-8", "surrogateescape") if bi.type(result) is bi.bytes else result
+    var pathlib = Python.import_module("pathlib")
+    # Exact native storage types only. Names/modules and isinstance admit
+    # subclasses whose descriptors or __fspath__ can execute Python. Never
+    # invoke that protocol from product execution, even through a C builtin.
+    if cls is not pathlib.PosixPath and cls is not pathlib.PurePosixPath:
+        raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
     var parts = PythonObject(None)
     try:
         parts = bi.object.__getattribute__(value, "_raw_paths")
     except:
         parts = bi.object.__getattribute__(value, "_parts")
+    if bi.type(parts) is not bi.list and bi.type(parts) is not bi.tuple:
+        raise Error("TypeError: path components require native storage")
     var result = PythonObject("")
     for i in range(len(parts)):  # driver-loop: over stored filesystem path components
         var part = parts[i]
+        if bi.type(part) is not bi.str:
+            raise Error("TypeError: path components require native strings")
         if Bool(py=part.startswith("/")) or len(result) == 0:
             result = part
         elif len(part) != 0:
