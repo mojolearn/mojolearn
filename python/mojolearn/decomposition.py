@@ -450,7 +450,7 @@ class PCA(NumericModeMixin):
             fit_owned, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
             addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
             addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
-            [n, d, nc, int(dense), keep_mode, int(bool(self.whiten))], frac,
+            [n, d, nc, int(dense), keep_mode, int(bool(self.whiten)), frac],
         )
         if keep != nc:
             components, variance = components[:keep], variance[:keep]
@@ -512,8 +512,8 @@ class PCA(NumericModeMixin):
             fit, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
             addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
             addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
-            [n, d, nc, oversamples, iterations, int(auto), int(bool(self.whiten))],
-            seed & 0xFFFFFFFF,  # glue: the Philox seed is taken mod 2^32
+            [n, d, nc, oversamples, iterations, int(auto), int(bool(self.whiten)),
+             seed & 0xFFFFFFFF],  # glue: the Philox seed is taken mod 2^32
         )
         self._keep_fit(copied, components, mean, variance, ratio, singular, noise, nc, d, n)
         return z

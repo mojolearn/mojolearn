@@ -747,17 +747,16 @@ def pca_fit_owned_binding(
     singular_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
-    frac: PythonObject,
 ) raises -> PythonObject:
     """`PCA.fit` / `fit_transform` for the exact solvers in one call
     (decomposition/impl/pca_owner.mojo): the five public arrays written at
     n_components, the kept count chosen, and with an output address (0:
     none) X projected onto the kept components. params: n_rows, n_features,
     n_components, dense (1: svd_solver='full'), keep mode (0: every
-    component, 1: the fraction `frac`, 2: "mle"), whiten. Returns (kept
+    component, 1: the fraction, 2: "mle"), whiten, the fraction. Returns (kept
     count, noise variance)."""
-    if len(params) != 6:
-        raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten")
+    if len(params) != 7:
+        raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
     var mp = _f32_ptr(Int(py=mean_addr))
@@ -772,7 +771,7 @@ def pca_fit_owned_binding(
     var dense = Int(py=params[3]) != 0
     var keep_mode = Int(py=params[4])
     var whiten = Int(py=params[5]) != 0
-    var fraction = Float64(py=frac)
+    var fraction = Float64(py=params[6])
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
@@ -794,16 +793,15 @@ def pca_fit_randomized_binding(
     singular_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
-    seed: PythonObject,
 ) raises -> PythonObject:
     """`PCA(svd_solver='randomized').fit` / `fit_transform` in one call
     (decomposition/impl/pca_owner.mojo `pca_randomized_owned`). params:
     n_rows, n_features, n_components, n_oversamples, power iterations, auto
-    (1: iterated_power='auto'), whiten; seed: the Philox seed mod 2^32.
+    (1: iterated_power='auto'), whiten, the Philox seed mod 2^32.
     With an output address (0: none) X is projected. Returns the noise
     variance."""
-    if len(params) != 7:
-        raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten")
+    if len(params) != 8:
+        raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten, seed")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
     var mp = _f32_ptr(Int(py=mean_addr))
@@ -819,7 +817,7 @@ def pca_fit_randomized_binding(
     var iterations = Int(py=params[4])
     var auto = Int(py=params[5]) != 0
     var whiten = Int(py=params[6]) != 0
-    var s = Int(py=seed)
+    var s = Int(py=params[7])
     var noise = Float64(0.0)
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()

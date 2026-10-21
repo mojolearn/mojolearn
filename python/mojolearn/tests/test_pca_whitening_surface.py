@@ -28,9 +28,9 @@ class FakePCA:
         self.calls = []
         self.nonfinite = False
 
-    def pca_fit_owned(self, x, components, mean, explained, ratio, singular, params, frac):
+    def pca_fit_owned(self, x, components, mean, explained, ratio, singular, out, params):
         self.calls.append(('fit', list(params)))
-        rows, features, count, dense, keep_mode = params
+        rows, features, count, dense, keep_mode, whiten, frac = params
         floats(components, count * features)[:] = np.eye(count, features, dtype=np.float32).ravel()
         floats(mean, features)[:] = 0
         floats(explained, count)[:] = 1
@@ -85,7 +85,7 @@ def test_whitening_abi_uses_fit_row_count_and_keeps_state(fake):
     before = x.tobytes()
     scores = model.transform(x[:3])
     model.inverse_transform(scores[:1])
-    assert fake.calls == [('fit', [8, 2, 2, 0, 0]), ('whiten', [3, 2, 2, 8]),
+    assert fake.calls == [('fit', [8, 2, 2, 0, 0, 1, 0.0]), ('whiten', [3, 2, 2, 8]),
                           ('inverse_whiten', [1, 2, 2, 8])]
     assert x.tobytes() == before
     assert all(getattr(model, name).tobytes() == value for name, value in state.items())
@@ -95,7 +95,7 @@ def test_plain_transform_abi_unchanged(fake):
     x = np.zeros((8, 2), dtype=np.float32)
     model = PCA(2, whiten=False).fit(x)
     model.inverse_transform(model.transform(x[:3]))
-    assert fake.calls == [('fit', [8, 2, 2, 0, 0]), ('plain', [3, 2, 2]),
+    assert fake.calls == [('fit', [8, 2, 2, 0, 0, 0, 0.0]), ('plain', [3, 2, 2]),
                           ('inverse_plain', [3, 2, 2, 1])]
 
 
