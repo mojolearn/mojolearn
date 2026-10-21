@@ -191,6 +191,89 @@ def prepare_control(args):
     return {"status": "control_captured", "manifest": str(args.out / "workload.json"), "active_passes": []}
 
 
+def prepare_transformer(args):
+    """Capture the complete saved block only after exact product equivalence."""
+    import numpy as np
+    from mojolearn import ops, TransformerBlock
+    from mojolearn import _verify_graph as fixture
+    from mojolearn._verify_native_runtime import audit_native_call
+    recipe, artifact, arrays = read_recipe(args.recipe)
+    if recipe["recipe"] != "transformer-forward":
+        raise ValueError("Transformer capture requires its retained full block recipe")
+    dims = recipe["saved_recipe"]["shape"]
+    expected_dims = {"batch": 1, "length": 2048, "d_model": 384, "n_heads": 6,
+                     "n_kv": 6, "head_dim": 64, "intermediate": 1024}
+    if any(dims.get(k) != v for k, v in expected_dims.items()):
+        raise ValueError("complete saved Transformer recipe dimensions differ")
+    x = arrays["x"]
+    if list(x.shape) != [dims[k] for k in ("batch", "length", "d_model")]:
+        raise ValueError("full Transformer input extent differs")
+    weights = {name.removeprefix("w:"): value for name, value in arrays.items() if name.startswith("w:")}
+    args.out.mkdir(parents=True, exist_ok=False)
+    copy_input(artifact, args.out / "inputs.npz")
+    copy_input(args.recipe, args.out / "recipe.json")
+    copy_input(fixture.__file__, args.out / "capture-source.py")
+    config = {"n_heads": dims["n_heads"], "n_kv_heads": dims["n_kv"], "head_dim": dims["head_dim"],
+              "window": 0, "rope_theta": 10000.0, "rope_scaling": None, "rope_dim": dims["head_dim"],
+              "max_positions": 8192, "qkv_bias": False, "o_bias": False, "norm": "rmsnorm",
+              "norm_eps": 1e-6, "norm_bias": False, "mlp": "swiglu", "mlp_bias": False,
+              "qk_norm": False, "attn_softcap": None, "numeric_profile": None, "numeric_mode": "identical"}
+    record = {"status": "running", "config_requested": config, "native_calls": [],
+              "scope": "complete declared synthetic Transformer block; not a full language model or corpus"}
+    try:
+        block = TransformerBlock(weights, **config)
+        record["config_readback"] = {name: getattr(block, name) for name in
+                                     ("d_model", "n_heads", "n_kv_heads", "head_dim", "intermediate", "window", "numeric_profile")}
+        record["native_option_words"] = list(block._opts_tail)
+        audit = audit_native_call(block.forward, x)
+        record["native_calls"].append(audit.report())
+        specialized = audit.assert_native()
+        retain_outputs(args.out / "specialized.npz", specialized)
+        with ops.Session() as s:
+            h, result, _ = fixture._transformer_graph(s, x, weights, dims["n_heads"], dims["n_kv"], dims["head_dim"])
+            p = s.capture(h, result)
+            audit = audit_native_call(p.run, x, optimize=False)
+            record["native_calls"].append(audit.report())
+            baseline = audit.assert_native()
+            retain_outputs(args.out / "expected.npz", baseline)
+            require_equal(outputs_record(baseline), outputs_record(specialized), "complete specialized/captured Transformer")
+            oracle = fixture._transformer_reference64(x, weights, dims["n_heads"], dims["n_kv"], dims["head_dim"])
+            np.savez(args.out / "oracle64.npz", output_0=oracle)
+            np.testing.assert_allclose(baseline, oracle, rtol=1e-4, atol=2e-5)
+            record["independent_oracle"] = {"rtol": 1e-4, "atol": 2e-5,
+                                           "max_abs_error": float(np.max(np.abs(np.asarray(baseline)-oracle)))}
+            audit = audit_native_call(p.run, x, optimize=True)
+            record["native_calls"].append(audit.report())
+            optimized = audit.assert_native()
+            retain_outputs(args.out / "optimized.npz", optimized)
+            require_equal(outputs_record(optimized), outputs_record(baseline), "complete optimized Transformer")
+            inspection = p.inspect(optimize=True)
+            counts = pass_coverage(inspection, True)
+            if not counts["permutation_composition"] or not counts["dead_intermediates"]:
+                raise ValueError("standard K layout did not activate the claimed passes")
+            p.save(args.out / "program.mjl")
+            restored = s.load_program(args.out / "program.mjl")
+            require_equal(outputs_record(restored.run(x, optimize=True)), outputs_record(baseline), "full Transformer checkpoint")
+        record.update(status="complete_forward_equivalence", pass_rewrites=counts,
+                      full_backward="not executed by capture preparation; independent primitive/whole-block derivative tests are separate")
+        write(args.out / "equivalence.json", record)
+        manifest = {"schema": "mojolearn.graph-optimizer-workload.v1", "name": "transformer-captured-full-block",
+                    "coverage": record["scope"], "inputs": ["x"], "recipe": "recipe.json",
+                    "program": "program.mjl", "expected": "expected.npz",
+                    "model": "saved Llama decoder block: RMSNorm, rotary causal attention, residual, RMSNorm, SwiGLU, residual",
+                    "config": config, "capture_inspection": inspection,
+                    "files": {p.name: file_record(p) for p in args.out.iterdir() if p.is_file()},
+                    "performance_measurements": []}
+        write(args.out / "workload.json", manifest)
+        return {"status": record["status"], "manifest": str(args.out / "workload.json"),
+                "active_passes": [name for name, count in counts.items() if count]}
+    except BaseException as error:
+        record.update(status="failed", error=repr(error))
+        write(args.out / "equivalence.json", record)
+        (args.out / "failure.log").write_text(traceback.format_exc())
+        raise
+
+
 def load_workload(path):
     """Native saved Program intake also supports retained real user models.
 
@@ -394,6 +477,9 @@ def main(argv=None):
     capture = sub.add_parser("prepare-control")
     capture.add_argument("--recipe", type=Path, required=True)
     capture.add_argument("--out", type=Path, required=True)
+    transformer = sub.add_parser("prepare-transformer")
+    transformer.add_argument("--recipe", type=Path, required=True)
+    transformer.add_argument("--out", type=Path, required=True)
     run = sub.add_parser("run")
     run.add_argument("--workload", type=Path, required=True)
     run.add_argument("--binary-provenance", type=Path, required=True)
@@ -407,6 +493,9 @@ def main(argv=None):
     args = p.parse_args(argv)
     if args.command == "prepare-control":
         print(json.dumps(prepare_control(args)))
+        return 0
+    if args.command == "prepare-transformer":
+        print(json.dumps(prepare_transformer(args)))
         return 0
     if args.command == "compare":
         print(json.dumps(compare(args.reports)))

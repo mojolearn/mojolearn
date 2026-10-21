@@ -28,11 +28,153 @@ EXPECTED_CASES = (
     "integer_loop_state_refusal",
     "attention_shared_projection_vjp", "conditional_tied_normalization_checkpoint",
     "higher_rank_derivatives",
+    "transformer_program_composition",
 )
-OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5, 8, 20, 7)))
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5, 8, 20, 7, 13)))
 
 
 _AUDITS = []
+
+
+def _transformer_graph(s, x, weights, heads, kv_heads, head_dim, *, gradient=False):
+    """Testing-only source-derived Llama block capture; never a product driver."""
+    import numpy as np
+    batch, length, width = x.shape
+    if heads * head_dim != width or heads % kv_heads:
+        raise ValueError("invalid declared Transformer head dimensions")
+    handles = {name: s.tensor(np.asarray(value, dtype=np.float32), requires_grad=gradient)
+               for name, value in weights.items()}
+    h = s.tensor(x, requires_grad=gradient)
+    normalized = s.rms_norm(h, handles["input_layernorm.weight"], eps=1e-6)
+    def projection(value, name):
+        return s._transformer_linear(value, handles[name + ".weight"])
+    q = s.rotary(projection(normalized, "q_proj"), head_dim)
+    k = s.rotary(projection(normalized, "k_proj"), head_dim)
+    v = projection(normalized, "v_proj")
+    q = s.permute(s.reshape(q, (batch, length, heads, head_dim)), (0, 2, 1, 3))
+    k = s.permute(s.reshape(k, (batch, length, kv_heads, head_dim)), (0, 2, 1, 3))
+    v = s.permute(s.reshape(v, (batch, length, kv_heads, head_dim)), (0, 2, 1, 3))
+    if kv_heads != heads:
+        copies = heads // kv_heads
+        def repeat_heads(value):
+            value = s.reshape(value, (batch, kv_heads, 1, length, head_dim))
+            return s.reshape(s.expand(value, (batch, kv_heads, copies, length, head_dim)),
+                             (batch, heads, length, head_dim))
+        k, v = repeat_heads(k), repeat_heads(v)
+    # Standard K layout followed by QK's transpose, not an inserted identity.
+    k_t = s.transpose(k, -1, -2)
+    scores = s.matmul(q, k_t)
+    # Native scalar sqrt/reciprocal reproduce the block's pinned scale.
+    scale = s.reciprocal(s.sqrt(s.full((1,), float(head_dim))))
+    scores = s.mul(scores, scale)
+    mask = np.where(np.arange(length)[None, :] <= np.arange(length)[:, None],
+                    np.float32(0), np.float32(-np.finfo(np.float32).max)).astype(np.float32)
+    scores = s.add(scores, s.tensor(mask.reshape(1, 1, length, length)))
+    probabilities = s.softmax(scores, axis=-1)
+    context = s.matmul(probabilities, v)
+    context = s.reshape(s.permute(context, (0, 2, 1, 3)), (batch, length, width))
+    residual = s.add(h, projection(context, "o_proj"))
+    normalized = s.rms_norm(residual, handles["post_attention_layernorm.weight"], eps=1e-6)
+    gated = s.mul(s.silu(projection(normalized, "gate_proj")), projection(normalized, "up_proj"))
+    result = s.add(residual, projection(gated, "down_proj"))
+    return h, result, handles
+
+
+def _transformer_reference64(x, weights, heads, kv_heads, head_dim):
+    """Independent double-precision whole-block oracle, only for verification."""
+    import numpy as np
+    x = np.asarray(x, dtype=np.float64)
+    w = {name: np.asarray(value, dtype=np.float64) for name, value in weights.items()}
+    batch, length, width = x.shape
+    def norm(value, name):
+        return value / np.sqrt(np.mean(value * value, axis=-1, keepdims=True) + 1e-6) * w[name]
+    def project(value, name):
+        return value @ w[name + ".weight"].T
+    def rotary(value, count):
+        z = value.reshape(batch, length, count, head_dim)
+        angle = np.arange(length)[:, None] / (10000.0 ** (np.arange(head_dim // 2) * 2.0 / head_dim))
+        c = np.concatenate([np.cos(angle)] * 2, axis=-1)[None, :, None, :]
+        si = np.concatenate([np.sin(angle)] * 2, axis=-1)[None, :, None, :]
+        rotation = np.concatenate((-z[..., head_dim // 2:], z[..., :head_dim // 2]), axis=-1)
+        return (z * c + rotation * si).transpose(0, 2, 1, 3)
+    n = norm(x, "input_layernorm.weight")
+    q, k = rotary(project(n, "q_proj"), heads), rotary(project(n, "k_proj"), kv_heads)
+    v = project(n, "v_proj").reshape(batch, length, kv_heads, head_dim).transpose(0, 2, 1, 3)
+    k, v = np.repeat(k, heads // kv_heads, axis=1), np.repeat(v, heads // kv_heads, axis=1)
+    scores = (q @ k.swapaxes(-1, -2)) / np.sqrt(head_dim)
+    scores += np.where(np.arange(length)[None, :] <= np.arange(length)[:, None], 0., -np.finfo(np.float32).max)
+    e = np.exp(scores - scores.max(axis=-1, keepdims=True))
+    p = e / e.sum(axis=-1, keepdims=True)
+    context = (p @ v).transpose(0, 2, 1, 3).reshape(batch, length, width)
+    residual = x + project(context, "o_proj")
+    n = norm(residual, "post_attention_layernorm.weight")
+    gate = project(n, "gate_proj")
+    gated = gate / (1 + np.exp(-gate)) * project(n, "up_proj")
+    return residual + project(gated, "down_proj")
+
+
+def _transformer_weights(rng, width, hidden, kv_width):
+    import numpy as np
+    shapes = {"input_layernorm.weight": (width,), "post_attention_layernorm.weight": (width,),
+              "q_proj.weight": (width, width), "k_proj.weight": (kv_width, width),
+              "v_proj.weight": (kv_width, width), "o_proj.weight": (width, width),
+              "gate_proj.weight": (hidden, width), "up_proj.weight": (hidden, width),
+              "down_proj.weight": (width, hidden)}
+    return {name: np.asarray(rng.normal(0, .12, shape) + (1 if "layernorm" in name else 0), dtype=np.float32)
+            for name, shape in shapes.items()}
+
+
+def transformer_program_composition():
+    import numpy as np
+    from . import ops, TransformerBlock
+    rng = np.random.default_rng(718)
+    x = np.asarray(rng.normal(0, .7, (1, 5, 8)), np.float32)
+    weights = _transformer_weights(rng, 8, 12, 8)
+    seed = np.asarray(rng.normal(0, .3, x.shape), np.float32)
+    oracle = _transformer_reference64(x, weights, 2, 2, 4)
+    block = TransformerBlock(weights, n_heads=2, n_kv_heads=2, head_dim=4, numeric_mode="identical")
+    specialized = _invoke(block.forward, x)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="graph-transformer-") as directory, ops.Session() as s:
+        h, result, _ = _transformer_graph(s, x, weights, 2, 2, 4)
+        p = s.capture(h, result)
+        baseline, optimized = _invoke(p.run, x), _invoke(p.run, x, optimize=True)
+        _equal(baseline, specialized)
+        _equal(optimized, baseline)
+        np.testing.assert_allclose(baseline, oracle, rtol=3e-5, atol=2e-6)
+        counts = {r["name"]: r["rewrites"] for r in _invoke(p.inspect, optimize=True)["pass_report"]["passes"]}
+        assert counts["permutation_composition"] > 0 and counts["dead_intermediates"] > 0
+        checkpoint = Path(directory) / "transformer.mjl"
+        _invoke(p.save, checkpoint)
+        restored = _invoke(s.load_program, checkpoint)
+        output = _invoke(restored.run, x, optimize=True)
+        _equal(output, baseline)
+        outputs.extend((baseline, optimized, output))
+    with ops.Session(record=True) as s:
+        h, result, handles = _transformer_graph(s, x, weights, 2, 2, 4, gradient=True)
+        loss = s.sum(s.mul(result, s.tensor(seed)))
+        _invoke(s.backward, loss)
+        gradients = {"x": _invoke(s.grad, h), **{name: _invoke(s.grad, handle) for name, handle in handles.items()}}
+        operands = {"x": x, **weights}
+        for name, value in operands.items():
+            # Each parameter family and input gets an independent directional
+            # finite difference; no mirrored native VJP implementation.
+            direction = rng.normal(0, 1, value.shape)
+            direction /= max(np.linalg.norm(direction), 1.)
+            epsilon = 1e-5
+            plus, minus = value.astype(np.float64) + epsilon * direction, value.astype(np.float64) - epsilon * direction
+            wp, wm = dict(weights), dict(weights)
+            xp, xm = x, x
+            if name == "x":
+                xp, xm = plus, minus
+            else:
+                wp[name], wm[name] = plus, minus
+            expected = np.sum((_transformer_reference64(xp, wp, 2, 2, 4) -
+                               _transformer_reference64(xm, wm, 2, 2, 4)) * seed) / (2 * epsilon)
+            got = np.sum(np.asarray(gradients[name], dtype=np.float64) * direction)
+            np.testing.assert_allclose(got, expected, rtol=3e-3, atol=2e-5)
+            outputs.append(gradients[name])
+    return outputs
 
 
 def _invoke(operation, *args, **kwargs):

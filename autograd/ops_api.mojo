@@ -67,6 +67,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_di
 from autograd.tape import Tape, Tensor, IdsHandle
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
 from autograd.layers import NeuralRules, layer_norm
+from autograd.transformer_primitives import graph_rms_norm, graph_rotary, graph_transformer_linear
 from autograd.higher import backward_recorded, backward_scalar_recorded
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
 from autograd.data import permutation, gather_rows
@@ -146,6 +147,9 @@ comptime OPS_SOFTMAX = 17
 comptime OPS_LOG_SOFTMAX = 18
 comptime OPS_LINEAR = 19
 comptime OPS_LAYER_NORM = 20
+comptime OPS_RMS_NORM = 77
+comptime OPS_ROTARY = 78
+comptime OPS_TRANSFORMER_LINEAR = 79
 comptime OPS_DROPOUT = 21
 comptime OPS_GATHER_ROWS = 22
 comptime OPS_PERMUTATION = 23
@@ -1070,6 +1074,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var ni = len(ints)
         var nf = len(fs)
         var t: Tensor
+        if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR:
+            for h in hs:  # small-loop(hs: at most two transformer primitive operands): dtype metadata
+                if self.int_words[self._slot(h)]:
+                    raise Error("ValueError: transformer primitives require floating-point tensors")
         if code == OPS_MATMUL or code == OPS_MATMUL_N:
             _need("matmul", n, 2, 0, ni, 0, nf)
             var ma = self.tape.ndim(x[0])
@@ -1150,6 +1158,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif code == OPS_LAYER_NORM:
             _need("layer_norm", n, 3, 0, ni, 1, nf)
             t = layer_norm(self.tape, self.ex, x[0], x[1], x[2], fs[0])
+        elif code == OPS_RMS_NORM:
+            _need("rms_norm", n, 2, 0, ni, 1, nf)
+            t = graph_rms_norm(self.tape, self.ex, x[0], x[1], fs[0])
+        elif code == OPS_TRANSFORMER_LINEAR:
+            _need("transformer_linear", n, 2, 0, ni, 0, nf)
+            t = graph_transformer_linear(self.tape, self.ex, x[0], x[1])
+        elif code == OPS_ROTARY:
+            _need("rotary", n, 1, 2, ni, 1, nf)
+            t = graph_rotary(self.tape, self.ex, x[0], ints[0], ints[1], fs[0])
         elif code == OPS_DROPOUT:
             _need("dropout", n, 1, 3, ni, 1, nf)
             t = self.tape.dropout(self.ex, x[0], fs[0], _seed(ints[0], ints[1]), ints[2])
@@ -2035,7 +2052,7 @@ def _keeps_shape(code: Int) -> Bool:
     return (code == OPS_RELU or code == OPS_SIGMOID or code == OPS_TANH or code == OPS_EXP
             or code == OPS_LOG or code == OPS_SQRT or code == OPS_SCALE or code == OPS_SOFTMAX
             or code == OPS_LOG_SOFTMAX or code == OPS_LAYER_NORM or code == OPS_DROPOUT
-            or code == OPS_DETACH)
+            or code == OPS_DETACH or code == OPS_RMS_NORM or code == OPS_ROTARY)
 
 
 # ---------------------------------------------------------------- the session table

@@ -142,6 +142,22 @@ def _swap_axes(p: OpsProgram, k: Int) -> List[Int]:
     return out^
 
 
+def _swap_permutation(p: OpsProgram, k: Int, rank: Int) -> List[Int]:
+    # Only an adjacent explicit permutation proves this exact rank. An
+    # isolated swap remains rank-polymorphic and must keep its own validator.
+    var axes = _swap_axes(p, k)
+    var out = List[Int]()
+    if len(axes) != 2 or rank < 2:
+        return out^
+    var a = axes[0] + rank if axes[0] < 0 else axes[0]
+    var b = axes[1] + rank if axes[1] < 0 else axes[1]
+    if a < 0 or b < 0 or a >= rank or b >= rank:
+        return out^
+    for j in range(rank):  # small-loop(rank: at most eight axes): proven permutation metadata
+        out.append(b if j == a else (a if j == b else j))
+    return out^
+
+
 def _views(mut plan: ProgramOptimization, mut removable: List[Bool], reshape: Bool):
     var p = plan.program.copy()
     var q = _header(p)
@@ -163,7 +179,12 @@ def _views(mut plan: ProgramOptimization, mut removable: List[Bool], reshape: Bo
             else:
                 var outer = _permutation(p, k)
                 var inner = _permutation(q, j)
+                if len(outer) > 0 and len(inner) == 0:
+                    inner = _swap_permutation(q, j, len(outer))
+                elif len(inner) > 0 and len(outer) == 0:
+                    outer = _swap_permutation(p, k, len(inner))
                 if len(outer) > 0 and len(outer) == len(inner):
+                    code = 34
                     ints.clear()
                     ints.append(0)
                     for axis in range(len(outer)):  # driver-loop: over explicit permutation axes

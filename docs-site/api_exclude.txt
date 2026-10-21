@@ -98,3 +98,5 @@ cross_vendor.LearningRateTable	native schedule admission; current qualification 
 GenerationStream.read	native generation stream reads; current cross-vendor qualification pending
 GenerationStream.info	native generation stream metadata; current cross-vendor qualification pending
 GenerationStream.state_dict	native generation stream checkpoint; current cross-vendor qualification pending
+mojolearn.ops.Session.rms_norm
+mojolearn.ops.Session.rotary

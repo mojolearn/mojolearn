@@ -183,10 +183,12 @@ from autograd.import_ops import OP_IMP_FIRST, OP_IMP_LAST, apply_import
 # ---- end lane ag-import-kernels
 # lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the higher-order bodies
 from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST, apply_higher
+from autograd.transformer_primitives_ops import OP_TFP_FIRST, OP_TFP_LAST, apply_transformer_primitive
 
 
 @always_inline
 def apply[OP: Int](t: Int, a: Args):
+    comptime assert OP_TFP_FIRST > OP_IMP_LAST and OP_TFP_FIRST > OP_RNV_LAST and OP_TFP_FIRST > OP_HO_LAST, "transformer graph opcode range overlaps existing family"
     # The autograd family (autograd/ops.mojo) is one contiguous range of
     # codes, one body each; no other operation code may fall inside it.
     comptime assert OP_AG_FIRST <= OP_AG_LAST, "autograd opcode range is empty"
@@ -525,6 +527,8 @@ def apply[OP: Int](t: Int, a: Args):
         apply_import[OP](t, a)
     elif OP >= OP_HO_FIRST and OP <= OP_HO_LAST:
         apply_higher[OP](t, a)
+    elif OP >= OP_TFP_FIRST and OP <= OP_TFP_LAST:
+        apply_transformer_primitive[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:
