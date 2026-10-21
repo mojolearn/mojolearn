@@ -78,7 +78,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from std.sys.compile import is_defined
-from core.host_parallel import host_parallelize
 
 from bindings.hostptr import i32_ptr
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
@@ -103,7 +102,6 @@ from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.pca_native import pca_c
 from bindings.generator_draw_native import generator_draw_c
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -137,7 +135,55 @@ from tokenizer.vocab import VocabTokenizer
 from tokenizer.train.bpe_train import (
     BPE_TRAINER_SABOTAGE,
     TrainedVocabulary,
-    train_bpe,
+)
+from tokenizer.impl.tokenizer_host_shell_impl import (
+    TOKENIZER_HOST_SABOTAGE,
+    TOKENIZER_BATCH_SABOTAGE,
+    BpeHandle,
+    BpeTrainedHandle,
+    VocabHandle,
+    SPELLED_OK,
+    SPELLED_BAD_ID,
+    SPELLED_NOT_STR,
+    SPELLED_UNSPELL,
+    SPELLED_RAISED,
+    SPELLED_NOT_PAIR,
+    SPELLED_NOT_LEVEL,
+    SpelledFailure,
+    SpelledMerges,
+    SpelledVocab,
+    _bytes_total,
+    _handle_from_table,
+    _i64_list,
+    _i64_ptr,
+    _u8_list,
+    _u8_ptr,
+    bpe_check_ids,
+    bpe_decode_batch_append,
+    bpe_decode_batch_fit,
+    bpe_decode_into,
+    bpe_decode_seq_bytes,
+    bpe_encode_batch_into,
+    bpe_encode_corpus_into,
+    bpe_encode_into,
+    bpe_handle_load,
+    bpe_train_corpus_fill,
+    bpe_train_fill,
+    bpe_trained_copy_into,
+    spelled_merges_list,
+    spelled_merges_text,
+    spelled_vocab_tokens,
+    tokenizer_append_bytes,
+    tokenizer_store_i32,
+    tokenizer_store_i64,
+    tokens_gather_rows_into,
+    tokens_gather_rows_width,
+    trained_vocab_settle,
+    vocab_check_merges,
+    vocab_check_pairs,
+    vocab_decode_ids,
+    vocab_encode_ids,
+    vocab_fingerprint_hex,
 )
 from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
 from bindings.causal_lm_public import (
@@ -148,48 +194,6 @@ from bindings.causal_lm_public import (
     causal_lm_snapshot_binding, causal_lm_resume_binding,
     causal_lm_parameters_binding, causal_lm_blocks_binding,
 )
-
-comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
-comptime TOKENIZER_BATCH_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_BATCH_SABOTAGE"]()
-
-
-struct BpeHandle(Movable, Writable):
-    """Python-owned tokenizer lifetime: the parsed rank table and Unicode
-    classes, loaded once by `bpe_load` and kept for the handle's life. No
-    global slot and no retained host pointer."""
-
-    var tok: Optional[BpeTokenizer]
-    var max_token_bytes: Int
-
-    def __init__(out self):
-        self.tok = Optional[BpeTokenizer]()
-        self.max_token_bytes = 0
-
-    # Both spelled out: `add_type` derives whichever is missing by
-    # reflection over the fields, and `Optional[BpeTokenizer]` is not
-    # Writable (the byte LM session does the same).
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("_BpeHandle(loaded=", Bool(self.tok), ")")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        writer.write("_BpeHandle(loaded=", Bool(self.tok), ")")
-
-
-struct BpeTrainedHandle(Movable, Writable):
-    """Python-owned result of one `bpe_train` call: the trained vocabulary,
-    held until `bpe_trained_copy` has copied it into the caller's buffers."""
-
-    var vocab: Optional[TrainedVocabulary]
-
-    def __init__(out self):
-        self.vocab = Optional[TrainedVocabulary]()
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("_BpeTrainedHandle(trained=", Bool(self.vocab), ")")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        writer.write("_BpeTrainedHandle(trained=", Bool(self.vocab), ")")
-
 
 def _index(value: PythonObject) raises -> Int:
     var type_name = String(py=value.__class__.__name__)
@@ -206,12 +210,6 @@ def _flag(value: PythonObject, name: String) raises -> Bool:
             "tokenizer host: " + name + " must be a bool, got " + type_name
         )
     return Bool(py=value)
-
-
-def _u8_ptr(addr: Int) raises -> MutPointer[UInt8, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null uint8 buffer address")
-    return MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
 def _require_loaded(loaded: Bool) raises:
@@ -266,13 +264,7 @@ def bpe_load_binding(ranks_path: PythonObject) raises -> PythonObject:
     var rp = String(py=ranks_path)
     var handle = BpeHandle()
     with GILReleased(Python()):
-        var tok = load_bpe_tokenizer_from(rp)
-        var longest = len(String(GPT2_ENDOFTEXT).as_bytes())
-        for i in range(tok.ranks.n_tokens()):
-            if tok.ranks.length[i] > longest:
-                longest = tok.ranks.length[i]
-        handle.max_token_bytes = longest
-        handle.tok = tok^
+        bpe_handle_load(handle, rp)
     return PythonObject(alloc=handle^)
 
 
@@ -312,33 +304,8 @@ def bpe_encode_binding(
     var out_address = _index(out_addr)
     var count = 0
     with GILReleased(Python()):
-        var src = _u8_ptr(text_address)
-        var text = List[UInt8](length=n, fill=UInt8(0))
-        memcpy(dest=text.unsafe_ptr(), src=src, count=n)
-        # THE ONE CALL THAT COMPUTES ANYTHING.
-        var ids = owner[].tok.value().encode_bytes(text, allow)
-        count = len(ids)
-        if count > cap:
-            raise Error(
-                "bpe_encode: "
-                + String(count)
-                + " ids do not fit an output of "
-                + String(cap)
-                + "; nothing written"
-            )
-        var dst = i32_ptr(out_address)
-        for k in range(count):
-            comptime if TOKENIZER_HOST_SABOTAGE:
-                dst[k] = Int32(ids[count - 1 - k])
-            else:
-                dst[k] = Int32(ids[k])
+        count = bpe_encode_into(owner[], text_address, n, out_address, cap, allow)
     return PythonObject(count)
-
-
-def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
-    if addr == 0:
-        raise Error("mojolearn: null int64 buffer address")
-    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
 def bpe_encode_batch_binding(
@@ -383,101 +350,10 @@ def bpe_encode_batch_binding(
     var counts_address = _index(counts_addr)
     var total = 0
     with GILReleased(Python()):
-        # `offsets_addr` holds the n_docs document LENGTHS (lane/pyglue-
-        # text-io): the running offsets are taken here, not in Python.
-        var lens = _i64_ptr(offsets_address)
-        var offsets_list = List[Int64](length=n_docs + 1, fill=Int64(0))
-        for k in range(n_docs):
-            if Int(lens[k]) < 0:
-                raise Error("bpe_encode_batch: document " + String(k) + " has a negative length")
-            offsets_list[k + 1] = offsets_list[k] + lens[k]
-        var offs = offsets_list.unsafe_ptr()
-        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
-            raise Error(
-                "bpe_encode_batch: document lengths must sum to n_bytes "
-                + String(n)
-                + ", got "
-                + String(Int(offs[0]))
-                + " and "
-                + String(Int(offs[n_docs]))
-            )
-        for k in range(n_docs):
-            if Int(offs[k + 1]) < Int(offs[k]):
-                raise Error(
-                    "bpe_encode_batch: offsets decrease at document "
-                    + String(k)
-                )
-        var all_ids = List[Int](capacity=n)
-        var counts = List[Int](length=n_docs, fill=0)
-        # A document produces at most one id per input byte.  Give each one
-        # its byte-offset-sized temporary range, so independent encodes can
-        # run concurrently without a shared append or a prefix scan first.
-        var staged = List[Int32](length=n, fill=Int32(0))
-        var failed = List[Int](length=n_docs, fill=0)
-        var countp = counts.unsafe_ptr()
-        var stagep = staged.unsafe_ptr()
-        var failp = failed.unsafe_ptr()
-        var tasks = host_predict_task_count(n_docs) if n >= 16384 else 1
-        var chunk = host_predict_chunk(n_docs, tasks)
-        def _documents(task: Int) {imm owner, imm offs, imm text_address, imm allow, imm countp, imm stagep, imm failp, imm chunk, imm n_docs}:
-            var lo = task * chunk
-            var hi = min(lo + chunk, n_docs)
-            for k in range(lo, hi):
-                var a = Int(offs[k])
-                var m = Int(offs[k + 1]) - a
-                var doc = List[UInt8](length=m, fill=UInt8(0))
-                try:
-                    if m > 0:
-                        var src = _u8_ptr(text_address + a)
-                        memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
-                    var ids = owner[].tok.value().encode_bytes(doc, allow)
-                    var c = len(ids)
-                    countp.unsafe_store(k, c)
-                    for j in range(c):
-                        comptime if TOKENIZER_HOST_SABOTAGE:
-                            stagep.unsafe_store(a + j, Int32(ids[c - 1 - j]))
-                        else:
-                            stagep.unsafe_store(a + j, Int32(ids[j]))
-                except:
-                    failp.unsafe_store(k, 1)
-        if tasks == 1:
-            _documents(0)
-        else:
-            host_parallelize(_documents, tasks)
-        for k in range(n_docs):
-            if failed[k] != 0:
-                raise Error("bpe_encode_batch: internal document encode failed")
-            var a = Int(offs[k])
-            for j in range(counts[k]):
-                all_ids.append(Int(staged[a + j]))
-        comptime if TOKENIZER_BATCH_SABOTAGE:
-            # The batch part's negative control: swap the last id of each
-            # document with the first id of the next non-empty one, which
-            # a batch of one document can never reach.
-            var start = 0
-            for k in range(n_docs - 1):
-                var end = start + counts[k]
-                if counts[k] > 0 and counts[k + 1] > 0:
-                    var t = all_ids[end - 1]
-                    all_ids[end - 1] = all_ids[end]
-                    all_ids[end] = t
-                start = end
-        total = len(all_ids)
-        if total > cap:
-            raise Error(
-                "bpe_encode_batch: "
-                + String(total)
-                + " ids do not fit an output of "
-                + String(cap)
-                + "; nothing written"
-            )
-        var cnt = _i64_ptr(counts_address)
-        for k in range(n_docs):
-            cnt[k] = Int64(counts[k])
-        if total > 0:
-            var dst = i32_ptr(out_address)
-            for j in range(total):
-                dst[j] = Int32(all_ids[j])
+        total = bpe_encode_batch_into(
+            owner[], text_address, offsets_address, out_address, counts_address,
+            n_docs, n, cap, allow,
+        )
     return PythonObject(total)
 
 
@@ -503,25 +379,7 @@ def bpe_decode_binding(
     var out_address = _index(out_addr)
     var count = 0
     with GILReleased(Python()):
-        var src = i32_ptr(ids_address)
-        var ids = List[Int](capacity=n)
-        for k in range(n):
-            ids.append(Int(src[k]))
-        # THE ONE CALL THAT COMPUTES ANYTHING; an id outside [0, n_vocab) is
-        # refused here by name and position, nothing written.
-        var out = owner[].tok.value().decode_bytes(ids)
-        count = len(out)
-        if count > cap:
-            raise Error(
-                "bpe_decode: "
-                + String(count)
-                + " bytes do not fit an output of "
-                + String(cap)
-                + "; nothing written"
-            )
-        var dst = _u8_ptr(out_address)
-        if count > 0:
-            memcpy(dest=dst, src=out.unsafe_ptr(), count=count)
+        count = bpe_decode_into(owner[], ids_address, n, out_address, cap)
     return PythonObject(count)
 
 
@@ -561,41 +419,9 @@ def bpe_train_binding(
     var offsets_address = _index(offsets_addr)
     var handle = BpeTrainedHandle()
     with GILReleased(Python()):
-        var lens = _i64_ptr(offsets_address)
-        var offsets_list = List[Int64](length=n_docs + 1, fill=Int64(0))
-        for k in range(n_docs):
-            if Int(lens[k]) < 0:
-                raise Error("bpe_train: document " + String(k) + " has a negative length")
-            offsets_list[k + 1] = offsets_list[k] + lens[k]
-        var offs = offsets_list.unsafe_ptr()
-        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
-            raise Error(
-                "bpe_train: document lengths must sum to n_bytes "
-                + String(n)
-                + ", got "
-                + String(Int(offs[0]))
-                + " and "
-                + String(Int(offs[n_docs]))
-            )
-        for k in range(n_docs):
-            if Int(offs[k + 1]) < Int(offs[k]):
-                raise Error(
-                    "bpe_train: offsets decrease at document " + String(k)
-                )
-        var documents = List[List[UInt8]](capacity=n_docs)
-        for k in range(n_docs):
-            var a = Int(offs[k])
-            var m = Int(offs[k + 1]) - a
-            var doc = List[UInt8](length=m, fill=UInt8(0))
-            if m > 0:
-                memcpy(
-                    dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m
-                )
-            documents.append(doc^)
-        var classes = builtin_unicode_classes()
-        # THE ONE CALL THAT COMPUTES ANYTHING.
-        handle.vocab = train_bpe(
-            documents, classes, vocab_size, min_frequency, reverse
+        bpe_train_fill(
+            handle, text_address, offsets_address, n_docs, n, vocab_size,
+            min_frequency, reverse,
         )
     return PythonObject(alloc=handle^)
 
@@ -636,25 +462,7 @@ def bpe_trained_copy_binding(
     var left_address = _index(left_addr) if nm > 0 else 0
     var right_address = _index(right_addr) if nm > 0 else 0
     ref v = owner[].vocab.value()
-    var arena = _u8_ptr(arena_address)
-    var lengths = _i64_ptr(lengths_address)
-    # The arena is written in RANK order from each token's own offset, so
-    # the caller's slicing by cumulative length is correct whatever order
-    # the trainer's arena was filled in.
-    var at = 0
-    for id in range(v.n_tokens()):
-        var m = v.length[id]
-        var src = v.offset[id]
-        for i in range(m):
-            arena[at + i] = v.arena[src + i]
-        at += m
-        lengths[id] = Int64(m)
-    if nm > 0:
-        var left = _i64_ptr(left_address)
-        var right = _i64_ptr(right_address)
-        for k in range(nm):
-            left[k] = Int64(v.merge_left[k])
-            right[k] = Int64(v.merge_right[k])
+    bpe_trained_copy_into(v, arena_address, lengths_address, nm, left_address, right_address)
     return PythonObject(v.n_tokens())
 
 
@@ -664,58 +472,6 @@ def bpe_trained_copy_binding(
 # only validate arguments, pass the caller's objects or buffers and return
 # results. Refusals raised here start with the Python exception name the
 # door re-raises them as (`ValueError: `, `TypeError: `).
-
-
-struct VocabHandle(Movable, Writable):
-    """Python-owned `mojolearn.models.Tokenizer` lifetime: the rank table,
-    the pattern and the added tokens (`tokenizer/vocab.mojo`)."""
-
-    var tok: Optional[VocabTokenizer]
-
-    def __init__(out self):
-        self.tok = Optional[VocabTokenizer]()
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("_VocabHandle(loaded=", Bool(self.tok), ")")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        writer.write("_VocabHandle(loaded=", Bool(self.tok), ")")
-
-
-def _i64_list(addr: Int, n: Int) raises -> List[Int]:
-    var out = List[Int](capacity=n)
-    if n > 0:
-        var p = _i64_ptr(addr)
-        for k in range(n):
-            out.append(Int(p[k]))
-    return out^
-
-
-def _u8_list(addr: Int, n: Int) raises -> List[UInt8]:
-    var out = List[UInt8](length=n, fill=UInt8(0))
-    if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(addr), count=n)
-    return out^
-
-
-def _bytes_total(lengths: List[Int]) raises -> Int:
-    var total = 0
-    for k in range(len(lengths)):
-        if lengths[k] < 0:
-            raise Error("ValueError: length " + String(k) + " is negative")
-        total += lengths[k]
-    return total
-
-
-def _handle_from_table(var table: RankTable) raises -> BpeHandle:
-    var handle = BpeHandle()
-    var longest = len(String(GPT2_ENDOFTEXT).as_bytes())
-    for i in range(table.n_tokens()):
-        if table.length[i] > longest:
-            longest = table.length[i]
-    handle.max_token_bytes = longest
-    handle.tok = BpeTokenizer(table^, builtin_unicode_classes())
-    return handle^
 
 
 def _py_repr(obj: PythonObject) raises -> String:
@@ -858,13 +614,6 @@ def _table_from_spelled(
     return table^
 
 
-def _quoted(line: List[UInt8]) -> String:
-    var s = String("'")
-    s += bytes_string(line)
-    s += "'"
-    return s^
-
-
 def bpe_load_tokens_binding(addresses: PythonObject, dims: PythonObject) raises -> PythonObject:
     """`BpeTokenizer.from_token_bytes`: `addresses` `[token_bytes(u8),
     lengths(i64)]`, `dims` `[n_tokens]`. Refuses an empty or repeated token
@@ -998,37 +747,6 @@ def bpe_render_binding(addresses: PythonObject, dims: PythonObject) raises -> Py
     if which == 0:
         return PythonObject(render_ranks(v))
     return PythonObject(render_tokenizer_json(v, String(GPT2_PAT_STR), String(GPT2_ENDOFTEXT)))
-
-
-def _cut_documents(
-    data: MutPointer[UInt8, MutUntrackedOrigin], points: List[Int], lo: Int, hi: Int,
-    document_bytes: Int, mut starts: List[Int], mut stops: List[Int]
-):
-    """`lm_corpus.documents`: `[lo, hi)` cut at every split point strictly
-    inside it, each piece cut into documents of at most `document_bytes`
-    bytes ending at the last 0x0A at or before the limit (or at the limit
-    when the window holds none)."""
-    var cuts = List[Int]()
-    cuts.append(lo)
-    for k in range(len(points)):
-        if points[k] > lo and points[k] < hi:
-            cuts.append(points[k])
-    cuts.append(hi)
-    for s in range(len(cuts) - 1):
-        var a = cuts[s]
-        var b = cuts[s + 1]
-        var at = a
-        while at < b:
-            var stop = min(at + document_bytes, b)
-            if stop < b:
-                var cut = stop - 1
-                while cut >= at and Int(data[cut]) != 0x0A:
-                    cut -= 1
-                if cut >= at and cut + 1 > at:
-                    stop = cut + 1
-            starts.append(at)
-            stops.append(stop)
-            at = stop
 
 
 def bpe_encode_corpus_binding(
