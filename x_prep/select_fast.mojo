@@ -517,7 +517,7 @@ def select_freg_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], 
         df.unsafe_ptr(), dw.unsafe_ptr(), Int32(X), Int32(n), Int32(d), Int32(Y), Int32(M), Int32(center), Int32(P2),
         Int32(nct), grid_dim=nb * nct, block_dim=TPB,
     )
-    ctx.enqueue_function[sel_freg_score_kernel](
+    ctx.enqueue_function[sel_freg_score_kernel](  # small-launch(n: the degrees of freedom only): folds the _row_tiles(n) tile partials sel_cross_kernel stored for one column, never walks rows
         df.unsafe_ptr(), dw.unsafe_ptr(), Int32(P2), Int32(nb), Int32(d), Int32(n), Int32(center), Int32(SC), Int32(PV),
         Int32(CO), Int32(ff), grid_dim=d, block_dim=TPB,
     )
@@ -562,7 +562,7 @@ def select_fcls_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], 
         df.unsafe_ptr(), dw.unsafe_ptr(), Int32(X), Int32(n), Int32(d), Int32(Y), Int32(MEAN), Int32(P), Int32(nct),
         grid_dim=nb * nct, block_dim=TPB,
     )
-    ctx.enqueue_function[sel_fcls_score_kernel](
+    ctx.enqueue_function[sel_fcls_score_kernel](  # small-launch(n: the grand-mean divisor and degrees of freedom only): folds the _row_tiles(n) tile partials sel_ssw_kernel stored for one column, never walks rows
         df.unsafe_ptr(), dw.unsafe_ptr(), Int32(P), Int32(nb), Int32(d), Int32(n), Int32(K), Int32(CNT), Int32(MEAN),
         Int32(SC), Int32(PV), grid_dim=d, block_dim=TPB,
     )
