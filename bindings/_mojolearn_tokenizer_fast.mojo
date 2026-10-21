@@ -33,8 +33,8 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from tokenizer.fast.bpe_device import BPE_MAX_VOCAB
 from tokenizer.fast.bpe_fast_impl import (
-    BPE_MAX_VOCAB,
     FastBpeHandle,
     FastTrainedHandle,
     bpe_fast_flag_list,
@@ -72,7 +72,7 @@ def bpe_fast_flags_binding() raises -> PythonObject:
     out.append(PythonObject(flags[2]))
     out.append(PythonObject(flags[3]))
     out.append(PythonObject(flags[4]))
-    out.append(PythonObject(BPE_MAX_VOCAB))
+    out.append(PythonObject(Int(BPE_MAX_VOCAB)))
     return out
 
 
