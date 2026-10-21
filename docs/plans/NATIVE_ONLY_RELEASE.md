@@ -50,7 +50,7 @@ no Python import in its 90-file source closure or linked interpreter dependency.
 This single native-core witness does not qualify a Python-free library release.
 Evidence: `~/mojolearn-evidence/core-completion-20261020/native-only-probe/`.
 
-Retained results on 2026-10-20 now cover all 35 currently written fixtures:
+The initial frozen integration results on 2026-10-20 cover 35 fixtures:
 four CPU cases pass on Apple and inside an interpreter-free Linux chroot, and
 31 GPU cases pass on Apple. The Linux run is
 [39520969549](https://github.com/mojolearn/mojolearn/actions/runs/39520969549).
@@ -58,7 +58,7 @@ Its workflow correctly exits nonzero because library-wide coverage remains
 incomplete. These are frozen integration-source results, not an assertion that
 the current main branch or an installed wheel has the same native closure.
 
-The manifest inventories 603 public exports, including 101 proven aliases.
+That initial integration manifest inventories 603 public exports, including 101 proven aliases.
 After aliases are removed, 37 entries have mapped standalone witnesses,
 396 still lack fixtures, nine are blocked by their current CPython-bound owner,
 and 60 are explicitly nonalgorithm entries. These counts include functions and
@@ -75,6 +75,19 @@ lines and every transitive source file are unchanged. All other admitted
 source closures match byte for byte. The first actual binary/source/log bundle
 is verified on the Mac and uploaded to R2 at
 `measurements/core-completion/2026-10-20/native-only/first-linux-and-mac-artifacts.tgz`.
-Later smoke rounds remain retained on the Mac pending their incremental R2
-upload. NVIDIA/AMD standalone runs, installed-wheel checks, and complete native
-owner interfaces remain pending. No smoke timing promotes a performance default.
+Later Mac rounds are also retained with full R2 readback at
+`measurements/core-completion/2026-10-20/native-only/incremental-mac-artifacts.tgz`.
+AMD standalone evidence is retained separately; the initial receipt above does
+not describe those later runs. NVIDIA qualification and complete native owner
+interfaces remain pending. No smoke timing promotes a performance default.
+
+The main-branch manifest now includes 37 fixtures after adding native SVC/SVR
+fit-and-predict smoke checks. Both pass on Apple and AMD GPUs, with matching
+output digests; RBF predictions retain an independent binary64 oracle and its
+stated tolerance. All 77 source files for each case match the qualified frozen
+source byte for byte, so no recompilation was needed. The main inventory has
+602 exports, including 101 aliases; this differs from the integration inventory
+because its additional public export has not merged. These two cases do not
+qualify public wrappers, multiclass/probability behavior, other kernel options
+or checkpoints. See [`native_only_svm_20261020.json`](native_only_svm_20261020.json)
+for exact source/binary evidence and retained artifact locations.
