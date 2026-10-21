@@ -1562,6 +1562,48 @@
       ],
       "whole_operation": true,
       "operation_boundary": "Native estimator fit validates and uploads inputs, runs SMO and downloads support/model state; native prediction rebuilds/uploads that complete fitted model, runs kernel/decision/class epilogue as applicable and returns consumed host outputs. Three independent analytic optima and two prediction cache budgets per case. No CPython or test module defining main is imported."
+    },
+    {
+      "id": "autograd_conv_cpu",
+      "source": "packaging/native_only/cases/smoke_autograd_conv_cpu.mojo",
+      "backends": [
+        "cpu"
+      ],
+      "scope": "native-core",
+      "algorithms": [
+        "mojolearn.ops.Session"
+      ],
+      "marker": "NATIVE_ONLY_PASS autograd_conv_cpu",
+      "status": "ready",
+      "coverage": "Complete tiny native Conv2d -> ReLU -> overlapping AvgPool2d forward and seeded backward. Four variants cover ordinary/grouped/depthwise multiplier/bias-free convolution, stride and padding. Every intermediate, input gradient, weight gradient and applicable bias gradient is checked against an independent analytic chain oracle with exactly representable dyadic values. Maps only Session.conv2d/relu/avg_pool2d/backward engine operations; standalone Conv2d/AvgPool2d classes, public Session/Program owners, training/checkpoints and higher derivatives are not exercised.",
+      "source_dependency_count": 94,
+      "canonical_algorithms": [
+        "mojolearn.ops.Session"
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native Tape owns tensor storage and records the complete convolution/activation/pooling network, performs a complete seeded reverse walk, downloads and consumes all intermediate values plus dx/dW/db, then releases the tape. Independent test-only float64 forward and analytic chain gradients supply expectations; the test oracle never calls product VJP kernels."
+    },
+    {
+      "id": "autograd_conv_gpu",
+      "source": "packaging/native_only/cases/smoke_autograd_conv_gpu.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-core",
+      "algorithms": [
+        "mojolearn.ops.Session"
+      ],
+      "marker": "NATIVE_ONLY_PASS autograd_conv_gpu",
+      "status": "ready",
+      "coverage": "Complete tiny native Conv2d -> ReLU -> overlapping AvgPool2d forward and seeded backward. Four variants cover ordinary/grouped/depthwise multiplier/bias-free convolution, stride and padding. Every intermediate, input gradient, weight gradient and applicable bias gradient is checked against an independent analytic chain oracle with exactly representable dyadic values. Maps only Session.conv2d/relu/avg_pool2d/backward engine operations; standalone Conv2d/AvgPool2d classes, public Session/Program owners, training/checkpoints and higher derivatives are not exercised.",
+      "source_dependency_count": 123,
+      "canonical_algorithms": [
+        "mojolearn.ops.Session"
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native Tape owns tensor storage and records the complete convolution/activation/pooling network, performs a complete seeded reverse walk, downloads and consumes all intermediate values plus dx/dW/db, then releases the tape. Independent test-only float64 forward and analytic chain gradients supply expectations; the test oracle never calls product VJP kernels."
     }
   ],
   "inventory": [
@@ -6380,6 +6422,8 @@
       "algorithm": "mojolearn.ops.Session",
       "status": "ready",
       "cases": [
+        "autograd_conv_cpu",
+        "autograd_conv_gpu",
         "autograd_cpu",
         "autograd_gpu"
       ],
