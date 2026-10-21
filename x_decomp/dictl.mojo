@@ -10,9 +10,7 @@ forgetting factor and convergence tests in the same order. So the IDENTICAL
 words are the Python driver's; x_decomp/dictl_dev.mojo is the same driver
 text on DKit (with the FAST fused atom update where Python took it)."""
 from std.math import sqrt
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_DIV, OP_MAXS, OP_SCALE, OP_SOFT, OP_SQ, OP_SQDIFF, OP_SQRT, OP_SUB, mat_from,
@@ -38,19 +36,18 @@ struct DlArgs(Copyable, Movable):
     var nnz: Int
     var max_no_imp: Int
 
-    def __init__(out self, p: PythonObject, f: PythonObject) raises:
-        """p = [n, m, nc, algo, max_iter, enc_iter, pos_dict, pos_code, seed,
-        nnz (-1: None), max_no_improvement (-1: None), extra]; f = [alpha, tol]."""
-        self.algo = Int(py=p[3])
-        self.max_iter = Int(py=p[4])
-        self.enc_iter = Int(py=p[5])
-        self.pos_dict = Int(py=p[6]) != 0
-        self.pos_code = Int(py=p[7]) != 0
-        self.seed = Int(py=p[8])
-        self.nnz = Int(py=p[9])
-        self.max_no_imp = Int(py=p[10])
-        self.alpha = Float64(py=f[0])
-        self.tol = Float64(py=f[1])
+    def __init__(out self, algo: Int, alpha: Float64, max_iter: Int, tol: Float64, enc_iter: Int, pos_dict: Bool,
+                 pos_code: Bool, seed: Int, nnz: Int, max_no_imp: Int):
+        self.algo = algo
+        self.alpha = alpha
+        self.max_iter = max_iter
+        self.tol = tol
+        self.enc_iter = enc_iter
+        self.pos_dict = pos_dict
+        self.pos_code = pos_code
+        self.seed = seed
+        self.nnz = nnz
+        self.max_no_imp = max_no_imp
 
 
 def _enc_nnz(m: Int, kc: Int, nnz: Int) -> Int:
@@ -226,57 +223,39 @@ def minibatch_loop[E: Exec](mut k: Kit[E], Xt: Mat, mut D: Mat, a: DlArgs, bs: I
 # ---- end driver
 
 
-def dict_learning_py[E: Exec](
-    x: PythonObject, code: PythonObject, d: PythonObject, errs: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """x (n x m); code (n x nc) and d (nc x m) the starts, replaced; errs
-    (max_iter float64) the costs. Returns (ii, errors written)."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var nc = _n(p, 2)
+def dict_learning_run[E: Exec](
+    px: F32Ptr, pc: F32Ptr, pd: F32Ptr, pe: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nc: Int, a: DlArgs,
+    mut ne: Int,
+) raises -> Int:
+    """x (n x m); code (n x nc) and d (nc x m) the starts, replaced; pe
+    (max_iter float64) the costs. Returns ii; ne takes the errors written."""
     if nc < 1 or n * m > 2147483647 or n * nc > 2147483647 or nc * m > 2147483647:
         raise Error("x_decomp: dict learning shape out of range")
-    var a = DlArgs(p, f)
-    var px = _f(x)
-    var pc = _f(code)
-    var pd = _f(d)
-    var pe = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=errs))
-    var ii = 0
-    var ne = 0
-    with GILReleased(Python()):
-        var k = Kit[E]()
-        var C = mat_from(pc, n, nc)
-        var D = mat_from(pd, nc, m)
-        var el = List[Float64]()
-        ii = dict_learning_loop(k, mat_from(px, n, m), C, D, a, el)
-        for i in range(n * nc):
-            pc.unsafe_store(i, C.d[i])
-        for i in range(nc * m):
-            pd.unsafe_store(i, D.d[i])
-        ne = len(el)
-        for i in range(ne):
-            pe.unsafe_store(i, el[i])
-    return Python.tuple(ii, ne)
+    var k = Kit[E]()
+    var C = mat_from(pc, n, nc)
+    var D = mat_from(pd, nc, m)
+    var el = List[Float64]()
+    var ii = dict_learning_loop(k, mat_from(px, n, m), C, D, a, el)
+    for i in range(n * nc):
+        pc.unsafe_store(i, C.d[i])
+    for i in range(nc * m):
+        pd.unsafe_store(i, D.d[i])
+    ne = len(el)
+    for i in range(ne):
+        pe.unsafe_store(i, el[i])
+    return ii
 
 
-def minibatch_py[E: Exec](x: PythonObject, d: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
-    """x (n x m) the (shuffled) rows; d (nc x m) the start, replaced. p's
-    extra entries: [.., bs, n_steps]. Returns the steps taken."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var nc = _n(p, 2)
-    var bs = _n(p, 11)
-    var n_steps = _n(p, 12)
+def minibatch_run[E: Exec](
+    px: F32Ptr, pd: F32Ptr, n: Int, m: Int, nc: Int, bs: Int, n_steps: Int, a: DlArgs
+) raises -> Int:
+    """x (n x m) the (shuffled) rows; d (nc x m) the start, replaced.
+    Returns the steps taken."""
     if nc < 1 or bs < 1 or n * m > 2147483647 or nc * m > 2147483647:
         raise Error("x_decomp: minibatch dict shape out of range")
-    var a = DlArgs(p, f)
-    var px = _f(x)
-    var pd = _f(d)
-    var steps = 0
-    with GILReleased(Python()):
-        var k = Kit[E]()
-        var D = mat_from(pd, nc, m)
-        steps = minibatch_loop(k, mat_from(px, n, m), D, a, bs, n_steps)
-        for i in range(nc * m):
-            pd.unsafe_store(i, D.d[i])
-    return PythonObject(steps)
+    var k = Kit[E]()
+    var D = mat_from(pd, nc, m)
+    var steps = minibatch_loop(k, mat_from(px, n, m), D, a, bs, n_steps)
+    for i in range(nc * m):
+        pd.unsafe_store(i, D.d[i])
+    return steps
