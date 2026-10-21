@@ -4,10 +4,11 @@
 Mojo 1.0's PythonObject attribute assignment, item assignment and positional
 calls each keep one extra reference on the value or argument
 (docs/MODULAR_ASKS.md). The shared shell helpers use bindings/py_balanced.mojo
-instead. Each test warms one public operation, then runs it CALLS more times:
-the caller's inputs keep their reference counts and the traced Python
-allocations after garbage collection stay flat (a retained returned array,
-key string or input reference per call would add far more than the bound).
+instead. Each test warms one public operation, then runs it in windows of
+CALLS calls: the caller's inputs keep their reference counts and the traced
+Python allocations after garbage collection stay flat in the quietest window
+(a retained returned array, key string or input reference per call would add
+far more than the bound).
 
 `python -m mojolearn.tests.test_native_steady_state` prints the measured bytes
 per call for each operation.
@@ -19,9 +20,13 @@ import tracemalloc
 import numpy as np
 import pytest
 
-CALLS = 50
-# Bytes per call that may remain after CALLS calls: free-list and dictionary
-# resizing noise, far below one retained 64-row output or key object per call.
+WARM = 500
+WINDOWS = 3
+CALLS = 200
+# Bytes per call that may remain in the quietest window: allocator arenas and
+# free lists settle unevenly, so a retained object shows up in every window
+# while settling noise does not. One retained 64-row output array, key string
+# or call argument per call is far above the bound.
 BOUND = 64
 
 
@@ -29,24 +34,29 @@ def _counts(values):
     return [sys.getrefcount(v) for v in values]
 
 
-def growth(operation, inputs=(), calls=CALLS):
-    """(traced bytes kept per call, input reference count changes)."""
-    for _ in range(3):  # warm caches, lazy imports and pools
+def growth(operation, inputs=(), calls=CALLS, windows=WINDOWS):
+    """(traced bytes kept per call in the quietest window, input reference
+    count changes across all windows)."""
+    for _ in range(WARM):  # warm caches, lazy imports and pools
         operation()
     gc.collect()
     counts = _counts(inputs)
     tracemalloc.start()
+    kept = []
     try:
         gc.collect()
         before = tracemalloc.get_traced_memory()[0]
-        for _ in range(calls):  # repeated public operation under test
-            operation()
-        gc.collect()
-        after = tracemalloc.get_traced_memory()[0]
+        for _ in range(windows):  # measurement windows
+            for _ in range(calls):  # repeated public operation under test
+                operation()
+            gc.collect()
+            after = tracemalloc.get_traced_memory()[0]
+            kept.append((after - before) / calls)
+            before = after
     finally:
         tracemalloc.stop()
     changed = [a - b for a, b in zip(_counts(inputs), counts)]
-    return (after - before) / calls, changed
+    return min(kept), changed
 
 
 def small_mlp():
