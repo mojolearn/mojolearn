@@ -18,6 +18,7 @@ from bindings.cross_vendor_admission import (
     cv_types_initialize, cv_int, cv_float, cv_bool, cv_text, cv_sequence, cv_buffer, cv_path, cv_json, cv_state,
 )
 from bindings.byte_checkpoint_native import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load
+from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from bindings.native_json import native_json_parse
 
 
@@ -135,14 +136,14 @@ def cross_vendor_state_hash(state: PythonObject) raises -> PythonObject:
     return hasher.hexdigest()
 
 
-def cross_vendor_call(operation: String, args: PythonObject) raises -> PythonObject:
+def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     if operation == "byte_checkpoint_initialize":
         byte_checkpoint_initialize(args[0])
     elif operation == "byte_checkpoint_save":
-        return byte_checkpoint_save(args[0], args[1])
+        return byte_checkpoint_save(args[0], args[1], io_error)
     elif operation == "byte_checkpoint_load":
-        return byte_checkpoint_load(args[0])
+        return byte_checkpoint_load(args[0], io_error)
     elif operation == "main":
         return cross_vendor_main(args[0])
     elif operation == "initialize":
@@ -161,7 +162,7 @@ def cross_vendor_call(operation: String, args: PythonObject) raises -> PythonObj
     elif operation == "worker_connect":
         return cross_vendor_worker_connect(args[0])
     elif operation == "worker_run":
-        return cross_vendor_worker_run(args[0])
+        return cross_vendor_worker_run(args[0], io_error)
     elif operation == "trainer_hash":
         return cross_vendor_state_hash(_cross_vendor_trainer(args[0], "export_raw", c[].bi.list()))
     elif operation == "feed_init":
@@ -213,11 +214,14 @@ def cross_vendor_call(operation: String, args: PythonObject) raises -> PythonObj
 def cross_vendor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var args = PythonObject(from_borrowed=args_ptr)
     var operation = String()
+    var io_error = ByteCheckpointIOError()
     try:
         operation = String(args[0])
-        var result = cross_vendor_call(operation, args[1])
+        var result = cross_vendor_call(operation, args[1], io_error)
         return result.steal_data()
     except error:
+        if io_error.pending:
+            return io_error.restore()
         if String(error).startswith("CrossVendorMismatch:"):
             try:
                 ref cpy = Python().cpython()
@@ -698,7 +702,7 @@ def cross_vendor_float_word(value: PythonObject) raises -> PythonObject:
     return CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.format(Int(word), "08x")
 
 
-def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonObject, snapshot: PythonObject, started: Float64) raises -> PythonObject:
+def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonObject, snapshot: PythonObject, started: Float64, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     var event = c[].bi.dict(row)
     var hash_start = transport_clock()
@@ -738,7 +742,7 @@ def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonO
         state.update(snapshot)
         var filename = PythonObject("ckpt_") + PythonObject(String(step)).zfill(8) + PythonObject(".blm")
         var path = owner.checkpoint_dir.rstrip("/") + PythonObject("/") + filename
-        var digest = byte_checkpoint_save(path, state)
+        var digest = byte_checkpoint_save(path, state, io_error)
         event["checkpoint_path"] = path
         event["checkpoint_sha256"] = digest
         event["checkpoint_seconds"] = PythonObject(transport_clock() - checkpoint_start)
@@ -884,7 +888,7 @@ def _cross_vendor_batch(owner: PythonObject, step: Int, shard: PythonObject) rai
     raise Error("cross_vendor: batches must be an exact BatchFeed; Python batch callbacks are not accepted")
 
 
-def cross_vendor_worker_run(owner: PythonObject) raises -> PythonObject:
+def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
     cross_vendor_worker_admit(owner)
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     var bi = c[].bi
@@ -1010,7 +1014,7 @@ def cross_vendor_worker_run(owner: PythonObject) raises -> PythonObject:
                 row["total_sha256"] = expected_hash
                 row["losses"] = head.get("losses")
                 row["total_bytes"] = applied
-                _ = cross_vendor_commit(owner, tr, row, snapshot, step_started)
+                _ = cross_vendor_commit(owner, tr, row, snapshot, step_started, io_error)
                 var reply = bi.dict()
                 reply["completed"] = done
                 reply["state"] = digest

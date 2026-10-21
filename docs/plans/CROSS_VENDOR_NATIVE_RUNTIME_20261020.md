@@ -61,6 +61,18 @@ sessions; the old Python locking trainer adapter is removed.
   an upstream lifetime blocker. This source does not compensate reference counts
   or patch the toolchain.
 
+The checkpoint I/O follow-up preserves original native file exceptions through
+the supported pinned CPython `PyObject_CallObject`, `PyErr_FetchTriple` and
+`PyErr_Restore` interfaces. A per-call native owner retains the first exception
+while cleanup runs, then restores its class, errno and filename fields at the
+outer ABI. It does not classify messages or use a global error slot. Five new
+controls cover missing files, directories, missing/non-directory parents,
+failed atomic replacement and subsequent successful recovery. This follow-up
+awaits the next tokenizer freeze; no lane compilation was run.
+The interfaces are present in the official
+[Mojo v1.0.0 CPython bindings](https://raw.githubusercontent.com/modular/modular/mojo/v1.0.0/mojo/stdlib/std/python/_cpython.mojo)
+and follow the [CPython exception ownership contract](https://docs.python.org/3/c-api/exceptions.html#c.PyErr_Restore).
+
 Full evidence is retained in
 `~/mojolearn-evidence/finish-graph-20261020/cross-vendor-*` and
 `checkpoint-format-oracle.{py,json,log}`. Original failures and subsequent frozen
