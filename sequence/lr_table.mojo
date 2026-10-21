@@ -339,8 +339,8 @@ def lr_table_on() -> Bool:
 
 
 def _decide_run(vs: List[Float64], es: List[Float64], n: Int, out: F32P, mut ok: List[UInt8]) -> Int:
-    var vp = vs.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-    var ep = es.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var vp = vs.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var ep = es.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var kp = ok.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     return decide_many(vp, ep, n, out, kp)
 

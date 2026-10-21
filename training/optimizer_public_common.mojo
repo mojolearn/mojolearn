@@ -193,7 +193,7 @@ struct Flat(Movable):
 
     def ptr(self) -> F32P:
         if self.packed:
-            return self.own.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            return self.own.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
         return F32P(unsafe_from_address=self.addr)
 
 
