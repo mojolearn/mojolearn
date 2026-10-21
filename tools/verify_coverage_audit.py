@@ -817,7 +817,7 @@ _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "(host_surface ADAPTED_MODULES), whose TrainerOwnerEntries call it for every "
                  "SmallByteLanguageModelTrainer step; on a GPU install byte_lm_trainer_step runs the "
                  "same session ops inside Mojo")
-_DEAD_KIT = "n/a: no live caller (the _expansion_decomp helper that calls it is never called)"
+_DEAD_KIT = "no live caller (the _expansion_decomp helper that calls it is never called)"
 # lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
 # owed, each checked in the source after they landed.
 _MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "
@@ -825,9 +825,9 @@ _MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_sessi
                   "mamba_native_call 'session_open', 'session_step', 'session_sync', 'session_load')")
 _SAMBA_OWNER = ("the native Samba owner (bindings/samba_*_native.mojo) is handed the entry at import "
                 "(_native_samba_bridge.connect) and calls it by name")
-_FAST_LINEAR = "n/a: fast tier only (Apple): registered for OLS_FAST_NORMAL_EQ / RIDGE_FAST_RESIDENT, which " \
+_FAST_LINEAR = "fast tier only (Apple): registered for OLS_FAST_NORMAL_EQ / RIDGE_FAST_RESIDENT, which " \
                "need numeric_mode fast on an Apple GPU; the verifier refuses a fast process"
-_HOST_SLOT = ("n/a: no live caller on a CPU install: the optimizer door moves its slots through its own "
+_HOST_SLOT = ("no live caller on a CPU install: the optimizer door moves its slots through its own "
               "kernels (keep_slot records the door's module as the owner), and SambaStack opens no slot on "
               "the host binding, which exports no optimizer_resident_step (_samba_open_optimizer)")
 
