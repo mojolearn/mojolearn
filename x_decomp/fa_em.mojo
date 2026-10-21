@@ -13,10 +13,7 @@ driver's on every column; x_decomp/fa_em_dev.mojo runs the same statements
 on resident device matrices."""
 from std.math import inf, sqrt
 from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
-from x_decomp.cells import OP_CLASSICAL_FA_LOAD
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr, OP_CLASSICAL_FA_LOAD
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT,
@@ -156,47 +153,40 @@ def fa_em[E: Exec](A: Mat, mut psi: Mat, mut W: Mat, mut ll_out: List[Float64], 
     return it
 
 
-def _fa_args(p: PythonObject, f: PythonObject) raises -> FaArgs:
-    """p = [n, d, nc, max_iter, ar] (ar: A's rows); f = [tol, llconst]."""
-    return FaArgs(_n(p, 0), _n(p, 1), _n(p, 2), Int(py=p[3]), Float64(py=f[0]), Float64(py=f[1]))
-
-
-def fa_em_main_py[E: Exec](
-    a: PythonObject, psi: PythonObject, w: PythonObject, ll: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """The EM loop: a (ar x d), psi (d, in and out), w (nc x d, out), ll
-    (max_iter float64, out). Returns it (the first it log-likelihoods set)."""
-    var args = _fa_args(p, f)
-    var ar = _n(p, 4)
+def fa_em_main_check(args: FaArgs, ar: Int) raises:
+    """The EM loop's shape check (runs before any buffer address is read)."""
     if args.nc < 1 or args.nc > args.d or ar * args.d > 2147483647:
         raise Error("x_decomp: factor analysis shape out of range")
-    var pa = _f(a)
-    var pp = _f(psi)
-    var pw = _f(w)
-    var pl = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=ll))
-    var it = 0
-    with GILReleased(Python()):
-        var A = mat_from(pa, ar, args.d)
-        var P = mat_from(pp, 1, args.d)
-        var W = Mat(args.nc, args.d)
-        var lls = List[Float64]()
-        it = fa_em[E](A, P, W, lls, args)
-        for i in range(args.d):
-            pp.unsafe_store(i, P.d[i])
-        for i in range(W.n()):
-            pw.unsafe_store(i, W.d[i])
-        for i in range(len(lls)):
-            pl.unsafe_store(i, lls[i])
-    return PythonObject(it)
 
 
-def dsum_f32_py(a: PythonObject, n: PythonObject) raises -> PythonObject:
-    """`_dsum` of the n float32 words at a (sequential binary64 adds)."""
-    var m = Int(py=n)
+def fa_em_main_run[E: Exec](
+    pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int, args: FaArgs
+) raises -> Int:
+    """The EM loop: A (ar x d) at pa, psi (d, in and out) at pp, W (nc x d,
+    out) at pw, the log-likelihoods (max_iter float64, out) at pl. Returns
+    it (the first it log-likelihoods set)."""
+    var A = mat_from(pa, ar, args.d)
+    var P = mat_from(pp, 1, args.d)
+    var W = Mat(args.nc, args.d)
+    var lls = List[Float64]()
+    var it = fa_em[E](A, P, W, lls, args)
+    for i in range(args.d):
+        pp.unsafe_store(i, P.d[i])
+    for i in range(W.n()):
+        pw.unsafe_store(i, W.d[i])
+    for i in range(len(lls)):
+        pl.unsafe_store(i, lls[i])
+    return it
+
+
+def dsum_f32_run(addr: Int, m: Int) raises -> Float64:
+    """`_dsum` of the m float32 words at addr (sequential binary64 adds)."""
     if m <= 0:
-        return PythonObject(0.0)
-    var pa = _f(a)
+        return 0.0
+    if addr == 0:
+        raise Error("x_decomp: null float32 buffer address")
+    var pa = F32Ptr(unsafe_from_address=addr)
     var t = 0.0
     for i in range(m):  # small-loop(m: features): the d float32 words of one log-likelihood term
         t += Float64(pa.unsafe_load(i))
-    return PythonObject(t)
+    return t

@@ -9,11 +9,8 @@ log-likelihood's float32 words come home for `_dsum`, as Python read them.
 GPU binding only."""
 from std.math import inf, sqrt
 from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
-from x_decomp.cells import OP_CLASSICAL_FA_LOAD
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
-from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, _fa_args, dsum, fa_mask, rev_cols, svd_desc
+from x_decomp.cells import F32Ptr, OP_CLASSICAL_FA_LOAD
+from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask, rev_cols, svd_desc
 from x_decomp.kit import (
     Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from, mat_t,
 )
@@ -83,33 +80,23 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
     return it
 
 
-def fa_em_main_dev_py(
-    a: PythonObject, psi: PythonObject, w: PythonObject, ll: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`fa_em_main_py` on the resident kit."""
-    var args = _fa_args(p, f)
-    var ar = _n(p, 4)
-    if args.nc < 1 or args.nc > args.d or ar * args.d > 2147483647:
-        raise Error("x_decomp: factor analysis shape out of range")
-    var pa = _f(a)
-    var pp = _f(psi)
-    var pw = _f(w)
-    var pl = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=ll))
-    var it = 0
-    with GILReleased(Python()):
-        var k = DKit()
-        var A = k.upload(mat_from(pa, ar, args.d))
-        var P = k.upload(mat_from(pp, 1, args.d))
-        var W = k.zeros(args.nc, args.d)
-        var lls = List[Float64]()
-        it = fa_em_dev(k, A, P, W, lls, args)
-        var hp = k.get(P)
-        var hw = k.get(W)
-        k.sync()
-        for i in range(args.d):
-            pp.unsafe_store(i, hp.d[i])
-        for i in range(hw.n()):
-            pw.unsafe_store(i, hw.d[i])
-        for i in range(len(lls)):
-            pl.unsafe_store(i, lls[i])
-    return PythonObject(it)
+def fa_em_main_dev_run(
+    pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int, args: FaArgs
+) raises -> Int:
+    """`fa_em_main_run` on the resident kit."""
+    var k = DKit()
+    var A = k.upload(mat_from(pa, ar, args.d))
+    var P = k.upload(mat_from(pp, 1, args.d))
+    var W = k.zeros(args.nc, args.d)
+    var lls = List[Float64]()
+    var it = fa_em_dev(k, A, P, W, lls, args)
+    var hp = k.get(P)
+    var hw = k.get(W)
+    k.sync()
+    for i in range(args.d):
+        pp.unsafe_store(i, hp.d[i])
+    for i in range(hw.n()):
+        pw.unsafe_store(i, hw.d[i])
+    for i in range(len(lls)):
+        pl.unsafe_store(i, lls[i])
+    return it
