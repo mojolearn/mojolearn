@@ -86,3 +86,20 @@ tokenizer/impl/tokenizer_host_shell_impl.mojo:bpe_check_ids	a range check only
 tokenizer/impl/tokenizer_host_shell_impl.mojo:bpe_decode_batch_fit	a capacity check only
 tokenizer/impl/tokenizer_host_shell_impl.mojo:tokens_gather_rows_width	a dims check returning a row width (a shape)
 tokenizer/impl/tokenizer_host_shell_impl.mojo:tokenizer_store_i64	stores sizes and offsets only (a fault changes sizes)
+# lane verify-coverage-owed (2026-10-21)
+mamba/host/mamba_host_shell_impl.mojo:_m3_owned_install_run	opt-in experiment only: the host install refuses unless built with -D MOJOLEARN_NN40_OWNED_WEIGHTS (NN40_OWNED_WEIGHTS, default off), so no default build runs it
+training/optimizer_public.mojo:OPT_POOL	the slot pool's storage (a process global), no value
+training/optimizer_public.mojo:OptPool	the slot pool's storage, no value
+training/optimizer_public.mojo:OptPool.__init__	the slot pool's empty construction, no value
+training/optimizer_public.mojo:opt_pool_handle	a handle and size check returning the slot index (a fault is a refusal, not a value)
+training/optimizer_public.mojo:resident_close	frees a slot's buffers and returns the handle; no value leaves it
+sequence/opt_public.mojo:IP64	a pointer type alias, no value
+sequence/opt_public.mojo:words_ptr	a null check returning the state-word pointer
+sequence/opt_public.mojo:word	reads one state word (an accessor every entry shares; its fault is every lane's, not this row's)
+sequence/opt_public.mojo:set_word	writes one state word (an accessor every entry shares)
+sequence/opt_public.mojo:W_HANDLE	a state-word index (layout constant), no value
+sequence/opt_public.mojo:W_OWNED	a state-word index (layout constant), no value
+sequence/opt_public.mojo:W_PRISTINE	a state-word index (layout constant), no value
+sequence/opt_public.mojo:seq_optimizer_state_on	the host entry's wrapper of state_read_host
+sequence/opt_public.mojo:state_read_host	on a host binding nothing is resident: it records that the host copies are the newest, and there is no other copy a fault could make a step read
+sequence/opt_public.mojo:seq_optimizer_close_on	nothing is resident on a host binding: a null check, no value

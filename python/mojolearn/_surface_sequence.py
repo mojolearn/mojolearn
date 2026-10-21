@@ -36,7 +36,10 @@ FAMILIES = (
                         # Sequential export/load/predict, import_model
                         "sequence-moe-backward", "sequence-export-roundtrip",
                         "sequence-onnx-import", "sequence-program-save-load",
-                        "sequence-device-tensor"),
+                        "sequence-device-tensor",
+                        # lane verify-coverage-owed (2026-10-21): state_dict and
+                        # load_state_dict of the sequence optimizers
+                        "sequence-optimizer-state"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -137,7 +140,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-export-roundtrip": "Sequential export, load and predict",
                        "sequence-onnx-import": "import_model on an ONNX file",
                        "sequence-program-save-load": "ops.Program save and Session.load_program",
-                       "sequence-device-tensor": "resident sequence tensors through an optimizer"}
+                       "sequence-device-tensor": "resident sequence tensors through an optimizer",
+                       "sequence-optimizer-state": "NAdam and RMSprop state_dict and load_state_dict"}
 PUBLIC_PENDING_LANES = {
     "sequence-tape-sequential": "no reference",
     "sequence-tape-program": "no reference",
@@ -146,4 +150,5 @@ PUBLIC_PENDING_LANES = {
     "sequence-onnx-import": "no reference",
     "sequence-program-save-load": "no reference",
     "sequence-device-tensor": "no reference",
+    "sequence-optimizer-state": "no reference",
 }

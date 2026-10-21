@@ -129,26 +129,14 @@ TABLE = os.path.join(ROOT, "python", "mojolearn", "verify_reference", "table.jso
 #: run after the merge. An empty dict here is a claim, checked on every run:
 #: every public algorithm has a lane.
 #:
-#: ONE ENTRY AGAIN SINCE 2026-09-23 (lane/exposure-leftovers), and on purpose:
-#: `training.chunked_lm_head_loss` is the Python door to the chunked LM head
-#: v2 that both training bindings registered with no caller. Its CPU arm is
-#: the host binding over the normative oracle; its GPU arm is the device
-#: kernels. A lane is what it owes, and a lane with no committed GPU hash
-#: would read OWED on every part, so this names the debt rather than adding a
-#: lane the shipped table cannot yet check.
+#: `training.chunked_lm_head_loss` (declared here 2026-09-23, lane/exposure-
+#: leftovers) and `training.mlp_inference_sessions` (2026-10-08) left this
+#: table on 2026-10-21 (lane verify-coverage-owed): the coverage lanes
+#: `training-chunked-lm-head` and `training-mlp-sessions`
+#: (tools/identity_lanes/coverage.py) reach them, pending a release record.
 DECLARED_LANELESS = {
-    "training.chunked_lm_head_loss": (
-        "owed: an identity lane over the loss and both gradients on all nine "
-        "fixtures, a CPU column with the training family's sabotage define "
-        "seen to move it, and one GPU column (any vendor) agreeing with it"
-    ),
-    # Training binding entries the manifest declares since 2026-10-08 (lane
-    # rehearsal-suite-green synced it to the binding source); none has a lane.
-    "training.mlp_inference_sessions": (
-        "owed: an identity lane over the packed multi-session MLP logits on all "
-        "nine fixtures, a CPU column with the training family's sabotage define "
-        "seen to move it, and one GPU column (any vendor) agreeing with it"
-    ),
+    # A training binding entry the manifest declares since 2026-10-08 (lane
+    # rehearsal-suite-green synced it to the binding source); it has no lane.
     "training.residual_dropout": (
         "owed: an identity lane over the residual dropout forward and its mask on "
         "all nine fixtures, a CPU column with the training family's sabotage "

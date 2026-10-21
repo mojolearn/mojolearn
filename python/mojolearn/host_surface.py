@@ -588,6 +588,8 @@ TRAINING_LANE_NAMES = {
     # against a plain in-process `CausalLM`, `par-cross-val` against the
     # serial `cross_val_score`. That is AGREEMENT, not rightness.
     "mamba1-decode-session": "the resident Mamba-1 decode session",
+    "mamba2-decode-session": "the resident Mamba-2 decode session",
+    "mamba3-decode-session": "the resident Mamba-3 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
     "par-causal-lm": "the layer-owned causal language model",
@@ -906,6 +908,9 @@ TRAINING_LANE_NAMES = {
     # the caller's eps). On the M4, one core: all 36 train, 9 infer and 18
     # batch cells IDENTICAL x4 before the gate ran.
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
+    "training-chunked-lm-head": "the chunked language-model head loss and its gradients",
+    "training-mlp-sessions": "the multi-session MLP inference",
+    "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
     # (DEVIATION 6200, training/maximize.mojo) through the same host binding;
@@ -2715,7 +2720,10 @@ FAMILIES = (
                         "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
                         "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w",
                         # lane/laneless-public-classes (2026-09-19)
-                        "grad-accumulation"),
+                        "grad-accumulation",
+                        # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
+                        # mlp_inference_sessions, the Samba optimizer's resident state
+                        "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -2830,7 +2838,11 @@ FAMILIES = (
                         # is this binding's own `mamba1_decode_step` -- the
                         # same entry the `mamba1` lane's step part hashes --
                         # on the session's own copies of the weights and state
-                        "mamba1-decode-session"),
+                        "mamba1-decode-session",
+                        # lane verify-coverage-owed (2026-10-21): the Mamba-2 and
+                        # Mamba-3 sessions (bindings/mamba_public_native.mojo); on the
+                        # host their steps are this binding's `<kind>_decode_step`
+                        "mamba2-decode-session", "mamba3-decode-session"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Mamba1Block", "Mamba2Block", "Mamba3Block"),
@@ -3742,6 +3754,13 @@ PUBLIC_PENDING_LANES = {
     "safetensors-widen-f16": "no reference",
     "hf-causal-lm-stream": "no reference",
     "ivf-short-fill": "no reference",
+    # lane verify-coverage-owed (2026-10-21): the rows the audit left owed to
+    # the migration lanes; no release record yet.
+    "mamba2-decode-session": "no reference",
+    "mamba3-decode-session": "no reference",
+    "training-chunked-lm-head": "no reference",
+    "training-mlp-sessions": "no reference",
+    "samba-optimizer-state": "no reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped

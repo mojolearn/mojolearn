@@ -12,7 +12,11 @@ ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program'))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
                               'byte-lm-host-infer-threaded', 'language-model-config',
-                              'hf-causal-lm-stream'))
+                              'hf-causal-lm-stream',
+                              # lane verify-coverage-owed (2026-10-21): seeded weights,
+                              # decode or forward only, no training
+                              'mamba2-decode-session', 'mamba3-decode-session',
+                              'training-mlp-sessions'))
 
 
 def neural_training_lanes(harness, surface):

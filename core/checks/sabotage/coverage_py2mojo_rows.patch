@@ -1,0 +1,17 @@
+--- a/core/py2mojo_rows.mojo
++++ b/core/py2mojo_rows.mojo
+@@ -235,7 +235,13 @@ def rows_call(md: Int, n: Int, k: Int, src: Int, dst: Int, src2_in: Int, thr: Fl
+     if md == ROWS_HUBER_OUT:
+         src2 = src2_in
+         scal = bitcast[DType.uint64](thr)
+-    var call = RowsCall(md, n, k, src, dst, src2, scal)
++    # SABOTAGE (coverage-core-py2mojo_rows): the two probability modes swapped
++    # (SGDClassifier gets LogisticRegressionCV's sigmoid/softmax and back), the
++    # Huber threshold halved
++    var smd = ROWS_LRCV_PROBA if md == ROWS_SGD_PROBA else (ROWS_SGD_PROBA if md == ROWS_LRCV_PROBA else md)
++    if md == ROWS_HUBER_OUT:
++        scal = bitcast[DType.uint64](thr * 0.5)
++    var call = RowsCall(smd, n, k, src, dst, src2, scal)
+     if call.n < 0 or call.k < 1:
+         raise Error("py2mojo_rows: n >= 0 and k >= 1 required")
+     if call.n > 0 and (call.src == 0 or call.dst == 0 or (md == ROWS_HUBER_OUT and call.src2 == 0)):
