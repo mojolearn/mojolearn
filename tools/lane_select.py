@@ -1566,7 +1566,56 @@ def _mojo_defs_for(rel):
     return out, "\n".join(units["residue"])
 
 
+@_by_path
+def _mojo_import_targets(rel):
+    """(local name -> the (file, name) nodes it is bound to; files to close
+    over whole) over EVERY import statement of one Mojo source, the ones
+    inside function bodies included, resolved the way the build resolves them
+    (`_mojo_module_files` with the imported name, so `from xtrees import
+    ops_device_boost as boost_dev` means `xtrees/ops_device_boost.mojo`, not
+    only the package's `__init__.mojo`). A MODULE bound to a local (`import
+    a.b as c`, or `from pkg import module`) is a node named None: its file is
+    closed over whole, since `c.f` is not read here. A star import is closed
+    over whole."""
+    try:
+        text = _read(rel)
+    except OSError:
+        return {}, set()
+    text = re.sub(r"\(\s*([^()]*?)\s*\)", lambda m: m.group(1).replace("\n", " "), text, flags=re.S)
+    names, whole = {}, set()
+    for line in text.splitlines():
+        if not re.match(r"^\s*(?:from|import)\s", line):
+            continue
+        for local, module, orig, star in _mojo_import_bindings(line) or ():
+            files = _mojo_module_files(module, rel, [orig] if orig and not star else [])
+            if star:
+                whole |= files
+                continue
+            for f in files:
+                base = os.path.basename(f)
+                is_module = orig is None or base == orig + ".mojo" or (
+                    base == "__init__.mojo" and os.path.basename(os.path.dirname(f)) == orig)
+                names.setdefault(local, set()).add((f, None if is_module else orig))
+    return names, whole
+
+
 _SYMBOL_STEPS = {}
+
+
+def _mojo_named_imports(rel, idents):
+    """The (file, name) nodes the identifiers `idents`, written in `rel`, are
+    imported as (`_mojo_import_targets`, and `_mojo_import_symbols` for the
+    package files the old scan named), plus every star-imported file whole."""
+    out = []
+    for sym, files in _mojo_import_symbols(rel).items():
+        if sym in idents:
+            out.extend((f, sym) for f in files)
+    targets, whole = _mojo_import_targets(rel)
+    for local, nodes in targets.items():
+        if local in idents:
+            out.extend(nodes)
+    out.extend((f, None) for f in whole)
+    return out
 
 
 def _mojo_symbol_step(rel, name):
@@ -1583,7 +1632,8 @@ def _mojo_symbol_step(rel, name):
         _SYMBOL_STEPS[key] = None
         return None
     blocks, preamble = defs
-    bodies, local_seen, local = [preamble], set(), [name]
+    pre_idents = set(_MOJO_IDENT_RE.findall(preamble))
+    bodies, local_seen, local = [preamble], set(), [name] + [o for o in blocks if o in pre_idents]
     while local:
         fn_name = local.pop()
         if fn_name in local_seen:
@@ -1595,18 +1645,8 @@ def _mojo_symbol_step(rel, name):
         bodies.append(body)
         idents = set(_MOJO_IDENT_RE.findall(body))
         local.extend(other for other in blocks if other in idents and other not in local_seen)
-    out = []
-    pre_idents = set(_MOJO_IDENT_RE.findall(preamble))
-    out.extend((rel, other) for other in blocks if other in pre_idents and other not in local_seen)
     idents = set(_MOJO_IDENT_RE.findall("\n".join(bodies)))
-    for sym, files in _mojo_import_symbols(rel).items():
-        if sym in idents:
-            out.extend((f, sym) for f in files)
-    # A MODULE IMPORT (`import x_cnn.device as D`) binds a module, not a
-    # symbol, and `D.f` is not read here: the module's files are closed over
-    # whole (name None), as before this walk.
-    for module in re.findall(r"(?m)^\s*import\s+([A-Za-z0-9_.]+)", _read(rel)):
-        out.extend((f, None) for f in _mojo_module_files(module, rel))
+    out = _mojo_named_imports(rel, idents)
     _SYMBOL_STEPS[key] = out
     return out
 
@@ -1624,27 +1664,27 @@ def _mojo_symbol_reach(pending):
     PCA, DBSCAN, scaler, ridge and k-NN oracles at once. Every lane calling
     any export of the binding then took every oracle, and
     `preprocessing/host/scaler_oracle.mojo` selected 503 of 530 lanes, k-means
-    among them. So a symbol that names a top-level definition of its file
-    (`_mojo_units`: a function with its overloads, a struct or trait with all
-    its methods, a `comptime` value) is followed the way the binding's own
-    export is: its text and the file's residue, the same-file definitions it
-    names, and the symbols those import, recursively. The file itself is
-    always reached. A symbol the file does not define (a package re-export) or
-    a file `_mojo_units` cannot read with certainty is closed over whole,
-    which is the old answer and stays wide."""
-    reached, whole, seen = set(), set(), set()
-    stack = list(pending)
-    while stack:
-        node = stack.pop()
-        if node in seen:
-            continue
-        seen.add(node)
+    among them. So a symbol that names a top-level definition of the file the
+    binding imports it from (`_mojo_units`: a function with its overloads, a
+    struct or trait with all its methods, a `comptime` value) is read the way
+    the binding's own export is: its text and the file's residue, and the
+    same-file definitions it names. That file is reached; every file those
+    definitions import a name from is closed over WHOLE, exactly as the
+    binding's direct imports were before. ONE HOP, ON PURPOSE: it undoes what
+    the thin shell moved and nothing more, so every file below the impl
+    module keeps the file-level closure the Mojo conformance inversion
+    (`test_the_mojo_conformance_inversion_holds_over_the_whole_tree`) is
+    stated over. A symbol the file does not define (a package re-export, a
+    module) or a file `_mojo_units` cannot read with certainty is closed over
+    whole, the old answer."""
+    reached, whole = set(), set()
+    for node in set(pending):
         step = None if node[1] is None else _mojo_symbol_step(*node)
         if step is None:
             whole.add(node[0])
             continue
         reached.add(node[0])
-        stack.extend(n for n in step if n not in seen)
+        whole |= {f for f, _ in step if f != node[0]}
     return reached, whole
 
 
@@ -1710,6 +1750,31 @@ def _binding_exports(rel):
         return {}
     return {m.group(2): m.group(1) for m in re.finditer(
         r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
+
+
+@_by_path
+def _delegated_exports(rel):
+    """export name -> (file, impl) for the exports a binding registers through
+    a function it IMPORTS: `bindings/_mojolearn_x_trees.mojo` calls
+    `xtrees.api_pyapi.register(module)`, which holds 87
+    `m.def_function[impl]("name")` lines. `_binding_exports` reads the
+    binding's own file only, so those exports were invisible to the per-export
+    scan and reached a lane only through the whole closure of whatever else
+    the lane called. Read from the registrar's own text; an export the
+    binding also registers itself stays the binding's."""
+    out = {}
+    targets, _ = _mojo_import_targets(rel)
+    for nodes in targets.values():
+        for f, name in nodes:
+            if name is None or not f.endswith(".mojo"):
+                continue
+            defs = _mojo_defs_for(f)
+            if defs is None or "def_function[" not in defs[0].get(name, ""):
+                continue
+            for m in re.finditer(r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"",
+                                 defs[0][name]):
+                out.setdefault(m.group(2), (f, m.group(1)))
+    return out
 
 
 def _binding_export_params(rel):
@@ -2738,6 +2803,7 @@ def lane_sources():
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
+    read_by_name = {}        # seed_cache key -> the files of it read definition by definition
 
     def binding_seeds(src, used, wide=True):
         """The Mojo files ONE binding contributes to a lane whose door calls
@@ -2770,9 +2836,11 @@ def lane_sources():
         one lane, so such a binding contributes its SOURCE only, and a change
         to the binding file still selects every lane."""
         if wide is False:
+            narrowed_files.add(src)
             return {src}
         exports = _binding_exports(src)
-        hit = tuple(sorted(e for e in used if e in exports))
+        delegated = _delegated_exports(src)
+        hit = tuple(sorted(e for e in used if e in exports or e in delegated))
         key = (src, hit, wide)
         if key not in seed_cache:
             if not hit:
@@ -2787,12 +2855,18 @@ def lane_sources():
                 # every estimator, and taking `_mojolearn_core_host` entire for
                 # each of them handed the k-means oracles to the scaler lanes.
                 seed_cache[key] = {src} if wide == "narrow" else _mojo_closure([src])
+                read_by_name[key] = {src} if wide == "narrow" else set()
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 params = _binding_export_params(src)
                 seeds, pending = set(), []
                 for export in hit:
+                    if export not in exports:
+                        # REGISTERED BY A FUNCTION THE BINDING IMPORTS
+                        # (`_delegated_exports`): the impl is that file's.
+                        pending.append(delegated[export])
+                        continue
                     # A PARAMETRIZED IMPL'S PARAMETERS ARE PART OF THE EXPORT:
                     # the executor struct in `gemm_py[DevExec]` is where its
                     # arithmetic lives (`_binding_export_params`).
@@ -2820,7 +2894,7 @@ def lane_sources():
                         if name in seen:
                             continue
                         seen.add(name)
-                        pending.extend((f, name) for f in syms.get(name, ()))
+                        pending.extend(_mojo_named_imports(src, {name}))
                         body = blocks.get(name)
                         if body is None:
                             continue
@@ -2830,15 +2904,16 @@ def lane_sources():
                                     r"\b%s\b" % re.escape(other), body):
                                 stack.append(other)
                     body = "\n".join(bodies)
-                    for sym, files in syms.items():
-                        if re.search(r"\b%s\b" % re.escape(sym), body):
-                            pending.extend((f, sym) for f in files)
+                    pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
                 # An imported symbol is followed definition by definition
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
                 reached, whole = _mojo_symbol_reach(pending)
                 seed_cache[key] = _mojo_closure(seeds | whole) | reached | {src}
+                read_by_name[key] = (reached | {src}) - _mojo_closure(seeds | whole)
+        if wide is not False:
+            narrowed_files.update(read_by_name[key])
         return seed_cache[key]
 
     sources, why = {}, {}
@@ -2949,6 +3024,7 @@ def lane_sources():
         # can narrow it) from one it reaches through a whole-closure fallback
         # (the old whole-file rule stands for that lane).
         calls = seed_calls[lane] = []
+        narrowed_files = set()     # files a contribution read per definition, not closed over
 
         def recorded_seeds(src, wide=True):
             got = binding_seeds(src, used, wide)
@@ -3019,8 +3095,19 @@ def lane_sources():
         # the lane already reaches (to a fixed point): taking every conformer
         # the sources import handed 40 lanes x_cluster's host ops and with them
         # the ClusterOps trait without its device implementation.
-        if source_only_hosts:
-            imported = set().union(*[_mojo_imports(h) for h in source_only_hosts])
+        #
+        # THE SAME FOR EVERY FILE READ BY NAME (2026-10-21). A binding read
+        # per export, and an impl module read per definition one hop below it
+        # (`_mojo_symbol_reach`), are in the map without the closure of what
+        # they import: autograd/tape.mojo reached a byte LM host lane through
+        # one export and autograd/layers.mojo, which conforms to its
+        # BackwardRules, did not. Whether a definition the lane runs hands the
+        # trait that struct is not read here, so a conformer such a file
+        # imports comes in with its closure whenever the lane reaches the
+        # trait: the same fixed point, the safe direction.
+        by_name = source_only_hosts | narrowed_files
+        if by_name:
+            imported = set().union(*[_mojo_imports(h) for h in by_name])
             pending = [(f, b) for f, _, b in mojo_conformance_edges() if f in imported]
             grew = True
             while grew:

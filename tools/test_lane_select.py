@@ -911,17 +911,37 @@ def test_the_mojo_conformance_inversion_holds_over_the_whole_tree():
     subclassing: a conforming struct is reached only when something
     parametrises on the trait AND IS HANDED THAT STRUCT BY NAME, and naming a
     symbol from another file requires importing it, so the forward walk
-    already has it."""
+    already has it.
+
+    PER EXPORT, THE LANE MUST ALSO REACH AN IMPORTER (2026-10-21). The map
+    reads a binding per export and the impl module below a thin shell per
+    definition, so a lane can reach the declaration B through one export while
+    NO file in its map imports the implementation F: autograd/tape.mojo
+    reaches the byte LM host lanes through one `_mojolearn_byte_lm` export, and
+    nothing those lanes reach imports autograd/layers.mojo, so nothing they run
+    can hand BackwardRules a layers struct. The argument above is about the
+    lanes that reach a file importing F, and that is what is held: each of
+    them reaches F."""
     sources, rev = _lane_sets()
     edges = lane_select.mojo_conformance_edges()
     assert len(edges) >= 5, f"only {len(edges)} conformance edges found; the scan is broken"
+    bad = _conformance_misses(sources, rev, edges, lane_select._mojo_imports)
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def _conformance_misses(sources, rev, edges, imports):
+    """For each conformance edge (F conforms to a trait declared in B), the
+    lanes that reach B and a file importing F (`imports`: file -> the files it
+    imports) and not F itself."""
     bad = []
     for f, trait, b in edges:
-        missing = rev.get(b, set()) - rev.get(f, set())
+        missing = {lane for lane in rev.get(b, set()) - rev.get(f, set())
+                   if any(f in imports(x) for x in sources[lane] if x.endswith(".mojo"))}
         if missing:
             bad.append(f"{f} conforms to {trait} declared in {b}, but {len(missing)} lane(s) "
-                       f"reach the declaration and not the implementation, e.g. {sorted(missing)[:4]}")
-    assert not bad, "\n  ".join([""] + bad[:6])
+                       f"reach the declaration and an importer of the implementation and not the "
+                       f"implementation, e.g. {sorted(missing)[:4]}")
+    return bad
 
 
 def test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose():
@@ -947,12 +967,14 @@ def test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose():
                                              if rel != victim else real(rel))
     lane_select.reset_caches()
     try:
-        _, broken = _lane_sets()
+        broken_sources, broken = _lane_sets()
         assert len(broken.get(declarer, set())) == before_b, \
             "the sabotage moved the DECLARER too, so the two arms move together and prove nothing"
         assert not broken.get(victim, set()), "the sabotage did not detach the implementation"
+        # The importers are the tree's REAL imports: the sabotage hid the
+        # victim from the walk, not from the source.
         fired = [f for f, _t, b in lane_select.mojo_conformance_edges()
-                 if broken.get(b, set()) - broken.get(f, set())]
+                 if _conformance_misses(broken_sources, broken, [(f, _t, b)], real)]
         assert victim in fired, f"the inversion did not name {victim}; it caught {fired[:4]}"
     finally:
         lane_select._mojo_imports = real
