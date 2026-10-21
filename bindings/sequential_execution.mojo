@@ -129,7 +129,7 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     seed = py_call(b.int, seed)
     var ip = Python.list(n, context["loss_codes"][options["loss"]], target, options["opt"], options["flags"],
         options["sched"], options["step_size"], batch_size, epochs, 1 if Bool(py=shuffle) else 0,
-        py_call(seed.__and__, 4294967295), py_call(seed.__rshift__, 32), options["n_iter_no_change"],
+        seed.__and__(4294967295), seed.__rshift__(32), options["n_iter_no_change"],
         0 if resume or warm else 1, 1 if resume else 0)
     var fp = Python.list(options["lr"], options["f1"], options["f2"], options["eps"],
         options["weight_decay"], 0.0, options["tol"], options["gamma"], options["huber_delta"])

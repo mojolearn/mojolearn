@@ -815,8 +815,8 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     var pending = py_call(g[].arrays, "B", s.pending_bytes)
     var cut = causal_lm_utf8_cut(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=pending.buffer_info()[0])), size, s.done())
     _ = pending^
-    var prefix = py_call(s.pending_bytes.__getitem__, py_call(g[].bi.slice, PythonObject(0), PythonObject(cut)))
-    var remaining = py_call(s.pending_bytes.__getitem__, py_call(g[].bi.slice, PythonObject(cut), PythonObject(None)))
+    var prefix = s.pending_bytes[py_call(g[].bi.slice, PythonObject(0), PythonObject(cut))]
+    var remaining = s.pending_bytes[py_call(g[].bi.slice, PythonObject(cut), PythonObject(None))]
     s.pending_bytes = remaining
     return py_call(prefix.decode, "utf-8", "replace")
 
