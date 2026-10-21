@@ -3,8 +3,6 @@
 """HOST ONLY (the CPU binding): the graph cells of x_decomp/graph_cells.mojo
 run row by row on the host, under the address contract of the other
 x_decomp host entries (lane hr2-graph-embed, 2026-10-02)."""
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.host import HostExec
 from x_decomp.graph_cells import (
@@ -18,17 +16,6 @@ from x_decomp.graph_cells import (
     count_comp,
     join_pair,
 )
-
-
-def _f(o: PythonObject) raises -> F32Ptr:
-    return F32Ptr(unsafe_from_address=Int(py=o))
-
-
-def _ni(p: PythonObject, i: Int) raises -> Int:
-    var v = Int(py=p[i])
-    if v < 0 or v > 2147483647:
-        raise Error("x_decomp: graph dimension out of range")
-    return v
 
 
 def host_components(W: F32Ptr, n: Int, comp: F32Ptr) -> Int:
@@ -80,102 +67,55 @@ def host_components(W: F32Ptr, n: Int, comp: F32Ptr) -> Int:
     return c
 
 
-def graph_knn_py(d: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    # p = [n, m, nn, excl]
-    var n = _ni(p, 0)
-    var m = _ni(p, 1)
-    var nn = _ni(p, 2)
-    var excl = Int(py=p[3]) != 0
+def graph_knn_run(pd: F32Ptr, pi: F32Ptr, po: F32Ptr, n: Int, m: Int, nn: Int, ex: Int) raises:
+    """`graph_knn_py`'s typed body (p = [n, m, nn, excl])."""
+    var excl = ex != 0
     var take = nn + (1 if excl else 0)
     if take > m or m >= 1 << 24:
         raise Error("x_decomp: knn asks for more neighbors than columns")
-    var pd = _f(d)
-    var pi = _f(idx)
-    var po = _f(dst)
     var sv = List[Float32](length=max(n * take, 1), fill=Float32(0))
     var si = List[Float32](length=max(n * take, 1), fill=Float32(0))
     var psv = F32Ptr(unsafe_from_address=Int(sv.unsafe_ptr()))
     var psi = F32Ptr(unsafe_from_address=Int(si.unsafe_ptr()))
-    with GILReleased(Python()):
-        for i in range(n):
-            knn_select_row(pd, i, m, take, excl, nn, psv, psi, pi, po)
+    for i in range(n):
+        knn_select_row(pd, i, m, take, excl, nn, psv, psi, pi, po)
     _ = sv^
     _ = si^
-    return PythonObject(n)
 
 
-def graph_knn_dense_py(idx: PythonObject, w: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
-    # p = [n, nn]; out (n x n) is written whole
-    var n = _ni(p, 0)
-    var nn = _ni(p, 1)
-    var pi = _f(idx)
-    var pw = _f(w)
-    var po = _f(wout)
-    with GILReleased(Python()):
-        for t in range(n * n):
-            po.unsafe_store(t, Float32(0))
-        for i in range(n):
-            knn_dense_row(i, pi, pw, n, nn, po)
-    return PythonObject(n)
+def graph_knn_dense_run(pi: F32Ptr, pw: F32Ptr, po: F32Ptr, n: Int, nn: Int) raises:
+    """`graph_knn_dense_py`'s typed body; out (n x n) is written whole."""
+    for t in range(n * n):
+        po.unsafe_store(t, Float32(0))
+    for i in range(n):
+        knn_dense_row(i, pi, pw, n, nn, po)
 
 
-def graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
-    var n = _ni(p, 0)
-    var rr = Float32(Float64(py=r))
-    var pd = _f(d)
-    var po = _f(wout)
-    with GILReleased(Python()):
-        for t in range(n * n):
-            radius_cell(t, pd, n, rr, po)
-    return PythonObject(n)
+def graph_radius_run(pd: F32Ptr, po: F32Ptr, n: Int, r: Float64) raises:
+    """`graph_radius_py`'s typed body."""
+    var rr = Float32(r)
+    for t in range(n * n):
+        radius_cell(t, pd, n, rr, po)
 
 
-def graph_radius_geo_py(
-    dq: PythonObject, d: PythonObject, g: PythonObject, p: PythonObject, r: PythonObject
-) raises -> PythonObject:
-    var nq = _ni(p, 0)
-    var n = _ni(p, 1)
-    var rr = Float32(Float64(py=r))
-    var pq = _f(dq)
-    var pd = _f(d)
-    var pg = _f(g)
-    with GILReleased(Python()):
-        for t in range(nq * n):
-            radius_geo_cell(t, pq, pd, n, rr, pg)
-    return PythonObject(nq)
+def graph_radius_geo_run(pq: F32Ptr, pd: F32Ptr, pg: F32Ptr, nq: Int, n: Int, r: Float64) raises:
+    """`graph_radius_geo_py`'s typed body."""
+    var rr = Float32(r)
+    for t in range(nq * n):
+        radius_geo_cell(t, pq, pd, n, rr, pg)
 
 
-def graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _ni(p, 0)
-    var nn = _ni(p, 1)
-    var pi = _f(idx)
-    var pw = _f(wb)
-    var po = _f(wout)
-    with GILReleased(Python()):
-        for t in range(n * n):
-            po.unsafe_store(t, Float32(0))
-        for i in range(n):
-            lle_iw_row(i, pi, pw, n, nn, po)
-    return PythonObject(n)
+def graph_lle_iw_run(pi: F32Ptr, pw: F32Ptr, po: F32Ptr, n: Int, nn: Int) raises:
+    """`graph_lle_iw_py`'s typed body."""
+    for t in range(n * n):
+        po.unsafe_store(t, Float32(0))
+    for i in range(n):
+        lle_iw_row(i, pi, pw, n, nn, po)
 
 
-def graph_components_py(w: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _ni(p, 0)
-    var pw = _f(w)
-    var pc = _f(comp)
-    var c = 0
-    with GILReleased(Python()):
-        c = host_components(pw, n, pc)
-    return PythonObject(c)
-
-
-def graph_join_py(w: PythonObject, d: PythonObject, comp: PythonObject, p: PythonObject) raises -> PythonObject:
-    # p = [n, C]; w (n x n) gains the joining edges in place
-    var n = _ni(p, 0)
-    var C = _ni(p, 1)
-    var pw = _f(w)
-    var pd = _f(d)
-    var pc = _f(comp)
+def graph_join_run(pw: F32Ptr, pd: F32Ptr, pc: F32Ptr, n: Int, C: Int) raises:
+    """`graph_join_py`'s typed body (p = [n, C]); w (n x n) gains the joining
+    edges in place."""
     var rv = List[Float32](length=max(n * C, 1), fill=Float32(0))
     var rj = List[Float32](length=max(n * C, 1), fill=Float32(0))
     var cnt = List[Int32](length=C + 1, fill=Int32(0))
@@ -186,36 +126,30 @@ def graph_join_py(w: PythonObject, d: PythonObject, comp: PythonObject, p: Pytho
     var pcnt = I32Ptr(unsafe_from_address=Int(cnt.unsafe_ptr()))
     var pst = I32Ptr(unsafe_from_address=Int(start.unsafe_ptr()))
     var pm = I32Ptr(unsafe_from_address=Int(mem.unsafe_ptr()))
-    with GILReleased(Python()):
-        for i in range(n):
-            rowbest_row(i, pd, pc, n, C, prv, prj)
-        for b in range(C):
-            count_comp(b, pc, n, pcnt)
-        var acc = Int32(0)
-        for b in range(C + 1):
-            pst.unsafe_store(b, acc)
-            if b < C:
-                acc += pcnt.unsafe_load(b)
-        for b in range(C):
-            members_comp(b, pc, n, pst, pm)
-        for a in range(C):
-            for b in range(a + 1, C):
-                join_pair(a, b, n, C, pst, pm, prv, prj, pw)
+    for i in range(n):
+        rowbest_row(i, pd, pc, n, C, prv, prj)
+    for b in range(C):
+        count_comp(b, pc, n, pcnt)
+    var acc = Int32(0)
+    for b in range(C + 1):
+        pst.unsafe_store(b, acc)
+        if b < C:
+            acc += pcnt.unsafe_load(b)
+    for b in range(C):
+        members_comp(b, pc, n, pst, pm)
+    for a in range(C):
+        for b in range(a + 1, C):
+            join_pair(a, b, n, C, pst, pm, prv, prj, pw)
     _ = rv^
     _ = rj^
     _ = cnt^
     _ = start^
     _ = mem^
-    return PythonObject(C)
 
 
-def graph_dijkstra_py(w: PythonObject, dist: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _ni(p, 0)
-    var pw = _f(w)
-    var pd = _f(dist)
+def graph_dijkstra_run(pw: F32Ptr, pd: F32Ptr, n: Int) raises:
+    """`graph_dijkstra_py`'s typed body."""
     var reached = List[Float32](length=max(n, 1), fill=Float32(0))
     var pr = F32Ptr(unsafe_from_address=Int(reached.unsafe_ptr()))
-    with GILReleased(Python()):
-        HostExec.dijkstra_rows(pw, pd, pr, n)
+    HostExec.dijkstra_rows(pw, pd, pr, n)
     _ = reached^
-    return PythonObject(n)
