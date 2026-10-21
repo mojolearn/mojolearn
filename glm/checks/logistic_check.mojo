@@ -502,22 +502,9 @@ def _host_halving_sum(terms: List[Float32], n: Int) -> Float32:
 
 
 def _host_halving_xty(x: List[Float32], y: List[Float32], n: Int, d: Int, col: Int) -> Float32:
-    comptime if HOST_QN_TILED:
-        return host_qnt_xty(x, y, n, d)[col]
-    var red = List[Float32]()
-    for t in range(STATS_TPB):
-        var acc = Float32(0.0)
-        var r = t
-        while r < n:
-            acc = identical_mul_add(x[r * d + col], y[r], acc)
-            r += STATS_TPB
-        red.append(acc)
-    var step = STATS_TPB // 2
-    while step > 0:
-        for t in range(step):
-            red[t] = red[t] + red[t + step]
-        step //= 2
-    return ftz(red[0])
+    # the tile order with QN_TILED on and off (`linear_bwd`'s
+    # `qntm_tiled_into` with it off, lane debt-block-per-n 2026-10-21)
+    return host_qnt_xty(x, y, n, d)[col]
 
 
 def _host_lz(y: Float32, z: Float32) -> Float32:

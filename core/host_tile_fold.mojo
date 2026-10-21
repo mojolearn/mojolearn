@@ -15,8 +15,8 @@ This file imports no GPU module: the device kernels and the host oracles both
 read the switch and the tile size from here, so one define moves NVIDIA, AMD,
 Apple and the host column together.
 
-`-D MOJOLEARN_IDN_XTY_TILED_OFF` (or the master `-D MOJOLEARN_IDN_ALL_OFF`)
-restores the `STATS_TPB`-chain order on the device and on the host.
+The order is the only one of those launches, in every mode (lane
+debt-block-per-n, 2026-10-21, retired `-D MOJOLEARN_IDN_XTY_TILED_OFF`).
 Candidate arms for the tile size (default 256 rows):
 `-D MOJOLEARN_IDN_XTY_TILE_64`, `-D MOJOLEARN_IDN_XTY_TILE_1024`. Pass the
 same define to the host build.
@@ -37,13 +37,13 @@ from checks.numerics import (
 )
 
 
-comptime IDN_XTY_TILED = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_XTY_TILED_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+#: Always True since lane debt-block-per-n (2026-10-21): `xty_launch` and
+#: `column_mean_launch` run the tile order in every mode, so every host
+#: column that mirrors them takes it too. The retired
+#: `-D MOJOLEARN_IDN_XTY_TILED_OFF` is refused in
+#: core/six_lane_experiment_guards.mojo. The name stays for the host
+#: oracles' `comptime if`.
+comptime IDN_XTY_TILED = True
 
 comptime XTY_TILE_ROWS = (
     64 if is_defined["MOJOLEARN_IDN_XTY_TILE_64"]()

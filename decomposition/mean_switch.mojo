@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared device/host dispatch choice for decomposition variance means."""
-from std.sys.compile import is_defined
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-# The launch helper can select a tiled fold. Both columns must select it
-# together; otherwise TruncatedSVD explained variance differs in raw bits.
-comptime IDN_DECOMP_MEAN_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]()
-    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# The launch helper's tiled fold is the variance means' only order, on the
+# device and in the host column, in every mode (lane debt-block-per-n,
+# 2026-10-21). The direct one-block-per-column arm that
+# `-D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF` selected walked all n rows per
+# block; the define is retired and refused in
+# core/six_lane_experiment_guards.mojo. The name stays for the host oracle's
+# `comptime if`.
+comptime IDN_DECOMP_MEAN_LAUNCH = True

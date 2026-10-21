@@ -1628,7 +1628,7 @@ def clause_a_cases() raises -> List[Int]:
       5  wide_v1024       P = 8, four even levels -- a deeper second
                           inert half
       6  wide_v129        P = 2 with a ONE-ELEMENT ragged leaf
-      7  long_n300_v8     N = 300 -- L_REDUCE_SERIAL's witness
+      7  long_n300_v8     N = 300 -- the batch fold's P = 3 tree
       8  long_n512_sum    SUM with divisor exactly +1.0, the bitwise-inert
                           divide contract 5.5 spells anyway
       9  sum_num_items7   the OTHER branch of ce_divisor, so the "one
@@ -3376,14 +3376,9 @@ def arm_expectation(arm: String) raises -> ArmExpectation:
                 " the transformer lane's rather than arguing about it"
             ),
         )
-    if arm == "REDUCE_SERIAL":
-        return ArmExpectation(
-            arm, String("ce.total"), String("long_n300_v8"),
-            String("base_n4_v8"), String("base_n3_v3"), String(""), False,
-            String(
-                "contract 5.4, the BATCH fold. INERT at every N <= 128"
-            ),
-        )
+    # REDUCE_SERIAL (contract 5.4) retired 2026-10-21 (lane
+    # debt-block-per-n): a one-thread fold of the batch, the forbidden
+    # serial shape; MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL is refused.
     # ---- the five reached through gemm_identical.mojo's own switches ----
     # Contract 7.2: showing these fail THROUGH this lane's entry points is
     # the proof that the routing lands on the CONTRACT's arithmetic rather

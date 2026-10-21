@@ -20,8 +20,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from core.xtdz_coalesced import xty_launch
-from core.column_stats import STATS_TPB, column_mean_kernel
+from core.xtdz_coalesced import column_mean_launch, xty_launch
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
 from glm.impl.linalg.detail.svd import svd_eig_traced
@@ -122,10 +121,10 @@ def ridge_fit_multi_host(
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.synchronize()
-    ctx.enqueue_function[column_mean_kernel](
-        mu.unsafe_ptr(), y.unsafe_ptr(), Int32(n_rows), Int32(n_targets),
-        grid_dim=(n_targets, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    # Y's column means in the row-tile order (lane debt-block-per-n,
+    # 2026-10-21; `column_mean_kernel` ran one block per target walking all
+    # n rows). It synchronizes.
+    column_mean_launch(ctx, mu, y, n_rows, n_targets)
     # svd_eig once, ridgeSolve's S and V transforms once
     var s = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var v = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)

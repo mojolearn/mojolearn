@@ -30,6 +30,9 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [`MOJOLEARN_IDN_XTY_TILED_OFF`](#mojolearn_idn_xty_tiled_off) (+ `MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`, `MOJOLEARN_PCA_FAST_COLMEAN_OFF`, `MOJOLEARN_TSVD_FAST_COLVAR_OFF`) | Shared / decomposition | removed (serial shape: one block per column walking all n rows) | 2026-10-21 | [MOJOLEARN_IDN_XTY_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch) |
+| [`MOJOLEARN_QN_TILED_MULTI_OFF`](#mojolearn_qn_tiled_multi_off) (+ `MOJOLEARN_QN_TILED_MULTI_ALL`, now the rule) | Linear | removed (serial shape: one block per gradient cell walking all n rows) | 2026-10-21 | [MOJOLEARN_QN_TILED_MULTI_OFF.patch](../experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch) |
+| [`MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL`](#mojolearn_loss_sabotage_reduce_serial) | Neural (loss gate) | removed (serial shape: one thread folding the batch) | 2026-10-21 | [MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch](../experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch) |
 | [`MOJOLEARN_AUTOGRAD_MLP_OFF`](#mojolearn_autograd_mlp_off) | Neural | DELETED-superseded | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MLP_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MAMBA_OFF`](#mojolearn_autograd_mamba_off) | Neural | removed (superseded by the tape) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch) |
 | [`MOJOLEARN_AUTOGRAD_MAMBA3_OFF`](#mojolearn_autograd_mamba3_off) | Neural | removed (superseded by the tape stage rules) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA3_OFF.patch) |
@@ -361,6 +364,48 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_GBDT_MULTI_HESS_ONE_WAIT_OFF`](#gbdt-oracle-multi-dimensional-host-walk) | Trees | removed (host arm retired) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
 | GPU oracle multi-dimensional host walk (no define) | Trees | removed (host loops on the GPU path) | 2026-10-17 | [GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch](../experiments/removed/GBDT_ORACLE_MULTI_DIM_HOST_WALK.patch) |
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
+
+## Retired by lane debt-block-per-n (2026-10-21)
+
+These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
+rules of `tools/hooks/no_host_routes.py` refuse (one block per output walking all n rows). The row-tile-then-fold order
+that replaced them is the shape of `glm/impl/qn/glm_base.mojo::qn_tile_sum_classes`, with the host column in the same
+order. No A/B was run (lanes never measure); the speed check on NVIDIA and AMD is owed with the next freeze. Code
+recoverable at `28b8ed11b` (main before the lane).
+
+### MOJOLEARN_IDN_XTY_TILED_OFF
+
+- Tried: `core/xtdz_coalesced.mojo` `xty_launch` / `column_mean_launch` in the STATS_TPB-chain order (`xty_kernel`,
+  `column_mean_kernel`: one block per column; Apple's row-coalesced `mean_partial_kernel` / `mean_fold_kernel` and
+  `xtdz_coalesced` of the same chains). Also the direct `column_mean_kernel` arm of
+  `decomposition/estimator.mojo::_column_variance` (`MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`), Apple FAST's
+  `PCA_FAST_COLMEAN` (rab20-pcacolmean: pca taxi 106.2 -> 85.0 ms vs the one-block kernel) and `TSVD_FAST_COLVAR`
+  (rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms vs the one-block kernel), and `glm/impl/ridge_multi.mojo`'s Y means.
+- Now: the tile order (`xty_tiled`) in every mode; host column `core/host_tile_fold.mojo` (IDN_XTY_TILED is True).
+- Bits: IDENTICAL defaults unchanged; FAST and the retired arms move to the tile order.
+- Files: core/xtdz_coalesced.mojo, core/host_tile_fold.mojo, decomposition/estimator.mojo, decomposition/mean_switch.mojo,
+  glm/impl/ridge_multi.mojo. Patch: `experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch` (reverse of lane commit
+  584cd1b8c on the code files).
+
+### MOJOLEARN_QN_TILED_MULTI_OFF
+
+- Tried: `glm/impl/qn/glm_base.mojo::linear_bwd` with `xtdz_multi_kernel` / `xty_kernel` (one block per gradient cell)
+  wherever the tile rule did not apply: `C > 1` gradients of at most 256 cells, gradients whose tile partials passed
+  QNTM_MAX_WS, `-D MOJOLEARN_QN_TILED_MULTI_OFF`, IDENTICAL `C == 1` with QN_TILED off, and FAST off Apple.
+- Now: `qntm_tiled_into` (chunked by the workspace bound, same chains and fold) for every `C > 1` gradient and for
+  IDENTICAL's `C == 1` `linear_bwd`; FAST keeps its Apple forms. Host column `glm/host/qn_oracle.mojo` and the check
+  mirrors move with it.
+- Bits: narrow multinomial gradients (`d * c <= 256`) move to the tile order on NVIDIA, AMD, Apple and the host column
+  together; the QN_TILED-off `C == 1` gradient likewise.
+- Patch: `experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch` (reverse of lane commit 4b8a8e8f2).
+
+### MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL
+
+- Tried: the loss gate's contract-5.4 sabotage, the batch's n_rows per-row losses folded by `ce_serial_fold_kernel` in
+  ONE thread of one block (`training/checks/loss.mojo`), inert at N <= 128.
+- Now: refused; the batch fold's witnesses are the gemm switches reached through the loss entry points.
+- Bits: none (a gate-only arm).
+- Patch: `experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch` (reverse of lane commit 8476d0774).
 
 ## Restored
 
