@@ -31,6 +31,7 @@ from std.os import abort, getenv
 from std.python import Python, PythonObject
 from std.time import perf_counter_ns
 from std.python._cpython import GILReleased
+from bindings.py_balanced import py_call
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from training.byte_lm_binding_impl import (
@@ -685,7 +686,7 @@ def _byte_config(shape: PythonObject) raises -> ByteConfig:
         var type_name = String(py=shape[i].__class__.__name__)
         if type_name == "bool" or type_name == "bool_":
             raise Error("byte LM: shape dimensions must be integers, not booleans")
-        values.append(Int(py=operator_module.index(shape[i])))
+        values.append(Int(py=py_call(operator_module.index, shape[i])))
     if len(values) == 7:
         values.append(2)
         values.append(256)

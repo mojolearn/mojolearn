@@ -76,6 +76,7 @@ from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.sha256_door import sha256_hexdigest
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -203,7 +204,7 @@ def _index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("tokenizer host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=operator_module.index(value))
+    return Int(py=py_call(operator_module.index, value))
 
 
 def _flag(value: PythonObject, name: String) raises -> Bool:
@@ -642,7 +643,7 @@ def _ids_from_seq(seq: PythonObject) raises -> List[Int]:
             raise Error("TypeError: ids must be int, not bool, at position " + String(k))
         var iv = 0
         try:
-            iv = Int(py=operator_module.index(v))
+            iv = Int(py=py_call(operator_module.index, v))
         except:
             raise Error("TypeError: ids must be int, got " + tn + " at position " + String(k))
         out.append(iv)
