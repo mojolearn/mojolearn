@@ -16,6 +16,7 @@ from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send,
 )
 from bindings.native_transport import transport_close
+from bindings.parallel_neural_admission import neural_admit
 
 
 struct ParallelNeuralBoundary(Defaultable, Movable):
@@ -25,6 +26,7 @@ struct ParallelNeuralBoundary(Defaultable, Movable):
     var samba_cls: PythonObject
     var samba_call: PythonObject
     var samba_context: PythonObject
+    var admission_context: PythonObject
     var lock: PythonObject
 
     def __init__(out self):
@@ -34,6 +36,7 @@ struct ParallelNeuralBoundary(Defaultable, Movable):
         self.samba_cls = PythonObject(None)
         self.samba_call = PythonObject(None)
         self.samba_context = PythonObject(None)
+        self.admission_context = PythonObject(None)
         self.lock = PythonObject(None)
 
 
@@ -51,6 +54,7 @@ def parallel_neural_initialize(args: PythonObject) raises:
     b[].samba_cls = args[2]
     b[].samba_call = args[3]
     b[].samba_context = args[4]
+    b[].admission_context = args[5]
     b[].lock = Python.import_module("_thread").RLock
     if b[].samba_call is not None and b[].bi.type(b[].samba_call) is not b[].bi.type(b[].bi.len):
         raise Error("parallel neural: Samba operations must use the compiled native dispatcher")
@@ -90,10 +94,10 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     var shards = _parallel_int(logical, 1, 1024, "logical_shards")
     var operation = String()
-    if Bool(py=b[].bi.isinstance(model, b[].mlp_cls)):
+    if b[].bi.type(model) is b[].mlp_cls:
         operation = "mlp_gradient"
         _ = mlp_snapshot(model)
-    elif Bool(py=b[].bi.isinstance(model, b[].samba_cls)):
+    elif b[].bi.type(model) is b[].samba_cls:
         operation = "samba_gradient"
         var fields = b[].bi.object.__getattribute__(model, "__dict__")
         var optimizer = b[].bi.object.__getattribute__(fields["optimizer"], "__dict__")
@@ -331,6 +335,7 @@ def parallel_neural_call(operation: String, args: PythonObject) raises -> Python
     if operation == "initialize":
         parallel_neural_initialize(args)
         return PythonObject(None)
+    neural_admit(operation, args, b[].owner_cls, b[].mlp_cls, b[].samba_cls, b[].admission_context)
     if operation == "init":
         _neural_init(args[0], args[1], args[2], args[3], child)
         return PythonObject(None)
