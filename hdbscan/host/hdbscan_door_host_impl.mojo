@@ -88,23 +88,23 @@ def approximate_predict_host_run(x: List[Float32], m: Int, d: Int, core: List[Fl
     _ = out^
 
 
-def membership_vector_host_run(x: List[Float32], m: Int, d: Int, core: List[Float32], labels: List[Int32], parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, deaths: List[Float32], selected: List[Int32], iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32], q: List[Float32], nq: Int, min_samples: Int, n_selected: Int, out: MutPointer[Float32, MutUntrackedOrigin]) raises:
+def membership_vector_host_run(x: List[Float32], m: Int, d: Int, core: List[Float32], labels: List[Int32], parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, deaths: List[Float32], selected: List[Int32], iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32], q: List[Float32], nq: Int, min_samples: Int, n_selected: Int, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
     """The GIL-free body of `hdbscan_membership_vector_binding` (moved word for word)."""
     var mv = hdbh_membership_vector(
         x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
         deaths, selected, iic, ex_idx, offsets, q, nq, min_samples,
     )
     for i in range(nq * n_selected):
-        out.unsafe_store(i, mv[i])
+        dst.unsafe_store(i, mv[i])
     _ = mv^
 
 
-def all_points_membership_host_run(x: List[Float32], m: Int, d: Int, parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, deaths: List[Float32], selected: List[Int32], iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32], row0: Int, count: Int, n_selected: Int, out: MutPointer[Float32, MutUntrackedOrigin]) raises:
+def all_points_membership_host_run(x: List[Float32], m: Int, d: Int, parents: List[Int32], lambdas: List[Float32], n_edges: Int, n_clusters: Int, deaths: List[Float32], selected: List[Int32], iic: List[Int32], ex_idx: List[Int32], offsets: List[Int32], row0: Int, count: Int, n_selected: Int, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
     """The GIL-free body of `hdbscan_all_points_membership_vectors_binding` (moved word for word)."""
     var mv = hdbh_all_points_membership_vectors(
         x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
         iic, ex_idx, offsets, row0, count,
     )
     for i in range(count * n_selected):
-        out.unsafe_store(i, mv[i])
+        dst.unsafe_store(i, mv[i])
     _ = mv^

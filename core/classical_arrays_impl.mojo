@@ -6,7 +6,7 @@ from bindings.classical_cast import classical_f32_bits
 
 def classical_cast_rows(
     addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, name: String,
-    borrowed: Bool, out: MutPointer[Float32, MutUntrackedOrigin],
+    borrowed: Bool, dst: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
     for r in range(rows):  # native input marshaling: input rows, never a model or training loop
         for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
@@ -18,7 +18,7 @@ def classical_cast_rows(
             if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
                 raise Error("Input " + name + " contains NaN or infinity")
             if not borrowed:
-                out[r * cols + c] = bitcast[DType.float32](bits)
+                dst[r * cols + c] = bitcast[DType.float32](bits)
 
 
 def classical_check_weights(

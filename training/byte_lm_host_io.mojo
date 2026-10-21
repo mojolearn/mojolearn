@@ -6,16 +6,16 @@ calls one of these, and returns the result."""
 from std.math import isfinite
 
 
-def byte_host_store_f32(out: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32]):
+def byte_host_store_f32(dst: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32]):
     """Write every element of `values` to `out`, in order."""
     for i in range(len(values)):
-        out.unsafe_store(i, values[i])
+        dst.unsafe_store(i, values[i])
 
 
-def byte_host_store_i32(out: MutPointer[Int32, MutUntrackedOrigin], values: List[Int32], count: Int):
+def byte_host_store_i32(dst: MutPointer[Int32, MutUntrackedOrigin], values: List[Int32], count: Int):
     """Write the first `count` elements of `values` to `out`, in order."""
     for i in range(count):
-        out.unsafe_store(i, values[i])
+        dst.unsafe_store(i, values[i])
 
 
 def all_finite_f32_scan(p: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Int:

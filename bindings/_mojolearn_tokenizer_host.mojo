@@ -1357,7 +1357,7 @@ def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject
     var offs = _py_int_list(offsets)
     var starts = offs[bi.slice(0, -1)]
     var stops = offs[bi.slice(1, PythonObject(None))]
-    return bi.list(bi.map(raw.__getitem__, bi.map(bi.slice, starts, stops)))
+    return bi.list(bi.map(bi.getattr(raw, PythonObject("__getitem__")), bi.map(bi.slice, starts, stops)))
 
 
 def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
