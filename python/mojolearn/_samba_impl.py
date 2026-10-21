@@ -445,34 +445,6 @@ class SambaStack(object):
             [int(b), int(l)])
         return logits.reshape((b, l, c.vocab))
 
-    def _train_step_resident(self, binding, ids, y):
-        """One optimizer step in one binding call (accumulation_steps 1):
-        the forward, the sum-reduced loss over the step's own target count,
-        the backward and `identical_optimizer_step` with the optimizer's
-        resident moments. The optimizer's scalar bookkeeping is its own
-        (`_step_begin` / `_step_finish`). None when the optimizer has no
-        resident moments in this build (the per-op route then runs)."""
-        o = self.optimizer
-        o._open_resident(binding)
-        if o._res is None:
-            return None
-        session = self._resident_session(binding)
-        b, l = ids.shape
-        cfg, plist = o._step_begin(self.max_norm)
-        info = _buffers.zeros((3,), '<f4')
-        loss_out = _buffers.zeros((1,), '<f4')
-        binding.samba_resident_step(
-            session,
-            [T._addr(self.flat), T._addr_ro(ids), T._addr_ro(y), T._addr_ro(o.offsets),
-             T._addr(o.buf_initialized), T._addr(info), T._addr(loss_out)],
-            [int(b), int(l)] + plist, int(o._res))
-        # the moments moved on the device; the host copies are stale until read
-        o._host_fresh = False
-        total = o._step_finish(info, cfg)
-        self.last_ = {"loss": float(loss_out[0]), "lr": o.lr_,
-                      "step": o.t, "total_norm": total}
-        return dict(self.last_)
-
     # -- forward ------------------------------------------------------------
     @staticmethod
     def _ids(x, what):

@@ -1,221 +1,85 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The learning-rate schedule TABLE in Mojo (lane py-runtime round 2): the
-binary64 block route of `_training_impl._LrTable` and OneCycleLR's
-`_fill`, which ran per optimizer step in Python.
-
-A schedule's value at step t is DEFINED as the float32 nearest an exact
-rational. The table evaluates a block of steps in binary64, each value with
-a rigorous error bound, and keeps a value only when both ends of its error
-interval round to the same normal float32 (`lr_decide`); every other step
-takes the exact route, which stays Python's big-rational arithmetic (it
-needs an arbitrary-precision rational Mojo's stdlib does not have; an owner
-decision, docs/identical/py-runtime-classified.tsv). So the answer at every
-step is the exact route's float32, as before.
-
-SAME VALUES AS THE PYTHON THEY REPLACE: the same IEEE binary64 operations
-in the same order, every product that meets an addition spelled
-`pinned_mul_f64` so it is never contracted into an fma (Python never
-fuses), and the same decision rule. The table only ever answers with a
-value the exact route would give, so even a different binary64 value
-would not change a float32; the bounds are copied with their margins.
-
-Every loop here walks one block of at most `_LR_BLOCK` (256) steps or the
-26 terms of a Taylor series: host scalar code on every column (no data
-size, no device)."""
-from std.math import isfinite
+"""The learning-rate schedule entries of the core bindings: the Python door
+of sequence/lr_table.mojo (the binary64 table, its float32 decision, the
+exact route over a run of steps, and `lr_spec_fill`, the one native call of
+every public schedule method). A shell (lane neural-optimizers,
+2026-10-21): each entry unpacks its argument words, calls one typed kernel
+entry and converts the result back; the arithmetic moved word for word to
+sequence/lr_table.mojo."""
 from std.python import PythonObject
 
-from checks.numerics import pinned_mul_f64
 from std.python import Python
 from sequence.lr_exact import LrOut, onecycle_exact, pow_exact, schedule_exact
-
-comptime _PI: Float64 = 3.141592653589793
-comptime _COS_F64_TERMS = 26
-comptime _F64_EPS: Float64 = 2.220446049250313e-16
-comptime _F32_MIN_NORMAL: Float64 = 1.1754943508222875e-38
-comptime _F32_MAX: Float64 = 3.4028234663852886e38
+from sequence.lr_table import (
+    F32P, F64P, U8P, LrSpec, decide_many, exact_block, lr_spec_fill, onecycle_fill, pow_values,
+    schedule_block_values,
+)
 
 
-def _f64p(addr: PythonObject) raises -> MutPointer[Float64, MutUntrackedOrigin]:
+def _f64p(addr: PythonObject) raises -> F64P:
     var a = Int(py=addr)
     if a == 0:
         raise Error("lr table: null float64 buffer")
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=a)
+    return F64P(unsafe_from_address=a)
 
 
-def _cos_sin_pi(q_in: Float64) -> Tuple[Float64, Float64]:
-    """`_training_impl._cos_sin_pi_f64`: (cos(pi q), sin(pi q)) by the
-    26-term Taylor series on q or 1 - q in [0, 1/2]."""
-    var q = q_in
-    var flip = q > 0.5
-    if flip:
-        q = 1.0 - q
-    var x = pinned_mul_f64(_PI, q)
-    var x2 = pinned_mul_f64(x, x)
-    var c: Float64 = 0.0
-    var sn: Float64 = 0.0
-    var tc: Float64 = 1.0
-    var ts = x
-    for k in range(_COS_F64_TERMS):  # small-loop(_COS_F64_TERMS: Taylor terms): the fixed 26-term series
-        c += tc
-        sn += ts
-        tc = pinned_mul_f64(-tc, x2) / Float64((2 * k + 1) * (2 * k + 2))
-        ts = pinned_mul_f64(-ts, x2) / Float64((2 * k + 2) * (2 * k + 3))
-    return (-c if flip else c, sn)
+def _ints(words: PythonObject, n: Int) raises -> List[Int]:
+    var out = List[Int]()
+    for i in range(n):  # small-loop(argument words: a fixed count per entry point)
+        out.append(Int(py=words[i]))
+    return out^
 
 
-def _cos_run(n0: Float64, den: Float64, count: Int, mut cs: List[Float64], mut ce: List[Float64]) -> Bool:
-    """`_training_impl._cos_pi_run`: cos(pi (n0 + k) / den) for k < count
-    into cs and the error bound 2^-43 + k 2^-45 into ce; False when the step
-    angle pi / den exceeds 1/2."""
-    var step = 1.0 / den
-    if not (pinned_mul_f64(_PI, step) <= 0.5):
-        return False
-    var a = _cos_sin_pi(n0 / den)
-    var c = a[0]
-    var sn = a[1]
-    var r = _cos_sin_pi(step)
-    var cp = r[0]
-    var sp = r[1]
-    for k in range(count):  # small-loop(count: steps of one table block): the rotation recurrence over one block
-        cs[k] = c
-        ce[k] = 1.1368683772161603e-13 + pinned_mul_f64(Float64(k), 2.842170943040401e-14)
-        var nc = pinned_mul_f64(c, cp) - pinned_mul_f64(sn, sp)
-        var ns = pinned_mul_f64(sn, cp) + pinned_mul_f64(c, sp)
-        c = nc
-        sn = ns
-    return True
+def _floats(words: PythonObject, n: Int) raises -> List[Float64]:
+    var out = List[Float64]()
+    for i in range(n):  # small-loop(argument words: a fixed count per entry point)
+        out.append(Float64(py=words[i]))
+    return out^
 
 
 def lr_schedule_values_binding(params: PythonObject, vs_addr: PythonObject, es_addr: PythonObject) raises -> PythonObject:
-    """`_Schedule._fast_values(t0, t1)` into vs / es (t1 - t0 float64 each).
+    """`_Schedule`'s binary64 run into vs / es (t1 - t0 float64 each).
     params: [kind (0 constant, 1 linear, 2 cosine), peak, lo, warmup,
-    total (-1: none), t0, t1]. Returns 1 when the block has no binary64
-    route (Python's None: every step takes the exact route), else 0."""
-    var kind = Int(py=params[0])
-    var peak = Float64(py=params[1])
-    var lo = Float64(py=params[2])
-    var w = Int(py=params[3])
-    var total = Int(py=params[4])
-    var t0 = Int(py=params[5])
-    var t1 = Int(py=params[6])
-    var vs = _f64p(vs_addr)
-    var es = _f64p(es_addr)
-    var m = 0
-    var b = min(t1, w + 1)
-    if t0 < b:
-        if w >= (1 << 29):
-            return PythonObject(1)
-        # peak t is exact (a float32 times an integer under 2^29), the
-        # division rounds once: bound 2^-50 of v
-        for t in range(t0, b):  # small-loop(b: steps of one table block): the warmup steps of the block
-            var v = pinned_mul_f64(peak, Float64(t)) / Float64(w)
-            vs[m] = v
-            es[m] = pinned_mul_f64(v, 8.881784197001252e-16)
-            m += 1
-    var a = max(t0, w + 1)
-    if a < t1:
-        var k0 = a - w
-        var k1 = t1 - w
-        if kind == 1:
-            var span = total - w
-            if span >= (1 << 29):
-                return PythonObject(1)
-            var d = lo - peak
-            var base = peak + abs(lo)
-            for k in range(k0, k1):  # small-loop(k1: steps of one table block): the linear decay steps of the block
-                var v = peak + pinned_mul_f64(d, Float64(k)) / Float64(span)
-                vs[m] = v
-                es[m] = pinned_mul_f64(base + abs(v), 8.881784197001252e-16)
-                m += 1
-        elif kind == 2:
-            var span_steps = total - w
-            var span = peak - lo
-            if not (span > 0.0) or span_steps >= (1 << 52):
-                return PythonObject(1)
-            var count = k1 - k0
-            var cs = List[Float64](length=count, fill=0.0)
-            var ce = List[Float64](length=count, fill=0.0)
-            if not _cos_run(Float64(k0), Float64(span_steps), count, cs, ce):
-                return PythonObject(1)
-            for j in range(count):  # small-loop(count: steps of one table block): the cosine decay steps of the block
-                var v = lo + pinned_mul_f64(span, 1.0 + cs[j]) / 2.0
-                vs[m] = v
-                es[m] = pinned_mul_f64(span, ce[j]) + pinned_mul_f64(8.0 * _F64_EPS, peak + abs(v))
-                m += 1
-        else:
-            return PythonObject(1)
-    return PythonObject(0)
+    total (-1: none), t0, t1]. Returns 1 when the run has no binary64
+    route (every step takes the exact route), else 0."""
+    return PythonObject(schedule_block_values(
+        Int(py=params[0]), Float64(py=params[1]), Float64(py=params[2]), Int(py=params[3]),
+        Int(py=params[4]), Int(py=params[5]), Int(py=params[6]), _f64p(vs_addr), _f64p(es_addr),
+    ))
 
 
 def lr_onecycle_fill_binding(params: PythonObject, vs_addr: PythonObject, es_addr: PythonObject) raises -> PythonObject:
-    """`OneCycleLR._fill` into vs / es from index `at`. params: [linear (1)
-    or cos (0), at, st0, count, start_f, end_f, af, bf]. Returns 0 (a cos
-    step angle over 1/2 leaves the entries untouched, as Python did)."""
-    var linear = Int(py=params[0]) != 0
-    var at = Int(py=params[1])
-    var st0 = Int(py=params[2])
-    var count = Int(py=params[3])
-    var start_f = Float64(py=params[4])
-    var end_f = Float64(py=params[5])
-    var af = Float64(py=params[6])
-    var bf = Float64(py=params[7])
-    var vs = _f64p(vs_addr)
-    var es = _f64p(es_addr)
-    var den = end_f - start_f
-    var scale = 16.0 * _F64_EPS
-    if linear:
-        var d = bf - af
-        for k in range(count):  # small-loop(count: steps of one table block): the linear phase steps of the block
-            var v = pinned_mul_f64(d, (Float64(st0 + k) - start_f) / den) + af
-            vs[at + k] = v
-            es[at + k] = pinned_mul_f64(scale, abs(af) + abs(bf) + abs(v))
-        return PythonObject(0)
-    var cs = List[Float64](length=count, fill=0.0)
-    var ce = List[Float64](length=count, fill=0.0)
-    if not _cos_run(Float64(st0) - start_f, den, count, cs, ce):
-        return PythonObject(0)
-    var hd = abs(af - bf)
-    for k in range(count):  # small-loop(count: steps of one table block): the cosine phase steps of the block
-        var v = bf + pinned_mul_f64((af - bf) / 2.0, cs[k] + 1.0)
-        vs[at + k] = v
-        es[at + k] = pinned_mul_f64(hd, ce[k]) + pinned_mul_f64(scale, abs(af) + abs(bf) + abs(v))
+    """One OneCycleLR phase into vs / es from index `at`. params: [linear
+    (1) or cos (0), at, st0, count, start_f, end_f, af, bf]. Returns 0."""
+    onecycle_fill(
+        Int(py=params[0]) != 0, Int(py=params[1]), Int(py=params[2]), Int(py=params[3]),
+        Float64(py=params[4]), Float64(py=params[5]), Float64(py=params[6]), Float64(py=params[7]),
+        _f64p(vs_addr), _f64p(es_addr),
+    )
     return PythonObject(0)
 
 
 def lr_decide_binding(vs_addr: PythonObject, es_addr: PythonObject, n: PythonObject,
                       out_addr: PythonObject, ok_addr: PythonObject) raises -> PythonObject:
-    """`_training_impl._f32_decide_many`: per value the float32 every real in
-    [v - e, v + e] rounds to (ties to even), kept (ok = 1) when both ends
-    round to the same normal positive float32. out gets that float32 (as a
-    float32 word), ok 0/1. Returns how many steps were NOT decided."""
+    """Per value the float32 every real in [v - e, v + e] rounds to, kept
+    (ok = 1) when both ends round to the same normal positive float32.
+    Returns how many steps were NOT decided."""
     var count = Int(py=n)
-    var vs = _f64p(vs_addr)
-    var es = _f64p(es_addr)
     var oa = Int(py=out_addr)
     var ka = Int(py=ok_addr)
     if count > 0 and (oa == 0 or ka == 0):
         raise Error("lr table: null output buffer")
-    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)
-    var ok = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=ka)
-    var undecided = 0
-    for i in range(count):  # small-loop(count: steps of one table block): one decision per step
-        var a = Float32(vs[i] - es[i])
-        var b = Float32(vs[i] + es[i])
-        out[i] = a
-        var keep = a == b and Float64(a) >= _F32_MIN_NORMAL and Float64(a) <= _F32_MAX
-        ok[i] = UInt8(1) if keep else UInt8(0)
-        if not keep:
-            undecided += 1
-    return PythonObject(undecided)
+    return PythonObject(decide_many(
+        _f64p(vs_addr), _f64p(es_addr), count, F32P(unsafe_from_address=oa), U8P(unsafe_from_address=ka),
+    ))
 
 
 # ----------------------------------------------------------- the exact route
-# (lane py-runtime round 3, sequence/lr_exact.mojo): the steps the table
-# cannot decide, and the schedules without a table, answered on the big
-# rationals. Each returns [status, value]: status 0 ok, 1 overflow (Python's
-# OverflowError), 2 a 64-term straddle (ArithmeticError), 3 a bad progress.
+# The steps the table cannot decide, and the schedules without a table,
+# answered on the big rationals. Each returns [status, value]: status 0 ok,
+# 1 overflow (Python's OverflowError), 2 a 64-term straddle
+# (ArithmeticError), 3 a bad progress.
 
 
 def _pair(r: LrOut) raises -> PythonObject:
@@ -226,85 +90,56 @@ def _pair(r: LrOut) raises -> PythonObject:
 
 
 def lr_schedule_exact_binding(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """`_Schedule._lr_at_slow`: ip = [kind (0 constant, 1 linear, 2 cosine),
-    warmup, total (-1: none), t >= 1]; fp = [peak, min_lr]."""
+    """The exact route of one `_Schedule` step: ip = [kind (0 constant, 1
+    linear, 2 cosine), warmup, total (-1: none), t >= 1]; fp = [peak,
+    min_lr]."""
     return _pair(schedule_exact(Int(py=ip[0]), Float64(py=fp[0]), Float64(py=fp[1]), Int(py=ip[1]),
                                 Int(py=ip[2]), Int(py=ip[3])))
 
 
 def lr_onecycle_exact_binding(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """`OneCycleLR._lr_at_slow`: ip = [linear, three_phase, total_steps,
-    torch step]; fp = [max_lr, div_factor, final_div_factor, phase-1 end,
-    phase-2 end]."""
+    """The exact route of one OneCycleLR step: ip = [linear, three_phase,
+    total_steps, torch step]; fp = [max_lr, div_factor, final_div_factor,
+    phase-1 end, phase-2 end]."""
     return _pair(onecycle_exact(Int(py=ip[0]) != 0, Int(py=ip[1]) != 0, Float64(py=fp[0]), Float64(py=fp[1]),
                                 Float64(py=fp[2]), Float64(py=fp[3]), Float64(py=fp[4]), Int(py=ip[2]),
                                 Int(py=ip[3])))
 
 
+def _status_pair(r: Tuple[Int, Int]) raises -> PythonObject:
+    var res = Python.list()
+    res.append(PythonObject(r[0]))
+    res.append(PythonObject(r[1]))
+    return res
+
+
 def lr_pow_values_binding(fp: PythonObject, ip: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     """StepLR / ExponentialLR: out[i] (float32 words) = the float32 nearest
-    base gamma^((e0 + i) // step) for i < n (`_PowSched._pow_value`).
-    fp = [base, gamma]; ip = [e0 >= 0, n, step >= 1]. Returns [0, n], or
-    [1, i] at the first overflowing step i (Python's OverflowError)."""
-    var base = Float64(py=fp[0])
-    var gamma = Float64(py=fp[1])
-    var e0 = Int(py=ip[0])
-    var n = Int(py=ip[1])
-    var step = Int(py=ip[2])
-    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
-    var last_e = -1
-    var last_v = Float32(0)
-    for i in range(n):  # small-loop(n: optimizer steps of one schedule block): one learning rate per step
-        var e = (e0 + i) // step
-        if e != last_e:
-            var r = pow_exact(base, gamma, e)
-            if r.status != 0:
-                var bad = Python.list()
-                bad.append(PythonObject(r.status))
-                bad.append(PythonObject(i))
-                return bad
-            last_e = e
-            last_v = r.value
-        out[i] = last_v
-    var res = Python.list()
-    res.append(PythonObject(0))
-    res.append(PythonObject(n))
-    return res
+    base gamma^((e0 + i) // step) for i < n. fp = [base, gamma]; ip = [e0 >=
+    0, n, step >= 1]. Returns [0, n], or [1, i] at the first overflowing
+    step i."""
+    return _status_pair(pow_values(
+        Float64(py=fp[0]), Float64(py=fp[1]), Int(py=ip[0]), Int(py=ip[1]), Int(py=ip[2]),
+        F32P(unsafe_from_address=Int(py=out_addr)),
+    ))
 
 
 def _exact_block(kind: Int, ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
                  ok_addr: PythonObject) raises -> PythonObject:
-    """The exact route over a block: out[i] (float32 words) for every i < n
+    """The exact route over a run: out[i] (float32 words) for every i < n
     whose ok[i] is 0 (ok_addr 0: every i). kind 0: `_Schedule`, ip = [kind,
     warmup, total, t0, n], fp = [peak, min_lr]; kind 1: OneCycleLR, ip =
     [linear, three_phase, total_steps, t0, n], fp as lr_onecycle_exact.
-    Returns [status, index]: status 0, or the first failing step's status
-    and its index."""
-    var t0 = Int(py=ip[3])
-    var n = Int(py=ip[4])
-    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
+    Returns [status, index]."""
+    var words = _ints(ip, 5)
     var oka = Int(py=ok_addr)
-    var ok = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=oka)
-    var res = Python.list()
-    for i in range(n):  # small-loop(n: steps of one table block): the steps the binary64 table left undecided
-        if oka != 0 and ok[i] != 0:
-            continue
-        var r: LrOut
-        if kind == 0:
-            r = schedule_exact(Int(py=ip[0]), Float64(py=fp[0]), Float64(py=fp[1]), Int(py=ip[1]),
-                               Int(py=ip[2]), t0 + i)
-        else:
-            # OneCycleLR's torch step is t - 1
-            r = onecycle_exact(Int(py=ip[0]) != 0, Int(py=ip[1]) != 0, Float64(py=fp[0]), Float64(py=fp[1]),
-                               Float64(py=fp[2]), Float64(py=fp[3]), Float64(py=fp[4]), Int(py=ip[2]), t0 + i - 1)
-        if r.status != 0:
-            res.append(PythonObject(r.status))
-            res.append(PythonObject(i))
-            return res
-        out[i] = r.value
-    res.append(PythonObject(0))
-    res.append(PythonObject(0))
-    return res
+    var r = exact_block(
+        kind, words, _floats(fp, 2 if kind == 0 else 5), words[3], words[4],
+        F32P(unsafe_from_address=Int(py=out_addr)), U8P(unsafe_from_address=oka), oka != 0,
+    )
+    if r[0] != 0:
+        return _status_pair(r)
+    return _status_pair((0, 0))
 
 
 def lr_schedule_exact_block_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
@@ -315,3 +150,28 @@ def lr_schedule_exact_block_binding(ip: PythonObject, fp: PythonObject, out_addr
 def lr_onecycle_exact_block_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
                                     ok_addr: PythonObject) raises -> PythonObject:
     return _exact_block(1, ip, fp, out_addr, ok_addr)
+
+
+# ------------------------------------------------- the public schedule methods
+
+
+def _spec(ip: PythonObject, fp: PythonObject) raises -> LrSpec:
+    return LrSpec(
+        Int(py=ip[0]), Int(py=ip[1]), Int(py=ip[2]), Int(py=ip[3]),
+        Float64(py=fp[0]), Float64(py=fp[1]), Float64(py=fp[2]), Float64(py=fp[3]),
+    )
+
+
+def lr_schedule_fill_binding(ip: PythonObject, fp: PythonObject, out_addr: PythonObject,
+                             res_addr: PythonObject) raises -> PythonObject:
+    """`lr_at` and `lr_values` of every built-in schedule (sequence/
+    lr_table.mojo::lr_spec_fill): the float32 rates of ONE-BASED steps t0 ..
+    t0 + n - 1 into `out_addr` (n float32). ip = [kind, a, b, c, t0, n] and
+    fp = [f0, f1, f2, f3] are `LrSpec`'s words. `res_addr` (one int64)
+    receives the index of the first failing step. Returns the status: 0, or
+    1 overflow, 2 a float32 straddle, 3 a bad progress, 4 a step below 1, 5
+    a OneCycleLR step past total_steps + 1."""
+    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=res_addr))
+    var r = lr_spec_fill(_spec(ip, fp), Int(py=ip[4]), Int(py=ip[5]), F32P(unsafe_from_address=Int(py=out_addr)))
+    res[0] = Int64(r[1])
+    return PythonObject(r[0])

@@ -82,7 +82,14 @@ from max.gpu.host import DeviceContext, HostBuffer
 
 from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
-from training.optimizer_multi_gpu import parallel_optimizer_step_host
+from training.optimizer_public import OPT_POOL, opt_pool_handle, per_call_step
+from bindings.optimizer_public_pyapi import (
+    optimizer_public_accumulate_c, optimizer_public_clip_c, optimizer_public_io_c, optimizer_public_step_c,
+    optimizer_public_zero_c, optimizer_resident_close_binding, optimizer_resident_copy_dev_binding,
+    optimizer_resident_download_binding, optimizer_resident_get_binding, optimizer_resident_open_binding,
+    optimizer_resident_put_binding, optimizer_resident_step_binding, optimizer_resident_step_io_binding,
+    optimizer_resident_upload_binding,
+)
 from training.estimator import (
     identical_clip_grad_norm_addrs_host,
     identical_ce_loss_host,
@@ -157,27 +164,6 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 
 def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
     return i32_ptr(addr)
-
-
-def _negate_through_device(
-    ctx: DeviceContext,
-    src: MutPointer[Float32, MutUntrackedOrigin],
-    dst: MutPointer[Float32, MutUntrackedOrigin],
-    n: Int,
-) raises:
-    """dst[0:n] = `maximize_negate(src[0:n])` ON THE DEVICE: one bulk upload,
-    one sign-flip launch (`maximize_negate_device`), one bulk download
-    (cpu3-bindings; the host loops it replaces flipped n floats on the CPU).
-    The flip is exact, so the bits are the host loop's on every column.
-    `src` and `dst` may be the same buffer."""
-    if n <= 0:
-        return
-    var d = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=src)
-    maximize_negate_device(ctx, d, n)
-    ctx.enqueue_copy(dst_ptr=dst, src_buf=d)
-    ctx.synchronize()
-    _ = d^
 
 
 def training_numeric_mode_binding() raises -> PythonObject:
@@ -324,420 +310,19 @@ def optimizer_step_binding(
     var n_total = 0
     with GILReleased(Python()):
         var ctx = neural_ctx[_NEURAL_CTX]()
-        if maximize:
-            # The step reads a negated COPY, so the caller's gradient is never
-            # negated, not even for the length of the call; a clipped
-            # gradient is written back through the same sign flip.
-            if n_tensors < 1 or op[n_tensors] < Int32(0):
-                raise Error("optimizer_step: maximize needs a registry with offsets[J] >= 0")
-            var n_flat = Int(op[n_tensors])
-            var neg = List[Float32](length=max(n_flat, 1), fill=Float32(0.0))
-            var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-            _negate_through_device(ctx, gp, np_, n_flat)
-            n_total = parallel_optimizer_step_host(
-                ctx, pp, np_, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
-                lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-                max_norm,
-            )
-            if max_norm > Float32(0.0):
-                _negate_through_device(ctx, np_, gp, n_flat)
-            _ = neg^  # `np_` is untracked: keep the copy alive past its last use
-        else:
-            n_total = parallel_optimizer_step_host(
-                ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
-                lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-                max_norm,
-            )
+        n_total = per_call_step(
+            ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
+            lr, beta1, beta2, eps, weight_decay, momentum, dampening, max_norm, maximize,
+        )
     return PythonObject(n_total)
 
 
 # ===========================================================================
-# THE RESIDENT OPTIMIZER MOMENTS (lane/neural-pass4, 2026-09-30).
-#
-# `optimizer_step` moves seven registry-sized buffers a step: parameters,
-# gradient, `m` and `v` up, parameters, `m` and `v` down. On the Samba step at
-# the board shape (5.7 M parameters, L4, PCIe) that transport is 55.7 of
-# 147.6 ms, more than the Mamba-3 backward. `m` and `v` are the optimizer's
-# own state and nothing else reads them between steps, so a Python optimizer
-# may keep them here: `optimizer_resident_open` allocates a pair on the
-# binding's context (zero filled, as `zeros` filled them), `optimizer_resident_step`
-# runs the SAME `identical_optimizer_step` on that pair (four transfers fewer
-# a step), `optimizer_resident_download` / `_upload` move them for a
-# `state_dict` / `load_state_dict`, `optimizer_resident_close` frees them.
-# Storage: `std.ffi._Global` (the pattern of core/neural_context.mojo), one
-# slot per tier. A handle is an index into the pool; a closed handle's slot
-# is reused by the next open.
+# THE RESIDENT OPTIMIZER STATE (lane/neural-pass4, 2026-09-30; lane
+# fam2-neural, 2026-10-04): the pool and its `optimizer_resident_*` entries
+# moved to training/optimizer_public.mojo and bindings/optimizer_public_pyapi.mojo
+# (lane neural-optimizers, 2026-10-21), the same words and the same steps.
 # ===========================================================================
-
-
-struct _OptPool(Defaultable, Movable):
-    var m: List[DeviceBuffer[DType.float32]]
-    var v: List[DeviceBuffer[DType.float32]]
-    #: the handle's device copies of the parameters and the gradients (lane
-    #: neural-pass26, 2026-10-01): the resident step uploads into these and
-    #: downloads the parameters from them, where it created two fresh
-    #: buffers of n floats every step (two 64 MB allocations a step at the
-    #: board's 16.8M parameters: 72 to 81 ms a step on the M4, 1.1 s for the
-    #: board's ten steps on every Mac, against a few ms of copies)
-    var p: List[DeviceBuffer[DType.float32]]
-    var g: List[DeviceBuffer[DType.float32]]
-    #: pinned host staging for the two uploads: the caller's arrays are
-    #: memcpy'd here and DMA'd to the device, where a raw host pointer handed
-    #: to the device paid a cold first-use mapping (about 20 ms per 64 MB on
-    #: the M4 for every new gradient array) and ran at a few GB/s
-    var sp: List[HostBuffer[DType.float32]]
-    var sg: List[HostBuffer[DType.float32]]
-    #: floats held by each slot; 0 marks a free slot
-    var n: List[Int]
-
-    def __init__(out self):
-        self.m = List[DeviceBuffer[DType.float32]]()
-        self.v = List[DeviceBuffer[DType.float32]]()
-        self.p = List[DeviceBuffer[DType.float32]]()
-        self.g = List[DeviceBuffer[DType.float32]]()
-        self.sp = List[HostBuffer[DType.float32]]()
-        self.sg = List[HostBuffer[DType.float32]]()
-        self.n = List[Int]()
-
-
-comptime _OPT_POOL_NAME = "MojoNeuralTrainingOptPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingOptPoolFast"
-comptime _OPT_POOL = _Global[StorageType=_OptPool, name=_OPT_POOL_NAME, init_fn=_OptPool.__init__]
-
-
-def _opt_pool_handle(handle: PythonObject, want: Int) raises -> Int:
-    var h = Int(py=handle)
-    var pool = _OPT_POOL.get_or_create_ptr()
-    if h < 0 or h >= len(pool[].n) or pool[].n[h] == 0:
-        raise Error("optimizer_resident: handle " + String(h) + " is not open")
-    if want > 0 and pool[].n[h] != want:
-        raise Error(
-            "optimizer_resident: handle " + String(h) + " holds "
-            + String(pool[].n[h]) + " floats, the call names " + String(want)
-        )
-    return h
-
-
-def optimizer_resident_open_binding(n_total: PythonObject) raises -> PythonObject:
-    """Allocate a resident `(m, v)` pair of `n_total` floats each, zero
-    filled. Returns the handle."""
-    var n = Int(py=n_total)
-    if n < 1:
-        raise Error("optimizer_resident_open: n_total must be >= 1, got " + String(n))
-    var h = -1
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var pool = _OPT_POOL.get_or_create_ptr()
-        var m = ctx.enqueue_create_buffer[DType.float32](n)
-        var v = ctx.enqueue_create_buffer[DType.float32](n)
-        m.enqueue_fill(Float32(0.0))
-        v.enqueue_fill(Float32(0.0))
-        # The fills are ordered before every later use on the one in-order
-        # context, and every host read (the download) waits.
-        var n_pool = n if opt_pool_buffers() else 1
-        var pbuf = ctx.enqueue_create_buffer[DType.float32](n_pool)
-        var gbuf = ctx.enqueue_create_buffer[DType.float32](n_pool)
-        var n_stage = n if opt_download_staged() else 1
-        var spin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
-        var sgin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
-        for j in range(len(pool[].n)):  # small-loop(n: optimizer handle slots in the pool): finds a free handle, not data
-            if pool[].n[j] == 0 and h < 0:
-                h = j
-        if h < 0:
-            pool[].m.append(m^)
-            pool[].v.append(v^)
-            pool[].p.append(pbuf^)
-            pool[].g.append(gbuf^)
-            pool[].sp.append(spin^)
-            pool[].sg.append(sgin^)
-            pool[].n.append(n)
-            h = len(pool[].n) - 1
-        else:
-            pool[].m[h] = m^
-            pool[].v[h] = v^
-            pool[].p[h] = pbuf^
-            pool[].g[h] = gbuf^
-            pool[].sp[h] = spin^
-            pool[].sg[h] = sgin^
-            pool[].n[h] = n
-    return PythonObject(h)
-
-
-def optimizer_resident_close_binding(handle: PythonObject) raises -> PythonObject:
-    """Free a handle's pair (after the queue drains). Returns the handle."""
-    var h = _opt_pool_handle(handle, 0)
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        ctx.synchronize()
-        var pool = _OPT_POOL.get_or_create_ptr()
-        pool[].m[h] = ctx.enqueue_create_buffer[DType.float32](1)
-        pool[].v[h] = ctx.enqueue_create_buffer[DType.float32](1)
-        pool[].p[h] = ctx.enqueue_create_buffer[DType.float32](1)
-        pool[].g[h] = ctx.enqueue_create_buffer[DType.float32](1)
-        pool[].sp[h] = ctx.enqueue_create_host_buffer[DType.float32](1)
-        pool[].sg[h] = ctx.enqueue_create_host_buffer[DType.float32](1)
-        pool[].n[h] = 0
-    return PythonObject(h)
-
-
-def optimizer_resident_download_binding(
-    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
-) raises -> PythonObject:
-    """The pair to host memory (`n_total` floats each). Returns `n_total`."""
-    var n = Int(py=n_total)
-    var h = _opt_pool_handle(handle, n)
-    var mp = _f32_ptr(Int(py=m_addr))
-    var vp = _f32_ptr(Int(py=v_addr))
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var pool = _OPT_POOL.get_or_create_ptr()
-        ctx.enqueue_copy(dst_ptr=mp, src_buf=pool[].m[h])
-        ctx.enqueue_copy(dst_ptr=vp, src_buf=pool[].v[h])
-        ctx.synchronize()
-    return PythonObject(n)
-
-
-def optimizer_resident_upload_binding(
-    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
-) raises -> PythonObject:
-    """Host memory (`n_total` floats each) into the pair. Returns `n_total`."""
-    var n = Int(py=n_total)
-    var h = _opt_pool_handle(handle, n)
-    var mp = _f32_ptr(Int(py=m_addr))
-    var vp = _f32_ptr(Int(py=v_addr))
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var pool = _OPT_POOL.get_or_create_ptr()
-        ctx.enqueue_copy(dst_buf=pool[].m[h], src_ptr=mp)
-        ctx.enqueue_copy(dst_buf=pool[].v[h], src_ptr=vp)
-        ctx.synchronize()
-    return PythonObject(n)
-
-
-def optimizer_resident_step_binding(
-    param_addr: PythonObject,
-    grad_addr: PythonObject,
-    offsets_addr: PythonObject,
-    init_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-    handle: PythonObject,
-) raises -> PythonObject:
-    """`optimizer_step` with `m` and `v` taken from the handle's resident
-    pair instead of two host buffers: the same `params` list (its 12 or 13
-    slots, word for word), the same buffers otherwise, the same step. The
-    single-device route only (`MOJOLEARN_OPTIMIZER_DEVICE_COUNT` is the
-    per-call optimizer's; the Python side keeps that route there). Returns
-    `N`."""
-    if len(params) != 12 and len(params) != 13:
-        raise Error(
-            "optimizer_resident_step: params must contain 12 or 13 values, got "
-            + String(len(params))
-        )
-    var h = _opt_pool_handle(handle, 0)
-    var pp = _f32_ptr(Int(py=param_addr))
-    var gp = _f32_ptr(Int(py=grad_addr))
-    var maximize = len(params) == 13 and Int(py=params[12]) != 0
-    var op = _i32_ptr(Int(py=offsets_addr))
-    var ip = _i32_ptr(Int(py=init_addr))
-    var fp = _f32_ptr(Int(py=info_addr))
-    var n_tensors = Int(py=params[0])
-    var kind = Int(py=params[1])
-    var t = Int(py=params[2])
-    var nesterov = Int(py=params[3])
-    var lr = Float32(Float64(py=params[4]))
-    var beta1 = Float32(Float64(py=params[5]))
-    var beta2 = Float32(Float64(py=params[6]))
-    var eps = Float32(Float64(py=params[7]))
-    var weight_decay = Float32(Float64(py=params[8]))
-    var momentum = Float32(Float64(py=params[9]))
-    var dampening = Float32(Float64(py=params[10]))
-    var max_norm = Float32(Float64(py=params[11]))
-    var n_total = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var pool = _OPT_POOL.get_or_create_ptr()
-        if maximize:
-            if n_tensors < 1 or op[n_tensors] < Int32(0):
-                raise Error("optimizer_resident_step: maximize needs a registry with offsets[J] >= 0")
-            var n_flat = Int(op[n_tensors])
-            var neg = List[Float32](length=max(n_flat, 1), fill=Float32(0.0))
-            var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-            _negate_through_device(ctx, gp, np_, n_flat)
-            # the parameter/gradient device buffers: the handle's pooled pair on
-            # Apple, a fresh pair per step elsewhere (lane neural-pass34)
-            var pooled = opt_pool_buffers()
-            var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
-            var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
-            if pooled:
-                n_total = identical_optimizer_step_resident_host(
-                    ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                    momentum, dampening, max_norm,
-                )
-            else:
-                n_total = identical_optimizer_step_resident_host(
-                    ctx, pp, np_, pool[].m[h], pool[].v[h], pb, gb, pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                    momentum, dampening, max_norm,
-                )
-            if max_norm > Float32(0.0):
-                _negate_through_device(ctx, np_, gp, n_flat)
-            _ = neg^  # `np_` is untracked: keep the copy alive past its last use
-        else:
-            # the parameter/gradient device buffers: the handle's pooled pair on
-            # Apple, a fresh pair per step elsewhere (lane neural-pass34)
-            var pooled = opt_pool_buffers()
-            var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
-            var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
-            if pooled:
-                n_total = identical_optimizer_step_resident_host(
-                    ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                    momentum, dampening, max_norm,
-                )
-            else:
-                n_total = identical_optimizer_step_resident_host(
-                    ctx, pp, gp, pool[].m[h], pool[].v[h], pb, gb, pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                    momentum, dampening, max_norm,
-                )
-    return PythonObject(n_total)
-
-
-# ---------------------------------------------------------------------------
-# lane fam2-neural (2026-10-04): THE HANDLE'S PARAMETERS AND GRADIENT, RESIDENT.
-# `optimizer_resident_step` still moved three registry-sized buffers a step
-# (parameters up, gradient up, parameters down). These entries let the
-# caller keep the parameters (and, when its gradient is already there, the
-# gradient) in the handle's device buffers between steps:
-#   optimizer_resident_put(handle, which, addr, n)   host -> device (0 = parameters, 1 = gradient)
-#   optimizer_resident_get(handle, which, addr, n)   device -> host
-#   optimizer_resident_step_io(..., [handle, io])    the step, moving only the transfers `io` names
-# The step is `identical_optimizer_step` on the same buffers: no bit moves.
-# Registered only under IDN_OPT_PARAMS_RESIDENT.
-
-
-def _opt_dev_pair(ctx: DeviceContext, h: Int) raises:
-    """The handle's parameter and gradient device buffers at full size
-    (off Apple they are one float until first needed here)."""
-    var pool = _OPT_POOL.get_or_create_ptr()
-    var n = pool[].n[h]
-    if len(pool[].p[h]) < n:
-        pool[].p[h] = ctx.enqueue_create_buffer[DType.float32](n)
-    if len(pool[].g[h]) < n:
-        pool[].g[h] = ctx.enqueue_create_buffer[DType.float32](n)
-
-
-def optimizer_resident_put_binding(
-    handle: PythonObject, which: PythonObject, addr: PythonObject, n_total: PythonObject,
-) raises -> PythonObject:
-    """Host `n_total` floats into the handle's parameter (which = 0) or
-    gradient (which = 1) device buffer. Returns `n_total`."""
-    var n = Int(py=n_total)
-    var h = _opt_pool_handle(handle, n)
-    var w = Int(py=which)
-    if w != 0 and w != 1:
-        raise Error("optimizer_resident_put: which is 0 (parameters) or 1 (gradient)")
-    var src = _f32_ptr(Int(py=addr))
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        _opt_dev_pair(ctx, h)
-        var pool = _OPT_POOL.get_or_create_ptr()
-        if w == 0:
-            ctx.enqueue_copy(dst_buf=pool[].p[h], src_ptr=src)
-        else:
-            ctx.enqueue_copy(dst_buf=pool[].g[h], src_ptr=src)
-        ctx.synchronize()
-    return PythonObject(n)
-
-
-def optimizer_resident_get_binding(
-    handle: PythonObject, which: PythonObject, addr: PythonObject, n_total: PythonObject,
-) raises -> PythonObject:
-    """The handle's parameter (which = 0) or gradient (which = 1) device
-    buffer into host memory (`n_total` floats). Returns `n_total`."""
-    var n = Int(py=n_total)
-    var h = _opt_pool_handle(handle, n)
-    var w = Int(py=which)
-    if w != 0 and w != 1:
-        raise Error("optimizer_resident_get: which is 0 (parameters) or 1 (gradient)")
-    var dst = _f32_ptr(Int(py=addr))
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        _opt_dev_pair(ctx, h)
-        var pool = _OPT_POOL.get_or_create_ptr()
-        if w == 0:
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=pool[].p[h])
-        else:
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=pool[].g[h])
-        ctx.synchronize()
-    return PythonObject(n)
-
-
-def maximize_dev_available_binding() raises -> PythonObject:
-    """Present when `Optimizer.step` should run maximize through
-    `optimizer_resident_step_io` (the sign flip on the device)."""
-    return PythonObject(1)
-
-
-def optimizer_resident_step_io_binding(
-    param_addr: PythonObject,
-    grad_addr: PythonObject,
-    offsets_addr: PythonObject,
-    init_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-    handle_io: PythonObject,
-) raises -> PythonObject:
-    """`optimizer_resident_step` moving only the transfers `io` names
-    (handle_io = [handle, io]; io bits: 1 parameters up, 2 gradient up, 4
-    parameters down, 8 clipped gradient down). A transfer left out means
-    that buffer is already in the handle's device buffer
-    (`optimizer_resident_put`, or the previous step's result) and its
-    address here is not read (pass any valid float address, e.g. `info`).
-    `params` is `optimizer_step`'s list, word for word. Maximize negates
-    the gradient on the device (`maximize_negate_device`), wherever it came
-    from. Returns `N`."""
-    if len(params) != 12 and len(params) != 13:
-        raise Error(
-            "optimizer_resident_step_io: params must contain 12 or 13 values, got "
-            + String(len(params))
-        )
-    if len(handle_io) != 2:
-        raise Error("optimizer_resident_step_io: the last argument is [handle, io]")
-    var h = _opt_pool_handle(handle_io[0], 0)
-    var io = Int(py=handle_io[1])
-    if io < 0 or io > OPT_IO_ALL:
-        raise Error("optimizer_resident_step_io: io is a mask of 1, 2, 4 and 8")
-    var pp = _f32_ptr(Int(py=param_addr))
-    var gp = _f32_ptr(Int(py=grad_addr))
-    var maximize = len(params) == 13 and Int(py=params[12]) != 0
-    var op = _i32_ptr(Int(py=offsets_addr))
-    var ip = _i32_ptr(Int(py=init_addr))
-    var fp = _f32_ptr(Int(py=info_addr))
-    var n_tensors = Int(py=params[0])
-    var kind = Int(py=params[1])
-    var t = Int(py=params[2])
-    var nesterov = Int(py=params[3])
-    var lr = Float32(Float64(py=params[4]))
-    var beta1 = Float32(Float64(py=params[5]))
-    var beta2 = Float32(Float64(py=params[6]))
-    var eps = Float32(Float64(py=params[7]))
-    var weight_decay = Float32(Float64(py=params[8]))
-    var momentum = Float32(Float64(py=params[9]))
-    var dampening = Float32(Float64(py=params[10]))
-    var max_norm = Float32(Float64(py=params[11]))
-    var n_total = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        _opt_dev_pair(ctx, h)
-        var pool = _OPT_POOL.get_or_create_ptr()
-        n_total = identical_optimizer_step_resident_io(
-            ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip,
-            fp, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-            max_norm, io, maximize,
-        )
-    return PythonObject(n_total)
 
 
 # ---------------------------------------------------------------------------
@@ -860,40 +445,6 @@ def ce_loss_dev_binding(
             label_smoothing,
         )
     return PythonObject(count)
-
-
-def optimizer_resident_copy_dev_binding(handle: PythonObject, params: PythonObject) raises -> PythonObject:
-    """A device-to-device copy between an optimizer handle's parameter or
-    gradient buffer and a device array. params = [which (0 parameters, 1
-    gradient), tensor handle, offset (floats, into the optimizer's flat
-    registry), n, direction (0: tensor -> optimizer, 1: optimizer ->
-    tensor)]. Returns `n`."""
-    _params(params, 5, "optimizer_resident_copy_dev")
-    var h = _opt_pool_handle(handle, 0)
-    var which = Int(py=params[0])
-    var th = Int(py=params[1])
-    var off = Int(py=params[2])
-    var n = Int(py=params[3])
-    var direction = Int(py=params[4])
-    if (which != 0 and which != 1) or (direction != 0 and direction != 1):
-        raise Error("optimizer_resident_copy_dev: which and direction are 0 or 1")
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        _opt_dev_pair(ctx, h)
-        var pool = _OPT_POOL.get_or_create_ptr()
-        var tv = train_dev_view(ctx, th, n, "the optimizer copy")
-        if which == 0:
-            if direction == 0:
-                train_dev_copy(ctx, pool[].p[h], off, tv, 0, n)
-            else:
-                train_dev_copy(ctx, tv, 0, pool[].p[h], off, n)
-        else:
-            if direction == 0:
-                train_dev_copy(ctx, pool[].g[h], off, tv, 0, n)
-            else:
-                train_dev_copy(ctx, tv, 0, pool[].g[h], off, n)
-        _ = tv^
-    return PythonObject(n)
 
 
 def clip_grad_norm_binding(
@@ -1660,14 +1211,14 @@ def samba_resident_step_binding(
         var max_norm = Float32(Float64(py=params[13]))
         if len(params) == 15 and Int(py=params[14]) != 0:
             raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
-        var h = _opt_pool_handle(handle, owner[].n_total)
+        var h = opt_pool_handle(Int(py=handle), owner[].n_total)
         if owner[].busy:
             raise Error("samba_resident_step: session busy")
         owner[].busy = True
         var count = 0
         try:
             with GILReleased(Python()):
-                var pool = _OPT_POOL.get_or_create_ptr()
+                var pool = OPT_POOL.get_or_create_ptr()
                 count = samba_resident_train_step(
                     owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _i32_ptr(a[2]), _f32_ptr(a[6]),
                     pool[].m[h], pool[].v[h], pool[].sp[h], pool[].sg[h],
@@ -1835,6 +1386,11 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
+        m.def_py_c_function(optimizer_public_step_c, "optimizer_public_step")
+        m.def_py_c_function(optimizer_public_io_c, "optimizer_public_io")
+        m.def_py_c_function(optimizer_public_clip_c, "optimizer_public_clip")
+        m.def_py_c_function(optimizer_public_accumulate_c, "optimizer_public_accumulate")
+        m.def_py_c_function(optimizer_public_zero_c, "optimizer_public_zero")
         m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")
         m.def_function[optimizer_resident_close_binding]("optimizer_resident_close")
         m.def_function[optimizer_resident_download_binding]("optimizer_resident_download")
