@@ -101,6 +101,53 @@ def source_match(source, commit, wheels, payload, git_root=None):
     return matched
 
 
+def native_source_inventory(source, commit, committed, git_root):
+    """Check frozen native bytes, recording archive-omitted historical evidence.
+
+    A git archive intentionally excludes some old benchmark source snapshots.
+    Only bench/results evidence can be omitted here, and only when the pinned
+    commit's export-ignore attribute excludes that path or a parent directory.
+    Missing product sources still refuse, including export-ignored products.
+    """
+    selected = {rel: blob for rel, blob in committed.items()
+                if rel.endswith((".mojo", ".mojopkg")) or rel in ("pixi.toml", "pixi.lock")}
+    missing = [rel for rel in selected if not (source / rel).exists()]
+    for rel in missing:
+        require(rel.startswith("bench/results/") and not (source / rel).is_symlink(),
+                "missing requested native source: " + rel)
+    ancestors = {str(parent) for rel in missing
+                 for parent in (PurePosixPath(rel), *PurePosixPath(rel).parents)
+                 if str(parent) != "."}
+    attributes = {}
+    if ancestors:
+        # Check ancestors too: export-ignore on a directory excludes descendants
+        # from git archive although check-attr on the child can say unspecified.
+        raw = subprocess.check_output(
+            ["git", "-C", str(git_root), "check-attr", "--source=" + commit,
+             "-z", "--stdin", "export-ignore"],
+            input=b"\0".join(path.encode() for path in sorted(ancestors)) + b"\0")
+        fields = raw.split(b"\0")[:-1]
+        require(len(fields) % 3 == 0, "invalid git export attribute response")
+        attributes = {fields[i].decode(): fields[i + 2].decode()
+                      for i in range(0, len(fields), 3)}
+    hashes, omitted = {}, {}
+    for rel, blob in selected.items():
+        path = source / rel
+        if rel in missing:
+            excluded_by = next((str(parent) for parent in
+                                (PurePosixPath(rel), *PurePosixPath(rel).parents)
+                                if attributes.get(str(parent)) == "set"), None)
+            require(excluded_by is not None, "missing non-export-ignored native source: " + rel)
+            omitted[rel] = dict(git_blob=blob, export_ignore_path=excluded_by,
+                                reason="historical benchmark evidence omitted by committed git archive policy")
+            continue
+        raw = path.read_bytes()
+        require(hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest() == blob,
+                "uncommitted requested native source: " + rel)
+        hashes[rel] = hashlib.sha256(raw).hexdigest()
+    return hashes, omitted
+
+
 def installed_module_inventory(modules, prefix, payload, tests):
     """Tests may live externally; every product Python/extension byte must ship."""
     prefix, tests = Path(prefix).resolve(), Path(tests).resolve()
@@ -259,13 +306,9 @@ def main():
             if row:
                 metadata, name = row.split(b"\t", 1)
                 committed[name.decode()] = metadata.split()[2].decode()
-        report["requested_native_source_hashes"] = {}
-        for rel, expected_blob in committed.items():
-            if rel.endswith((".mojo", ".mojopkg")) or rel in ("pixi.toml", "pixi.lock"):
-                raw = (source / rel).read_bytes()
-                require(hashlib.sha1(b"blob %d\0" % len(raw) + raw).hexdigest() == expected_blob,
-                        "uncommitted requested native source: " + rel)
-                report["requested_native_source_hashes"][rel] = hashlib.sha256(raw).hexdigest()
+        (report["requested_native_source_hashes"],
+         report["archive_omitted_historical_native_sources"]) = native_source_inventory(
+            source, args.source_commit, committed, git_root)
         report["test_hashes"] = {}
         for path in tests.rglob("*"):
             if path.is_file():
