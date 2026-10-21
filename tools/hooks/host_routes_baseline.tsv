@@ -46,7 +46,3 @@ host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	import x_linear/ops.mojo:
 host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
-# why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
-block-per-n	serial-gpu	UNOWNED	owed2	x_prep/select_fast.mojo	0	ctx.enqueue_function[sel_fcls_score_kernel](
-# why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
-block-per-n	serial-gpu	UNOWNED	owed2	x_prep/select_fast.mojo	0	ctx.enqueue_function[sel_freg_score_kernel](
