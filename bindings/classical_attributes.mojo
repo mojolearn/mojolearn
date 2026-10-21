@@ -4,6 +4,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.native_error_class import error_without_class
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
@@ -11,29 +12,29 @@ from bindings.sequential_inputs import sequential_input
 
 def _type_fields(cls: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    return b.type.__dict__["__dict__"].__get__(cls)
+    return py_call(b.type.__dict__["__dict__"].__get__, cls)
 
 
 def _type_mro(cls: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    return b.type.__dict__["__mro__"].__get__(cls)
+    return py_call(b.type.__dict__["__mro__"].__get__, cls)
 
 
 def _descriptor_slot(cls: PythonObject, name: String) raises -> Bool:
     var mro = _type_mro(cls)
     for k in range(len(mro)):  # driver-loop: native descriptor class metadata
-        if Bool(py=_type_fields(mro[k]).__contains__(name)):
+        if py_contains(_type_fields(mro[k]), name):
             return True
     return False
 
 
 def _public_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var cls = model if b.type(model) is b.type else b.type(model)
-    var layouts = context.get("classical_public_layouts")
+    var cls = model if py_type(model) is b.type else py_type(model)
+    var layouts = py_get(context, "classical_public_layouts")
     if layouts is None:
         raise Error("RuntimeError: native public model metadata was not connected")
-    var plan = layouts.get(cls)
+    var plan = py_get(layouts, cls)
     if plan is None:
         raise Error("TypeError: native public model requires an exact connected class")
     return plan
@@ -42,12 +43,12 @@ def _public_plan(model: PythonObject, context: PythonObject) raises -> PythonObj
 def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     # Existing private-owner callers have no installer metadata. Once public
     # installation is requested, the complete layout is mandatory and checked.
-    if context.get("classical_public_layouts") is None:
-        if Bool(py=context.get("classical_public_installed", False)):
+    if py_get(context, "classical_public_layouts") is None:
+        if Bool(py=py_get(context, "classical_public_installed", False)):
             raise Error("RuntimeError: native public model metadata was removed")
         return
     var b = Python.import_module("builtins")
-    var cls = model if b.type(model) is b.type else b.type(model)
+    var cls = model if py_type(model) is b.type else py_type(model)
     var plan = _public_plan(model, context)
     var mro = _type_mro(cls)
     var connected = plan["mro"]
@@ -57,25 +58,25 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     for k in range(len(mro)):  # driver-loop: exact connected class ancestry
         if mro[k] is not connected[k]:
             raise Error("TypeError: native public model class ancestry changed")
-        if Bool(py=_type_fields(mro[k]).__contains__("__getattr__")):
+        if py_contains(_type_fields(mro[k]), "__getattr__"):
             # CPython otherwise invokes this hook after AttributeError from
             # our native getter. Refuse while we still control the boundary.
             raise Error("TypeError: Python model __getattr__ hooks are not accepted")
-        if Bool(py=_type_fields(mro[k]).__contains__("__del__")):
+        if py_contains(_type_fields(mro[k]), "__del__"):
             raise Error("TypeError: Python model finalizer hooks are not accepted")
         if not found_fields:
-            var descriptor = _type_fields(mro[k]).get("__dict__")
+            var descriptor = py_get(_type_fields(mro[k]), "__dict__")
             if descriptor is not None:
                 if descriptor is not plan["fields_descriptor"]:
                     raise Error("TypeError: Python model dictionary descriptors are not accepted")
                 found_fields = True
     if not found_fields:
         raise Error("TypeError: native public model dictionary descriptor is missing")
-    if b.type(model) is not b.type:
-        var fields = plan["fields_get"](model, cls)
-        var keys = b.list(fields.keys())
+    if py_type(model) is not b.type:
+        var fields = py_call(plan["fields_get"], model, cls)
+        var keys = py_call(b.list, fields.keys())
         for k in range(len(keys)):  # driver-loop: native instance attribute names
-            if b.type(keys[k]) is not b.str:
+            if py_type(keys[k]) is not b.str:
                 # Refuse before a dict lookup can compare a malicious key
                 # against one of the native implementation's string names.
                 raise Error("TypeError: native model dictionary requires exact string keys")
@@ -83,34 +84,34 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
 
 def classical_getattribute(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    if b.type(name) is not b.str:
+    if py_type(name) is not b.str:
         raise Error("TypeError: native model attribute name must be an exact string")
     classical_check_layout(model, context)
     var plan = _public_plan(model, context)
-    var cls = b.type(model)
+    var cls = py_type(model)
     var member = PythonObject(None)
     var present = False
     var mro = plan["mro"]
     for k in range(len(mro)):  # driver-loop: native class attribute lookup order
         var fields = _type_fields(mro[k])
-        if Bool(py=fields.__contains__(name)):
+        if py_contains(fields, name):
             member = fields[name]
             present = True
             break
-    var binding = plan["bindings"].get(name)
+    var binding = py_get(plan["bindings"], name)
     var known = binding is not None and member is binding[0]
-    var member_type = b.type(member)
+    var member_type = py_type(member)
     var descriptor = present and _descriptor_slot(member_type, "__get__")
     var data_descriptor = descriptor and (_descriptor_slot(member_type, "__set__") or _descriptor_slot(member_type, "__delete__"))
     if data_descriptor:
         if not known:
             raise Error("TypeError: Python model property/descriptor hooks are not accepted")
-        return binding[1](model, cls)
-    var fields = plan["fields_get"](model, cls)
-    if Bool(py=fields.__contains__(name)):
+        return py_call(binding[1], model, cls)
+    var fields = py_call(plan["fields_get"], model, cls)
+    if py_contains(fields, name):
         var value = fields[name]
-        if (len(name) > 0 and Bool(py=name.endswith("_")) and not Bool(py=name.startswith("_"))
-                and b.type(value) is context["array_class"]):
+        if (len(name) > 0 and Bool(py=py_call(name.endswith, "_")) and not Bool(py=py_call(name.startswith, "_"))
+                and py_type(value) is context["array_class"]):
             # Native slot getters + ndarray C type wrap the same owner/storage.
             # Never invoke Array.__array__, properties, or output Python code.
             sequential_admit_value(value, context)
@@ -121,14 +122,14 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     if descriptor:
         if not known:
             raise Error("TypeError: unconnected Python model descriptors are not accepted")
-        return binding[1](model, cls)
+        return py_call(binding[1], model, cls)
     return member
 
 
 def _attribute_context(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var host = context.get("classical_host_context")
-    if host is not None and (b.type(model) is host["ridge_class"] or b.type(model) is host["linear_class"]):
+    var host = py_get(context, "classical_host_context")
+    if host is not None and (py_type(model) is host["ridge_class"] or py_type(model) is host["linear_class"]):
         return host
     return context
 
@@ -157,7 +158,7 @@ def classical_attribute_descriptor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr
         var value = PythonObject(from_borrowed=function)
         var b = Python.import_module("builtins")
         var types = Python.import_module("types")
-        if b.type(value) is not types.MethodType or b.type(value.__func__) is not types.BuiltinFunctionType:
+        if py_type(value) is not types.MethodType or py_type(value.__func__) is not types.BuiltinFunctionType:
             raise Error("native attribute descriptor requires a bound compiled entry")
         # Documented CPython API, present throughout package Python >=3.10.
         # Borrows `function`; owns one new reference returned directly to the

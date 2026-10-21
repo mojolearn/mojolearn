@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """JSON parsing owned by Mojo, returning ordinary native CPython containers."""
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_contains
 from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
 
 
@@ -195,11 +196,11 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
 def native_path(value: PythonObject) raises -> PythonObject:
     """Read standard path storage without invoking caller path protocols."""
     var bi = Python.import_module("builtins")
-    if bi.type(value) is bi.str:
+    if py_type(value) is bi.str:
         return value
-    if bi.type(value) is bi.bytes:
-        return value.decode("utf-8", "surrogateescape")
-    var cls = bi.type(value)
+    if py_type(value) is bi.bytes:
+        return py_call(value.decode, "utf-8", "surrogateescape")
+    var cls = py_type(value)
     var pathlib = Python.import_module("pathlib")
     # Exact native storage types only. Names/modules and isinstance admit
     # subclasses whose descriptors or __fspath__ can execute Python. Never
@@ -208,7 +209,7 @@ def native_path(value: PythonObject) raises -> PythonObject:
         raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
     var parts = PythonObject(None)
     var member_type = Python.import_module("types").MemberDescriptorType
-    var mro = bi.type.__getattribute__(cls, "__mro__")
+    var mro = py_call(bi.type.__getattribute__, cls, "__mro__")
     var found = False
     # object.__getattribute__ still invokes a replaced property. Read only a
     # real native slot descriptor from the admitted path hierarchy instead.
@@ -218,29 +219,29 @@ def native_path(value: PythonObject) raises -> PythonObject:
             var base = mro[i]
             if base is not pathlib.PosixPath and base is not pathlib.PurePosixPath and base is not pathlib.Path and base is not pathlib.PurePath and base is not bi.object:
                 raise Error("TypeError: Python path inheritance callbacks are unsupported")
-            var namespace = bi.type.__getattribute__(base, "__dict__")
-            if Bool(py=namespace.__contains__(field)):
+            var namespace = py_call(bi.type.__getattribute__, base, "__dict__")
+            if py_contains(namespace, field):
                 var descriptor = namespace[field]
-                if bi.type(descriptor) is not member_type:
+                if py_type(descriptor) is not member_type:
                     raise Error("TypeError: Python path storage descriptors are unsupported")
-                parts = descriptor.__get__(value, cls)
+                parts = py_call(descriptor.__get__, value, cls)
                 found = True
                 break
         if found:
             break
     if not found:
         raise Error("TypeError: path requires native component storage")
-    if bi.type(parts) is not bi.list and bi.type(parts) is not bi.tuple:
+    if py_type(parts) is not bi.list and py_type(parts) is not bi.tuple:
         raise Error("TypeError: path components require native storage")
     var result = PythonObject("")
     for i in range(len(parts)):  # driver-loop: over stored filesystem path components
         var part = parts[i]
-        if bi.type(part) is not bi.str:
+        if py_type(part) is not bi.str:
             raise Error("TypeError: path components require native strings")
-        if Bool(py=part.startswith("/")) or len(result) == 0:
+        if Bool(py=py_call(part.startswith, "/")) or len(result) == 0:
             result = part
         elif len(part) != 0:
-            result = result.rstrip("/") + PythonObject("/") + part
+            result = py_call(result.rstrip, "/") + PythonObject("/") + part
     return result if len(result) != 0 else PythonObject(".")
 
 

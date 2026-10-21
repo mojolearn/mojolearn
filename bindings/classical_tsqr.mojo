@@ -4,6 +4,7 @@
 # new solver or performance default is introduced. Matrix descriptors are
 # native structs; PythonObjects only own admitted host buffers and C entries.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy
 from bindings.classical_arrays import classical_array, classical_word
 from bindings.sequential_arrays import sequential_address
@@ -35,14 +36,14 @@ struct ClassicalKit(Movable):
         self.context = context
         self.matrices = List[ClassicalMatrix]()
         self.allocations = List[Int]()
-        self.resident = entries.get("x_decomp_dev_ew") is not None
+        self.resident = py_get(entries, "x_decomp_dev_ew") is not None
 
     def close(mut self) raises:
         # Cleanup owns every successful allocation before the first upload.
         # Views may share an id, so only the allocation ledger frees buffers.
         # driver-loop: over native matrix allocation handles
         for i in range(len(self.allocations) - 1, -1, -1):
-            _ = self.entries["x_decomp_dev_free"](self.allocations[i])
+            _ = py_call(self.entries["x_decomp_dev_free"], self.allocations[i])
         self.allocations.clear()
 
     def add(mut self, host: PythonObject, rows: Int, cols: Int, device: Int = -1) -> Int:
@@ -56,7 +57,7 @@ struct ClassicalKit(Movable):
         return self.add(host, rows, cols)
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
-        var handle = Int(py=self.entries["x_decomp_dev_alloc"](max(rows * cols, 1)))
+        var handle = Int(py=py_call(self.entries["x_decomp_dev_alloc"], max(rows * cols, 1)))
         self.allocations.append(handle)
         return self.add(PythonObject(None), rows, cols, handle)
 
@@ -66,7 +67,7 @@ struct ClassicalKit(Movable):
             var cols = self.matrices[index].cols
             var result = classical_array(max(rows * cols, 1), 0, self.context)
             if rows * cols:
-                _ = self.entries["x_decomp_dev_download"](self.matrices[index].device,
+                _ = py_call(self.entries["x_decomp_dev_download"], self.matrices[index].device,
                         sequential_address(result), rows * cols)
             self.matrices[index].host = result
             self.matrices[index].device = -1
@@ -82,10 +83,10 @@ struct ClassicalKit(Movable):
         if self.matrices[index].device < 0:
             var n = self.matrices[index].rows * self.matrices[index].cols
             var owner = self.host(index)
-            var handle = Int(py=self.entries["x_decomp_dev_alloc"](max(n, 1)))
+            var handle = Int(py=py_call(self.entries["x_decomp_dev_alloc"], max(n, 1)))
             self.allocations.append(handle)
             if n:
-                _ = self.entries["x_decomp_dev_upload"](handle, sequential_address(owner), n)
+                _ = py_call(self.entries["x_decomp_dev_upload"], handle, sequential_address(owner), n)
             self.matrices[index].device = handle
             self.matrices[index].host = PythonObject(None)
             _ = owner^
@@ -134,7 +135,7 @@ struct ClassicalKit(Movable):
             var da = self.device(a)
             var db = self.device(ib)
             var dc = self.device(ic)
-            _ = self.entries["x_decomp_dev_ew"](da, db, dc, self.matrices[out].device, params, PythonObject(scalar))
+            _ = py_call(self.entries["x_decomp_dev_ew"], da, db, dc, self.matrices[out].device, params, PythonObject(scalar))
             return out
         var out = self.zeros(rows, cols)
         if rows * cols:
@@ -142,7 +143,7 @@ struct ClassicalKit(Movable):
             var ab = self.address(ib)
             var ac = self.address(ic)
             var ao = self.address(out)
-            _ = self.entries["x_decomp_ew"](aa, ab, ac, ao, params, PythonObject(scalar))
+            _ = py_call(self.entries["x_decomp_ew"], aa, ab, ac, ao, params, PythonObject(scalar))
         return out
 
     def mm(mut self, a: Int, b: Int, ta: Bool = False, tb: Bool = False) raises -> Int:
@@ -157,14 +158,14 @@ struct ClassicalKit(Movable):
             var out = self.device_output(m, n)
             var da = self.device(a)
             var db = self.device(b)
-            _ = self.entries["x_decomp_dev_gemm"](da, db, self.matrices[out].device, params)
+            _ = py_call(self.entries["x_decomp_dev_gemm"], da, db, self.matrices[out].device, params)
             return out
         var out = self.zeros(m, n)
         if m * n:
             var aa = self.address(a)
             var ab = self.address(b)
             var ao = self.address(out)
-            _ = self.entries["x_decomp_gemm"](aa, ab, ao, params)
+            _ = py_call(self.entries["x_decomp_gemm"], aa, ab, ao, params)
         return out
 
     def sum(mut self, a: Int, columns: Bool) raises -> Int:
@@ -176,12 +177,12 @@ struct ClassicalKit(Movable):
         if rows * cols and self.resident:
             var out = self.device_output(nr, nc)
             var da = self.device(a)
-            _ = self.entries["x_decomp_dev_" + name](da, self.matrices[out].device, Python.list(rows, cols))
+            _ = py_call(self.entries["x_decomp_dev_" + name], da, self.matrices[out].device, Python.list(rows, cols))
             return out
         var out = self.zeros(nr, nc)
         var aa = self.address(a)
         var ao = self.address(out)
-        _ = self.entries["x_decomp_" + name](aa, ao, Python.list(rows, cols))
+        _ = py_call(self.entries["x_decomp_" + name], aa, ao, Python.list(rows, cols))
         return out
 
     def total(mut self, a: Int) raises -> Float64:
@@ -198,14 +199,14 @@ struct ClassicalKit(Movable):
             var out = self.device_output(rows, cols)
             var da = self.device(a)
             var di = self.device(idx)
-            _ = self.entries["x_decomp_dev_move"](da, di, self.matrices[out].device, params)
+            _ = py_call(self.entries["x_decomp_dev_move"], da, di, self.matrices[out].device, params)
             return out
         var out = self.zeros(rows, cols)
         if rows * cols:
             var aa = self.address(a)
             var ai = self.address(idx)
             var ao = self.address(out)
-            _ = self.entries["x_decomp_move"](aa, ai, ao, params)
+            _ = py_call(self.entries["x_decomp_move"], aa, ai, ao, params)
         return out
 
     def take_rows(mut self, a: Int, idx: Int) raises -> Int:
@@ -265,20 +266,20 @@ struct ClassicalKit(Movable):
             # The same device max/NaN check and stable radix order as _Kit.
             var maximum = self.device_output(1, 1)
             var da = self.device(a)
-            _ = self.entries["x_decomp_dev_reduce"](da, self.matrices[maximum].device, Python.list(n, 1))
+            _ = py_call(self.entries["x_decomp_dev_reduce"], da, self.matrices[maximum].device, Python.list(n, 1))
             var v = self.word(maximum)
             if v != v:
                 raise Error("x_decomp: a NaN has no order (refused)")
             var out = self.device_output(n, 1)
             var count = self.device_output(1, 1)
-            _ = self.entries["x_decomp_dev_order_f"](da, da, self.matrices[out].device,
+            _ = py_call(self.entries["x_decomp_dev_order_f"], da, da, self.matrices[out].device,
                                                     self.matrices[count].device, Python.list(n, 0, 0))
             return out
         var out = self.zeros(n, 1)
         if n:
             var aa = self.address(a)
             var ao = self.address(out)
-            _ = self.entries["x_decomp_order_f"](aa, n, ao)
+            _ = py_call(self.entries["x_decomp_order_f"], aa, n, ao)
         return out
 
     def signs(mut self, a: Int) raises -> Int:
@@ -307,12 +308,12 @@ struct ClassicalKit(Movable):
         var v = self.zeros(n, n)
         var sa = self.address(s)
         var va = self.address(v)
-        if self.resident and self.entries.get("x_decomp_dev_svd") is not None:
+        if self.resident and py_get(self.entries, "x_decomp_dev_svd") is not None:
             var da = self.device(a)
-            _ = self.entries["x_decomp_dev_svd"](da, sa, va, Python.list(m, n))
+            _ = py_call(self.entries["x_decomp_dev_svd"], da, sa, va, Python.list(m, n))
         else:
             var aa = self.address(a)
-            _ = self.entries["x_decomp_svd"](aa, sa, va, Python.list(m, n))
+            _ = py_call(self.entries["x_decomp_svd"], aa, sa, va, Python.list(m, n))
         var negated = self.ew(14, s, scalar=-1.0)
         var order = self.order(negated)
         var st = self.transpose(s)
@@ -321,7 +322,7 @@ struct ClassicalKit(Movable):
         var vt = self.transpose(v)
         vt = self.take_rows(vt, order)
         sa = self.address(s)
-        var rank = Int(py=self.entries["x_decomp_rank_above"](sa, Python.list(n), PythonObject(0.00000095367431640625)))
+        var rank = Int(py=py_call(self.entries["x_decomp_rank_above"], sa, Python.list(n), PythonObject(0.00000095367431640625)))
         var av = self.mm(a, vt, tb=True)
         var used_av = av
         var used_s = s
@@ -336,11 +337,11 @@ struct ClassicalKit(Movable):
             if self.resident and m * n:
                 q = self.device_output(m, n)
                 var du = self.device(ug)
-                _ = self.entries["x_decomp_dev_orth_diag"](du, self.matrices[q].device, dia, Python.list(m, n))
+                _ = py_call(self.entries["x_decomp_dev_orth_diag"], du, self.matrices[q].device, dia, Python.list(m, n))
             else:
                 q = self.copy_host(ug)
                 var qa = self.address(q)
-                _ = self.entries["x_decomp_orth_diag"](qa, dia, Python.list(m, n))
+                _ = py_call(self.entries["x_decomp_orth_diag"], qa, dia, Python.list(m, n))
             var absolute = self.ew(13, diag)
             var zero = self.zeros(1, 1)
             var nonpositive = self.ew(34, absolute, zero)
@@ -359,10 +360,10 @@ struct ClassicalKit(Movable):
         var tau = self.zeros(1, min(m, rank))
         var ha = self.address(h)
         var ta = self.address(tau)
-        _ = self.entries["x_decomp_geqrf"](ha, ta, Python.list(m, rank))
+        _ = py_call(self.entries["x_decomp_geqrf"], ha, ta, Python.list(m, rank))
         var qc = self.zeros(m, n)
         var qa = self.address(qc)
-        _ = self.entries["x_decomp_orgqr"](ha, ta, qa, Python.list(m, rank, min(m, rank), n))
+        _ = py_call(self.entries["x_decomp_orgqr"], ha, ta, qa, Python.list(m, rank, min(m, rank), n))
         var diagonal = self.strided(h, rank, rank + 1)
         var sign = self.signs(diagonal)
         if n > rank:
@@ -378,12 +379,12 @@ struct ClassicalKit(Movable):
                 if self.resident:
                     var ds = self.device(source)
                     var di = self.device(one)
-                    _ = self.entries["x_decomp_dev_move"](ds, di, self.matrices[joined].device, params)
+                    _ = py_call(self.entries["x_decomp_dev_move"], ds, di, self.matrices[joined].device, params)
                 else:
                     var aa = self.address(source)
                     var ai = self.address(one)
                     var ao = self.address(joined)
-                    _ = self.entries["x_decomp_move"](aa, ai, ao, params)
+                    _ = py_call(self.entries["x_decomp_move"], aa, ai, ao, params)
                 offset += count
             sign = joined
         var u = self.ew(2, qc, sign)

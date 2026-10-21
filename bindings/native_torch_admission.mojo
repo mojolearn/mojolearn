@@ -6,6 +6,7 @@
 # those helpers in the supported installed Torch, and are checked before cache.
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 
 
 struct NativeTorchBoundary(Defaultable, Movable):
@@ -37,21 +38,21 @@ def _torch_type_fields(cls: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     # Use type's native dictionary descriptor, bypassing a custom metaclass's
     # __getattribute__ and any user property named __dict__.
-    return bi.type.__dict__["__dict__"].__get__(cls)
+    return py_call(bi.type.__dict__["__dict__"].__get__, cls)
 
 
 def native_torch_exact(cls: PythonObject) raises -> Bool:
     var bi = Python.import_module("builtins")
     var sys = Python.import_module("sys")
-    var module = sys.modules.get("torch._tensor")
-    if module is None or bi.type(module) is not bi.type(sys):
+    var module = py_get(sys.modules, "torch._tensor")
+    if module is None or py_type(module) is not py_type(sys):
         return False
-    var fields = bi.object.__getattribute__(module, "__dict__")
-    if cls is fields.get("Tensor"):
+    var fields = py_fields(module)
+    if cls is py_get(fields, "Tensor"):
         return True
-    var parameter = sys.modules.get("torch.nn.parameter")
-    if parameter is not None and bi.type(parameter) is bi.type(sys):
-        return cls is bi.object.__getattribute__(parameter, "__dict__").get("Parameter")
+    var parameter = py_get(sys.modules, "torch.nn.parameter")
+    if parameter is not None and py_type(parameter) is py_type(sys):
+        return cls is py_get(py_fields(parameter), "Parameter")
     return False
 
 
@@ -59,48 +60,48 @@ def _torch_connect() raises:
     var cache = NATIVE_TORCH.get_or_create_ptr()
     var bi = Python.import_module("builtins")
     var sys = Python.import_module("sys")
-    var module = sys.modules.get("torch._C")
-    if module is None or bi.type(module) is not bi.type(sys):
+    var module = py_get(sys.modules, "torch._C")
+    if module is None or py_type(module) is not py_type(sys):
         raise Error("TypeError: Torch native mode admission requires its compiled extension")
     if cache[].module is module:
         return
-    var fields = bi.object.__getattribute__(module, "__dict__")
+    var fields = py_fields(module)
     var entries = Python.dict()
     # small-loop(the three fixed Torch mode metadata entry names)
     for name in [String("_len_torch_function_stack"), String("_len_torch_dispatch_stack"),
                  String("_dispatch_tls_is_dispatch_key_included")]:
-        var entry = fields.get(name)
-        if entry is None or bi.type(entry) is not bi.type(bi.len):
+        var entry = py_get(fields, name)
+        if entry is None or py_type(entry) is not py_type(bi.len):
             raise Error("TypeError: Torch lacks compiled mode metadata entry " + name)
         if String(entry.__module__) != "torch._C" or String(entry.__name__) != name:
             raise Error("TypeError: Torch mode metadata entry provenance differs: " + name)
-        entries[name] = entry
-    var base = fields.get("TensorBase")
+        py_setitem(entries, name, entry)
+    var base = py_get(fields, "TensorBase")
     if base is None:
         # Torch 2.1 registers the same native tensor descriptor family only
         # under _TensorBase. Later releases export both names. Admission below
         # still verifies the native methods and the actual Tensor ancestry.
-        base = fields.get("_TensorBase")
+        base = py_get(fields, "_TensorBase")
     if base is None:
         raise Error("TypeError: Torch lacks native TensorBase metadata")
     var base_fields = _torch_type_fields(base)
     var methods = Python.dict()
     for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride")]:  # small-loop(the four fixed tensor method names)
-        var entry = base_fields.get(name)
-        if entry is None or bi.type(entry) is not bi.type(bi.list.append):
+        var entry = py_get(base_fields, name)
+        if entry is None or py_type(entry) is not py_type(bi.list.append):
             raise Error("TypeError: Torch tensor conversion requires native method " + name)
-        methods[name] = entry
+        py_setitem(methods, name, entry)
     for name in [String("device"), String("dtype"), String("shape")]:  # small-loop(the three fixed tensor descriptor names)
-        var entry = base_fields.get(name)
-        if entry is None or bi.type(entry) is not bi.type(bi.memoryview.obj):
+        var entry = py_get(base_fields, name)
+        if entry is None or py_type(entry) is not py_type(bi.memoryview.obj):
             raise Error("TypeError: Torch tensor metadata requires native descriptor " + name)
-        methods[name] = entry
-    var mode_type = fields.get("_TorchDispatchModeKey")
-    var dispatch_type = fields.get("DispatchKey")
+        py_setitem(methods, name, entry)
+    var mode_type = py_get(fields, "_TorchDispatchModeKey")
+    var dispatch_type = py_get(fields, "DispatchKey")
     if dispatch_type is None:
         raise Error("TypeError: Torch lacks native dispatch key metadata")
     var keys = Python.list()
-    var get_mode = fields.get("_get_dispatch_mode")
+    var get_mode = py_get(fields, "_get_dispatch_mode")
     if mode_type is None and get_mode is None:
         # Verified Torch 2.1 native TLS stores every dispatch mode in stack_.
         # Its C stack length therefore covers the modes that modern Torch
@@ -108,38 +109,38 @@ def _torch_connect() raises:
         # merely from missing APIs in a newer/unknown release.
         # Source: pytorch/v2.1.0/c10/core/impl/TorchDispatchModeTLS.h; actual
         # 2.1.2 C-entry probe retained in the internal compatibility evidence.
-        var version_module = sys.modules.get("torch.version")
-        if version_module is None or bi.type(version_module) is not bi.type(sys):
+        var version_module = py_get(sys.modules, "torch.version")
+        if version_module is None or py_type(version_module) is not py_type(sys):
             raise Error("TypeError: Torch unified dispatch metadata requires verified version metadata")
-        var version = bi.object.__getattribute__(version_module, "__dict__").get("__version__")
-        if bi.type(version) is not bi.str or not Bool(py=version.startswith("2.1.")):
+        var version = py_get(py_fields(version_module), "__version__")
+        if py_type(version) is not bi.str or not Bool(py=py_call(version.startswith, "2.1.")):
             raise Error("TypeError: Torch lacks native infrastructure mode metadata for this API family")
     else:
-        if mode_type is None or get_mode is None or bi.type(get_mode) is not bi.type(bi.len):
+        if mode_type is None or get_mode is None or py_type(get_mode) is not py_type(bi.len):
             raise Error("TypeError: Torch lacks compiled infrastructure mode metadata")
         if String(get_mode.__module__) != "torch._C" or String(get_mode.__name__) != "_get_dispatch_mode":
             raise Error("TypeError: Torch infrastructure mode metadata provenance differs")
-        entries["_get_dispatch_mode"] = get_mode
+        py_setitem(entries, "_get_dispatch_mode", get_mode)
         var modes = _torch_type_fields(mode_type)
         for name in [String("FAKE"), String("PROXY"), String("FUNCTIONAL")]:  # small-loop(the three fixed dispatch mode keys)
-            var key = modes.get(name)
-            if key is None or bi.type(key) is not mode_type:
+            var key = py_get(modes, name)
+            if key is None or py_type(key) is not mode_type:
                 raise Error("TypeError: Torch lacks native dispatch mode key " + name)
-            keys.append(key)
+            py_call(keys.append, key)
     var dispatch = _torch_type_fields(dispatch_type)
-    var pre = dispatch.get("PreDispatch")
-    if pre is None or bi.type(pre) is not dispatch_type:
+    var pre = py_get(dispatch, "PreDispatch")
+    if pre is None or py_type(pre) is not dispatch_type:
         raise Error("TypeError: Torch lacks native PreDispatch key metadata")
-    var torch = sys.modules.get("torch._tensor")
-    if torch is None or bi.type(torch) is not bi.type(sys):
+    var torch = py_get(sys.modules, "torch._tensor")
+    if torch is None or py_type(torch) is not py_type(sys):
         raise Error("TypeError: Torch native Tensor class metadata is unavailable")
-    var public = bi.object.__getattribute__(torch, "__dict__")
-    cache[].tensor = public.get("Tensor")
+    var public = py_fields(torch)
+    cache[].tensor = py_get(public, "Tensor")
     cache[].base = base
-    var parameter = sys.modules.get("torch.nn.parameter")
+    var parameter = py_get(sys.modules, "torch.nn.parameter")
     cache[].parameter = PythonObject(None)
-    if parameter is not None and bi.type(parameter) is bi.type(sys):
-        cache[].parameter = bi.object.__getattribute__(parameter, "__dict__").get("Parameter")
+    if parameter is not None and py_type(parameter) is py_type(sys):
+        cache[].parameter = py_get(py_fields(parameter), "Parameter")
     cache[].entries = entries
     cache[].methods = methods
     cache[].mode_keys = keys
@@ -150,11 +151,11 @@ def _torch_connect() raises:
 def native_torch_admit(value: PythonObject) raises:
     _torch_connect()
     var cache = NATIVE_TORCH.get_or_create_ptr()
-    var cls = Python.import_module("builtins").type(value)
+    var cls = py_type(value)
     if cls is not cache[].tensor and cls is not cache[].parameter:
         raise Error("TypeError: Torch buffers require an exact Tensor or Parameter without Python subclass hooks")
     var bi = Python.import_module("builtins")
-    var hierarchy = bi.type.__dict__["__mro__"].__get__(cls)
+    var hierarchy = py_call(bi.type.__dict__["__mro__"].__get__, cls)
     var has_base = False
     for i in range(len(hierarchy)):  # driver-loop: over native Tensor class ancestry metadata
         has_base = has_base or hierarchy[i] is cache[].base
@@ -165,11 +166,11 @@ def native_torch_admit(value: PythonObject) raises:
     if Int(py=cache[].entries["_len_torch_dispatch_stack"]()) != 0:
         raise Error("TypeError: Torch buffers cannot be used while a Python TorchDispatchMode is active")
     for i in range(len(cache[].mode_keys)):  # driver-loop: over native Torch infrastructure mode keys
-        if cache[].entries["_get_dispatch_mode"](cache[].mode_keys[i]) is not None:
+        if py_call(cache[].entries["_get_dispatch_mode"], cache[].mode_keys[i]) is not None:
             raise Error("TypeError: Torch buffers cannot be used while a Python infrastructure dispatch mode is active")
     # Torch's _ops.py sets this native TLS key whenever its Python pre-dispatch
     # stack is nonempty. Refusing the included key needs no Python stack walk.
-    if Bool(py=cache[].entries["_dispatch_tls_is_dispatch_key_included"](cache[].pre_dispatch)):
+    if Bool(py=py_call(cache[].entries["_dispatch_tls_is_dispatch_key_included"], cache[].pre_dispatch)):
         raise Error("TypeError: Torch buffers cannot be used while Python PreDispatch is active")
 
 
@@ -179,21 +180,21 @@ def native_torch_metadata(value: PythonObject) raises -> PythonObject:
     var methods = cache[].methods
     # Invoke native base descriptors directly: an instance can shadow a
     # non-data Tensor method with a Python callable despite having exact type.
-    var device = methods["device"].__get__(value)
-    var dtype = methods["dtype"].__get__(value)
-    var shape = methods["shape"].__get__(value)
-    var address = methods["data_ptr"](value)
-    var strides = methods["stride"](value)
+    var device = py_call(methods["device"].__get__, value)
+    var dtype = py_call(methods["dtype"].__get__, value)
+    var shape = py_call(methods["shape"].__get__, value)
+    var address = py_call(methods["data_ptr"], value)
+    var strides = py_call(methods["stride"], value)
     return Python.tuple(dtype, device.type, shape, strides, address)
 
 
 def native_torch_numpy(value: PythonObject) raises -> PythonObject:
     native_torch_admit(value)
     var cache = NATIVE_TORCH.get_or_create_ptr()
-    var device = cache[].methods["device"].__get__(value)
+    var device = py_call(cache[].methods["device"].__get__, value)
     if String(device.type) != "cpu":
         raise Error("TypeError: Torch input must be a host buffer; copy device tensors to CPU explicitly")
-    var detached = cache[].methods["detach"](value)
-    var result = cache[].methods["numpy"](detached)
+    var detached = py_call(cache[].methods["detach"], value)
+    var result = py_call(cache[].methods["numpy"], detached)
     _ = detached^
     return result

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential buffer admission and ndarray ABI ownership."""
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type
 from bindings.sequential_inputs import sequential_input
 
 
@@ -9,8 +10,8 @@ def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonOb
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
-    var storage = b.bytearray(count * Int(py=dtype.itemsize))
-    return context["ndarray"](shape, dtype=dtype, buffer=storage)
+    var storage = py_call(b.bytearray, count * Int(py=dtype.itemsize))
+    return py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
 
 
 def sequential_address(value: PythonObject) raises -> PythonObject:
@@ -65,5 +66,5 @@ def sequential_curve(value: PythonObject, count: Int) raises -> PythonObject:
         return result
     var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
     for k in range(count):  # driver-loop: over the native training engine's per-epoch scalar report
-        result.append(PythonObject(pointer[k]))
+        py_call(result.append, PythonObject(pointer[k]))
     return result

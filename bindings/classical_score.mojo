@@ -2,6 +2,7 @@
 # The exact existing single-output _Reg R2 program, assembled and consumed
 # natively. The grouped sums and binary64 finishing remain x_metrics kernels.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy, bitcast
 from bindings.classical_arrays import classical_array, classical_host_f32
 from bindings.classical_ridge import classical_linear_predict
@@ -58,9 +59,9 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var metrics = context["classical_metrics"][mode]
     var bi = Python.import_module("builtins")
-    if bi.type(metrics) is bi.str:
+    if py_type(metrics) is bi.str:
         raise Error("ImportError: " + String(metrics))
-    if String(metrics["x_metrics_vendor"]()) != String(context.get("classical_metric_vendor", context["vendor"])):
+    if String(metrics["x_metrics_vendor"]()) != String(py_get(context, "classical_metric_vendor", context["vendor"])):
         raise Error("RuntimeError: score vendor differs from selected execution")
     if Int(py=metrics["x_metrics_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: score mode differs from process default")
@@ -102,18 +103,18 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var stages = len(program.words) // 16
     var words_address = Int(program.words.unsafe_ptr())
     var outputs_address = Int(outputs.unsafe_ptr())
-    var setting = context["environment"].get(PythonObject("MOJOLEARN_ARENA_RANGES").encode("ascii"), PythonObject("1").encode("ascii"))
-    if bi.type(setting) is not bi.bytes:
+    var setting = py_get(context["environment"], py_call(PythonObject("MOJOLEARN_ARENA_RANGES").encode, "ascii"), py_call(PythonObject("1").encode, "ascii"))
+    if py_type(setting) is not bi.bytes:
         raise Error("TypeError: arena environment setting must be native bytes")
     var setting_text = String(setting.decode())
     var ranges = String(setting_text.strip()) != "0"
-    if ranges and metrics.get("x_metrics_run_ranges") is not None:
-        _ = metrics["x_metrics_run_ranges"](address, words_address,
+    if ranges and py_get(metrics, "x_metrics_run_ranges") is not None:
+        _ = py_call(metrics["x_metrics_run_ranges"], address, words_address,
             Python.tuple(program.size, stages, 1, 2), Int(inputs.unsafe_ptr()), outputs_address)
-    elif metrics.get("x_metrics_run_out") is not None:
-        _ = metrics["x_metrics_run_out"](address, program.size, words_address, stages, outputs_address, 2)
+    elif py_get(metrics, "x_metrics_run_out") is not None:
+        _ = py_call(metrics["x_metrics_run_out"], address, program.size, words_address, stages, outputs_address, 2)
     else:
-        _ = metrics["x_metrics_run"](address, program.size, words_address, stages)
+        _ = py_call(metrics["x_metrics_run"], address, program.size, words_address, stages)
     # Decode two little-endian double words without assuming 8-byte alignment.
     var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address)
     var numerator_bits = UInt64(words[numerator]) | (UInt64(words[numerator + 1]) << UInt64(32))

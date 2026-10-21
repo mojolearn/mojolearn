@@ -2,6 +2,7 @@
 # Native classical ABI preparation. Only admitted native buffers are read;
 # dtype conversion is the shared integer-defined CastIn conversion.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_type
 from core.cast_in import cast_in_kind
 from core.classical_arrays_impl import classical_cast_rows, classical_check_weights
 from bindings.classical_warnings import classical_warn_column
@@ -23,11 +24,11 @@ def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: P
     var prepared = source
     if native_pandas_exact(source):
         prepared = native_pandas_f32(source, context)
-    elif _ordinary_torch(b.type(source), context):
+    elif _ordinary_torch(py_type(source), context):
         prepared = native_torch_numpy(source)
     var value = sequential_input(prepared, context)
     var nd = Int(py=value.ndim)
-    var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and b.type(source) is not b.list and b.type(source) is not b.tuple and b.type(source) is not b.memoryview
+    var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
     if column:
         classical_warn_column(context)
     if nd != ndim and not column:

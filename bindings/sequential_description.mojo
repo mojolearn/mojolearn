@@ -2,10 +2,11 @@
 """Native Sequential model-description and option metadata."""
 from std.python import Python, PythonObject
 from bindings.sequential_admission import sequential_integer, sequential_admit_value
+from bindings.py_balanced import py_fields
 
 
 def sequential_fields(value: PythonObject) raises -> PythonObject:
-    return Python.import_module("builtins").object.__getattribute__(value, "__dict__")
+    return py_fields(value)
 
 
 def _integer(value: PythonObject, context: PythonObject) raises -> Bool:

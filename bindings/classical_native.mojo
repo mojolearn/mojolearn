@@ -19,36 +19,37 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_tags import classical_tags
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
 
 
 def _classical_error_class(args_ptr: PyObjectPtr, key: String) raises -> PyObjectPtr:
     ref cpy = Python().cpython()
     var root = cpy.PyTuple_GetItem(args_ptr, 3)
     var context = PythonObject(from_borrowed=root)
-    var host = context.get("classical_host_context")
+    var host = py_get(context, "classical_host_context")
     if host is not None:
         var model = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0))
-        var cls = Python.import_module("builtins").type(model)
-        if cls is host["ridge_class"] or cls is host.get("linear_class"):
+        var cls = py_type(model)
+        if cls is host["ridge_class"] or cls is py_get(host, "linear_class"):
             root = causal_borrowed_item(root, "classical_host_context")
     # The active call owns its root/host dictionaries and the returned class.
     return causal_borrowed_item(root, key)
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    if Bool(py=context.get("classical_explicit_cpu", False)):
+    if Bool(py=py_get(context, "classical_explicit_cpu", False)):
         return classical_host_entries(model, context)
     var fields = sequential_fields(model)
-    var mode = fields.get("numeric_mode")
+    var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if Python.import_module("builtins").type(mode) is not Python.import_module("builtins").str:
+    if py_type(mode) is not Python.import_module("builtins").str:
         raise Error("TypeError: numeric_mode must be identical, fast or None")
     mode = mode.strip().lower()
     if String(mode) != "identical" and String(mode) != "fast":
         raise Error("numeric_mode must be identical, fast or None")
     var entries = context["classical_bindings"][mode]
-    if Python.import_module("builtins").type(entries) is Python.import_module("builtins").str:
+    if py_type(entries) is Python.import_module("builtins").str:
         raise Error("ImportError: " + String(entries))
     if String(entries["estimators_vendor"]()) != String(context["vendor"]):
         raise Error("RuntimeError: classical native vendor differs from selected execution")
@@ -73,16 +74,16 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return reduced.steal_data()
         var loading = operation == "load"
         var class_operation = loading or operation == "param_names"
-        var cls = model if class_operation else b.type(model)
-        var host = context.get("classical_host_context")
-        if host is not None and (cls is host["ridge_class"] or cls is host.get("linear_class")):
+        var cls = model if class_operation else py_type(model)
+        var host = py_get(context, "classical_host_context")
+        if host is not None and (cls is host["ridge_class"] or cls is py_get(host, "linear_class")):
             context = host
         var ridge = cls is context["ridge_class"]
-        var linear = cls is context.get("linear_class")
+        var linear = cls is py_get(context, "linear_class")
         if not ridge and not linear:
             raise Error("TypeError: the private classical owner requires an exact Ridge or LinearRegression instance")
         if operation == "param_names":
-            var names = b.list(classical_parameter_names(ridge))
+            var names = py_call(b.list, classical_parameter_names(ridge))
             return names.steal_data()
         if not class_operation:
             classical_check_layout(model, context)
@@ -97,7 +98,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var fields = sequential_fields(model)
         var names = context["classical_fields"]
         for k in range(len(names)):  # driver-loop: over connected estimator metadata fields
-            if Bool(py=fields.__contains__(names[k])):
+            if py_contains(fields, names[k]):
                 sequential_admit_value(fields[names[k]], context)
         var result = PythonObject(None)
         if operation == "initialize":
@@ -116,7 +117,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_tags(context)
             return result.steal_data()
         if operation == "model_sha256":
-            if not Bool(py=context.get("classical_explicit_cpu", False)):
+            if not Bool(py=py_get(context, "classical_explicit_cpu", False)):
                 raise Error("AttributeError: model_sha256 belongs to the explicit host model interface")
             result = classical_host_hash(model, context)
             return result.steal_data()

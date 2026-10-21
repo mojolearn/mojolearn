@@ -3,6 +3,7 @@
 # bounds, dtype validation and member dispatch stay here. Connected C codecs
 # only decompress bytes; Python zipfile/ast/NumPy load helpers never execute.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.classical_archive import _archive_methods
 from bindings.native_json import native_path
 from bindings.sequential_description import sequential_fields
@@ -23,8 +24,8 @@ def _read_uint(raw: PythonObject, at: Int, width: Int) raises -> Int:
 def _read_at(file: PythonObject, methods: PythonObject, at: Int, size: Int) raises -> PythonObject:
     if at < 0 or size < 0:
         raise Error("invalid checkpoint offset or size")
-    _ = methods["seek"](file, at, 0)
-    var raw = methods["read"](file, size)
+    _ = py_call(methods["seek"], file, at, 0)
+    var raw = py_call(methods["read"], file, size)
     if len(raw) != size:
         raise Error("truncated checkpoint payload")
     return raw
@@ -38,7 +39,7 @@ struct NpyHeader(Movable):
 
     def __init__(out self, raw: PythonObject, context: PythonObject) raises:
         self.raw = raw
-        self.bytes = npy_latin1_bytes(String(py=raw.decode("latin-1")))
+        self.bytes = npy_latin1_bytes(String(py=py_call(raw.decode, "latin-1")))
         self.at = 0
         self.context = context
 
@@ -65,12 +66,12 @@ struct NpyHeader(Movable):
         if close >= 0:
             var encoded = self.raw[start:close]
             self.at = close + 1
-            return self.context["archive_literal_decode"](encoded)[0]
+            return py_call(self.context["archive_literal_decode"], encoded)[0]
         raise Error("unterminated npy header string")
 
     def literal(mut self, text: String) raises:
         self.ws()
-        var bytes = PythonObject(text).encode("ascii")
+        var bytes = py_call(PythonObject(text).encode, "ascii")
         if self.raw[self.at:self.at + len(bytes)] != bytes:
             raise Error("malformed npy header literal")
         self.at += len(bytes)
@@ -90,7 +91,7 @@ struct NpyHeader(Movable):
             self.at = npy_digits_end(self.bytes, self.at)
             if start == self.at:
                 raise Error("npy shape requires nonnegative dimensions")
-            dims.append(Python.import_module("builtins").int(self.raw[start:self.at]))
+            py_call(dims.append, py_call(Python.import_module("builtins").int, self.raw[start:self.at]))
             self.ws()
             if self.peek() != 44:
                 # A single dimension must have its tuple comma, as in NPY.
@@ -103,7 +104,7 @@ struct NpyHeader(Movable):
             if self.peek() == 41:
                 self.at += 1
                 break
-        return Python.import_module("builtins").tuple(dims)
+        return py_call(Python.import_module("builtins").tuple, dims)
 
     def parse(mut self) raises -> PythonObject:
         self.take(123)
@@ -116,17 +117,17 @@ struct NpyHeader(Movable):
             var key = self.string()
             self.take(58)
             if String(key) == "descr":
-                fields[key] = self.string()
+                py_setitem(fields, key, self.string())
             elif String(key) == "fortran_order":
                 self.ws()
                 if self.peek() == 84:
                     self.literal("True")
-                    fields[key] = True
+                    py_setitem(fields, key, True)
                 else:
                     self.literal("False")
-                    fields[key] = False
+                    py_setitem(fields, key, False)
             elif String(key) == "shape":
-                fields[key] = self.shape()
+                py_setitem(fields, key, self.shape())
             else:
                 raise Error("unknown npy header field")
             self.ws()
@@ -148,7 +149,7 @@ def _text_nest(items: PythonObject, shape: PythonObject, axis: Int, offset: Int)
         stride *= Int(py=shape[k])
     var result = Python.list()
     for k in range(Int(py=shape[axis])):  # driver-loop: over string metadata container entries
-        result.append(_text_nest(items, shape, axis + 1, offset + k * stride))
+        py_call(result.append, _text_nest(items, shape, axis + 1, offset + k * stride))
     return result
 
 
@@ -176,30 +177,30 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
         if dim < 0 or (dim > 0 and count > 0x7FFFFFFFFFFFFFFF // dim):
             raise Error("invalid or overflowing npy shape")
         count *= dim
-    var dtype = context["archive_npy_dtypes"].get(descr)
+    var dtype = py_get(context["archive_npy_dtypes"], descr)
     var itemsize = 0
     var unicode = False
     if dtype is not None:
         itemsize = Int(py=dtype.itemsize)
-    elif Bool(py=descr.startswith("<U")) or Bool(py=descr.startswith("=U")):
+    elif Bool(py=py_call(descr.startswith, "<U")) or Bool(py=py_call(descr.startswith, "=U")):
         if not Bool(py=descr[2:].isdigit()):
             raise Error("unsupported npy dtype")
-        itemsize = 4 * Int(py=bi.int(descr[2:]))
+        itemsize = 4 * Int(py=py_call(bi.int, descr[2:]))
         unicode = True
-    elif Bool(py=descr.startswith("|S")):
+    elif Bool(py=py_call(descr.startswith, "|S")):
         if not Bool(py=descr[2:].isdigit()):
             raise Error("unsupported npy dtype")
-        itemsize = Int(py=bi.int(descr[2:]))
+        itemsize = Int(py=py_call(bi.int, descr[2:]))
     else:
         raise Error("unsupported npy dtype")
     var offset = start + header_size
     if itemsize < 0 or (itemsize > 0 and count > (len(raw) - offset) // itemsize):
         raise Error("npy member does not hold the bytes required by its shape and dtype")
-    var payload = bi.memoryview(raw)[offset:offset + count * itemsize]
+    var payload = py_call(bi.memoryview, raw)[offset:offset + count * itemsize]
     if dtype is not None:
         # The C ndarray constructor only describes the single owned byte copy;
         # it does not compute, cast, or invoke NumPy preparation helpers.
-        return context["ndarray"](shape, dtype=dtype, buffer=bi.bytearray(payload), order="F" if fortran else "C")
+        return py_call(context["ndarray"], shape, dtype=dtype, buffer=py_call(bi.bytearray, payload), order="F" if fortran else "C")
     var items = Python.list()
     for k in range(count):  # driver-loop: over serialized string/bytes metadata entries
         var source = k
@@ -216,9 +217,9 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
                 fstride *= dim
         var cell = raw[offset + source * itemsize:offset + (source + 1) * itemsize]
         if unicode:
-            items.append(context["archive_utf32_decode"](cell)[0].rstrip(bi.chr(0)))
+            py_call(items.append, py_call(py_call(context["archive_utf32_decode"], cell)[0].rstrip, py_call(bi.chr, 0)))
         else:
-            items.append(cell.rstrip(bi.bytes(1)))
+            py_call(items.append, py_call(cell.rstrip, py_call(bi.bytes, 1)))
     if count == 1:
         return items[0]
     return _text_nest(items, shape, 0, 0) if len(shape) else items[0]
@@ -226,44 +227,44 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
 
 def _filename(raw: PythonObject, flags: Int, context: PythonObject) raises -> PythonObject:
     if flags & 2048:
-        return raw.decode("utf8")
+        return py_call(raw.decode, "utf8")
     var parts = Python.list()
     for k in range(len(raw)):  # driver-loop: over ZIP member filename bytes using the fixed CP437 table
-        parts.append(context["archive_cp437"][Int(py=raw[k])])
-    return PythonObject("").join(parts)
+        py_call(parts.append, context["archive_cp437"][Int(py=raw[k])])
+    return py_call(PythonObject("").join, parts)
 
 
 def _inflate(raw: PythonObject, method: Int, context: PythonObject) raises -> PythonObject:
     if method == 0:
         return raw
     if method == 8:
-        return context["archive_inflate"](raw, -15)
+        return py_call(context["archive_inflate"], raw, -15)
     if method == 12:
         if context["archive_bzip"] is None:
             raise Error("RuntimeError: ZIP BZIP2 support requires the native bz2 extension")
         var decoder = context["archive_bzip"]()
-        return decoder.decompress(raw)
+        return py_call(decoder.decompress, raw)
     if method == 14:
         if context["archive_lzma"] is None:
             raise Error("RuntimeError: ZIP LZMA support requires the native lzma extension")
         var size = _read_uint(raw, 2, 2)
         if size > len(raw) - 4:
             raise Error("truncated ZIP LZMA properties")
-        var filters = Python.list(context["archive_lzma_properties"](context["archive_lzma1"], raw[4:4 + size]))
-        var decoder = context["archive_lzma"](context["archive_lzma_raw"], filters=filters)
-        return decoder.decompress(raw[4 + size:])
-    if method == 93 and context.get("archive_zstd") is not None:
+        var filters = Python.list(py_call(context["archive_lzma_properties"], context["archive_lzma1"], raw[4:4 + size]))
+        var decoder = py_call(context["archive_lzma"], context["archive_lzma_raw"], filters=filters)
+        return py_call(decoder.decompress, raw[4 + size:])
+    if method == 93 and py_get(context, "archive_zstd") is not None:
         var decoder = context["archive_zstd"]()
-        return decoder.decompress(raw)
+        return py_call(decoder.decompress, raw)
     raise Error("NotImplementedError: unsupported ZIP compression type " + String(method))
 
 
 def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObject) raises -> PythonObject:
-    _ = methods["seek"](file, 0, 2)
-    var size = Int(py=methods["tell"](file))
+    _ = py_call(methods["seek"], file, 0, 2)
+    var size = Int(py=py_call(methods["tell"], file))
     var tail_start = max(0, size - 65557)
     var tail = _read_at(file, methods, tail_start, size - tail_start)
-    var at = Int(py=tail.rfind(context["archive_zip_end"]))
+    var at = Int(py=py_call(tail.rfind, context["archive_zip_end"]))
     if at < 0 or len(tail) - at < 22:
         raise Error("file is not a ZIP archive")
     var count = _read_uint(tail, at + 10, 2)
@@ -340,23 +341,23 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
                 if pos > extra_at + length:
                     raise Error("truncated ZIP64 member sizes")
             elif tag == 0x7075 and length >= 5 and _read_uint(central, extra_at, 1) == 1:
-                if _read_uint(central, extra_at + 1, 4) == Int(py=context["archive_crc32"](raw_name)):
-                    name = central[extra_at + 5:extra_at + length].decode("utf8")
+                if _read_uint(central, extra_at + 1, 4) == Int(py=py_call(context["archive_crc32"], raw_name)):
+                    name = py_call(central[extra_at + 5:extra_at + length].decode, "utf8")
             extra_at += length
         # ZipFile's lookup uses the final entry for a duplicate member name.
-        records[name] = Python.tuple(flags, method, crc, compressed, unpacked, offset + concat, raw_name)
-        positions.append(Python.tuple(offset + concat, name))
+        py_setitem(records, name, Python.tuple(flags, method, crc, compressed, unpacked, offset + concat, raw_name))
+        py_call(positions.append, Python.tuple(offset + concat, name))
         at = end
         seen += 1
     if seen != count:
         raise Error("ZIP directory entry count differs from its footer")
-    positions = Python.import_module("builtins").sorted(positions)
+    positions = py_call(Python.import_module("builtins").sorted, positions)
     var limit = directory_start
     for k in range(len(positions) - 1, -1, -1):  # driver-loop: over ordered ZIP member bounds to reject overlapping payloads
         var name = positions[k][1]
         var offset = Int(py=positions[k][0])
         if offset == Int(py=records[name][5]):
-            records[name] = records[name][0:7] + Python.tuple(limit)
+            py_setitem(records, name, records[name][0:7] + Python.tuple(limit))
         limit = offset
     return Python.tuple(records, directory_start)
 
@@ -367,20 +368,20 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
     var close = True
     var types = context["archive_file_types"]
     for k in range(len(types)):  # driver-loop: over exact connected native binary file types
-        if bi.type(path) is types[k]:
+        if py_type(path) is types[k]:
             close = False
     if close:
-        file = bi.open(native_path(path), "rb")
+        file = py_call(bi.open, native_path(path), "rb")
     var methods = _archive_methods(file, context)
     try:
         var directory = _zip_records(file, methods, context)
         var records = directory[0]
         var limit = Int(py=directory[1])
-        var names = bi.list(records.keys())
+        var names = py_call(bi.list, records.keys())
         var result = Python.dict()
         for k in range(len(names)):  # driver-loop: over every NPZ member, including extra schema-independent members
             var name = names[k]
-            if not Bool(py=name.endswith(".npy")):
+            if not Bool(py=py_call(name.endswith, ".npy")):
                 continue
             var record = records[name]
             var flags = Int(py=record[0])
@@ -406,20 +407,20 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
             var decoded = _inflate(raw, Int(py=record[1]), context)
             if len(decoded) != Int(py=record[4]):
                 raise Error("ZIP member length differs from its directory")
-            if Int(py=context["archive_crc32"](decoded)) != Int(py=record[2]):
+            if Int(py=py_call(context["archive_crc32"], decoded)) != Int(py=record[2]):
                 raise Error("ZIP member CRC mismatch")
-            result[name[0:len(name) - 4]] = _decode_npy(decoded, context)
+            py_setitem(result, name[0:len(name) - 4], _decode_npy(decoded, context))
         return result
     finally:
         if close:
-            _ = methods["close"](file)
+            _ = py_call(methods["close"], file)
 
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
-    if not Bool(py=arrays.__contains__(name)):
+    if not py_contains(arrays, name):
         raise Error("model file is missing field " + name)
     var value = arrays[name]
-    if Python.import_module("builtins").type(value) is not context["ndarray"]:
+    if py_type(value) is not context["ndarray"]:
         raise Error("model field " + name + " is not the expected numeric dtype")
     if String(value.dtype.str) != dtype:
         raise Error("model field " + name + " is not the expected numeric dtype")
@@ -427,19 +428,19 @@ def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: P
 
 
 def _archive_string(arrays: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    if not Bool(py=arrays.__contains__(name)):
+    if not py_contains(arrays, name):
         raise Error("model file is missing field " + name)
     var value = arrays[name]
     var bi = Python.import_module("builtins")
-    if bi.type(value) is context["ndarray"]:
+    if py_type(value) is context["ndarray"]:
         if Int(py=value.size) == 0:
             raise Error("model string field is empty")
         value = value.flat[0]
-    while bi.type(value) is bi.list:  # driver-loop: over the nesting depth of a stored string field
+    while py_type(value) is bi.list:  # driver-loop: over the nesting depth of a stored string field
         if len(value) == 0:
             raise Error("model string field is empty")
         value = value[0]
-    return bi.str(value)
+    return py_call(bi.str, value)
 
 
 def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, context: PythonObject) raises -> PythonObject:
@@ -447,7 +448,7 @@ def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, c
     if String(_archive_string(arrays, "format", context)) != "mojolearn-linear-1":
         raise Error("model archive format does not match mojolearn-linear-1")
     var saved_as = _archive_string(arrays, "estimator", context)
-    if not Bool(py=context["ridge_saved_names" if ridge else "linear_saved_names"].__contains__(saved_as)):
+    if not py_contains(context["ridge_saved_names" if ridge else "linear_saved_names"], saved_as):
         raise Error("model archive was saved by a different estimator")
     var meta = _archive_exact(arrays, "meta", "<i8", context)
     if Int(py=meta.size) != 2:
@@ -468,18 +469,18 @@ def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, c
         if Int(py=alpha.size) != 1:
             raise Error("model alpha must hold one value")
     var bi = Python.import_module("builtins")
-    var model = bi.object.__new__(cls)
+    var model = py_call(bi.object.__new__, cls)
     var fields = sequential_fields(model)
-    fields["fit_intercept"] = bi.bool(meta.flat[1])
-    fields["numeric_mode"] = mode
-    fields["coef_"] = coef
-    fields["intercept_"] = bi.float(intercept.flat[0])
-    fields["n_features_in_"] = features
+    py_setitem(fields, "fit_intercept", py_call(bi.bool, meta.flat[1]))
+    py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "coef_", coef)
+    py_setitem(fields, "intercept_", py_call(bi.float, intercept.flat[0]))
+    py_setitem(fields, "n_features_in_", features)
     if ridge:
-        fields["alpha"] = bi.float(alpha.flat[0])
+        py_setitem(fields, "alpha", py_call(bi.float, alpha.flat[0]))
         # load preserves the constructor's default solver parameter; only the
         # fitted solver_ metadata records the eig implementation used by Ridge.
-        fields["solver"] = "auto"
-        fields["normalize"] = False
-        fields["solver_"] = "eig"
+        py_setitem(fields, "solver", "auto")
+        py_setitem(fields, "normalize", False)
+        py_setitem(fields, "solver_", "eig")
     return model

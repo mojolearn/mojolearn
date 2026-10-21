@@ -4,6 +4,7 @@
 # serialization are host ABI work; existing kernels still own model math.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32
 
@@ -43,7 +44,7 @@ def _promote(mut kind: String, mut size: Int, incoming: String, width: Int) rais
 
 def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var view = b.memoryview(value)
+    var view = py_call(b.memoryview, value)
     if samples and Int(py=view.ndim) > 2 and not Bool(py=view.c_contiguous):
         raise Error("X with more than two dimensions must be C-contiguous")
     var format = view.format
@@ -53,7 +54,7 @@ def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises ->
         if first == "@" or first == "=" or first == "<" or first == ">" or first == "!":
             if first == "<" or first == ">" or first == "!":
                 prefix = ">" if first == "!" else first
-            format = format[b.slice(1, PythonObject(None))]
+            format = format[py_call(b.slice, 1, PythonObject(None))]
     var code = String(format)
     var kind = String()
     if code == "?":
@@ -76,11 +77,11 @@ def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises ->
     if Bool(py=view.contiguous):
         # Both C and Fortran contiguous buffers are borrowed without a copy.
         # ndarray's C type owns the memoryview and preserves read-only status.
-        return context["ndarray"](view.shape, dtype=dtype, buffer=view, strides=view.strides)
+        return py_call(context["ndarray"], view.shape, dtype=dtype, buffer=view, strides=view.strides)
     # CPython's native buffer implementation packs signed/zero strides in
     # logical C order, including read-only views. No NumPy conversion runs.
-    var packed = view.tobytes("C")
-    return context["ndarray"](view.shape, dtype=dtype, buffer=packed)
+    var packed = py_call(view.tobytes, "C")
+    return py_call(context["ndarray"], view.shape, dtype=dtype, buffer=packed)
 
 
 def _leaf_shape(shape: PythonObject, depth: Int, mut dims: List[Int], mut leaf_depth: Int) raises:
@@ -105,43 +106,43 @@ def _leaf_shape(shape: PythonObject, depth: Int, mut dims: List[Int], mut leaf_d
 def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                   mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
     var b = Python.import_module("builtins")
-    var view = b.memoryview(value)
+    var view = py_call(b.memoryview, value)
     _leaf_shape(view.shape, depth, dims, leaf_depth)
     var dtype = value.dtype
     var incoming = String(dtype.kind)
     var width = Int(py=dtype.itemsize)
     _promote(kind, size, incoming, width)
-    var packed = context["array_type"](context["buffer_codes"][Python.tuple(incoming, width)])
-    packed.frombytes(view.tobytes("C"))
+    var packed = py_call(context["array_type"], context["buffer_codes"][Python.tuple(incoming, width)])
+    py_call(packed.frombytes, py_call(view.tobytes, "C"))
     if not Bool(py=dtype.isnative) and width > 1:
         packed.byteswap()
     if incoming == "f" and width == 2:
         var count = len(packed)
-        var wide = context["array_type"]("f", b.bytes(4 * count))
+        var wide = py_call(context["array_type"], "f", py_call(b.bytes, 4 * count))
         sequence_widen_halves(Int(py=packed.buffer_info()[0]), Int(py=wide.buffer_info()[0]), count)
-        values.extend(wide)
+        py_call(values.extend, wide)
         _ = wide^
     else:
-        values.extend(packed)
+        py_call(values.extend, packed)
     _ = packed^
 
 
 def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                      mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
     var b = Python.import_module("builtins")
-    if Bool(py=b.isinstance(value, context["ndarray"])) or Bool(py=b.isinstance(value, context["scalar_type"])):
+    if Bool(py=py_call(b.isinstance, value, context["ndarray"])) or Bool(py=py_call(b.isinstance, value, context["scalar_type"])):
         _array_values(value, depth, dims, values, kind, size, leaf_depth, context)
-    elif b.type(value) is context["array_class"]:
-        var view = context["array_fields"]["_mv"](value, context["array_class"])
-        var shape = context["array_fields"]["shape"](value, context["array_class"])
-        var dtype = context["array_fields"]["dtype"](value, context["array_class"])
-        var order = context["array_fields"]["order"](value, context["array_class"])
-        var array = context["ndarray"](shape, dtype=dtype, buffer=view, order=order)
+    elif py_type(value) is context["array_class"]:
+        var view = py_call(context["array_fields"]["_mv"], value, context["array_class"])
+        var shape = py_call(context["array_fields"]["shape"], value, context["array_class"])
+        var dtype = py_call(context["array_fields"]["dtype"], value, context["array_class"])
+        var order = py_call(context["array_fields"]["order"], value, context["array_class"])
+        var array = py_call(context["ndarray"], shape, dtype=dtype, buffer=view, order=order)
         _array_values(array, depth, dims, values, kind, size, leaf_depth, context)
-    elif b.type(value) is b.memoryview or b.type(value) is context["array_type"] or b.type(value) is b.bytearray:
+    elif py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
         var array = _buffer(value, context, False)
         _array_values(array, depth, dims, values, kind, size, leaf_depth, context)
-    elif Bool(py=b.isinstance(value, b.list)) or Bool(py=b.isinstance(value, b.tuple)) or b.type(value) is b.range:
+    elif Bool(py=py_call(b.isinstance, value, b.list)) or Bool(py=py_call(b.isinstance, value, b.tuple)) or py_type(value) is b.range:
         var n = len(value)
         if depth >= 8 or n == 0:
             raise Error("input sequences must be nonempty and have rank at most eight")
@@ -156,30 +157,30 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
             _sequence_values(value[k], depth + 1, dims, values, kind, size, leaf_depth, context)
     else:
         _leaf_shape(Python.tuple(), depth, dims, leaf_depth)
-        if Bool(py=b.isinstance(value, b.bool)):
+        if Bool(py=py_call(b.isinstance, value, b.bool)):
             _promote(kind, size, "b", 1)
-        elif Bool(py=b.isinstance(value, b.float)):
+        elif Bool(py=py_call(b.isinstance, value, b.float)):
             _promote(kind, size, "f", 8)
-        elif Bool(py=b.isinstance(value, b.int)):
+        elif Bool(py=py_call(b.isinstance, value, b.int)):
             if Bool(py=value < context["int64_min"]) or Bool(py=value > context["uint64_max"]):
                 raise Error("TypeError: input integers exceed the supported numeric array range")
             _promote(kind, size, "u" if Bool(py=value > context["int64_max"]) else "i", 8)
         else:
             raise Error("TypeError: inputs must contain numeric scalars")
-        values.append(value)
+        py_call(values.append, value)
 
 
 def sequential_input(value: PythonObject, context: PythonObject, samples: Bool = False) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    if Bool(py=b.isinstance(value, context["ndarray"])):
+    if Bool(py=py_call(b.isinstance, value, context["ndarray"])):
         return value
-    if b.type(value) is context["array_class"]:
-        var view = context["array_fields"]["_mv"](value, context["array_class"])
-        var shape = context["array_fields"]["shape"](value, context["array_class"])
-        var dtype = context["array_fields"]["dtype"](value, context["array_class"])
-        var order = context["array_fields"]["order"](value, context["array_class"])
-        return context["ndarray"](shape, dtype=dtype, buffer=view, order=order)
-    if b.type(value) is b.memoryview or b.type(value) is context["array_type"] or b.type(value) is b.bytearray:
+    if py_type(value) is context["array_class"]:
+        var view = py_call(context["array_fields"]["_mv"], value, context["array_class"])
+        var shape = py_call(context["array_fields"]["shape"], value, context["array_class"])
+        var dtype = py_call(context["array_fields"]["dtype"], value, context["array_class"])
+        var order = py_call(context["array_fields"]["order"], value, context["array_class"])
+        return py_call(context["ndarray"], shape, dtype=dtype, buffer=view, order=order)
+    if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
         return _buffer(value, context, samples)
     var dims = List[Int]()
     var values = Python.list()
@@ -189,16 +190,16 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
     _sequence_values(value, 0, dims, values, kind, size, leaf_depth, context)
     var shape = Python.list()
     for k in range(len(dims)):  # driver-loop: over sequence result shape metadata
-        shape.append(dims[k])
+        py_call(shape.append, dims[k])
     var dtype = context["numeric_dtypes"][Python.tuple(kind, size)]
     var code = context["buffer_codes"][Python.tuple(kind, size)]
     var storage = PythonObject(None)
     if kind == "f" and size == 2:
         var count = len(values)
-        var wide = context["array_type"]("d", values)
-        storage = context["array_type"]("H", b.bytes(2 * count))
+        var wide = py_call(context["array_type"], "d", values)
+        storage = py_call(context["array_type"], "H", py_call(b.bytes, 2 * count))
         sequence_narrow_halves(Int(py=wide.buffer_info()[0]), Int(py=storage.buffer_info()[0]), count)
         _ = wide^
     else:
-        storage = context["array_type"](code, values)
-    return context["ndarray"](shape, dtype=dtype, buffer=storage)
+        storage = py_call(context["array_type"], code, values)
+    return py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
