@@ -66,6 +66,47 @@ def test_config_dict_refuses_custom_mapping_before_getitem():
     assert calls == []
 
 
+@pytest.mark.parametrize("field", ["layers", "tie_embeddings", "norm_eps"])
+def test_native_array_in_scalar_or_config_slot_cannot_invoke_python_protocols(monkeypatch, field):
+    value = Array.from_list([1], "<i4")
+    calls = []
+
+    def callback(*args):
+        calls.append("array protocol")
+        raise AssertionError("Python Array conversion")
+
+    config = object.__new__(SambaConfig)
+    arguments = dict(vocab=13, d_model=8, layers=["attention"], n_heads=2, intermediate=11)
+    arguments[field] = value
+    with monkeypatch.context() as patch:
+        for name in ("__bool__", "__iter__", "__len__", "__getitem__"):
+            patch.setattr(Array, name, callback)
+        result = audit_native_call(config.__init__, **arguments)
+    _assert_refusal(result, TypeError)
+    assert calls == []
+    assert vars(config) == {}
+
+
+def test_array_in_stored_sequence_slot_refused_before_python_indexing(monkeypatch):
+    model, ids = _model()
+    before = _identity(model)
+    original = model.offsets
+    model.offsets = Array.from_list(original, "<i4")
+    calls = []
+
+    def callback(*args):
+        calls.append("index")
+        raise AssertionError("Python Array indexing")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Array, "__getitem__", callback)
+        result = audit_native_call(model.train_step, ids, ids)
+    model.offsets = original
+    _assert_refusal(result, TypeError)
+    assert calls == []
+    assert _identity(model) == before
+
+
 def test_defaultdict_factory_is_refused_before_missing_config_lookup():
     calls = []
 

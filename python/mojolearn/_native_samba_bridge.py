@@ -43,6 +43,13 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
     for group in nc["block_classes"].values():  # glue: fixed ABI owner classes at package connection
         classes.extend(group.values())
     classes = tuple(dict.fromkeys(classes))
+    buffer_or_owner_fields = {
+        "config", "optimizer", "generator", "arrays", "flat", "params", "_m", "_v", "buf_initialized",
+        "_blocks", "_w", "_wopt", "_int15", "layers", "offsets", "packed_", "_runtime_lock",
+        "k_cache", "v_cache", "theta", "h", "buffer_qrot", "buffer_krot", "buffer_v", "buffer_dt",
+        "buffer_sig", "buffer_adt", "pending_k", "pending_v", "bits", "codes", "exponents",
+        "conv_window", "affine_boundary", "affine_a", "affine_b", "buffer_xbc", "buffer_dtraw",
+    }
     records = []
     for cls in classes:  # glue: retain native __dict__ getters for admitted records
         descriptor = next(vars(base)["__dict__"] for base in cls.__mro__ if "__dict__" in vars(base))
@@ -57,6 +64,8 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
         guards.append((namespace, tuple((name, namespace.get(name)) for name in keys), cls, cls.__mro__))
     return {
         "records": tuple(records), "guards": tuple(guards), "array_class": array_cls,
+        "metadata_fields": tuple(name for name in fields if name not in buffer_or_owner_fields),
+        "config_class": config_cls, "optimizer_class": training.AdamW,
         "array_getters": {name: vars(array_cls)[name].__get__ for name in array_names},
         "array_metadata": ("shape", "dtype", "order", "_addr", "_readonly", "ndim", "size", "nbytes", "itemsize", "strides"),
         "mapping_types": (dict, OrderedDict, defaultdict),
