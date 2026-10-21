@@ -26,7 +26,11 @@ from core.labeled_reference_host_predict import (
     labeled_reference_validate,
 )
 from dbscan.host.dbscan_oracle import host_dbscan_fit
-from decomposition.host.pca_full_oracle import host_pca_fit_full
+from decomposition.host.pca_full_oracle import host_pca_fit_full, host_pca_full_validate
+from decomposition.impl.pca_rank import pca_rank_finish
+from checks.soft_f64 import sf64_from_f32
+from std.memory import bitcast
+from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
 from decomposition.host.pca_oracle import (
     host_pca_fit,
     host_pca_validate,
@@ -138,6 +142,56 @@ def pca_fit_full_host_run(
     for i in range(nf):
         mp[i] = fit.mean[i]
     return fit.result.noise_var
+
+
+def pca_mle_rank_host_run(ev: _F32P, d: Int, n: Int) raises -> Int:
+    """Minka's MLE rank of the d-value spectrum at `ev` (n samples) on the
+    host column (`pca_mle_rank_host`); its input is the exact binary64
+    widening of each float32 value, two float32 words each, low first (the
+    words `array('d')` held when Python built them). 0 below two values."""
+    if d < 2:
+        return 0
+    var words = List[Float32](length=2 * d, fill=Float32(0))
+    for k in range(d):  # small-loop(d: fitted component count): one spectrum value per component
+        var v = sf64_from_f32(ev[k])
+        words[2 * k] = bitcast[DType.float32](UInt32(v & UInt64(0xFFFFFFFF)))
+        words[2 * k + 1] = bitcast[DType.float32](UInt32(v >> UInt64(32)))
+    var scratch = List[Float32](length=mle_scratch_words(d), fill=Float32(0))
+    var sp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(words.unsafe_ptr()))
+    var ss = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(scratch.unsafe_ptr()))
+    var rank = pca_mle_rank_host(sp, d, n, ss)
+    _ = words^
+    _ = scratch^
+    return rank
+
+
+def pca_fit_owned_host_run(
+    x_address: Int, cp: _F32P, mp: _F32P, ep: _F32P, rp: _F32P, sp: _F32P,
+    nr: Int, nf: Int, nc: Int, dense: Bool, keep_mode: Int, frac: Float64,
+) raises -> Tuple[Int, Float64]:
+    """`PCA.fit` for the exact solvers as one host operation (the GPU
+    binding's `decomposition/impl/pca_owner.mojo::pca_fit_owned`): the fit,
+    then for a float (`keep_mode` 1) or "mle" (`keep_mode` 2)
+    `n_components` the kept count and the dropped tail's noise variance.
+    Returns (kept count, noise variance)."""
+    if keep_mode < 0 or keep_mode > 2:
+        raise Error("pca_fit_owned: unknown n_components mode")
+    var noise: Float64
+    if dense:
+        host_pca_full_validate(nr, nf, nc)
+        noise = pca_fit_full_host_run(x_address, cp, mp, ep, rp, sp, nr, nf, nc)
+    else:
+        noise = pca_fit_host_run(x_address, cp, mp, ep, rp, sp, nr, nf, nc)
+    if keep_mode == 0:
+        return (nc, noise)
+    var keep_in = -1
+    if keep_mode == 2:
+        keep_in = pca_mle_rank_host_run(ep, nc, nr)
+    var tail: Float64 = 0.0
+    var keep = 0
+    if nc > 0:
+        keep = pca_rank_finish(rp, ep, nc, keep_in, frac, tail)
+    return (keep, tail)
 
 
 def tsvd_fit_host_run(

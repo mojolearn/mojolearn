@@ -114,6 +114,7 @@ from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_rank import pca_rank_finish
+from decomposition.impl.pca_owner import pca_fit_owned
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 from core.estimators_impl import (
     pca_whiten_overlap_check,
@@ -735,6 +736,46 @@ def pca_rank_finish_binding(
     out.append(PythonObject(keep))
     out.append(PythonObject(noise))
     return out
+
+
+def pca_fit_owned_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    singular_addr: PythonObject,
+    params: PythonObject,
+    frac: PythonObject,
+) raises -> PythonObject:
+    """`PCA.fit` for the exact solvers in one call
+    (decomposition/impl/pca_owner.mojo): the five public arrays written at
+    n_components, then the kept count. params: n_rows, n_features,
+    n_components, dense (1: svd_solver='full'), keep mode (0: every
+    component, 1: the fraction `frac`, 2: "mle"). Returns (kept count,
+    noise variance)."""
+    if len(params) != 5:
+        raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=components_addr))
+    var mp = _f32_ptr(Int(py=mean_addr))
+    var ep = _f32_ptr(Int(py=explained_addr))
+    var rp = _f32_ptr(Int(py=ratio_addr))
+    var sp = _f32_ptr(Int(py=singular_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var dense = Int(py=params[3]) != 0
+    var keep_mode = Int(py=params[4])
+    var fraction = Float64(py=frac)
+    var kept = 0
+    var noise = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var fitted = pca_fit_owned(ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction)
+        kept = fitted[0]
+        noise = fitted[1]
+    return Python.tuple(PythonObject(kept), PythonObject(noise))
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1454,6 +1495,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_means_finish_binding]("lm_means_finish")
         m.def_function[lm_intercept_binding]("lm_intercept")
         m.def_function[pca_rank_finish_binding]("pca_rank_finish")
+        m.def_function[pca_fit_owned_binding]("pca_fit_owned")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
