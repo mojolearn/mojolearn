@@ -8,6 +8,8 @@ from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_description import sequential_fields
 from bindings.classical_ridge import classical_ridge_fit, classical_linear_predict
 from bindings.classical_ols import classical_ols_fit
+from bindings.classical_score import classical_linear_score
+from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -48,8 +50,20 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         for k in range(len(names)):  # driver-loop: over connected estimator metadata fields
             if Bool(py=fields.__contains__(names[k])):
                 sequential_admit_value(fields[names[k]], context)
-        var entries = classical_entries(model, context)
         var result = PythonObject(None)
+        if operation == "initialize":
+            result = classical_initialize(model, args, ridge)
+            return result.steal_data()
+        if operation == "get_params":
+            result = classical_get_params(model, ridge)
+            return result.steal_data()
+        if operation == "set_params":
+            result = classical_set_params(model, args[0], ridge)
+            return result.steal_data()
+        if operation == "is_fitted":
+            result = classical_is_fitted(model)
+            return result.steal_data()
+        var entries = classical_entries(model, context)
         if operation == "ridge_fit":
             if not ridge:
                 raise Error("TypeError: ridge_fit requires Ridge")
@@ -60,6 +74,12 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_ols_fit(model, args, entries, context)
         elif operation == "predict":
             result = classical_linear_predict(model, args[0], entries, context)
+        elif operation == "score":
+            result = classical_linear_score(model, args, entries, context)
+        elif operation == "numeric_mode_used":
+            result = PythonObject("identical" if Int(py=entries["estimators_numeric_mode"]()) == 1 else "fast")
+        elif operation == "vendor_used":
+            result = entries["estimators_vendor"]()
         else:
             raise Error("unknown private classical operation")
         return result.steal_data()
@@ -70,6 +90,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("ImportError:"):
             return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
+        if String(error).startswith("AttributeError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error, ExceptionType.ValueError)
