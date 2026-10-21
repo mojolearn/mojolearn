@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native feeds, schedules and complete worker vs independent protocol oracle."""
 import hashlib
+import array
 import json
 import math
 import socket
@@ -47,6 +48,20 @@ def test_native_rate_table_preserves_float32_schedule_and_bounds():
     failed = audit_native_call(table.__call__, 4)
     assert isinstance(failed.exception, ValueError)
     assert not failed.report()['python_frames']
+
+
+@pytest.mark.parametrize('owner_kind', ['array', 'numpy'])
+def test_borrowed_array_raw_memoryview_keeps_native_exporter_admitted(owner_kind):
+    exporter = array.array('f', [1., -0., 3.5]) if owner_kind == 'array' else np.array([1., -0., 3.5], np.float32)
+    value = Array.from_buffer(exporter)
+    assert value._mv.obj is None
+    assert value._pin.obj is exporter
+    original = np.asarray(value).tobytes()
+    result = audit_native_call(cv.ordered_fold, [value]).assert_native()
+    assert result == original
+    exporter[0] = 8.
+    assert result == original  # native fold owns its result, despite borrowed input
+    assert audit_native_call(cv.ordered_fold, [value]).assert_native() == np.asarray(value).tobytes()
 
 
 @pytest.mark.parametrize('chained', [False, True])

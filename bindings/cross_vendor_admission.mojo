@@ -91,15 +91,24 @@ def cv_buffer(value: PythonObject) raises -> PythonObject:
         _ = cv_text(value.dtype, "Array dtype")
         _ = cv_text(value.order, "Array order")
         _ = cv_int(value._addr, "Array address")
+        # Array.from_buffer uses a native raw-address memoryview (obj=None)
+        # plus a separate pin retaining the original native exporter.
         var backing = c[].bi.type(view.obj)
-        if backing is not c[].ndarray and backing is not c[].c_array and backing is not c[].bi.bytes and backing is not c[].bi.bytearray:
+        if view.obj is not None and backing is not c[].ndarray and backing is not c[].c_array and backing is not c[].bi.bytes and backing is not c[].bi.bytearray:
             raise Error("cross_vendor: Array backing must be native; Python buffer hooks are not accepted")
+        var pin = value._pin
+        if pin is not None:
+            if c[].bi.type(pin) is not c[].bi.memoryview:
+                raise Error("cross_vendor: Array pin must be a native memoryview")
+            var pinned = c[].bi.type(pin.obj)
+            if pin.obj is not None and pinned is not c[].ndarray and pinned is not c[].c_array and pinned is not c[].bi.bytes and pinned is not c[].bi.bytearray:
+                raise Error("cross_vendor: Array pin must retain a native buffer exporter")
         return view
     if kind is not c[].ndarray and kind is not c[].c_array and kind is not c[].bi.memoryview and kind is not c[].bi.bytes and kind is not c[].bi.bytearray:
         raise Error("cross_vendor: buffer must be an exact native array or memoryview; Python buffer hooks are not accepted")
     if kind is c[].bi.memoryview:
         var backing = c[].bi.type(value.obj)
-        if backing is not c[].ndarray and backing is not c[].c_array and backing is not c[].bi.bytes and backing is not c[].bi.bytearray:
+        if value.obj is not None and backing is not c[].ndarray and backing is not c[].c_array and backing is not c[].bi.bytes and backing is not c[].bi.bytearray:
             raise Error("cross_vendor: memoryview backing must be native; Python buffer hooks are not accepted")
     return c[].bi.memoryview(value)
 
