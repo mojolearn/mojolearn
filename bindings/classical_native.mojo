@@ -15,6 +15,7 @@ from bindings.classical_archive_read import classical_archive_load
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
+from bindings.classical_tags import classical_tags
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -78,6 +79,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation == "is_fitted":
             result = classical_is_fitted(model)
+            return result.steal_data()
+        if operation == "sklearn_tags":
+            result = classical_tags(context)
             return result.steal_data()
         if operation == "save":
             result = classical_archive_save(model, args[0], ridge, context)

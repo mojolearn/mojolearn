@@ -6,6 +6,36 @@ _ERROR_CONTEXT = None
 _ERROR_BRIDGES = {}
 
 
+def _connect_tags():
+    # glue: connect optional sklearn's native record layout once at ABI setup
+    from types import MemberDescriptorType
+    try:
+        from sklearn.utils import Tags, TargetTags, InputTags, RegressorTags
+    except ImportError as error:
+        return str(error)
+    target, inputs, regression = TargetTags(required=True), InputTags(), RegressorTags()
+    tags = Tags(estimator_type="regressor", target_tags=target,
+                input_tags=inputs, regressor_tags=regression)
+    records = (target, inputs, regression, tags)
+    plan = []
+    for record in records:  # glue: capture native field descriptors at connection
+        cls = type(record)
+        if type(cls) is not type or cls.__mro__ != (cls, object):
+            raise TypeError("sklearn tags require standard native record metadata")
+        slots = []
+        for name in cls.__dataclass_fields__:  # glue: one metadata tuple per declared record field
+            descriptor = vars(cls).get(name)
+            if type(descriptor) is not MemberDescriptorType:
+                raise TypeError("sklearn tag fields must be native member descriptors")
+            value = descriptor.__get__(record)
+            nested = next((index for index, candidate in enumerate(records[:3]) if value is candidate), -1)  # glue: connect nested native tag record indices
+            if nested < 0 and value is not None and type(value) not in (bool, str):
+                raise TypeError("sklearn tag defaults must be immutable native metadata")
+            slots.append((name, descriptor, nested, None if nested >= 0 else value))
+        plan.append((cls, tuple(slots)))
+    return tuple(plan)
+
+
 def _restore_not_fitted(message):
     return _ERROR_ENTRY(None, "restore_not_fitted", (message,), _ERROR_CONTEXT)
 
@@ -17,7 +47,7 @@ def _reduce_not_fitted(error):
 def connect(ridge_class, linear_class=None):
     # glue: connect compiled entries and exact native buffer classes once
     global _ERROR_ENTRY, _ERROR_CONTEXT
-    from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType
+    from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType, MemberDescriptorType
     import _codecs
     import io
     import os
@@ -42,6 +72,7 @@ def connect(ridge_class, linear_class=None):
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
                    active_not_fitted_class=NotFittedError)
+    context.update(classical_tag_plan=_connect_tags(), native_member_descriptor=MemberDescriptorType)
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
