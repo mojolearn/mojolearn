@@ -128,6 +128,83 @@ def test_actual_loaded_native_bytes_must_match_build_receipt(tmp_path, mutate):
         assert graph.check_binary_provenance(path, runtime)["source_commit"] == "retained-source"
 
 
+def merged_package(root):
+    """Merged layout: one `_mojolearn_native.so` per directory set (same file
+    name, different bytes), an index beside each, and one own per-binding file
+    that shadows its merged member."""
+    pkg = root / "mojolearn"
+    for sub, members in (("", ["_mojolearn_x_sequence", "_mojolearn_tokenizer"]),
+                         ("identical", ["_mojolearn_x_sequence", "_mojolearn_trees"])):
+        d = pkg / sub
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "_mojolearn_native.so").write_bytes(b"merged:" + sub.encode())
+        graph.write(d / "_mojolearn_merged.json", {"files": {"_mojolearn_native.so": members}})
+    (pkg / "__init__.py").write_text("")
+    (pkg / "identical" / "_mojolearn_trees.so").write_bytes(b"own trees")
+    return pkg
+
+
+def loaded(pkg, module, rel):
+    path = pkg / rel
+    return {"package": str(pkg / "__init__.py"), "native_extensions": {
+        module: {"path": str(path.resolve()), **graph.file_record(path)}}}
+
+
+def test_merged_layout_receipt_names_each_members_loaded_file(tmp_path):
+    pkg = merged_package(tmp_path)
+    record = graph.binary_provenance(pkg, "retained-source", "unit test")
+    path = tmp_path / "binary.json"
+    graph.write(path, record)
+    rows = {r["package_relative"]: r["members"] for r in record["binaries"]}
+    assert rows == {"_mojolearn_native.so": ["_mojolearn_tokenizer", "_mojolearn_x_sequence"],
+                    "identical/_mojolearn_native.so": ["_mojolearn_x_sequence"],
+                    "identical/_mojolearn_trees.so": ["_mojolearn_trees"]}
+    assert record["members"]["identical/_mojolearn_x_sequence"]["package_relative"] == "identical/_mojolearn_native.so"
+    assert record["members"]["identical/_mojolearn_trees"]["package_relative"] == "identical/_mojolearn_trees.so"
+    # The box break: a tier member served by a merged file whose name repeats in
+    # another directory. Matched by full path, not by the shared file name.
+    for module, rel in (("mojolearn._sets.fast._mojolearn_x_sequence", "identical/_mojolearn_native.so"),
+                        ("mojolearn._mojolearn_x_sequence", "_mojolearn_native.so")):
+        closure = graph.check_binary_provenance(path, loaded(pkg, module, rel))["matched_native_closure"]
+        assert closure == {module: graph.file_record(pkg / rel)["sha256"]}
+    # A copy of the receipted package elsewhere matches by package-relative path.
+    moved = tmp_path / "copy"
+    moved.mkdir()
+    copied = merged_package(moved)
+    graph.check_binary_provenance(path, loaded(copied, "mojolearn._sets.fast._mojolearn_x_sequence",
+                                               "identical/_mojolearn_native.so"))
+
+
+def test_merged_layout_refuses_changed_bytes_unserved_member_and_ambiguous_names(tmp_path):
+    pkg = merged_package(tmp_path)
+    path = tmp_path / "binary.json"
+    graph.write(path, graph.binary_provenance(pkg, "retained-source", "unit test"))
+    runtime = loaded(pkg, "mojolearn._sets.fast._mojolearn_x_sequence", "identical/_mojolearn_native.so")
+    (pkg / "identical" / "_mojolearn_native.so").write_bytes(b"rebuilt")
+    runtime_changed = loaded(pkg, "mojolearn._sets.fast._mojolearn_x_sequence", "identical/_mojolearn_native.so")
+    with pytest.raises(ValueError, match="native closure differs"):
+        graph.check_binary_provenance(path, runtime_changed)
+    graph.write(path, graph.binary_provenance(pkg, "retained-source", "unit test"))
+    with pytest.raises(ValueError, match="does not serve"):
+        graph.check_binary_provenance(path, loaded(pkg, "mojolearn._sets.identical._mojolearn_tokenizer",
+                                                   "identical/_mojolearn_native.so"))
+    # A file-name-only receipt from elsewhere cannot tell the merged files apart.
+    graph.write(path, {"source_commit": "retained-source", "binaries": [
+        {"path": "/build/_mojolearn_native.so", "sha256": runtime["native_extensions"][
+            "mojolearn._sets.fast._mojolearn_x_sequence"]["sha256"]},
+        {"path": "/build/identical/_mojolearn_native.so", "sha256": "c" * 64}]})
+    with pytest.raises(ValueError, match="several files"):
+        graph.check_binary_provenance(path, runtime)
+
+
+def test_provenance_command_writes_the_receipt(tmp_path):
+    pkg = merged_package(tmp_path)
+    assert graph.main(["provenance", "--package", str(pkg), "--source-commit", "retained-source",
+                       "--out", str(tmp_path / "binary.json")]) == 0
+    record = json.loads((tmp_path / "binary.json").read_text())
+    assert record["source_commit"] == "retained-source" and len(record["binaries"]) == 3
+
+
 def test_whole_call_timer_consumes_every_output(monkeypatch):
     calls = []
     value = (np.array([-0.0, 2], np.float32), np.array([1, 2, 3], np.int32))

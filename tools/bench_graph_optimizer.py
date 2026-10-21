@@ -120,16 +120,79 @@ def copy_input(source, target):
     return file_record(target)
 
 
+MERGED_INDEX = "_mojolearn_merged.json"  # python/mojolearn/_merged.py INDEX_NAME
+NATIVE_SUFFIXES = (".so", ".pyd", ".dylib")
+
+
+def binary_provenance(package, source_commit, built_by):
+    """Receipt of every native file under the installed `package` directory.
+
+    Each row names the file, its sha256 and the module leaf names it serves,
+    resolved the way python/mojolearn/_merged.py binding_path resolves them: a
+    member's own `<name>.so` wins; otherwise the merged file its directory's
+    `_mojolearn_merged.json` names serves it. `members` maps
+    `<directory>/<leaf>` (relative to `package`) to the file that loads it.
+    """
+    package = Path(package).resolve()
+    files = sorted(p for p in package.rglob("*") if p.is_file() and p.suffix in NATIVE_SUFFIXES)
+    served = {p: [] for p in files}
+    for directory in sorted({p.parent for p in files}):
+        own = {p.stem for p in files if p.parent == directory}
+        index = directory / MERGED_INDEX
+        merged = json.loads(index.read_text()).get("files", {}) if index.is_file() else {}
+        for fname, names in merged.items():
+            target = directory / fname
+            if target in served:
+                served[target].extend(n for n in names if n not in own)
+        for p in files:
+            if p.parent == directory and p.name not in merged:
+                served[p].append(p.stem)
+    rows, members = [], {}
+    for p in files:
+        rel = p.relative_to(package).as_posix()
+        record = {"path": str(p), "package_relative": rel, **file_record(p), "members": sorted(served[p])}
+        rows.append(record)
+        for leaf in record["members"]:
+            key = (p.parent.relative_to(package) / leaf).as_posix()
+            members[key] = {"path": str(p), "package_relative": rel, "sha256": record["sha256"]}
+    return {"source_commit": source_commit, "built_by": built_by, "package": str(package),
+            "binaries": rows, "members": members}
+
+
+def provenance_row(rows, loaded, package_dir):
+    """The receipt row for the file a module was loaded from: same resolved
+    path, else same path relative to the package, else (per-binding receipts
+    written elsewhere) the one row with the same file name."""
+    loaded = Path(loaded).resolve()
+    for row in rows:
+        if Path(row["path"]).resolve() == loaded:
+            return row
+    if package_dir is not None and loaded.is_relative_to(package_dir):
+        rel = loaded.relative_to(package_dir).as_posix()
+        for row in rows:
+            if row.get("package_relative") == rel:
+                return row
+    named = [row for row in rows if Path(row["path"]).name == loaded.name]
+    if len(named) > 1:
+        raise ValueError("binary provenance names several files called " + loaded.name + "; record full paths")
+    return named[0] if named else None
+
+
 def check_binary_provenance(path, runtime):
     provenance = json.loads(Path(path).read_text())
     if not provenance.get("source_commit") or not isinstance(provenance.get("binaries"), list):
         raise ValueError("binary provenance requires source_commit and binaries[{path,sha256}]")
-    expected = {Path(row["path"]).name: row["sha256"] for row in provenance["binaries"]}
+    rows = provenance["binaries"]
+    package = runtime.get("package")
+    package_dir = Path(package).resolve().parent if package else None
     checked = {}
     for name, meta in runtime["native_extensions"].items():
         if "x_sequence" in name or "tokenizer" in name:
-            if expected.get(Path(meta["path"]).name) != meta["sha256"]:
+            row = provenance_row(rows, meta["path"], package_dir)
+            if row is None or row["sha256"] != meta["sha256"]:
                 raise ValueError("loaded native closure differs from retained binary provenance: " + name)
+            if "members" in row and name.rpartition(".")[2] not in row["members"]:
+                raise ValueError("retained binary provenance says " + row["path"] + " does not serve " + name)
             checked[name] = meta["sha256"]
     if not checked or not any("x_sequence" in name for name in checked):
         raise ValueError("sequence native closure unproven")
@@ -494,6 +557,11 @@ def main(argv=None):
     run.add_argument("--validation-only", action="store_true", help="local correctness/controller checks; never performance evidence")
     run.add_argument("--retain-local", action="store_true",
                      help="keep the evidence archives local (a rented box has no R2 credential); the box archive pull retains them")
+    receipt = sub.add_parser("provenance", help="write the native-file receipt of an installed package directory")
+    receipt.add_argument("--package", type=Path, required=True)
+    receipt.add_argument("--source-commit", required=True)
+    receipt.add_argument("--built-by", default="tools/box_merged_verify.sh merged builds")
+    receipt.add_argument("--out", type=Path, required=True)
     comparison = sub.add_parser("compare")
     comparison.add_argument("reports", type=Path, nargs="+")
     args = p.parse_args(argv)
@@ -502,6 +570,11 @@ def main(argv=None):
         return 0
     if args.command == "prepare-transformer":
         print(json.dumps(prepare_transformer(args)))
+        return 0
+    if args.command == "provenance":
+        record = binary_provenance(args.package, args.source_commit, args.built_by)
+        write(args.out, record)
+        print(len(record["binaries"]), "binaries", len(record["members"]), "members")
         return 0
     if args.command == "compare":
         print(json.dumps(compare(args.reports)))

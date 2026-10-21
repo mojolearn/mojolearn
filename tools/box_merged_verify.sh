@@ -134,13 +134,9 @@ job_graphopt() {
   local VPY=$VENV/bin/python SP
   SP=$($VPY -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
   cp -a python/mojolearn $SP/mojolearn; st "GRAPHOPT installed copy $SP/mojolearn"
-  $VPY - $G/provenance.json $SHA $SP/mojolearn > $G/provenance.log 2>&1 <<'EOF'
-import hashlib, json, pathlib, sys
-out, sha, pkg = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
-rows = [{"path": str(p), "sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(pkg.rglob("*.so"))]
-pathlib.Path(out).write_text(json.dumps({"source_commit": sha, "built_by": "tools/box_merged_verify.sh merged builds", "binaries": rows}, indent=1) + "\n")
-print(len(rows), "binaries")
-EOF
+  # Per-member receipt (own file or the merged file that serves it), checked by `run` against each loaded __file__.
+  env -u PYTHONPATH $VPY tools/bench_graph_optimizer.py provenance --package $SP/mojolearn --source-commit $SHA \
+    --out $G/provenance.json > $G/provenance.log 2>&1
   st "GRAPHOPT provenance rc=$? $(tail -n 1 $G/provenance.log)"
   local name recipe prep req
   for name in program-run transformer-forward; do
