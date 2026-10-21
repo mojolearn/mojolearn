@@ -10,18 +10,22 @@ kernel-only clock on device tensors (64x on the L40S board). Here x, y, dy
 and dx are resident sequence tensors (`sequence/seq_tensor.mojo`); only the
 D-float weight and bias go up and the D-float dweight and dbias come down.
 The launches are `layer_norm_fwd_core` / `layer_norm_bwd_core`, the per-call
-entry's own, on the same values: no bit moves."""
-from std.python import PythonObject
-
+entry's own, on the same values: no bit moves. The Python entry
+(`layer_norm_dev_py`) is `sequence/layernorm_dev_pyapi.mojo`'s."""
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP
-from sequence.pyapi import fptr, fval, ival
 from sequence.layernorm_core import layer_norm_bwd_core, layer_norm_fwd_core
 from sequence.seq_tensor import seq_tensor_ptr
 
 
-def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObject,
-                      fp: PythonObject) raises -> PythonObject:
+def _host_fp(a: Int, what: String) raises -> FP:
+    if a == 0:
+        raise Error("sequence: null float32 buffer for " + what)
+    return FP(unsafe_from_address=a)
+
+
+def layer_norm_dev(handles: List[Int], addrs: List[Int], ip: List[Int],
+                   fp: List[Float64]) raises -> Int:
     """handles = [x (M, D), y (M, D) out or 0, dy (M, D) or 0, dx (M, D) out
     or 0, (mean (M), rstd (M))] (seq_tensor handles); addrs = [weight (D) or
     0, bias (D) or 0, dweight (D) out or 0, dbias (D) out or 0] (host
@@ -38,26 +42,26 @@ def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObje
     per backward). The words are the forward's own stores: no bit moves."""
     if (len(handles) != 4 and len(handles) != 6) or len(addrs) != 4 or (len(ip) != 5 and len(ip) != 6) or len(fp) != 1:
         raise Error("layer_norm_dev: requires 4 or 6 handles, 4 addresses, 5 or 6 integer and 1 float parameters")
-    var M = ival(ip, 0)
-    var D = ival(ip, 1)
-    var hw = ival(ip, 2) != 0
-    var hb = ival(ip, 3) != 0
-    var bwd = ival(ip, 4) != 0
-    var stats = len(handles) == 6 and len(ip) == 6 and ival(ip, 5) != 0
+    var M = ip[0]
+    var D = ip[1]
+    var hw = ip[2] != 0
+    var hb = ip[3] != 0
+    var bwd = ip[4] != 0
+    var stats = len(handles) == 6 and len(ip) == 6 and ip[5] != 0
     if M < 1 or D < 1:
         raise Error("layer_norm_dev: M and D must be >= 1")
     var n = M * D
     var X = seq_tensor_ptr(handles[0], n, "x")
-    var has_y = Int(py=handles[1]) != 0
+    var has_y = handles[1] != 0
     if not bwd and not has_y:
         raise Error("layer_norm_dev: a forward needs a y tensor")
     var ex = DeviceExec()
     var W = ex.alloc(D)
     var Bb = ex.alloc(D)
     if hw:
-        ex.upload(W, fptr(addrs[0], "weight"), D)
+        ex.upload(W, _host_fp(addrs[0], "weight"), D)
     if hb:
-        ex.upload(Bb, fptr(addrs[1], "bias"), D)
+        ex.upload(Bb, _host_fp(addrs[1], "bias"), D)
     # OP_LN_FWD stores every y, mean and rstd cell: no fill
     var mean: FP
     var rstd: FP
@@ -74,7 +78,7 @@ def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObje
             Y = seq_tensor_ptr(handles[1], n, "y")
         else:
             Y = ex._alloc(n, False)
-        layer_norm_fwd_core(ex, X, W, Bb, Y, mean, rstd, M, D, hw, hb, fval(fp, 0))
+        layer_norm_fwd_core(ex, X, W, Bb, Y, mean, rstd, M, D, hw, hb, Float32(fp[0]))
     if bwd:
         var DY = seq_tensor_ptr(handles[2], n, "dy")
         var DX = seq_tensor_ptr(handles[3], n, "dx")
@@ -82,8 +86,8 @@ def layer_norm_dev_py(handles: PythonObject, addrs: PythonObject, ip: PythonObje
         var DB = ex.alloc(D)
         layer_norm_bwd_core(ex, X, W, DY, DX, DW, DB, mean, rstd, M, D, hw)
         if hw:
-            ex.download_async(fptr(addrs[2], "dweight"), DW, D)
+            ex.download_async(_host_fp(addrs[2], "dweight"), DW, D)
         if hb:
-            ex.download_async(fptr(addrs[3], "dbias"), DB, D)
+            ex.download_async(_host_fp(addrs[3], "dbias"), DB, D)
     ex.sync()
-    return PythonObject(n)
+    return n
