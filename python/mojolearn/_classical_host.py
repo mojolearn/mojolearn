@@ -628,7 +628,7 @@ def _host_fit_helpers():
 
 # The explicit host classes run through the same compiled owner as
 # LinearRegression and Ridge, with their CPU identical binding.
-_native_classical_bridge.connect_host_public(HostRidge, HostLinearRegression, _CLASSICAL)
+_native_classical_bridge.connect_host_public(HostRidge, HostLinearRegression, _CLASSICAL, _host_fit_helpers())
 
 
 def host_model(path):

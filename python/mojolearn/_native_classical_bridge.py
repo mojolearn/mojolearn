@@ -42,8 +42,10 @@ def _decomp_cells(decomp):
     return cells
 
 
-def connect_host(host_ridge_class, host_linear_class):
-    # glue: connect the existing explicit Host* CPU ABI once at setup
+def connect_host(host_ridge_class, host_linear_class, helpers):
+    # glue: connect the existing explicit Host* CPU ABI once at setup;
+    # `helpers` is the CPU (decomposition, x_linear) binary pair
+    # `_classical_host._host_fit_helpers` loads.
     from types import BuiltinFunctionType
 
     entry, context = connect(host_ridge_class, host_linear_class)
@@ -69,8 +71,7 @@ def connect_host(host_ridge_class, host_linear_class):
     # The TSQR and x_linear helpers are the CPU binaries too: the device
     # ones report the device vendor, which the native fit refuses beside
     # the CPU estimator entries (and would not give the CPU column's bits).
-    from ._classical_host import _host_fit_helpers
-    decomp, linear = _host_fit_helpers()
+    decomp, linear = helpers
     try:
         cpu["decomp"] = _decomp_cells(decomp)
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
@@ -392,11 +393,11 @@ def register_subclass(cls, context):
         target["classical_kinds"].pop(cls, None)
 
 
-def connect_host_public(host_ridge_class, host_linear_class, context):
+def connect_host_public(host_ridge_class, host_linear_class, context, helpers):
     """Connect the explicit CPU host classes beside the public ones."""
     if "classical_attribute_descriptor" not in context:
         return
-    entry, host_context = connect_host(host_ridge_class, host_linear_class)
+    entry, host_context = connect_host(host_ridge_class, host_linear_class, helpers)
     for cls in (host_ridge_class, host_linear_class):  # glue: the two host classes
         context["classical_kinds"].pop(cls, None)
     host_context.update(classical_public_layouts=context["classical_public_layouts"],
