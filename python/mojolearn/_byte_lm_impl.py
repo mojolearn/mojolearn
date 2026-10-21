@@ -41,7 +41,6 @@ reference path of DEVIATION 2610, `LanguageModelInference(threaded=False)`.
 """
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
-import hashlib
 import json
 from . import _portable_math as math
 from . import _numeric_profile
@@ -426,12 +425,18 @@ def _validate_state(value):
                 parameter_shapes=[list(shape) for shape in shape.parameter_shapes], parameter_offsets=list(shape.offsets))  # glue: lists the model parameter shapes
 
 
+def _sha256_hex(data):
+    """The SHA-256 of the bytes `data` as 64 hex digits, computed by the Mojo
+    SHA-256 (core/sha256.mojo) behind the CPU tokenizer binding's
+    `sha256_hex`: the same digest as before, over the same bytes."""
+    return str(_backend.load_host_module('_mojolearn_tokenizer_host').sha256_hex(data))
+
+
 def _sha(path):
-    digest = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):  # cpu-route: reads a binding file in chunks to hash it (file input)
-            digest.update(chunk)
-    return digest.hexdigest()
+    """The SHA-256 of the file at `path`, streamed by the Mojo file digest
+    (`verify_file_sha256`, autograd/model_verify.mojo) behind the CPU
+    sequence binding; the file never passes through Python."""
+    return str(_backend.load_host_module('_mojolearn_x_sequence_host').verify_file_sha256(str(path))[0])
 
 
 def _binding_metadata(binding, shape):
@@ -1601,7 +1606,7 @@ class SmallByteLanguageModelTrainer:
             payload[key] = dict(dtype=dtype, shape=list(value.shape),
                                 hex=le_bytes(value, 'i' if integer else 'f').hex())
         envelope = dict(schema=_CHECKPOINT_SCHEMA, payload=payload,
-                        payload_sha256=hashlib.sha256(_canonical(payload)).hexdigest())
+                        payload_sha256=_sha256_hex(_canonical(payload)))
         encoded = _canonical(envelope) + b'\n'
         if len(encoded) > _CHECKPOINT_LIMIT:
             raise ValueError('Byte-LM checkpoint exceeds 2 MiB')
@@ -1753,7 +1758,7 @@ def _decode_checkpoint(encoded):
             or envelope['schema'] != _CHECKPOINT_SCHEMA):
         raise ValueError('Byte-LM checkpoint schema mismatch')
     payload = envelope['payload']
-    if hashlib.sha256(_canonical(payload)).hexdigest() != envelope['payload_sha256']:
+    if _sha256_hex(_canonical(payload)) != envelope['payload_sha256']:
         raise ValueError('Byte-LM checkpoint integrity mismatch')
     if not isinstance(payload, dict):
         raise ValueError('Byte-LM checkpoint payload must be an object')
