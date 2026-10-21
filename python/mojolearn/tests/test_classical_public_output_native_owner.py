@@ -8,6 +8,13 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 ENTRY, CONTEXT = connect(Ridge, LinearRegression)
 
+# The incumbent wrapper distinguishes callers by their module name. This
+# independent oracle always represents an external user, even when pytest
+# collects this file as mojolearn.tests rather than an isolated test module.
+_USER_ORACLE = {"__name__": "classical_public_output_oracle"}
+exec("def predict(model, x):\n    return model.predict(x)\n", _USER_ORACLE)
+legacy_public_predict = _USER_ORACLE["predict"]
+
 
 def native_predict_public(model, x):
     return ENTRY(model, "predict_public", (x,), CONTEXT)
@@ -38,7 +45,7 @@ def test_native_public_prediction_widens_after_kernel_and_preserves_score_bits(c
     y = (x @ np.array([0.75, -1.5, 0.125], dtype="f4") + np.float32(0.25)).astype("f4")
     model = cls().fit(x, y)
     query = x.astype("f8") if layout == "float64" else x[::-1] if layout == "strided" else x
-    expected = model.predict(query)
+    expected = legacy_public_predict(model, query)
     expected_score = model.score(x, y)
     assert expected.dtype == np.dtype("f8")
 
