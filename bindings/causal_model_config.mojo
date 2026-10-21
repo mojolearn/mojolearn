@@ -87,6 +87,8 @@ def _config_int(data: PythonObject, field: String, default: PythonObject, requir
     var bi = Python.import_module("builtins")
     if v is None and not required:
         return v
+    if v is None:
+        raise Error("model config: " + field + ": the field is required and the config lacks it")
     if bi.type(v) is not bi.int:
         raise Error("model config: " + field + ": an integer is required")
     return v
