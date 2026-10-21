@@ -75,7 +75,7 @@ def closure(root, source):
         # can mention Python legitimately, so remove them for this check.
         code = re.sub(r'(?s)""".*?"""|\'\'\'.*?\'\'\'', "", text)
         code = "\n".join(line.split("#", 1)[0] for line in code.splitlines())
-        if re.search(r"\bPythonObject\b|\bPython\s*\.|\b_?Py[A-Z_][A-Za-z0-9_]*", code):
+        if re.search(r"\bPythonObject\b|\bPython\s*\.|\b_?Py(?:_[A-Za-z]\w*|[A-Z][A-Za-z0-9]*_[A-Za-z0-9_]+)\b", code):
             errors.append(f"{relative}: Python interop in native-only closure")
     return {p.relative_to(root).as_posix(): h for p, h in sorted(seen.items())}, sorted(set(errors))
 

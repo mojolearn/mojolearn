@@ -666,7 +666,7 @@
   "cases": [
     {
       "id": "autograd_cpu",
-      "source": "packaging/native_only/cases/autograd_cpu.mojo",
+      "source": "packaging/native_only/cases/smoke_autograd_cpu.mojo",
       "backends": [
         "cpu"
       ],
@@ -681,7 +681,7 @@
     },
     {
       "id": "autograd_gpu",
-      "source": "packaging/native_only/cases/autograd_gpu.mojo",
+      "source": "packaging/native_only/cases/smoke_autograd_gpu.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -698,7 +698,7 @@
     },
     {
       "id": "sequential_cpu",
-      "source": "packaging/native_only/cases/sequential_cpu.mojo",
+      "source": "packaging/native_only/cases/smoke_sequential_cpu.mojo",
       "backends": [
         "cpu"
       ],
@@ -713,7 +713,7 @@
     },
     {
       "id": "sequential_gpu",
-      "source": "packaging/native_only/cases/sequential_gpu.mojo",
+      "source": "packaging/native_only/cases/smoke_sequential_gpu.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -730,7 +730,7 @@
     },
     {
       "id": "optimizer_cpu",
-      "source": "packaging/native_only/cases/optimizer_cpu.mojo",
+      "source": "packaging/native_only/cases/smoke_optimizer_cpu.mojo",
       "backends": [
         "cpu"
       ],
@@ -748,7 +748,7 @@
     },
     {
       "id": "optimizer_gpu",
-      "source": "packaging/native_only/cases/optimizer_gpu.mojo",
+      "source": "packaging/native_only/cases/smoke_optimizer_gpu.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -768,7 +768,7 @@
     },
     {
       "id": "tokenizer",
-      "source": "packaging/native_only/cases/tokenizer.mojo",
+      "source": "packaging/native_only/cases/smoke_tokenizer.mojo",
       "backends": [
         "cpu"
       ],
@@ -787,7 +787,7 @@
     },
     {
       "id": "kmeans",
-      "source": "packaging/native_only/cases/kmeans.mojo",
+      "source": "packaging/native_only/cases/smoke_kmeans.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -804,7 +804,7 @@
     },
     {
       "id": "linear_regression",
-      "source": "packaging/native_only/cases/linear_regression.mojo",
+      "source": "packaging/native_only/cases/smoke_linear_regression.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -821,7 +821,7 @@
     },
     {
       "id": "ridge",
-      "source": "packaging/native_only/cases/ridge.mojo",
+      "source": "packaging/native_only/cases/smoke_ridge.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -838,7 +838,7 @@
     },
     {
       "id": "logistic",
-      "source": "packaging/native_only/cases/logistic.mojo",
+      "source": "packaging/native_only/cases/smoke_logistic.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -855,7 +855,7 @@
     },
     {
       "id": "pca",
-      "source": "packaging/native_only/cases/pca.mojo",
+      "source": "packaging/native_only/cases/smoke_pca.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -872,7 +872,7 @@
     },
     {
       "id": "truncated_svd",
-      "source": "packaging/native_only/cases/truncated_svd.mojo",
+      "source": "packaging/native_only/cases/smoke_truncated_svd.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -889,7 +889,7 @@
     },
     {
       "id": "nearest_neighbors",
-      "source": "packaging/native_only/cases/nearest_neighbors.mojo",
+      "source": "packaging/native_only/cases/smoke_nearest_neighbors.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -906,7 +906,7 @@
     },
     {
       "id": "radius_neighbors",
-      "source": "packaging/native_only/cases/radius_neighbors.mojo",
+      "source": "packaging/native_only/cases/smoke_radius_neighbors.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -923,7 +923,7 @@
     },
     {
       "id": "knn_classifier",
-      "source": "packaging/native_only/cases/knn_classifier.mojo",
+      "source": "packaging/native_only/cases/smoke_knn_classifier.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -940,7 +940,7 @@
     },
     {
       "id": "knn_regressor",
-      "source": "packaging/native_only/cases/knn_regressor.mojo",
+      "source": "packaging/native_only/cases/smoke_knn_regressor.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -957,7 +957,7 @@
     },
     {
       "id": "dbscan",
-      "source": "packaging/native_only/cases/dbscan.mojo",
+      "source": "packaging/native_only/cases/smoke_dbscan.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -974,7 +974,7 @@
     },
     {
       "id": "kernel_density",
-      "source": "packaging/native_only/cases/kernel_density.mojo",
+      "source": "packaging/native_only/cases/smoke_kernel_density.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -991,7 +991,7 @@
     },
     {
       "id": "cholesky",
-      "source": "packaging/native_only/cases/cholesky.mojo",
+      "source": "packaging/native_only/cases/smoke_cholesky.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1008,7 +1008,7 @@
     },
     {
       "id": "gaussian_process",
-      "source": "packaging/native_only/cases/gaussian_process.mojo",
+      "source": "packaging/native_only/cases/smoke_gaussian_process.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1025,7 +1025,7 @@
     },
     {
       "id": "gaussian_mixture",
-      "source": "packaging/native_only/cases/gaussian_mixture.mojo",
+      "source": "packaging/native_only/cases/smoke_gaussian_mixture.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1042,7 +1042,7 @@
     },
     {
       "id": "kernel_ridge",
-      "source": "packaging/native_only/cases/kernel_ridge.mojo",
+      "source": "packaging/native_only/cases/smoke_kernel_ridge.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1059,7 +1059,7 @@
     },
     {
       "id": "nystroem",
-      "source": "packaging/native_only/cases/nystroem.mojo",
+      "source": "packaging/native_only/cases/smoke_nystroem.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1076,7 +1076,7 @@
     },
     {
       "id": "rbf_sampler",
-      "source": "packaging/native_only/cases/rbf_sampler.mojo",
+      "source": "packaging/native_only/cases/smoke_rbf_sampler.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1093,7 +1093,7 @@
     },
     {
       "id": "ivf",
-      "source": "packaging/native_only/cases/ivf.mojo",
+      "source": "packaging/native_only/cases/smoke_ivf.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1110,7 +1110,7 @@
     },
     {
       "id": "isolation_forest",
-      "source": "packaging/native_only/cases/isolation_forest.mojo",
+      "source": "packaging/native_only/cases/smoke_isolation_forest.mojo",
       "backends": [
         "metal",
         "cuda",
@@ -1127,7 +1127,7 @@
     },
     {
       "id": "exponential_smoothing",
-      "source": "packaging/native_only/cases/exponential_smoothing.mojo",
+      "source": "packaging/native_only/cases/smoke_exponential_smoothing.mojo",
       "backends": [
         "metal",
         "cuda",

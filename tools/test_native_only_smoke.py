@@ -25,6 +25,15 @@ class NativeOnlyGate(unittest.TestCase):
             (root / "main.mojo").write_text("from vanished import compute\n")
             self.assertIn("unresolved import vanished", gate.closure(root, "main.mojo")[1][0])
 
+    def test_pytorch_prose_is_not_a_cpython_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "main.mojo"
+            path.write_text('def main() raises:\n    raise Error("PyTorch shape semantics")\n')
+            self.assertFalse(gate.closure(root, "main.mojo")[1])
+            path.write_text('def main():\n    external_call["PyEval_EvalCode"]()\n')
+            self.assertTrue(gate.closure(root, "main.mojo")[1])
+
     def test_source_mutation_changes_closure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
