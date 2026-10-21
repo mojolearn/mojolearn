@@ -10,9 +10,7 @@ every column. The GPU binding runs x_decomp/ica_dev.mojo, the same
 statements on resident matrices."""
 from std.math import sqrt
 from experiments.classical_identical_ideas.linear_controls import C27_COMPONENTS
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADDS, OP_CUBE, OP_CUBEP, OP_EXPG, OP_EXPGP, OP_MAXS, OP_MUL, OP_ONEMSQ, OP_RECIP,
@@ -130,31 +128,21 @@ def ica_def[E: Exec](X1: Mat, mut W: Mat, fun: Int, alpha: Float64, max_iter: In
     return best
 
 
-def ica_solve_py[E: Exec](x1: PythonObject, w: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
-    """`FastICA._par` / `_def` over X1 (xr x xc): w (nc x nc, the initial
-    unmixing matrix) replaced in place. p = [nc, xr, xc, algorithm (0
-    parallel, 1 deflation), fun (0 logcosh, 1 exp, 2 cube), max_iter];
-    f = [alpha, tol]. Returns the iteration count."""
-    var nc = _n(p, 0)
-    var xr = _n(p, 1)
-    var xc = _n(p, 2)
-    var algo = Int(py=p[3])
-    var fun = Int(py=p[4])
-    var max_iter = Int(py=p[5])
+def ica_solve_run[E: Exec](
+    px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64, tol: Float64
+) raises -> Int:
+    """`FastICA._par` / `_def` over X1 (xr x xc) at `px`: W (nc x nc, the
+    initial unmixing matrix) at `pw` replaced in place. algo 0 parallel, 1
+    deflation; fun 0 logcosh, 1 exp, 2 cube. Returns the iteration count."""
     if xr * xc > 2147483647 or nc * nc > 2147483647 or nc < 1:
         raise Error("x_decomp: fastica shape out of range")
-    var alpha = Float64(py=f[0])
-    var tol = Float64(py=f[1])
-    var px = _f(x1)
-    var pw = _f(w)
     var it = 0
-    with GILReleased(Python()):
-        var X1 = mat_from(px, xr, xc)
-        var W = mat_from(pw, nc, nc)
-        if algo == 0:
-            it = ica_par[E](X1, W, fun, alpha, max_iter, tol)
-        else:
-            it = ica_def[E](X1, W, fun, alpha, max_iter, tol)
-        for i in range(nc * nc):
-            pw.unsafe_store(i, W.d[i])
-    return PythonObject(it)
+    var X1 = mat_from(px, xr, xc)
+    var W = mat_from(pw, nc, nc)
+    if algo == 0:
+        it = ica_par[E](X1, W, fun, alpha, max_iter, tol)
+    else:
+        it = ica_def[E](X1, W, fun, alpha, max_iter, tol)
+    for i in range(nc * nc):
+        pw.unsafe_store(i, W.d[i])
+    return it
