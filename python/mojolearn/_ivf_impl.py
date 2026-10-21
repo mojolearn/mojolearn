@@ -420,8 +420,8 @@ class IVFIndex(NumericModeMixin):
         return np.ascontiguousarray(f.astype(np.int32))
 
     # filter: cuVS's sample filter, applied to the merged candidates of the
-    # probed lists before any distance (DEVIATION 5863); a short query raises
-    # (DEVIATION 1794).
+    # probed lists before any distance (DEVIATION 5863); a short query is
+    # short-filled in Mojo (their kOutOfBoundsRecord, DEVIATION 1794 lifted).
     def search(self, queries, filter=None):
         """Find the nearest indexed rows of each query within the probed lists.
 
@@ -439,7 +439,10 @@ class IVFIndex(NumericModeMixin):
         distances : ndarray of shape (n_queries, n_neighbors), float32
             Distances under `metric`, ascending.
         indices : ndarray of shape (n_queries, n_neighbors), int32
-            Original row ids of the neighbors.
+            Original row ids of the neighbors. A query whose probed lists hold
+            (after filtering) fewer than `n_neighbors` rows is padded with
+            distance ``inf`` and id ``-1`` after its
+            ``min(n_neighbors, n_candidates_[i])`` real neighbors.
 
         Raises
         ------
@@ -447,12 +450,6 @@ class IVFIndex(NumericModeMixin):
             If the index is not fitted or loaded, the queries have a different
             number of features, `metric` no longer names the metric the index
             was built under, or `filter` has the wrong shape or dtype.
-
-        Notes
-        -----
-        Unlike the compressed IVF indexes, a query whose probed lists hold
-        (after filtering) fewer than `n_neighbors` rows raises an error rather
-        than being padded. Raise `n_probes` if this happens.
         """
         if not self._is_built():
             raise ValueError("mojolearn IVFIndex: call fit (or load) before search")

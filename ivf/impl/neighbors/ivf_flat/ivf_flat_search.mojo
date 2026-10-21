@@ -673,7 +673,7 @@ def _refuse_query(counts: List[Int32], n_queries: Int, k: Int) raises:
     selects its `min(k, count)` candidates and the emit kernel short-fills
     the rest with `kOutOfBoundsRecord` (`ivf_common.cuh:106-108`;
     `IVF_OUT_OF_BOUNDS_RECORD`, distance `+inf`)."""
-    for q in range(n_queries):  # small-loop(n_queries: one count per query): the selection-capacity refusal, no row data
+    for q in range(n_queries):
         var selected = min(k, Int(counts[q]))
         if selected > IVF_SELECT_LIMIT:
             raise Error("ivf_flat: selection k exceeds the mode's bounded rank capacity " + String(IVF_SELECT_LIMIT))

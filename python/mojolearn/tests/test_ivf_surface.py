@@ -76,6 +76,37 @@ def arm_euclidean(rep):
     rep.check("EUCLIDEAN", IVFIndex(n_lists=8, n_probes=2, n_neighbors=5, metric=1, random_state=1).fit(x).search(q)[0].shape == (32, 5), "metric code 1 (L2SqrtExpanded) accepted")
 
 
+def arm_short_fill(rep):
+    """A query whose probed lists hold fewer than n_neighbors rows is
+    short-filled, as cuVS's kOutOfBoundsRecord (`ivf_common.cuh:106-108`):
+    its real neighbors first, then distance inf and id -1 (lane
+    ivf-short-fill, 2026-10-21; before, it raised "fewer than k"). Planted
+    so the short case is reached whatever the quantizer does: 16 indexed
+    rows against n_neighbors = 20 with every list probed, and a filter that
+    keeps 3 rows against n_neighbors = 5."""
+    x, q = _data()
+    small = np.ascontiguousarray(x[:16])
+    brute = np.argsort(((q[:, None, :].astype(np.float64) - small[None, :, :]) ** 2).sum(-1), axis=1, kind="stable")
+    for metric in ("sqeuclidean", "euclidean"):
+        m = IVFIndex(n_lists=2, n_probes=2, n_neighbors=20, metric=metric, random_state=1).fit(small)
+        d, i = (np.asarray(a) for a in m.search(q))
+        cand = np.asarray(m.n_candidates_)
+        rep.check("SHORT", d.shape == (32, 20) and i.shape == (32, 20), f"{metric}: (m, k) outputs for a short index", (d.shape, i.shape))
+        rep.check("SHORT", np.all(cand == 16), f"{metric}: n_candidates_ is the 16 indexed rows", (cand.min(), cand.max()))
+        rep.check("SHORT", np.all(i[:, 16:] == -1), f"{metric}: slots 16..19 hold id -1")
+        rep.check("SHORT", np.all(np.isposinf(d[:, 16:])), f"{metric}: slots 16..19 hold distance +inf")
+        rep.check("SHORT", np.all(np.isfinite(d[:, :16])) and np.all(np.diff(d[:, :16], axis=1) >= 0), f"{metric}: the 16 real distances are finite and ascend")
+        rep.check("SHORT", np.array_equal(np.sort(i[:, :16], axis=1), np.sort(brute.astype(np.int32), axis=1)), f"{metric}: the 16 real ids are every indexed row")
+    full = IVFIndex(n_lists=8, n_probes=8, n_neighbors=5, random_state=1).fit(x)
+    keep = np.zeros(1024, dtype=bool)
+    keep[[3, 500, 1000]] = True
+    fd, fi = (np.asarray(a) for a in full.search(q, filter=keep))
+    fcand = np.asarray(full.n_candidates_)
+    rep.check("SHORT", np.all(fcand == 3), "filter: n_candidates_ counts the 3 kept rows", (fcand.min(), fcand.max()))
+    rep.check("SHORT", np.all(np.isin(fi[:, :3], [3, 500, 1000])) and np.all(np.sort(fi[:, :3], axis=1) == np.array([3, 500, 1000], dtype=np.int32)), "filter: slots 0..2 are the kept rows")
+    rep.check("SHORT", np.all(fi[:, 3:] == -1) and np.all(np.isposinf(fd[:, 3:])), "filter: slots 3..4 are (inf, -1)")
+
+
 def arm_refusals(rep):
     x, q = _data()
     # Validation may refuse during construction or fit, before search exists.
@@ -98,7 +129,7 @@ def arm_provenance(rep):
 def main(out=sys.stdout):
     bind_or_exit("_mojolearn_ivf", "build_ivf.sh")
     rep = Report("test_ivf_surface")
-    return run("test_ivf_surface", [("SEARCH", arm_search), ("EUCLIDEAN", arm_euclidean), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
+    return run("test_ivf_surface", [("SEARCH", arm_search), ("EUCLIDEAN", arm_euclidean), ("SHORT", arm_short_fill), ("REFUSE", arm_refusals), ("PROVENANCE", arm_provenance)], rep, out)
 
 
 if __name__ == "__main__":

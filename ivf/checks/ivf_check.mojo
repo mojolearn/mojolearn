@@ -699,48 +699,8 @@ def check_ivf_refusals() raises:
     if raised_k == IDENTICAL:
         raise Error("check_ivf_refusals: k257 admission disagrees with numeric mode")
 
-    # A probe set too small to supply k (DEVIATION 1794), PLANTED so it is
-    # reached rather than hoped for. Row 0 sits alone in list 0, whose
-    # centre IS row 0; the query IS row 0, so the coarse selection at
-    # n_probes = 1 probes list 0 and finds one candidate against k = 5.
-    var tiny_labels = List[UInt32]()
-    tiny_labels.append(UInt32(0))
-    for _ in range(N_ROWS - 1):
-        tiny_labels.append(UInt32(1))
-    var tiny_centers = List[Float32]()
-    for f in range(DIM):
-        tiny_centers.append(x[f])
-    for f in range(DIM):
-        tiny_centers.append(x[DIM + f])
-    # THE CHECK REFUSES ITSELF IF THE COARSE SELECTION IS NOT FORCED.
-    var q0 = List[Float32]()
-    for f in range(DIM):
-        q0.append(x[f])
-    var dc0 = reference_distance_f64(q0, 0, tiny_centers, 0, DIM, False)
-    var dc1 = reference_distance_f64(q0, 0, tiny_centers, 1, DIM, False)
-    if dc0 >= dc1:
-        raise Error(
-            "check_ivf_refusals: the planted short-list fixture does not"
-            " force list 0 (" + String(dc0) + " vs " + String(dc1)
-            + "), so DEVIATION 1794's refusal would not be reached"
-        )
-    var tiny = _plant_index(
-        ctx, x, tiny_labels, tiny_centers, N_ROWS, DIM, 2
-    )
-    var raised_small = False
-    try:
-        _ = _search(ctx, tiny, q0, 1, K, 1)
-    except e:
-        raised_small = True
-        refused += 1
-        print("  refused  probed lists hold fewer than k: " + String(e))
-    if not raised_small:
-        raise Error(
-            "check_ivf_refusals: a single probed list holding one vector"
-            " supplied k = " + String(K) + " neighbours without raising"
-            " (DEVIATION 1794)"
-        )
-    _ = tiny^
+    # A probe set too small to supply k is no longer a refusal: it is
+    # short-filled, and `check_short_fill` below plants and gates it.
 
     print(
         "check_ivf_refusals OK ["
@@ -959,6 +919,162 @@ def check_list_layout_and_index_carry() raises:
 # =====================================================================
 # THE DEGENERATE LIST
 # =====================================================================
+
+
+def check_short_fill() raises:
+    """Their `kOutOfBoundsRecord` short-fill (`ivf_common.cuh:106-108`;
+    lane ivf-short-fill, DEVIATION 1794 lifted), PLANTED so it is reached
+    rather than hoped for. Row 0 sits alone in list 0, whose centre IS row
+    0; every other row is in list 1, whose centre IS row 1. Query 0 IS row
+    0 and query 1 IS row 1, so at n_probes = 1 query 0 probes list 0 and
+    holds ONE candidate against k = K, and query 1 probes list 1 and holds
+    N_ROWS - 1.
+
+    Gated, under both implemented metrics:
+      * the counts are (1, N_ROWS - 1);
+      * query 0's slot 0 is row 0 and its slots 1 .. K-1 are exactly
+        (+inf, 0xFFFFFFFF), on the device and in the host column;
+      * device, host column and oracle agree slot for slot (bits under
+        IDENTICAL; the pad slots in every mode);
+      * query 1's answer inside the mixed call is its answer alone, so a
+        query that has k candidates is untouched by a short sibling
+        (bits under IDENTICAL; a report under FAST, whose batched scan and
+        per-query path differ by ulps);
+      * a partial-storage search still pads with zeros (the shard driver's
+        contract), on the device and in the host column.
+    """
+    var ctx = DeviceContext()
+    var x = ivf_index_fixture(N_ROWS, DIM, 5)
+    var labels = List[UInt32]()
+    labels.append(UInt32(0))
+    for _ in range(N_ROWS - 1):
+        labels.append(UInt32(1))
+    var centers = List[Float32]()
+    for f in range(DIM):
+        centers.append(x[f])
+    for f in range(DIM):
+        centers.append(x[DIM + f])
+    var q = List[Float32]()
+    for f in range(DIM):
+        q.append(x[f])
+    for f in range(DIM):
+        q.append(x[DIM + f])
+    var q1 = List[Float32]()
+    for f in range(DIM):
+        q1.append(x[DIM + f])
+    # THE CHECK REFUSES ITSELF IF THE COARSE SELECTION IS NOT FORCED.
+    var d00 = reference_distance_f64(q, 0, centers, 0, DIM, False)
+    var d01 = reference_distance_f64(q, 0, centers, 1, DIM, False)
+    var d10 = reference_distance_f64(q, 1, centers, 0, DIM, False)
+    var d11 = reference_distance_f64(q, 1, centers, 1, DIM, False)
+    if d00 >= d01 or d11 >= d10:
+        raise Error(
+            "check_short_fill: the planted fixture does not force the probes ("
+            + String(d00) + " vs " + String(d01) + ", " + String(d11) + " vs "
+            + String(d10) + "), so the short-fill would not be reached"
+        )
+    var inf_bits = UInt32(0x7F800000)
+    var oob = UInt32(0xFFFFFFFF)
+    var metrics: List[Int] = [METRIC_L2_EXPANDED, METRIC_L2_SQRT_EXPANDED]
+    var fast_moved = 0
+    for mi in range(len(metrics)):
+        var metric = metrics[mi]
+        var is_sqrt = metric == METRIC_L2_SQRT_EXPANDED
+        var index = _plant_index(ctx, x, labels, centers, N_ROWS, DIM, 2, metric)
+        var got = _search(ctx, index, q, 2, K, 1)
+        var alone = _search(ctx, index, q1, 1, K, 1)
+        var host_index = IvfHostIndex(
+            2, DIM, N_ROWS, metric, index.centers.copy(), index.center_norms.copy(),
+            index.list_offsets.copy(), index.list_indices.copy(), index.list_data.copy(),
+        )
+        var host = host_ivf_search(host_index, q, 2, K, 1)
+        var want = oracle_ivf_search(
+            index.centers, 2, index.list_offsets, index.list_indices, index.list_data,
+            N_ROWS, q, 2, DIM, K, 1, is_sqrt,
+        )
+        if (
+            got.n_candidates[0] != 1 or got.n_candidates[1] != Int32(N_ROWS - 1)
+            or host.n_candidates[0] != 1 or host.n_candidates[1] != Int32(N_ROWS - 1)
+            or want.n_candidates[0] != 1
+        ):
+            raise Error(
+                "check_short_fill: FAIL counts device (" + String(got.n_candidates[0]) + ", "
+                + String(got.n_candidates[1]) + ") host (" + String(host.n_candidates[0]) + ", "
+                + String(host.n_candidates[1]) + "), want (1, " + String(N_ROWS - 1) + ")"
+            )
+        if got.indices[0] != 0 or host.indices[0] != 0:
+            raise Error(
+                "check_short_fill: FAIL query 0 slot 0 is device " + String(got.indices[0])
+                + " host " + String(host.indices[0]) + ", not row 0"
+            )
+        for i in range(1, K):
+            if got.indices[i] != oob or host.indices[i] != oob or want.indices[i] != oob:
+                raise Error("check_short_fill: FAIL query 0 slot " + String(i) + " id is not kOutOfBoundsRecord")
+            if (
+                got.distances[i].to_bits() != inf_bits or host.distances[i].to_bits() != inf_bits
+                or want.distances[i].to_bits() != inf_bits
+            ):
+                raise Error(
+                    "check_short_fill: FAIL query 0 slot " + String(i) + " distance "
+                    + _hex32(got.distances[i]) + " (host " + _hex32(host.distances[i]) + ") is not +inf"
+                )
+        for i in range(2 * K):
+            var moved = (
+                not _same_bits(got.distances[i], host.distances[i]) or got.indices[i] != host.indices[i]
+                or not _same_bits(got.distances[i], want.distances[i]) or got.indices[i] != want.indices[i]
+            )
+            comptime if IDENTICAL:
+                if moved:
+                    raise Error(
+                        "check_short_fill: FAIL slot " + String(i) + " device (" + _hex32(got.distances[i])
+                        + ", " + String(got.indices[i]) + ") host (" + _hex32(host.distances[i]) + ", "
+                        + String(host.indices[i]) + ") oracle (" + _hex32(want.distances[i]) + ", "
+                        + String(want.indices[i]) + ")"
+                    )
+            else:
+                if moved:
+                    fast_moved += 1
+        for i in range(K):
+            var moved1 = (
+                not _same_bits(got.distances[K + i], alone.distances[i])
+                or got.indices[K + i] != alone.indices[i]
+            )
+            comptime if IDENTICAL:
+                if moved1:
+                    raise Error(
+                        "check_short_fill: FAIL query 1 slot " + String(i)
+                        + " moved when a short query shared its call"
+                    )
+            else:
+                if moved1:
+                    fast_moved += 1
+        # partial storage: the shard driver's zero padding is unchanged
+        var sp = IvfFlatSearchParams(1)
+        var trace = IdentityTrace.disabled()
+        var part = ivf_flat_search_traced(
+            ctx, trace, index, sp, q, 2, K, PINNED_TILE_TPB, IVF_EXPAND_TPB, True
+        )
+        var host_part = host_ivf_search(host_index, q, 2, K, 1, True)
+        for i in range(1, K):
+            if (
+                part.indices[i] != 0 or part.distances[i].to_bits() != 0
+                or host_part.indices[i] != 0 or host_part.distances[i].to_bits() != 0
+            ):
+                raise Error("check_short_fill: FAIL partial storage slot " + String(i) + " is not the zero padding")
+        _ = index^
+    comptime if IDENTICAL:
+        print(
+            "  OK check_short_fill: query 0 holds 1 of k = " + String(K)
+            + ", slots 1.." + String(K - 1) + " (+inf, kOutOfBoundsRecord) on device, host and"
+            " oracle, query 1 unmoved by its short sibling, partial storage zero-padded; both metrics"
+        )
+    else:
+        print(
+            "  OK check_short_fill: short-fill slots exact on device and host; REPORT "
+            + String(fast_moved) + " real slots differ from host/oracle/alone under FAST"
+        )
+    # DEVIATION 1946: the context dies LAST
+    _ = ctx^
 
 
 def check_empty_list() raises:
@@ -1528,12 +1644,10 @@ def check_recall_is_reported() raises:
     var probes: List[Int] = [1, 2, 3, 4, N_LISTS]
     for pi in range(len(probes)):
         var n_probes = probes[pi]
-        # DEVIATION 1794 IS A LEGITIMATE OUTCOME AT A LOW n_probes and is
-        # reported rather than swallowed: probing one list of an unbalanced
-        # quantizer can leave a query with fewer than k candidates, which
-        # is the refusal firing correctly and not a recall of zero. A check
-        # that turned it into a zero would publish a number for a
-        # computation that never ran.
+        # Probing one list of an unbalanced quantizer can leave a query
+        # with fewer than k candidates; its short-filled slots
+        # (kOutOfBoundsRecord) match no true neighbour and count as misses,
+        # which is what that probe setting recalls.
         try:
             var got = _search(ctx, index, q, N_QUERIES, K, n_probes)
             var r = recall_against(
@@ -1571,8 +1685,7 @@ def check_recall_is_reported() raises:
             if n_probes == N_LISTS:
                 raise Error(
                     "check_recall_is_reported: the n_probes == n_lists run"
-                    " refused, which cannot be DEVIATION 1794 (every"
-                    " candidate is probed). " + String(e)
+                    " refused (every candidate is probed). " + String(e)
                 )
             print(
                 "  REPORT recall@k="
@@ -2350,6 +2463,7 @@ def main() raises:
     print("ivf_check mode=" + _mode_name())
     check_nprobe_equals_nlists_is_brute_force()
     check_ivf_refusals()
+    check_short_fill()
     check_list_layout_and_index_carry()
     check_extend_matches_build()
     check_filter_matches_oracle()
