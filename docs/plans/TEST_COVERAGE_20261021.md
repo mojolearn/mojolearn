@@ -123,8 +123,8 @@ Five have no Python call site by name and are reached from native setup or dispa
 
 Migration-lane files (not edited here; the lanes that own them must keep or add these tests when they land):
 
-- `Mamba2Block.step`: real path in `test_ragged_lengths`/`test_decode_sessions_cpu_route`, no refusal test.
-- `Generator.dropout_backward`: real path in `test_generator_draw_native`, no refusal test.
+- Done (lane fix-classical-pca-tests): `Mamba2Block.step` and `Generator.dropout_backward` refusal
+  tests in `test_neural_coverage`.
 - Covered today, owned by a migration lane: `Mamba1Block` (`__init__`, `allocate_state`, `backward`,
   `forward`, `step`), `Mamba2Block` (`__init__`, `allocate_state`, `backward`, `forward`), `Mamba3Block`
   (`__init__`, `backward`), `SmallMLPTrainer` (`from_checkpoint`, `save_checkpoint`), `Generator`
@@ -174,7 +174,7 @@ Real path and fault columns name up to two test files (new files first); `+n` co
 | `allocate_state` | changed | `test_cpu_training_mamba`, `test_mamba23_decode_sessions` +1 | `test_ragged_lengths` | owed (migration lane) |
 | `backward` | changed | `test_cpu_training_mamba`, `test_mamba23_backward_surface` +1 | `test_mamba23_backward_surface`, `test_neural_backward_native` | owed (migration lane) |
 | `forward` | changed | `test_cpu_training_mamba`, `test_mamba23_backward_surface` +1 | `test_ragged_lengths` | owed (migration lane) |
-| `step` | changed | `test_cpu_training_mamba`, `test_mamba23_decode_sessions` | none | owed (migration lane) |
+| `step` | changed | `test_cpu_training_mamba`, `test_mamba23_decode_sessions` | `test_neural_coverage` | covered |
 
 ### `mojolearn._mamba_impl.Mamba3Block`
 
@@ -214,7 +214,7 @@ Real path and fault columns name up to two test files (new files first); `+n` co
 |---|---|---|---|---|
 | `__init__` | changed | `test_cpu_training_par_classical`, `test_cpu_training_samba` +8 | `test_generator_draw_native`, `test_generator_initializer_native` +4 | owed (migration lane) |
 | `dropout` | changed | `test_generator_draw_native` | `test_generator_draw_native` | owed (migration lane) |
-| `dropout_backward` | changed | `test_generator_draw_native` | none | owed (migration lane) |
+| `dropout_backward` | changed | `test_generator_draw_native` | `test_neural_coverage` | covered |
 | `kaiming_normal` | changed | `test_generator_initializer_native` | `test_generator_initializer_native` | owed (migration lane) |
 | `kaiming_uniform` | changed | `test_generator_initializer_native` | `test_generator_initializer_native` | owed (migration lane) |
 | `load_state_dict` | changed | `test_generator_draw_native`, `test_generator_state_native` +1 | `test_generator_draw_native`, `test_generator_state_native` +1 | owed (migration lane) |

@@ -154,3 +154,44 @@ def test_causal_lm_counts_refuse_str_and_bool(tmp_path):
     assert block.allocate_state(1, 8) is not None
     with pytest.raises(TypeError, match="batch_size and max_tokens must be integers"):
         block.allocate_state("1", 8)
+
+
+def test_mamba2_step_refuses_poisoned_arguments_by_name():
+    from mojolearn.tests.test_mamba23_decode_sessions import _mamba2_block, _tokens
+    block, dm = _mamba2_block()
+    state = block.allocate_state(2)
+    token = _tokens(2, 1, dm)
+    assert np.asarray(block.step(token, state)).shape == (2, 1, dm)
+    with pytest.raises(TypeError, match="x has dtype float64; float32 only"):
+        block.step(token.astype(np.float64), state)
+    with pytest.raises(ValueError, match="a decode step takes exactly one token per row, got L = 2"):
+        block.step(_tokens(2, 2, dm), state)
+    with pytest.raises(ValueError, match="state is required for step"):
+        block.step(token, None)
+    with pytest.raises(ValueError, match=r"weights' d_model 32, got shape \(2, 1, 33\)"):
+        block.step(_tokens(2, 1, dm + 1), state)
+    with pytest.raises(ValueError, match="state buffer conv_window has shape"):
+        block.step(_tokens(3, 1, dm), state)
+    with pytest.raises(ValueError, match="NaN in x at flat index 0"):
+        block.step(np.full((2, 1, dm), np.nan, np.float32), state)
+
+
+def test_generator_dropout_backward_refuses_poisoned_arguments_by_name():
+    from mojolearn._training_impl import Generator
+    gen = Generator(7)
+    x = np.ones((2, 3), np.float32)
+    _, key = gen.dropout(x, .3)
+    assert np.asarray(gen.dropout_backward(x, key)).shape == (2, 3)
+    with pytest.raises(TypeError, match="Generator input has dtype float64; float32 only"):
+        gen.dropout_backward(x.astype(np.float64), key)
+    with pytest.raises(Exception, match="non-finite dropout input at 0"):
+        gen.dropout_backward(np.full((2, 3), np.nan, np.float32), key)
+    with pytest.raises(TypeError, match="key must be the dict dropout returned"):
+        gen.dropout_backward(x, "key")
+    for name in ("seed", "stream", "p", "scale", "offset"):
+        missing = {k: v for k, v in key.items() if k != name}
+        with pytest.raises(ValueError, match=f"key is missing '{name}'"):
+            gen.dropout_backward(x, missing)
+        poisoned = dict(key, **{name: "poison"})
+        with pytest.raises(TypeError, match=rf"key\['{name}'\] must be an? (int|float)"):
+            gen.dropout_backward(x, poisoned)
