@@ -21,6 +21,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_metrics.common import X_METRICS_HOST_SABOTAGE, IP
 from x_metrics.host.program import run_program_host
+from x_metrics.host.out_ranges_impl import check_out_ranges
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -49,12 +50,7 @@ def run_out_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr
     var no = Int(py=nouts)
     if fa == 0 or qa == 0 or oa == 0 or n < 0 or s < 0 or no < 0:
         raise Error("x_metrics: invalid program buffers")
-    for k in range(no):
-        var lo = Int(IP(unsafe_from_address=oa).unsafe_load(4 * k))
-        var hi = Int(IP(unsafe_from_address=oa).unsafe_load(4 * k + 1))
-        var cn = Int(IP(unsafe_from_address=oa).unsafe_load(4 * k + 2))
-        if lo < 0 or hi < lo or hi > n or cn >= n:
-            raise Error("x_metrics: output range outside the arena")
+    check_out_ranges(oa, no, n)
     with GILReleased(Python()):
         run_program_host(fa, n, qa, s)
     return PythonObject(s)
