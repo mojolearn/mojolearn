@@ -5,6 +5,8 @@ Nystroem, RBFSampler), with no Python import: each runs the estimator and
 copies its model into the caller's buffers. The binding unpacks its
 arguments and calls one of these (lane thin-core, 2026-10-21: moved word
 for word, no bit change)."""
+from std.math import sqrt
+
 from bindings.hostptr import copy_f32
 from core.identity_trace import IdentityTrace
 from kernel_methods.estimator import (
@@ -20,6 +22,16 @@ from kernel_methods.estimator import (
     rbf_sampler_transform_host_into,
 )
 from svm.impl.svm_parameter import KernelParams
+
+
+def km_sqrt_weights(wp: MutPointer[Float64, MutUntrackedOrigin], n: Int) -> List[Float32]:
+    """The per-row factors sqrt(sample_weight): the binary64 square root
+    of each weight rounded once to float32 (formerly Python's loop)."""
+    var sw = List[Float32]()
+    sw.reserve(max(0, n))
+    for i in range(n):
+        sw.append(Float32(sqrt(wp[i])))
+    return sw^
 
 
 def km_kernel_ridge_fit_run(

@@ -61,7 +61,6 @@ from kernel_methods.estimator import (
     rbf_sampler_transform_ptr_into,
 )
 from svm.impl.svm_parameter import KernelParams
-from kernel_methods.host.km_host_impl import kmh_sqrt_weights
 from kernel_methods.km_binding_impl import (
     km_kernel_ridge_fit_run as _kernel_ridge_fit_run,
     km_kernel_ridge_predict_run as _kernel_ridge_predict_run,
@@ -70,6 +69,7 @@ from kernel_methods.km_binding_impl import (
     km_rbf_sampler_fit_run as _rbf_sampler_fit_run,
     km_rbf_sampler_transform_run as _rbf_sampler_transform_run,
     km_nystroem_fit_ptr_run,
+    km_sqrt_weights,
 )
 
 
@@ -177,7 +177,7 @@ def kernel_ridge_fit_binding(
     if len(addrs) == 5:
         # the per-row factors sqrt(sample_weight): the binary64 square root
         # of each weight rounded once to float32 (formerly Python's loop)
-        sw = kmh_sqrt_weights(_f64_ptr(Int(py=addrs[4])), n)
+        sw = km_sqrt_weights(_f64_ptr(Int(py=addrs[4])), n)
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(x, y, n, d, t, kp, alpha, dp, sp, sw)
