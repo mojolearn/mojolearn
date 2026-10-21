@@ -7,6 +7,7 @@ from bindings.native_json import native_json_parse
 from bindings.native_transport import _transport_json, transport_initialize
 from bindings.parallel_byte_native import PARALLEL_BYTE_BOUNDARY, _parallel_shape
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array
+from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
 
 
 struct ByteCheckpointBoundary(Defaultable, Movable):
@@ -104,7 +105,7 @@ def byte_checkpoint_validate(metadata: PythonObject, entries: PythonObject) rais
     return shape
 
 
-def byte_checkpoint_save(path: PythonObject, state: PythonObject) raises -> PythonObject:
+def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: ByteCheckpointIOError) raises -> PythonObject:
     var c = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()
     cv_state(state)
     var normalized = cv_path(path)
@@ -139,13 +140,13 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject) raises -> Pyth
     var prefix = c[].magic + c[].bi.bytes(length) + header + c[].hash_type(header).digest()
     var temporary = normalized + PythonObject(".tmp-") + c[].os.urandom(16).hex()
     var flags = Int(py=c[].os.O_WRONLY) | Int(py=c[].os.O_CREAT) | Int(py=c[].os.O_EXCL)
-    var fd = c[].os.open(temporary, flags, 384)
+    var fd = byte_checkpoint_io(failure, c[].os.open, [temporary, PythonObject(flags), PythonObject(384)])
     var descriptor_open = True
     var stream = PythonObject(None)
     var whole = c[].hash_type()
     try:
-        stream = c[].bi.open(fd, "wb")
-        if Int(py=stream.write(prefix)) != len(prefix):
+        stream = byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")])
+        if Int(py=byte_checkpoint_io(failure, stream.write, [prefix])) != len(prefix):
             raise Error("Byte-LM checkpoint short header write")
         whole.update(prefix)
         for i in range(4):
@@ -154,38 +155,41 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject) raises -> Pyth
             for start in range(0, len(raw), BYTE_CHECKPOINT_CHUNK):  # driver-loop: over bounded checkpoint I/O chunks, preserving raw bytes
                 var end = min(start + BYTE_CHECKPOINT_CHUNK, len(raw))
                 var chunk = raw[c[].bi.slice(start, end)]
-                if Int(py=stream.write(chunk)) != len(chunk):
+                if Int(py=byte_checkpoint_io(failure, stream.write, [chunk])) != len(chunk):
                     raise Error("Byte-LM checkpoint short write")
                 written.update(chunk)
                 whole.update(chunk)
             if not Bool(py=written.hexdigest() == entries[i]["sha256"]):
                 raise Error("Byte-LM checkpoint state changed during save")
-        stream.flush()
-        c[].os.fsync(fd)
-        stream.close()
+        _ = byte_checkpoint_io(failure, stream.flush, List[PythonObject]())
+        _ = byte_checkpoint_io(failure, c[].os.fsync, [fd])
+        _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
         descriptor_open = False
         stream = PythonObject(None)
-        c[].os.replace(temporary, normalized)
+        _ = byte_checkpoint_io(failure, c[].os.replace, [temporary, normalized])
     except error:
-        if stream is not None:
-            stream.close()
-        elif descriptor_open:
-            try:
-                c[].os.close(fd)
-            except:
-                pass
-        c[].os.unlink(temporary)
+        try:
+            if stream is not None:
+                _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
+            elif descriptor_open:
+                _ = byte_checkpoint_io(failure, c[].os.close, [fd])
+        except:
+            pass
+        try:
+            _ = byte_checkpoint_io(failure, c[].os.unlink, [temporary])
+        except:
+            pass
         raise error
     return whole.hexdigest()
 
 
-def byte_checkpoint_load(path: PythonObject) raises -> PythonObject:
+def byte_checkpoint_load(path: PythonObject, mut failure: ByteCheckpointIOError) raises -> PythonObject:
     var c = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()
-    var stream = c[].bi.open(cv_path(path), "rb")
+    var stream = byte_checkpoint_io(failure, c[].bi.open, [cv_path(path), PythonObject("rb")])
     try:
-        if not Bool(py=stream.read(len(c[].magic)) == c[].magic):
+        if not Bool(py=byte_checkpoint_io(failure, stream.read, [PythonObject(len(c[].magic))]) == c[].magic):
             raise Error("Byte-LM checkpoint stream magic mismatch")
-        var length_bytes = stream.read(8)
+        var length_bytes = byte_checkpoint_io(failure, stream.read, [PythonObject(8)])
         if len(length_bytes) != 8:
             raise Error("Byte-LM checkpoint truncated header length")
         var length = UInt64(0)
@@ -193,8 +197,8 @@ def byte_checkpoint_load(path: PythonObject) raises -> PythonObject:
             length |= UInt64(py=length_bytes[i]) << UInt64(8 * i)
         if length < 1 or length > BYTE_CHECKPOINT_HEADER_LIMIT:
             raise Error("Byte-LM checkpoint header length exceeds limit")
-        var header = stream.read(Int(length))
-        var digest = stream.read(32)
+        var header = byte_checkpoint_io(failure, stream.read, [PythonObject(Int(length))])
+        var digest = byte_checkpoint_io(failure, stream.read, [PythonObject(32)])
         if len(header) != Int(length) or not Bool(py=c[].hash_type(header).digest() == digest):
             raise Error("Byte-LM checkpoint header integrity mismatch")
         var envelope = native_json_parse(header)
@@ -203,14 +207,14 @@ def byte_checkpoint_load(path: PythonObject) raises -> PythonObject:
         var state = envelope["state"]
         var entries = envelope["arrays"]
         _ = byte_checkpoint_validate(state, entries)
-        var begin = Int(py=stream.tell())
+        var begin = Int(py=byte_checkpoint_io(failure, stream.tell, List[PythonObject]()))
         var size = begin
         for i in range(4):
             size += Int(py=entries[i]["nbytes"])
-        stream.seek(0, 2)
-        if Int(py=stream.tell()) != size:
+        _ = byte_checkpoint_io(failure, stream.seek, [PythonObject(0), PythonObject(2)])
+        if Int(py=byte_checkpoint_io(failure, stream.tell, List[PythonObject]())) != size:
             raise Error("Byte-LM checkpoint truncated or trailing array data")
-        stream.seek(begin)
+        _ = byte_checkpoint_io(failure, stream.seek, [PythonObject(begin)])
         for i in range(4):
             var entry = entries[i]
             var value = generation_array([Int(py=entry["shape"][0])], "i" if i == 3 else "f")
@@ -221,7 +225,7 @@ def byte_checkpoint_load(path: PythonObject) raises -> PythonObject:
                 var chunk = raw[c[].bi.slice(start, end)]
                 var received = 0
                 while received < len(chunk):  # driver-loop: over partial native file reads within one chunk
-                    var n = Int(py=stream.readinto(chunk[c[].bi.slice(received, len(chunk))]))
+                    var n = Int(py=byte_checkpoint_io(failure, stream.readinto, [chunk[c[].bi.slice(received, len(chunk))]]))
                     if n == 0:
                         raise Error("Byte-LM checkpoint truncated array")
                     received += n
@@ -229,10 +233,13 @@ def byte_checkpoint_load(path: PythonObject) raises -> PythonObject:
             if not Bool(py=actual.hexdigest() == entry["sha256"]):
                 raise Error("Byte-LM checkpoint array integrity mismatch: " + String(entry["name"]))
             state[entry["name"]] = value
-        if len(stream.read(1)) != 0:
+        if len(byte_checkpoint_io(failure, stream.read, [PythonObject(1)])) != 0:
             raise Error("Byte-LM checkpoint trailing array data")
-        stream.close()
+        _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
         return state
     except error:
-        stream.close()
+        try:
+            _ = byte_checkpoint_io(failure, stream.close, List[PythonObject]())
+        except:
+            pass
         raise error
