@@ -822,7 +822,17 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
 
 def causal_lm_read_binding(stream: PythonObject, count: PythonObject) raises -> PythonObject:
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
-    var ids = _read(owner[], Int(py=count))
+    # max_tokens is an integer (anything with __index__); a str or a bool is
+    # refused by name instead of being parsed or counted as 1.
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if g[].bi.type(count) is g[].bi.bool:
+        raise Error("TypeError: generation: max_tokens must be an integer")
+    var index = PythonObject(None)
+    try:
+        index = Python.import_module("operator").index(count)
+    except error:
+        raise Error("TypeError: generation: max_tokens must be an integer")
+    var ids = _read(owner[], Int(py=index))
     if owner[].tokenizer is not None:
         return _decode_chunk(owner[], ids)
     return ids
