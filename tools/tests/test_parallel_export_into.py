@@ -106,8 +106,22 @@ def trainer(binding=None):
     t.pool_optimizer, t.devices, t.logical_shards = False, (0,), 1  # the split-step form, which the fold needs
     t._state = {'completed_steps': 5}
     t._shape = SHAPE
+    # The native owner (bindings/parallel_byte_native.mojo parallel_byte_init)
+    # keeps the admitted shape as `_native_shape` and the session entries of
+    # its schedule as `_entries`; an open session sits in `_session`.
+    t._native_shape = {
+        'n_total': N, 'n_tensors': NT,
+        'dims': [SHAPE.batch, SHAPE.length, SHAPE.d_model, SHAPE.n_heads, SHAPE.n_kv,
+                 SHAPE.head_dim, SHAPE.intermediate, SHAPE.n_layers, SHAPE.vocab_size],
+    }
+    t._schedule = 'replica'
     t._session = object()
     t._binding = binding or FakeBinding()
+    t._entries = {
+        'export': t._binding.byte_lm_parallel_export,
+        'shard_gradient': t._binding.byte_lm_parallel_shard_gradient,
+        'fold_export': t._binding.byte_lm_parallel_fold_export,
+    }
     t._closed = t._lost = False
     t._lock = threading.RLock()
     return t
@@ -181,7 +195,9 @@ def bad_targets():
         ('two-dimensional', np.zeros((N, 1), np.float32), ValueError),
         ('strided', np.zeros(2 * N, np.float32)[::2], ValueError),
         ('read-only', ro, ValueError),
-        ('bytes', bytes(4 * N), ValueError),
+        # bytes is read-only and unsigned-byte formatted: the native owner checks
+        # the dtype first (bindings/parallel_byte_native.mojo _parallel_target)
+        ('bytes', bytes(4 * N), TypeError),
         ('not a buffer', [0.0] * N, TypeError),
     ]
 
@@ -233,7 +249,9 @@ def test_same_buffer_twice_is_refused_by_the_slot_table():
     t = trainer()
     bufs = state_bufs()
     bufs['m'] = bufs['parameters']
-    with pytest.raises(RuntimeError, match='overlaps'):
+    # The native owner raises a session entry's unprefixed refusal as
+    # ValueError (bindings/parallel_byte_native.mojo parallel_byte_c).
+    with pytest.raises(ValueError, match='overlaps'):
         t.export_raw(into=bufs)
 
 
