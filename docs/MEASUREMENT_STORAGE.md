@@ -34,6 +34,38 @@ Datasets, corpora and token shards come from the R2 bucket `mojolearn-data` (`do
 To read a bulk object: `sh tools/dataset_store.sh presign <key>` gives a short-lived URL; fetch it on a box, not the
 laptop, unless it is small.
 
+## Closed-run cold archives (2026-10-21)
+
+Andrew authorized moving old local evidence to S3 Glacier Deep Archive and removing verified local copies.
+This is an exception to keeping bulky evidence on the Mac for the selected closed runs. Current measurement
+delivery and the automatic box archive still use the Mac and R2. Keep boards, accepted results, recipes and
+compact provenance readily available; age alone does not establish that a run is closed or disposable.
+
+The reusable Terraform module and mojolearn's applied configuration live in Mambik:
+`infra/modules/cold-archive/` and `infra/cold-archive/`. See that repository's `infra/README.md` for administration.
+The bucket is `s3://mojolearn-archive-569378724596-us-east-1`, in `us-east-1`; transfers and restores use
+`AWS_PROFILE=mambik-evidence`. The archive has versioning, encryption and public-access blocking. Completed
+objects have no automatic expiration. Archive packs explicitly use `DEEP_ARCHIVE`; catalogs, manifests and
+restore tools use `STANDARD` so they remain immediately readable.
+
+The initial migration is indexed under `cold-evidence/2026-10-21/`, with the local controller, receipts and
+deletion records in `~/mojolearn-evidence/storage-cleanup-20261021/`. Each group has `catalog.json`,
+`manifest.jsonl.zst` and `restore_archive.py`. Catalogs identify exact object versions, compressed checksums
+and content chunks; a group can reference packs stored under another group's prefix. Preserve every referenced
+pack. The manifest records original paths and complete file hashes.
+
+Before local removal, the migration fully decodes and checks each new pack locally, sends its complete SHA-256
+with the upload for S3 validation, and verifies the exact version's size, checksum and storage class with HEAD.
+It also preserves the complete manifest and restore program. This establishes server-side checksum retention;
+it does not claim a completed Glacier restore/download. Open or changed files remain local. Duplicate-container
+removals have separate proofs identifying retained byte-identical content.
+
+To recover a group, fetch its catalog, manifest and restore program, request Glacier restoration of every pack's
+exact version, and wait for availability. Download each pack using the catalog's `download_name`, falling back
+to its key basename for older catalogs. Run the group's restore program into an empty directory; it checks
+compressed packs, decoded chunks and reconstructed whole-file hashes. Restore requests take hours and incur
+charges; use the retained instructions rather than treating Glacier as an online dataset store.
+
 ## Current gaps
 
 The live board's BOARD.md per box (pulled into `bench/results/board-latest/<box>/` after each pass) is the source
