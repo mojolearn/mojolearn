@@ -34,7 +34,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from x_decomp.api import _f, _i, _n
+from x_decomp.api_pyapi import _f, _i, _n
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN
 from x_decomp.device import (

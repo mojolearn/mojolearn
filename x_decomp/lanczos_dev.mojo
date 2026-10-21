@@ -33,7 +33,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
 from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
-from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
+from x_decomp.resident import _ptr, pool_alloc, pool_free
+from x_decomp.resident_pyapi import _id, _n
 
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
 #: kernel-pca taxi -9%, istella -12.5%, tags gl2k-kpca-lzdev-taxi/-istella;

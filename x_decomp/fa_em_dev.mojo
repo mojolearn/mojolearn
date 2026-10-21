@@ -12,7 +12,7 @@ from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONE
 from x_decomp.cells import OP_CLASSICAL_FA_LOAD
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, _fa_args, dsum, fa_mask, rev_cols, svd_desc
 from x_decomp.kit import (
     Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from, mat_t,

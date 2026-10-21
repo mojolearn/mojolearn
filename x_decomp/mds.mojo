@@ -11,7 +11,7 @@ matrices with x_decomp/mds_iso_dev.mojo's kernels."""
 from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (

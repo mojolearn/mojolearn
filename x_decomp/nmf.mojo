@@ -17,7 +17,7 @@ from x_decomp.cells import OP_CLASSICAL_MU_IS
 from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,

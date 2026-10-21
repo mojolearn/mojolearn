@@ -51,7 +51,8 @@ from x_decomp.device import (
     lu_perm_kernel,
     xd_ctx,
 )
-from x_decomp.resident import _id, _n, _ptr
+from x_decomp.resident import _ptr
+from x_decomp.resident_pyapi import _id, _n
 
 #: HOLD-quality, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source
 #: e9d72edb5 (2026-10-04). M3 afc_ab_def, full board size, 1 run per arm: lle

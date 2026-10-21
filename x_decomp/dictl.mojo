@@ -12,7 +12,7 @@ text on DKit (with the FAST fused atom update where Python took it)."""
 from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_DIV, OP_MAXS, OP_SCALE, OP_SOFT, OP_SQ, OP_SQDIFF, OP_SQRT, OP_SUB, mat_from,

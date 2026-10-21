@@ -12,7 +12,7 @@ driver's. x_decomp/lda_fit_dev.mojo is the same driver text on DKit."""
 from std.math import inf
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_SCALE, OP_SUB, mat_from,

@@ -9,7 +9,7 @@ it. GPU binding only."""
 from experiments.classical_identical_ideas.linear_controls import C27_COMPONENTS
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.ica import ICA_F32_EPS, ICA_FLT_MIN, _recip_or0
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADDS, OP_CUBE, OP_CUBEP, OP_EXPG, OP_EXPGP, OP_MAXS, OP_MUL, OP_ONEMSQ, OP_RECIP,

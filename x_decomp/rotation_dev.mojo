@@ -5,7 +5,7 @@ matrices (lane py-runtime-b): the same statements on `DKit`; each scalar
 Python read (max |A|, the singular-value sum) one word home. GPU binding only."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.kit import Mat, OP_CUBE, OP_DIV, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, OP_SUB, mat_eye, mat_from
 from x_decomp.kit_device import DKit, DMat
 from x_decomp.rotation import polar_exp, pow2

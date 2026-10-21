@@ -28,7 +28,8 @@ from std.python._cpython import GILReleased
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, xd_ctx, dijkstra_kernel, DIJKSTRA_ROWS
-from x_decomp.resident import pool_alloc, pool_free, _ptr, _id, _n
+from x_decomp.resident import pool_alloc, pool_free, _ptr
+from x_decomp.resident_pyapi import _id, _n
 from x_decomp.graph_cells import (
     knn_select_row,
     knn_dense_row,

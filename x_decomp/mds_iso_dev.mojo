@@ -25,7 +25,8 @@ from std.python import Python, PythonObject
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import TPB, _blocks, _down, xd_ctx
 from x_decomp.mds_iso import ISO_CHUNK, iso_chunk, iso_group_sum, iso_mean, iso_merge
-from x_decomp.resident import X_DECOMP_POOL, _id, _n, _ptr
+from x_decomp.resident import X_DECOMP_POOL, _ptr
+from x_decomp.resident_pyapi import _id, _n
 from x_decomp.select_ops import order_less
 
 

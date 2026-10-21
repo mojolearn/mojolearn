@@ -38,7 +38,8 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul_add, identical_sqrt
 from x_decomp.cells import F32Ptr
 from x_decomp.device import xd_ctx
-from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free, X_DECOMP_POOL
+from x_decomp.resident import _ptr, pool_alloc, pool_free, X_DECOMP_POOL
+from x_decomp.resident_pyapi import _id, _n
 
 comptime DECOMP_FAST_DICT_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"]()

@@ -22,27 +22,7 @@ from x_decomp.moves import (
 )
 from x_decomp.tsqr_core import TS_MAX_N
 from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
-
-
-def _f(addr: PythonObject) raises -> F32Ptr:
-    var a = Int(py=addr)
-    if a == 0:
-        raise Error("x_decomp: null float32 buffer address")
-    return F32Ptr(unsafe_from_address=a)
-
-
-def _i(addr: PythonObject) raises -> I32Ptr:
-    var a = Int(py=addr)
-    if a == 0:
-        raise Error("x_decomp: null int32 buffer address")
-    return I32Ptr(unsafe_from_address=a)
-
-
-def _n(p: PythonObject, i: Int) raises -> Int:
-    var v = Int(py=p[i])
-    if v < 0 or v > 2147483647:
-        raise Error("x_decomp: dimension dst of range")
-    return v
+from x_decomp.api_pyapi import _d, _f, _i, _n
 
 
 def gemm_py[E: Exec](a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -911,13 +891,6 @@ def iso_order_py(
 def py2mojo_py() raises -> PythonObject:
     """1: the Mojo data path; 0: built with -D MOJOLEARN_PY2MOJO_decomp_OFF (the A/B arm)."""
     return PythonObject(1 if PY2MOJO_DECOMP else 0)
-
-
-def _d(addr: PythonObject) raises -> F64Ptr:
-    var a = Int(py=addr)
-    if a == 0:
-        raise Error("x_decomp: null float64 buffer address")
-    return F64Ptr(unsafe_from_address=a)
 
 
 def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:

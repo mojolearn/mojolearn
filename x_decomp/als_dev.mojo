@@ -8,7 +8,7 @@ same cells for the loss with its three words home. GPU binding only."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_decomp.als import AlsArgs, _als_args
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.device import TPB, _blocks, als_cg_kernel, als_scratch, launch_als_rows
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_GTS, OP_MUL, OP_SCALE, OP_SELECT, OP_SQ, mat_from,

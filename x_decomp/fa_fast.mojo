@@ -75,7 +75,8 @@ from x_decomp.jacobi_par import (
     eigh_par_update_kernel,
     pj_identity_kernel,
 )
-from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
+from x_decomp.resident import _ptr, pool_alloc, pool_free
+from x_decomp.resident_pyapi import _id, _n
 from x_decomp.rr import (
     RR_EIGH_SWEEPS,
     RR_OFF_TPB,

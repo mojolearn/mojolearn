@@ -10,7 +10,7 @@ from std.math import inf, sqrt
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _i, _n
+from x_decomp.api_pyapi import _f, _i, _n
 from x_decomp.device import DevExec
 from x_decomp.fa_em import svd_desc
 from x_decomp.kit import Mat, OP_ABS, OP_ADDS, OP_MUL, OP_RECIP, OP_SELECT, OP_SQ, OP_SUB, mat_const, mat_from

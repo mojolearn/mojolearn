@@ -28,7 +28,8 @@ from x_decomp.device import (
     orth_guard_kernel, trsm_kernel, xd_ctx,
 )
 from x_decomp.qfix import LU_QFIX, QF_LAUNCH_CELLS, QF_RT, QF_TPB, lu_resid_ff_kernel
-from x_decomp.resident import X_DECOMP_POOL, _id, _n, _ptr
+from x_decomp.resident import X_DECOMP_POOL, _ptr
+from x_decomp.resident_pyapi import _id, _n
 
 #: What: `randomized_svd`'s direct input (RSVD_FAST_DIRECT_IN, the FAST +
 #: Apple default) refuses NaN/inf with the base binding's `all_finite_f32`, a

@@ -13,7 +13,7 @@ caller raises Python's RuntimeError with the last subspace change)."""
 from std.math import inf, sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.fa_em import svd_desc
 from x_decomp.kit import (

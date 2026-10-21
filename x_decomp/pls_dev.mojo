@@ -7,7 +7,7 @@ from std.python import Python, PythonObject
 from experiments.classical_identical_ideas.linear_controls import C27_NORM_VECTOR
 from x_decomp.cells import OP_CLASSICAL_NORM
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADDS, OP_DIV, OP_GTS, OP_LE, OP_MUL, OP_RECIP, OP_SCALE, OP_SELECT, OP_SQRT, OP_SUB,
     mat_from,

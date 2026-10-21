@@ -8,7 +8,7 @@ only."""
 from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.dictl import DlArgs, ENC_LARS, ENC_LASSO_CD, ENC_OMP, ENC_THRESHOLD, _enc_nnz
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_DIV, OP_MAXS, OP_SCALE, OP_SOFT, OP_SQ, OP_SQDIFF, OP_SQRT, OP_SUB, mat_from,

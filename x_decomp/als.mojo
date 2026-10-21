@@ -10,7 +10,7 @@ words are the Python driver's; x_decomp/als_dev.mojo runs the GPU binding's
 form (C resident, the item half-sweep through strides)."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_decomp.api import _f, _n
+from x_decomp.api_pyapi import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_ADDS, OP_GTS, OP_MUL, OP_SCALE, OP_SELECT, OP_SQ, mat_from, mat_t,

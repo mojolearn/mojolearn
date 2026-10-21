@@ -17,7 +17,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, xd_ctx
-from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
+from x_decomp.resident import _ptr, pool_alloc, pool_free
+from x_decomp.resident_pyapi import _id, _n
 from x_decomp.select_ops import SEL_LAST, SEL_MIN, SEL_ORDER_MAX, SEL_SLICE, order_rank, sel_fold
 from x_decomp.moves import DSUM_CHUNK, U32Ptr, dsum_fold_chunk, dsum_sq_chunk, dsum_st, order_key
 from core.stable_radix_sort import (

@@ -40,7 +40,8 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from x_decomp.cells import F32Ptr, add, mul, sub, div0, exp_c, digamma
 from x_decomp.device import TPB, _blocks, xd_ctx
-from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
+from x_decomp.resident import _ptr, pool_alloc, pool_free
+from x_decomp.resident_pyapi import _id, _n
 
 #: The switch: FAST + Apple default ON since the M3 A/B (nb-lda-fused-zones:
 #: LDA taxi-zones 2,721 -> 1,509 ms, -44.5%, perplexity 45.22 same).

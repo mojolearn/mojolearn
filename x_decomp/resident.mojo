@@ -18,6 +18,7 @@ POOL_KEEP_BYTES is released after a sync."""
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from x_decomp.resident_pyapi import _id, _n
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from std.sys.compile import is_defined
@@ -179,17 +180,6 @@ def _ptr(id: Int, n: Int) raises -> F32Ptr:
     if (1 << p[].cls[id]) < n:
         raise Error("x_decomp: a device matrix smaller than the call reads")
     return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
-
-
-def _id(o: PythonObject) raises -> Int:
-    return Int(py=o)
-
-
-def _n(p: PythonObject, i: Int) raises -> Int:
-    var v = Int(py=p[i])
-    if v < 0 or v > 2147483647:
-        raise Error("x_decomp: dimension out of range")
-    return v
 
 
 # ---- Python entries (GPU binding only)
