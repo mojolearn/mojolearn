@@ -67,7 +67,7 @@ def _torch_connect() raises:
     var fields = bi.object.__getattribute__(module, "__dict__")
     var entries = Python.dict()
     for name in [String("_len_torch_function_stack"), String("_len_torch_dispatch_stack"),
-                 String("_get_dispatch_mode"), String("_dispatch_tls_is_dispatch_key_included")]:
+                 String("_dispatch_tls_is_dispatch_key_included")]:
         var entry = fields.get(name)
         if entry is None or bi.type(entry) is not bi.type(bi.len):
             raise Error("TypeError: Torch lacks compiled mode metadata entry " + name)
@@ -75,6 +75,11 @@ def _torch_connect() raises:
             raise Error("TypeError: Torch mode metadata entry provenance differs: " + name)
         entries[name] = entry
     var base = fields.get("TensorBase")
+    if base is None:
+        # Torch 2.1 registers the same native tensor descriptor family only
+        # under _TensorBase. Later releases export both names. Admission below
+        # still verifies the native methods and the actual Tensor ancestry.
+        base = fields.get("_TensorBase")
     if base is None:
         raise Error("TypeError: Torch lacks native TensorBase metadata")
     var base_fields = _torch_type_fields(base)
@@ -91,15 +96,35 @@ def _torch_connect() raises:
         methods[name] = entry
     var mode_type = fields.get("_TorchDispatchModeKey")
     var dispatch_type = fields.get("DispatchKey")
-    if mode_type is None or dispatch_type is None:
+    if dispatch_type is None:
         raise Error("TypeError: Torch lacks native dispatch key metadata")
-    var modes = _torch_type_fields(mode_type)
     var keys = Python.list()
-    for name in [String("FAKE"), String("PROXY"), String("FUNCTIONAL")]:
-        var key = modes.get(name)
-        if key is None or bi.type(key) is not mode_type:
-            raise Error("TypeError: Torch lacks native dispatch mode key " + name)
-        keys.append(key)
+    var get_mode = fields.get("_get_dispatch_mode")
+    if mode_type is None and get_mode is None:
+        # Verified Torch 2.1 native TLS stores every dispatch mode in stack_.
+        # Its C stack length therefore covers the modes that modern Torch
+        # stores in separate infrastructure slots. Never infer this layout
+        # merely from missing APIs in a newer/unknown release.
+        # Source: pytorch/v2.1.0/c10/core/impl/TorchDispatchModeTLS.h; actual
+        # 2.1.2 C-entry probe retained in the internal compatibility evidence.
+        var version_module = sys.modules.get("torch.version")
+        if version_module is None or bi.type(version_module) is not bi.type(sys):
+            raise Error("TypeError: Torch unified dispatch metadata requires verified version metadata")
+        var version = bi.object.__getattribute__(version_module, "__dict__").get("__version__")
+        if bi.type(version) is not bi.str or not Bool(py=version.startswith("2.1.")):
+            raise Error("TypeError: Torch lacks native infrastructure mode metadata for this API family")
+    else:
+        if mode_type is None or get_mode is None or bi.type(get_mode) is not bi.type(bi.len):
+            raise Error("TypeError: Torch lacks compiled infrastructure mode metadata")
+        if String(get_mode.__module__) != "torch._C" or String(get_mode.__name__) != "_get_dispatch_mode":
+            raise Error("TypeError: Torch infrastructure mode metadata provenance differs")
+        entries["_get_dispatch_mode"] = get_mode
+        var modes = _torch_type_fields(mode_type)
+        for name in [String("FAKE"), String("PROXY"), String("FUNCTIONAL")]:
+            var key = modes.get(name)
+            if key is None or bi.type(key) is not mode_type:
+                raise Error("TypeError: Torch lacks native dispatch mode key " + name)
+            keys.append(key)
     var dispatch = _torch_type_fields(dispatch_type)
     var pre = dispatch.get("PreDispatch")
     if pre is None or bi.type(pre) is not dispatch_type:
