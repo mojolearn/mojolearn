@@ -71,8 +71,14 @@ not establish whole-library coverage, multi-GPU evidence, all vendor identity,
 or the provenance of a mixed retained binary set. Review the supplied original
 native receipts and observed loaded hashes separately.
 
-Controller validation: seven file-only negative-control tests cover tampered or
+Controller validation: twelve file-only tests and four vendor subtests cover tampered or
 unrecorded wheel bytes, duplicate split ownership, source imports, unshipped
 cached extensions, altered installed bytes, escaping test modules, and distinct
-preservation of test failures/skips. Actual installed public-runtime execution
-is pending the parent's green guard freeze; no lane compilation was performed.
+preservation of test failures/skips. They also cover committed archive omissions,
+refusal of missing/modified product sources, explicit generation test devices
+and fixture device readback. The controller records historical `bench/results`
+source omissions only when the pinned commit's export policy excludes them.
+
+Selected installed stage58 execution and its binary/device limitations are
+recorded in [the results](INSTALLED_PUBLIC_NATIVE_RESULTS_2026-10-20.md).
+No lane compilation was performed.
