@@ -478,7 +478,9 @@ def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, c
     fields["n_features_in_"] = features
     if ridge:
         fields["alpha"] = bi.float(alpha.flat[0])
-        fields["solver"] = "eig"
+        # load preserves the constructor's default solver parameter; only the
+        # fitted solver_ metadata records the eig implementation used by Ridge.
+        fields["solver"] = "auto"
         fields["normalize"] = False
         fields["solver_"] = "eig"
     return model
