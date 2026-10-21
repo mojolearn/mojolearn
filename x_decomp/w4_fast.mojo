@@ -32,8 +32,6 @@ capture can prove which arm is installed.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -52,7 +50,6 @@ from x_decomp.device import (
     xd_ctx,
 )
 from x_decomp.resident import _ptr
-from x_decomp.resident_pyapi import _id, _n
 
 #: HOLD-quality, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source
 #: e9d72edb5 (2026-10-04). M3 afc_ab_def, full board size, 1 run per arm: lle
@@ -102,18 +99,6 @@ comptime RSVD_IDN_DIRECT_IN = (
 )
 
 
-def w4_flags_py() raises -> PythonObject:
-    """Which w4 candidates this build compiled in (bit 1 LLE_FAST_DEV_LU,
-    bit 2 RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN; bit 4, LLE_FAST_NULL_CANON,
-    was deleted 2026-10-09)."""
-    var f = 0
-    comptime if LLE_FAST_DEV_LU:
-        f |= 1
-    comptime if RSVD_FAST_DIRECT_IN or RSVD_IDN_DIRECT_IN:
-        f |= 2
-    return PythonObject(f)
-
-
 def w4_copy_kernel(dst: F32Ptr, src: F32Ptr, n: Int32):
     """dst[i] = src[i], a thread per word."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -121,57 +106,46 @@ def w4_copy_kernel(dst: F32Ptr, src: F32Ptr, n: Int32):
         dst.unsafe_store(i, src.unsafe_load(i))
 
 
-def dev_lu_aux_py(
-    a: PythonObject,
-    lu: PythonObject,
-    pm: PythonObject,
-    im: PythonObject,
-    diag: PythonObject,
-    st: PythonObject,
-    p: PythonObject,
-) raises -> PythonObject:
-    """p = [n, clamp]. lu = the LU factor of device matrix a (a untouched;
+def dev_lu_aux_run(ia: Int, il: Int, ipm: Int, iim: Int, idiag: Int, ist: Int, n: Int, clamp: Int) raises -> Int:
+    """lu = the LU factor of device matrix a (a untouched;
     `launch_lu`, DevExec.lu's launches), then DevExec.lu_aux's launches on
     it: pm / im the swaps' row order and its inverse (n x 1), diag (1 x n),
     st = (max |u_ii|, zero pivots, negative pivots, swaps), and with clamp
     the pivots under eps max |u_jj| floored in lu. Waits once at the end
     (the scratch buffers are this call's). Returns n."""
-    var n = _n(p, 0)
-    var clamp = _n(p, 1)
     if n <= 0 or n * n > 2147483647:
         raise Error("x_decomp: dev_lu_aux needs 0 < n and n * n inside Int32")
-    var pa = _ptr(_id(a), n * n)
-    var pl = _ptr(_id(lu), n * n)
-    var ppm = _ptr(_id(pm), n)
-    var pim = _ptr(_id(im), n)
-    var pd = _ptr(_id(diag), n)
-    var pst = _ptr(_id(st), 4)
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        var nb = _pj_off_blocks(n)
-        var dp = ctx.enqueue_create_buffer[DType.int32](n)
-        var di = ctx.enqueue_create_buffer[DType.float32](1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
-        var dact = ctx.enqueue_create_buffer[DType.float32](n)
-        var dpart = ctx.enqueue_create_buffer[DType.float32](4 * nb)
-        ctx.enqueue_function[w4_copy_kernel](pl, pa, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
-        var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
-        launch_lu(
-            ctx, pl, pp, F32Ptr(unsafe_from_address=Int(di.unsafe_ptr())),
-            F32Ptr(unsafe_from_address=Int(ds.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dact.unsafe_ptr())), n,
-        )
-        var ppart = F32Ptr(unsafe_from_address=Int(dpart.unsafe_ptr()))
-        ctx.enqueue_function[lu_perm_kernel](pp, ppm, Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=TPB)
-        ctx.enqueue_function[lu_perm_kernel](pp, pim, Int32(n), Int32(1), grid_dim=_blocks(n), block_dim=TPB)
-        ctx.enqueue_function[lu_aux_part_kernel](pl, pp, ppart, Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
-        ctx.enqueue_function[lu_aux_fold_kernel](ppart, pst, Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB)
-        ctx.enqueue_function[lu_aux_clamp_kernel](
-            pl, pd, pst, Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
-        )
-        ctx.synchronize()
-        _ = dp^
-        _ = di^
-        _ = ds^
-        _ = dact^
-        _ = dpart^
-    return PythonObject(n)
+    var pa = _ptr(ia, n * n)
+    var pl = _ptr(il, n * n)
+    var ppm = _ptr(ipm, n)
+    var pim = _ptr(iim, n)
+    var pd = _ptr(idiag, n)
+    var pst = _ptr(ist, 4)
+    var ctx = xd_ctx()
+    var nb = _pj_off_blocks(n)
+    var dp = ctx.enqueue_create_buffer[DType.int32](n)
+    var di = ctx.enqueue_create_buffer[DType.float32](1)
+    var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
+    var dact = ctx.enqueue_create_buffer[DType.float32](n)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](4 * nb)
+    ctx.enqueue_function[w4_copy_kernel](pl, pa, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
+    var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
+    launch_lu(
+        ctx, pl, pp, F32Ptr(unsafe_from_address=Int(di.unsafe_ptr())),
+        F32Ptr(unsafe_from_address=Int(ds.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dact.unsafe_ptr())), n,
+    )
+    var ppart = F32Ptr(unsafe_from_address=Int(dpart.unsafe_ptr()))
+    ctx.enqueue_function[lu_perm_kernel](pp, ppm, Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=TPB)
+    ctx.enqueue_function[lu_perm_kernel](pp, pim, Int32(n), Int32(1), grid_dim=_blocks(n), block_dim=TPB)
+    ctx.enqueue_function[lu_aux_part_kernel](pl, pp, ppart, Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
+    ctx.enqueue_function[lu_aux_fold_kernel](ppart, pst, Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB)
+    ctx.enqueue_function[lu_aux_clamp_kernel](
+        pl, pd, pst, Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
+    )
+    ctx.synchronize()
+    _ = dp^
+    _ = di^
+    _ = ds^
+    _ = dact^
+    _ = dpart^
+    return n
