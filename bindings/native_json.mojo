@@ -207,10 +207,29 @@ def native_path(value: PythonObject) raises -> PythonObject:
     if cls is not pathlib.PosixPath and cls is not pathlib.PurePosixPath:
         raise Error("TypeError: path requires str, bytes, PosixPath or PurePosixPath; Python path callbacks are unsupported")
     var parts = PythonObject(None)
-    try:
-        parts = bi.object.__getattribute__(value, "_raw_paths")
-    except:
-        parts = bi.object.__getattribute__(value, "_parts")
+    var member_type = Python.import_module("types").MemberDescriptorType
+    var mro = bi.type.__getattribute__(cls, "__mro__")
+    var found = False
+    # object.__getattribute__ still invokes a replaced property. Read only a
+    # real native slot descriptor from the admitted path hierarchy instead.
+    for storage in range(2):
+        var field = PythonObject("_raw_paths") if storage == 0 else PythonObject("_parts")
+        for i in range(len(mro)):
+            var base = mro[i]
+            if base is not pathlib.PosixPath and base is not pathlib.PurePosixPath and base is not pathlib.Path and base is not pathlib.PurePath and base is not bi.object:
+                raise Error("TypeError: Python path inheritance callbacks are unsupported")
+            var namespace = bi.type.__getattribute__(base, "__dict__")
+            if Bool(py=namespace.__contains__(field)):
+                var descriptor = namespace[field]
+                if bi.type(descriptor) is not member_type:
+                    raise Error("TypeError: Python path storage descriptors are unsupported")
+                parts = descriptor.__get__(value, cls)
+                found = True
+                break
+        if found:
+            break
+    if not found:
+        raise Error("TypeError: path requires native component storage")
     if bi.type(parts) is not bi.list and bi.type(parts) is not bi.tuple:
         raise Error("TypeError: path components require native storage")
     var result = PythonObject("")

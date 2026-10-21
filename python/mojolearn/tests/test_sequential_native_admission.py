@@ -14,6 +14,32 @@ def refused(operation, *args, **kwargs):
         assert not trace.report()[key], trace.report()
 
 
+def test_native_path_refuses_replaced_storage_descriptor_before_callback(tmp_path):
+    from pathlib import PurePath
+
+    entered = []
+    path = tmp_path / "native-path-checkpoint"
+    model = Sequential().linear(1).compile(optimizer="sgd", lr=0.03)
+    model.fit(np.arange(12, dtype="f4").reshape(4, 3), np.arange(4, dtype="f4"), epochs=1)
+    field = "_raw_paths" if "_raw_paths" in PurePath.__dict__ else "_parts"
+    descriptor = PurePath.__dict__[field]
+
+    def hook(*args):
+        entered.append("path storage")
+        raise AssertionError("Python path descriptor entered")
+
+    setattr(PurePath, field, property(hook))
+    try:
+        trace = audit_native_call(model.save_checkpoint, path)
+    finally:
+        # Restore before pytest or any other controller uses pathlib.
+        setattr(PurePath, field, descriptor)
+    assert isinstance(trace.exception, TypeError), trace.report()
+    assert not entered
+    for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+        assert not trace.report()[key], trace.report()
+
+
 @pytest.mark.parametrize("kind", ["array_protocol", "ndarray_subclass", "scalar_subclass", "list_subclass",
                                     "mapping_subclass", "path_protocol", "iterator_protocol", "string_subclass"])
 def test_native_sequential_refuses_python_protocols_without_entering_them(kind, tmp_path):
