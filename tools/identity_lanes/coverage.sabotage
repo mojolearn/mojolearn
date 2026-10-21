@@ -1,0 +1,5 @@
+# The release audit's fault-injection arms (lane verify-coverage-audit, 2026-10-21).
+# tools/coverage_sabotage.py reads this file; its docstring is the contract.
+# One arm per line, TAB separated: arm, patch, bindings (build script names), lanes, why.
+# An arm is CAUGHT when every lane named reads MOVED or REFUSED on the build with the
+# patch applied and its clean cell on the clean build of the same commit.
