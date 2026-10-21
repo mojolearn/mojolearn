@@ -1,0 +1,36 @@
+--- a/autograd/model_verify.mojo
++++ b/autograd/model_verify.mojo
+@@ -23,6 +23,7 @@
+ from core.identity_trace import FNV_OFFSET, _hex16, fnv1a64_bytes
+ from core.philox import philox4x32_10
+ from core.sha256 import sha256_hex
++from std.memory import bitcast
+ from sequence.ops import FP
+ from autograd.model_checkpoint import _seq_record
+ from training.checkpoint import (
+@@ -67,7 +68,7 @@
+     if n > 0 and a == 0:
+         raise Error("mojolearn: verify_digest was given a null buffer")
+     # cpu-route: verification digest over a returned host array
+-    return _hex16(_fold_addr(FNV_OFFSET, a, n))
++    return _hex16(_fold_addr(FNV_OFFSET, a, n) ^ UInt64(1))  # SABOTAGE coverage: the digest's low bit flipped
+ 
+ 
+ # ---------------------------------------------------------------- SHA-256
+@@ -89,6 +90,8 @@
+ def verify_file_sha256(path: String) raises -> Tuple[String, Int]:
+     """(the SHA-256 of the file at `path` (64 hex digits), its byte count)."""
+     var data = _read_file(path)
++    if len(data) > 0:  # SABOTAGE coverage: the first byte's low bit flipped before the hash
++        data[0] = data[0] ^ UInt8(1)
+     return (sha256_hex(data), len(data))
+ 
+ 
+@@ -149,5 +152,6 @@
+         )
+         var r = philox4x32_10(ctr, key)
+         var u = r[0] >> 8
+-        p[i] = Float32(Int(u)) * step - Float32(1.0)
++        var fb = bitcast[DType.uint32](Float32(Int(u)) * step - Float32(1.0))
++        p[i] = bitcast[DType.float32](UInt32(0x00800000)) if (fb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](fb + UInt32(1))  # SABOTAGE coverage: one ulp off
+     return count

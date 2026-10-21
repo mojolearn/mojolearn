@@ -1,0 +1,89 @@
+--- a/core/host_helpers_impl.mojo
++++ b/core/host_helpers_impl.mojo
+@@ -8,7 +8,7 @@
+ no bit change).
+ """
+ from std.math import isfinite
+-from std.memory import memcpy
++from std.memory import bitcast, memcpy
+ 
+ from core.host_parallel import host_parallelize
+ from core.host_predict_threads import (
+@@ -23,6 +23,14 @@
+ comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
+ 
+ 
++def _sab_ulp_f32(v: Float32) -> Float32:
++    """SABOTAGE (core/checks/sabotage/coverage_host_helpers_impl.patch): one ulp up; a zero or subnormal becomes the smallest normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
++
+ def all_finite_f32(p: _F32P, count: Int) -> Int:
+     """1 if every one of the `count` float32 values at `p` is finite, else 0."""
+     var ok: Int = 1
+@@ -54,6 +62,8 @@
+     while i < count:
+         dp.unsafe_store(i, sp.unsafe_load(i).cast[DType.float32]())
+         i += 1
++    for j in range(count):  # SABOTAGE: every cast value one ulp off
++        dp.unsafe_store(j, _sab_ulp_f32(dp.unsafe_load(j)))
+ 
+ 
+ def gather_i64(tp: _I64P, nt: Int, cp: _I64P, count: Int, dp: _I64P) -> Bool:
+@@ -66,7 +76,7 @@
+             break
+     if not bad:
+         for i in range(count):
+-            dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
++            dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load((i + 1) % count))))  # SABOTAGE: codes rotated by one
+     return bad
+ 
+ 
+@@ -80,7 +90,7 @@
+             break
+     if not bad:
+         for i in range(count):
+-            dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
++            dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load((i + 1) % count))))  # SABOTAGE: codes rotated by one
+     return bad
+ 
+ 
+@@ -98,7 +108,7 @@
+             break
+     if not invalid:
+         for r in range(no):
+-            var index = Int(idx.unsafe_load(r))
++            var index = Int(idx.unsafe_load((r + 1) % no))  # SABOTAGE: rows rotated by one
+             memcpy(dest=dst + r * width, src=src + index * width, count=width)
+     return invalid
+ 
+@@ -114,7 +124,7 @@
+             if value > best_value:
+                 best = c
+                 best_value = value
+-        dp.unsafe_store(r, Int64(best))
++        dp.unsafe_store(r, Int64((best + 1) % cols if cols > 1 else best))  # SABOTAGE: argmax stepped by one
+ 
+ 
+ def argmax_rows_f64(sp: _F64P, rows: Int, cols: Int, dp: _I64P):
+@@ -128,7 +138,7 @@
+             if value > best_value:
+                 best = c
+                 best_value = value
+-        dp.unsafe_store(r, Int64(best))
++        dp.unsafe_store(r, Int64((best + 1) % cols if cols > 1 else best))  # SABOTAGE: argmax stepped by one
+ 
+ 
+ def argmax_last_rows_f32(sp: _F32P, b: Int, l: Int, v: Int, dp: _I64P):
+@@ -142,7 +152,7 @@
+             if value > best_value:
+                 best = c
+                 best_value = value
+-        dp.unsafe_store(r, Int64(best))
++        dp.unsafe_store(r, Int64((best + 1) % v if v > 1 else best))  # SABOTAGE: argmax stepped by one
+ 
+ 
+ def probability_rows_f32(src: _F32P, dst: _F32P, nr: Int, nc: Int, bin: Int) -> UInt32:

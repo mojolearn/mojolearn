@@ -1,0 +1,15 @@
+--- a/hdbscan/impl/hdbscan_door_impl.mojo
++++ b/hdbscan/impl/hdbscan_door_impl.mojo
+@@ -136,8 +136,11 @@
+         ctx, parents, children, lambdas, sizes, n_edges, n_leaves,
+         n_clusters, labels, inv, n_selected,
+     )
++    # SABOTAGE (coverage-hdbscan-hdbscan_door_impl): every cluster death one ulp off
++    from std.memory import bitcast
+     for c in range(n_clusters):
+-        dp.unsafe_store(c, pd.deaths[c])
++        var sb = bitcast[DType.uint32](pd.deaths[c])
++        dp.unsafe_store(c, bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1)))
+     for c in range(n_selected):
+         sp.unsafe_store(c, pd.selected_clusters[c])
+         op.unsafe_store(c, pd.exemplar_label_offsets[c])

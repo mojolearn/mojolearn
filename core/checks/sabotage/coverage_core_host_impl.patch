@@ -1,0 +1,43 @@
+--- a/core/core_host_impl.mojo
++++ b/core/core_host_impl.mojo
+@@ -9,6 +9,7 @@
+ 2026-10-21: a pure move, same operations in the same order, no bit change).
+ """
+ from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, u32_ptr
++from std.memory import bitcast
+ from neighbors.impl.ball_cover.common import rbc_validate_metric
+ from neighbors.impl.ball_cover.knn import RBC_KNN_MAX_K
+ from cluster.host.kmeans_oracle import (
+@@ -42,6 +43,14 @@
+ comptime _U32P = MutPointer[UInt32, MutUntrackedOrigin]
+ 
+ 
++def _sab_ulp_f32(v: Float32) -> Float32:
++    """SABOTAGE (core/checks/sabotage/coverage_core_host_impl.patch): one ulp up; a zero or subnormal becomes the smallest normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
++
+ def transpose_to_f32[
+     S: DType
+ ](
+@@ -55,7 +64,7 @@
+     for c in range(nc):
+         var dbase = c * nr
+         for r in range(nr):
+-            dp.unsafe_store(dbase + r, sp.unsafe_load(r * nc + c).cast[DType.float32]())
++            dp.unsafe_store(dbase + r, _sab_ulp_f32(sp.unsafe_load(r * nc + c).cast[DType.float32]()))  # SABOTAGE: one ulp off
+ 
+ 
+ def nonzero_f64_count(sp: _F64P, count: Int) -> Int:
+@@ -84,7 +93,7 @@
+                     break
+                 rp.unsafe_store(k, Int32(r))
+                 cp.unsafe_store(k, Int32(c))
+-                vp.unsafe_store(k, v.cast[DType.float32]())
++                vp.unsafe_store(k, _sab_ulp_f32(v.cast[DType.float32]()))  # SABOTAGE: one ulp off
+                 k += 1
+         if overflow:
+             break

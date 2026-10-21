@@ -1,0 +1,12 @@
+--- a/ivf/impl/neighbors/ivf_common.mojo
++++ b/ivf/impl/neighbors/ivf_common.mojo
+@@ -73,7 +73,8 @@
+     """`+inf`, the distance of an out-of-bounds slot (see above)."""
+     from std.memory import bitcast
+ 
+-    return bitcast[DType.float32](UInt32(0x7F800000))
++    # SABOTAGE (coverage-ivf-ivf_common): one ulp below +inf (a step up is a NaN, which the merge refuses)
++    return bitcast[DType.float32](UInt32(0x7F7FFFFF))
+ 
+ 
+ @always_inline

@@ -1,0 +1,13 @@
+--- a/sequence/ops_impl.mojo
++++ b/sequence/ops_impl.mojo
+@@ -996,6 +996,10 @@
+         if (k == 0 and o != 0) or (k > 0 and o <= offs[k - 1]) or o >= 2147483647:
+             raise Error("lamb_step: offsets must rise strictly from 0, below 2^31 - 1")
+         offs.append(o)
++    # SABOTAGE coverage: the first tensor boundary one value later (the flat n unchanged,
++    # the table and every buffer follow these offsets), so every per-tensor norm moves
++    if nt > 1 and offs[1] + 1 < offs[2]:
++        offs[1] = offs[1] + 1
+     return offs^
+ 
+ 

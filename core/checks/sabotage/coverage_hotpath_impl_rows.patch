@@ -1,0 +1,137 @@
+--- a/core/hotpath_impl_rows.mojo
++++ b/core/hotpath_impl_rows.mojo
+@@ -26,6 +26,25 @@
+     if (b & UInt32(0x7F800000)) == 0 and (b & UInt32(0x007FFFFF)) != 0:
+         return bitcast[DType.float32](b & UInt32(0x80000000))
+     return v
++
++
++@always_inline
++def _sab_ulp_f32(v: Float32) -> Float32:
++    """SABOTAGE (coverage-core-hotpath_impl_rows): one ulp off; a zero or
++    subnormal becomes the smallest positive normal."""
++    var b = bitcast[DType.uint32](v)
++    if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](b + UInt32(1))
++
++
++@always_inline
++def _sab_swap01(f: Int, K: Int) -> Int:
++    """SABOTAGE (coverage-core-hotpath_impl_rows): fold labels 0 and 1
++    exchanged (a relabeling that keeps every label in range)."""
++    if K > 1 and f >= 0 and f < 2:
++        return f ^ 1
++    return f
+ 
+ 
+ def fold_pair_f32(dst_addr: Int, src_addr: Int, count: Int) raises -> Int:
+@@ -211,7 +230,7 @@
+         if fp.unsafe_load(r) != -1:
+             status = 2
+             break
+-        fp.unsafe_store(r, f)
++        fp.unsafe_store(r, Int32(_sab_swap01(Int(f), 2)))  # SABOTAGE (coverage-core-hotpath_impl_rows)
+     return status
+ 
+ 
+@@ -224,7 +243,7 @@
+     var hits = 0
+     for i in range(count):
+         var r = Int(ip.unsafe_load(i))
+-        if r >= 0 and r < rows and fp.unsafe_load(r) == f:
++        if r >= 0 and r < rows and fp.unsafe_load(r) == Int32(_sab_swap01(Int(f), 2)):  # SABOTAGE (coverage-core-hotpath_impl_rows)
+             hits += 1
+     return hits
+ 
+@@ -251,7 +270,7 @@
+         if rp.unsafe_load(base + row) != Float32(0):
+             status = 2
+             break
+-        rp.unsafe_store(base + row, value)
++        rp.unsafe_store(base + row, value if i > 0 else Float32(3) - value)  # SABOTAGE (coverage-core-hotpath_impl_rows)
+     return status
+ 
+ 
+@@ -311,7 +330,8 @@
+         for i in range(count):
+             var r = Int(rp.unsafe_load(i))
+             for b in range(width):
+-                dp.unsafe_store(r * width + b, sp.unsafe_load(i * width + b))
++                var si = (1 - i) if (i < 2 and count > 1) else i  # SABOTAGE (coverage-core-hotpath_impl_rows)
++                dp.unsafe_store(r * width + b, sp.unsafe_load(si * width + b))
+     if bad:
+         raise Error("scatter_rows_bytes: row index out of bounds")
+     return 0
+@@ -333,7 +353,7 @@
+         # lane fix-s1-shared: an explicit fma (Mojo's default fp-mode
+         # contracts `lo + (hi - lo) * u` anyway); the device twin
+         # (core/hotpath_device.mojo) is the same sf64_fma
+-        dp.unsafe_store(i, Float32(fma(hi - lo, u, lo)))
++        dp.unsafe_store(i, _sab_ulp_f32(Float32(fma(hi - lo, u, lo))))  # SABOTAGE (coverage-core-hotpath_impl_rows)
+     return 0
+ 
+ 
+@@ -357,7 +377,7 @@
+         var cz = portable_cosf(Float32(6.283185307179586 * u2))
+         # lane fix-s1-shared: an explicit fma, as the device twin's
+         # sf64_fma (core/hotpath_device.mojo::_normal_init_kernel)
+-        dp.unsafe_store(i, Float32(fma(sd, r * Float64(cz), mu)))
++        dp.unsafe_store(i, _sab_ulp_f32(Float32(fma(sd, r * Float64(cz), mu))))  # SABOTAGE (coverage-core-hotpath_impl_rows)
+     return 0
+ 
+ 
+@@ -456,6 +476,10 @@
+             m += 1
+         ep.unsafe_store(i, Int32(rank[c]))
+         np.unsafe_store(rank[c], np.unsafe_load(rank[c]) + 1)
++    if not bad and rows > 1:  # SABOTAGE (coverage-core-hotpath_impl_rows): swap rows 0 and n - 1
++        var t0 = ep.unsafe_load(0)
++        ep.unsafe_store(0, ep.unsafe_load(rows - 1))
++        ep.unsafe_store(rows - 1, t0)
+     if bad:
+         raise Error("first_seen_i32: code out of range")
+     return m
+@@ -479,7 +503,7 @@
+     for c in range(kk):
+         var e = s + Int(cp.unsafe_load(c))
+         for i in range(K):
+-            dp.unsafe_store(i * kk + c, Int64(_floor_div_pos(e - 1 - i, K) - _floor_div_pos(s - 1 - i, K)))
++            dp.unsafe_store(_sab_swap01(i, K) * kk + c, Int64(_floor_div_pos(e - 1 - i, K) - _floor_div_pos(s - 1 - i, K)))
+         s = e
+     return 0
+ 
+@@ -563,7 +587,8 @@
+             load[best] += Int(cp.unsafe_load(g))
+             dp.unsafe_store(g, Int32(best))
+     for g in range(mm):
+-        var f = Int(dp.unsafe_load(g))
++        var f = _sab_swap01(Int(dp.unsafe_load(g)), K)  # SABOTAGE (coverage-core-hotpath_impl_rows)
++        dp.unsafe_store(g, Int32(f))
+         sp.unsafe_store(f, sp.unsafe_load(f) + cp.unsafe_load(g))
+     return 0
+ 
+@@ -647,9 +672,9 @@
+         for c in range(kk):
+             fold_dist[best * kk + c] += dist[g * kk + c]
+             fold_n[best] += dist[g * kk + c]
+-        dp.unsafe_store(g, Int32(best))
++        dp.unsafe_store(g, Int32(_sab_swap01(best, K)))  # SABOTAGE (coverage-core-hotpath_impl_rows)
+     for f in range(K):
+-        sp.unsafe_store(f, Int64(fold_n[f]))
++        sp.unsafe_store(_sab_swap01(f, K), Int64(fold_n[f]))
+     return 0
+ 
+ 
+@@ -728,9 +753,9 @@
+         for c in range(kk):
+             fold_dist[best * kk + c] += dist[g * kk + c]
+             fold_n[best] += dist[g * kk + c]
+-        dp.unsafe_store(g, Int32(best))
++        dp.unsafe_store(g, Int32(_sab_swap01(best, K)))  # SABOTAGE (coverage-core-hotpath_impl_rows)
+     for f in range(K):
+-        sp.unsafe_store(f, Int64(fold_n[f]))
++        sp.unsafe_store(_sab_swap01(f, K), Int64(fold_n[f]))
+     return 0
+ 
+ 

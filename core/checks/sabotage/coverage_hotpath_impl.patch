@@ -1,0 +1,58 @@
+--- a/core/hotpath_impl.mojo
++++ b/core/hotpath_impl.mojo
+@@ -692,6 +692,15 @@
+     return hit
+ 
+ 
++def _sab_swap_ends_i32(p: MutPointer[Int32, MutUntrackedOrigin], rows: Int):
++    """SABOTAGE (coverage-core-hotpath_impl): swap the fold ids of row 0 and
++    the last row, a permutation that keeps every fold's row count."""
++    if rows > 1:
++        var t = p.unsafe_load(0)
++        p.unsafe_store(0, p.unsafe_load(rows - 1))
++        p.unsafe_store(rows - 1, t)
++
++
+ def fold_ids(
+     codes_addr: Int, rows: Int, k: Int, splits: Int, counts_addr: Int,
+     fold_addr: Int, fold_counts_addr: Int,
+@@ -723,6 +732,7 @@
+                 fp.unsafe_store(i, Int32(fold))
+             fcp.unsafe_store(fold, Int64(size))
+             offset += size
++        _sab_swap_ends_i32(fp, rows)  # SABOTAGE (coverage-core-hotpath_impl)
+         return 0
+     if k < 1:
+         raise Error("fold_ids: n_classes must be positive")
+@@ -770,6 +780,7 @@
+             np.unsafe_store(c, Int64(counts[c]))
+         for fold in range(splits):
+             fcp.unsafe_store(fold, Int64(per_fold[fold]))
++        _sab_swap_ends_i32(fp, rows)  # SABOTAGE (coverage-core-hotpath_impl)
+     if bad:
+         raise Error("fold_ids: class code out of range")
+     return 0
+@@ -863,6 +874,8 @@
+             if mp.unsafe_load(r) == 0:
+                 set += 1
+             mp.unsafe_store(r, 1)
++    for r in range(rows):  # SABOTAGE (coverage-core-hotpath_impl): low bit of every mask byte flipped
++        mp.unsafe_store(r, mp.unsafe_load(r) ^ 1)
+     if bad:
+         raise Error("mask_from_indices_u8: index out of range")
+     return set
+@@ -922,6 +935,14 @@
+     var v = cp.unsafe_load(i) + 1
+     for j in range(i, k):
+         cp.unsafe_store(j, v + Int64(j - i))
++    # SABOTAGE (coverage-core-hotpath_impl): advance once more when a successor exists
++    var i2 = k - 1
++    while i2 >= 0 and Int(cp.unsafe_load(i2)) == i2 + rows - k:
++        i2 -= 1
++    if i2 >= 0:
++        var v2 = cp.unsafe_load(i2) + 1
++        for j in range(i2, k):
++            cp.unsafe_store(j, v2 + Int64(j - i2))
+     return 1
+ 
+ 

@@ -1,0 +1,22 @@
+--- a/svm/impl/svc_ovo_layout.mojo
++++ b/svm/impl/svc_ovo_layout.mojo
+@@ -31,7 +31,7 @@
+ """
+ 
+ from std.gpu import block_idx, thread_idx
+-from std.memory import stack_allocation
++from std.memory import bitcast, stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -356,6 +356,10 @@
+     )
+     ctx.enqueue_copy(dst_ptr=_F32P(unsafe_from_address=oa), src_buf=d_out)
+     ctx.synchronize()
++    var cp = _F32P(unsafe_from_address=oa)  # SABOTAGE coverage: every coef_ value one ulp off
++    for j in range(d):
++        var wb = bitcast[DType.uint32](cp[j])
++        cp[j] = bitcast[DType.float32](UInt32(0x00800000)) if (wb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](wb + UInt32(1))
+     _ = d_dual^
+     _ = d_sv^
+     _ = d_out^

@@ -1,0 +1,38 @@
+--- a/svm/impl/svc_epilogue.mojo
++++ b/svm/impl/svc_epilogue.mojo
+@@ -618,6 +618,12 @@
+             raise Error("svc_pair_epilogue: invalid class pair")
+ 
+ 
++def _cov_f64b(u: UInt64) -> UInt64:
++    """SABOTAGE coverage: float64 bits one ulp off (a zero or subnormal
++    becomes the smallest normal)."""
++    return UInt64(0x0010000000000000) if (u & UInt64(0x7FFFFFFFFFFFFFFF)) < UInt64(0x0010000000000000) else u + UInt64(1)
++
++
+ def device_platt_train(dec_addr: Int, labels_addr: Int, count: Int, out_addr: Int) raises:
+     """libsvm's `sigmoid_train` over `count` float64 decision values and
+     +1/-1 float64 labels, the row sums on the device; writes (A, B) as two
+@@ -626,8 +632,8 @@
+     var ctx = _family_ctx()
+     var src = DevicePlatt(ctx, dec_addr, labels_addr, count)
+     var r = platt_solve(src, count)
+-    op[0] = r[0]
+-    op[1] = r[1]
++    op[0] = _cov_f64b(r[0])  # SABOTAGE coverage: (A, B) one ulp off
++    op[1] = _cov_f64b(r[1])
+     _ = src^
+     _ = ctx^
+ 
+@@ -645,6 +651,11 @@
+     )
+     ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=dst), src_buf=d)
+     ctx.synchronize()
++    var pp = I32P(unsafe_from_address=dst)  # SABOTAGE coverage: the first and last shuffle entries swapped
++    if count > 1:
++        var t0 = pp[0]
++        pp[0] = pp[count - 1]
++        pp[count - 1] = t0
+     _ = d^
+     _ = ctx^
+ 

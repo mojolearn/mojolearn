@@ -1,0 +1,87 @@
+--- a/x_cnn/host/binding_entries_impl.mojo
++++ b/x_cnn/host/binding_entries_impl.mojo
+@@ -9,7 +9,7 @@
+ (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
+ bit here.
+ """
+-from std.memory import memcpy
++from std.memory import bitcast, memcpy
+ 
+ from core.hostptr import read_i32
+ from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
+@@ -22,6 +22,15 @@
+ 
+ 
+ @always_inline
++def _sab_ulp32(v: Float32) -> Float32:
++    """SABOTAGE (coverage): one ulp up; a zero or subnormal becomes the smallest normal (same sign)."""
++    var u = bitcast[DType.uint32](v)
++    if (u & UInt32(0x7F800000)) == UInt32(0):
++        return bitcast[DType.float32]((u & UInt32(0x80000000)) | UInt32(0x00800000))
++    return bitcast[DType.float32](u + UInt32(1))
++
++
++@always_inline
+ def out_f32(p: FP, n: Int):
+     """THE CPU COLUMN'S OUTPUT SEAM for the address-out entries: every
+     float32 word such an entry returns is in p[0:n] when this runs. In
+@@ -29,8 +38,8 @@
+     (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
+     bit here, and in the shell's `copy_f32` for the entries that still copy
+     a result."""
+-    _ = p
+-    _ = n
++    for i in range(n):  # SABOTAGE (coverage): every returned word one ulp up
++        p[i] = _sab_ulp32(p[i])
+ 
+ 
+ @always_inline
+@@ -76,6 +85,10 @@
+     var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+     for i in range(n):
+         argmax_row_at(i, src, src, src, src, dst, pp)
++    if n > 1:  # SABOTAGE (coverage): the first two rows' labels swapped
++        var t0 = dst[0]
++        dst[0] = dst[1]
++        dst[1] = t0
+     _ = prm^
+ 
+ 
+@@ -89,6 +102,8 @@
+     """dst rows = src rows[rp[r]], `row` 4-byte words each."""
+     for r in range(n):
+         memcpy(dest=d + r * row, src=s + Int(rp[r]) * row, count=row)
++    for i in range(n * row):  # SABOTAGE (coverage): every gathered word one ulp up
++        d[i] = _sab_ulp32(d[i])
+ 
+ 
+ def epoch_rows_fill(dst: IP, n: Int, shuffle: Bool, key: UInt64):
+@@ -97,6 +112,10 @@
+     var none = FP(unsafe_from_address=Int(dst))
+     for i in range(n):
+         epoch_rows_at(i, none, none, none, none, dst, pp)
++    if n > 1:  # SABOTAGE (coverage): the order's first and last rows trade places (still a permutation)
++        var t0 = dst[0]
++        dst[0] = dst[n - 1]
++        dst[n - 1] = t0
+     _ = prm^
+ 
+ 
+@@ -112,6 +131,8 @@
+     var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+     for t in range(nsteps):
+         adam_hyper_at(t, pb, po, po, po, pp, pp)
++    for i in range(nsteps * AH_ROW):  # SABOTAGE (coverage): every hyper word one ulp up
++        out[i] = _sab_ulp32(out[i])
+     _ = base^
+     _ = prm^
+     return out^
+@@ -120,7 +141,7 @@
+ def widen_f32_into(dst: MutPointer[Float64, MutUntrackedOrigin], src: List[Float32], n: Int):
+     """dst[e] = Float64(src[e]) for e < n."""
+     for e in range(n):
+-        dst[e] = Float64(src[e])
++        dst[e] = Float64(_sab_ulp32(src[e]))  # SABOTAGE (coverage): every widened word one float32 ulp up
+ 
+ 
+ def widen_f32_list_into(mut dst: List[Float64], src: List[Float32], n: Int):

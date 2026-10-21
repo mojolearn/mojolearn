@@ -771,7 +771,8 @@ def recorded_lanes():
 NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward",
                        "sequence-export-roundtrip", "sequence-onnx-import",
                        "transformer-decode-load-state", "safetensors-widen-f16",
-                       "sequence-program-save-load", "hf-causal-lm-stream"})
+                       "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill",
+                       "sequence-device-tensor"})
 
 _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "the CPU column routes _mojolearn_byte_lm through _byte_lm_trainer_host "

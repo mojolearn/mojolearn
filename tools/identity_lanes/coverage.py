@@ -359,8 +359,63 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(greedy=d(streamed), sampled=d(streamed_sampled)))
 
 
+# ---------------------------------------------------------------- IVF: a query with fewer candidates than k
+
+@lane("ivf-short-fill")
+def _(ml, X, yc, yr, Xh=None):
+    """IVFIndex on 128 fixture rows in 16 lists, each of 16 queries probing
+    one list (about eight candidates) for 24 neighbours: every query has
+    fewer candidates than k, so its answer is its real neighbours and then
+    the short fill (+inf distances, id -1), on the device search and the host
+    column alike. Parts: the distances and ids, squared and rooted metrics."""
+    d = _coverage_digester(ml)
+    q = np.ascontiguousarray(X[4096:4112])
+    m = ml.IVFIndex(n_lists=16, n_probes=1, n_neighbors=24, random_state=5).fit(X[:128])
+    dist, idx = m.search(q)
+    e = ml.IVFIndex(metric="euclidean", n_lists=16, n_probes=1, n_neighbors=24, random_state=5).fit(X[:128])
+    edist, eidx = e.search(q)
+    return _fit(dict(dist=d(np.asarray(dist, dtype=np.float32)), idx=d(np.asarray(idx, dtype=np.int64)),
+                     root_dist=d(np.asarray(edist, dtype=np.float32)), root_idx=d(np.asarray(eidx, dtype=np.int64))))
+
+
+# ---------------------------------------------------------------- resident sequence tensors
+
+@lane("sequence-device-tensor")
+def _(ml, X, yc, yr, Xh=None):
+    """RMSprop over params and gradients handed to it as resident tensors
+    (`to_device`, sequence/seq_tensor.mojo on a GPU binding; the float32
+    array itself on a binding without resident tensors), six steps on the
+    `sequence-rmsprop` lane's fixture tensors, held byte for byte in the cell
+    to the same steps on host arrays, which is the resident path's claim (the
+    same launches on the same values). Then a tensor's round trip: upload,
+    copy and download."""
+    from mojolearn._x_sequence_device import to_device
+    d = _coverage_digester(ml)
+
+    def run(wrap):
+        p1 = wrap(np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy())
+        p2 = wrap(np.ascontiguousarray(X[32:40, 0], dtype=np.float32).copy())
+        opt = ml.RMSprop([p1, p2], lr=1e-2, momentum=0.5)
+        for k in range(6):  # glue: six optimizer steps
+            base = 40 + 48 * k
+            g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
+            g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
+            opt.step([wrap(g1), wrap(g2)])
+        return np.asarray(p1, dtype=np.float32), np.asarray(p2, dtype=np.float32)
+
+    host = run(lambda a: a)
+    resident = run(to_device)
+    _same_bytes("resident-tensor RMSprop params", np.concatenate([a.reshape(-1) for a in resident]),
+                "host-array RMSprop params", np.concatenate([a.reshape(-1) for a in host]))
+    t = to_device(np.ascontiguousarray(X[:16, :4], dtype=np.float32))
+    back = np.asarray(t, dtype=np.float32)
+    twin = np.asarray(t.copy(), dtype=np.float32)
+    _same_bytes("downloaded tensor", back, "uploaded array", np.ascontiguousarray(X[:16, :4], dtype=np.float32))
+    return _fit(dict(p1=d(resident[0]), p2=d(resident[1]), back=d(back), copy=d(twin)))
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward", "sequence-export-roundtrip",
             "sequence-onnx-import", "transformer-decode-load-state", "safetensors-widen-f16",
-            "sequence-program-save-load", "hf-causal-lm-stream")
+            "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill", "sequence-device-tensor")

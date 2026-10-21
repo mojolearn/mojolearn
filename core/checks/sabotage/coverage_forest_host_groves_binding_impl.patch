@@ -1,0 +1,31 @@
+--- a/core/forest_host_groves_binding_impl.mojo
++++ b/core/forest_host_groves_binding_impl.mojo
+@@ -1,8 +1,19 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Typed snapshot copy moved word for word from bindings/forest_host_groves_binding.mojo."""
+ from core.forest_host_groves import HostGroveForest
++from std.memory import bitcast
+ 
+ 
++@always_inline
++def _sab_ulp_f32(v: Float32) -> Float32:
++    """SABOTAGE (coverage-core-forest_host_groves_binding_impl): a float32 one
++    ulp off; a zero or subnormal becomes the smallest positive normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
++
+ def _i32_ptr(address: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
+     if address == 0:
+         raise Error("null resident forest Int32 pointer")
+@@ -40,7 +51,7 @@
+         thresholds.append(tp[i])
+         left.append(lp[i])
+     for i in range(nodes * outputs):
+-        leaves.append(vp[i])
++        leaves.append(_sab_ulp_f32(vp[i]))  # SABOTAGE: every leaf value one ulp off
+     return HostGroveForest(
+         offsets^, columns^, thresholds^, left^, leaves^, features, outputs
+     )

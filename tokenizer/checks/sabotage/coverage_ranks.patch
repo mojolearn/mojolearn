@@ -1,0 +1,11 @@
+--- a/tokenizer/impl/ranks.mojo
++++ b/tokenizer/impl/ranks.mojo
+@@ -206,7 +206,7 @@
+         table.length.append(n_hex // 2)
+         for i in range(0, n_hex, 2):
+             table.arena.append(
+-                UInt8(_hex_digit(hexbytes[i]) * 16 + _hex_digit(hexbytes[i + 1]))
++                UInt8(_hex_digit(hexbytes[i]) * 16 + _hex_digit(hexbytes[i + 1])) ^ UInt8(1)  # SABOTAGE (coverage): every token byte's low bit flipped
+             )
+         table._insert(rank)
+         expect += 1

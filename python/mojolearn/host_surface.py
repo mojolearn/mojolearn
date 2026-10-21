@@ -1116,6 +1116,7 @@ TRAINING_LANE_NAMES = {
     # added to a built index by IVFIndex.extend. No GPU record carries the
     # lane yet, so every cell is OWED against the record.
     "ivf-extend": "extending a built IVF-Flat index",
+    "ivf-short-fill": "IVF-Flat queries with fewer candidates than neighbours asked for",
     # The GPU byte LM trainer's lanes (same branch): SmallByteLanguageModelTrainer,
     # stateless and on its resident session, whose single-device entries a
     # CPU-only install serves from the byte LM host binding's step, loss and
@@ -2987,7 +2988,9 @@ FAMILIES = (
         routes="_mojolearn_ivf",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf"),
+        # lane/verify-coverage-audit (2026-10-21): `ivf-short-fill`, queries
+        # with fewer candidates than k
+        training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf", "ivf-short-fill"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFIndex",),
@@ -3733,6 +3736,7 @@ PUBLIC_PENDING_LANES = {
     "transformer-decode-load-state": "no reference",
     "safetensors-widen-f16": "no reference",
     "hf-causal-lm-stream": "no reference",
+    "ivf-short-fill": "no reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped

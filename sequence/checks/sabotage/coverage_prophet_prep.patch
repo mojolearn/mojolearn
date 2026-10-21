@@ -1,0 +1,52 @@
+--- a/sequence/prophet_prep.mojo
++++ b/sequence/prophet_prep.mojo
+@@ -74,6 +74,24 @@
+     return -v if a < 0 else v
+ 
+ 
++def _cov_f64(v: Float64) -> Float64:
++    """SABOTAGE coverage: v one ulp off (a zero or subnormal becomes the
++    smallest normal; a NaN stays itself)."""
++    if v != v:
++        return v
++    var b = bitcast[DType.uint64](v)
++    if (b & UInt64(0x7FFFFFFFFFFFFFFF)) < UInt64(0x0010000000000000):
++        return bitcast[DType.float64](UInt64(0x0010000000000000))
++    return bitcast[DType.float64](b + UInt64(1))
++
++
++def _cov_f32(v: Float32) -> Float32:
++    """SABOTAGE coverage: v one ulp off (a zero or subnormal becomes the
++    smallest normal)."""
++    var b = bitcast[DType.uint32](v)
++    return bitcast[DType.float32](UInt32(0x00800000)) if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](b + UInt32(1))
++
++
+ def _round_half_even(x: Float64) -> Int:
+     var f = Int(x)  # x >= 0 here
+     var d = x - Float64(f)
+@@ -95,11 +113,11 @@
+     if kind == 1:
+         var src = I64P(unsafe_from_address=addrs[0])
+         for i in range(N):
+-            dst[i] = Float64(src[i]) / 86400e9
++            dst[i] = _cov_f64(Float64(src[i]) / 86400e9)  # SABOTAGE coverage: one ulp off
+     elif kind == 0:
+         var src = _f64p(addrs[0], "t")
+         for i in range(N):
+-            dst[i] = src[i]
++            dst[i] = _cov_f64(src[i])  # SABOTAGE coverage: one ulp off
+     else:
+         raise Error("prophet_days: kind must be 0 or 1")
+     var status = 0
+@@ -202,8 +220,8 @@
+             var idx = hist - 1 if i == n_cp else _round_half_even(Float64(i) * step)
+             cp.append(days[idx])
+     if len(cp) == 0:
+-        out[0] = 0
++        out[0] = _cov_f32(Float32(0))  # SABOTAGE coverage: the smallest normal
+         return 1
+     for i in range(len(cp)):
+-        out[i] = Float32((cp[i] - start) / scale)
++        out[i] = _cov_f32(Float32((cp[i] - start) / scale))  # SABOTAGE coverage: one ulp off
+     return len(cp)
