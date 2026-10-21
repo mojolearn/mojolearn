@@ -781,7 +781,9 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         result.append(gradient)
         return p[].bi.tuple(result)
     if operation == "apply_gradient":
-        var total = _parallel_array(args[1], [n])
+        # `total` is documented as the bytes `cross_vendor.ordered_fold`
+        # returns; admit raw float32 bytes the way fold_reset/fold_add do.
+        var total = _parallel_array(_parallel_float_bytes(args[1]), [n])
         addresses.append(total._addr)
         parallel_byte_open(owner)
         _parallel_require_split(owner, "apply_gradient")
