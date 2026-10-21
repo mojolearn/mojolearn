@@ -1594,6 +1594,14 @@ FAMILIES = (
             "tokenizer/train/emit.mojo",
         ),
         exports=(
+            # Native C-entry registrations are part of the exported ABI too.
+            "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
+            "cross_vendor_call", "generator_draw", "mamba_native_call",
+            "native_codec_call", "native_process_call", "native_transport_call",
+            "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
+            "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
+            "samba_config_call", "samba_native_call", "sequential_native_call",
+            "small_mlp_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
@@ -1742,6 +1750,8 @@ FAMILIES = (
             "core/dense_coo.mojo", "core/msel_host.mojo",
         ),
         exports=(
+            # Native C-entry registrations are part of the exported ABI too.
+            "lr_schedule_at", "lr_schedule_series", "optimizer_door_init",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "lr_schedule_fill",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
@@ -2747,6 +2757,10 @@ FAMILIES = (
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
+            # Native C-entry registrations are part of the exported ABI too.
+            "optimizer_door_accumulate", "optimizer_door_clip", "optimizer_door_io",
+            "optimizer_door_load_state", "optimizer_door_state", "optimizer_door_state_set",
+            "optimizer_door_step", "optimizer_door_zero",
             "optimizer_resident_open", "optimizer_resident_close",
             "optimizer_resident_upload", "optimizer_resident_download",
             "training_host_numeric_mode", "training_host_vendor",
@@ -3739,8 +3753,9 @@ PUBLIC_PENDING_LANES = {
     # lanes; CPU and NVIDIA agree (lane/apple-merged), no release record yet.
     # lanes sk-kernels / sk-final (2026-10-15): the weighted Extra Trees fits
     # have a CPU column (_mojolearn_trees_host) and no release record yet.
-    "et-clf-weighted": "no reference",
-    "et-reg-weighted": "no reference",
+    # Weighted Extra Trees already has nine admitted fixtures with Apple,
+    # NVIDIA and AMD train/infer/model columns in table.json (records 112,
+    # 114, 116, 117). Keep those references comparable; no new admission here.
     # f63ef2235 (2026-10-14): PairLogit and YetiRank on the pointwise searcher.
     # The gbdt host binding's pointwise arm trains Logloss only and refuses
     # every other loss by name (bindings/_mojolearn_gbdt_host.mojo,
@@ -3803,7 +3818,10 @@ def public_reference_lanes():
              if not lane.startswith(PUBLIC_INAPPLICABLE_PREFIXES)
              and not pending_blocks_comparison(lane)
              and lane not in PUBLIC_HOST_ONLY_LANES]
-    return lanes + list(PUBLIC_HOST_ONLY_LANES)
+    # Host-only execution still needs an admitted reference to compare. A
+    # newly declared host probe remains pending until that evidence exists.
+    return lanes + [lane for lane in PUBLIC_HOST_ONLY_LANES
+                    if not pending_blocks_comparison(lane)]
 
 
 def pending_blocks_comparison(lane, device_class="cpu"):
