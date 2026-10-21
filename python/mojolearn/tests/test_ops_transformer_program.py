@@ -30,7 +30,9 @@ def test_rms_norm_noncontiguous_view_and_both_derivatives():
         dw = np.sum(seed.astype(np.float64) * z * inv, axis=(0, 1))
         np.testing.assert_allclose(native(s.numpy, result), expected, rtol=3e-6, atol=1e-7)
         np.testing.assert_allclose(native(s.grad, hx), dx.transpose(0, 2, 1), rtol=4e-6, atol=1e-7)
-        np.testing.assert_allclose(native(s.grad, hw), dw, rtol=4e-6, atol=1e-7)
+        gradient = native(s.grad, hw)
+        assert gradient.shape == (w.size, 1), "Session.tensor imports a 1-D array as a column"
+        np.testing.assert_allclose(gradient, dw[:, None], rtol=4e-6, atol=1e-7)
 
 
 def test_rotary_absolute_offset_gradient_and_multiple_heads():
@@ -60,12 +62,17 @@ def test_projection_first_vjp_keeps_full_rank_and_parameter_shape():
     with ops.Session(record=True) as s:
         hx, hw = s.tensor(x, requires_grad=True), s.tensor(w, requires_grad=True)
         y = native(s._transformer_linear, hx, hw)
-        dx, dw = native(s.vjp, y, [hx, hw], seed)
+        seed_handle = s.tensor(seed)
+        dx_handle, dw_handle = native(s.vjp, y, [hx, hw], seed_handle)
+        dx, dw = native(s.numpy, dx_handle), native(s.numpy, dw_handle)
         assert dx.shape == x.shape and dw.shape == w.shape
         np.testing.assert_allclose(dx, seed.astype(np.float64) @ w, rtol=2e-6, atol=2e-7)
         np.testing.assert_allclose(dw, seed.reshape(-1, 5).astype(np.float64).T @ x.reshape(-1, 4), rtol=2e-6, atol=2e-7)
-        with pytest.raises(ValueError, match="higher|backward rule|unsupported"):
-            s.vjp(y, [hx, hw], seed, create_graph=True)
+        # The established recorded-custom-rule contract raises Exception,
+        # with a named first-order-only refusal before any backward launch.
+        with pytest.raises(Exception, match=r"create_graph cannot differentiate.*tag 210.*first-order rule only") as refusal:
+            s.vjp(y, [hx, hw], seed_handle, create_graph=True)
+        assert type(refusal.value) is Exception
 
 
 @pytest.mark.parametrize("bad", ["rms_weight", "rms_epsilon", "rms_nan", "rotary_odd", "rotary_width", "rotary_domain", "rotary_theta", "integer"])

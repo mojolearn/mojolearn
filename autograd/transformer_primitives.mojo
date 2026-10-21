@@ -76,7 +76,12 @@ def graph_rms_norm[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor
     var shape = tape.shape_of(x)
     var d = tape.cols(x)
     var m = tape.rows(x)
-    if tape.rows(weight) != 1 or tape.cols(weight) != d:
+    # Session.tensor's established 1-D import is a (features, 1) column;
+    # native rank-1 and explicit row vectors have the same linear storage.
+    # Accept those vector forms, retaining the parameter's original shape.
+    var weight_shape = tape.shape_of(weight)
+    if (weight_shape.ndim > 2 or weight_shape.count() != d
+            or (tape.rows(weight) != 1 and tape.cols(weight) != 1)):
         raise Error("ValueError: RMSNorm weight must have one value per last-axis feature")
     if not eps > 0 or not isfinite(eps):
         raise Error("ValueError: RMSNorm epsilon must be positive and finite")
