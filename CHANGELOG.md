@@ -31,6 +31,14 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
   every push: no Python in kernels, no compute in shells.
 - IVF-flat search pads a query whose probed lists hold fewer than `k` vectors with distance `inf` and id `-1` after
   the real neighbours instead of raising.
+- Importing `mojolearn` no longer loads NumPy. Results come back as native arrays; when NumPy is imported before or
+  after `mojolearn`, the same calls return NumPy arrays with the same bits.
+- `HostLinearRegression` and `HostRidge` fit on the CPU binaries again, with weighted, no-intercept and one-column fits;
+  `fit`, `predict`, `score`, `save`, `load` and `model_sha256` match the public classes run with `MOJOLEARN_VENDOR=cpu`.
+- `LinearRegression`, `Ridge`, `SmallMLP` training, the optimizers and the Mamba-3 blocks run as one native call per
+  public method. Results are unchanged.
+- `tokenizer` vocabulary export no longer reads a freed buffer; the tokenizer, the shared helpers and the host bindings
+  release every Python reference they take, so long sessions hold steady memory.
 
 ## 0.8.55 (published 2026-10-20)
 
