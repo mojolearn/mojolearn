@@ -27,6 +27,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.native_json import native_json_parse, native_json_parse_unique, native_path
 from bindings.native_transport import _transport_json
 from core.parallel_mlp_native_impl import mlp_targets_into
@@ -144,16 +145,16 @@ def _mode_entries() raises -> PythonObject:
     read back from the compiled binding; the route choice of every call."""
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var mode = b[].backend["_DEFAULT_MODE"]
-    if mode is None or b[].bi.type(mode) is not b[].bi.str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
+    if mode is None or py_type(mode) is not b[].bi.str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
         raise Error(_MODE_REFUSAL)
-    var entries = b[].modes.get(mode)
-    if entries is None or b[].bi.type(entries) is b[].bi.str:
+    var entries = py_get(b[].modes, mode)
+    if entries is None or py_type(entries) is b[].bi.str:
         raise Error(String(_MODE_REFUSAL) + " (" + String(entries) + ")")
     var compiled = Int(py=entries["training_numeric_mode"]())
     if compiled != (1 if String(py=mode) == "identical" else 0):
         raise Error(_MODE_REFUSAL)
     for name in [String("mlp_bias_activation"), String("mlp_relu_backward"), String("mlp_sum_rows")]:  # small-loop(the three required entry names)
-        if not Bool(py=entries.__contains__(name)):
+        if not py_contains(entries, name):
             raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing " + name)
     return entries
 
@@ -164,8 +165,8 @@ def _mode_name(entries: PythonObject) raises -> String:
 
 def _env(name: String, default: String) raises -> String:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    var raw = b[].environ.get(PythonObject(name).encode("ascii"), PythonObject(default).encode("ascii"))
-    return String(py=raw.decode("latin-1"))
+    var raw = py_get(b[].environ, py_call(PythonObject(name).encode, "ascii"), py_call(PythonObject(default).encode, "ascii"))
+    return String(py=py_call(raw.decode, "latin-1"))
 
 
 def _fused_enabled(entries: PythonObject) raises -> Bool:
@@ -178,13 +179,13 @@ def _fused_enabled(entries: PythonObject) raises -> Bool:
         return False
     if _env("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") != "1":
         return False
-    return Bool(py=entries.__contains__("mlp_train_step"))
+    return py_contains(entries, "mlp_train_step")
 
 
 def _resident_enabled(entries: PythonObject) raises -> Bool:
     """The Apple FAST device-resident session (compiled under
     -D MOJOLEARN_AFN_MLP_RESIDENT, _MULTISTEP or _ALL only)."""
-    return _fused_enabled(entries) and Bool(py=entries.__contains__("mlp_resident_open"))
+    return _fused_enabled(entries) and py_contains(entries, "mlp_resident_open")
 
 
 # ------------------------------------------------------------ argument doors
@@ -224,11 +225,11 @@ def _view(value: PythonObject, refusal: String) raises -> PythonObject:
         exporter = PythonObject(None)
     if exporter is not None:
         try:
-            return exporter(b[].buffer_flags)
+            return py_call(exporter, b[].buffer_flags)
         except:
             raise Error("TypeError: " + refusal)
     try:
-        return b[].bi.memoryview(value)
+        return py_call(b[].bi.memoryview, value)
     except:
         raise Error("TypeError: " + refusal)
 
@@ -290,8 +291,8 @@ def _words_into(value: PythonObject, dims: List[Int], label: String, dst: Int, i
     if source != 0:
         parallel_copy_words(source, dst, dims, n, False)
         return
-    var store = b[].arrays("i" if integer else "f")
-    store.frombytes(view.tobytes("C"))
+    var store = py_call(b[].arrays, "i" if integer else "f")
+    _ = py_call(store.frombytes, py_call(view.tobytes, "C"))
     if len(store) != n:
         raise Error("SmallMLPTrainer " + label + " must have shape " + _shape_text(dims))
     var fortran = value.__class__ is b[].array_cls and String(py=value.order) == "F" and len(dims) > 1
@@ -333,8 +334,8 @@ def _targets_in(value: PythonObject, rows: Int) raises -> List[Int32]:
     var source = _source_address(value, view)
     var packed = PythonObject(None)
     if source == 0:
-        packed = b[].arrays(fmt)
-        packed.frombytes(view.tobytes("C"))
+        packed = py_call(b[].arrays, fmt)
+        _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
         source = Int(py=packed.buffer_info()[0])
         itemsize = Int(py=packed.itemsize)
     try:
@@ -443,13 +444,13 @@ def _schedule_text(value: PythonObject) raises -> String:
 
 def _is_dict(value: PythonObject) raises -> Bool:
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    return Bool(py=bi.issubclass(value.__class__, bi.dict))
+    return Bool(py=py_call(bi.issubclass, value.__class__, bi.dict))
 
 
 def _same_keys(value: PythonObject, names: String) raises -> Bool:
     """`value` is a dict whose keys are exactly the `|`-separated `names`."""
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    return _is_dict(value) and Bool(py=value.keys() == bi.set(PythonObject(names).split("|")))
+    return _is_dict(value) and Bool(py=value.keys() == py_call(bi.set, py_call(PythonObject(names).split, "|")))
 
 
 def _handle_of(handle: PythonObject) raises -> Int:
@@ -518,7 +519,7 @@ def _weights_out(state: MlpState) raises -> PythonObject:
     for i in range(4):  # driver-loop: over the fixed MLP parameter registry
         var out = generation_array(_dims(i))
         mlp_copy_tensor_out(state, i, Int(py=out._addr))
-        weights[names[i]] = out
+        py_setitem(weights, names[i], out)
     return weights
 
 
@@ -527,31 +528,31 @@ def _state_out(state: MlpState, mode: String) raises -> PythonObject:
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
     var names = _names()
     var result = bi.dict()
-    result["schema"] = PythonObject(_STATE_SCHEMA)
-    result["architecture"] = py_ints([8, 16, 3])
-    result["numeric_mode"] = PythonObject(mode)
-    result["parameter_order"] = Python.list(names[0], names[1], names[2], names[3])
-    result["weights"] = _weights_out(state)
+    py_setitem(result, "schema", PythonObject(_STATE_SCHEMA))
+    py_setitem(result, "architecture", py_ints([8, 16, 3]))
+    py_setitem(result, "numeric_mode", PythonObject(mode))
+    py_setitem(result, "parameter_order", Python.list(names[0], names[1], names[2], names[3]))
+    py_setitem(result, "weights", _weights_out(state))
     var opt = bi.dict()
-    opt["kind"] = PythonObject("AdamW")
-    opt["step"] = PythonObject(state.step)
-    opt["m"] = _f32_array_of(state.m_addr(), [MLP_TOTAL])
-    opt["v"] = _f32_array_of(state.v_addr(), [MLP_TOTAL])
+    py_setitem(opt, "kind", PythonObject("AdamW"))
+    py_setitem(opt, "step", PythonObject(state.step))
+    py_setitem(opt, "m", _f32_array_of(state.m_addr(), [MLP_TOTAL]))
+    py_setitem(opt, "v", _f32_array_of(state.v_addr(), [MLP_TOTAL]))
     var flags = generation_array([4], "i")
     var fp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=flags._addr))
     var sp = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=state.flags_addr())
     for i in range(4):  # small-loop(the four optimizer flag words)
         fp[i] = sp[i]
-    opt["flags"] = flags
-    result["optimizer"] = opt
+    py_setitem(opt, "flags", flags)
+    py_setitem(result, "optimizer", opt)
     var cfg = bi.dict()
-    cfg["lr"] = PythonObject(state.lr)
-    cfg["beta1"] = PythonObject(state.beta1)
-    cfg["beta2"] = PythonObject(state.beta2)
-    cfg["eps"] = PythonObject(state.eps)
-    cfg["weight_decay"] = PythonObject(state.weight_decay)
-    result["config"] = cfg
-    result["data_schedule"] = native_json_parse(PythonObject(state.schedule))
+    py_setitem(cfg, "lr", PythonObject(state.lr))
+    py_setitem(cfg, "beta1", PythonObject(state.beta1))
+    py_setitem(cfg, "beta2", PythonObject(state.beta2))
+    py_setitem(cfg, "eps", PythonObject(state.eps))
+    py_setitem(cfg, "weight_decay", PythonObject(state.weight_decay))
+    py_setitem(result, "config", cfg)
+    py_setitem(result, "data_schedule", native_json_parse(PythonObject(state.schedule)))
     return result
 
 
@@ -572,7 +573,7 @@ def _resident_sync(index: Int) raises:
         return
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var entries = b[].modes[store[].slots[index].resident_mode]
-    _ = entries["mlp_resident_download"](store[].slots[index].resident, _resident_addresses(index))
+    _ = py_call(entries["mlp_resident_download"], store[].slots[index].resident, _resident_addresses(index))
 
 
 def _resident_close(index: Int) raises:
@@ -585,7 +586,7 @@ def _resident_close(index: Int) raises:
     store[].slots[index].resident_mode = String()
     store[].slots[index].resident_cap = 0
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    _ = b[].modes[mode]["mlp_resident_close"](handle)
+    _ = py_call(b[].modes[mode]["mlp_resident_close"], handle)
 
 
 def _settle(index: Int, close: Bool) raises:
@@ -603,7 +604,7 @@ def _resident_open(index: Int, entries: PythonObject, cap_k: Int) raises -> Int:
         if store[].slots[index].resident_mode == mode and store[].slots[index].resident_cap >= cap_k:
             return store[].slots[index].resident
         _settle(index, True)
-    var handle = Int(py=entries["mlp_resident_open"](_resident_addresses(index), Python.list(cap_k)))
+    var handle = Int(py=py_call(entries["mlp_resident_open"], _resident_addresses(index), Python.list(cap_k)))
     store[].slots[index].resident = handle
     store[].slots[index].resident_mode = mode
     store[].slots[index].resident_cap = cap_k
@@ -622,7 +623,7 @@ def _step_error(error: Error) -> Error:
 def _native_step(entry: PythonObject, a: PythonObject, b: PythonObject) raises -> Int:
     """One fused step call."""
     try:
-        return Int(py=entry(a, b))
+        return Int(py=py_call(entry, a, b))
     except error:
         raise _step_error(error)
 
@@ -630,7 +631,7 @@ def _native_step(entry: PythonObject, a: PythonObject, b: PythonObject) raises -
 def _native_resident_step(entry: PythonObject, a: PythonObject, b: PythonObject, c: PythonObject) raises -> Int:
     """One resident-session step call."""
     try:
-        return Int(py=entry(a, b, c))
+        return Int(py=py_call(entry, a, b, c))
     except error:
         raise _step_error(error)
 
@@ -666,8 +667,9 @@ def _resident_steps(index: Int, entries: PythonObject, x: List[Float32], y: List
     if mode == _FORWARD:
         return Python.list(PythonObject(None), logits, PythonObject(None), PythonObject(None))
     var values = bi.list()
+    var append = values.append
     for i in range(k):  # driver-loop: over the k step losses the session returned
-        _ = values.append(mlp_read_f32(Int(losses.unsafe_ptr()) + 4 * i))
+        _ = py_call(append, mlp_read_f32(Int(losses.unsafe_ptr()) + 4 * i))
     _ = losses^
     if mode == _TRAIN:
         store[].slots[index].state.step = t + k - 1
@@ -740,28 +742,28 @@ def _fused(mut state: MlpState, entries: PythonObject, x: List[Float32], y: List
 
 def _gemm_into(entries: PythonObject, a: Int, b: Int, dst: Int, m: Int, n: Int, k: Int, layout: Int) raises:
     if _mode_name(entries) == "identical":
-        if not Bool(py=entries.__contains__("neural_gemm")):
+        if not py_contains(entries, "neural_gemm"):
             raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing neural_gemm")
-        var written = Int(py=entries["neural_gemm"](a, b, dst, py_ints([m, n, k, layout])))
+        var written = Int(py=py_call(entries["neural_gemm"], a, b, dst, py_ints([m, n, k, layout])))
         if written != m * n:
             raise Error("RuntimeError: SmallMLPTrainer neural GEMM returned an incomplete result")
     else:
-        if not Bool(py=entries.__contains__("linalg_gemm")):
+        if not py_contains(entries, "linalg_gemm"):
             raise Error("ImportError: SmallMLPTrainer requires the linalg binding's gemm")
         # THE OUTPUT ADDRESS COMES FIRST in the linalg entry.
-        _ = entries["linalg_gemm"](dst, a, b, py_ints([m, n, k, layout]))
+        _ = py_call(entries["linalg_gemm"], dst, a, b, py_ints([m, n, k, layout]))
     mlp_require_result_finite(dst, m * n, "GEMM")
 
 
 def _bias_into(entries: PythonObject, values: Int, bias: Int, dst: Int, rows: Int, cols: Int, relu: Bool) raises:
-    var written = Int(py=entries["mlp_bias_activation"](values, bias, dst, py_ints([rows, cols, Int(relu)])))
+    var written = Int(py=py_call(entries["mlp_bias_activation"], values, bias, dst, py_ints([rows, cols, Int(relu)])))
     if written != rows * cols:
         raise Error("RuntimeError: SmallMLPTrainer bias/activation returned an invalid result")
     mlp_require_result_finite(dst, rows * cols, "bias/activation")
 
 
 def _sum_into(entries: PythonObject, values: Int, dst: Int, rows: Int, cols: Int) raises:
-    var written = Int(py=entries["mlp_sum_rows"](values, dst, py_ints([rows, cols])))
+    var written = Int(py=py_call(entries["mlp_sum_rows"], values, dst, py_ints([rows, cols])))
     if written != cols:
         raise Error("RuntimeError: SmallMLPTrainer bias gradient returned an invalid result")
     mlp_require_result_finite(dst, cols, "bias gradient")
@@ -802,8 +804,8 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
     # ce_loss params: rows, vocab, ignore_index, reduction (2 mean),
     # num_items, return_grad, label_smoothing
     # (bindings/_mojolearn_training.mojo::ce_loss_binding).
-    _ = entries["ce_loss"](Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, logits._addr,
-                           Int(y.unsafe_ptr()), Python.list(rows, 3, -100, 2, 0, 1, 0.0))
+    _ = py_call(entries["ce_loss"], Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, logits._addr,
+                Int(y.unsafe_ptr()), Python.list(rows, 3, -100, 2, 0, 1, 0.0))
     var value = mlp_read_f32(Int(loss.unsafe_ptr()))
     if not isfinite(value):
         raise Error("RuntimeError: SmallMLPTrainer loss is not finite")
@@ -818,7 +820,7 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
     _gemm_into(entries, dl, state.params_addr(2), Int(incoming.unsafe_ptr()), rows, 16, 3, _NN)
     var dhidden = List[Float32](length=rows * 16, fill=Float32(0))
     var dh = Int(dhidden.unsafe_ptr())
-    var written = Int(py=entries["mlp_relu_backward"](ha, Int(incoming.unsafe_ptr()), dh, py_ints([rows, 16])))
+    var written = Int(py=py_call(entries["mlp_relu_backward"], ha, Int(incoming.unsafe_ptr()), dh, py_ints([rows, 16])))
     if written != rows * 16:
         raise Error("RuntimeError: SmallMLPTrainer ReLU gradient returned an invalid result")
     mlp_require_result_finite(dh, rows * 16, "ReLU gradient")
@@ -849,9 +851,9 @@ def _adamw(mut state: MlpState, entries: PythonObject, grads: List[Float32]) rai
     # (bindings/_mojolearn_training.mojo::optimizer_step_binding).
     var plan = Python.list(4, 2, t, 0, state.lr, state.beta1, state.beta2, state.eps,
                            state.weight_decay, 0.0, 0.0, 0.0, 0)
-    _ = entries["optimizer_step"](state.params_addr(0), Int(grads.unsafe_ptr()), state.m_addr(),
-                                  state.v_addr(), Int(offsets.unsafe_ptr()), state.flags_addr(),
-                                  Int(info.unsafe_ptr()), plan)
+    _ = py_call(entries["optimizer_step"], state.params_addr(0), Int(grads.unsafe_ptr()), state.m_addr(),
+                state.v_addr(), Int(offsets.unsafe_ptr()), state.flags_addr(),
+                Int(info.unsafe_ptr()), plan)
     _ = offsets^
     _ = info^
     state.step = t
@@ -889,7 +891,7 @@ def _gradients_dict(grads: PythonObject) raises -> PythonObject:
     var names = _names()
     var result = bi.dict()
     for i in range(4):  # driver-loop: over the fixed MLP gradient registry
-        result[names[i]] = grads[i]
+        py_setitem(result, names[i], grads[i])
     return result
 
 
@@ -908,7 +910,7 @@ def small_mlp_create(args: PythonObject) raises -> PythonObject:
     state.schedule = _schedule_text(args[4])
     _ = _mode_entries()
     var handle = mlp_store_create(state^)
-    b[].locks[handle] = b[].rlock()
+    py_setitem(b[].locks, handle, b[].rlock())
     return PythonObject(handle)
 
 
@@ -917,11 +919,11 @@ def small_mlp_from_state(cls: PythonObject, state: PythonObject, mode: String) r
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var typed = _state_from_dict(state, mode)
     var handle = mlp_store_create(typed^)
-    b[].locks[handle] = b[].rlock()
+    py_setitem(b[].locks, handle, b[].rlock())
     # `object.__new__` takes only the class; the handle goes into the new
     # instance's own dictionary, so the instance is never a call argument.
-    var instance = b[].bi.object.__new__(cls)
-    instance.__dict__["_handle"] = PythonObject(handle)
+    var instance = py_call(b[].bi.object.__new__, cls)
+    py_setitem(instance.__dict__, "_handle", PythonObject(handle))
     return instance
 
 
@@ -937,7 +939,7 @@ def small_mlp_close(handle: PythonObject) raises:
     except:
         pass
     _ = mlp_store_release(h)
-    _ = b[].locks.pop(h, PythonObject(None))
+    _ = py_call(b[].locks.pop, h, PythonObject(None))
 
 
 def small_mlp_state_dict(handle: Int) raises -> PythonObject:
@@ -1008,12 +1010,12 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
         index = mlp_store_index(handle)
         store[].slots[index].state = working^
     var result = b[].bi.dict()
-    result["step"] = PythonObject(store[].slots[index].state.step)
-    result["loss"] = out[0]
-    result["logits"] = out[1]
-    result["gradients"] = _gradients_dict(out[2])
+    py_setitem(result, "step", PythonObject(store[].slots[index].state.step))
+    py_setitem(result, "loss", out[0])
+    py_setitem(result, "logits", out[1])
+    py_setitem(result, "gradients", _gradients_dict(out[2]))
     if want_dx:
-        result["input_grad"] = out[3]
+        py_setitem(result, "input_grad", out[3])
     return result
 
 
@@ -1023,7 +1025,7 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
         raise Error("SmallMLPTrainer train_steps k must be a positive int")
     var k = Int(py=k_value)
     var entries = _mode_entries()
-    if not (_resident_enabled(entries) and Bool(py=entries.__contains__("mlp_resident_steps"))):
+    if not (_resident_enabled(entries) and py_contains(entries, "mlp_resident_steps")):
         raise Error("RuntimeError: SmallMLPTrainer.train_steps needs the Apple FAST training "
                     + "binding built with -D MOJOLEARN_AFN_MLP_MULTISTEP")
     var view = _view(X, "SmallMLPTrainer train_steps X must have shape (k * batch, 8)")
@@ -1042,11 +1044,11 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
         raise Error("SmallMLPTrainer step counter is exhausted")
     var res = _resident_steps(index, entries, x, y, batch, k, _TRAIN, False)
     var result = b[].bi.dict()
-    result["step"] = PythonObject(store[].slots[index].state.step)
-    result["losses"] = res[0]
-    result["loss"] = res[0][k - 1]
-    result["logits"] = res[1]
-    result["gradients"] = _gradients_dict(res[2])
+    py_setitem(result, "step", PythonObject(store[].slots[index].state.step))
+    py_setitem(result, "losses", res[0])
+    py_setitem(result, "loss", res[0][k - 1])
+    py_setitem(result, "logits", res[1])
+    py_setitem(result, "gradients", _gradients_dict(res[2]))
     return result
 
 
@@ -1136,18 +1138,18 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
         var owned = List[Float32](length=max(n, 1), fill=Float32(0))
         if n > 0:
             _words_into(value, dims, "session input", Int(owned.unsafe_ptr()))
-        _ = addresses.append(Int(owned.unsafe_ptr()))
-        _ = shapes.append(shape)
+        _ = py_call(addresses.append, Int(owned.unsafe_ptr()))
+        _ = py_call(shapes.append, shape)
         sessions.append(owned^)
     var total: Int
     try:
-        total = Int(py=entries["mlp_sessions_rows"](shapes, 8))
+        total = Int(py=py_call(entries["mlp_sessions_rows"], shapes, 8))
     except error:
         raise Error(String(error))
     var out = generation_array([total, 3])
     var store = MLP_STORE.get_or_create_ptr()
     ref s = store[].slots[index].state
-    var wrote = Int(py=entries["mlp_sessions"](
+    var wrote = Int(py=py_call(entries["mlp_sessions"],
         Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
         addresses, shapes, py_ints([8, 16, 3])))
     _ = sessions^
@@ -1164,9 +1166,9 @@ def _encode_array(value: PythonObject, integer: Bool) raises -> PythonObject:
     little-endian, so the stored bytes are the buffer's own)."""
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
     var result = bi.dict()
-    result["dtype"] = PythonObject("<i4" if integer else "<f4")
-    result["shape"] = bi.list(value.shape)
-    result["hex"] = value._mv.tobytes().hex()
+    py_setitem(result, "dtype", PythonObject("<i4" if integer else "<f4"))
+    py_setitem(result, "shape", py_call(bi.list, value.shape))
+    py_setitem(result, "hex", value._mv.tobytes().hex())
     return result
 
 
@@ -1175,9 +1177,9 @@ def _decode_array(value: PythonObject, dims: List[Int], integer: Bool) raises ->
     var bi = b[].bi
     var shape = py_ints(dims)
     var dtype = PythonObject("<i4" if integer else "<f4")
-    if (not Bool(py=bi.isinstance(value, bi.dict)) or Bool(py=bi.set(value) != bi.set(PythonObject("dtype|shape|hex").split("|")))
+    if (not Bool(py=py_call(bi.isinstance, value, bi.dict)) or Bool(py=py_call(bi.set, value) != py_call(bi.set, py_call(PythonObject("dtype|shape|hex").split, "|")))
             or Bool(py=value["dtype"] != dtype) or Bool(py=value["shape"] != shape)
-            or bi.type(value["hex"]) is not bi.str):
+            or py_type(value["hex"]) is not bi.str):
         raise Error("SmallMLPTrainer checkpoint tensor descriptor mismatch")
     var cells = 1
     for i in range(len(dims)):  # small-loop(descriptor shape words)
@@ -1186,13 +1188,13 @@ def _decode_array(value: PythonObject, dims: List[Int], integer: Bool) raises ->
         raise Error("SmallMLPTrainer checkpoint tensor length mismatch")
     var raw = PythonObject(None)
     try:
-        raw = bi.bytes.fromhex(value["hex"])
+        raw = py_call(bi.bytes.fromhex, value["hex"])
     except:
         raise Error("SmallMLPTrainer checkpoint tensor is not hexadecimal")
     if len(raw) != cells * 4:
         raise Error("SmallMLPTrainer checkpoint tensor byte count mismatch")
-    var store = b[].arrays("i" if integer else "f")
-    store.frombytes(raw)
+    var store = py_call(b[].arrays, "i" if integer else "f")
+    _ = py_call(store.frombytes, raw)
     var out = generation_array(dims, "i" if integer else "f")
     if integer:
         mlp_copy_i32(Int(py=store.buffer_info()[0]), Int(py=out._addr), cells)
@@ -1204,31 +1206,31 @@ def _decode_array(value: PythonObject, dims: List[Int], integer: Bool) raises ->
 
 def _decode_state(payload: PythonObject) raises -> PythonObject:
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    if not Bool(py=bi.isinstance(payload, bi.dict)):
+    if not Bool(py=py_call(bi.isinstance, payload, bi.dict)):
         raise Error("SmallMLPTrainer checkpoint payload must be an object")
-    var weights = payload.get("weights")
-    var opt = payload.get("optimizer")
-    if weights is None or not Bool(py=bi.isinstance(opt, bi.dict)) or not Bool(py=opt.__contains__("m")) or not Bool(py=opt.__contains__("v")) or not Bool(py=opt.__contains__("flags")):
+    var weights = py_get(payload, "weights")
+    var opt = py_get(payload, "optimizer")
+    if weights is None or not Bool(py=py_call(bi.isinstance, opt, bi.dict)) or not py_contains(opt, "m") or not py_contains(opt, "v") or not py_contains(opt, "flags"):
         raise Error("SmallMLPTrainer checkpoint state is incomplete")
     var names = _names()
     var order = Python.list(names[0], names[1], names[2], names[3])
-    if not Bool(py=bi.isinstance(weights, bi.dict)) or Bool(py=bi.set(weights) != bi.set(order)):
+    if not Bool(py=py_call(bi.isinstance, weights, bi.dict)) or Bool(py=py_call(bi.set, weights) != py_call(bi.set, order)):
         raise Error("SmallMLPTrainer checkpoint parameter registry mismatch")
     var decoded = bi.dict()
     for i in range(4):  # driver-loop: over the fixed MLP parameter registry
-        decoded[names[i]] = _decode_array(weights[names[i]], _dims(i), False)
-    var result = bi.dict(payload)
-    result["weights"] = decoded
-    var optimizer = bi.dict(opt)
-    optimizer["m"] = _decode_array(opt["m"], [MLP_TOTAL], False)
-    optimizer["v"] = _decode_array(opt["v"], [MLP_TOTAL], False)
-    optimizer["flags"] = _decode_array(opt["flags"], [4], True)
-    result["optimizer"] = optimizer
+        py_setitem(decoded, names[i], _decode_array(weights[names[i]], _dims(i), False))
+    var result = py_call(bi.dict, payload)
+    py_setitem(result, "weights", decoded)
+    var optimizer = py_call(bi.dict, opt)
+    py_setitem(optimizer, "m", _decode_array(opt["m"], [MLP_TOTAL], False))
+    py_setitem(optimizer, "v", _decode_array(opt["v"], [MLP_TOTAL], False))
+    py_setitem(optimizer, "flags", _decode_array(opt["flags"], [4], True))
+    py_setitem(result, "optimizer", optimizer)
     return result
 
 
 def _canonical_bytes(value: PythonObject) raises -> PythonObject:
-    return PythonObject(_transport_json(value)).encode("ascii")
+    return py_call(PythonObject(_transport_json(value)).encode, "ascii")
 
 
 def _save_checkpoint(handle: Int, path: PythonObject) raises:
@@ -1244,53 +1246,53 @@ def _save_checkpoint(handle: Int, path: PythonObject) raises:
     var weights = state["weights"]
     var encoded_weights = bi.dict()
     for i in range(4):  # driver-loop: over the fixed MLP parameter registry
-        encoded_weights[names[i]] = _encode_array(weights[names[i]], False)
-    state["weights"] = encoded_weights
+        py_setitem(encoded_weights, names[i], _encode_array(weights[names[i]], False))
+    py_setitem(state, "weights", encoded_weights)
     var opt = state["optimizer"]
-    opt["m"] = _encode_array(opt["m"], False)
-    opt["v"] = _encode_array(opt["v"], False)
-    opt["flags"] = _encode_array(opt["flags"], True)
+    py_setitem(opt, "m", _encode_array(opt["m"], False))
+    py_setitem(opt, "v", _encode_array(opt["v"], False))
+    py_setitem(opt, "flags", _encode_array(opt["flags"], True))
     var envelope = bi.dict()
-    envelope["schema"] = PythonObject(_FILE_SCHEMA)
-    envelope["payload"] = state
+    py_setitem(envelope, "schema", PythonObject(_FILE_SCHEMA))
+    py_setitem(envelope, "payload", state)
     # The digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's.
-    envelope["payload_sha256"] = bi.str(entries["sha256_hex"](_canonical_bytes(state)))
-    var profile = bi.str(entries["neural_arithmetic_profile"]())
+    py_setitem(envelope, "payload_sha256", py_call(bi.str, py_call(entries["sha256_hex"], _canonical_bytes(state))))
+    var profile = py_call(bi.str, entries["neural_arithmetic_profile"]())
     if String(py=profile) != _BASE_PROFILE:
-        envelope["arithmetic_profile"] = profile
-    var data = PythonObject(_transport_json(envelope) + "\n").encode("ascii")
+        py_setitem(envelope, "arithmetic_profile", profile)
+    var data = py_call(PythonObject(_transport_json(envelope) + "\n").encode, "ascii")
     if len(data) > _FILE_LIMIT:
         raise Error("SmallMLPTrainer checkpoint exceeds its size bound")
     var target = native_path(path)
-    var parts = target.rpartition("/")
+    var parts = py_call(target.rpartition, "/")
     var directory = parts[0] if len(parts[1]) > 0 else PythonObject(".")
     if len(parts[1]) > 0 and len(parts[0]) == 0:
         directory = PythonObject("/")
-    var temporary = directory + PythonObject("/.") + parts[2] + PythonObject(".") + posix.urandom(8).hex()
+    var temporary = directory + PythonObject("/.") + parts[2] + PythonObject(".") + py_call(posix.urandom, 8).hex()
     var fd = -1
     try:
-        fd = Int(py=posix.open(temporary, posix.O_WRONLY | posix.O_CREAT | posix.O_EXCL | posix.O_CLOEXEC, 384))
+        fd = Int(py=py_call(posix.open, temporary, posix.O_WRONLY | posix.O_CREAT | posix.O_EXCL | posix.O_CLOEXEC, 384))
     except error:
         raise Error(_os_error(String(error)))
     var done = False
     try:
         var offset = 0
-        var view = bi.memoryview(data)
+        var view = py_call(bi.memoryview, data)
         while offset < len(data):  # driver-loop: over partial OS writes of the checkpoint bytes
-            offset += Int(py=posix.write(fd, view.__getitem__(bi.slice(offset, PythonObject(None)))))
-        _ = posix.fsync(fd)
-        _ = posix.close(fd)
+            offset += Int(py=py_call(posix.write, fd, view[py_call(bi.slice, offset, PythonObject(None))]))
+        _ = py_call(posix.fsync, fd)
+        _ = py_call(posix.close, fd)
         fd = -1
-        _ = posix.replace(temporary, target)
+        _ = py_call(posix.replace, temporary, target)
         done = True
     except error:
         if fd >= 0:
             try:
-                _ = posix.close(fd)
+                _ = py_call(posix.close, fd)
             except:
                 pass
         try:
-            _ = posix.unlink(temporary)
+            _ = py_call(posix.unlink, temporary)
         except:
             pass
         raise Error(_os_error(String(error)))
@@ -1312,41 +1314,41 @@ def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObje
     var source = native_path(path)
     var fd: Int
     try:
-        fd = Int(py=posix.open(source, posix.O_RDONLY | posix.O_CLOEXEC))
+        fd = Int(py=py_call(posix.open, source, posix.O_RDONLY | posix.O_CLOEXEC))
     except error:
         raise Error(_os_error(String(error)))
     var chunks = bi.bytearray()
     try:
         while len(chunks) <= _FILE_LIMIT:  # driver-loop: over partial OS reads, at most the size bound plus one byte
-            var chunk = posix.read(fd, _FILE_LIMIT + 1 - len(chunks))
+            var chunk = py_call(posix.read, fd, _FILE_LIMIT + 1 - len(chunks))
             if len(chunk) == 0:
                 break
-            _ = chunks.extend(chunk)
+            _ = py_call(chunks.extend, chunk)
     finally:
-        _ = posix.close(fd)
+        _ = py_call(posix.close, fd)
     if len(chunks) > _FILE_LIMIT:
         raise Error("SmallMLPTrainer checkpoint exceeds its size bound")
     var envelope: PythonObject
     try:
-        envelope = native_json_parse_unique(bi.bytes(chunks))
+        envelope = native_json_parse_unique(py_call(bi.bytes, chunks))
     except:
         raise Error("SmallMLPTrainer checkpoint is not valid bounded JSON")
-    var three = bi.set(PythonObject("schema|payload|payload_sha256").split("|"))
-    var four = bi.set(PythonObject("schema|payload|payload_sha256|arithmetic_profile").split("|"))
-    if not Bool(py=bi.isinstance(envelope, bi.dict)) or (Bool(py=bi.set(envelope) != three) and Bool(py=bi.set(envelope) != four)):
+    var three = py_call(bi.set, py_call(PythonObject("schema|payload|payload_sha256").split, "|"))
+    var four = py_call(bi.set, py_call(PythonObject("schema|payload|payload_sha256|arithmetic_profile").split, "|"))
+    if not Bool(py=py_call(bi.isinstance, envelope, bi.dict)) or (Bool(py=py_call(bi.set, envelope) != three) and Bool(py=py_call(bi.set, envelope) != four)):
         raise Error("SmallMLPTrainer checkpoint envelope mismatch")
     if Bool(py=envelope["schema"] != PythonObject(_FILE_SCHEMA)):
         raise Error("SmallMLPTrainer checkpoint schema mismatch")
     var entries = _mode_entries()
     var digest: PythonObject
     try:
-        digest = bi.str(entries["sha256_hex"](_canonical_bytes(envelope["payload"])))
+        digest = py_call(bi.str, py_call(entries["sha256_hex"], _canonical_bytes(envelope["payload"])))
     except:
         raise Error("SmallMLPTrainer checkpoint integrity mismatch")
     if Bool(py=digest != envelope["payload_sha256"]):
         raise Error("SmallMLPTrainer checkpoint integrity mismatch")
-    var expected = bi.str(entries["neural_arithmetic_profile"]())
-    if Bool(py=envelope.get("arithmetic_profile", PythonObject(_BASE_PROFILE)) != expected):
+    var expected = py_call(bi.str, entries["neural_arithmetic_profile"]())
+    if Bool(py=py_get(envelope, "arithmetic_profile", PythonObject(_BASE_PROFILE)) != expected):
         raise Error("SmallMLPTrainer checkpoint arithmetic profile mismatch")
     var state = _decode_state(envelope["payload"])
     return small_mlp_from_state(cls, state, _mode_name(entries))
