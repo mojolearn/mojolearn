@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native regression aggregation of existing neighbor ids; does not exercise end-to-end search plus regression.
+# Native search plus regression. The fold oracle reuses native search ids.
 from neighbors.checks.knn_regress_check import check_knn_regress_matches_host_transcription
 
 
