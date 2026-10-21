@@ -69,17 +69,14 @@ def connect_host(host_ridge_class, host_linear_class):
     # The TSQR and x_linear helpers are the CPU binaries too: the device
     # ones report the device vendor, which the native fit refuses beside
     # the CPU estimator entries (and would not give the CPU column's bits).
-    from . import _backend
+    from ._classical_host import _host_fit_helpers
+    decomp, linear = _host_fit_helpers()
     try:
-        decomp = _decomp_cells(_backend.load_host_module("_mojolearn_x_decomp_host"))
+        cpu["decomp"] = _decomp_cells(decomp)
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-        decomp = type(error).__name__ + ": " + str(error)
-    cpu["decomp"] = decomp
-    try:
-        linear_fit = _backend.load_host_module("_mojolearn_x_linear_host").x_linear_fit
-    except (ImportError, AttributeError):
-        linear_fit = None  # only a weighted or one-column HostRidge fit needs it
-    if linear_fit is not None:
+        cpu["decomp"] = type(error).__name__ + ": " + str(error)
+    linear_fit = getattr(linear, "x_linear_fit", None)
+    if linear_fit is not None:  # only a weighted or one-column HostRidge fit needs it
         if not isinstance(linear_fit, BuiltinFunctionType):
             raise TypeError("explicit host model requires compiled x_linear_fit")
         cpu["x_linear_fit"] = linear_fit

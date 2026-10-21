@@ -613,6 +613,19 @@ def _merge_expansion_doors():
 _merge_expansion_doors()
 CLASSICAL_FORMATS = tuple(_FORMATS)
 
+def _host_fit_helpers():
+    """The CPU decomposition and x_linear binaries the explicit host
+    LinearRegression and Ridge fit with (TSQR, weighted ridge); an
+    unbuilt one is passed as its ImportError, refused when a fit needs it."""
+    loaded = []
+    for basename in ("_mojolearn_x_decomp_host", "_mojolearn_x_linear_host"):  # glue: the two helper binaries
+        try:
+            loaded.append(_backend.load_host_module(basename))
+        except ImportError as error:
+            loaded.append(error)
+    return tuple(loaded)
+
+
 # The explicit host classes run through the same compiled owner as
 # LinearRegression and Ridge, with their CPU identical binding.
 _native_classical_bridge.connect_host_public(HostRidge, HostLinearRegression, _CLASSICAL)
