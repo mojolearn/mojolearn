@@ -16,9 +16,6 @@ DeviceContext runs its work in order, so a buffer reused by a later launch
 is written only after every earlier launch that read it. Free capacity past
 POOL_KEEP_BYTES is released after a sync."""
 from std.ffi import _Global
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.resident_pyapi import _id, _n
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from std.sys.compile import is_defined
@@ -182,7 +179,7 @@ def _ptr(id: Int, n: Int) raises -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
 
 
-# ---- Typed entries of the Python doors (x_decomp/resident_pyapi.mojo; GPU binding only)
+# ---- Typed entries behind the GPU binding's doors (the shell is x_decomp/resident_py*.mojo)
 def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     """Host floats into the device matrix; waits (the host store may change
     after this returns)."""
@@ -841,62 +838,40 @@ comptime GRP_FAST_SRP_STRAT = GRP_FAST_FUSED and not is_defined["MOJOLEARN_XD_FA
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
-def grp_cls2_py() raises -> PythonObject:
-    """The random projections' FAST Apple fit switches compiled in: bit 1
-    NOSCAN, bit 2 DEVSCAN, bit 4 LAZY, bit 8 FUSED, bit 16 SRP_STRAT (0 on
-    every other build)."""
-    var f = 0
-    comptime if GRP_CLS2_NOSCAN:
-        f |= 1
-    comptime if GRP_CLS2_DEVSCAN:
-        f |= 2
-    comptime if GRP_CLS2_LAZY:
-        f |= 4
-    comptime if GRP_FAST_FUSED:
-        f |= 8
-    comptime if GRP_FAST_SRP_STRAT:
-        f |= 16
-    return PythonObject(f)
+# grp_cls2_py (the compiled-in switch bits) lives in the shell next to this file.
 
 
-def dev_first_nonfinite_py(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+def dev_first_nonfinite_run(src: F32Ptr, cnt: Int) raises -> Int:
     """The first flat index of a NaN or infinity among the n floats at
     `addr`, or -1: one upload from the caller's buffer into a pooled device
     buffer (no fresh allocation per fit) and one device scan. Registered
     only under GRP_CLS2_DEVSCAN."""
-    var cnt = Int(py=n)
     if cnt <= 0:
-        return PythonObject(-1)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
+        return -1
     var r = -1
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        var buf = pool_take["MojoXDecompCls2Scan"](ctx, cnt)
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
-        r = device_first_nonfinite(ctx, buf, cnt)
-        pool_give["MojoXDecompCls2Scan"](buf^)
-    return PythonObject(r)
+    var ctx = xd_ctx()
+    var buf = pool_take["MojoXDecompCls2Scan"](ctx, cnt)
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
+    r = device_first_nonfinite(ctx, buf, cnt)
+    pool_give["MojoXDecompCls2Scan"](buf^)
+    return r
 
 
-def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_move_run(
+    src: Int, idx: Int, dst: Int, op: Int, count: Int, a1: Int, a2: Int, a3: Int, ist: Int, ioff: Int,
+    nsrc: Int, ndst: Int, nidx: Int,
+) raises -> Int:
     """`x_decomp_move` on device ids, enqueued (no sync); p = [op, count, a1,
     a2, a3, ist, ioff, nsrc, ndst, nidx] (lane apple-fast-py2mojo-decomp)."""
-    var op = Int(py=p[0])
-    var count = _n(p, 1)
-    var a1 = _n(p, 2)
-    var a2 = _n(p, 3)
-    var a3 = _n(p, 4)
-    var ist = _n(p, 5)
-    var ioff = _n(p, 6)
     if op < MOVE_TAKE_ROWS or op > MOVE_LAST:
         raise Error("x_decomp: unknown move op")
     if op != MOVE_FILL0 and a1 <= 0 and count > 0:
         raise Error("x_decomp: move needs a positive width")
-    var ps = _ptr(_id(src), max(_n(p, 7), 1))
-    var pi = _ptr(_id(idx), max(_n(p, 9), 1))
-    var pd = _ptr(_id(dst), max(_n(p, 8), 1))
+    var ps = _ptr(src, max(nsrc, 1))
+    var pi = _ptr(idx, max(nidx, 1))
+    var pd = _ptr(dst, max(ndst, 1))
     launch_move(xd_ctx(), op, ps, pi, pd, count, a1, a2, a3, ist, ioff)
-    return PythonObject(count)
+    return count
 
 
 # ---- GRP_FAST_FUSED (lane apple-fast-gap-kapprox2)
@@ -961,76 +936,68 @@ struct _GrpStage(Defaultable, Movable):
 comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedStage", init_fn=_GrpStage.__init__]
 
 
-def grp_fit_fused_py(
-    xaddr: PythonObject, n: PythonObject, dst: PythonObject, hout: PythonObject, p: PythonObject, s: PythonObject
-) raises -> PythonObject:
+def grp_fit_fused_run(
+    src: F32Ptr, cnt: Int, dst: Int, host_out: F32Ptr, count: Int, seed_in: Int, mode: Int, sd: Int, sgrid: Int,
+    sc_in: Float64, thr_in: Float64,
+) raises -> Int:
     """p = [count, seed, mode], s = [scale, threshold]: the first flat
     index of a NaN or infinity among the n floats at xaddr (or -1), the
     count-entry matrix (`grp_rand_scale_kernel` mode) into the device
     matrix dst, and its words copied
     to the host floats at out; one synchronize. Registered only under
-    GRP_FAST_FUSED."""
-    var cnt = Int(py=n)
-    var count = _n(p, 0)
-    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
-    var mode = Int(py=p[2])
-    var sd = 1
-    var sgrid = 0
+    GRP_FAST_FUSED. sd and sgrid are p[3] and p[4] in the stratified sparse
+    mode (mode 3 under GRP_FAST_SRP_STRAT), else 1 and 0."""
+    var seed = UInt32(seed_in & 0xFFFFFFFF)
     comptime if GRP_FAST_SRP_STRAT:
         if mode == 3:
-            sd = _n(p, 3)
-            sgrid = _n(p, 4)
             if sd <= 0 or count % sd != 0 or sgrid <= 0 or sgrid > 16777216:
                 raise Error("x_decomp_grp_fit_fused: stratified sparse mode needs n_features > 0 dividing count and 0 < D <= 2^24")
-    var sc = Float32(Float64(py=s[0]))
-    var thr = Float32(Float64(py=s[1]))
-    var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
-    var host_out = F32Ptr(unsafe_from_address=Int(py=hout))
-    var pd = _ptr(_id(dst), max(count, 1))
+    var sc = Float32(sc_in)
+    var thr = Float32(thr_in)
+    var pd = _ptr(dst, max(count, 1))
     var best = NONFINITE_NONE
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        var st = GRP_STAGE.get_or_create_ptr()
-        if not st[].part:
-            # 512 partials plus the slot their device-folded minimum lands in
-            st[].part = ctx.enqueue_create_buffer[DType.int32](513)
-            st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
-        var blocks = _scan_blocks(cnt) if cnt > 0 else 0
-        var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
-        if cnt > 0:
-            ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
-            ctx.enqueue_function[nonfinite_partial_kernel](
-                st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
-                grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-            )
-            # the partials fold on the device; one word home (lane cpu3-core)
-            ctx.enqueue_function[min_partials_kernel](
-                st[].part.value().unsafe_ptr() + 512, st[].part.value().unsafe_ptr(),
-                Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
-                             src_buf=st[].part.value().create_sub_buffer[DType.int32](512, 1))
-        if count > 0:
-            var strat = False
-            comptime if GRP_FAST_SRP_STRAT:
-                # p = [count, seed, 3, n_features, D]: the stratified sparse
-                # pattern (srp_strat_kernel); modes 0-2 are main's kernel
-                strat = mode == 3
-                if strat:
-                    ctx.enqueue_function[srp_strat_kernel](
-                        pd, Int32(count), Int32(sd), seed, UInt32(sgrid), sc,
-                        grid_dim=_blocks(count), block_dim=TPB,
-                    )
-            if not strat:
-                ctx.enqueue_function[grp_rand_scale_kernel](
-                    pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
+    var ctx = xd_ctx()
+    var st = GRP_STAGE.get_or_create_ptr()
+    if not st[].part:
+        # 512 partials plus the slot their device-folded minimum lands in
+        st[].part = ctx.enqueue_create_buffer[DType.int32](513)
+        st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var blocks = _scan_blocks(cnt) if cnt > 0 else 0
+    var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
+    if cnt > 0:
+        ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
+        ctx.enqueue_function[nonfinite_partial_kernel](
+            st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
+            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+        # the partials fold on the device; one word home (lane cpu3-core)
+        ctx.enqueue_function[min_partials_kernel](
+            st[].part.value().unsafe_ptr() + 512, st[].part.value().unsafe_ptr(),
+            Int32(blocks), grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
+                         src_buf=st[].part.value().create_sub_buffer[DType.int32](512, 1))
+    if count > 0:
+        var strat = False
+        comptime if GRP_FAST_SRP_STRAT:
+            # p = [count, seed, 3, n_features, D]: the stratified sparse
+            # pattern (srp_strat_kernel); modes 0-2 are main's kernel
+            strat = mode == 3
+            if strat:
+                ctx.enqueue_function[srp_strat_kernel](
+                    pd, Int32(count), Int32(sd), seed, UInt32(sgrid), sc,
+                    grid_dim=_blocks(count), block_dim=TPB,
                 )
-            ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(_id(dst), count))
-        ctx.synchronize()
-        if cnt > 0:
-            best = st[].host.value().unsafe_ptr()[0]
-        pool_give["MojoXDecompCls2Scan"](buf^)
-    return PythonObject(-1 if best == NONFINITE_NONE else Int(best))
+        if not strat:
+            ctx.enqueue_function[grp_rand_scale_kernel](
+                pd, Int32(count), seed, Int32(mode), sc, thr, grid_dim=_blocks(count), block_dim=TPB
+            )
+        ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(dst, count))
+    ctx.synchronize()
+    if cnt > 0:
+        best = st[].host.value().unsafe_ptr()[0]
+    pool_give["MojoXDecompCls2Scan"](buf^)
+    return -1 if best == NONFINITE_NONE else Int(best)
 
 
 def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
@@ -1070,16 +1037,15 @@ def maxabs_slice_kernel(src: F32Ptr, dst: F32Ptr, count: Int32):
         dst.unsafe_store(t, nanv if seen_nan else best)
 
 
-def dev_maxabs_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_maxabs_run(a: Int, dst: Int, count: Int) raises -> Int:
     """dst (a device matrix of >= 1 value) = max |a| over the first p[0]
     values of the device matrix a (NaN if any is NaN). Slices of
     MAXABS_SLICE values per thread, then the slice maxima the same way
     until one value is left: ceil(log_256(count)) launches, no wait."""
-    var count = _n(p, 0)
     if count < 1:
         raise Error("x_decomp: maxabs needs at least one value")
-    var src = _ptr(_id(a), count)
-    var pd = _ptr(_id(dst), 1)
+    var src = _ptr(a, count)
+    var pd = _ptr(dst, 1)
     var ctx = xd_ctx()
     var cur_id = -1
     var cur = src
@@ -1097,18 +1063,14 @@ def dev_maxabs_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises ->
     ctx.enqueue_function[maxabs_slice_kernel](cur, pd, Int32(cnt), grid_dim=1, block_dim=TPB)
     if cur_id >= 0:
         pool_free(cur_id)
-    return PythonObject(1)
+    return 1
 
 
 # Test-only direct batched covariance seam, identical API on both arms.
 # Inactive outputs retain sentinel, partial storage is poisoned before B.
-def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
-                     p: PythonObject) raises -> PythonObject:
+def mcd_cov_probe_run(px: F32Ptr, pg: I32Ptr, pout: F32Ptr, nc: Int, rows: Int, d: Int) raises -> Int:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_FAST or not has_apple_gpu_accelerator():
         raise Error("covariance probe requires FAST Apple")
-    var nc = _n(p, 0)
-    var rows = _n(p, 1)
-    var d = _n(p, 2)
     if nc <= 0 or rows <= 0 or d <= 0 or nc*rows*d > 2147483647 or nc*d*d > 2147483647:
         raise Error("invalid ordered covariance probe shape")
     var ctx = xd_ctx()
@@ -1116,8 +1078,8 @@ def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonOb
     var dg = ctx.enqueue_create_buffer[DType.int32](nc)
     var dc = ctx.enqueue_create_buffer[DType.float32](nc*d*d)
     var scratch = ctx.enqueue_create_buffer[DType.float32](ordered_cov_scratch(nc, rows, d))
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=F32Ptr(unsafe_from_address=Int(py=xaddr)))
-    ctx.enqueue_copy(dst_buf=dg, src_ptr=I32Ptr(unsafe_from_address=Int(py=gaddr)))
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=px)
+    ctx.enqueue_copy(dst_buf=dg, src_ptr=pg)
     ctx.enqueue_memset(dc, Float32(-123.5))
     ctx.enqueue_memset(scratch, Float32(7654321))
     # Explicit mutable borrows of owned buffers for the legacy launcher API.
@@ -1134,10 +1096,10 @@ def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonOb
     else:
         launch_gemm_mma_batched(ctx, xp, xp, cp,
             d, rows, d, True, False, nc, rows*d, rows*d, d*d, gp, False)
-    ctx.enqueue_copy(dst_ptr=F32Ptr(unsafe_from_address=Int(py=outaddr)), src_buf=dc)
+    ctx.enqueue_copy(dst_ptr=pout, src_buf=dc)
     ctx.synchronize()
     _ = dx^
     _ = dg^
     _ = dc^
     _ = scratch^
-    return PythonObject(1 if MCD_ORDERED_COV else 0)
+    return 1 if MCD_ORDERED_COV else 0

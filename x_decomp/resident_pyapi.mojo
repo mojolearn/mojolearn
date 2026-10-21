@@ -34,6 +34,16 @@ from x_decomp.resident import (
     dev_qr_r_run,
     dev_code_rows_run,
     dev_eigh_run,
+    GRP_CLS2_NOSCAN,
+    GRP_CLS2_DEVSCAN,
+    GRP_CLS2_LAZY,
+    GRP_FAST_FUSED,
+    GRP_FAST_SRP_STRAT,
+    dev_first_nonfinite_run,
+    dev_move_run,
+    grp_fit_fused_run,
+    dev_maxabs_run,
+    mcd_cov_probe_run,
 )
 
 
@@ -349,3 +359,97 @@ def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObje
     with GILReleased(Python()):
         r = dev_eigh_run(ia, pw, pv, n, uplo)
     return PythonObject(r)
+
+
+def grp_cls2_py() raises -> PythonObject:
+    """The random projections' FAST Apple fit switches compiled in: bit 1
+    NOSCAN, bit 2 DEVSCAN, bit 4 LAZY, bit 8 FUSED, bit 16 SRP_STRAT (0 on
+    every other build)."""
+    var f = 0
+    comptime if GRP_CLS2_NOSCAN:
+        f |= 1
+    comptime if GRP_CLS2_DEVSCAN:
+        f |= 2
+    comptime if GRP_CLS2_LAZY:
+        f |= 4
+    comptime if GRP_FAST_FUSED:
+        f |= 8
+    comptime if GRP_FAST_SRP_STRAT:
+        f |= 16
+    return PythonObject(f)
+
+
+def dev_first_nonfinite_py(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """The first flat index of a NaN or infinity among the n floats at
+    `addr`, or -1. Registered only under GRP_CLS2_DEVSCAN."""
+    var cnt = Int(py=n)
+    var src = F32Ptr(unsafe_from_address=Int(py=addr))
+    var r = -1
+    with GILReleased(Python()):
+        r = dev_first_nonfinite_run(src, cnt)
+    return PythonObject(r)
+
+
+def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_move` on device ids, enqueued (no sync); p = [op, count, a1,
+    a2, a3, ist, ioff, nsrc, ndst, nidx]."""
+    var op = Int(py=p[0])
+    var count = _n(p, 1)
+    var a1 = _n(p, 2)
+    var a2 = _n(p, 3)
+    var a3 = _n(p, 4)
+    var ist = _n(p, 5)
+    var ioff = _n(p, 6)
+    var nsrc = _n(p, 7)
+    var ndst = _n(p, 8)
+    var nidx = _n(p, 9)
+    return PythonObject(
+        dev_move_run(_id(src), _id(idx), _id(dst), op, count, a1, a2, a3, ist, ioff, nsrc, ndst, nidx)
+    )
+
+
+def grp_fit_fused_py(
+    xaddr: PythonObject, n: PythonObject, dst: PythonObject, hout: PythonObject, p: PythonObject, s: PythonObject
+) raises -> PythonObject:
+    """p = [count, seed, mode] (or [count, seed, 3, n_features, D]), s =
+    [scale, threshold]: the first flat index of a NaN or infinity among the
+    n floats at xaddr (or -1), the projection matrix into the device matrix
+    dst, and its words copied to the host floats at hout. Registered only
+    under GRP_FAST_FUSED."""
+    var cnt = Int(py=n)
+    var count = _n(p, 0)
+    var seed = Int(py=p[1])
+    var mode = Int(py=p[2])
+    var sd = 1
+    var sgrid = 0
+    comptime if GRP_FAST_SRP_STRAT:
+        if mode == 3:
+            sd = _n(p, 3)
+            sgrid = _n(p, 4)
+    var sc = Float64(py=s[0])
+    var thr = Float64(py=s[1])
+    var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
+    var host_out = F32Ptr(unsafe_from_address=Int(py=hout))
+    var idst = _id(dst)
+    var r = -1
+    with GILReleased(Python()):
+        r = grp_fit_fused_run(src, cnt, idst, host_out, count, seed, mode, sd, sgrid, sc, thr)
+    return PythonObject(r)
+
+
+def dev_maxabs_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """dst (a device matrix of >= 1 value) = max |a| over the first p[0]
+    values of the device matrix a (NaN if any is NaN); no wait."""
+    return PythonObject(dev_maxabs_run(_id(a), _id(dst), _n(p, 0)))
+
+
+# Test-only direct batched covariance seam, identical API on both arms.
+def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
+                     p: PythonObject) raises -> PythonObject:
+    var nc = _n(p, 0)
+    var rows = _n(p, 1)
+    var d = _n(p, 2)
+    var px = F32Ptr(unsafe_from_address=Int(py=xaddr))
+    var pg = I32Ptr(unsafe_from_address=Int(py=gaddr))
+    var pout = F32Ptr(unsafe_from_address=Int(py=outaddr))
+    return PythonObject(mcd_cov_probe_run(px, pg, pout, nc, rows, d))
