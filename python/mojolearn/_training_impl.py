@@ -2291,8 +2291,8 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     """Run several independent batches of rows through one Linear-ReLU-Linear model.
 
     Computes ``relu(x @ weight1.T + bias1) @ weight2.T + bias2`` for every session and
-    returns the logits of all sessions concatenated in the order given. Empty sessions
-    are allowed. The model is stateless (no caches, no dropout).
+    returns the logits of all sessions concatenated in the order given. Every session
+    has at least one row. The model is stateless (no caches, no dropout).
 
     Parameters
     ----------
