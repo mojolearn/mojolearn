@@ -6,7 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_description import sequential_fields
-from bindings.classical_ridge import classical_ridge_fit, classical_linear_predict
+from bindings.classical_ridge import classical_ridge_fit, classical_linear_predict, classical_linear_predict_public
 from bindings.classical_ols import classical_ols_fit
 from bindings.classical_score import classical_linear_score
 from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted
@@ -84,6 +84,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_ols_fit(model, args, entries, context)
         elif operation == "predict":
             result = classical_linear_predict(model, args[0], entries, context)
+        elif operation == "predict_public":
+            result = classical_linear_predict_public(model, args[0], entries, context)
         elif operation == "score":
             result = classical_linear_score(model, args, entries, context)
         elif operation == "numeric_mode_used":
