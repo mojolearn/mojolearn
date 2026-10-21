@@ -1,0 +1,1115 @@
+{
+ "schema": "mojolearn.lowbit_quality.inference.v2",
+ "commit": "35aba5c06962049d3cd9fdf4abbfe523ebac1c8a",
+ "stamp_utc": "2026-09-29T03:13:58Z",
+ "model": {
+  "key": "models/SmolLM2-360M",
+  "path": "/root/models/SmolLM2-360M",
+  "weights_sha256": "7aaff6661428bed033abba9522bec81938678642cca3181fe752b6ca9e1e540f",
+  "stored_dtypes": [
+   "torch.bfloat16"
+  ],
+  "config": {
+   "architectures": [
+    "LlamaForCausalLM"
+   ],
+   "attention_bias": false,
+   "attention_dropout": 0.0,
+   "bos_token_id": 0,
+   "eos_token_id": 0,
+   "hidden_act": "silu",
+   "hidden_size": 960,
+   "initializer_range": 0.02,
+   "intermediate_size": 2560,
+   "is_llama_config": true,
+   "max_position_embeddings": 8192,
+   "model_type": "llama",
+   "num_attention_heads": 15,
+   "num_hidden_layers": 32,
+   "num_key_value_heads": 5,
+   "pretraining_tp": 1,
+   "rms_norm_eps": 1e-05,
+   "rope_interleaved": false,
+   "rope_scaling": null,
+   "rope_theta": 100000,
+   "tie_word_embeddings": true,
+   "torch_dtype": "bfloat16",
+   "transformers_version": "4.40.1",
+   "use_cache": true,
+   "vocab_size": 49152
+  }
+ },
+ "evaluation_set": {
+  "corpus_key": "corpus/pile_github/input.txt",
+  "corpus_bytes": 97124565,
+  "corpus_sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+  "decoding": "UTF-8; an invalid byte is one U+FFFD to the tokenizer",
+  "invalid_bytes_in_tail": 0,
+  "invalid_bytes_in_used": 0,
+  "tail_from": 96000000,
+  "byte_start": 96000030,
+  "byte_end": 97124565,
+  "tail_bytes": 1124535,
+  "tail_sha256": "caeb445cb22ab55f6c345c465cb47994feb9249eba2115c9962b88fccd5865d4",
+  "tail_ids": 405408,
+  "used_byte_start": 96000030,
+  "used_byte_end": 96240053,
+  "used_bytes_sha256": "91cc52d4b375dd0b7a8b0a256f1b5b5261967eba025a44ce3b6072633e3919ef",
+  "windows": 200,
+  "length": 512,
+  "ids_used": 102400,
+  "ids_sha256": "2d337ff1deeb3846125e558b8521f9f47f92e51abf03396d083255a9827a2f86",
+  "scored_positions": 102200,
+  "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+  "rule": "non-overlapping windows; every position but the first of a window is scored from the ids before it in the same window; no special token added"
+ },
+ "limit_windows": null,
+ "batch": 8,
+ "library": {
+  "torch": "2.4.1+cu124",
+  "cuda": "12.4",
+  "device_name": "NVIDIA GeForce RTX 4090",
+  "matmul_allow_tf32": false,
+  "float32_matmul_precision": "highest"
+ },
+ "threshold": {
+  "rel_ppl_change_max": 0.01,
+  "rel_ppl_change_hi_max": 0.01,
+  "rule": "the change and the upper end of its interval both under 1 percent, on two texts"
+ },
+ "arms": {
+  "a": {
+   "mean_nll": 1.2125332145410692,
+   "perplexity": 3.36199051767609,
+   "delta_nll": 0.0,
+   "delta_nll_se": 0.0,
+   "rel_ppl_change": 0.0,
+   "rel_ppl_change_lo": 0.0,
+   "rel_ppl_change_hi": 0.0,
+   "top1_agreement": 1.0,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "fp32.v1",
+    "weight_kind": "fp32",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "baseline: float32 operands, torch float32 accumulation"
+   },
+   "letter": "a",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7047071396822339e-07,
+     "max": 2.3468324921949868e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2045808388693348e-07,
+     "max": 1.6581599287541967e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 4.932356587233933e-07,
+     "max": 7.256111513708853e-07,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 2.7301779811431096e-07,
+     "max": 3.1211860423846226e-07,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 2.4811275176443145e-07,
+     "max": 3.141868333710657e-07,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 7.690791595671314e-07,
+     "max": 7.690791595671314e-07,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 3.1067402801794933e-07,
+     "max": 4.2803190945816567e-07,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 2.45638079758538e-07,
+     "max": 2.889378843485701e-07,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 3.1548573630341013e-07,
+     "max": 3.375374552997908e-07,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 3.249301359515872e-07,
+     "max": 3.773504421186083e-07,
+     "n": 32
+    }
+   },
+   "seconds": 7.250176906585693,
+   "scored_positions": 102200
+  },
+  "floor": {
+   "mean_nll": 1.2125332357176595,
+   "perplexity": 3.361990588871586,
+   "delta_nll": 2.1176590218435034e-08,
+   "delta_nll_se": 1.7363817227234423e-08,
+   "rel_ppl_change": 2.117659044265902e-08,
+   "rel_ppl_change_lo": -1.2856491464299747e-08,
+   "rel_ppl_change_hi": 5.520967350786847e-08,
+   "top1_agreement": 1.0,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "fp32-acc64",
+    "weight_kind": "fp32",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": true,
+    "overrides": {},
+    "note": "float32 operands, every product accumulated in float64 and rounded once: how far the ORDER of a float32 accumulation can move the metric"
+   },
+   "letter": "floor",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 2.530435681698342e-08,
+     "max": 2.60483885524017e-08,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 2.533682499629335e-08,
+     "max": 2.582383710116858e-08,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 2.52888989881323e-08,
+     "max": 2.5936111464499717e-08,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 2.5230713960395864e-08,
+     "max": 2.558266333441553e-08,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 2.5097816709726466e-08,
+     "max": 2.6506797608817817e-08,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 2.5357109020211958e-08,
+     "max": 2.5357109020211958e-08,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 2.534351231814012e-08,
+     "max": 2.753120139443412e-08,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 2.5477666467444913e-08,
+     "max": 2.6803172918304212e-08,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 2.5286110060446416e-08,
+     "max": 2.535609677959226e-08,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 2.5268533480713696e-08,
+     "max": 2.5519970177621092e-08,
+     "n": 32
+    }
+   },
+   "seconds": 71.65926146507263,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false
+  },
+  "b": {
+   "mean_nll": 1.2125332145410692,
+   "perplexity": 3.36199051767609,
+   "delta_nll": 0.0,
+   "delta_nll_se": 0.0,
+   "rel_ppl_change": 0.0,
+   "rel_ppl_change_lo": 0.0,
+   "rel_ppl_change_hi": 0.0,
+   "top1_agreement": 1.0,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "bf16f32.v1",
+    "weight_kind": "bf16",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "bf16 weights, fp32 activations, fp32 accumulation"
+   },
+   "letter": "b",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7047071396822339e-07,
+     "max": 2.3468324921949868e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2045808388693348e-07,
+     "max": 1.6581599287541967e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 4.932356587233933e-07,
+     "max": 7.256111513708853e-07,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 2.7301779811431096e-07,
+     "max": 3.1211860423846226e-07,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 2.4811275176443145e-07,
+     "max": 3.141868333710657e-07,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 7.690791595671314e-07,
+     "max": 7.690791595671314e-07,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 3.1067402801794933e-07,
+     "max": 4.2803190945816567e-07,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 2.45638079758538e-07,
+     "max": 2.889378843485701e-07,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 3.1548573630341013e-07,
+     "max": 3.375374552997908e-07,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 3.249301359515872e-07,
+     "max": 3.773504421186083e-07,
+     "n": 32
+    }
+   },
+   "seconds": 7.2142333984375,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": true,
+   "verdict": "PASS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": true
+  },
+  "c": {
+   "mean_nll": 1.2125335144097038,
+   "perplexity": 3.361991525831747,
+   "delta_nll": 2.998686346810525e-07,
+   "delta_nll_se": 3.093388535051182e-05,
+   "rel_ppl_change": 2.9986867964165607e-07,
+   "rel_ppl_change_lo": -6.032872680149014e-05,
+   "rel_ppl_change_hi": 6.093214020913479e-05,
+   "top1_agreement": 0.9976320939334637,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "bf16-both",
+    "weight_kind": "bf16",
+    "activation_kind": "bf16",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "bf16 both operands, fp32 accumulation"
+   },
+   "letter": "c",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7045961811927372e-07,
+     "max": 2.3522040299748825e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2045799971241435e-07,
+     "max": 1.658201172792451e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0014988835295357016,
+     "max": 0.001636030338277538,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.0012839549932597248,
+     "max": 0.001979613928417573,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.0010874812421834065,
+     "max": 0.0014155859210060705,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.003879827039771326,
+     "max": 0.003879827039771326,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.001579584616822381,
+     "max": 0.0023552125567116128,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0010410833955944313,
+     "max": 0.0012823019267934534,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.0015630228598708803,
+     "max": 0.0019497431595335716,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.0016428922723033964,
+     "max": 0.0019628715281575396,
+     "n": 32
+    }
+   },
+   "seconds": 14.211846828460693,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "e": {
+   "mean_nll": 1.212579295232772,
+   "perplexity": 3.362145444094174,
+   "delta_nll": 4.608069170298228e-05,
+   "delta_nll_se": 2.1696656788044714e-05,
+   "rel_ppl_change": 4.608175343436457e-05,
+   "rel_ppl_change_lo": 3.5552507183034977e-06,
+   "rel_ppl_change_hi": 8.861006464742924e-05,
+   "top1_agreement": 0.9986203522504893,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "int15-both",
+    "weight_kind": "int15",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit codes on both operands, same scale rule"
+   },
+   "letter": "e",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.704688420868989e-07,
+     "max": 2.3545283034913113e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2045614637430537e-07,
+     "max": 1.6574182191165554e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0004879555153032304,
+     "max": 0.000897437941637729,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.00021368455052747423,
+     "max": 0.0005102066127264871,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.0002681295306881387,
+     "max": 0.0004951459721952909,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.0010565840453902202,
+     "max": 0.0010565840453902202,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.00021656124644935335,
+     "max": 0.00034356671290335404,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0003108830784532175,
+     "max": 0.0005800714970742132,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.00037477243638970285,
+     "max": 0.0031284191588955915,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.0007491207682330001,
+     "max": 0.0014069455943804367,
+     "n": 32
+    }
+   },
+   "seconds": 73.45998978614807,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "c+attn": {
+   "mean_nll": 1.212659890593906,
+   "perplexity": 3.3624164283403153,
+   "delta_nll": 0.0001266760528369959,
+   "delta_nll_se": 4.948078754132321e-05,
+   "rel_ppl_change": 0.00012668407658697914,
+   "rel_ppl_change_lo": 2.9694150118550695e-05,
+   "rel_ppl_change_hi": 0.000223683409821918,
+   "top1_agreement": 0.9967221135029354,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "bf16-both+attn",
+    "weight_kind": "bf16",
+    "activation_kind": "bf16",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "bf16 both operands, fp32 accumulation; attention QK and PV products replaced too"
+   },
+   "letter": "c",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 0.001664563090945128,
+     "max": 0.0020158275806969575,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 0.0025112322446745054,
+     "max": 0.0033741169130754155,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0014910478687478884,
+     "max": 0.0016385519297840315,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.0012852259596043527,
+     "max": 0.0020218986544465398,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.001087354033340783,
+     "max": 0.0014156811284918882,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.003917828369200585,
+     "max": 0.003917828369200585,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.0015782438351485868,
+     "max": 0.0023535389348703652,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0010409774341017493,
+     "max": 0.0012823019267934534,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.0015641350361017157,
+     "max": 0.0019783773503706343,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.001642143217821225,
+     "max": 0.001960603779365528,
+     "n": 32
+    }
+   },
+   "seconds": 26.28205943107605,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "e+attn": {
+   "mean_nll": 1.2125880120693378,
+   "perplexity": 3.3621747514942535,
+   "delta_nll": 5.4797528268426674e-05,
+   "delta_nll_se": 2.2673963306675433e-05,
+   "rel_ppl_change": 5.479902968040327e-05,
+   "rel_ppl_change_lo": 1.0356613816697418e-05,
+   "rel_ppl_change_hi": 9.92434206519815e-05,
+   "top1_agreement": 0.9986692759295499,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "int15-both+attn",
+    "weight_kind": "int15",
+    "activation_kind": "int15",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit codes on both operands, same scale rule; attention QK and PV products replaced too"
+   },
+   "letter": "e",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 0.0009461630427461381,
+     "max": 0.00248078500346005,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 0.0001340545158227061,
+     "max": 0.00020216009294114664,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.00048799996510884855,
+     "max": 0.0008919587987345185,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.00021369840034453412,
+     "max": 0.0005104147233616583,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.0002680543561017013,
+     "max": 0.0004946617442618092,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.0010587931189795438,
+     "max": 0.0010587931189795438,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.00021650479613586078,
+     "max": 0.00034333624944124416,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0003109329418450372,
+     "max": 0.0005799026244772257,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.00037474281969628417,
+     "max": 0.0031277203619548438,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.0007491476565170599,
+     "max": 0.001407735685349747,
+     "n": 32
+    }
+   },
+   "seconds": 89.73463654518127,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "d": {
+   "mean_nll": 1.4663592723797547,
+   "perplexity": 4.3334295499422595,
+   "delta_nll": 0.2538260578386853,
+   "delta_nll_se": 0.011588329957727274,
+   "rel_ppl_change": 0.288947582439244,
+   "rel_ppl_change_lo": 0.26000152480019567,
+   "rel_ppl_change_hi": 0.318558618839311,
+   "top1_agreement": 0.850146771037182,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "int8i32.v1",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "contract L-3 to L-7 on both operands"
+   },
+   "letter": "d",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7529993335523774e-07,
+     "max": 2.47893278839933e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2232757729669715e-07,
+     "max": 1.7004492884757938e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.05562356807829139,
+     "max": 0.08246149565801417,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.02896536844207185,
+     "max": 0.05087590434054353,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03550607631432368,
+     "max": 0.06190246960092974,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.1554729096473519,
+     "max": 0.1554729096473519,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.0301632607526867,
+     "max": 0.047473547772662814,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.04109981702852186,
+     "max": 0.07479429501169446,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.047367440800349644,
+     "max": 0.29957274544814044,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.10239835314387863,
+     "max": 0.18610104456048202,
+     "n": 32
+    }
+   },
+   "seconds": 73.35659098625183,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "f": {
+   "mean_nll": 1.416223977880045,
+   "perplexity": 4.121528039108707,
+   "delta_nll": 0.20369076333897593,
+   "delta_nll_se": 0.009327865097389665,
+   "rel_ppl_change": 0.22591899573757077,
+   "rel_ppl_change_lo": 0.2037096312569544,
+   "rel_ppl_change_hi": 0.2485381400004738,
+   "top1_agreement": 0.864774951076321,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "int15w-int8a",
+    "weight_kind": "int15",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit weight codes, int8 activation codes"
+   },
+   "letter": "f",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7463520820389075e-07,
+     "max": 2.4879010327696743e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.224843974761482e-07,
+     "max": 1.6977326064068994e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.05386648598524831,
+     "max": 0.08104949504887993,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.02696381036261707,
+     "max": 0.04995203789712713,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03441449853745657,
+     "max": 0.061004987719054084,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.13834698175641622,
+     "max": 0.13834698175641622,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.026814023220261277,
+     "max": 0.0431651911631019,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.039661975008715614,
+     "max": 0.0736822997795923,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.04461455249831044,
+     "max": 0.2938801880047614,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.09874545538439457,
+     "max": 0.18237415504193516,
+     "n": 32
+    }
+   },
+   "seconds": 73.35196781158447,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "d+attn": {
+   "mean_nll": 1.4585442870466425,
+   "perplexity": 4.299695847449982,
+   "delta_nll": 0.24601107250557297,
+   "delta_nll_se": 0.011006706242947143,
+   "rel_ppl_change": 0.27891373424279065,
+   "rel_ppl_change_lo": 0.2516190187782382,
+   "rel_ppl_change_hi": 0.3068036799500235,
+   "top1_agreement": 0.8488747553816047,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "int8i32.v1+attn",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "contract L-3 to L-7 on both operands; attention QK and PV products replaced too"
+   },
+   "letter": "d",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 0.08270584318903025,
+     "max": 0.23478693373957646,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 0.017747383397602505,
+     "max": 0.02766756024374101,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.05552464568982258,
+     "max": 0.08070002877366887,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.02876605856751335,
+     "max": 0.05059252513340214,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.035308438572510835,
+     "max": 0.06189778603315093,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.15302234388994562,
+     "max": 0.15302234388994562,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.029702160130361376,
+     "max": 0.04563774893628259,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.040929211499259315,
+     "max": 0.07472351501352771,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.04683261507375675,
+     "max": 0.2980805823559907,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.10049622501124186,
+     "max": 0.1855830111237481,
+     "n": 32
+    }
+   },
+   "seconds": 89.7171733379364,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "f+attn": {
+   "mean_nll": 1.4223874209912426,
+   "perplexity": 4.147009288158263,
+   "delta_nll": 0.20985420645017325,
+   "delta_nll_se": 0.009402914436632187,
+   "rel_ppl_change": 0.2334982107637835,
+   "rel_ppl_change_lo": 0.2109733941177926,
+   "rel_ppl_change_hi": 0.2564420022339943,
+   "top1_agreement": 0.8626125244618396,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "int15w-int8a+attn",
+    "weight_kind": "int15",
+    "activation_kind": "int8",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit weight codes, int8 activation codes; attention QK and PV products replaced too"
+   },
+   "letter": "f",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 0.08244498386702151,
+     "max": 0.23037840043140786,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 0.017821125131072018,
+     "max": 0.027410938770060633,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0537689705227228,
+     "max": 0.07901863237747046,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.02682801526906344,
+     "max": 0.04973560983431442,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03423255503641865,
+     "max": 0.06108495652852117,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.1368240890334358,
+     "max": 0.1368240890334358,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.026232305142099746,
+     "max": 0.0402805980392348,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.03953538395528039,
+     "max": 0.07363151710788322,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.044246506175539754,
+     "max": 0.2930406176624593,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.09727451783854169,
+     "max": 0.18264226007815543,
+     "n": 32
+    }
+   },
+   "seconds": 89.7196033000946,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "int8w-fp32a": {
+   "mean_nll": 1.2230299653537482,
+   "perplexity": 3.3974663591767684,
+   "delta_nll": 0.010496750812678883,
+   "delta_nll_se": 0.0005097669237901075,
+   "rel_ppl_change": 0.010552034966832711,
+   "rel_ppl_change_lo": 0.009542853045097706,
+   "rel_ppl_change_hi": 0.011562225709687183,
+   "top1_agreement": 0.9630234833659491,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "int8w-fp32a",
+    "weight_kind": "int8",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 weight codes materialized (what weight_format='int8' ships), fp32 activations"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7058403579422323e-07,
+     "max": 2.347064312038816e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.204972583369157e-07,
+     "max": 1.6621009039575601e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.01335672865183941,
+     "max": 0.016664133914269887,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.009870167149767755,
+     "max": 0.011639416090743964,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.007849705307308736,
+     "max": 0.00962717770974675,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.06871991044994584,
+     "max": 0.06871991044994584,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.013815013998872307,
+     "max": 0.02186523300352774,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.009646041015926995,
+     "max": 0.013140179069963192,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.014182674202056248,
+     "max": 0.04297807038349683,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.02234218230908509,
+     "max": 0.02754607719458832,
+     "n": 32
+    }
+   },
+   "seconds": 7.845818042755127,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  },
+  "fp32w-int8a": {
+   "mean_nll": 1.4160179464895668,
+   "perplexity": 4.120678962427143,
+   "delta_nll": 0.20348473194849753,
+   "delta_nll_se": 0.009189086689119297,
+   "rel_ppl_change": 0.22566644395995542,
+   "rel_ppl_change_lo": 0.2037890477646146,
+   "rel_ppl_change_hi": 0.24794143512027508,
+   "top1_agreement": 0.8658023483365949,
+   "top1_accuracy_note": "agreement with the baseline's top-1, not with the text",
+   "spec": {
+    "name": "fp32w-int8a",
+    "weight_kind": "fp32",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "fp32 weights, int8 activation codes materialized"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7410273583166809e-07,
+     "max": 2.490942839377855e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.224645466536722e-07,
+     "max": 1.6976983853843183e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0538862988046772,
+     "max": 0.08108693459865768,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.026970276295112228,
+     "max": 0.04992077914957199,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03441941325936087,
+     "max": 0.06105857272786962,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.13873137363114296,
+     "max": 0.13873137363114296,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.026826662963012605,
+     "max": 0.043102762382341196,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.039669202673080904,
+     "max": 0.07376993980221445,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.04462050501298077,
+     "max": 0.29382341583084015,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.09874223798703201,
+     "max": 0.1825137001617285,
+     "n": 32
+    }
+   },
+   "seconds": 10.426669597625732,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS",
+   "numerical_floor": 2.117659044265902e-08,
+   "inside_numerical_floor": false
+  }
+ }
+}

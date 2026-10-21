@@ -145,6 +145,8 @@ from core.estimators_host_impl import (
     ols_fit_host_run,
     pca_fit_full_host_run,
     pca_fit_host_run,
+    pca_fit_owned_host_run,
+    pca_randomized_owned_host_run,
     pca_whiten_check_host,
     pca_whiten_host_run,
     qn_fit_host_run,
@@ -523,6 +525,91 @@ def pca_rank_finish_binding(
     out.append(PythonObject(keep))
     out.append(PythonObject(noise))
     return out
+
+
+def pca_fit_owned_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    singular_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`PCA.fit` / `fit_transform` for the exact solvers in one call on the
+    host (core/estimators_host_impl.mojo `pca_fit_owned_host_run`): the GPU
+    binding's contract. params: n_rows, n_features, n_components, dense (1:
+    svd_solver='full'), keep mode (0: every component, 1: the fraction
+    the fraction, 2: "mle"), whiten, the fraction; an output address (0: none) gets X's
+    projection. Returns (kept count, noise variance)."""
+    if len(params) != 7:
+        raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
+    var x_address = Int(py=x_addr)
+    var cp = f32_ptr(Int(py=components_addr))
+    var mp = f32_ptr(Int(py=mean_addr))
+    var ep = f32_ptr(Int(py=explained_addr))
+    var rp = f32_ptr(Int(py=ratio_addr))
+    var sp = f32_ptr(Int(py=singular_addr))
+    var oa = Int(py=out_addr)
+    var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)  # read only when oa != 0
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var dense = Int(py=params[3]) != 0
+    var keep_mode = Int(py=params[4])
+    var whiten = Int(py=params[5]) != 0
+    var fraction = Float64(py=params[6])
+    var kept = 0
+    var noise = Float64(0.0)
+    with GILReleased(Python()):
+        var fitted = pca_fit_owned_host_run(
+            x_address, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
+        )
+        kept = fitted[0]
+        noise = fitted[1]
+    return Python.tuple(PythonObject(kept), PythonObject(noise))
+
+
+def pca_fit_randomized_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    singular_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`PCA(svd_solver='randomized').fit` / `fit_transform` in one call on
+    the host (core/estimators_host_impl.mojo `pca_randomized_owned_host_run`):
+    the GPU binding's contract. params: n_rows, n_features, n_components,
+    n_oversamples, power iterations, auto (1: iterated_power='auto'),
+    whiten, the Philox seed mod 2^32. Returns the noise variance."""
+    if len(params) != 8:
+        raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten, seed")
+    var x_address = Int(py=x_addr)
+    var cp = f32_ptr(Int(py=components_addr))
+    var mp = f32_ptr(Int(py=mean_addr))
+    var ep = f32_ptr(Int(py=explained_addr))
+    var rp = f32_ptr(Int(py=ratio_addr))
+    var sp = f32_ptr(Int(py=singular_addr))
+    var oa = Int(py=out_addr)
+    var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)  # read only when oa != 0
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var oversamples = Int(py=params[3])
+    var iterations = Int(py=params[4])
+    var auto = Int(py=params[5]) != 0
+    var whiten = Int(py=params[6]) != 0
+    var s = Int(py=params[7])
+    var noise = Float64(0.0)
+    with GILReleased(Python()):
+        noise = pca_randomized_owned_host_run(
+            x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
+        )
+    return PythonObject(noise)
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1374,6 +1461,8 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[lm_means_finish_binding]("lm_means_finish")
         module.def_function[lm_intercept_binding]("lm_intercept")
         module.def_function[pca_rank_finish_binding]("pca_rank_finish")
+        module.def_function[pca_fit_owned_binding]("pca_fit_owned")
+        module.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         module.def_function[lm_center_binding]("lm_center")
         module.def_function[lm_scale_rows_binding]("lm_scale_rows")
         module.def_function[ridge_fit_binding]("ridge_fit")

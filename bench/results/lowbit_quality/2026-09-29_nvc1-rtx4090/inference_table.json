@@ -1,0 +1,1589 @@
+{
+ "schema": "mojolearn.lowbit_quality.inference_table.v1",
+ "rule": "change and upper end of its interval both under 1 percent, on every text",
+ "texts": {
+  "enwik8": {
+   "corpus_key": "corpus/enwik8/input.txt",
+   "corpus_bytes": 100000000,
+   "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+   "tail_from": 99000000,
+   "byte_start": 99000022,
+   "byte_end": 99999968,
+   "tail_bytes": 999946,
+   "tail_sha256": "45b0b15955e4b2f944765f2f4fa57eb6e8741d72e9a37e258e588dbd3abc92fd",
+   "tail_ids": 282111,
+   "used_byte_start": 99000022,
+   "used_byte_end": 99374116,
+   "used_bytes_sha256": "a2bf2dea5108207b0653ffb0aa46cc550ba9cd6e67e82ff2d1123fa890c0880d",
+   "windows": 200,
+   "length": 512,
+   "ids_used": 102400,
+   "ids_sha256": "d5be2324ffc522bc306eaa9baa63e626c9fe8df690eec7c552b4117f1ad8a56f",
+   "scored_positions": 102200,
+   "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+   "rule": "non-overlapping windows; every position but the first of a window is scored from the ids before it in the same window; no special token added"
+  },
+  "pile_github": {
+   "corpus_key": "corpus/pile_github/input.txt",
+   "corpus_bytes": 97124565,
+   "corpus_sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+   "decoding": "UTF-8; an invalid byte is one U+FFFD to the tokenizer",
+   "invalid_bytes_in_tail": 0,
+   "invalid_bytes_in_used": 0,
+   "tail_from": 96000000,
+   "byte_start": 96000030,
+   "byte_end": 97124565,
+   "tail_bytes": 1124535,
+   "tail_sha256": "caeb445cb22ab55f6c345c465cb47994feb9249eba2115c9962b88fccd5865d4",
+   "tail_ids": 405408,
+   "used_byte_start": 96000030,
+   "used_byte_end": 96240053,
+   "used_bytes_sha256": "91cc52d4b375dd0b7a8b0a256f1b5b5261967eba025a44ce3b6072633e3919ef",
+   "windows": 200,
+   "length": 512,
+   "ids_used": 102400,
+   "ids_sha256": "2d337ff1deeb3846125e558b8521f9f47f92e51abf03396d083255a9827a2f86",
+   "scored_positions": 102200,
+   "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+   "rule": "non-overlapping windows; every position but the first of a window is scored from the ids before it in the same window; no special token added"
+  }
+ },
+ "baseline": {
+  "enwik8": 7.937105795479167,
+  "pile_github": 3.36199051767609
+ },
+ "profiles": {
+  "bf16f32.v1": {
+   "spec": {
+    "name": "bf16f32.v1",
+    "weight_kind": "bf16",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "bf16 weights, fp32 activations, fp32 accumulation"
+   },
+   "verdict": "PASS, bit-equal to the baseline",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.937105795479167,
+     "rel_ppl_change": 0.0,
+     "rel_ppl_change_lo": 0.0,
+     "rel_ppl_change_hi": 0.0,
+     "top1_agreement": 1.0,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.36199051767609,
+     "rel_ppl_change": 0.0,
+     "rel_ppl_change_lo": 0.0,
+     "rel_ppl_change_hi": 0.0,
+     "top1_agreement": 1.0,
+     "finite_logits": true
+    }
+   }
+  },
+  "bf16-both": {
+   "spec": {
+    "name": "bf16-both",
+    "weight_kind": "bf16",
+    "activation_kind": "bf16",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "bf16 both operands, fp32 accumulation"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.93784057874408,
+     "rel_ppl_change": 9.257571762878763e-05,
+     "rel_ppl_change_lo": 1.7093697335405894e-05,
+     "rel_ppl_change_hi": 0.00016806343536016665,
+     "top1_agreement": 0.996174168297456,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.361991525831747,
+     "rel_ppl_change": 2.9986867964165607e-07,
+     "rel_ppl_change_lo": -6.032872680149014e-05,
+     "rel_ppl_change_hi": 6.093214020913479e-05,
+     "top1_agreement": 0.9976320939334637,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8i32.v1": {
+   "spec": {
+    "name": "int8i32.v1",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "contract L-3 to L-7 on both operands"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.49104367570309,
+     "rel_ppl_change": 0.32177193375431634,
+     "rel_ppl_change_lo": 0.29783074684263955,
+     "rel_ppl_change_hi": 0.34615476564330183,
+     "top1_agreement": 0.7659197651663405,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.3334295499422595,
+     "rel_ppl_change": 0.288947582439244,
+     "rel_ppl_change_lo": 0.26000152480019567,
+     "rel_ppl_change_hi": 0.318558618839311,
+     "top1_agreement": 0.850146771037182,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15-both": {
+   "spec": {
+    "name": "int15-both",
+    "weight_kind": "int15",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit codes on both operands, same scale rule"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.9368880095975385,
+     "rel_ppl_change": -2.743895410253189e-05,
+     "rel_ppl_change_lo": -7.226883704008733e-05,
+     "rel_ppl_change_hi": 1.739293869867826e-05,
+     "top1_agreement": 0.9979060665362035,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.362145444094174,
+     "rel_ppl_change": 4.608175343436457e-05,
+     "rel_ppl_change_lo": 3.5552507183034977e-06,
+     "rel_ppl_change_hi": 8.861006464742924e-05,
+     "top1_agreement": 0.9986203522504893,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15w-int8a": {
+   "spec": {
+    "name": "int15w-int8a",
+    "weight_kind": "int15",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit weight codes, int8 activation codes"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.102012442539403,
+     "rel_ppl_change": 0.27275769062991806,
+     "rel_ppl_change_lo": 0.25286205047292304,
+     "rel_ppl_change_hi": 0.2929692765824676,
+     "top1_agreement": 0.7843737769080235,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.121528039108707,
+     "rel_ppl_change": 0.22591899573757077,
+     "rel_ppl_change_lo": 0.2037096312569544,
+     "rel_ppl_change_hi": 0.2485381400004738,
+     "top1_agreement": 0.864774951076321,
+     "finite_logits": true
+    }
+   }
+  },
+  "bf16-both+attn": {
+   "spec": {
+    "name": "bf16-both+attn",
+    "weight_kind": "bf16",
+    "activation_kind": "bf16",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "bf16 both operands, fp32 accumulation; attention QK and PV products replaced too"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.937783411626941,
+     "rel_ppl_change": 8.537320343663896e-05,
+     "rel_ppl_change_lo": -8.240959339426636e-06,
+     "rel_ppl_change_hi": 0.000178996129896398,
+     "top1_agreement": 0.9953033268101761,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3624164283403153,
+     "rel_ppl_change": 0.00012668407658697914,
+     "rel_ppl_change_lo": 2.9694150118550695e-05,
+     "rel_ppl_change_hi": 0.000223683409821918,
+     "top1_agreement": 0.9967221135029354,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8i32.v1+attn": {
+   "spec": {
+    "name": "int8i32.v1+attn",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "contract L-3 to L-7 on both operands; attention QK and PV products replaced too"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.446084907063748,
+     "rel_ppl_change": 0.3161075556046705,
+     "rel_ppl_change_lo": 0.29349453858902125,
+     "rel_ppl_change_hi": 0.3391158959272955,
+     "top1_agreement": 0.7652641878669276,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.299695847449982,
+     "rel_ppl_change": 0.27891373424279065,
+     "rel_ppl_change_lo": 0.2516190187782382,
+     "rel_ppl_change_hi": 0.3068036799500235,
+     "top1_agreement": 0.8488747553816047,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15-both+attn": {
+   "spec": {
+    "name": "int15-both+attn",
+    "weight_kind": "int15",
+    "activation_kind": "int15",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit codes on both operands, same scale rule; attention QK and PV products replaced too"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.936987787935737,
+     "rel_ppl_change": -1.4867830475077621e-05,
+     "rel_ppl_change_lo": -6.245303106783012e-05,
+     "rel_ppl_change_hi": 3.2719634610414765e-05,
+     "top1_agreement": 0.998013698630137,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3621747514942535,
+     "rel_ppl_change": 5.479902968040327e-05,
+     "rel_ppl_change_lo": 1.0356613816697418e-05,
+     "rel_ppl_change_hi": 9.92434206519815e-05,
+     "top1_agreement": 0.9986692759295499,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15w-int8a+attn": {
+   "spec": {
+    "name": "int15w-int8a+attn",
+    "weight_kind": "int15",
+    "activation_kind": "int8",
+    "attention_products": true,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit weight codes, int8 activation codes; attention QK and PV products replaced too"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.126891226898454,
+     "rel_ppl_change": 0.27589218133725185,
+     "rel_ppl_change_lo": 0.25596451731102027,
+     "rel_ppl_change_hi": 0.296136026105908,
+     "top1_agreement": 0.7825146771037182,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.147009288158263,
+     "rel_ppl_change": 0.2334982107637835,
+     "rel_ppl_change_lo": 0.2109733941177926,
+     "rel_ppl_change_hi": 0.2564420022339943,
+     "top1_agreement": 0.8626125244618396,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-fp32a": {
+   "spec": {
+    "name": "int8w-fp32a",
+    "weight_kind": "int8",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 weight codes materialized (what weight_format='int8' ships), fp32 activations"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.06358214666194,
+     "rel_ppl_change": 0.01593481987537729,
+     "rel_ppl_change_lo": 0.014761018424695273,
+     "rel_ppl_change_hi": 0.017109979093869274,
+     "top1_agreement": 0.9326712328767123,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3974663591767684,
+     "rel_ppl_change": 0.010552034966832711,
+     "rel_ppl_change_lo": 0.009542853045097706,
+     "rel_ppl_change_hi": 0.011562225709687183,
+     "top1_agreement": 0.9630234833659491,
+     "finite_logits": true
+    }
+   }
+  },
+  "fp32w-int8a": {
+   "spec": {
+    "name": "fp32w-int8a",
+    "weight_kind": "fp32",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "fp32 weights, int8 activation codes materialized"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.088180560425556,
+     "rel_ppl_change": 0.271015004760502,
+     "rel_ppl_change_lo": 0.25150136227961434,
+     "rel_ppl_change_hi": 0.2908329075916767,
+     "top1_agreement": 0.7846966731898238,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.120678962427143,
+     "rel_ppl_change": 0.22566644395995542,
+     "rel_ppl_change_lo": 0.2037890477646146,
+     "rel_ppl_change_hi": 0.24794143512027508,
+     "top1_agreement": 0.8658023483365949,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15w-fp32a": {
+   "spec": {
+    "name": "int15w-fp32a",
+    "weight_kind": "int15",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "15-bit weight codes materialized, fp32 activations"
+   },
+   "verdict": "OWED (one text only)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.937053117167175,
+     "rel_ppl_change": -6.636967346680704e-06,
+     "rel_ppl_change_lo": -1.1542653301878157e-05,
+     "rel_ppl_change_hi": -1.731257325450773e-06,
+     "top1_agreement": 0.999774951076321,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "fp32w-int15a": {
+   "spec": {
+    "name": "fp32w-int15a",
+    "weight_kind": "fp32",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "fp32 weights, 15-bit activation codes materialized"
+   },
+   "verdict": "OWED (one text only)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.937100941598314,
+     "rel_ppl_change": -6.115429194677763e-07,
+     "rel_ppl_change_lo": -4.904227502855953e-05,
+     "rel_ppl_change_hi": 4.7821534840472666e-05,
+     "top1_agreement": 0.9980626223091976,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8w-int15a": {
+   "spec": {
+    "name": "int8w-int15a",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 weight codes, 15-bit activation codes (more integer pieces on the activation only)"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.063557667793065,
+     "rel_ppl_change": 0.015931735770225344,
+     "rel_ppl_change_lo": 0.01475697175073151,
+     "rel_ppl_change_hi": 0.017107859790724263,
+     "top1_agreement": 0.9326516634050881,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3975436495832114,
+     "rel_ppl_change": 0.010575024444654559,
+     "rel_ppl_change_lo": 0.009563546796678316,
+     "rel_ppl_change_hi": 0.011587515488009032,
+     "top1_agreement": 0.9629256360078278,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-int12a": {
+   "spec": {
+    "name": "int8w-int12a",
+    "weight_kind": "int8",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 weight codes, 12-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.069193778251208,
+     "rel_ppl_change": 0.01664183219622404,
+     "rel_ppl_change_lo": 0.015436092535981164,
+     "rel_ppl_change_hi": 0.017849003564615728,
+     "top1_agreement": 0.9316634050880627,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.400020609975687,
+     "rel_ppl_change": 0.011311778572737746,
+     "rel_ppl_change_lo": 0.01026342666710671,
+     "rel_ppl_change_hi": 0.012361218354747388,
+     "top1_agreement": 0.9625146771037182,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-int10a": {
+   "spec": {
+    "name": "int8w-int10a",
+    "weight_kind": "int8",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 weight codes, 10-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.246384118732665,
+     "rel_ppl_change": 0.038966133402135006,
+     "rel_ppl_change_lo": 0.03691712249968028,
+     "rel_ppl_change_hi": 0.041019193273969516,
+     "top1_agreement": 0.9198727984344423,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.47165160722015,
+     "rel_ppl_change": 0.03261790566258382,
+     "rel_ppl_change_lo": 0.030664909371714566,
+     "rel_ppl_change_hi": 0.03457460266595183,
+     "top1_agreement": 0.9566340508806263,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-int8s1a": {
+   "spec": {
+    "name": "int8w-int8s1a",
+    "weight_kind": "int8",
+    "activation_kind": "int8s1",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 both; the ACTIVATION scale saturates: row absmax to [128, 256), clamp at 127"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 24.914344430245126,
+     "rel_ppl_change": 2.1389709388069265,
+     "rel_ppl_change_lo": 2.065197630225933,
+     "rel_ppl_change_hi": 2.2145198265562316,
+     "top1_agreement": 0.5324853228962818,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8w-int8s2a": {
+   "spec": {
+    "name": "int8w-int8s2a",
+    "weight_kind": "int8",
+    "activation_kind": "int8s2",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 both; the ACTIVATION scale saturates: row absmax to [256, 512), clamp at 127"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 44426.43946056945,
+     "rel_ppl_change": 5596.30972540065,
+     "rel_ppl_change_lo": 5046.089038032882,
+     "rel_ppl_change_hi": 6206.514059287453,
+     "top1_agreement": 0.026575342465753424,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8m-both": {
+   "spec": {
+    "name": "int8m-both",
+    "weight_kind": "int8m",
+    "activation_kind": "int8m",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 both, a finer scale that is NOT a power of two: row absmax maps to exactly 127"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.422918943202927,
+     "rel_ppl_change": 0.0612078458120682,
+     "rel_ppl_change_lo": 0.058120104573879984,
+     "rel_ppl_change_hi": 0.06430459750749354,
+     "top1_agreement": 0.8840117416829746,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.523547497213133,
+     "rel_ppl_change": 0.04805396644863711,
+     "rel_ppl_change_lo": 0.04545758276645351,
+     "rel_ppl_change_hi": 0.05065679822430268,
+     "top1_agreement": 0.9316536203522505,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8i32.v1-fp32head": {
+   "spec": {
+    "name": "int8i32.v1-fp32head",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "lm_head": [
+      "fp32",
+      "fp32"
+     ]
+    },
+    "note": "int8 both operands, the LM head product kept fp32"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 9.942833293092555,
+     "rel_ppl_change": 0.25270262855206144,
+     "rel_ppl_change_lo": 0.2312345295102355,
+     "rel_ppl_change_hi": 0.27454505049129097,
+     "top1_agreement": 0.8083659491193738,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8i32.v1-fp32mlp": {
+   "spec": {
+    "name": "int8i32.v1-fp32mlp",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "gate_proj": [
+      "fp32",
+      "fp32"
+     ],
+     "up_proj": [
+      "fp32",
+      "fp32"
+     ],
+     "down_proj": [
+      "fp32",
+      "fp32"
+     ]
+    },
+    "note": "int8 both operands, the three SwiGLU products of every block kept fp32"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.452817054969431,
+     "rel_ppl_change": 0.06497472413483554,
+     "rel_ppl_change_lo": 0.061693476560045875,
+     "rel_ppl_change_hi": 0.0682661126645098,
+     "top1_agreement": 0.8638845401174168,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8i32.v1-fp32down": {
+   "spec": {
+    "name": "int8i32.v1-fp32down",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "down_proj": [
+      "fp32",
+      "fp32"
+     ]
+    },
+    "note": "int8 both operands, down_proj of every block kept fp32"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.34783911994133,
+     "rel_ppl_change": 0.30372951886760485,
+     "rel_ppl_change_lo": 0.28006336089321077,
+     "rel_ppl_change_hi": 0.3278332231778913,
+     "top1_agreement": 0.7749706457925636,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8i32.v1-fp32attnproj": {
+   "spec": {
+    "name": "int8i32.v1-fp32attnproj",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "q_proj": [
+      "fp32",
+      "fp32"
+     ],
+     "k_proj": [
+      "fp32",
+      "fp32"
+     ],
+     "v_proj": [
+      "fp32",
+      "fp32"
+     ],
+     "o_proj": [
+      "fp32",
+      "fp32"
+     ]
+    },
+    "note": "int8 both operands, the four attention projections of every block kept fp32"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.711984121468179,
+     "rel_ppl_change": 0.34960833299834987,
+     "rel_ppl_change_lo": 0.3220502308032621,
+     "rel_ppl_change_hi": 0.3777408831069133,
+     "top1_agreement": 0.7667123287671233,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8i32.v1-int15down": {
+   "spec": {
+    "name": "int8i32.v1-int15down",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "down_proj": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 both operands, down_proj of every block on 15-bit codes"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.385755616009115,
+     "rel_ppl_change": 0.30850663751069796,
+     "rel_ppl_change_lo": 0.28445280938037887,
+     "rel_ppl_change_hi": 0.3330109194400958,
+     "top1_agreement": 0.7754011741682975,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8i32.v1-int15head-down": {
+   "spec": {
+    "name": "int8i32.v1-int15head-down",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "down_proj": [
+      "int15",
+      "int15"
+     ],
+     "lm_head": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 both operands, down_proj and the LM head on 15-bit codes"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 9.80863022783259,
+     "rel_ppl_change": 0.2357943160363833,
+     "rel_ppl_change_lo": 0.21451360768566252,
+     "rel_ppl_change_hi": 0.2574479049748905,
+     "top1_agreement": 0.8221917808219178,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "fp32+attn-int8": {
+   "spec": {
+    "name": "fp32+attn-int8",
+    "weight_kind": "fp32",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "attn_qk": [
+      "int8",
+      "int8"
+     ],
+     "attn_pv": [
+      "int8",
+      "int8"
+     ]
+    },
+    "note": "every projection fp32, QK and PV on int8 codes"
+   },
+   "verdict": "OWED (one text only); dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.984305609613874,
+     "rel_ppl_change": 0.005946728612536906,
+     "rel_ppl_change_lo": 0.005237334918725653,
+     "rel_ppl_change_hi": 0.006656622923859405,
+     "top1_agreement": 0.9636399217221135,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "fp32+attn-int15": {
+   "spec": {
+    "name": "fp32+attn-int15",
+    "weight_kind": "fp32",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "attn_qk": [
+      "int15",
+      "int15"
+     ],
+     "attn_pv": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "every projection fp32, QK and PV on 15-bit codes"
+   },
+   "verdict": "OWED (one text only)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.937189694606203,
+     "rel_ppl_change": 1.0570493729003864e-05,
+     "rel_ppl_change_lo": 7.626391631906732e-07,
+     "rel_ppl_change_hi": 2.0378444488754875e-05,
+     "top1_agreement": 0.9995009784735812,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8i32.v1+qk": {
+   "spec": {
+    "name": "int8i32.v1+qk",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "attn_qk": [
+      "int8",
+      "int8"
+     ]
+    },
+    "note": "int8 both operands, QK replaced, PV kept fp32"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.52669858381599,
+     "rel_ppl_change": 0.3262641137795864,
+     "rel_ppl_change_lo": 0.3019140490135761,
+     "rel_ppl_change_hi": 0.35106960465806414,
+     "top1_agreement": 0.764637964774951,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8i32.v1+pv": {
+   "spec": {
+    "name": "int8i32.v1+pv",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "attn_pv": [
+      "int8",
+      "int8"
+     ]
+    },
+    "note": "int8 both operands, PV replaced, QK kept fp32"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.445649963072473,
+     "rel_ppl_change": 0.3160527567897771,
+     "rel_ppl_change_lo": 0.29343485209815723,
+     "rel_ppl_change_hi": 0.33906617395101185,
+     "top1_agreement": 0.7671819960861057,
+     "finite_logits": true
+    },
+    "pile_github": null
+   }
+  },
+  "int8w-int8a": {
+   "spec": {
+    "name": "int8w-int8a",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 8-bit weight codes, 8-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.49104367570309,
+     "rel_ppl_change": 0.32177193375431634,
+     "rel_ppl_change_lo": 0.29783074684263955,
+     "rel_ppl_change_hi": 0.34615476564330183,
+     "top1_agreement": 0.7659197651663405,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.3334295499422595,
+     "rel_ppl_change": 0.288947582439244,
+     "rel_ppl_change_lo": 0.26000152480019567,
+     "rel_ppl_change_hi": 0.318558618839311,
+     "top1_agreement": 0.850146771037182,
+     "finite_logits": true
+    }
+   }
+  },
+  "int10w-int15a": {
+   "spec": {
+    "name": "int10w-int15a",
+    "weight_kind": "int10",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 15-bit activation codes, same scale rule"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.942747661931851,
+     "rel_ppl_change": 0.0007108216266815574,
+     "rel_ppl_change_lo": 0.00040017841847417383,
+     "rel_ppl_change_hi": 0.0010215612954902952,
+     "top1_agreement": 0.9799021526418786,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3642775297137004,
+     "rel_ppl_change": 0.0006802553503903828,
+     "rel_ppl_change_lo": 0.0004615839236884445,
+     "rel_ppl_change_hi": 0.0008989745722237127,
+     "top1_agreement": 0.9902152641878669,
+     "finite_logits": true
+    }
+   }
+  },
+  "int10w-int12a": {
+   "spec": {
+    "name": "int10w-int12a",
+    "weight_kind": "int10",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 12-bit activation codes, same scale rule"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.9573188904710435,
+     "rel_ppl_change": 0.0025466581286329843,
+     "rel_ppl_change_lo": 0.0020705671274054904,
+     "rel_ppl_change_hi": 0.003022975324151465,
+     "top1_agreement": 0.9754794520547945,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3693442432956995,
+     "rel_ppl_change": 0.0021873130161868806,
+     "rel_ppl_change_lo": 0.001728741371806337,
+     "rel_ppl_change_hi": 0.0026460945856143403,
+     "top1_agreement": 0.9870939334637965,
+     "finite_logits": true
+    }
+   }
+  },
+  "int10w-int10a": {
+   "spec": {
+    "name": "int10w-int10a",
+    "weight_kind": "int10",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 10-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.123814704221514,
+     "rel_ppl_change": 0.023523550467060138,
+     "rel_ppl_change_lo": 0.021844191345529625,
+     "rel_ppl_change_hi": 0.02520566954659888,
+     "top1_agreement": 0.9519080234833659,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.4390682968336996,
+     "rel_ppl_change": 0.02292623335859022,
+     "rel_ppl_change_lo": 0.021276564155963972,
+     "rel_ppl_change_hi": 0.024578567273767025,
+     "top1_agreement": 0.9722113502935421,
+     "finite_logits": true
+    }
+   }
+  },
+  "int10w-int8a": {
+   "spec": {
+    "name": "int10w-int8a",
+    "weight_kind": "int10",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 8-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.109186756557783,
+     "rel_ppl_change": 0.27366158610557934,
+     "rel_ppl_change_lo": 0.25355740131842686,
+     "rel_ppl_change_hi": 0.29408819589339863,
+     "top1_agreement": 0.7832778864970645,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.134664582606746,
+     "rel_ppl_change": 0.22982636651359487,
+     "rel_ppl_change_lo": 0.20729447493520875,
+     "rel_ppl_change_hi": 0.25277877367342383,
+     "top1_agreement": 0.8630039138943248,
+     "finite_logits": true
+    }
+   }
+  },
+  "int12w-int15a": {
+   "spec": {
+    "name": "int12w-int15a",
+    "weight_kind": "int12",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 15-bit activation codes, same scale rule"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.937755371466583,
+     "rel_ppl_change": 8.184040935757567e-05,
+     "rel_ppl_change_lo": 4.8482305215915116e-06,
+     "rel_ppl_change_hi": 0.00015883851596042257,
+     "top1_agreement": 0.9953424657534247,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3617765901654555,
+     "rel_ppl_change": -6.363120583160147e-05,
+     "rel_ppl_change_lo": -0.00013079714452612578,
+     "rel_ppl_change_hi": 3.5392447163811076e-06,
+     "top1_agreement": 0.9972994129158512,
+     "finite_logits": true
+    }
+   }
+  },
+  "int12w-int12a": {
+   "spec": {
+    "name": "int12w-int12a",
+    "weight_kind": "int12",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 12-bit activation codes, same scale rule"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.95141791958557,
+     "rel_ppl_change": 0.0018031918025525164,
+     "rel_ppl_change_lo": 0.0014431217257199198,
+     "rel_ppl_change_hi": 0.0021633913430135683,
+     "top1_agreement": 0.9867123287671233,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.366166954636768,
+     "rel_ppl_change": 0.0012422512611858256,
+     "rel_ppl_change_lo": 0.0008730539540780819,
+     "rel_ppl_change_hi": 0.0016115847560458894,
+     "top1_agreement": 0.9919667318982387,
+     "finite_logits": true
+    }
+   }
+  },
+  "int12w-int10a": {
+   "spec": {
+    "name": "int12w-int10a",
+    "weight_kind": "int12",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 10-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.11925199842395,
+     "rel_ppl_change": 0.02294869284072413,
+     "rel_ppl_change_lo": 0.021309360368372107,
+     "rel_ppl_change_hi": 0.024590656651884153,
+     "top1_agreement": 0.9559099804305283,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.4401731106697273,
+     "rel_ppl_change": 0.023254852321142085,
+     "rel_ppl_change_lo": 0.02178483481477493,
+     "rel_ppl_change_hi": 0.024726984706684774,
+     "top1_agreement": 0.9748825831702544,
+     "finite_logits": true
+    }
+   }
+  },
+  "int12w-int8a": {
+   "spec": {
+    "name": "int12w-int8a",
+    "weight_kind": "int12",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 8-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 10.070369986062033,
+     "rel_ppl_change": 0.26877104142897223,
+     "rel_ppl_change_lo": 0.24890402712654577,
+     "rel_ppl_change_hi": 0.28895409143047557,
+     "top1_agreement": 0.7856164383561643,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 4.109333795067918,
+     "rel_ppl_change": 0.22229190518610215,
+     "rel_ppl_change_lo": 0.2007235740435684,
+     "rel_ppl_change_hi": 0.24424766347534163,
+     "top1_agreement": 0.8653816046966731,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15w-int15a": {
+   "spec": {
+    "name": "int15w-int15a",
+    "weight_kind": "int15",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 15-bit weight codes, 15-bit activation codes, same scale rule"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.9368880095975385,
+     "rel_ppl_change": -2.743895410253189e-05,
+     "rel_ppl_change_lo": -7.226883704008733e-05,
+     "rel_ppl_change_hi": 1.739293869867826e-05,
+     "top1_agreement": 0.9979060665362035,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.362145444094174,
+     "rel_ppl_change": 4.608175343436457e-05,
+     "rel_ppl_change_lo": 3.5552507183034977e-06,
+     "rel_ppl_change_hi": 8.861006464742924e-05,
+     "top1_agreement": 0.9986203522504893,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15w-int12a": {
+   "spec": {
+    "name": "int15w-int12a",
+    "weight_kind": "int15",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 15-bit weight codes, 12-bit activation codes, same scale rule"
+   },
+   "verdict": "PASS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.951203861688649,
+     "rel_ppl_change": 0.001776222539142162,
+     "rel_ppl_change_lo": 0.0014300002164125084,
+     "rel_ppl_change_hi": 0.0021225645605993655,
+     "top1_agreement": 0.9874755381604696,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3657981448020418,
+     "rel_ppl_change": 0.0011325514173620478,
+     "rel_ppl_change_lo": 0.0007726526131456929,
+     "rel_ppl_change_hi": 0.0014925796487254555,
+     "top1_agreement": 0.9921428571428571,
+     "finite_logits": true
+    }
+   }
+  },
+  "int15w-int10a": {
+   "spec": {
+    "name": "int15w-int10a",
+    "weight_kind": "int15",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "width sweep: 15-bit weight codes, 10-bit activation codes, same scale rule"
+   },
+   "verdict": "MISS",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.120566400378927,
+     "rel_ppl_change": 0.023114295012201722,
+     "rel_ppl_change_lo": 0.02150442871912155,
+     "rel_ppl_change_hi": 0.024726698415654332,
+     "top1_agreement": 0.9563307240704501,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.4391379823835826,
+     "rel_ppl_change": 0.022946960826296034,
+     "rel_ppl_change_lo": 0.021467988404692155,
+     "rel_ppl_change_hi": 0.02442807463602827,
+     "top1_agreement": 0.9742857142857143,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8mw-int15a": {
+   "spec": {
+    "name": "int8mw-int15a",
+    "weight_kind": "int8m",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 weight codes on the finer scale that is NOT a power of two (row absmax maps to exactly 127), 15-bit activation codes"
+   },
+   "verdict": "PASS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.98619276449387,
+     "rel_ppl_change": 0.006184492216629298,
+     "rel_ppl_change_lo": 0.005459355915841074,
+     "rel_ppl_change_hi": 0.006910151485006044,
+     "top1_agreement": 0.9571722113502935,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.378314766585264,
+     "rel_ppl_change": 0.004855530919360872,
+     "rel_ppl_change_lo": 0.004206157708065882,
+     "rel_ppl_change_hi": 0.005505324049976523,
+     "top1_agreement": 0.9757827788649707,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8s1w-int15a": {
+   "spec": {
+    "name": "int8s1w-int15a",
+    "weight_kind": "int8s1",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {},
+    "note": "int8 weight codes on the saturating scale (row absmax to [128, 256), clamp at 127), 15-bit activation codes"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 14.255237209952305,
+     "rel_ppl_change": 0.7960245935076027,
+     "rel_ppl_change_lo": 0.7634584746019726,
+     "rel_ppl_change_hi": 0.8291921170484143,
+     "top1_agreement": 0.6679941291585128,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 5.98309912041205,
+     "rel_ppl_change": 0.7796299807971352,
+     "rel_ppl_change_lo": 0.7126744052872596,
+     "rel_ppl_change_hi": 0.849203128612651,
+     "top1_agreement": 0.7520743639921722,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-int15a-fp32head": {
+   "spec": {
+    "name": "int8w-int15a-fp32head",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "lm_head": [
+      "fp32",
+      "fp32"
+     ]
+    },
+    "note": "int8 weights, 15-bit activations, the LM head product kept fp32"
+   },
+   "verdict": "PASS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.993215727405619,
+     "rel_ppl_change": 0.0070693188893123735,
+     "rel_ppl_change_lo": 0.006271856081152075,
+     "rel_ppl_change_hi": 0.007867413680695256,
+     "top1_agreement": 0.9627690802348337,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3798484838604113,
+     "rel_ppl_change": 0.005311724137956535,
+     "rel_ppl_change_lo": 0.004591849846321919,
+     "rel_ppl_change_hi": 0.006032114279879838,
+     "top1_agreement": 0.978091976516634,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-int15a-int15head": {
+   "spec": {
+    "name": "int8w-int15a-int15head",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "lm_head": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 weights, 15-bit activations, the LM head (the tied table) on 15-bit codes"
+   },
+   "verdict": "PASS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 7.993262925511285,
+     "rel_ppl_change": 0.00707526540267463,
+     "rel_ppl_change_lo": 0.006276812037888279,
+     "rel_ppl_change_hi": 0.007874352318555582,
+     "top1_agreement": 0.962641878669276,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.37990703802708,
+     "rel_ppl_change": 0.0053291406554514965,
+     "rel_ppl_change_lo": 0.004609481625995362,
+     "rel_ppl_change_hi": 0.006049315217687434,
+     "top1_agreement": 0.9780821917808219,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-int15a-int15mlp": {
+   "spec": {
+    "name": "int8w-int15a-int15mlp",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "gate_proj": [
+      "int15",
+      "int15"
+     ],
+     "up_proj": [
+      "int15",
+      "int15"
+     ],
+     "down_proj": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 weights on the four attention projections and the head, 15-bit weights on the three SwiGLU products, 15-bit activations"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.025391504535616,
+     "rel_ppl_change": 0.011123161430799408,
+     "rel_ppl_change_lo": 0.010168929347698143,
+     "rel_ppl_change_hi": 0.012078294906570716,
+     "top1_agreement": 0.9379745596868885,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3836096948413745,
+     "rel_ppl_change": 0.006430469405436697,
+     "rel_ppl_change_lo": 0.0055711775074989145,
+     "rel_ppl_change_hi": 0.007290495595070957,
+     "top1_agreement": 0.9679647749510764,
+     "finite_logits": true
+    }
+   }
+  },
+  "int8w-int15a-int15attnproj": {
+   "spec": {
+    "name": "int8w-int15a-int15attnproj",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "overrides": {
+     "q_proj": [
+      "int15",
+      "int15"
+     ],
+     "k_proj": [
+      "int15",
+      "int15"
+     ],
+     "v_proj": [
+      "int15",
+      "int15"
+     ],
+     "o_proj": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 weights on the SwiGLU products and the head, 15-bit weights on the four attention projections, 15-bit activations"
+   },
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)",
+   "texts": {
+    "enwik8": {
+     "perplexity": 8.05263984952369,
+     "rel_ppl_change": 0.014556194288141318,
+     "rel_ppl_change_lo": 0.013452163235038997,
+     "rel_ppl_change_hi": 0.01566142804681814,
+     "top1_agreement": 0.9358121330724071,
+     "finite_logits": true
+    },
+    "pile_github": {
+     "perplexity": 3.3943901163152486,
+     "rel_ppl_change": 0.009637028560554773,
+     "rel_ppl_change_lo": 0.008749689566750827,
+     "rel_ppl_change_hi": 0.010525148095357213,
+     "top1_agreement": 0.9649902152641878,
+     "finite_logits": true
+    }
+   }
+  }
+ },
+ "width_table": {
+  "int8w-int8a": {
+   "weight_bits": 8,
+   "activation_bits": 8,
+   "products": 1,
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)"
+  },
+  "int8w-int10a": {
+   "weight_bits": 8,
+   "activation_bits": 10,
+   "products": 2,
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)"
+  },
+  "int8w-int12a": {
+   "weight_bits": 8,
+   "activation_bits": 12,
+   "products": 2,
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)"
+  },
+  "int8w-int15a": {
+   "weight_bits": 8,
+   "activation_bits": 15,
+   "products": 2,
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)"
+  },
+  "int10w-int8a": {
+   "weight_bits": 10,
+   "activation_bits": 8,
+   "products": 2,
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)"
+  },
+  "int10w-int10a": {
+   "weight_bits": 10,
+   "activation_bits": 10,
+   "products": 4,
+   "verdict": "MISS"
+  },
+  "int10w-int12a": {
+   "weight_bits": 10,
+   "activation_bits": 12,
+   "products": 4,
+   "verdict": "PASS"
+  },
+  "int10w-int15a": {
+   "weight_bits": 10,
+   "activation_bits": 15,
+   "products": 4,
+   "verdict": "PASS"
+  },
+  "int12w-int8a": {
+   "weight_bits": 12,
+   "activation_bits": 8,
+   "products": 2,
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)"
+  },
+  "int12w-int10a": {
+   "weight_bits": 12,
+   "activation_bits": 10,
+   "products": 4,
+   "verdict": "MISS"
+  },
+  "int12w-int12a": {
+   "weight_bits": 12,
+   "activation_bits": 12,
+   "products": 4,
+   "verdict": "PASS"
+  },
+  "int12w-int15a": {
+   "weight_bits": 12,
+   "activation_bits": 15,
+   "products": 4,
+   "verdict": "PASS"
+  },
+  "int15w-int8a": {
+   "weight_bits": 15,
+   "activation_bits": 8,
+   "products": 2,
+   "verdict": "MISS; dropped 2026-09-29, Andrew (not offered by the flag)"
+  },
+  "int15w-int10a": {
+   "weight_bits": 15,
+   "activation_bits": 10,
+   "products": 4,
+   "verdict": "MISS"
+  },
+  "int15w-int12a": {
+   "weight_bits": 15,
+   "activation_bits": 12,
+   "products": 4,
+   "verdict": "PASS"
+  },
+  "int15w-int15a": {
+   "weight_bits": 15,
+   "activation_bits": 15,
+   "products": 4,
+   "verdict": "PASS"
+  }
+ }
+}

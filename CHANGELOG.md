@@ -4,6 +4,9 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## 0.8.56 (unreleased)
 
+- `PCA.fit` and `PCA.fit_transform` run as one native call for every solver, including `n_components="mle"`, a
+  variance fraction and `svd_solver="randomized"`; results are unchanged. With `whiten=True`, non-finite data or fitted
+  arrays are refused by the transform itself.
 - `Sequential` supports dropout: add `.dropout(rate)` between layers. Prediction and validation use every activation, and the
   seeded masks continue across resumed training.
 - `Sequential.fit` takes `validation_data=(X, y)` and `restore_best_weights`: early stopping watches the held-out loss, and
