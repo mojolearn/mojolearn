@@ -5,12 +5,14 @@
 def connect(ridge_class, linear_class=None):
     # glue: connect compiled entries and exact native buffer classes once
     from types import BuiltinFunctionType
+    import os
     from . import _backend
     from .tokenizer import _binding
     from ._x_sequence_model import _SEQUENTIAL_CONTEXT
 
     context = dict(_SEQUENTIAL_CONTEXT)
     connected = {}
+    metric_bindings = {}
     selected = _backend.default_mode()
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: native ABI connection at setup only
         try:
@@ -68,7 +70,26 @@ def connect(ridge_class, linear_class=None):
             connected[mode] = entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
+        try:
+            metrics = _backend.binding("_mojolearn_x_metrics", mode)
+            metric_entries = {}
+            for name in ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",
+                         "x_metrics_run_out", "x_metrics_run_ranges"):  # glue: cache raw metric program entries once
+                try:
+                    entry = getattr(metrics, name)
+                except (AttributeError, ImportError):
+                    if name in ("x_metrics_run_out", "x_metrics_run_ranges"):
+                        continue
+                    raise
+                if not isinstance(entry, BuiltinFunctionType):
+                    raise TypeError(f"classical score requires compiled {name}")
+                metric_entries[name] = entry
+            metric_bindings[mode] = metric_entries
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+            metric_bindings[mode] = type(error).__name__ + ": " + str(error)
     context.update(ridge_class=ridge_class, linear_class=linear_class, classical_bindings=connected,
+                   classical_metrics=metric_bindings, environment=os.environ._data,
                    classical_fields=("numeric_mode", "fit_intercept", "alpha", "solver", "normalize",
-                                     "coef_", "intercept_", "n_features_in_"))
+                                     "coef_", "intercept_", "n_features_in_",
+                                     "_mojolearn_fitted", "_mojolearn_fitting"))
     return _binding()._module.classical_native_call, context
