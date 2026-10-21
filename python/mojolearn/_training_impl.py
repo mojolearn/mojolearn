@@ -543,10 +543,13 @@ class _Optimizer(NumericModeMixin):
         ]
 
     def _keep_slot(self, handle, binding, on_host):
-        """Record a slot the native call opened."""
+        """Record a slot the native call opened, with the extension module
+        that owns it (the module its entries belong to: on a CPU-only install
+        `binding` is the host binding's stand-in), which the native finalizer
+        closes it through."""
         if self._res is None and handle >= 0:
             self._res = int(handle)
-            self._res_binding = binding
+            self._res_binding = binding.optimizer_resident_close.__self__
             self._res_host = bool(on_host)
 
     # -- lane fam2-neural (2026-10-04): parameters and gradients resident ----

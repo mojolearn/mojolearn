@@ -4,7 +4,13 @@ from std.python import Python, PythonObject
 
 
 def optimizer_finalize_binding(owner: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi: PythonObject
+    try:
+        bi = Python.import_module("builtins")
+    except:
+        # interpreter shutdown (no import machinery left): the process is
+        # releasing everything; there is nothing to close through
+        return PythonObject(None)
     # Optimizers inherit Python attribute policy. These are stored ownership
     # records, so use the base C getter and never invoke that policy at cleanup.
     var fields = bi.object.__getattribute__(owner, "__dict__")
