@@ -269,8 +269,8 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 def arima_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself, 0 FAST, 1
-    IDENTICAL. The same shape as `gbdt_numeric_mode` and
-    for the same reason, the wrapper reads it once and refuses to run if the
+    IDENTICAL. The same shape as `gbdt_numeric_mode`, and
+    with the same reason: the wrapper reads it once and refuses to run if the
     binary it loaded disagrees with the mode the package asked for. A
     wrong-arm measurement that is correctly labelled by accident is the
     failure this prevents."""
