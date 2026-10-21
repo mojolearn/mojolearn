@@ -496,7 +496,7 @@
     "recorded_branch": "lane/run-sabotage-arms",
     "recorded_commit": "62e93bd37",
     "recorded_scope": "base fixture, one repeat; eligible CPU/Metal columns on retained frozen sources; not all vendors/options",
-    "source_integration_pending_at_review": true,
+    "source_integration_pending_at_review": false,
     "unrecorded_arms": [
       "coverage-core-py2mojo_rows",
       "coverage-sequence-opt_public",
@@ -507,7 +507,8 @@
       "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-results-review.json",
       "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-metadata-review.json",
       "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-checker-negative-controls.json"
-    ]
+    ],
+    "integrated_commit": "52fd0f4fc"
   },
   "priority_order": [
     "R0",
@@ -696,16 +697,16 @@
     {
       "id": "S1",
       "priority": "P1",
-      "title": "Integrate and reconcile the 51 existing fault runs; execute only the three missing arms",
+      "title": "Reconcile the 51 integrated fault runs and execute only the three missing arms",
       "source_paths": [
         "tools/identity_lanes/coverage_sabotage.tsv",
         "tools/identity_lanes/coverage_sabotage_proven.tsv",
         "docs/plans/VERIFY_COVERAGE_20261021.md"
       ],
       "actions": [
-        "Review lane/run-sabotage-arms at 62e93bd37 and retain/link its raw .sabrun/out records. Independent signature inspection found clean/faulted/post-revert records detecting every current-manifest lane for 51 arms.",
+        "The 51-arm results from lane/run-sabotage-arms at 62e93bd37 were integrated into main at 52fd0f4fc during this review. Retain/link its raw .sabrun/out records. Independent signature inspection against the reviewed 6174c30ad manifest found detection/restoration for every named lane of 51 arms.",
         "Scope that evidence to one base fixture, one repeat, CPU/Metal on the recorded frozen source; it is not full-vendor or all-option validation.",
-        "Reconcile four summary omissions against raw records: trees-adaboost-reg, par-cholesky, par-hdbscan and x-decomp-lstsq-rsvd. Raw detection exists; do not rerun solely to repair the summary.",
+        "Reconcile historical manifest/summary differences with the integrated manifest and retained records (trees-adaboost-reg, par-cholesky, par-hdbscan and x-decomp-lstsq-rsvd). The merge also carries the rank-deficient RSVD case and its retained .sabrun/rsvd evidence; preserve the exact tested lane/source scope, without rerunning accepted cells.",
         "Record closure equivalence for coverage-core-cast_in: its clean and faulted/reverted commit IDs differ, but the git diff changes only another fault patch and the arm manifest, not product code.",
         "Run coverage-core-py2mojo_rows, coverage-sequence-opt_public and coverage-training-optimizer_public on the appropriate clean frozen build; these three have no complete retained record sets.",
         "Map saved build logs, actual loaded own/merged binding hashes and refusal reasons to each verdict before admission. Reuse valid evidence; rerun only genuinely missing or invalidated cells."
@@ -734,7 +735,7 @@
         "python/mojolearn/_buffer.py",
         "python/mojolearn/_array.py",
         "python/mojolearn/_expansion_prep.py",
-        "python/mojolearn/metrics.py"
+        "python/mojolearn/_metrics_impl.py"
       ],
       "actions": [
         "Migrate the 204 non-native census rows for preprocessing, metrics; the companion TSV names every class, method, definition and current verdict.",
@@ -916,7 +917,7 @@
         "docs/plans/BOX_JOBS_20261021.md"
       ],
       "actions": [
-        "Finish the existing integrated build; it last recorded host success and Apple fast in progress. Do not start duplicate compilation.",
+        "Finish the existing integration build at 3837ab3f0. Host and Apple fast now have rc=0; Apple identical is in progress. Do not start duplicate compilation.",
         "Resolve logistic-multiclass and hf-checkpoint reference mismatches by comparing same-version qualified source and retained outputs, not by accepting a separate Apple reference or blindly replacing hashes.",
         "Qualify changed closures on CPU and supported Apple/NVIDIA/AMD modes. Include neural-training verification explicitly; the routine verifier excludes neural training.",
         "Complete installed-wheel whole-operation native audits, lifecycle/leak checks and affected physical multi-device paths. Single-device process execution cannot certify multi-GPU behavior.",
@@ -949,5 +950,14 @@
     "zero coverage GAP means all tests were executed",
     "a green shrinking-baseline check means zero runtime Python",
     "all 54 fault-injection arms remain unrun"
-  ]
+  ],
+  "followup_snapshot": {
+    "head": "52fd0f4fcb8b1addb3943c1d6047764c1b5d4cb0",
+    "census_source_remains_frozen": "6174c30ad",
+    "integration_build_source": "3837ab3f0",
+    "host_build_exit": 0,
+    "apple_fast_build_exit": 0,
+    "apple_identical_build": "running",
+    "note": "The recorded census, failures and negative probes retain their original reviewed source. Main integrated the fault results while the review was being written."
+  }
 }

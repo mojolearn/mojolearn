@@ -9,25 +9,30 @@ Python connects the user to Mojo, and Mojo does the work. A public method (`fit`
 `score`, `partial_fit`, `sample`, `decision_function`, `predict_proba`, `generate`, `step`, `save`/`load`,
 ...) runs in this order:
 
-    user call -> thin Python binding (argument checks, choose the binding, pass buffers)
-              -> ONE native call that prepares, executes and produces the results
+    user call -> thin Python binding (forward arguments and buffer references)
+              -> ONE native call that validates, prepares, executes and produces the results
               -> return
 
-Outside that native call, Python does not prepare inputs beyond conversion, choose execution routes,
-allocate working buffers, sequence several native calls or post-process results. PyPI and the
+The owner contract in `AGENTS.md` is: "A public method is one binding call that hands over buffers and returns the result; nothing else runs in Python."
+Outside that native call, Python does not convert or prepare inputs, choose execution routes,
+allocate working buffers, sequence several native calls or post-process results. Import-time connection
+is distinct from a public constructor or an operation's first call. Native code must not call back into
+Python functions, methods, descriptors or input protocols. PyPI and the
 scikit-learn compatible interface are only the shell. They are never a reason to keep implementation
 logic in Python.
 
 A standalone native smoke test does not prove that a public method is native, and neither does a green
 kernel check. Only the method's own call path proves it.
 
-There are no before/after A/Bs for the migration itself. Bits may change within a version, and when they
-do they are recorded on every vendor together. Prefer bit-exact moves: the same operations in the same
-order.
+Migration correctness is separate from a performance claim. Reuse valid correctness and compilation
+evidence; do not start a performance campaign just to rename or move code. A speedup claim or default
+promotion still requires the full-workload evidence in `AGENTS.md`. Within one release, identical-mode
+bits must match Apple, NVIDIA and AMD; bits may change between versions. Prefer bit-exact moves: the
+same operations in the same order.
 
 ## The measure
 
-`tools/public_runtime_inventory.py` is the measure. It reads the code statically and imports nothing.
+`tools/public_runtime_inventory.py` is a static triage measure, not runtime certification. It reads the code statically and imports nothing.
 For every public name `mojolearn` exports, it takes these operation methods: `fit`, `partial_fit`,
 `predict`, `predict_proba`, `decision_function`, `transform`, `fit_transform`, `fit_predict`,
 `inverse_transform`, `score`, `sample`, `generate`, `step`, `forward`, `train_step`, `save`, `load`,
@@ -106,7 +111,90 @@ The tool has limits:
 - The statement and branch totals are summed per method. A shared helper counts once for every method
   that reaches it.
 
-## Today (main f180228eb, baseline tools/hooks/public_runtime_baseline.tsv)
+## Reviewed remaining work (2026-10-21, source 6174c30ad)
+
+The executable inventory still reports **996 operation rows: 81 native-shaped, 396 orchestrated,
+519 python**. Its 915 non-native rows refer to 695 distinct definition locations; inheritance and
+shared helpers mean they are not 915 independent algorithm rewrites. Eight of the 81 native-shaped
+rows are no-op `fit` methods. A separate public/MRO walk found 1,906 method rows outside the census's
+operation-name list, including constructors, `backward`, state/checkpoint methods and descriptors.
+Those omitted rows need classification; they are not 1,906 established violations.
+
+The review artifacts are [the ordered work plan and failure records](runtime_completion_review_20261021.json)
+and [every remaining census row, assigned to a workstream](runtime_completion_remaining_20261021.tsv).
+Evidence is under `~/mojolearn-evidence/runtime-completion-review-20261021-182318/`.
+The earlier baseline below is retained as historical evidence, not the current count.
+
+### Close these shared gaps first
+
+1. **Make completion measurable (`R0`).** The census skips binding getters and conversion helpers,
+   stops at native-looking calls, and does not inspect native-to-Python callbacks. It omits constructors,
+   much state/checkpoint handling and other public methods. Expand the inventory and add strict cold
+   and repeated whole-operation runtime checks. Green baseline CI means debt did not increase.
+2. **Remove verified Python execution from migrated paths (`R1`).** The late-NumPy path stores Python
+   `_connect_numpy` in the classical context and calls it from `classical_attributes.mojo`. Optimizer
+   `step`, clipping and accumulation still call Python `_binding`/`_load` selectors. Both violate the
+   contract above even when the static census calls the public method native. Preserve no-NumPy,
+   NumPy-first and NumPy-later inputs and outputs; connect them through supported native code.
+3. **Close the retained failures on coherent binaries (`V0`–`V2`).** The retained `t5.log` has 204 passes
+   and 34 failures. It lacks a complete source/loaded-binary receipt, so neither stale-build dismissal
+   nor 34 independent algorithm-bug claims are justified. Finish the existing frozen integration build,
+   retain provenance, and rerun the affected cases after their fixes.
+4. **Validate the fault gate and finish its evidence (`S0`–`S1`).** Four negative probes demonstrated
+   false passes: divergent clean output, different source/vendor, a missing faulted fixture, and a
+   missing-binary refusal. Require valid baseline/provenance, complete requested coverage, a legitimate
+   fault-triggered refusal or changed result, and restoration to clean output.
+
+The 34 failures have these concrete work items:
+
+| Cases | Cause or diagnostic | Required action |
+|---|---|---|
+| 24 | Supported buffers rejected by shared Sequential admission | Trace the classical context's actual ndarray/scalar/buffer-owner types; preserve ordinary inputs and poisoned-hook refusals. The precise underlying cause awaits coherent-run provenance. |
+| 1 | Importing mojolearn eagerly loads NumPy | Repair the import path and audit no/first/late-NumPy operations, including the first call. |
+| 3 | Host export manifests disagree with the source scanner | Add genuine new exports; teach the scanner `def_py_c_function` so six existing ops entries are not falsely absent. |
+| 3 | Historical evidence paths absent from the test worktree | The named paths exist in main. Verify retained bytes and use `MOJOLEARN_TEST_EVIDENCE_ROOT`; do not recreate old measurements. |
+| 1 | Tokenizer sabotage define not found by the test | Follow its moved source in `tokenizer/impl/tokenizer_host_shell_impl.mojo`. |
+| 2 | Reference/coverage metadata disagrees | Reconcile `nystroem-poly` fixture accounting and `cross-vendor-fold` comparability with actual admitted evidence. |
+
+### Fault-run evidence that arrived during the review
+
+`lane/run-sabotage-arms` at `62e93bd37` records 51 arms; main integrated that work at `52fd0f4fc` during
+this review. Re-reading its raw `.sabrun/out` records found fault detection and restored clean
+signatures for every lane of those arms in the reviewed `6174c30ad` manifest. This is
+**base fixture, one repeat, eligible CPU/Metal columns**, not an all-vendor qualification. Retain and
+link that work; do not rerun it wholesale. Reconcile historical manifest/summary differences from the
+raw records and the merged rank-deficient RSVD case. One arm's commit labels differ across clean/faulted runs, with a diff confined to
+another fault patch and the manifest; retain the product-source equivalence explanation.
+
+The current manifest has **54 arms**, and all 54 patches apply. The three without complete retained
+run records are `coverage-core-py2mojo_rows`, `coverage-sequence-opt_public`, and
+`coverage-training-optimizer_public`. Run those on the appropriate frozen builds after hardening the
+acceptance check. Tie every admission to loaded-binding provenance and the actual refusal reason.
+
+### Remaining migration workstreams
+
+| Workstream | Non-native census rows | Boundary to migrate |
+|---|---:|---|
+| M1: preprocessing and metrics | 204 | Shared admission, buffers, conversion, results and preprocessing/metric orchestration |
+| M2: linear and decomposition | 193 | Public fit/predict/transform/score and associated state/archive paths |
+| M3: ensemble | 132 | Forest/boosting orchestration and shared model wrappers |
+| M4: neural, sequence and byte-LM | 135 | Remaining trainers, blocks, schedules, state/checkpoints and whole-operation boundaries |
+| M5: neighbors and clustering | 120 | Index/query setup, clustering orchestration and results |
+| M6: remaining estimator families | 131 | Model selection, SVM, kernels, GP, manifold, mixtures, linalg and resampling |
+| Total | 915 | Exact class/method/source rows are in the companion TSV |
+
+Do not wait for all families to finish before qualifying a slice. Each slice must preserve interfaces
+and existing numerical kernels, pass independent correctness and strict runtime checks, and retain
+same-version identity evidence for affected targets. Audit omitted lifecycle methods with each slice.
+
+At the final review check, the existing build at `3837ab3f0` had passed host and Apple fast; Apple
+identical was still running. The final release gate (`Q0`) still needs a coherent installed build, resolution of the recorded
+`logistic-multiclass`/`hf-checkpoint` mismatches, affected NVIDIA/AMD qualification, explicit neural-training
+verification, and actual multi-device evidence for supported parallel paths. The routine verifier
+excludes neural training. Keep the bounded GitHub no-Python check and Python correctness tests; a
+separate Python-free product is not required to finish this migration.
+
+## Historical baseline (main f180228eb)
 
 The baseline covers 383 public names and 996 operation methods: **53 native, 406 orchestrated, 537
 python**. The path reaches 4,579 native call sites and 189,994 Python statements, counted per method.
