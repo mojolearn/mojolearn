@@ -11,6 +11,7 @@ from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from autograd.rankn import ShapeN
 from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
 from autograd.tape import Tape
+from autograd.program_io import ProgramInput, HostArray
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
@@ -85,37 +86,32 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
             values.append(Float64(py=a))
 
 
-struct ProgramInput(Movable):
-    var src: CastIn
-    var shape: ShapeN
-    var values: List[Float64]
-    var ids: List[Int64]
-
-    def __init__(out self, a: PythonObject, integer: Bool) raises:
-        self.values = List[Float64]()
-        self.ids = List[Int64]()
-        var b = Python.import_module("builtins")
-        if Bool(py=b.hasattr(a, "dtype")) and Bool(py=b.hasattr(a, "strides")):
-            var parsed = array_input(a, "numeric program input")
-            self.src = parsed[0]
-            self.shape = parsed[1]
-            if integer and self.src.kind != CAST_KIND_SIGNED and self.src.kind != CAST_KIND_UNSIGNED:
-                raise Error("TypeError: program input holds ids and must be integers (an integer array)")
-        else:
-            var dims = List[Int]()
-            var leaf_depth = -1
-            _sequence_values(a, 0, dims, self.values, self.ids, integer, leaf_depth)
-            if len(dims) == 0:
-                dims.append(1)
-            if len(dims) == 1:
-                dims.append(1)
-            self.shape = ShapeN.of(dims)
-            if integer:
-                self.src = CastIn(Int(self.ids.unsafe_ptr()), CAST_KIND_SIGNED, 8,
-                                  self.shape.rows(), self.shape.cols(), self.shape.cols() * 8, 8)
-            else:
-                self.src = CastIn(Int(self.values.unsafe_ptr()), CAST_KIND_FLOAT, 8,
-                                  self.shape.rows(), self.shape.cols(), self.shape.cols() * 8, 8)
+def program_input(a: PythonObject, integer: Bool) raises -> ProgramInput:
+    """A typed ProgramInput from an array (its descriptor) or a nested
+    sequence of Python scalars (converted once, owned by the result)."""
+    var values = List[Float64]()
+    var ids = List[Int64]()
+    var b = Python.import_module("builtins")
+    if Bool(py=b.hasattr(a, "dtype")) and Bool(py=b.hasattr(a, "strides")):
+        var parsed = array_input(a, "numeric program input")
+        if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
+            raise Error("TypeError: program input holds ids and must be integers (an integer array)")
+        return ProgramInput(parsed[0], parsed[1], values^, ids^)
+    var dims = List[Int]()
+    var leaf_depth = -1
+    _sequence_values(a, 0, dims, values, ids, integer, leaf_depth)
+    if len(dims) == 0:
+        dims.append(1)
+    if len(dims) == 1:
+        dims.append(1)
+    var shape = ShapeN.of(dims)
+    if integer:
+        var id_src = CastIn(Int(ids.unsafe_ptr()), CAST_KIND_SIGNED, 8,
+                            shape.rows(), shape.cols(), shape.cols() * 8, 8)
+        return ProgramInput(id_src, shape, values^, ids^)
+    var src = CastIn(Int(values.unsafe_ptr()), CAST_KIND_FLOAT, 8,
+                     shape.rows(), shape.cols(), shape.cols() * 8, 8)
+    return ProgramInput(src, shape, values^, ids^)
 
 
 def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_rank: Bool = False) raises -> List[ProgramInput]:
@@ -123,7 +119,7 @@ def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_
         raise Error("ValueError: this program takes " + String(p.n_in) + " input arrays, got " + String(len(arrays)))
     var out = List[ProgramInput]()
     for k in range(p.n_in):  # driver-loop: over input descriptors, owners retained through replay
-        var item = ProgramInput(arrays[k], p.in_kinds[k] == PROGRAM_IN_IDS)
+        var item = program_input(arrays[k], p.in_kinds[k] == PROGRAM_IN_IDS)
         if (dynamic and not variable_rank and item.shape.ndim != p.in_shapes[k].ndim) or (not dynamic and not same_shape(item.shape, p.in_shapes[k])):
             raise Error("ValueError: input " + String(k) + " must keep its captured "
                         + ("rank" if dynamic else "shape") + " " + shape_text(p.in_shapes[k])
@@ -459,7 +455,7 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var target = CastIn.f32_c(0, 1, 1)
     var target_owners = List[ProgramInput]()
     if kind != 0:
-        target_owners.append(ProgramInput(targets, False))
+        target_owners.append(program_input(targets, False))
         target = target_owners[0].src
     var curve = output_array(ShapeN.of([count]))
     var branches = train_program_control(s[], Int(py=pid), srcs, shapes, target, kind, Float32(py=delta),
