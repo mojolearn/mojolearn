@@ -37,7 +37,7 @@ def samba_inference_ids_into(
         var source = i // l + (i % l) * b if column_major else i
         var raw = _id_word(bytes, source, item)
         if _id_negative(raw, item, signed) or raw >= UInt64(vocab):
-            raise Error("Samba: input id outside vocabulary")
+            raise Error("Samba: an input id is outside [0, vocab) for vocab " + String(vocab))
         dst[i] = Int32(Int(raw))
 
 

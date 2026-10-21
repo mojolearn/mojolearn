@@ -320,29 +320,41 @@ def _addr(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
 
 def _mutable(
     value: PythonObject, expected: List[Int], mut keep: List[PythonObject], mut copies: List[PythonObject],
+    name: String = "",
 ) raises -> Int:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var label = String("state buffer")
+    if name != "":
+        label = "state buffer " + name
     var view = PythonObject(None)
     var shape = PythonObject(None)
+    if value is None:
+        raise Error("CausalLM: " + label + " is missing; allocate_state() makes a complete state")
     if g[].bi.type(value) is g[].array_cls:
         if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
-            raise Error("CausalLM: state must be writable C-contiguous float32")
+            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
         view = value._mv
         shape = value.shape
     else:
         view = g[].bi.memoryview(value)
         shape = view.shape
         if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
-            raise Error("CausalLM: state must be writable C-contiguous float32")
+            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
+    var want = String("(")
+    for i in range(len(expected)):  # small-loop(state buffer shape dims)
+        if i > 0:
+            want += ", "
+        want += String(expected[i])
+    want += ")"
     if len(shape) != len(expected):
-        raise Error("CausalLM: state buffer rank differs")
+        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
     var size = 1
     for i in range(len(expected)):  # small-loop(state buffer shape dims)
         if Int(py=shape[i]) != expected[i]:
-            raise Error("CausalLM: state buffer shape differs")
+            raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
         size *= expected[i]
     if Int(py=view.nbytes) != size * 4:
-        raise Error("CausalLM: state buffer span differs")
+        raise Error("CausalLM: " + label + " span differs from its shape")
     var address = _addr(value, keep)
     if g[].bi.type(value) is not g[].array_cls:
         var pair = g[].bi.list()
@@ -420,8 +432,8 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
         var profile = model._head_int15 is not None
         var device15 = profile and Bool(py=e.__contains__("forward15"))
         addresses = _transformer_args(model, blk, st, x, y, b, l, device15, keep)
-        addresses[10] = PythonObject(_mutable(st.k_cache, [cache_n], keep, copies))
-        addresses[11] = PythonObject(_mutable(st.v_cache, [cache_n], keep, copies))
+        addresses[10] = PythonObject(_mutable(st.k_cache, [cache_n], keep, copies, "k_cache"))
+        addresses[11] = PythonObject(_mutable(st.v_cache, [cache_n], keep, copies, "v_cache"))
         if device15:
             if blk["_native_session"] is None:
                 blk["_native_session"] = e["create"]()
@@ -446,27 +458,27 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
             addresses.append(_addr(blk["_w"][j], keep))
         if kind == "mamba1":
             var di = Int(py=blk["d_inner"])
-            addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies))
-            addresses.append(_mutable(st.h, [b, di, 16], keep, copies))
+            addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies, "conv_window"))
+            addresses.append(_mutable(st.h, [b, di, 16], keep, copies, "h"))
             addresses.append(_addr(y, keep))
             params = py_ints([b, d]) if step else py_ints([b, l, d])
             var profile = Int(py=e["mamba1_profile"])
             if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
                 raise Error("CausalLM: incompatible or failed Mamba1 state")
             if profile == 2:
-                addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies))
-                addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies))
-                addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies))
+                addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies, "affine_boundary"))
+                addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies, "affine_a"))
+                addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies, "affine_b"))
                 params.append(st.absolute_position)
             e["decode" if step else "forward"](addresses, params)
             st.absolute_position = PythonObject(Int(py=st.absolute_position) + l)
         else:
             var nh = Int(py=blk["nheads"])
             var cd = Int(py=blk["conv_dim"])
-            addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies))
-            addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies))
-            addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
-            addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
+            addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies, "conv_window"))
+            addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies, "h"))
+            addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
+            addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
             addresses.append(_addr(y, keep))
             var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
             addresses.append(_addr(last, keep))

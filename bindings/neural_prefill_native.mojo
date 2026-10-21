@@ -11,7 +11,9 @@ from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 
 
-def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
+def _prefill_mamba3_reports(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
+    """The zero-state prefill: `(y, h_last, k_last, v_last, theta_last)`, the
+    reports None where the binding skips them. The caller assigns them."""
     var bi = Python.import_module("builtins")
     var fields = bi.object.__getattribute__(block, "__dict__")
     var b = Int(py=x.shape[0])
@@ -57,10 +59,16 @@ def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject)
             _native_function(entries, "mamba3_prefill_session_forward")(fields["_prefill_session"], addresses, params)
     else:
         _native_function(entries, "mamba3_forward_fresh")(addresses, params)
+    return Python.tuple(out, reports[0], reports[1], reports[2], reports[3])
+
+
+def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
+    var result = _prefill_mamba3_reports(block, x, entries)
+    var fields = Python.import_module("builtins").object.__getattribute__(block, "__dict__")
     var names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over report result metadata slots
-        fields[names[i]] = reports[i]
-    return out
+        fields[names[i]] = result[i + 1]
+    return result[0]
 
 
 def neural_prefill_forward(block: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:

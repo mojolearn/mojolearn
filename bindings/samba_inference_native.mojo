@@ -85,12 +85,14 @@ def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> P
         return _model_bindings(PythonObject("cpu"), "mamba3", nc, PythonObject("identical"))["mamba3"]
     return neural_training_entries(samba_fields(block), nc)
 
-def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
+def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, entries: PythonObject) raises -> PythonObject:
+    """One carried-state call: `(y, h_last, k_last, v_last, theta_last)`. The
+    state's pieces, `buffered_tokens` and `pending` are updated; the caller
+    assigns the four reports."""
     var fields = samba_fields(block)
     var slots = samba_fields(state)
     if slots.get("_resident_session") is not None:
         raise Error("Mamba3: state belongs to an open resident decode session; synchronize or close it first")
-    var entries = _samba_block_entries(block, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=fields["d_model"])
@@ -104,7 +106,7 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
     for i in range(len(weights)):  # driver-loop: over existing Mamba3 parameter ABI slots
         addresses.append(generation_address(weights[i], keep))
     for i in range(len(names)):  # driver-loop: over mutable continuation buffers
-        addresses.append(_mutable(slots[names[i]], shapes[i], keep, copies))
+        addresses.append(_mutable(slots[names[i]], shapes[i], keep, copies, names[i]))
     var output = generation_array([b, l, d])
     var reports = Python.list(generation_array([b, h, 64, 128]), generation_array([b, h, 128]),
                               generation_array([b, h, 64]), generation_array([b, h, 32]))
@@ -121,11 +123,17 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
     _writeback(copies)
     slots["buffered_tokens"] = updated
     slots["pending"] = False
+    _ = keep^
+    return Python.tuple(output, reports[0], reports[1], reports[2], reports[3])
+
+
+def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
+    var result = _m3_state_call(block, x, state, step, _samba_block_entries(block, context))
+    var fields = samba_fields(block)
     var report_names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over reporting result metadata
-        fields[report_names[i]] = reports[i]
-    _ = keep^
-    return output
+        fields[report_names[i]] = result[i + 1]
+    return result[0]
 
 
 def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries: PythonObject, ids: PythonObject) raises -> PythonObject:

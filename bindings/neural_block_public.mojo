@@ -112,9 +112,10 @@ def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: Python
         shaped.strides = bi.tuple(py_ints([d_model * 4, d_model * 4, 4]))
         x = shaped
     if len(x.shape) != 3 or Int(py=x.shape[0]) < 1 or Int(py=x.shape[1]) < 1 or Int(py=x.shape[2]) != d_model:
-        raise Error("neural block: x must have shape (positive B, positive L, d_model)")
+        raise Error("neural block: x must be (B, L, d_model)" + (String(" -- or (B, d_model) for a step --") if step else String("")) +
+                    " with positive B and L and the weights' d_model " + String(d_model) + ", got shape " + String(x.shape))
     if step and Int(py=x.shape[1]) != 1:
-        raise Error("neural block: step requires one token per row")
+        raise Error("neural block: a decode step takes exactly one token per row, got L = " + String(x.shape[1]) + "; use forward() for prefill")
     return x
 
 
@@ -227,13 +228,13 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
     var d = Int(py=owner.d_model)
     var step = Bool(py=step_value)
     if step and state_value is None:
-        raise Error("neural block: step requires a state")
+        raise Error("neural block: state is required for step (a decode step continues a sequence; allocate_state(B) makes the fresh one)")
     var x = _neural_input(input, d, step, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     if lengths is not None:
         if state_value is not None:
-            raise Error("neural block: lengths cannot be combined with state")
+            raise Error("neural block: lengths= (a ragged, right-padded batch) cannot carry a state; run the ragged prefill with state=None, or continue each sequence as its own batch")
         var sizes = _neural_lengths(lengths, b, l, context)
         var padded = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=padded._addr), Int(py=x._addr), sizes, b, l, d)
