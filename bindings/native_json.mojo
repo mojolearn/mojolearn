@@ -214,7 +214,7 @@ def native_path(value: PythonObject) raises -> PythonObject:
     # real native slot descriptor from the admitted path hierarchy instead.
     for storage in range(2):
         var field = PythonObject("_raw_paths") if storage == 0 else PythonObject("_parts")
-        for i in range(len(mro)):
+        for i in range(len(mro)):  # driver-loop: over admitted native path class metadata
             var base = mro[i]
             if base is not pathlib.PosixPath and base is not pathlib.PurePosixPath and base is not pathlib.Path and base is not pathlib.PurePath and base is not bi.object:
                 raise Error("TypeError: Python path inheritance callbacks are unsupported")
