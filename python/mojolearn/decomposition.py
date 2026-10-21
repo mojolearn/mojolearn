@@ -446,8 +446,10 @@ class PCA(NumericModeMixin):
         # ONE native call: the fit, the rank choice, the dropped tail's noise
         # variance and (fit_transform) the projection. The kept components
         # are the prefix of the outputs.
-        keep, noise = self._native(
-            fit_owned, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
+        # Its refusals keep the binding's exception class (the CPU wide
+        # full-SVD refusal is a plain Exception, as before).
+        keep, noise = fit_owned(
+            addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
             addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
             addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
             [n, d, nc, int(dense), keep_mode, int(bool(self.whiten)), frac],
