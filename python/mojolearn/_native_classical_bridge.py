@@ -252,10 +252,17 @@ def _layout(cls, attribute_descriptor):
 
 
 def _unavailable(error):
-    message = f"mojolearn LinearRegression and Ridge are unavailable: {error}"
+    # glue: an install without NumPy (or without the compiled owner) keeps the
+    # package importable; these classes then explain what is missing.
+    if isinstance(error, ModuleNotFoundError) and error.name == "numpy":
+        message = ("mojolearn: LinearRegression and Ridge require optional NumPy support. "
+                   'Install it with: python -m pip install "mojolearn[numpy]" '
+                   '("mojolearn[verify]" also includes NumPy).')
+    else:
+        message = f"mojolearn: LinearRegression and Ridge are unavailable: {error}"
 
     def unavailable(*args):
-        raise ImportError(message)
+        raise ModuleNotFoundError(message, name=getattr(error, "name", None))
     return unavailable, {"classical_unavailable": message}
 
 
