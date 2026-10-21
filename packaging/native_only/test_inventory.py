@@ -123,3 +123,20 @@ def test_svm_fit_prediction_witness_preserves_binary_and_backend_scope():
     for name in ("mojolearn.LinearSVC", "mojolearn.LinearSVR"):
         assert rows[name]["status"] != "ready"
         assert not rows[name]["cases"]
+
+
+def test_convolution_derivatives_map_only_the_actual_tape_operations():
+    data = manifest()
+    rows = {row["algorithm"]: row for row in data["inventory"]}
+    cases = {case["id"]: case for case in data["cases"]}
+    for name in ("autograd_conv_cpu", "autograd_conv_gpu"):
+        assert cases[name]["canonical_algorithms"] == ["mojolearn.ops.Session"]
+        assert cases[name]["scope"] == "native-core"
+        assert cases[name]["whole_operation"] is True
+        assert "independent analytic chain oracle" in cases[name]["coverage"]
+        assert name in rows["mojolearn.ops.Session"]["cases"]
+    assert "CPython" in rows["mojolearn.ops.Session"]["boundary_blocker"]
+    for name in ("mojolearn.Conv2d", "mojolearn.AvgPool2d"):
+        assert rows[name]["status"] != "ready"
+        assert not rows[name]["cases"]
+    assert rows["mojolearn.ops.Program"]["status"] == "blocked"
