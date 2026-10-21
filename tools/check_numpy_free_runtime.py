@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run GPU RF/ET, scoring and scaler smoke checks with NumPy imports blocked.
+"""Run GPU RF/ET, linear, scoring and scaler smoke checks with NumPy imports blocked.
 
 Run with an installed package (no PYTHONPATH) for wheel qualification, or
 PYTHONPATH=python for a source-tree correctness check. Requires a GPU and
@@ -39,7 +39,8 @@ def main():
  class RejectNumpy(importlib.abc.MetaPathFinder):
   def find_spec(self, fullname, path=None, target=None):
    if fullname=='numpy' or fullname.startswith('numpy.'):
-    raise ImportError('NumPy blocked for runtime qualification')
+    # The error an install without NumPy raises.
+    raise ModuleNotFoundError("No module named 'numpy' (blocked for runtime qualification)", name='numpy')
  sys.meta_path.insert(0,RejectNumpy())
  import mojolearn as ml
  if args.installed:
@@ -76,6 +77,12 @@ def main():
   m=cls(numeric_mode='identical');out=m.fit_transform(X);restored=m.inverse_transform(out)
   assert out.shape==X.shape and restored.shape==X.shape
   results.append(dict(estimator=cls.__name__,shape=out.shape))
+ target=[float(v) for v in y]
+ for cls in (ml.LinearRegression,ml.Ridge):
+  m=cls(numeric_mode='identical').fit(X,target)
+  pred=m.predict(X)
+  assert type(pred) is ml.Array and type(m.coef_) is ml.Array and pred.shape==(16,)
+  results.append(dict(estimator=cls.__name__,shape=pred.shape,score=m.score(X,target)))
  folds=ml.cross_val_score(ml.RandomForestClassifier(n_estimators=2,max_depth=2,numeric_mode='identical'),X,y,cv=2)
  assert folds.shape==(2,)
  results.append(dict(operation='cross_val_score',scores=folds.tolist()))

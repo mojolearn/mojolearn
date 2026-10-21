@@ -22,6 +22,10 @@ import pytest
 import mojolearn
 from mojolearn import LinearRegression, Ridge
 
+#: This module calls the estimators as a user does, so `predict` answers it
+#: with the public float64 output, as it answers the child process.
+__mojolearn_user_boundary__ = True
+
 _CHILD = r'''
 import array, gc, hashlib, io, json, sys, weakref
 
@@ -153,8 +157,16 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
         local.save(tmp + "/leak.npz")
         restored = cls.load(tmp + "/leak.npz")
         assert [sys.getrefcount(v) for v in (X, y, w)] == counts
-        return [weakref.ref(local), weakref.ref(result), weakref.ref(restored),
-                weakref.ref(object.__getattribute__(local, "coef_"))]
+        # An Array takes no weak reference: an output held by one name must
+        # count as a fresh Array held the same way, and a fitted coef_ as one
+        # held by a dictionary and a name.
+        fresh = Array((n,), "<f8")
+        assert sys.getrefcount(result) == sys.getrefcount(fresh)
+        coef = object.__getattribute__(local, "coef_")
+        holder = {"coef_": Array((d,))}
+        held = holder["coef_"]
+        assert sys.getrefcount(coef) == sys.getrefcount(held)
+        return [weakref.ref(local), weakref.ref(restored)]
     references = run()
     gc.collect()
     assert [ref for ref in references if ref() is not None] == []
