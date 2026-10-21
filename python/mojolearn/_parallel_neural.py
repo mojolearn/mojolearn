@@ -7,8 +7,10 @@ from ._samba_impl import SambaStack
 from ._native_samba_bridge import CONTEXT
 from .parallel_training import ParallelNeuralTrainer
 from .tokenizer import _binding
+from ._parallel_neural_admission import connect as _connect_admission
 
 _module = _binding()._module
 _native_parallel_neural = _module.parallel_neural_call
 _native_parallel_neural('initialize', (ParallelNeuralTrainer, SmallMLPTrainer, SambaStack,
-                                     _module.samba_native_call, CONTEXT))
+                                     _module.samba_native_call, CONTEXT,
+                                     _connect_admission(CONTEXT, ParallelNeuralTrainer, SmallMLPTrainer)))
