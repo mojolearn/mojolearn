@@ -200,7 +200,7 @@ def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises 
         for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file read chunks
             var chunk = raw[bi.slice(start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))]
             var received = 0
-            while received < len(chunk):
+            while received < len(chunk):  # driver-loop: over partial native file reads within one chunk
                 var count = Int(py=stream.readinto(chunk[bi.slice(received, PythonObject(None))]))
                 if count < 1:
                     raise Error("Samba checkpoint truncated array")

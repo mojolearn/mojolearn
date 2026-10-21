@@ -104,6 +104,7 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
             var device = Int(py=group[i])
             selected.append(tokens[device].strip() if visible is not None else PythonObject(String(device)))
         env[mask] = PythonObject(",").join(selected)
+    # small-loop(the fixed family device-count variable names)
     for family in [String("KMEANS"), String("GBDT"), String("GRAM"), String("QR"),
                    String("OPTIMIZER"), String("GLM"), String("SOLVER"), String("IFOREST"),
                    String("FOREST"), String("SVM"), String("GP"), String("GMM"),
