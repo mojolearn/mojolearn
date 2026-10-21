@@ -25,7 +25,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32, read_i32
+from bindings.hostptr import f32_ptr, read_f32, read_i32, store_each_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from embedding.checks.embedding_oracle import (
@@ -144,8 +144,7 @@ def embedding_backward_binding(
     with GILReleased(Python()):
         if cells > 0:
             host_embedding_backward(dw, dy, ids, n_positions, cfg, plan)
-            for i in range(cells):
-                dwp.unsafe_store(i, dw[i])
+            store_each_f32(dwp, dw, cells)
     return PythonObject(vocab * width)
 
 

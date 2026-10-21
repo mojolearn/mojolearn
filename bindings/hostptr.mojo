@@ -6,7 +6,7 @@ both allocations alive for the entire call. Copies require disjoint spans (or ex
 span); partial overlap is not supported. No pointer is retained.
 """
 from std.memory import memcpy
-from core.shell_impl.hostptr_impl import copy_f32
+from core.shell_impl.hostptr_impl import copy_f32, store_each_f32
 
 
 def f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
