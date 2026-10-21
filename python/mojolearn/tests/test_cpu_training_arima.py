@@ -79,7 +79,10 @@ def test_binding_registers_the_gpu_names():
     # arima_predict and arima_forecast live in bindings/arima_host_predict.mojo
     # since lane/inference-forecast-umap-pca (2026-09-15), shared with the
     # forecast inference binding; the reference binding imports them.
-    src = _read(host_surface.binding_source("arima")) + _read("bindings/arima_host_predict.mojo")
+    # The typed bodies (`_order`, the fit body) moved to
+    # arima/host/arima_host_entries.mojo (lane thin-trees-metrics, 2026-10-21).
+    src = (_read(host_surface.binding_source("arima")) + _read("bindings/arima_host_predict.mojo")
+           + _read("arima/host/arima_host_entries.mojo"))
     exports = host_surface.family("arima")["exports"]
     gpu = _read("bindings/_mojolearn_arima.mojo")
     for name in ("arima_fit", "arima_predict", "arima_forecast", "arima_vendor", "arima_numeric_mode"):

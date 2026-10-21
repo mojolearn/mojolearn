@@ -103,7 +103,7 @@ from arima.impl.arima_ic import ARIMA_IC_TPB, arima_ic_kernel
 from arima.impl.batched_kalman import KALMAN_TPB
 from arima.impl.batched_arima import LoglikeResult, batched_diff, batched_loglike_x, predict_x
 from arima.impl.batched_fit import batched_fit_x
-from bindings.arima_exog_layout import exog_filter_layout
+from arima.exog_layout import exog_filter_layout
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 from arima.impl.tsa.arima_common import (
     ARIMAOrder,

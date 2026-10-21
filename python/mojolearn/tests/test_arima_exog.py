@@ -5,7 +5,7 @@
 Source checks, which run anywhere: the order validator no longer refuses a
 regressor count and refuses a negative one and one above `EXOG_MAX`; the three
 doors that take an exogenous address permute it through ONE file
-(`bindings/arima_exog_layout.mojo`), which is where a non-finite regressor is
+(`arima/exog_layout.mojo`), which is where a non-finite regressor is
 refused by name; the host oracle restates the constructs a bit claim rests on
 (the observation intercept's fold, the start-value regression, the future
 differencing, `beta` through the packing and the Jones copy); the manifest
@@ -33,7 +33,7 @@ from mojolearn._cpu_reference import reference_training
 ROOT = Path(__file__).resolve().parents[3]
 
 ORACLE = "arima/host/arima_oracle.mojo"
-LAYOUT = "bindings/arima_exog_layout.mojo"
+LAYOUT = "arima/exog_layout.mojo"
 LANES = ("arima-exog", "arima-exog-seasonal")
 
 
@@ -64,10 +64,11 @@ def test_one_file_permutes_the_exog_layout_and_refuses_a_non_finite_one():
     layout = _read(LAYOUT)
     assert "def exog_filter_layout(" in layout
     assert "non-finite value at series " in layout, "the refusal does not name the cell"
-    for door in ("arima/estimator.mojo", "bindings/arima_host_predict.mojo",
-                 "bindings/_mojolearn_arima_host.mojo"):
+    # The host doors' typed bodies are arima/host/arima_host_entries.mojo
+    # (lane thin-trees-metrics, 2026-10-21).
+    for door in ("arima/estimator.mojo", "arima/host/arima_host_entries.mojo"):
         code = _code(_read(door))
-        assert "from bindings.arima_exog_layout import exog_filter_layout" in code, door
+        assert "from arima.exog_layout import exog_filter_layout" in code, door
         assert "def exog_filter_layout" not in code, f"{door} spells the permutation itself"
 
 

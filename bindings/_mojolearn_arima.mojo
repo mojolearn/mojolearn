@@ -45,7 +45,7 @@ or two layers down and is raised there by name, which is what keeps it
 reachable from every caller and not only from Python:
 
     n_exog < 0 or > 17   `arima/impl/tsa/arima_common.mojo::validate_order`
-    non-finite exog      `bindings/arima_exog_layout.mojo`, naming the
+    non-finite exog      `arima/exog_layout.mojo`, naming the
                          series, row and regressor (DEVIATION 997)
     method css, css-ml   `arima/estimator.mojo::_refuse_method`
     rd > 8               `validate_order`, cuML's block-per-series Kalman
