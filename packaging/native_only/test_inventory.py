@@ -83,3 +83,21 @@ def test_whole_operation_metadata_preserves_knn_oracle_limits():
         assert "does not independently validate neighbor selection" in cases[name]["coverage"]
     for name in ("autograd_cpu", "sequential_cpu", "optimizer_cpu", "tokenizer", "preprocessing"):
         assert cases[name]["whole_operation"] is True
+
+
+def test_sequence_optimizer_engine_witness_does_not_admit_public_or_uncovered_owners():
+    data = manifest()
+    rows = {row["algorithm"]: row for row in data["inventory"]}
+    cases = {case["id"]: case for case in data["cases"]}
+    names = {"mojolearn." + name for name in ("Adagrad", "Adamax", "NAdam", "RMSprop", "Lion")}
+    for name in names:
+        assert rows[name]["status"] == "ready"
+        assert "CPython" in rows[name]["boundary_blocker"]
+    for name in ("sequence_optimizer_cpu", "sequence_optimizer_gpu"):
+        assert set(cases[name]["canonical_algorithms"]) == names
+        assert cases[name]["scope"] == "native-core"
+        assert cases[name]["whole_operation"] is True
+        assert "Public adapters/checkpoints, Adafactor and LAMB are not exercised" in cases[name]["coverage"]
+    for name in ("mojolearn.Adafactor", "mojolearn.LAMB"):
+        assert rows[name]["status"] != "ready"
+        assert not rows[name]["cases"]
