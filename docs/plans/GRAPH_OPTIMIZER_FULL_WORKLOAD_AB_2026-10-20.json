@@ -1,7 +1,7 @@
 {
   "schema": "mojolearn.graph-optimizer-full-workload-plan.v1",
   "date": "2026-10-20",
-  "status": "recipe_mapping_and_input_preparation_only; full-workload optimizer A/B harness and measurements pending",
+  "status": "paired_runner_source_and_full_control_cpu_validation_ready; active_real_model_coverage_and_vendor_measurements_pending",
   "reviewed_integration": "c0164cc04ef143bee65f885a6ba4e892c7254c2b",
   "policy_sources": [
     "AGENTS.md: Full-dataset candidate evaluation / Incremental experiment delivery",
@@ -141,7 +141,7 @@
         "array_hashes": "Every complete array byte SHA256/dtype/shape is retained in recipe.json; artifact SHA above covers the exact NPZ."
       },
       "applicability": "Existing native captured Program; expected zero rewrites. Measures aggregate planning overhead, not active-pass benefit.",
-      "harness_gap": "OursProgramRun.call currently invokes run(X) without optimize; program_eager compares eager vs captured and is NOT optimizer A/B. Add explicit recorded optimize argument and immutable input receipt consumption.",
+      "harness_gap": "Fixed in source: explicit program_optimize runtime bool reaches native Program.run; paired runner consumes retained complete inputs/checkpoint and pass reports. Full CPU control validation passed; installed NVIDIA/AMD timing pending.",
       "timed_boundary": "Repeated inference: prepared host X -> single Program.run -> required synchronization and complete returned output consumption. Weights are resident in BOTH arms. Also record cold construction/parameter upload/capture/first call separately."
     },
     {
@@ -396,7 +396,7 @@
       ]
     },
     {
-      "purpose": "Existing full declared baseline/zero-rewrite control only. No optimize toggle is wired yet; this command does NOT perform optimizer A/B. Requires a retained repo checkout and properly installed native vendor package.",
+      "purpose": "Existing saved baseline only; explicit program_optimize config can now select aggregate false/true. Prefer bench_graph_optimizer.py for paired immutable-artifact clocks and full-output/native-audit retention; this ordinary command alone still does not perform paired A/B.",
       "commands": [
         "MOJOLEARN_VENDOR=cuda MOJOLEARN_NUMERIC_MODE=identical python3 tools/bench_board_neural.py race --lane program-run --shape full --arms ours --rounds 1 --out /root/results-graph-opt/baseline-cuda --work /root/results-graph-opt/work-cuda --ours-python /root/results-graph-opt/venv/bin/python --keep-outputs",
         "MOJOLEARN_VENDOR=hip MOJOLEARN_NUMERIC_MODE=identical python3 tools/bench_board_neural.py race --lane program-run --shape full --arms ours --rounds 1 --out /root/results-graph-opt/baseline-hip --work /root/results-graph-opt/work-hip --ours-python /root/results-graph-opt/venv/bin/python --keep-outputs"
@@ -407,7 +407,8 @@
     {
       "order": 1,
       "change": "Add explicit optimizer false/true arms to the saved native Program worker, recording requested and effective bool. Consume one immutable input receipt/capture/checkpoint across vendors; refuse hash or full-extent mismatches.",
-      "acceptance": "One native whole operation per run; no substitution of eager-vs-captured program_eager. Preserve zero-rewrite control."
+      "acceptance": "One native whole operation per run; no substitution of eager-vs-captured program_eager. Preserve zero-rewrite control.",
+      "source_status": "implemented by tools/bench_graph_optimizer.py; control validation only; real active workloads and NVIDIA/AMD execution remain pending"
     },
     {
       "order": 2,
@@ -417,12 +418,14 @@
     {
       "order": 3,
       "change": "Record inspect reports with each named pass count/source mapping; add actual full workload for every pass intended for promotion.",
-      "acceptance": "No fabricated duplicate/view/broadcast work in a saved baseline. Synthetic stress graphs remain component screening."
+      "acceptance": "No fabricated duplicate/view/broadcast work in a saved baseline. Synthetic stress graphs remain component screening.",
+      "source_status": "implemented by tools/bench_graph_optimizer.py; control validation only; real active workloads and NVIDIA/AMD execution remain pending"
     },
     {
       "order": 4,
       "change": "Implement cold and repeated whole-operation clocks and output/state hashing within the declared consumed-output boundary. Keep instrumentation/profile runs separate.",
-      "acceptance": "Include optimizer plan construction on each call where the public API performs it; do not preoptimize outside the candidate clock unless the actual public runtime caches it for both measured arms."
+      "acceptance": "Include optimizer plan construction on each call where the public API performs it; do not preoptimize outside the candidate clock unless the actual public runtime caches it for both measured arms.",
+      "source_status": "implemented by tools/bench_graph_optimizer.py; control validation only; real active workloads and NVIDIA/AMD execution remain pending"
     },
     {
       "order": 5,
@@ -441,5 +444,18 @@
     "publication": "Internal plan only. No public support/performance statements and no board completion claims from this mapping."
   },
   "performance_measurements": [],
-  "default_changed": false
+  "default_changed": false,
+  "runner": {
+    "source": "tools/bench_graph_optimizer.py",
+    "instructions": "docs/plans/GRAPH_OPTIMIZER_RUNNER_20261020.md",
+    "native_source_changed": false,
+    "aggregate_toggle_forwarded": true,
+    "control_cpu_validation": "complete saved 4096x256->512->16 native Program; exact output/audit passes; all rewrite counts zero",
+    "pending": [
+      "NVIDIA/AMD full-workload execution",
+      "real captured full model activation",
+      "separate paired noise evidence",
+      "full affected-workload and cross-vendor identity qualification"
+    ]
+  }
 }
