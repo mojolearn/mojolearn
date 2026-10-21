@@ -11,6 +11,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.memory import memcpy
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,
@@ -32,8 +33,8 @@ from transformer.causal_lm_public_impl import (
 
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var entry = g[].bi.getattr(module, name)
-    if g[].bi.type(entry) is not g[].bi.type(g[].bi.len):
+    var entry = py_call(g[].bi.getattr, module, name)
+    if py_type(entry) is not py_type(g[].bi.len):
         raise Error("CausalLM: " + name + " must be a compiled native extension entry")
     return entry
 
@@ -64,54 +65,54 @@ def causal_lm_admit_binding(
         var packed_mode = Int(py=_native_function(int15_binding, "linalg_numeric_mode")())
         if packed_vendor != vendor or packed_mode != mode:
             raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
-    model._native_vendor = PythonObject(vendor)
-    model._native_numeric_mode = PythonObject(mode)
-    entries["weight_names"] = g[].bi.object.__getattribute__(model._blocks[0], "_W_NAMES")
+    py_setattr(model, "_native_vendor", PythonObject(vendor))
+    py_setattr(model, "_native_numeric_mode", PythonObject(mode))
+    py_setitem(entries, "weight_names", py_call(g[].bi.object.__getattribute__, model._blocks[0], "_W_NAMES"))
     for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
-        entries[name] = _native_function(primitives, name)
+        py_setitem(entries, name, _native_function(primitives, name))
     if kind == "transformer":
-        entries["forward"] = _native_function(block_binding, "transformer_forward")
-        entries["decode"] = _native_function(block_binding, "transformer_decode_step")
-        entries["block_binding"] = block_binding
+        py_setitem(entries, "forward", _native_function(block_binding, "transformer_forward"))
+        py_setitem(entries, "decode", _native_function(block_binding, "transformer_decode_step"))
+        py_setitem(entries, "block_binding", block_binding)
         for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:  # small-loop(optional entry names)
-            if Bool(py=g[].bi.hasattr(block_binding, name)):
-                entries[name] = _native_function(block_binding, name)
-        if Bool(py=g[].bi.hasattr(block_binding, "transformer_session_forward")):
-            entries["create"] = _native_function(block_binding, "transformer_session_create")
-            entries["forward_session"] = _native_function(block_binding, "transformer_session_forward")
-            entries["block_binding"] = block_binding
+            if Bool(py=py_call(g[].bi.hasattr, block_binding, name)):
+                py_setitem(entries, name, _native_function(block_binding, name))
+        if Bool(py=py_call(g[].bi.hasattr, block_binding, "transformer_session_forward")):
+            py_setitem(entries, "create", _native_function(block_binding, "transformer_session_create"))
+            py_setitem(entries, "forward_session", _native_function(block_binding, "transformer_session_forward"))
+            py_setitem(entries, "block_binding", block_binding)
         if model._head_int15 is not None:
-            if Bool(py=g[].bi.hasattr(block_binding, "transformer_session_forward_int15")):
-                entries["create"] = _native_function(block_binding, "transformer_session_create")
-                entries["forward15"] = _native_function(block_binding, "transformer_session_forward_int15")
+            if Bool(py=py_call(g[].bi.hasattr, block_binding, "transformer_session_forward_int15")):
+                py_setitem(entries, "create", _native_function(block_binding, "transformer_session_create"))
+                py_setitem(entries, "forward15", _native_function(block_binding, "transformer_session_forward_int15"))
             else:
-                entries["forward15_host"] = _native_function(block_binding, "transformer_forward_int15")
-            entries["quantize15"] = _native_function(int15_binding, "quantize_int15")
-            entries["gemm15"] = _native_function(int15_binding, "gemm_int15")
+                py_setitem(entries, "forward15_host", _native_function(block_binding, "transformer_forward_int15"))
+            py_setitem(entries, "quantize15", _native_function(int15_binding, "quantize_int15"))
+            py_setitem(entries, "gemm15", _native_function(int15_binding, "gemm_int15"))
         # Preserve the existing resident GPU route for fixed-length greedy
         # generation. No performance default changes with this migration.
-        if Bool(py=g[].bi.hasattr(block_binding, "causal_lm_session_run")):
-            entries["resident_vendor"] = _native_function(block_binding, "transformer_vendor")()
+        if Bool(py=py_call(g[].bi.hasattr, block_binding, "causal_lm_session_run")):
+            py_setitem(entries, "resident_vendor", _native_function(block_binding, "transformer_vendor")())
             for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),  # small-loop(resident entry names)
                          String("transformer_decode_session_close"), String("causal_lm_session_create"),
                          String("causal_lm_session_open"), String("causal_lm_session_run"), String("causal_lm_session_close")]:
-                entries[name] = _native_function(block_binding, name)
+                py_setitem(entries, name, _native_function(block_binding, name))
             if model._head_int15 is not None:
-                entries["transformer_decode_session_open_int15"] = _native_function(block_binding, "transformer_decode_session_open_int15")
-                entries["causal_lm_session_open_int15"] = _native_function(block_binding, "causal_lm_session_open_int15")
+                py_setitem(entries, "transformer_decode_session_open_int15", _native_function(block_binding, "transformer_decode_session_open_int15"))
+                py_setitem(entries, "causal_lm_session_open_int15", _native_function(block_binding, "causal_lm_session_open_int15"))
     elif kind == "mamba1":
-        entries["forward"] = _native_function(block_binding, "mamba1_forward")
-        entries["decode"] = _native_function(block_binding, "mamba1_decode_step")
+        py_setitem(entries, "forward", _native_function(block_binding, "mamba1_forward"))
+        py_setitem(entries, "decode", _native_function(block_binding, "mamba1_decode_step"))
         var profile = 1
-        if Bool(py=g[].bi.hasattr(block_binding, "mamba1_profile")):
+        if Bool(py=py_call(g[].bi.hasattr, block_binding, "mamba1_profile")):
             profile = Int(py=_native_function(block_binding, "mamba1_profile")())
-        entries["mamba1_profile"] = PythonObject(profile)
+        py_setitem(entries, "mamba1_profile", PythonObject(profile))
     elif kind == "mamba2":
-        entries["forward"] = _native_function(block_binding, "mamba2_forward")
-        entries["decode"] = _native_function(block_binding, "mamba2_decode_step")
+        py_setitem(entries, "forward", _native_function(block_binding, "mamba2_forward"))
+        py_setitem(entries, "decode", _native_function(block_binding, "mamba2_decode_step"))
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
-    model._native_entries = entries
+    py_setattr(model, "_native_entries", entries)
     return PythonObject(None)
 
 
@@ -119,10 +120,10 @@ def _block(model: PythonObject, index: Int) raises -> PythonObject:
     # PublicOutputsMixin.__getattribute__ is Python even for private metadata.
     # Access the object's plain dictionary with CPython's base implementation,
     # bypassing that overridden getter; every field below is stored metadata.
-    var parallel = model._native_entries.get("parallel_call")
+    var parallel = py_get(model._native_entries, "parallel_call")
     if parallel is not None:
-        return parallel("block_fields", Python.list(model, index))
-    return GENERATION_BOUNDARY.get_or_create_ptr()[].bi.object.__getattribute__(model._blocks[index], "__dict__")
+        return py_call(parallel, "block_fields", Python.list(model, index))
+    return py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.object.__getattribute__, model._blocks[index], "__dict__")
 
 
 def _positions(model: PythonObject, state: PythonObject, length: Int) raises:
@@ -139,11 +140,11 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var result = g[].bi.dict()
     var p = model.plan
-    result[p.embed_name] = model._embed
+    py_setitem(result, p.embed_name, model._embed)
     if p.norm_name is not None:
-        result[p.norm_name] = model._norm
+        py_setitem(result, p.norm_name, model._norm)
     if p.head_name is not None:
-        result[p.head_name] = model._head
+        py_setitem(result, p.head_name, model._head)
     var weight_names = model._native_entries["weight_names"]
     # Same canonical optional slot order as the transformer native ABI.
     var optional_names = [String("q_proj.bias"), String("k_proj.bias"), String("v_proj.bias"),
@@ -157,32 +158,32 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
         var slices = g[].bi.dict()
         for j in range(len(p._layer_map)):  # driver-loop: over checkpoint tensor mappings
             var entry = p._layer_map[j]
-            names[entry[0]] = PythonObject(String(entry[1]).replace("{i}", String(i)))
-            slices[entry[0]] = entry[2]
+            py_setitem(names, entry[0], PythonObject(String(entry[1]).replace("{i}", String(i))))
+            py_setitem(slices, entry[0], entry[2])
         var blk = _block(model, i)
         var values = g[].bi.dict()
         for j in range(min(len(weight_names), len(blk["_w"]))):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
-                values[weight_names[j]] = blk["_w"][j]
+                py_setitem(values, weight_names[j], blk["_w"][j])
         if String(model.kind) == "transformer":
             for j in range(len(optional_names)):  # driver-loop: over optional block weight slots
                 if blk["_wopt"][j] is not None:
-                    values[optional_names[j]] = blk["_wopt"][j]
-        var keys = g[].bi.list(values)
+                    py_setitem(values, optional_names[j], blk["_wopt"][j])
+        var keys = py_call(g[].bi.list, values)
         var fused = g[].bi.dict()
         for j in range(len(keys)):  # driver-loop: over checkpoint tensor names
             var key = keys[j]
-            var name = names.get(key, PythonObject("layers." + String(i) + "." + String(key)))
-            var rows = slices.get(key)
+            var name = py_get(names, key, PythonObject("layers." + String(i) + "." + String(key)))
+            var rows = py_get(slices, key)
             if rows is None:
-                result[name] = values[key]
+                py_setitem(result, name, values[key])
             else:
                 # A fused checkpoint tensor (Phi-3 QKV / gate-up) is split
                 # for execution. Return every row under its checkpoint name.
-                var piece = g[].bi.list(rows)
-                piece.append(values[key])
-                fused.setdefault(name, g[].bi.list()).append(piece)
-        var fused_names = g[].bi.list(fused)
+                var piece = py_call(g[].bi.list, rows)
+                _ = py_call(piece.append, values[key])
+                _ = py_call(py_call(fused.setdefault, name, g[].bi.list()).append, piece)
+        var fused_names = py_call(g[].bi.list, fused)
         for j in range(len(fused_names)):  # driver-loop: over fused checkpoint tensor names
             var name = fused_names[j]
             var pieces = fused[name]
@@ -196,58 +197,58 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
                 var end = Int(py=pieces[k][1])
                 if end > begin:
                     memcpy(dest=f32_ptr(Int(py=joined._addr)) + begin * cols, src=f32_ptr(_addr(pieces[k][2], keep)), count=(end - begin) * cols)
-            result[name] = joined
+            py_setitem(result, name, joined)
     _ = keep^
     return result
 
 
 def causal_lm_blocks_binding(model: PythonObject) raises -> PythonObject:
-    return GENERATION_BOUNDARY.get_or_create_ptr()[].bi.list(model._blocks)
+    return py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.list, model._blocks)
 
 
 def causal_layer_allocate(model: PythonObject, i: Int, b: Int, cap: Int) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var kind = String(model.kind)
     var blk = _block(model, i)
-    var st = g[].bi.object.__new__(g[].layer_classes[kind])
+    var st = py_call(g[].bi.object.__new__, g[].layer_classes[kind])
     if kind == "transformer":
         var window = Int(py=blk["window"])
         var nkv = Int(py=blk["n_kv_heads"])
         var hd = Int(py=blk["head_dim"])
         var n = b * nkv * (cap if window == 0 else window) * hd
-        st.batch_size = PythonObject(b)
-        st.n_kv_heads = PythonObject(nkv)
-        st.head_dim = PythonObject(hd)
-        st.max_tokens = PythonObject(cap)
-        st.window = PythonObject(window)
-        st.k_cache = generation_array([n])
-        st.v_cache = generation_array([n])
-        st.cached_tokens = PythonObject(0)
-        st._resident_session = PythonObject(None)
-        st._numeric_profile = model.numeric_profile
+        py_setattr(st, "batch_size", PythonObject(b))
+        py_setattr(st, "n_kv_heads", PythonObject(nkv))
+        py_setattr(st, "head_dim", PythonObject(hd))
+        py_setattr(st, "max_tokens", PythonObject(cap))
+        py_setattr(st, "window", PythonObject(window))
+        py_setattr(st, "k_cache", generation_array([n]))
+        py_setattr(st, "v_cache", generation_array([n]))
+        py_setattr(st, "cached_tokens", PythonObject(0))
+        py_setattr(st, "_resident_session", PythonObject(None))
+        py_setattr(st, "_numeric_profile", model.numeric_profile)
     elif kind == "mamba1":
         var di = Int(py=blk["d_inner"])
         var profile = Int(py=model._native_entries["mamba1_profile"])
-        st.conv_window = generation_array([b, di, 4])
-        st.h = generation_array([b, di, 16])
-        st.profile_id = PythonObject(profile)
-        st.absolute_position = PythonObject(0)
-        st._nn34_usable = PythonObject(True)
-        st.affine_boundary = PythonObject(None)
-        st.affine_a = PythonObject(None)
-        st.affine_b = PythonObject(None)
+        py_setattr(st, "conv_window", generation_array([b, di, 4]))
+        py_setattr(st, "h", generation_array([b, di, 16]))
+        py_setattr(st, "profile_id", PythonObject(profile))
+        py_setattr(st, "absolute_position", PythonObject(0))
+        py_setattr(st, "_nn34_usable", PythonObject(True))
+        py_setattr(st, "affine_boundary", PythonObject(None))
+        py_setattr(st, "affine_a", PythonObject(None))
+        py_setattr(st, "affine_b", PythonObject(None))
         if profile == 2:
-            st.affine_boundary = generation_array([b, di, 16])
-            st.affine_a = generation_array([b, di, 16, 6])
-            st.affine_b = generation_array([b, di, 16, 6])
+            py_setattr(st, "affine_boundary", generation_array([b, di, 16]))
+            py_setattr(st, "affine_a", generation_array([b, di, 16, 6]))
+            py_setattr(st, "affine_b", generation_array([b, di, 16, 6]))
     else:
         var cd = Int(py=blk["conv_dim"])
         var nh = Int(py=blk["nheads"])
-        st.conv_window = generation_array([b, cd, 4])
-        st.h = generation_array([b, nh, 64, 128])
-        st.buffer_xbc = generation_array([b, 256, cd])
-        st.buffer_dtraw = generation_array([b, 256, nh])
-        st.buffered_tokens = PythonObject(0)
+        py_setattr(st, "conv_window", generation_array([b, cd, 4]))
+        py_setattr(st, "h", generation_array([b, nh, 64, 128]))
+        py_setattr(st, "buffer_xbc", generation_array([b, 256, cd]))
+        py_setattr(st, "buffer_dtraw", generation_array([b, 256, nh]))
+        py_setattr(st, "buffered_tokens", PythonObject(0))
     return st
 
 
@@ -258,23 +259,23 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
         raise Error("CausalLM: batch_size and max_tokens must be positive")
     _positions(model, PythonObject(None), cap)
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var state = g[].bi.object.__new__(g[].state_cls)
-    state.batch_size = PythonObject(b)
-    state.max_tokens = PythonObject(cap)
-    state.positions = PythonObject(0)
-    state._owner = model
-    state._usable = PythonObject(True)
-    state.layers = g[].bi.list()
+    var state = py_call(g[].bi.object.__new__, g[].state_cls)
+    py_setattr(state, "batch_size", PythonObject(b))
+    py_setattr(state, "max_tokens", PythonObject(cap))
+    py_setattr(state, "positions", PythonObject(0))
+    py_setattr(state, "_owner", model)
+    py_setattr(state, "_usable", PythonObject(True))
+    py_setattr(state, "layers", g[].bi.list())
     var kind = String(model.kind)
-    var parallel = model._native_entries.get("parallel_call")
+    var parallel = py_get(model._native_entries, "parallel_call")
     try:
         for i in range(len(model._blocks)):  # driver-loop: over model layer state owners
-            state.layers.append(causal_layer_allocate(model, i, b, cap) if parallel is None else
-                                parallel("allocate_layer", Python.list(model, i, b, cap)))
+            _ = py_call(state.layers.append, causal_layer_allocate(model, i, b, cap) if parallel is None else
+                        py_call(parallel, "allocate_layer", Python.list(model, i, b, cap)))
     except error:
         if parallel is not None:
             try:
-                _ = parallel("release_layers", Python.list(model, state))
+                _ = py_call(parallel, "release_layers", Python.list(model, state))
             except cleanup_error:
                 raise Error("CausalLM: state allocation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
@@ -283,9 +284,9 @@ def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacit
 
 def _state(model: PythonObject, state: PythonObject, b: Int, l: Int) raises:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if g[].bi.type(state) is not g[].state_cls or state._owner is not model:
+    if py_type(state) is not g[].state_cls or state._owner is not model:
         raise Error("CausalLM: state belongs to another model")
-    if not Bool(py=g[].bi.getattr(state, "_usable", True)):
+    if not Bool(py=py_call(g[].bi.getattr, state, "_usable", True)):
         raise Error("CausalLM: state lost after a failed call; reset or restore it")
     if Int(py=state.batch_size) != b or len(state.layers) != len(model._blocks):
         raise Error("CausalLM: state batch/layer counts disagree with model and input")
@@ -294,23 +295,23 @@ def _state(model: PythonObject, state: PythonObject, b: Int, l: Int) raises:
 
 def causal_lm_reset_binding(model: PythonObject, state: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if g[].bi.type(state) is not g[].state_cls or state._owner is not model:
+    if py_type(state) is not g[].state_cls or state._owner is not model:
         raise Error("CausalLM: state belongs to another model")
     var fresh = causal_lm_allocate_binding(model, state.batch_size, state.max_tokens)
-    var parallel = model._native_entries.get("parallel_call")
+    var parallel = py_get(model._native_entries, "parallel_call")
     if parallel is not None:
         try:
-            _ = parallel("release_layers", Python.list(model, state))
+            _ = py_call(parallel, "release_layers", Python.list(model, state))
         except error:
-            state._usable = PythonObject(False)
+            py_setattr(state, "_usable", PythonObject(False))
             try:
-                _ = parallel("release_layers", Python.list(model, fresh))
+                _ = py_call(parallel, "release_layers", Python.list(model, fresh))
             except cleanup_error:
                 raise Error("CausalLM: state reset failed: " + String(error) + "; fresh-state cleanup also failed: " + String(cleanup_error))
             raise error
-    state.layers = fresh.layers
-    state.positions = PythonObject(0)
-    state._usable = PythonObject(True)
+    py_setattr(state, "layers", fresh.layers)
+    py_setattr(state, "positions", PythonObject(0))
+    py_setattr(state, "_usable", PythonObject(True))
     return state
 
 
@@ -324,13 +325,13 @@ def _mutable(
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var view = PythonObject(None)
     var shape = PythonObject(None)
-    if g[].bi.type(value) is g[].array_cls:
+    if py_type(value) is g[].array_cls:
         if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
             raise Error("CausalLM: state must be writable C-contiguous float32")
         view = value._mv
         shape = value.shape
     else:
-        view = g[].bi.memoryview(value)
+        view = py_call(g[].bi.memoryview, value)
         shape = view.shape
         if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
             raise Error("CausalLM: state must be writable C-contiguous float32")
@@ -344,10 +345,10 @@ def _mutable(
     if Int(py=view.nbytes) != size * 4:
         raise Error("CausalLM: state buffer span differs")
     var address = _addr(value, keep)
-    if g[].bi.type(value) is not g[].array_cls:
+    if py_type(value) is not g[].array_cls:
         var pair = g[].bi.list()
-        pair.append(view)
-        pair.append(keep[len(keep) - 1])
+        _ = py_call(pair.append, view)
+        _ = py_call(pair.append, keep[len(keep) - 1])
         copies.append(pair)
     return address
 
@@ -355,9 +356,9 @@ def _mutable(
 def _writeback(mut copies: List[PythonObject]) raises:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     for i in range(len(copies)):  # driver-loop: over copied state buffer handles
-        var view = copies[i][0].cast("B")
-        var source = g[].bi.memoryview(copies[i][1]).cast("B")
-        view[g[].bi.slice(PythonObject(None))] = source
+        var view = py_call(copies[i][0].cast, "B")
+        var source = py_call(py_call(g[].bi.memoryview, copies[i][1]).cast, "B")
+        py_setitem(view, py_call(g[].bi.slice, PythonObject(None)), source)
     copies.clear()
 
 
@@ -367,17 +368,17 @@ def _transformer_args(
 ) raises -> PythonObject:
     var addresses = py_ints([_addr(x, keep)])
     for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
-        addresses.append(0 if planes and j >= 2 else _addr(blk["_w"][j], keep))
-    addresses.append(_addr(st.k_cache, keep))
-    addresses.append(_addr(st.v_cache, keep))
-    addresses.append(_addr(y, keep))
+        _ = py_call(addresses.append, 0 if planes and j >= 2 else _addr(blk["_w"][j], keep))
+    _ = py_call(addresses.append, _addr(st.k_cache, keep))
+    _ = py_call(addresses.append, _addr(st.v_cache, keep))
+    _ = py_call(addresses.append, _addr(y, keep))
     for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
-        addresses.append(_addr(blk["_wopt"][j], keep))
+        _ = py_call(addresses.append, _addr(blk["_wopt"][j], keep))
     if planes:
         for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
             var trip = blk["_int15"][j]
             for k in range(3):  # small-loop(int15 plane triple)
-                addresses.append(0 if trip is None else _addr(trip[k], keep))
+                _ = py_call(addresses.append, 0 if trip is None else _addr(trip[k], keep))
     return addresses
 
 
@@ -385,7 +386,7 @@ def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) rai
     var p = py_ints([b, l, Int(py=blk["d_model"]), Int(py=blk["n_heads"]), Int(py=blk["n_kv_heads"]),
                     Int(py=blk["head_dim"]), Int(py=blk["intermediate"]), Int(py=st.max_tokens),
                     Int(py=st.cached_tokens), Int(py=blk["window"])])
-    p.extend(blk["_opts_tail"])
+    _ = py_call(p.extend, blk["_opts_tail"])
     return p
 
 
@@ -404,76 +405,76 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
     var params = PythonObject(None)
     if kind == "transformer":
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
-        if g[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
+        if py_call(g[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
             raise Error("CausalLM: layer state is owned by a decode session")
-        var old_profile = g[].bi.getattr(st, "arithmetic_profile", PythonObject(None))
-        var profile_id = blk.get("_arithmetic_profile", PythonObject(None))
-        if old_profile is None and Int(py=st.cached_tokens) != 0 and Bool(py=blk.get("_arithmetic_profile_changed", PythonObject(False))):
+        var old_profile = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
+        var profile_id = py_get(blk, "_arithmetic_profile", PythonObject(None))
+        if old_profile is None and Int(py=st.cached_tokens) != 0 and Bool(py=py_get(blk, "_arithmetic_profile_changed", PythonObject(False))):
             raise Error("CausalLM: cached state requires arithmetic profile metadata")
         if old_profile is not None and profile_id is not None and not Bool(py=old_profile == profile_id):
             raise Error("CausalLM: state arithmetic profile differs")
         if profile_id is not None:
-            st.arithmetic_profile = profile_id
+            py_setattr(st, "arithmetic_profile", profile_id)
         var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
         var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
         params = _transformer_params(blk, st, b, l)
         var profile = model._head_int15 is not None
-        var device15 = profile and Bool(py=e.__contains__("forward15"))
+        var device15 = profile and py_contains(e, "forward15")
         addresses = _transformer_args(model, blk, st, x, y, b, l, device15, keep)
-        addresses[10] = PythonObject(_mutable(st.k_cache, [cache_n], keep, copies))
-        addresses[11] = PythonObject(_mutable(st.v_cache, [cache_n], keep, copies))
+        py_setitem(addresses, 10, PythonObject(_mutable(st.k_cache, [cache_n], keep, copies)))
+        py_setitem(addresses, 11, PythonObject(_mutable(st.v_cache, [cache_n], keep, copies)))
         if device15:
             if blk["_native_session"] is None:
-                blk["_native_session"] = e["create"]()
-                blk["_session_binding"] = e["block_binding"]
-            st.cached_tokens = e["forward15"](blk["_native_session"], addresses, params)
+                py_setitem(blk, "_native_session", e["create"]())
+                py_setitem(blk, "_session_binding", e["block_binding"])
+            py_setattr(st, "cached_tokens", py_call(e["forward15"], blk["_native_session"], addresses, params))
         elif profile:
-            st.cached_tokens = e["forward15_host"](addresses, params)
-        elif Bool(py=e.__contains__("forward_session")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
+            py_setattr(st, "cached_tokens", py_call(e["forward15_host"], addresses, params))
+        elif py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1":
             if blk["_native_session"] is None:
-                blk["_native_session"] = e["create"]()
-                blk["_session_binding"] = e["block_binding"]
-            st.cached_tokens = e["forward_session"](blk["_native_session"], addresses, params)
+                py_setitem(blk, "_native_session", e["create"]())
+                py_setitem(blk, "_session_binding", e["block_binding"])
+            py_setattr(st, "cached_tokens", py_call(e["forward_session"], blk["_native_session"], addresses, params))
         else:
             if step:
-                params.pop(1)
-            st.cached_tokens = e["decode" if step else "forward"](addresses, params)
+                _ = py_call(params.pop, 1)
+            py_setattr(st, "cached_tokens", py_call(e["decode" if step else "forward"], addresses, params))
     else:
-        if GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
+        if py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
             raise Error("neural block: state is owned by a resident decode session")
         addresses = py_ints([_addr(x, keep)])
         for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
-            addresses.append(_addr(blk["_w"][j], keep))
+            _ = py_call(addresses.append, _addr(blk["_w"][j], keep))
         if kind == "mamba1":
             var di = Int(py=blk["d_inner"])
-            addresses.append(_mutable(st.conv_window, [b, di, 4], keep, copies))
-            addresses.append(_mutable(st.h, [b, di, 16], keep, copies))
-            addresses.append(_addr(y, keep))
+            _ = py_call(addresses.append, _mutable(st.conv_window, [b, di, 4], keep, copies))
+            _ = py_call(addresses.append, _mutable(st.h, [b, di, 16], keep, copies))
+            _ = py_call(addresses.append, _addr(y, keep))
             params = py_ints([b, d]) if step else py_ints([b, l, d])
             var profile = Int(py=e["mamba1_profile"])
             if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
                 raise Error("CausalLM: incompatible or failed Mamba1 state")
             if profile == 2:
-                addresses.append(_mutable(st.affine_boundary, [b, di, 16], keep, copies))
-                addresses.append(_mutable(st.affine_a, [b, di, 16, 6], keep, copies))
-                addresses.append(_mutable(st.affine_b, [b, di, 16, 6], keep, copies))
-                params.append(st.absolute_position)
-            e["decode" if step else "forward"](addresses, params)
-            st.absolute_position = PythonObject(Int(py=st.absolute_position) + l)
+                _ = py_call(addresses.append, _mutable(st.affine_boundary, [b, di, 16], keep, copies))
+                _ = py_call(addresses.append, _mutable(st.affine_a, [b, di, 16, 6], keep, copies))
+                _ = py_call(addresses.append, _mutable(st.affine_b, [b, di, 16, 6], keep, copies))
+                _ = py_call(params.append, st.absolute_position)
+            _ = py_call(e["decode" if step else "forward"], addresses, params)
+            py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
         else:
             var nh = Int(py=blk["nheads"])
             var cd = Int(py=blk["conv_dim"])
-            addresses.append(_mutable(st.conv_window, [b, cd, 4], keep, copies))
-            addresses.append(_mutable(st.h, [b, nh, 64, 128], keep, copies))
-            addresses.append(_mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
-            addresses.append(_mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
-            addresses.append(_addr(y, keep))
+            _ = py_call(addresses.append, _mutable(st.conv_window, [b, cd, 4], keep, copies))
+            _ = py_call(addresses.append, _mutable(st.h, [b, nh, 64, 128], keep, copies))
+            _ = py_call(addresses.append, _mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
+            _ = py_call(addresses.append, _mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
+            _ = py_call(addresses.append, _addr(y, keep))
             var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
-            addresses.append(_addr(last, keep))
+            _ = py_call(addresses.append, _addr(last, keep))
             params = py_ints([b, d, Int(py=st.buffered_tokens)]) if step else py_ints([b, l, d, Int(py=st.buffered_tokens)])
-            params.extend(blk["dt_limit"])
-            st.buffered_tokens = e["decode" if step else "forward"](addresses, params)
-            blk["h_last_"] = last
+            _ = py_call(params.extend, blk["dt_limit"])
+            py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], addresses, params))
+            py_setitem(blk, "h_last_", last)
     _writeback(copies)
     _ = keep^
     return y
@@ -488,12 +489,12 @@ def causal_model_embedding(model: PythonObject, ids: PythonObject) raises -> Pyt
     var e = model._native_entries
     var keep = List[PythonObject]()
     var x = generation_array([b, l, d])
-    e["embedding_forward"](py_ints([_addr(x, keep), _addr(model._embed, keep), _addr(ids, keep)]), py_ints([b * l, v, d]))
+    _ = py_call(e["embedding_forward"], py_ints([_addr(x, keep), _addr(model._embed, keep), _addr(ids, keep)]), py_ints([b * l, v, d]))
     if flat:
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
-        x.shape = bi.tuple(py_ints([l, d]))
-        x.strides = bi.tuple(py_ints([d * 4, 4]))
-        x.ndim = PythonObject(2)
+        py_setattr(x, "shape", py_call(bi.tuple, py_ints([l, d])))
+        py_setattr(x, "strides", py_call(bi.tuple, py_ints([d * 4, 4])))
+        py_setattr(x, "ndim", PythonObject(2))
     _ = keep^
     return x
 
@@ -510,24 +511,24 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
     if normalize and model._norm is not None:
         hn = generation_array([b, l, d])
         var np = py_ints([b * l, d])
-        np.append(model.norm_eps)
-        e["rms_norm_forward"](py_ints([_addr(hn, keep), _addr(x, keep), _addr(model._norm, keep)]), np)
+        _ = py_call(np.append, model.norm_eps)
+        _ = py_call(e["rms_norm_forward"], py_ints([_addr(hn, keep), _addr(x, keep), _addr(model._norm, keep)]), np)
     var out = generation_array([b, l, v])
     if model._head_int15 is None or not packed:
-        e["linear_forward"](py_ints([_addr(out, keep), _addr(hn, keep), _addr(model._head, keep)]), py_ints([b * l, v, d]))
+        _ = py_call(e["linear_forward"], py_ints([_addr(out, keep), _addr(hn, keep), _addr(model._head, keep)]), py_ints([b * l, v, d]))
     else:
         var hi = generation_array([b * l, d], "b")
         var lo = generation_array([b * l, d], "b")
         var ex = generation_array([b * l], "i")
-        e["quantize15"](py_ints([_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)]), py_ints([b * l, d]))
+        _ = py_call(e["quantize15"], py_ints([_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)]), py_ints([b * l, d]))
         var hp = model._head_int15
         e["gemm15"](py_ints([_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
             _addr(hp[0], keep), _addr(hp[1], keep), _addr(hp[2], keep)]), py_ints([b * l, v, d]))
     if flat:
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
-        out.shape = bi.tuple(py_ints([l, v]))
-        out.strides = bi.tuple(py_ints([v * 4, 4]))
-        out.ndim = PythonObject(2)
+        py_setattr(out, "shape", py_call(bi.tuple, py_ints([l, v])))
+        py_setattr(out, "strides", py_call(bi.tuple, py_ints([v * 4, 4])))
+        py_setattr(out, "ndim", PythonObject(2))
     _ = keep^
     return out
 
@@ -535,18 +536,18 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
 def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
     var l = Int(py=ids.shape[1])
     _state(model, state, Int(py=ids.shape[0]), l)
-    var parallel = model._native_entries.get("parallel_call")
+    var parallel = py_get(model._native_entries, "parallel_call")
     try:
         if parallel is not None:
-            return parallel("run", Python.list(model, ids, state, remote_step))
+            return py_call(parallel, "run", Python.list(model, ids, state, remote_step))
         var x = causal_model_embedding(model, ids)
         for i in range(len(model._blocks)):  # driver-loop: over ordered model layers
             x = causal_layer_run(model, i, x, state.layers[i])
         var out = causal_model_head(model, x)
-        state.positions = PythonObject(Int(py=state.positions) + l)
+        py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
         return out
     except error:
-        state._usable = PythonObject(False)
+        py_setattr(state, "_usable", PythonObject(False))
         raise error
 
 
@@ -559,35 +560,35 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
             raise Error("CausalLM.step: state is required")
         state = causal_lm_allocate_binding(model, ids.shape[0], ids.shape[1])
     var out = PythonObject(None)
-    var parallel = model._native_entries.get("parallel_call")
+    var parallel = py_get(model._native_entries, "parallel_call")
     try:
         out = _run(model, ids, state, one)
     except error:
         if supplied_state is None and parallel is not None:
             try:
-                _ = parallel("release_layers", Python.list(model, state))
+                _ = py_call(parallel, "release_layers", Python.list(model, state))
             except cleanup_error:
                 raise Error("CausalLM: forward failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if supplied_state is None and parallel is not None:
-        _ = parallel("release_layers", Python.list(model, state))
+        _ = py_call(parallel, "release_layers", Python.list(model, state))
     if one:
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
-        out.shape = g[].bi.tuple(py_ints([Int(py=ids.shape[0]), Int(py=model.vocab_size)]))
-        out.strides = g[].bi.tuple(py_ints([Int(py=model.vocab_size) * 4, 4]))
-        out.ndim = PythonObject(2)
+        py_setattr(out, "shape", py_call(g[].bi.tuple, py_ints([Int(py=ids.shape[0]), Int(py=model.vocab_size)])))
+        py_setattr(out, "strides", py_call(g[].bi.tuple, py_ints([Int(py=model.vocab_size) * 4, 4])))
+        py_setattr(out, "ndim", PythonObject(2))
     return out
 
 
 def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
-    entries["causal_lm_session_close"](lm)
+    _ = py_call(entries["causal_lm_session_close"], lm)
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-        entries["transformer_decode_session_close"](sessions[i])
+        _ = py_call(entries["transformer_decode_session_close"], sessions[i])
 
 
 def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:
     var e = model._native_entries
-    if not Bool(py=e.__contains__("causal_lm_session_run")) or model._norm is None:
+    if not py_contains(e, "causal_lm_session_run") or model._norm is None:
         return PythonObject(None)
     var int15 = model._head_int15 is not None
     if int15 and String(e["resident_vendor"]) != "cuda":
@@ -615,27 +616,27 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
             var a = _transformer_args(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
             var open_a = g[].bi.list()
             for j in range(1, 12):  # driver-loop: over layer argument spans
-                open_a.append(a[j])
+                _ = py_call(open_a.append, a[j])
             for j in range(13, len(a)):  # driver-loop: over layer argument spans
-                open_a.append(a[j])
+                _ = py_call(open_a.append, a[j])
             var p = _transformer_params(blk, st, b, l)
             var open_p = g[].bi.list()
             for j in range(len(p)):  # driver-loop: over layer shape parameters
                 if j != 1:
-                    open_p.append(p[j])
+                    _ = py_call(open_p.append, p[j])
             var ss = e["transformer_decode_session_create"]()
-            sessions.append(ss)
-            e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"](ss, open_a, open_p)
+            _ = py_call(sessions.append, ss)
+            _ = py_call(e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"], ss, open_a, open_p)
         var top = py_ints([_addr(model._embed, keep), _addr(model._norm, keep)])
         if int15:
             for i in range(3):  # small-loop(int15 head plane triple)
-                top.append(_addr(model._head_int15[i], keep))
+                _ = py_call(top.append, _addr(model._head_int15[i], keep))
         else:
-            top.append(0 if model._head is model._embed else _addr(model._head, keep))
+            _ = py_call(top.append, 0 if model._head is model._embed else _addr(model._head, keep))
         var tp = py_ints([b, Int(py=model.vocab_size), Int(py=model.d_model)])
-        tp.append(model.norm_eps)
-        e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"](lm, top, tp)
-        e["causal_lm_session_run"](lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
+        _ = py_call(tp.append, model.norm_eps)
+        _ = py_call(e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"], lm, top, tp)
+        _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
     except error:
         _resident_close(e, lm, sessions)
         raise error
@@ -709,15 +710,15 @@ def _options(mut s: GenerationHandle, options: PythonObject) raises:
     if len(options) != 7:
         raise Error("generation: expected greedy, seed, temperature, top_k, top_p, eos_token_id, pad_token_id")
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if g[].bi.type(options[0]) is not g[].bi.bool:
+    if py_type(options[0]) is not g[].bi.bool:
         raise Error("generation: greedy must be bool")
     s.greedy = Bool(py=options[0])
     if not s.greedy and options[1] is None:
         raise Error("generation: greedy=True is the default decoding; greedy=False (sampling) requires an explicit seed")
     if options[1] is not None:
-        if g[].bi.type(options[1]) is not g[].bi.int or Bool(py=options[1] < 0) or Bool(py=options[1] >= g[].bi.int("18446744073709551616")):
+        if py_type(options[1]) is not g[].bi.int or Bool(py=options[1] < 0) or Bool(py=options[1] >= py_call(g[].bi.int, "18446744073709551616")):
             raise Error("generation: seed must be an integer in [0, 2**64)")
-        var halves = g[].bi.divmod(options[1], g[].bi.int("4294967296"))
+        var halves = py_call(g[].bi.divmod, options[1], py_call(g[].bi.int, "4294967296"))
         s.seed = (UInt64(Int(py=halves[0])) << 32) | UInt64(Int(py=halves[1]))
     s.temperature = Float32(Float64(py=options[2]))
     s.top_k = Int(py=options[3])
@@ -727,10 +728,10 @@ def _options(mut s: GenerationHandle, options: PythonObject) raises:
         raise Error("generation: invalid temperature, top_k or top_p")
     if options[5] is not None:
         var values = options[5]
-        if g[].bi.type(values) is g[].bi.int:
+        if py_type(values) is g[].bi.int:
             values = py_ints([Int(py=values)])
         for i in range(len(values)):  # small-loop(eos token id arguments)
-            if g[].bi.type(values[i]) is not g[].bi.int:
+            if py_type(values[i]) is not g[].bi.int:
                 raise Error("generation: eos_token_id must be integer or sequence of integers")
             var id = Int(py=values[i])
             if id < 0 or id >= v:
@@ -750,17 +751,17 @@ def causal_lm_stream_binding(model: PythonObject, value: PythonObject, maximum: 
     try:
         _options(handle, options)
     except error:
-        var parallel = model._native_entries.get("parallel_call")
+        var parallel = py_get(model._native_entries, "parallel_call")
         if parallel is not None:
             try:
-                _ = parallel("release_layers", Python.list(model, handle.state))
+                _ = py_call(parallel, "release_layers", Python.list(model, handle.state))
             except cleanup_error:
                 raise Error("generation: option validation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var stream = g[].bi.object.__new__(g[].stream_cls)
-    stream._native = PythonObject(alloc=handle^)
-    stream._runtime = model._runtime
+    var stream = py_call(g[].bi.object.__new__, g[].stream_cls)
+    py_setattr(stream, "_native", PythonObject(alloc=handle^))
+    py_setattr(stream, "_runtime", model._runtime)
     return stream
 
 
@@ -808,16 +809,16 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     var n = Int(py=ids.shape[1])
     var raw = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
     var values = py_ints(causal_lm_drop_eos(raw, n, s.eos))
-    s.pending_bytes.extend(_native_function(s.tokenizer._m, "vocab_decode_public")(s.tokenizer, values, PythonObject(True), PythonObject("replace")))
+    _ = py_call(s.pending_bytes.extend, py_call(_native_function(s.tokenizer._m, "vocab_decode_public"), s.tokenizer, values, PythonObject(True), PythonObject("replace")))
     var size = len(s.pending_bytes)
     # The CPython array constructor copies the pending bytes to native storage.
-    var pending = g[].arrays("B", s.pending_bytes)
+    var pending = py_call(g[].arrays, "B", s.pending_bytes)
     var cut = causal_lm_utf8_cut(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=pending.buffer_info()[0])), size, s.done())
     _ = pending^
-    var prefix = s.pending_bytes.__getitem__(g[].bi.slice(PythonObject(0), PythonObject(cut)))
-    var remaining = s.pending_bytes.__getitem__(g[].bi.slice(PythonObject(cut), PythonObject(None)))
+    var prefix = py_call(s.pending_bytes.__getitem__, py_call(g[].bi.slice, PythonObject(0), PythonObject(cut)))
+    var remaining = py_call(s.pending_bytes.__getitem__, py_call(g[].bi.slice, PythonObject(cut), PythonObject(None)))
     s.pending_bytes = remaining
-    return prefix.decode("utf-8", "replace")
+    return py_call(prefix.decode, "utf-8", "replace")
 
 
 def causal_lm_read_binding(stream: PythonObject, count: PythonObject) raises -> PythonObject:
@@ -831,10 +832,10 @@ def causal_lm_read_binding(stream: PythonObject, count: PythonObject) raises -> 
 def causal_lm_info_binding(stream: PythonObject) raises -> PythonObject:
     var s = stream._native.downcast_value_ptr[GenerationHandle]()
     var result = GENERATION_BOUNDARY.get_or_create_ptr()[].bi.dict()
-    result["done"] = PythonObject(s[].done())
-    result["generated_tokens"] = PythonObject(s[].produced)
-    result["lengths"] = py_ints(s[].lengths)
-    result["usable"] = PythonObject(s[].usable)
+    py_setitem(result, "done", PythonObject(s[].done()))
+    py_setitem(result, "generated_tokens", PythonObject(s[].produced))
+    py_setitem(result, "lengths", py_ints(s[].lengths))
+    py_setitem(result, "usable", PythonObject(s[].usable))
     return result
 
 
@@ -859,29 +860,29 @@ def _generate_complete(model: PythonObject, value: PythonObject, maximum: Python
 def causal_lm_generate_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var stream = causal_lm_stream_binding(model, value, maximum, options)
     var s = stream._native.downcast_value_ptr[GenerationHandle]()
-    var parallel = model._native_entries.get("parallel_call")
+    var parallel = py_get(model._native_entries, "parallel_call")
     var result = PythonObject(None)
     try:
         result = _generate_complete(model, value, maximum, s[])
     except error:
         if parallel is not None:
             try:
-                _ = parallel("release_layers", Python.list(model, s[].state))
+                _ = py_call(parallel, "release_layers", Python.list(model, s[].state))
             except cleanup_error:
                 raise Error("CausalLM: generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if parallel is not None:
-        _ = parallel("release_layers", Python.list(model, s[].state))
+        _ = py_call(parallel, "release_layers", Python.list(model, s[].state))
     return result
 
 
 def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, text: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var encode = _native_function(tokenizer._m, "vocab_encode_public")
-    var ids = encode(tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
+    var ids = py_call(encode, tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
     var prompt = generation_array([1, len(ids)], "i")
     var ptr = i32_ptr(Int(py=prompt._addr))
     # The CPython array constructor unpacks the id list to native int64 storage.
-    var packed = GENERATION_BOUNDARY.get_or_create_ptr()[].arrays("q", ids)
+    var packed = py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].arrays, "q", ids)
     causal_lm_store_ids(ptr, MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=packed.buffer_info()[0])), len(ids))
     _ = packed^
     var stream = causal_lm_stream_binding(model, prompt, maximum, options)
@@ -893,7 +894,7 @@ def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, 
 def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject, text: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
     var stream = causal_lm_text_stream_binding(model, tokenizer, text, maximum, options)
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
-    var parallel = model._native_entries.get("parallel_call")
+    var parallel = py_get(model._native_entries, "parallel_call")
     var result = PythonObject(None)
     try:
         var ids = _read(owner[], max(1, owner[].max_new))
@@ -901,20 +902,20 @@ def causal_lm_generate_text_binding(model: PythonObject, tokenizer: PythonObject
     except error:
         if parallel is not None:
             try:
-                _ = parallel("release_layers", Python.list(model, owner[].state))
+                _ = py_call(parallel, "release_layers", Python.list(model, owner[].state))
             except cleanup_error:
                 raise Error("CausalLM: text generation failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
     if parallel is not None:
-        _ = parallel("release_layers", Python.list(model, owner[].state))
+        _ = py_call(parallel, "release_layers", Python.list(model, owner[].state))
     return result
 
 
 def _array_bytes(value: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if g[].bi.type(value) is g[].array_cls:
-        return value._mv.tobytes("C")
-    return g[].bi.memoryview(value).tobytes("C")
+    if py_type(value) is g[].array_cls:
+        return py_call(value._mv.tobytes, "C")
+    return py_call(py_call(g[].bi.memoryview, value).tobytes, "C")
 
 
 def _hash() -> Sha256:
@@ -987,11 +988,11 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     sha256_update(h, _array_bytes(checkpoint["current"]))
     for i in range(len(checkpoint["layers"])):  # driver-loop: over checkpoint layers
         var layer = checkpoint["layers"][i]
-        var names = g[].bi.sorted(layer.keys())
+        var names = py_call(g[].bi.sorted, layer.keys())
         for j in range(len(names)):  # driver-loop: over layer state field names
             _hash_scalar(h, names[j])
             var value = layer[names[j]]
-            if g[].bi.type(value) is g[].array_cls:
+            if py_type(value) is g[].array_cls:
                 _hash_scalar(h, value.shape)
                 _hash_scalar(h, value.dtype)
                 sha256_update(h, _array_bytes(value))
@@ -1006,53 +1007,53 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
         raise Error("generation: cannot checkpoint a busy or failed stream")
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var result = g[].bi.dict()
-    result["schema"] = PythonObject("mojolearn.generation.v1")
-    result["model"] = _fingerprint(s[].model)
-    result["maximum"] = PythonObject(s[].max_new)
-    result["produced"] = PythonObject(s[].produced)
-    result["positions"] = s[].state.positions
-    result["prompt"] = generation_copy(s[].prompt)
-    result["current"] = generation_copy(s[].current)
-    result["lengths"] = py_ints(s[].lengths)
-    result["finished"] = g[].bi.list(g[].bi.map(g[].bi.bool, py_ints(causal_lm_flags_as_ints(s[].finished))))
-    result["text"] = PythonObject(s[].tokenizer is not None)
-    result["tokenizer"] = PythonObject(None)
+    py_setitem(result, "schema", PythonObject("mojolearn.generation.v1"))
+    py_setitem(result, "model", _fingerprint(s[].model))
+    py_setitem(result, "maximum", PythonObject(s[].max_new))
+    py_setitem(result, "produced", PythonObject(s[].produced))
+    py_setitem(result, "positions", s[].state.positions)
+    py_setitem(result, "prompt", generation_copy(s[].prompt))
+    py_setitem(result, "current", generation_copy(s[].current))
+    py_setitem(result, "lengths", py_ints(s[].lengths))
+    py_setitem(result, "finished", py_call(g[].bi.list, py_call(g[].bi.map, g[].bi.bool, py_ints(causal_lm_flags_as_ints(s[].finished)))))
+    py_setitem(result, "text", PythonObject(s[].tokenizer is not None))
+    py_setitem(result, "tokenizer", PythonObject(None))
     if s[].tokenizer is not None:
-        result["tokenizer"] = _native_function(s[].tokenizer._m, "vocab_fingerprint")(s[].tokenizer)
-    result["pending_bytes"] = g[].bi.bytes(s[].pending_bytes)
+        py_setitem(result, "tokenizer", py_call(_native_function(s[].tokenizer._m, "vocab_fingerprint"), s[].tokenizer))
+    py_setitem(result, "pending_bytes", py_call(g[].bi.bytes, s[].pending_bytes))
     var options = g[].bi.list()
-    options.append(s[].greedy)
+    _ = py_call(options.append, s[].greedy)
     # Decimal conversion avoids truncating UInt64 through the signed Python
     # bridge. Every unsigned seed is representable by Python's native int.
-    options.append(g[].bi.int(String(s[].seed)))
-    options.append(Float64(s[].temperature))
-    options.append(s[].top_k)
-    options.append(s[].top_p)
-    options.append(py_ints(s[].eos))
-    options.append(s[].pad)
-    result["options"] = options
+    _ = py_call(options.append, py_call(g[].bi.int, String(s[].seed)))
+    _ = py_call(options.append, Float64(s[].temperature))
+    _ = py_call(options.append, s[].top_k)
+    _ = py_call(options.append, s[].top_p)
+    _ = py_call(options.append, py_ints(s[].eos))
+    _ = py_call(options.append, s[].pad)
+    py_setitem(result, "options", options)
     var layers = g[].bi.list()
     var kind = String(s[].model.kind)
     var profile = Int(py=s[].model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
     var arrays = _state_arrays(kind, profile)
     for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
         var st = s[].state.layers[i]
-        var parallel = s[].model._native_entries.get("parallel_call")
+        var parallel = py_get(s[].model._native_entries, "parallel_call")
         if parallel is not None:
-            st = parallel("state_snapshot", Python.list(st))
+            st = py_call(parallel, "state_snapshot", Python.list(st))
         var entry = g[].bi.dict()
         for j in range(len(arrays)):  # driver-loop: over layer state arrays
-            entry[arrays[j]] = generation_copy(g[].bi.getattr(st, arrays[j]))
+            py_setitem(entry, arrays[j], generation_copy(py_call(g[].bi.getattr, st, arrays[j])))
         if kind == "transformer":
-            entry["cached_tokens"] = st.cached_tokens
+            py_setitem(entry, "cached_tokens", st.cached_tokens)
         elif kind == "mamba1":
-            entry["absolute_position"] = st.absolute_position
-            entry["profile_id"] = st.profile_id
+            py_setitem(entry, "absolute_position", st.absolute_position)
+            py_setitem(entry, "profile_id", st.profile_id)
         else:
-            entry["buffered_tokens"] = st.buffered_tokens
-        layers.append(entry)
-    result["layers"] = layers
-    result["checksum"] = _snapshot_hash(result)
+            py_setitem(entry, "buffered_tokens", st.buffered_tokens)
+        _ = py_call(layers.append, entry)
+    py_setitem(result, "layers", layers)
+    py_setitem(result, "checksum", _snapshot_hash(result))
     return result
 
 
@@ -1067,7 +1068,7 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
     if Bool(py=checkpoint["text"]) and tokenizer is None:
         raise Error("generation: a text checkpoint requires its tokenizer")
     if Bool(py=checkpoint["text"]):
-        var fingerprint = _native_function(tokenizer._m, "vocab_fingerprint")(tokenizer)
+        var fingerprint = py_call(_native_function(tokenizer._m, "vocab_fingerprint"), tokenizer)
         if not Bool(py=checkpoint["tokenizer"] == fingerprint):
             raise Error("generation: checkpoint tokenizer differs")
     var stream = causal_lm_stream_binding(model, checkpoint["prompt"], checkpoint["maximum"], checkpoint["options"])
@@ -1085,10 +1086,10 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
         var position = 0 if s[].produced == 0 else Int(py=s[].prompt.shape[1]) + s[].produced - 1
         if Int(py=checkpoint["positions"]) != position:
             raise Error("generation: checkpoint cache position disagrees with output count")
-        s[].state.positions = PythonObject(position)
+        py_setattr(s[].state, "positions", PythonObject(position))
         # The CPython array constructor unpacks the per-row lists to native storage.
-        var packed_lengths = g[].arrays("q", checkpoint["lengths"])
-        var packed_finished = g[].arrays("b", g[].bi.map(g[].bi.bool, checkpoint["finished"]))
+        var packed_lengths = py_call(g[].arrays, "q", checkpoint["lengths"])
+        var packed_finished = py_call(g[].arrays, "b", py_call(g[].bi.map, g[].bi.bool, checkpoint["finished"]))
         causal_lm_restore_rows(
             MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=packed_lengths.buffer_info()[0])),
             MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=Int(py=packed_finished.buffer_info()[0])),
@@ -1103,40 +1104,40 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
         var arrays = _state_arrays(kind, profile)
         for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
             var dest = s[].state.layers[i]
-            var parallel = model._native_entries.get("parallel_call")
+            var parallel = py_get(model._native_entries, "parallel_call")
             if parallel is not None:
-                dest = parallel("state_snapshot", Python.list(dest))
+                dest = py_call(parallel, "state_snapshot", Python.list(dest))
             var source = checkpoint["layers"][i]
             for j in range(len(arrays)):  # driver-loop: over layer state arrays
-                var expected = g[].bi.getattr(dest, arrays[j])
+                var expected = py_call(g[].bi.getattr, dest, arrays[j])
                 var supplied = source[arrays[j]]
-                if g[].bi.type(supplied) is not g[].array_cls or String(supplied.dtype) != "<f4" or not Bool(py=supplied.shape == expected.shape):
+                if py_type(supplied) is not g[].array_cls or String(supplied.dtype) != "<f4" or not Bool(py=supplied.shape == expected.shape):
                     raise Error("generation: checkpoint state array shape or dtype differs")
-                g[].bi.setattr(dest, arrays[j], generation_copy(supplied))
+                _ = py_call(g[].bi.setattr, dest, arrays[j], generation_copy(supplied))
             if kind == "transformer":
                 if Int(py=source["cached_tokens"]) != position:
                     raise Error("generation: checkpoint layer cache position differs")
-                dest.cached_tokens = PythonObject(position)
+                py_setattr(dest, "cached_tokens", PythonObject(position))
             elif kind == "mamba1":
                 if Int(py=source["profile_id"]) != profile or Int(py=source["absolute_position"]) != position:
                     raise Error("generation: checkpoint Mamba profile/position differs")
-                dest.absolute_position = PythonObject(position)
+                py_setattr(dest, "absolute_position", PythonObject(position))
             else:
                 if Int(py=source["buffered_tokens"]) != position % 256:
                     raise Error("generation: checkpoint Mamba2 buffered length differs")
-                dest.buffered_tokens = source["buffered_tokens"]
+                py_setattr(dest, "buffered_tokens", source["buffered_tokens"])
             if parallel is not None:
-                _ = parallel("state_publish", Python.list(s[].state.layers[i], dest))
+                _ = py_call(parallel, "state_publish", Python.list(s[].state.layers[i], dest))
         s[].tokenizer = tokenizer if Bool(py=checkpoint["text"]) else PythonObject(None)
-        s[].pending_bytes = g[].bi.bytearray(checkpoint["pending_bytes"])
+        s[].pending_bytes = py_call(g[].bi.bytearray, checkpoint["pending_bytes"])
         return stream
     except error:
         # These caches belong only to this attempted restore. Existing live
         # streams retain their own worker tokens and are never touched.
-        var parallel = model._native_entries.get("parallel_call")
+        var parallel = py_get(model._native_entries, "parallel_call")
         if parallel is not None:
             try:
-                _ = parallel("release_layers", Python.list(model, s[].state))
+                _ = py_call(parallel, "release_layers", Python.list(model, s[].state))
             except cleanup_error:
                 raise Error("generation: checkpoint restore failed: " + String(error) + "; remote cleanup also failed: " + String(cleanup_error))
         raise error
@@ -1144,12 +1145,12 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
 
 def causal_state_init_binding(state: PythonObject, values: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    state.batch_size = bi.int(values[0])
-    state.max_tokens = bi.int(values[1])
-    state.layers = bi.list(values[2])
-    state.positions = PythonObject(0)
-    state._owner = values[3]
-    state._usable = PythonObject(True)
+    py_setattr(state, "batch_size", py_call(bi.int, values[0]))
+    py_setattr(state, "max_tokens", py_call(bi.int, values[1]))
+    py_setattr(state, "layers", py_call(bi.list, values[2]))
+    py_setattr(state, "positions", PythonObject(0))
+    py_setattr(state, "_owner", values[3])
+    py_setattr(state, "_usable", PythonObject(True))
     return PythonObject(None)
 
 
