@@ -154,6 +154,14 @@ DECLARED_LANELESS = {
         "all nine fixtures, a CPU column with the training family's sabotage "
         "define seen to move it, and one GPU column (any vendor) agreeing with it"
     ),
+    # lane/verify-coverage-audit (2026-10-21): it downloads a pinned model and
+    # needs torch or onnx to build it, which a verifier run never has; the import
+    # and run it then performs are import_model and ImportedProgram.run, which
+    # the sequence-onnx-import lane covers.
+    "models.verify_catalog_entry": (
+        "owed: a network-free check needs a cached catalog model file; the import "
+        "and run it performs are covered by the sequence-onnx-import lane"
+    ),
     "training.residual_dropout_backward": (
         "owed: an identity lane over the residual dropout gradient on all nine "
         "fixtures, a CPU column with the training family's sabotage define seen "

@@ -280,7 +280,84 @@ def _(ml, X, yc, yr, Xh=None):
                      fixture=d(np.asarray(widen_f16(np.ascontiguousarray(fixture)), dtype=np.float32))))
 
 
+# ---------------------------------------------------------------- ops.Program: save and load_program
+
+@lane("sequence-program-save-load")
+def _(ml, X, yc, yr, Xh=None):
+    """An ops.Program (the `sequence-tape-program` lane's 6 -> 8 tanh -> 1
+    network on seeded weights) captured, run on 64 fixture rows, saved
+    (`Program.save`), loaded into a second session (`Session.load_program`)
+    and run on the same rows and on 64 held-out rows. The loaded program's
+    output is held byte for byte to the captured one's in the cell, which is
+    load_program's documented claim. Parts: both outputs and the program's
+    held-out output."""
+    B = _coverage_binding(ml)
+    d = lambda a: _coverage_digest(B, a)
+    ops = ml.ops
+    x = np.ascontiguousarray(X[:64, :6], dtype=np.float32)
+    xh = np.ascontiguousarray((X if Xh is None else Xh)[:64, :6], dtype=np.float32)
+    init = []
+    for k, shape in enumerate(((6, 8), (1, 8), (8, 1), (1, 1))):  # glue: four seeded weight buffers
+        a = np.empty(shape, dtype=np.float32)
+        # cpu-route: verification inputs made in Mojo before the run
+        B.verify_fill(a.ctypes.data, a.size, 21, k)
+        init.append(a)
+    with tempfile.TemporaryDirectory(prefix="ib-program-save-") as tmp:
+        path = os.path.join(tmp, "net.mlprog")
+        with ops.Session(numeric_mode="identical") as s:
+            w = [s.tensor(a) for a in init]  # glue: four parameters
+            xin = s.tensor(np.zeros((64, 6), dtype=np.float32))
+            program = s.capture([xin], [s.linear(s.linear(xin, w[0], w[1], activation="tanh"), w[2], w[3])])
+            out = np.asarray(program.run(x))
+            program.save(path)
+        with ops.Session(numeric_mode="identical") as s:
+            loaded = s.load_program(path)
+            if not isinstance(loaded, ml.ops.Program):
+                raise RuntimeError(f"Session.load_program returned {type(loaded).__name__}, not ops.Program")
+            again = np.asarray(loaded.run(x))
+            held = np.asarray(loaded.run(xh))
+    _same_bytes("loaded program run", again, "captured program run", out)
+    return _fit(dict(out=d(out), held=d(held)))
+
+
+# ---------------------------------------------------------------- CausalLM.stream: GenerationStream
+
+@lane("hf-causal-lm-stream")
+def _(ml, X, yc, yr, Xh=None):
+    """CausalLM.stream on the `hf-causal-lm` lane's Llama fixture and prompt:
+    a greedy GenerationStream read two tokens at a time, and a sampled one
+    (seed 7, temperature 0.8, top-k 8) read three at a time. Each stream's
+    ids are held byte for byte in the cell to `generate`'s continuation with
+    the same options, which is the stream's documented claim (read size does
+    not change the ids)."""
+    from mojolearn import _causal_lm_fixtures as fx
+    d = _coverage_digester(ml)
+    A = ml.Array.from_buffer
+    ids = _ids(X, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
+    cfg, tensors = fx.family_fixture("llama", False)
+    sampling = dict(greedy=False, seed=7, temperature=0.8, top_k=8)
+
+    def read_all(stream, step):
+        if not isinstance(stream, ml.models.GenerationStream):
+            raise RuntimeError(f"CausalLM.stream returned {type(stream).__name__}, not models.GenerationStream")
+        pieces = [np.asarray(stream.read(step), dtype=np.int32)
+                  for _ in range(-(-HF_LM_NEW // step))]  # glue: one read per chunk of new tokens
+        return np.ascontiguousarray(np.concatenate(pieces, axis=1))
+
+    with tempfile.TemporaryDirectory(prefix="ib-causal-lm-stream-") as tmp:
+        root = fx._write_checkpoint(os.path.join(tmp, "llama"), cfg, tensors)
+        m = ml.models.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1")
+        greedy = np.asarray(m.generate(A(ids), HF_LM_NEW), dtype=np.int32)[:, HF_LM_LEN:]
+        sampled = np.asarray(m.generate(A(ids), HF_LM_NEW, **sampling), dtype=np.int32)[:, HF_LM_LEN:]
+        streamed = read_all(m.stream(A(ids), HF_LM_NEW), 2)
+        streamed_sampled = read_all(m.stream(A(ids), HF_LM_NEW, **sampling), 3)
+    _same_bytes("greedy stream", streamed, "greedy generate continuation", np.ascontiguousarray(greedy))
+    _same_bytes("sampled stream", streamed_sampled, "sampled generate continuation", np.ascontiguousarray(sampled))
+    return _fit(dict(greedy=d(streamed), sampled=d(streamed_sampled)))
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward", "sequence-export-roundtrip",
-            "sequence-onnx-import", "transformer-decode-load-state", "safetensors-widen-f16")
+            "sequence-onnx-import", "transformer-decode-load-state", "safetensors-widen-f16",
+            "sequence-program-save-load", "hf-causal-lm-stream")

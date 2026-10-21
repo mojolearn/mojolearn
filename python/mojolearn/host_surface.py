@@ -559,6 +559,7 @@ TRAINING_LANE_NAMES = {
     "gp-normalize-y": "the Gaussian process with normalized targets",
     "gp-optimize": "Gaussian process hyperparameter optimization",
     "gp-optimize-restarts": "Gaussian process hyperparameter optimization with restarts",
+    "gp-lml-theta": "the Gaussian process log marginal likelihood and its gradient at a given theta",
     # Gaussian process classification (lane/gaussian-process-classifier,
     # 2026-09-15): gaussian_process/host/gpc_oracle.mojo over the gp oracle's
     # kernel matrix, the Cholesky oracle and gemm_oracle, the Newton steps in
@@ -588,6 +589,7 @@ TRAINING_LANE_NAMES = {
     # serial `cross_val_score`. That is AGREEMENT, not rightness.
     "mamba1-decode-session": "the resident Mamba-1 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
+    "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
     "par-causal-lm": "the layer-owned causal language model",
     "par-cross-val": "the fold-dispatched cross-validation",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
@@ -613,6 +615,7 @@ TRAINING_LANE_NAMES = {
     "linalg-qr": "the Householder QR's R factor, both slice arms",
     "linalg-eigh": "the symmetric Jacobi eigendecomposition, ascending",
     "linalg-svdvals": "the singular values, descending",
+    "safetensors-widen-f16": "float16 checkpoint weights widened to float32",
     "dbscan-brute-l1": "brute-force DBSCAN under manhattan distance",
     "kde-tophat-sqeuclidean": "kernel density with the tophat kernel under squared euclidean distance",
     "kde-epanechnikov-l1": "kernel density with the Epanechnikov kernel under manhattan distance",
@@ -1156,6 +1159,7 @@ TRAINING_LANE_NAMES = {
     "bpe-trainer": "byte-level BPE vocabulary training",
     "bpe-vocabulary": "a trained BPE vocabulary written, loaded back and used",
     "tokenized-corpus": "a corpus tokenized once, cached and read back as batches",
+    "cross-vendor-fold": "the ordered float32 fold of replicated training",
     # THE `mojolearn.models` NAMESPACE, which had no lane of any kind
     # (lane/models-namespace-lanes, 2026-09-19). tools/verification_matrix.py
     # reported fourteen public entries with no lane and every one of them was
@@ -1172,6 +1176,7 @@ TRAINING_LANE_NAMES = {
     "hf-checkpoint": "the Hugging Face checkpoint reader and the option matrix",
     "hf-tokenizer": "the Hugging Face byte-level BPE tokenizer (three pre-tokenization patterns)",
     "hf-causal-lm": "a Hugging Face causal language model loaded and run",
+    "hf-causal-lm-stream": "a causal language model's generation stream",
     # The CTR table lanes: CPU TRAINING of CTR tables refuses by name
     # (NO_CPU_PATH), so the CPU column LOADS the Metal-saved model of each
     # fixture from GBDT_CTR_MODELS_DIR and predicts through the forest host
@@ -1557,7 +1562,10 @@ FAMILIES = (
         # trains on the fixture), and the Python patterns' parts move under
         # neither -- what guards those is the recorded hash.
         training_lanes=("tokenizer", "bpe-trainer", "bpe-vocabulary", "tokenized-corpus",
-                        "hf-tokenizer"),
+                        "hf-tokenizer",
+                        # lane/verify-coverage-audit (2026-10-21): mojolearn.cross_vendor's
+                        # ordered fold runs in this binding (cross_vendor_call)
+                        "cross-vendor-fold"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("BpeTokenizer",),
@@ -1636,7 +1644,9 @@ FAMILIES = (
         # is this family's, and the driver's own Python is the partition and
         # the ordered hand-off. The generic define reaches it for the same
         # reason it reaches `hf-causal-lm`.
-        training_lanes=("hf-causal-lm", "par-causal-lm"),
+        # lane/verify-coverage-audit (2026-10-21): `hf-causal-lm-stream`,
+        # CausalLM.stream's GenerationStream against generate.
+        training_lanes=("hf-causal-lm", "par-causal-lm", "hf-causal-lm-stream"),
         inference_lanes=(),
         forest_kinds=(),
         # lane/inference-neural-forward, 2026-09-15: the Mamba-1, Mamba-2
@@ -1795,6 +1805,9 @@ FAMILIES = (
                         # lane/lowbit-int15 (2026-09-29)
                         "gemm-int15",
                         "linalg-qr", "linalg-eigh", "linalg-svdvals",
+                        # lane/verify-coverage-audit (2026-10-21): from_f16, the
+                        # widening of a float16 checkpoint's weights
+                        "safetensors-widen-f16",
                         # lane/laneless-public-classes (2026-09-19): the
                         # conversion seams themselves, under their own arm
                         "lowbit-conversions",
@@ -2278,7 +2291,9 @@ FAMILIES = (
                         "gp-optimize", "gp-optimize-restarts",
                         # lane/unlaned-public-algorithms (2026-09-20): the class-sharded
                         # GPC drivers, whose shard IS this family's gpc_fit/gpc_predict
-                        "par-gpc-fit", "par-gpc-predict"),
+                        "par-gpc-fit", "par-gpc-predict",
+                        # lane/verify-coverage-audit (2026-10-21): the likelihood at a caller's theta
+                        "gp-lml-theta"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
@@ -3105,7 +3120,9 @@ FAMILIES = (
                         # `transformer_decode_step` and `transformer_forward`
                         # over transformer/host/transformer_block_host.mojo,
                         # the same entries the `transformer` lane hashes
-                        "transformer-decode-session"),
+                        "transformer-decode-session",
+                        # lane/verify-coverage-audit (2026-10-21): the session's load_state
+                        "transformer-decode-load-state"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -3708,6 +3725,14 @@ PUBLIC_PENDING_LANES = {
     # (identity_break.GPU_ONLY_LANES).
     "gbdt-pair-logit-pointwise": "no cpu route",
     "gbdt-yeti-rank-pointwise": "no cpu route",
+    # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
+    # since the last release that no lane reached
+    # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
+    "gp-lml-theta": "no reference",
+    "cross-vendor-fold": "no reference",
+    "transformer-decode-load-state": "no reference",
+    "safetensors-widen-f16": "no reference",
+    "hf-causal-lm-stream": "no reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped
@@ -3952,7 +3977,7 @@ def lane_exposure_counts(lanes, device_class="cpu"):
 # Calling that lane pure Python would hide its real native dependency.
 PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
                           "cross-val-folds": "core", "bpe-vocabulary": "tokenizer",
-                          "tokenized-corpus": "tokenizer"}
+                          "tokenized-corpus": "tokenizer", "cross-vendor-fold": "tokenizer"}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
 #: are not in it (lane/expose-inference-surface, 2026-09-16). Each one:
