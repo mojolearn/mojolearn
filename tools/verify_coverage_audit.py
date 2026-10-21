@@ -242,7 +242,7 @@ def native_rows(ls, base, reach):
                 for p in pnodes.get(n, ()):
                     patches.add(p)
             users = ls.binding_users(name, exports=[export])
-            precise = {lane for lane, (_, ents, _) in reach.items() if export in ents}
+            precise = {lane for lane, (_, ents, _) in reach.items() if NameClosure.names_entry(ents, export)}
             rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots,
                              kinds=kinds, changed=[label(n) for n in hits[:4]], n_changed=len(hits),
                              changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
@@ -373,6 +373,8 @@ class NameClosure:
     is a reached name; binding entries are matched against those."""
 
     IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    SUFFIX = "\x00suffix"
+    _suffixes = {}
     OPS_NAMES = frozenset({"fit", "predict", "transform", "score", "save", "load", "step", "forward",
                            "generate", "sample", "run", "close", "open", "main", "call"})
 
@@ -434,6 +436,11 @@ class NameClosure:
                         target = None
                 elif isinstance(n, ast.Constant) and isinstance(n.value, str) and self.IDENT.match(n.value):
                     names.add(n.value)
+                elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add) and \
+                        isinstance(n.right, ast.Constant) and isinstance(n.right.value, str) and \
+                        self.IDENT.match(n.right.value) and n.right.value.startswith("_"):
+                    # `name + "_rowmajor_export"`: an entry named by composition
+                    names.add(self.SUFFIX + n.right.value)
                 if target and target[0] in ("func", "class"):
                     defs.append(target)
                 elif isinstance(n, ast.Name):
@@ -511,6 +518,24 @@ class NameClosure:
                 for func in pending.pop(name, ()):
                     queue.append(("func", func))
         return reached
+
+    @classmethod
+    def names_entry(cls, reached, entry, depth=0):
+        """`entry` is reached by name, or as a reached name plus one or two
+        suffixes a reached definition composes (`name + "_rowmajor"`)."""
+        if entry in reached:
+            return True
+        if depth >= 2:
+            return False
+        key = id(reached)
+        if key not in cls._suffixes:
+            cls._suffixes[key] = [n[len(cls.SUFFIX):] for n in reached if n.startswith(cls.SUFFIX)]
+        for suffix in cls._suffixes[key]:
+            if True:
+                if entry.endswith(suffix) and len(entry) > len(suffix) and \
+                        cls.names_entry(reached, entry[:-len(suffix)], depth + 1):
+                    return True
+        return False
 
 
 def lane_names(ls, ib):
