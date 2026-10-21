@@ -16,7 +16,7 @@ define reports nothing compiled and every call runs the host binding.
 THE ADDRESS CONTRACT is the host binding's, so the Python door passes the same buffers:
 
     tokenizer_fast_numeric_mode() -> 0 (FAST); the loader refuses anything else
-    bpe_fast_flags() -> [train_device, encode_device, merge_batch, group_filter, livebuf]
+    bpe_fast_flags() -> [train_device, encode_device, merge_batch, group_filter, livebuf, max_vocab]
     bpe_train(text_addr, lengths_addr, [n_docs, n_bytes, vocab_size, min_frequency, break_ties_high])
         the merge loop on the GPU. break_ties_high (the host trainer's negative control) is
         refused here: the Python door sends a sabotage run to the host binding.
@@ -34,6 +34,7 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from tokenizer.fast.bpe_fast_impl import (
+    BPE_MAX_VOCAB,
     FastBpeHandle,
     FastTrainedHandle,
     bpe_fast_flag_list,
@@ -71,6 +72,7 @@ def bpe_fast_flags_binding() raises -> PythonObject:
     out.append(PythonObject(flags[2]))
     out.append(PythonObject(flags[3]))
     out.append(PythonObject(flags[4]))
+    out.append(PythonObject(BPE_MAX_VOCAB))
     return out
 
 

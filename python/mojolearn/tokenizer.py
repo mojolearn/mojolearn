@@ -140,6 +140,33 @@ def _binding():
     return _Entries(_backend.load_host_module(_EXTENSION))  # cpu-route: CPU tokenizer binding, text encoding and decoding before the runtime
 
 
+#: The fast tier's Apple GPU tokenizer (`tokenizer/fast/`, built by
+#: `bindings/build_tokenizer_fast.sh`). Used only in numeric mode fast, only
+#: when built, and only for the device paths it compiled (`bpe_fast_flags()`:
+#: each needs an Apple GPU target and its `-D MOJOLEARN_BPE_*` define, all
+#: default off). Every other call runs on the host binding as before.
+_FAST_EXTENSION = "_mojolearn_tokenizer_fast"
+_NO_FAST = (None, False, False, 0)
+
+
+def _fast_binding():
+    """`(module, train_device, encode_device, max_vocab)`, or `_NO_FAST`."""
+    if _backend.default_mode() != "fast":
+        return _NO_FAST
+    try:
+        path = os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
+    except ImportError:
+        return _NO_FAST
+    if not os.path.exists(path):
+        return _NO_FAST
+    module = _backend._load_member("fast", _FAST_EXTENSION, path)
+    if int(module.tokenizer_fast_numeric_mode()) != 0:
+        raise ImportError(f"mojolearn: {path} was not compiled fast; rebuild it with "
+                          "MOJOLEARN_NUMERIC_MODE=fast bash bindings/build_tokenizer_fast.sh")
+    train, encode, _batch, _filter, _livebuf, max_vocab = module.bpe_fast_flags()
+    return module, bool(train), bool(encode), int(max_vocab)
+
+
 def _byte_to_char():
     """The GPT-2 format's byte-to-unicode spelling (`tokenizer/impl/
     byte_unicode.mojo` builds the same table): the printable Latin-1 runs
@@ -220,9 +247,14 @@ class BpeTokenizer:
         self._source = source
         self._m = m
         self._handle = handle
-        self._identity = _identity_of_handle(m, handle)
+        text = m.bpe_ranks_text(handle)
         self._n_vocab = int(m.bpe_n_vocab(handle))
+        self._identity = _identity_from_tokens_text(text, self._n_vocab - 1)
         self._max_token_bytes = int(m.bpe_max_token_bytes(handle))
+        # Fast mode with the device encoder compiled in: the Apple GPU binding's
+        # own handle over the same table (its canonical rank text).
+        fast, _train, encode, _max = _fast_binding()
+        self._fast = (fast, _native(fast.bpe_fast_load, text)) if encode else None
 
     @classmethod
     def _from_handle(cls, m, handle, source):
@@ -463,8 +495,11 @@ class BpeTokenizer:
         counts = array.array("q", bytes(8 * n_docs))
         ids = array.array("i", bytes(4 * max(n, 1)))
         text_buf = text if n > 0 else b"\0"
-        total = int(self._m.bpe_encode_batch(
-            self._handle, addr_ro(text_buf, name="text"), addr_ro(lengths, name="lengths"),
+        # The binding: the fast device encoder when it is loaded (it does not
+        # recognize <|endoftext|>), else the host binding. Same arguments.
+        m, handle = (self._m, self._handle) if allow or self._fast is None else self._fast
+        total = int(m.bpe_encode_batch(
+            handle, addr_ro(text_buf, name="text"), addr_ro(lengths, name="lengths"),
             addr(ids, name="ids"), addr(counts, name="counts"), [n_docs, n, n, allow]))
         if not 0 <= total <= n or sum(counts) != total:  # glue: checks the native token counts (counts-sized: per-document token counts)
             raise RuntimeError(
@@ -766,9 +801,12 @@ class BpeVocabularyTrainer:
             else:
                 raise TypeError(
                     f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}")
-        native = _native_trainer(required=True)
-        tokens, merges, stats = _train_native(native, raws, self.vocab_size, self.min_frequency,
-                                              _bpe_trainer.sabotaged())
+        # The binding: the fast device trainer when it is loaded and takes this
+        # vocab_size (outside the sabotage arm), else the host binding.
+        fast, train, _encode, max_vocab = _fast_binding()
+        sabotaged = _bpe_trainer.sabotaged()
+        native = fast if train and not sabotaged and self.vocab_size <= max_vocab else _native_trainer(required=True)
+        tokens, merges, stats = _train_native(native, raws, self.vocab_size, self.min_frequency, sabotaged)
         stats["backend"] = "mojo"
         return TrainedBpeVocabulary(tokens, merges, stats)
 
