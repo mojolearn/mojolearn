@@ -58,7 +58,7 @@ from autograd.ops_api import OPS_DEVICE
 from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
 from autograd.import_resolve_pyapi import onnx_resolve_py
 # the lowering onto session operations and the GraphIR-from-words handle (autograd/import_lower.mojo)
-from autograd.import_lower import onnx_import_py, onnx_from_words_py
+from autograd.import_lower_pyapi import onnx_import_py, onnx_from_words_py
 from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from autograd.model_checkpoint_pyapi import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,

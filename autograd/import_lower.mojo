@@ -37,6 +37,9 @@ the word layout `onnx_info` returns (header, then the status-0 body; every
 buffer an external one at its address): the torch.export reader's GraphIR
 takes the same lowering through it.
 
+The Python doors (`onnx_import_py`, `onnx_from_words_py`: argument and
+result conversion only) are in import_lower_pyapi.mojo.
+
 Description only on the host: names, shapes, axes and attribute numbers.
 Element values are never computed here; every value computation, one-element
 constants included, is a session operation on the executor."""
@@ -45,7 +48,6 @@ constants included, is a session operation on the executor."""
 # (description) and emits one session call per operation; the only element
 # bytes it touches are handed to the executor's upload unchanged.
 from std.memory import bitcast
-from std.python import Python, PythonObject
 
 from autograd.import_reader import (
     AK_FLOAT, AK_FLOATS, AK_INT, AK_INTS, AK_STRING, AK_STRINGS, AK_TENSOR, AK_TENSORS, AttrVal,
@@ -66,7 +68,7 @@ from autograd.ops_api import (
     OPS_SOFTMAX, OPS_SOFTMAX_N, OPS_SOFTPLUS, OPS_SQRT, OPS_SUB, OPS_SUM_N, OPS_TAKE, OPS_TANH,
     OPS_TRANSPOSE, OPS_WHERE, OPS_ANY_ALL, OPS_CUMSUM, OPS_INDEX, OpsSession, ops_session,
 )
-from autograd.pyapi import program_info
+from autograd.program import OpsProgram
 from autograd.rankn_api import rn_dims, rn_shape
 from autograd.weight_import import WI_RECORD, session_load_check, wi_source
 from core.cast_in import CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CastIn
@@ -92,13 +94,6 @@ comptime _NO_HANDLE = -1
 
 
 # ------------------------------------------------------------ small helpers --
-
-def _pyint_list(p: PythonObject) raises -> List[Int]:
-    var out = List[Int]()
-    for i in range(len(p)):  # cpu-route: model graph lowered on the host (argument words)
-        out.append(Int(py=p[i]))
-    return out^
-
 
 def _contains(v: List[Int], x: Int) -> Bool:
     for i in range(len(v)):  # cpu-route: model graph lowered on the host (a short list)
@@ -1873,51 +1868,62 @@ struct _Low[E: Exec & Movable & Deinitable](Movable):
 
 # ------------------------------------------------------------ the entry --
 
-def _problems_out(found: List[_Found]) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(found)):  # cpu-route: model graph lowered on the host (one per problem)
-        var p = Python.list()
-        p.append(PythonObject(found[i].name))
-        if found[i].has_op:
-            p.append(PythonObject(found[i].op))
-        else:
-            p.append(PythonObject(None))
-        p.append(PythonObject(found[i].why))
-        out.append(p)
-    return out
+struct OnnxImport(Movable):
+    """The result of onnx_import (this module's docstring): `status`, then
+    the message (IMPORT_BAD_VALUE), the problems (IMPORT_PROBLEMS) or the
+    captured program and its input and output metadata (IMPORT_OK)."""
+    var status: Int
+    var message: String
+    var problems: List[_Found]
+    var pid: Int
+    var prog: OpsProgram
+    var in_names: List[String]
+    var in_dims: List[List[Int]]
+    var in_dtypes: List[String]
+    var out_names: List[String]
+    var out_dims: List[List[Int]]
+    var out_int32: List[Int]
+
+    def __init__(out self):
+        self.status = IMPORT_OK
+        self.message = String("")
+        self.problems = List[_Found]()
+        self.pid = 0
+        self.prog = OpsProgram()
+        self.in_names = List[String]()
+        self.in_dims = List[List[Int]]()
+        self.in_dtypes = List[String]()
+        self.out_names = List[String]()
+        self.out_dims = List[List[Int]]()
+        self.out_int32 = List[Int]()
 
 
-def _dims_py(v: List[Int]) raises -> PythonObject:
-    var d = Python.list()
-    for i in range(len(v)):  # cpu-route: model graph lowered on the host (one per axis)
-        d.append(PythonObject(v[i]))
-    return d
-
-
-def onnx_import_py[E: Exec & Movable & Deinitable, KIND: Int](
-    h: PythonObject, sid: PythonObject, names: PythonObject, flat: PythonObject, addrs: PythonObject,
-    source: PythonObject,
-) raises -> PythonObject:
+def onnx_import[E: Exec & Movable & Deinitable, KIND: Int](
+    h: Int, sid: Int, names: List[String], flat: List[Int], var bufs: List[Int], src: String,
+) raises -> OnnxImport:
     """Import graph `h` into inference session `sid` (this module's
-    docstring): resolve, refuse, lower, capture. Returns [status, ...]."""
-    var gp = onnx_graph(Int(py=h))
+    docstring): resolve, refuse, lower, capture. `flat` holds, per name in
+    `names`, its rank then its dims; `bufs` the address of each buffer."""
+    var gp = onnx_graph(h)
     if gp[].status != ONNX_OK:
-        raise Error("onnx_import: model graph " + String(Int(py=h)) + " was not read")
+        raise Error("onnx_import: model graph " + String(h) + " was not read")
     var gnames = List[Int]()
     var gdims = List[List[Int]]()
     var pos = 0
     for i in range(len(names)):  # cpu-route: model graph lowered on the host (the shapes argument)
-        gnames.append(gp[].st.intern(String(py=names[i])))
-        var rank = Int(py=flat[pos])
+        gnames.append(gp[].st.intern(names[i]))
+        if pos >= len(flat):
+            raise Error("onnx_import: the shapes argument is shorter than its ranks")
+        var rank = flat[pos]
         pos += 1
+        if rank < 0 or pos + rank > len(flat):
+            raise Error("onnx_import: the shapes argument is shorter than its ranks")
         var dims = List[Int]()
         for _ in range(rank):  # cpu-route: model graph lowered on the host (one per axis)
-            dims.append(Int(py=flat[pos]))
+            dims.append(flat[pos])
             pos += 1
         gdims.append(dims^)
-    var bufs = _pyint_list(addrs)
-    var src = String(py=source)
-    var res = Python.list()
+    var res = OnnxImport()
     var c = RCtx()
     var no_rule = List[Int]()
     var rprobs = List[_RProblem]()
@@ -1925,59 +1931,50 @@ def onnx_import_py[E: Exec & Movable & Deinitable, KIND: Int](
         _resolve(gp[], gnames, gdims, c, no_rule, rprobs)
     except e:
         var msg = String(e)
-        res.append(PythonObject(IMPORT_BAD_VALUE))
-        res.append(PythonObject(fatal_text(msg) if is_fatal(msg) else msg))
-        return res
+        res.status = IMPORT_BAD_VALUE
+        res.message = fatal_text(msg) if is_fatal(msg) else msg
+        return res^
     var a = _analyse(gp[], c)
     var found = _check(gp[], c, a, rprobs, src)
     if len(found) > 0:
-        res.append(PythonObject(IMPORT_PROBLEMS))
-        res.append(_problems_out(found))
-        return res
+        res.status = IMPORT_PROBLEMS
+        res.problems = found^
+        return res^
     # every problem was listed before anything reached the executor; now the session
-    var in_meta = Python.list()
     for q in range(len(a.inputs)):  # cpu-route: model graph lowered on the host (graph inputs)
         ref v = gp[].inputs[a.inputs[q]]
-        var m = Python.list()
-        m.append(PythonObject(gp[].st.text(v.name)))
-        m.append(_dims_py(c.shape(v.name)))
-        m.append(PythonObject(dtype_name(v.dtype)))
-        in_meta.append(m)
+        res.in_names.append(gp[].st.text(v.name))
+        res.in_dims.append(c.shape(v.name))
+        res.in_dtypes.append(dtype_name(v.dtype))
     var out_names = List[Int]()
     var out_shapes = List[List[Int]]()
     for i in range(len(gp[].outputs)):  # cpu-route: model graph lowered on the host (graph outputs)
         out_names.append(gp[].outputs[i].name)
         out_shapes.append(c.shape(gp[].outputs[i].name))
-    var p = ops_session[E, KIND](Int(py=sid))
+    var p = ops_session[E, KIND](sid)
     var low = _Low[E](p, gp, c^, a^, bufs^)
     var ins = List[Int]()
     var outs = List[Int]()
     low.run(ins, outs)
     # Session.capture's call, kept as the imported program
     var pid = p[].capture(ins, outs)
-    var prog = p[].program(pid)
-    var info = program_info(pid, prog)
+    res.pid = pid
+    res.prog = p[].program(pid)
     # the computed tensors (placeholders, prologue intermediates) go; the
     # uploads the program does not read go too
     var keep = Dict[Int, Bool]()
-    for j in range(len(prog.params)):  # cpu-route: model graph lowered on the host (program parameters)
-        keep[prog.params[j]] = True
+    for j in range(len(res.prog.params)):  # cpu-route: model graph lowered on the host (program parameters)
+        keep[res.prog.params[j]] = True
     p[].reset()
     for j in range(len(low.owned)):  # driver-loop: over the import's uploaded tensors
         if low.owned[j] not in keep:
             p[].free(low.owned[j])
-    var out_meta = Python.list()
     for i in range(len(out_names)):  # cpu-route: model graph lowered on the host (graph outputs)
-        var m = Python.list()
-        m.append(PythonObject(gp[].st.text(out_names[i])))
-        m.append(_dims_py(out_shapes[i]))
-        m.append(PythonObject(1 if out_names[i] in low.int32_out else 0))
-        out_meta.append(m)
-    res.append(PythonObject(IMPORT_OK))
-    res.append(info)
-    res.append(in_meta)
-    res.append(out_meta)
-    return res
+        res.out_names.append(gp[].st.text(out_names[i]))
+        res.out_dims.append(out_shapes[i].copy())
+        res.out_int32.append(1 if out_names[i] in low.int32_out else 0)
+    res.status = IMPORT_OK
+    return res^
 
 
 # ------------------------------------------------- a graph from words --
@@ -2053,21 +2050,18 @@ def _w_gvalue(mut c: _Cur) raises -> GValue:
     return GValue(name, dt, dims^, dstr^)
 
 
-def onnx_from_words_py(words: PythonObject, strings: PythonObject, floats: PythonObject,
-                       addrs: PythonObject) raises -> PythonObject:
+def onnx_from_words(var words: List[Int], strings: List[String], floats: List[Float64],
+                    bufs: List[Int]) raises -> Int:
     """A graph handle from the `onnx_info` word layout (header, then the
     status-0 body), its strings (index 0 the empty string), its floats and
     the address of each buffer. Returns the handle (>= 1)."""
     var g = OnnxGraph()
     for i in range(len(strings)):  # cpu-route: model graph description (the graph's strings)
-        var k = g.st.intern(String(py=strings[i]))
+        var k = g.st.intern(strings[i])
         if k != i:
             raise Error("onnx_from_words: string " + String(i) + " repeats an earlier one")
-    var fl = List[Float64]()
-    for i in range(len(floats)):  # cpu-route: model graph description (attribute numbers)
-        fl.append(Float64(py=floats[i]))
-    var bufs = _pyint_list(addrs)
-    var c = _Cur(_pyint_list(words))
+    var fl = floats.copy()
+    var c = _Cur(words^)
     if c.take() != 0x4F4E5852 or c.take() != 1 or c.take() != ONNX_OK:
         raise Error("onnx_from_words: not a status-0 graph of word layout 1")
     g.opset = c.take()
@@ -2137,4 +2131,4 @@ def onnx_from_words_py(words: PythonObject, strings: PythonObject, floats: Pytho
     s[].next_id += 1
     s[].ids.append(hid)
     s[].addr.append(Int(p))
-    return PythonObject(hid)
+    return hid
