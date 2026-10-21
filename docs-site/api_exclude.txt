@@ -91,6 +91,10 @@ CausalLM.generate_text	native text generation; current cross-vendor qualificatio
 CausalLM.stream_text	native text streaming; current cross-vendor qualification pending
 CausalLM.resume_generation	native generation continuation; current cross-vendor qualification pending
 causal_lm.GenerationStream	native generation stream state; current cross-vendor qualification pending
+cross_vendor.Worker	native callback-free worker and checkpoint policy; current qualification pending
+cross_vendor.Coordinator	native callback-free coordinator; current qualification pending
+cross_vendor.BatchFeed	native data admission; current qualification pending
+cross_vendor.LearningRateTable	native schedule admission; current qualification pending
 GenerationStream.read	native generation stream reads; current cross-vendor qualification pending
 GenerationStream.info	native generation stream metadata; current cross-vendor qualification pending
 GenerationStream.state_dict	native generation stream checkpoint; current cross-vendor qualification pending

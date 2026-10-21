@@ -1,71 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Live cross-vendor data-parallel training. EXPERIMENTAL.
+"""Native worker/coordinator connections for replicated training.
 
-One language model trained at the same time by workers on GPUs from different
-vendors (Apple, NVIDIA, AMD), with every replica bit-identical after every
-step, and the step itself identical to a one-GPU `train_step` over the same
-logical shards.
-
-    # the coordinator: any machine, no GPU needed
-    python -m mojolearn.cross_vendor coordinator --port 7777 --workers 2 --shards 4 --steps 100
-
-    # each worker, in Python, with its own GPU
-    from mojolearn.cross_vendor import Worker
-    Worker(state, shards=[0, 1], batches=lambda step, shard: ids,
-           address=("coordinator-host", 7777), name="my-mac").run()
-
-WHY THE BITS AGREE. A step is K logical shards (K is part of the recipe, not
-of the hardware). Each worker computes the gradient of the shards it owns
-with the same IDENTICAL kernels a one-GPU step uses, so a shard's gradient
-does not depend on the GPU or its vendor. The coordinator combines them with
-the fixed left fold the device reduction uses (`ordered_fold`): total = g0,
-then total = ftz(ftz(total) + ftz(g_k)) in shard order. Every worker applies
-that same total with the same elementwise AdamW. Nothing chooses an
-arithmetic order at run time.
-
-WHAT IS CHECKED, EVERY STEP. Every worker reports the sha256 of its complete
-state (parameters, m, v, flags) after the update; the coordinator refuses to
-go on, naming the workers, if any two differ. Workers must also start from
-the same state hash and together own every shard exactly once.
-
-TWO WAYS TO MOVE THE BYTES. The GATHERED protocol (the default) has every
-worker send every shard's whole gradient (4 bytes per parameter) to the
-coordinator, which folds them all and sends the total back: K + W gradients
-on the wire per step, fine for a small model on a local network, 41 GB a
-step at 162M parameters and K = 64. The CHAINED protocol (`chained=True`)
-uses the fact that the fold is a LEFT fold: each worker owns a CONTIGUOUS
-block of shards in shard order; the first block's owner folds its own
-shards and sends that ONE prefix; the next owner continues the fold onto
-the prefix with its own shards, one at a time in order, and sends the
-result on; the last owner's result is the total, which the coordinator
-sends to every other worker. Bit for bit the flat fold a single GPU
-computes, and W + (W - 1) gradients on the wire per step instead of K + W:
-with two workers and the coordinator on the first owner's box, two
-gradients cross the wide-area link. A worker holds its block's gradients
-in host memory until its turn (`shards x 4 bytes x n_total`).
-
-No authentication or encryption: run it on a trusted network or through an
-ssh tunnel. Each worker drives one device with a replicated optimizer
-(`ParallelByteLanguageModelTrainer(state, devices=(d,), pool_optimizer=False)`).
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 """
-import argparse
-import array
-import hashlib
-import json
-import socket
-import struct
 import sys
-import threading
-import time
-
-try:
-    from ._buffer import flat_bytes
-except (ImportError, AttributeError):  # loaded by file path outside the package (tools/tests do this
-    # for the host fold, which needs only the standard library): a memoryview
-    # is enough there, since the package's Array never reaches such a caller
-    def flat_bytes(obj, *, name="array"):
-        return memoryview(obj).cast("B")
 
 PROTOCOL = "mojolearn.cross-vendor.v1"
 _TINY = 2.0 ** -126  # smallest normal float32
@@ -107,9 +46,7 @@ def state_hash(state):
 
 
 def trainer_state_hash(trainer):
-    """`state_hash` of a trainer's current replica, through `export_raw`
-    when the trainer has it (no per-element admission pass, which costs
-    about 16 s at 162M parameters) and `state_dict` otherwise."""
+    """Return SHA256 over a native trainer's current complete replica state."""
     return _native_cross_vendor("trainer_hash", (trainer,), _cross_vendor_errors)
 
 
@@ -151,14 +88,14 @@ class Coordinator:
     """Accepts `workers` connections, then drives `steps` lockstep steps.
 
     `run()` returns one row per step: the step number, every shard's loss,
-    the agreed state hash and each worker's hash. `on_step(row)` is called
-    after each agreed step. Refuses, naming what differs, on a bad split, a
+    the agreed state hash and each worker's hash. ``log_path`` appends each
+    agreed step as JSON. Refuses, naming what differs, on a bad split, a
     different starting state or a disagreement after any step."""
 
     def __init__(self, *, port, workers, logical_shards, steps, host="0.0.0.0",
                  on_step=None, timeout=3600.0, accept_timeout=3600.0, max_gradient_bytes=1 << 31,
-                 chained=False):
-        return _native_cross_vendor("coordinator_init", (self, port, workers, logical_shards, steps, host, on_step, timeout, accept_timeout, max_gradient_bytes, chained, _NativeReady), _cross_vendor_errors)
+                 chained=False, log_path=None):
+        return _native_cross_vendor("coordinator_init", (self, port, workers, logical_shards, steps, host, on_step, timeout, accept_timeout, max_gradient_bytes, chained, _NativeReady, log_path), _cross_vendor_errors)
 
     def _refuse(self, reason):
         return _native_cross_vendor("coordinator_refuse", (self, reason), _cross_vendor_errors)
@@ -202,13 +139,15 @@ class Worker:
 
     `trainer` is a `ParallelByteLanguageModelTrainer(state, devices=(d,),
     pool_optimizer=False)`, or pass `state` and `device` and one is built.
-    `batches(step, shard)` returns that shard's int32 [batch, length + 1]
-    tokens; it must be the same function on every worker."""
+    ``batches`` is a :class:`BatchFeed` containing the same logical batches
+    on every worker. ``lr_for_step`` is a :class:`LearningRateTable` or None.
+    Committed metadata is available through :meth:`drain_events`."""
 
     def __init__(self, state=None, *, shards, batches, address, name=None, device=0,
                  trainer=None, connect_timeout=600.0, timeout=3600.0, chained=False, lr_for_step=None,
-                 on_commit=None):
-        return _native_cross_vendor("worker_init", (self, state, shards, batches, address, name, device, trainer, connect_timeout, timeout, chained, lr_for_step, on_commit), _cross_vendor_errors)
+                 on_commit=None, log_path=None, checkpoint_dir=None, checkpoint_steps=(),
+                 expected_commits=(), retain_gradients=False, hash_scheme="sha256.v1"):
+        return _native_cross_vendor("worker_init", (self, state, shards, batches, address, name, device, trainer, connect_timeout, timeout, chained, lr_for_step, on_commit, log_path, checkpoint_dir, checkpoint_steps, expected_commits, retain_gradients, hash_scheme), _cross_vendor_errors)
 
     def _connect(self):
         return _native_cross_vendor("worker_connect", (self,), _cross_vendor_errors)
@@ -224,37 +163,13 @@ class Worker:
 
 # ------------------------------------------------------------ command line
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="python -m mojolearn.cross_vendor",
-                                 description="Coordinator for live cross-vendor training (EXPERIMENTAL).")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("coordinator")
-    c.add_argument("--host", default="0.0.0.0")
-    c.add_argument("--port", type=int, default=7777)
-    c.add_argument("--workers", type=int, required=True)
-    c.add_argument("--shards", type=int, required=True, help="logical shards per step, K")
-    c.add_argument("--steps", type=int, required=True, help="train until this many steps are complete")
-    c.add_argument("--log", help="append one JSON line per agreed step")
-    c.add_argument("--chained", action="store_true",
-                   help="the chained fold: contiguous blocks, one gradient per worker on the wire")
-    args = ap.parse_args(argv)
-
-    def on_step(row):
-        line = json.dumps(row, sort_keys=True)
-        print("step %d state %s %s" % (row["step"], row["state"][:16], sorted(row["vendors"].items())), flush=True)  # glue: vendor names in the log line
-        if args.log:
-            with open(args.log, "a") as fh:
-                fh.write(line + "\n")
-
-    rows = Coordinator(host=args.host, port=args.port, workers=args.workers, logical_shards=args.shards,
-                       steps=args.steps, on_step=on_step, chained=args.chained).run()
-    print("AGREED on %d steps across %d workers" % (len(rows), args.workers))
-    return 0
+    return _native_cross_vendor("main", (argv,), _cross_vendor_errors)
 
 
 # ABI setup connects concrete native-owned classes and the selected vendor.
 from .parallel_training import ParallelByteLanguageModelTrainer as _ParallelByte
 from ._backend import vendor as _installed_vendor
-_native_cross_vendor("worker_initialize", (_ParallelByte, BatchFeed, LearningRateTable, _installed_vendor()))
+_native_cross_vendor("worker_initialize", (_ParallelByte, BatchFeed, LearningRateTable, _installed_vendor(), Worker, Coordinator, _NativeReady))
 
 
 if __name__ == "__main__":

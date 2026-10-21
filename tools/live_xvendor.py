@@ -12,8 +12,9 @@ problem (weights and tokens from SHAKE-256, K = 4 shards) so that every step
 the live group agrees on can also be held to a column recorded by one-process
 runs (`--expect`, e.g. bench/results/par_lm_xvendor/2026-09-21/apple-m4-1gpu.json).
 
-`local` runs the coordinator and N workers in ONE process on ONE device, the
-workers taking turns on it under a lock (one Metal job at a time). It tests
+`local` runs the coordinator and N workers in ONE process on ONE device,
+each worker owning a native session. Controller threads launch whole native
+runs; no per-step Python callbacks execute. It tests
 the protocol, the split and the fold; it is not a cross-vendor claim.
 """
 import argparse
@@ -34,22 +35,6 @@ def problem(steps):
     _shape, state0, ids = recipe.build_problem(ml, args)
     return state0, ids
 
-
-class _Locked:
-    """A trainer whose device calls take turns under one lock."""
-
-    def __init__(self, trainer, lock):
-        self._t, self._lock = trainer, lock
-
-    def __getattr__(self, name):
-        attr = getattr(self._t, name)
-        if not callable(attr):
-            return attr
-
-        def call(*a, **k):
-            with self._lock:
-                return attr(*a, **k)
-        return call
 
 
 def _trainer(state, device):
@@ -98,52 +83,60 @@ def main(argv=None):
         sp.add_argument("--chained", action="store_true",
                         help="the chained fold: contiguous blocks, one gradient per worker on the wire")
     args = ap.parse_args(argv)
-    from mojolearn.cross_vendor import Coordinator, Worker
+    from mojolearn.cross_vendor import Coordinator, Worker, BatchFeed
 
     def log(row):
         print(f"step {row['step']} state {row['state'][:16]} {sorted(row['vendors'].items())}", flush=True)
 
     if args.cmd == "coordinator":
         rows = Coordinator(host=args.host, port=args.port, workers=args.workers, logical_shards=4,
-                           steps=args.steps, on_step=log, chained=args.chained).run()
+                           steps=args.steps, chained=args.chained).run()
+        for row in rows:  # test-controller reporting after native run
+            log(row)
         _write(args.out, rows, dict(workers=args.workers, chained=args.chained))
         print(f"AGREED on {len(rows)} steps across {args.workers} workers")
         return _check(rows, args.expect)
 
     state0, ids = problem(args.steps)
-    batches = lambda step, shard: ids[step, shard]  # noqa: E731
+    batches = BatchFeed(ids)
     if args.cmd == "worker":
         host, port = args.address.rsplit(":", 1)
-        done = Worker(state0, shards=[int(k) for k in args.shards.split(",")], batches=batches,
-                      address=(host, int(port)), name=args.name, device=args.device,
-                      connect_timeout=args.connect_timeout, chained=args.chained).run()
+        trainer = _trainer(state0, args.device)
+        try:
+            done = Worker(trainer=trainer, shards=[int(k) for k in args.shards.split(",")], batches=batches,
+                          address=(host, int(port)), name=args.name,
+                          connect_timeout=args.connect_timeout, chained=args.chained).run()
+        finally:
+            trainer.close()
         print(f"{args.name}: committed {done} steps")
         return 0
 
-    # local: coordinator in a thread, workers in threads, one device under a lock
+    # Test controller threads launch complete native sessions; no step callbacks.
     K = 4
     if args.chained:  # contiguous blocks, shard order
         cut = [K * i // args.workers for i in range(args.workers + 1)]
         split = [list(range(cut[i], cut[i + 1])) for i in range(args.workers)]
     else:
         split = [list(range(K))[i::args.workers] for i in range(args.workers)]
-    lock = threading.Lock()
     result, errors = {}, []
 
     def coord():
         try:
             result["rows"] = Coordinator(host="127.0.0.1", port=args.port, workers=args.workers,
-                                         logical_shards=K, steps=args.steps, on_step=log, chained=args.chained).run()
+                                         logical_shards=K, steps=args.steps, chained=args.chained).run()
         except BaseException as e:  # noqa: BLE001
             errors.append(e)
 
     def work(i):
+        trainer = _trainer(state0, 0)
         try:
-            Worker(trainer=_Locked(_trainer(state0, 0), lock), shards=split[i], batches=batches,
+            Worker(trainer=trainer, shards=split[i], batches=batches,
                    address=("127.0.0.1", args.port), name=f"local-{i}", connect_timeout=60,
                    chained=args.chained).run()
         except BaseException as e:  # noqa: BLE001
             errors.append(e)
+        finally:
+            trainer.close()
 
     threads = [threading.Thread(target=coord)] + [threading.Thread(target=work, args=(i,)) for i in range(args.workers)]
     for t in threads:

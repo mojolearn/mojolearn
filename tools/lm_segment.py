@@ -958,15 +958,15 @@ def _block(text):
 
 def _run_live(args, recipe, batches, state, devices, chain, table, out, manifest, upload, segment, say,
               first, last, wants_checkpoint):
-    """The multi-vendor segment: this box is one worker of a chained
-    `mojolearn.cross_vendor` group, and, as the coordinator, also the fold's
-    host. Every agreed step becomes a chain line of the same shape a one-box
-    segment writes (the total's hash is the summed gradient's hash, since the
-    host fold and the device fold are the same bits), so route A's live
-    segment and route B's compare line for line, and checkpoints come from
-    this worker's replica."""
+    """Controller for one whole native cross-vendor run.
+
+    Fixture preparation is reported separately and included in whole_seconds.
+    All step scheduling, loss/hash checks, stopping and durable checkpoint writes
+    execute inside Worker.run. Chain formatting and artifact uploads follow it.
+    """
     import threading
-    from mojolearn.cross_vendor import Coordinator, Worker
+    import numpy as np
+    from mojolearn.cross_vendor import Coordinator, Worker, BatchFeed, LearningRateTable
     from mojolearn.parallel_training import ParallelByteLanguageModelTrainer as Par
     K = int(recipe["logical_shards"])
     block = _block(args.live_shards)
@@ -974,79 +974,91 @@ def _run_live(args, recipe, batches, state, devices, chain, table, out, manifest
         raise SystemExit("--live-shards must lie inside 0..%d" % (K - 1))
     segment["live"] = dict(role=args.live_role, shards=[block[0], block[-1] + 1], workers=args.live_workers,
                            port=args.live_port, address=args.live_address, protocol="chained")
-    lr_for_step = lambda step: _bits_f32(int(table[step], 16))  # noqa: E731
-    batches_fn = lambda step, k: batches.ids(step * K + k)  # noqa: E731
-    last_commit = [time.perf_counter()]
-    stop = {"flag": False}
-
+    started = time.perf_counter()
+    prepared = np.empty((last - first, K, recipe["shape"][0], recipe["shape"][1] + 1), np.int32)
+    for step in range(first, last):  # test-data preparation, included in whole boundary
+        for shard in range(K):
+            prepared[step - first, shard] = batches.ids(step * K + shard)
+    feed = BatchFeed(prepared, start_step=first)
+    prepared_bytes = prepared.nbytes
+    del prepared
+    rates = LearningRateTable([_bits_f32(int(table[step], 16)) for step in range(first, last)], start_step=first)
+    expected = []
+    if chain.expect is not None:
+        for step in range(first + 1, last + 1):
+            if step in chain.expect:
+                expected.append(dict(step=step, **{key: chain.expect[step].get(key) for key in COMPARED}))
+    checkpoints = [step for step in range(first + 1, last + 1) if wants_checkpoint(step)]
     scheme = hash_scheme_of(recipe)
-
-    def make_commit(trainer):
-        def on_commit(completed, row):
-            now = time.perf_counter()
-            # the chain line's hashes under the RECIPE's scheme, from this
-            # replica's state and the total's bytes, so a live segment's chain
-            # compares with any other segment's (the group's own agreement is
-            # the coordinator's plain sha256 in coordinator.jsonl)
-            t0 = time.perf_counter()
-            state_digest = _hash_arrays(trainer.export_raw(), scheme)
-            grad_digest = _hash_gradient(row["total_bytes"], scheme) if row.get("total_bytes") is not None else row["total_sha256"]
-            hash_seconds = time.perf_counter() - t0
-            line = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
-                        lr_f32_hex=table[completed - 1], losses_f32_hex=["%08x" % _f32_bits(x) for x in row["losses"]],
-                        state_sha256=state_digest, gradient_sha256=grad_digest, hash_scheme=scheme,
-                        group_state_sha256=row["state"], group_total_sha256=row["total_sha256"],
-                        batch_index=[(completed - 1) * K, completed * K], seconds=round(now - last_commit[0], 4),
-                        hash_seconds=round(hash_seconds, 3), live=segment["live"])
-            last_commit[0] = time.perf_counter()
-            if not chain.write(line):
-                stop["flag"] = True
-                raise SystemExit("the live segment stops at a disagreement")
-            if wants_checkpoint(completed) and args.live_role == "coordinator":
-                info = save_checkpoint(trainer, out, manifest=manifest, upload=upload)
-                segment["checkpoints"].append(info)
-                say("checkpoint %s (%d bytes, sha256 %s, %.1f s)" % (info["file"], info["bytes"], info["sha256"][:16], info["save_seconds"]))
-        return on_commit
-
-    errors = []
-    coord = None
+    preparation_seconds = time.perf_counter() - started
+    errors, coordinator, coordinator_thread = [], None, None
     if args.live_role == "coordinator":
-        coord = Coordinator(host="0.0.0.0", port=args.live_port, workers=args.live_workers, logical_shards=K,
-                            steps=last, chained=True, timeout=args.live_timeout, accept_timeout=args.live_timeout,
-                            on_step=lambda r: _append_json(out / "coordinator.jsonl", r))
-        t = threading.Thread(target=lambda: _safe(coord.run, errors), name="coordinator")
-        t.start()
-        coord.ready.wait(30)
-        address = ("127.0.0.1", coord.bound_port)
-        say("coordinator listening on port %d for %d workers, K=%d, until step %d" % (coord.bound_port, args.live_workers, K, last))
+        coordinator = Coordinator(host="0.0.0.0", port=args.live_port, workers=args.live_workers,
+                                  logical_shards=K, steps=last, chained=True,
+                                  timeout=args.live_timeout, accept_timeout=args.live_timeout,
+                                  log_path=out / "coordinator.jsonl")
+        # This harness launches complete native runs; threads never drive steps.
+        coordinator_thread = threading.Thread(target=lambda: _safe(coordinator.run, errors), name="coordinator")
+        coordinator_thread.start()
+        coordinator.ready.wait(30)
+        address = ("127.0.0.1", coordinator.bound_port)
     else:
         host, port = args.live_address.rsplit(":", 1)
         address = (host, int(port))
-    lock = threading.Lock()
-    workers = []
     trainer = Par(state, devices=(devices[0],), logical_shards=1, pool_optimizer=False)
-    workers.append(Worker(trainer=_Locked(trainer, lock) if args.live_local_extra else trainer, shards=block,
-                          batches=batches_fn, address=address, name=args.label, chained=True,
-                          lr_for_step=lr_for_step, on_commit=make_commit(trainer),
-                          connect_timeout=args.live_timeout, timeout=args.live_timeout))
-    if args.live_local_extra:  # a test: a second worker in this process, same device under a lock
+    workers = [Worker(trainer=trainer, shards=block, batches=feed, address=address,
+                      name=args.label, chained=True, lr_for_step=rates,
+                      checkpoint_dir=out if args.live_role == "coordinator" else None,
+                      checkpoint_steps=checkpoints if args.live_role == "coordinator" else (),
+                      expected_commits=expected, hash_scheme=scheme,
+                      log_path=out / "worker-native.jsonl",
+                      connect_timeout=args.live_timeout, timeout=args.live_timeout)]
+    if args.live_local_extra:  # protocol fixture: an independent native session on the same physical GPU
         extra = Par(state, devices=(devices[0],), logical_shards=1, pool_optimizer=False)
-        workers.append(Worker(trainer=_Locked(extra, lock), shards=_block(args.live_local_extra), batches=batches_fn,
-                              address=address, name=args.label + "-extra", chained=True, lr_for_step=lr_for_step,
+        workers.append(Worker(trainer=extra, shards=_block(args.live_local_extra), batches=feed,
+                              address=address, name=args.label + "-extra", chained=True,
+                              lr_for_step=rates, expected_commits=expected, hash_scheme=scheme,
                               connect_timeout=args.live_timeout, timeout=args.live_timeout))
-    threads = [threading.Thread(target=lambda w=w: _safe(w.run, errors), name=w.name) for w in workers]
-    for th in threads:
-        th.start()
-    for th in threads:
-        th.join()
-    if coord is not None:
-        t.join()
-    trainer.close()
-    if errors and not stop["flag"]:
-        segment["live_errors"] = [str(e) for e in errors]
-        say("LIVE ERROR: %s" % "; ".join(str(e)[:200] for e in errors))
+    run_started = time.perf_counter()
+    threads = [threading.Thread(target=lambda worker=worker: _safe(worker.run, errors), name=worker.name)
+               for worker in workers]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if coordinator_thread is not None:
+        coordinator_thread.join()
+    native_run_seconds = time.perf_counter() - run_started
+    segment["live_timing"] = dict(preparation_seconds=preparation_seconds,
+                                  native_run_seconds=native_run_seconds,
+                                  whole_seconds=time.perf_counter() - started,
+                                  prepared_batch_bytes=prepared_bytes,
+                                  boundary="feed preparation, native setup, whole run, native commit hashes and checkpoint writes; reporting/upload follows")
+    events = workers[0].drain_events()
+    for worker in workers:
+        worker.trainer.close()
+    for event in events:  # test-controller evidence formatting, after native stopping decisions
+        completed = event["step"]
+        line = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
+                    lr_f32_hex=event["lr_f32_hex"], losses_f32_hex=event["losses_f32_hex"],
+                    state_sha256=event["state_sha256"], gradient_sha256=event["gradient_sha256"],
+                    hash_scheme=event["hash_scheme"], group_state_sha256=event["state"],
+                    group_total_sha256=event["total_sha256"], batch_index=[(completed - 1) * K, completed * K],
+                    seconds=event.get("seconds", 0.), hash_seconds=event["hash_seconds"], live=segment["live"])
+        chain.write(line)
+        if "checkpoint_path" in event:
+            path = Path(event["checkpoint_path"])
+            size, name = path.stat().st_size, path.name
+            manifest.pin(name, size, event["checkpoint_sha256"])
+            upload(name, path)
+            segment["checkpoints"].append(dict(step=completed, file=name, bytes=size,
+                                              sha256=event["checkpoint_sha256"],
+                                              save_seconds=event["checkpoint_seconds"]))
+    if errors:
+        segment["live_errors"] = [str(error) for error in errors]
+        say("LIVE ERROR: %s" % "; ".join(str(error)[:200] for error in errors))
         chain.verdict = "FAIL"
-        chain.disagreements.append(dict(reason="live group error", errors=[str(e) for e in errors]))
+        chain.disagreements.append(dict(reason="native live group error", errors=[str(error) for error in errors]))
 
 
 def _safe(fn, errors):
@@ -1059,23 +1071,6 @@ def _safe(fn, errors):
 def _append_json(path, row):
     with open(path, "a") as fh:
         fh.write(_canonical(row) + "\n")
-
-
-class _Locked:
-    """A trainer whose device calls take turns under one lock (one Metal job at a time)."""
-
-    def __init__(self, trainer, lock):
-        self._t, self._lock = trainer, lock
-
-    def __getattr__(self, name):
-        attr = getattr(self._t, name)
-        if not callable(attr):
-            return attr
-
-        def call(*a, **k):
-            with self._lock:
-                return attr(*a, **k)
-        return call
 
 
 # ---------------------------------------------------------------- controls

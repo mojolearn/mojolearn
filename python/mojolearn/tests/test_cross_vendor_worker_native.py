@@ -50,7 +50,8 @@ def test_native_rate_table_preserves_float32_schedule_and_bounds():
 
 
 @pytest.mark.parametrize('chained', [False, True])
-def test_complete_native_gpu_worker_independent_uniform_loss_decay_and_hash(tmp_path, chained):
+@pytest.mark.parametrize('policy', ['default', 'checkpoint', 'checkpoint_v2', 'mismatch', 'mismatch_loss'])
+def test_complete_native_gpu_worker_independent_uniform_loss_decay_and_hash(tmp_path, chained, policy):
     if _backend.vendor() == 'cpu':
         pytest.skip('existing byte-LM cooperative worker requires a GPU')
     state, shape = state_fixture()
@@ -64,7 +65,7 @@ def test_complete_native_gpu_worker_independent_uniform_loss_decay_and_hash(tmp_
     port = listener.getsockname()[1]
     listener.close()
     fixture = dict(port=port, initial=initial, expected=expected, count=shape.n_total,
-                   loss=math.log(shape.vocab_size), chained=chained)
+                   loss=math.log(shape.vocab_size), chained=chained, mismatch=policy.startswith('mismatch'))
     fixture_path = tmp_path / 'worker-oracle.json'
     fixture_path.write_text(json.dumps(fixture))
     script = r'''
@@ -95,6 +96,9 @@ else:
 assert data==bytes(len(data)), ('uniform zero-output model has nonzero gradient bits', [(i,hex(v[0])) for i,v in enumerate(struct.iter_unpack('<I',data)) if v[0]][:8])
 total=bytes(cfg['count']*4)
 send(dict(cmd='apply',step=0,total_sha256=hashlib.sha256(total).hexdigest(),losses=[cfg['loss']]*2),b'' if cfg['chained'] else total)
+if cfg['mismatch']:
+    assert sock.recv(1)==b'', 'mismatched expectation must close before acknowledgment'
+    sock.close(); server.close(); print('native expected-hash stop complete'); sys.exit(0)
 head,data=receive(); assert head['completed']==1 and head['state']==cfg['expected'] and not data, ('committed state',head,cfg['expected'],len(data))
 send(dict(cmd='done')); sock.close(); server.close(); print('worker oracle complete')
 '''
@@ -110,18 +114,55 @@ send(dict(cmd='done')); sock.close(); server.close(); print('worker oracle compl
     try:
         feed = construct(cv.BatchFeed, np.tile(np.arange(5, dtype=np.int32), (1, 2, 1, 1)))
         schedule = construct(cv.LearningRateTable, [.0625])
+        config = {}
+        if policy != 'default':
+            config = dict(expected_commits=[dict(step=1, state='0' * 64 if policy == 'mismatch' else expected)],
+                          checkpoint_dir=tmp_path, checkpoint_steps=(1,), retain_gradients=True,
+                          log_path=tmp_path / 'worker-events.jsonl')
+        if policy == 'mismatch_loss':
+            config['expected_commits'][0]['losses_f32_hex'] = ['00000000'] * 2
+        if policy == 'checkpoint_v2':
+            def sliced(raw):
+                return hashlib.sha256(''.join(hashlib.sha256(raw[len(raw)*i//8:len(raw)*(i+1)//8]).hexdigest()
+                                              for i in range(8)).encode('ascii')).hexdigest()
+            wanted_state = hashlib.sha256(''.join(sliced(after[key].tobytes()) for key in fields).encode('ascii')).hexdigest()
+            wanted_gradient = sliced(bytes(shape.n_total * 4))
+            config['hash_scheme'] = 'sliced-sha256-8.v2'
+            config['expected_commits'][0].update(state_sha256=wanted_state, gradient_sha256=wanted_gradient,
+                                                  hash_scheme='sliced-sha256-8.v2', lr_f32_hex='3d800000',
+                                                  losses_f32_hex=[format(np.float32(math.log(shape.vocab_size)).view(np.uint32).item(), '08x')] * 2)
         worker = construct(cv.Worker, state, shards=[0, 1], batches=feed,
                            lr_for_step=schedule, address=('127.0.0.1', port),
-                           connect_timeout=10., timeout=10., chained=chained, name='native')
+                           connect_timeout=10., timeout=10., chained=chained, name='native', **config)
         trainer = worker.trainer
         run_audit = audit_native_call(worker.run)
-        assert run_audit.assert_native() == 1
+        if policy.startswith('mismatch'):
+            assert isinstance(run_audit.exception, cv.CrossVendorMismatch)
+            assert 'configured expectation' in str(run_audit.exception)
+            for field in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+                assert not run_audit.report()[field], run_audit.report()
+        else:
+            assert run_audit.assert_native() == 1
         child.wait(timeout=15)
         assert child.returncode == 0, stderr_path.read_text()[-4000:]
         assert audit_native_call(cv.trainer_state_hash, trainer).assert_native() == expected
         events = audit_native_call(worker.drain_events).assert_native()
         assert len(events) == 1 and events[0]['step'] == 1 and events[0]['state'] == expected
-        assert 'total_bytes' not in events[0]
+        if policy == 'default':
+            assert 'total_bytes' not in events[0]
+        else:
+            assert events[0]['total_bytes'] == bytes(shape.n_total * 4)
+            logged = json.loads((tmp_path / 'worker-events.jsonl').read_text())
+            assert logged['state'] == expected and 'total_bytes' not in logged
+            if policy.startswith('checkpoint'):
+                from mojolearn import _byte_lm_checkpoint as checkpoint
+                restored = audit_native_call(checkpoint.load, events[0]['checkpoint_path']).assert_native()
+                assert restored['completed_steps'] == restored['next_batch_index'] == 1
+                assert audit_native_call(cv.state_hash, restored).assert_native() == expected
+                assert hashlib.sha256((tmp_path / 'ckpt_00000001.blm').read_bytes()).hexdigest() == events[0]['checkpoint_sha256']
+            else:
+                assert events[0]['expected_mismatch'] == ('state' if policy == 'mismatch' else 'losses_f32_hex')
+                assert not (tmp_path / 'ckpt_00000001.blm').exists()
         assert audit_native_call(worker.drain_events).assert_native() == []
     except BaseException as error:
         primary = error
