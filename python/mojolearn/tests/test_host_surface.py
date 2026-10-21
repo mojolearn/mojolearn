@@ -49,7 +49,9 @@ TRAINING_GPU_CLASSES = ("amd", "apple", "nvidia")
 #: (one generic entry point per executor, lane/algos-decomp 2026-09-27; the
 #: same spelling tools/lane_select.py `_binding_exports` reads): requiring a
 #: bare identifier read such a binding as exporting nothing.
-DEF_FUNCTION = re.compile(r'(?:module|m)\.def_function\[[A-Za-z0-9_]+(?:\[[^\[\]]*\])?\]\("([A-Za-z0-9_]+)"\)')
+DEF_FUNCTION = re.compile(
+    r'(?:module|m)\.(?:def_function\[[A-Za-z0-9_]+(?:\[[^\[\]]*\])?\]\('
+    r'|def_py_c_function\(\s*[A-Za-z0-9_]+\s*,\s*)"([A-Za-z0-9_]+)"\)')
 
 
 def _read(rel):
@@ -509,7 +511,8 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     # under the family define alone.
     assert host_surface.sabotage_build_defines("linalg").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1"]
-    sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo"],
+    sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo",
+                             "tokenizer/impl/tokenizer_host_shell_impl.mojo"],
                "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"],
                "linalg": ["gemm/host/gemm_lowbit_oracle.mojo"]}
     sources["tokenizer"].append("tokenizer/train/bpe_train.mojo")

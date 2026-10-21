@@ -1743,6 +1743,7 @@ FAMILIES = (
         ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
+            "lr_schedule_fill",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "knn_classify_neighbors", "knn_regress_neighbors",
@@ -2746,6 +2747,8 @@ FAMILIES = (
             "gemm/host/gemm_oracle.mojo",
         ),
         exports=(
+            "optimizer_resident_open", "optimizer_resident_close",
+            "optimizer_resident_upload", "optimizer_resident_download",
             "training_host_numeric_mode", "training_host_vendor",
             "training_host_column", "training_host_sabotage",
             "training_numeric_mode", "training_vendor", "optimizer_step",

@@ -72,7 +72,10 @@ FAMILIES = (
             "epoch_schedule", "prophet_days", "prophet_features",
             "prophet_changepoints",
             # the model-description trainer (autograd/model.mojo)
-            "model_fit", "model_predict", "model_n_params", "model_labels",
+            "model_fit", "model_predict", "model_n_params", "model_labels", "model_gather_labels",
+            "moe_backward", "seq_adafactor_step", "seq_lamb_step",
+            "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
+            "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
             "ops_open", "ops_session_create", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
             "ops_shape", "ops_free", "ops_reset", "ops_metric", "ops_backward", "ops_grad",

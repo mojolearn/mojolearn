@@ -90,50 +90,12 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
 _NPY_DTYPES = ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2", "=f4", "=f8", "=i4", "=i8", "=u4")
 
 
-def _numpy():
-    # glue: NumPy is optional and importing mojolearn never loads it. A
-    # caller's ndarray exists only once NumPy is loaded, so the loaded module
-    # decides: without it the owner reads and returns mojolearn Arrays, and
-    # the native entries connect the NumPy context when NumPy is loaded later
-    # (`_connect_numpy`).
-    import sys
-    return sys.modules.get("numpy")
-
-
-def _archive_npy_dtypes(np):
-    # glue: the archive dtypes the reader admits: NumPy dtypes with NumPy,
-    # the Array typestr each one is stored as without it.
-    if np is not None:
-        npy_dtypes = {name: np.dtype(name) for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
-        npy_dtypes.update({"|u1": np.dtype("u1"), "|b1": np.dtype("u1")})
-    else:
-        npy_dtypes = {name: "<" + name[1:] for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
-        npy_dtypes.update({"|u1": "<u1", "|b1": "<u1"})
+def _archive_npy_dtypes():
+    # Package-import metadata for the NumPy-free archive reader. The native
+    # owner replaces these with dtype objects if the caller loads NumPy.
+    npy_dtypes = {name: "<" + name[1:] for name in _NPY_DTYPES}
+    npy_dtypes.update({"|u1": "<u1", "|b1": "<u1"})
     return npy_dtypes
-
-
-def _numpy_context(np):
-    # glue: the NumPy admission types and dtypes (the Sequential context)
-    # plus the NumPy archive dtypes.
-    from ._x_sequence_model import _SEQUENTIAL_CONTEXT
-    context = dict(_SEQUENTIAL_CONTEXT)
-    context["archive_npy_dtypes"] = _archive_npy_dtypes(np)
-    return context
-
-
-def _connect_numpy(context):
-    # glue: called by the native classical entries (bindings/
-    # classical_attributes.mojo classical_connect_numpy) the first time they
-    # run with NumPy loaded after a NumPy-free connection. Every entry the
-    # NumPy-free connection installed and nothing changed since is replaced
-    # by its NumPy counterpart; entries set after connection (the explicit
-    # host vendor) are kept.
-    import sys
-    numpy_free = context.pop("classical_numpy_free")
-    for key, value in _numpy_context(sys.modules["numpy"]).items():  # glue: connect the NumPy admission entries once
-        if key not in context or context[key] is numpy_free.get(key, context):
-            context[key] = value
-    context.pop("classical_connect_numpy", None)
 
 
 def _numpy_free_context():
@@ -155,7 +117,9 @@ def _numpy_free_context():
         "buffer_owner_types": (type(None), bytes, bytearray, array, mmap.mmap),
         "scalar_types": (), "integer_types": (int,), "array_fields": array_fields,
         "array_type": array, "array_class": Array, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
-        "buffer_codes": {("b", 1): "b", ("i", 8): "q", ("u", 8): "Q", ("f", 8): "d"},
+        "buffer_codes": {("b", 1): "b", ("i", 1): "b", ("i", 2): "h", ("i", 4): "i",
+                         ("i", 8): "q", ("u", 1): "B", ("u", 2): "H", ("u", 4): "I",
+                         ("u", 8): "Q", ("f", 2): "H", ("f", 4): "f", ("f", 8): "d"},
         "int64_min": -(2 ** 63), "int64_max": 2 ** 63 - 1, "uint64_max": 2 ** 64 - 1,
         "modules": sys.modules,
     }
@@ -184,13 +148,10 @@ def connect(ridge_class, linear_class=None):
     except ImportError:
         _lzma = None
 
-    np = _numpy()
-    if np is not None:
-        context = _numpy_context(np)
-    else:
-        context = _numpy_free_context()
-        context["archive_npy_dtypes"] = _archive_npy_dtypes(None)
-        context.update(classical_numpy_free=dict(context), classical_connect_numpy=_connect_numpy)
+    # Both import orders use the same native admission setup. Do not copy
+    # Sequential's cached context or install a Python first-call callback.
+    context = _numpy_free_context()
+    context["archive_npy_dtypes"] = _archive_npy_dtypes()
     context.update(not_fitted_class=NotFittedError, not_fitted_doc=NotFittedError.__doc__,
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,

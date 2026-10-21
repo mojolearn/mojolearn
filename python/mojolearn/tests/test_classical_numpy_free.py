@@ -268,17 +268,23 @@ import json, os, sys
 import mojolearn
 from mojolearn import LinearRegression, Ridge
 assert "numpy" not in sys.modules, "importing mojolearn loaded NumPy"
+from mojolearn._verify_native_runtime import audit_native_call
 import numpy as np
 data = json.loads(sys.stdin.read())
 x, y = np.array(data["x"], "f4"), np.array(data["y"], "f4")
 out = {}
 for cls in (LinearRegression, Ridge):
-    model = cls(numeric_mode="identical").fit(x, y)
-    prediction = model.predict(x)
-    assert type(model.coef_) is np.ndarray and type(prediction) is np.ndarray, cls.__name__
+    # The first operation, including late NumPy admission, must be native;
+    # auditing only a subsequent fit would miss the old setup callback.
+    model = audit_native_call(cls, numeric_mode="identical").assert_native()
+    audit_native_call(model.fit, x, y).assert_native()
+    prediction = audit_native_call(model.predict, x).assert_native()
+    coefficient = audit_native_call(getattr, model, "coef_").assert_native()
+    assert type(coefficient) is np.ndarray and type(prediction) is np.ndarray, cls.__name__
     path = os.path.join(data["tmp"], cls.__name__ + ".npz")
-    model.save(path)
-    hosted = mojolearn.host_model(path).predict(x)
+    audit_native_call(model.save, path).assert_native()
+    host = audit_native_call(mojolearn.host_model, path).assert_native()
+    hosted = audit_native_call(host.predict, x).assert_native()
     assert type(hosted) is np.ndarray, cls.__name__
     out[cls.__name__] = {"coef": model.coef_.tobytes().hex(), "predict": prediction.tobytes().hex(),
                          "host_predict": hosted.tobytes().hex()}

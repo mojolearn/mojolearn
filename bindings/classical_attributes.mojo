@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.native_error_class import error_without_class
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
@@ -128,17 +128,63 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
 
 
 def classical_connect_numpy(context: PythonObject) raises:
-    """Connect the NumPy admission entries the first time a classical entry
-    runs with NumPy loaded after a NumPy-free connection (NumPy imported
-    after mojolearn). An ndarray exists only once NumPy is loaded, so the
-    loaded module decides; NumPy is never imported here."""
+    """Connect loaded NumPy's native types without a Python setup callback."""
     if py_get(context, "ndarray") is not None:
         return
-    var connect = py_get(context, "classical_connect_numpy")
-    if connect is None:
+    var numpy = py_get(context["modules"], "numpy")
+    if numpy is None:
         return
-    if py_get(context["modules"], "numpy") is not None:
-        _ = py_call(connect, context)
+    if py_type(numpy) is not context["native_module_type"]:
+        raise Error("TypeError: classical NumPy support requires the native NumPy module")
+    # Read the loaded module dictionary directly; module __getattr__ is a
+    # Python hook. All dtype construction below uses NumPy's C dtype type.
+    var fields = py_fields(numpy)
+    var b = Python.import_module("builtins")
+    var dtype_class = fields["dtype"]
+    var ndarray = fields["ndarray"]
+    var numeric = Python.dict()
+    var classes = Python.dict()
+    var scalars = py_call(b.list)
+    var integers = py_call(b.list, Python.tuple(b.int))
+    var kinds = Python.tuple("u", "i", "f", "b")
+    var sizes = Python.tuple(1, 2, 4, 8)
+    for kind in range(4):  # driver-loop: fixed native scalar ABI metadata
+        for index in range(4):  # driver-loop: supported scalar widths
+            var size = Int(py=sizes[index])
+            if (kind == 2 and size == 1) or (kind == 3 and size != 1):
+                continue
+            var code = "?" if kind == 3 else String(kinds[kind]) + String(size)
+            var dtype = py_call(dtype_class, code)
+            py_setitem(numeric, Python.tuple(kinds[kind], size), dtype)
+            py_setitem(classes, Python.tuple(kind, size), dtype)
+            _ = py_call(scalars.append, dtype.type)
+            if kind < 2:
+                _ = py_call(integers.append, dtype.type)
+    var values = py_call(b.list, context["native_value_types"])
+    var owners = py_call(b.list, context["buffer_owner_types"])
+    _ = py_call(values.append, ndarray)
+    _ = py_call(owners.append, ndarray)
+    var archive = Python.dict()
+    var archive_codes = Python.tuple("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2",
+                                     "=f4", "=f8", "=i4", "=i8", "=u4", "|u1", "|b1")
+    for i in range(len(archive_codes)):  # driver-loop: supported NPY header dtype metadata
+        var code = archive_codes[i]
+        # The archive's Boolean payload is represented by byte storage.
+        var dtype = py_call(dtype_class, "u1" if String(code) == "|b1" else String(code))
+        py_setitem(archive, code, dtype)
+    var update = Python.dict(
+        ndarray=ndarray, scalar_type=fields["generic"], integer=fields["integer"],
+        scalar_types=py_call(b.tuple, scalars), integer_types=py_call(b.tuple, integers),
+        native_value_types=py_call(b.tuple, values), buffer_owner_types=py_call(b.tuple, owners),
+        numeric_dtypes=numeric, class_dtypes=classes, archive_npy_dtypes=archive,
+        float_types=Python.tuple(b.float, fields["floating"]),
+        int_types=Python.tuple(b.int, fields["integer"]), bool_types=Python.tuple(b.bool, fields["bool_"]),
+        float32=py_call(dtype_class, "f4"), float64=py_call(dtype_class, "f8"),
+        int32=py_call(dtype_class, "i4"), int64=py_call(dtype_class, "i8"),
+        uint64=py_call(dtype_class, "u8"), bool=py_call(dtype_class, "?"))
+    # Publish together after setup succeeds. Only admission metadata changes:
+    # explicit Host* vendor and binding entries retain their CPU ownership.
+    _ = py_call(context.update, update)
 
 
 def _attribute_context(model: PythonObject, context: PythonObject) raises -> PythonObject:
