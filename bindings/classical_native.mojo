@@ -18,6 +18,7 @@ from bindings.classical_exceptions import classical_require_fitted, classical_er
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_tags import classical_tags
+from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 
@@ -130,6 +131,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if loading:
             var loaded = classical_archive_load(model, args[0], ridge, context)
             return loaded.steal_data()
+        if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "score_public":
+            # scikit-learn's sparse refusal comes before input admission.
+            classical_refuse_sparse(args[0], classical_estimator_name(model))
         if operation != "save":
             classical_admit_value(args, context)
         var fields = sequential_fields(model)

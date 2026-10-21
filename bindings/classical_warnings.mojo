@@ -27,7 +27,16 @@ def _warning_class_fields(cls: PythonObject) raises -> PythonObject:
 
 def _warning_category(context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var cls = context["warning_category"]
+    # scikit-learn's DataConversionWarning once sklearn is loaded, else
+    # mojolearn's own (_sk_validate._conversion_warning); the error path reads
+    # the same class back from the context.
+    var cls = context["warning_category_default"]
+    var module = py_get(Python.import_module("sys").modules, "sklearn.exceptions")
+    if module is not None and py_type(module) is py_type(Python.import_module("sys")):
+        var loaded = py_get(py_call(b.object.__getattribute__, module, "__dict__"), "DataConversionWarning")
+        if loaded is not None:
+            cls = loaded
+    py_setitem(context, "warning_category", cls)
     _ = _warning_class_fields(cls)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var names = Python.tuple("__new__", "__init__", "__str__", "__getattribute__")

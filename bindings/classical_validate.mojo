@@ -39,7 +39,7 @@ def classical_view(source: PythonObject, context: PythonObject) raises -> Python
     return sequential_input(prepared, context)
 
 
-def _refuse_sparse(source: PythonObject, est: String) raises:
+def classical_refuse_sparse(source: PythonObject, est: String) raises:
     # scipy.sparse containers are recognized by their defining module, so no
     # attribute or property of the container runs.
     var module = py_type(source).__module__
@@ -69,7 +69,7 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject) raises -> Py
 def classical_check_x(source: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
     """X for fit, predict or score: refused with scikit-learn's wording, then
     cast to C-ordered float32 (the input itself when it already is one)."""
-    _refuse_sparse(source, est)
+    classical_refuse_sparse(source, est)
     var view = classical_view(source, context)
     var kind = String(view.dtype.kind)
     if kind == "c":

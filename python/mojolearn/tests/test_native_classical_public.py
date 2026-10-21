@@ -96,8 +96,11 @@ def test_fit_predict_score_and_checkpoint_are_native(cls, layout, monkeypatch, t
     assert clean(model.__sklearn_is_fitted__) is True
     coef = clean(getattr, model, "coef_")
     assert type(coef) is np.ndarray and coef.dtype == np.float32 and coef.shape == (3,)
-    reference = np.linalg.lstsq(np.c_[np.asarray(x, "f8"), np.ones(len(x))], np.asarray(y, "f8"), rcond=None)[0]
-    np.testing.assert_allclose(coef, reference[:3], rtol=0, atol=2e-2 if cls is Ridge else 1e-4)
+    xc = np.asarray(x, "f8") - np.asarray(x, "f8").mean(0)
+    yc = np.asarray(y, "f8") - np.asarray(y, "f8").mean()
+    alpha = 1.0 if cls is Ridge else 0.0
+    reference = np.linalg.solve(xc.T @ xc + alpha * np.eye(3), xc.T @ yc)
+    np.testing.assert_allclose(coef, reference, rtol=0, atol=1e-4)
     assert type(clean(getattr, model, "intercept_")) is float
     assert clean(getattr, model, "n_features_in_") == 3
     prediction = clean(model.predict, x)
