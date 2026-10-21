@@ -236,6 +236,23 @@ def parse_imports(text):
     return out
 
 
+def exact_source_file(path, root):
+    """Require on-disk spelling even on a case-insensitive filesystem.
+
+    An imported symbol such as Tape is not the module tape.mojo. Admitting
+    that alias can copy a closure under Tape.mojo, which Mojo cannot import.
+    Check directory components too, without changing the caller's root.
+    """
+    if not path.is_file():
+        return False
+    parent = root
+    for part in path.relative_to(root).parts:
+        if part not in (".", "..") and part not in {p.name for p in parent.iterdir()}:
+            return False
+        parent = parent / part
+    return True
+
+
 def resolve(module, names, importer, roots):
     """Every existing file the import could mean, or None if it names this
     tree and nothing matches (the caller then widens to the whole tree)."""
@@ -255,11 +272,11 @@ def resolve(module, names, importer, roots):
     for root in search:
         for k in range(1, len(parts) + 1):
             init = root.joinpath(*parts[:k], "__init__.mojo")
-            if init.is_file():
+            if exact_source_file(init, root):
                 found.add(init)
         if parts:
             leaf = root.joinpath(*parts[:-1], parts[-1] + ".mojo")
-            if leaf.is_file():
+            if exact_source_file(leaf, root):
                 found.add(leaf)
         pkg = root.joinpath(*parts) if parts else root
         for name in names:
@@ -268,7 +285,7 @@ def resolve(module, names, importer, roots):
                     found.update(p for p in pkg.glob("*.mojo") if p.is_file())
                 continue
             for cand in (pkg / (name + ".mojo"), pkg / name / "__init__.mojo"):
-                if cand.is_file():
+                if exact_source_file(cand, root):
                     found.add(cand)
     if not found and not external:
         return None
