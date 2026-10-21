@@ -33,6 +33,15 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
+# The typed bodies (lane thin-trees-metrics, 2026-10-21).
+from mixture.gmm_entries import (
+    _gmm_fit_run,
+    _gmm_predict_proba_run,
+    _gmm_predict_run,
+    _gmm_sample_run,
+    _gmm_score_bic_aic_run,
+    _gmm_score_samples_run,
+)
 from checks.vendor import COMPILED_VENDOR
 from mixture.estimator import (
     GaussianMixtureModel,
@@ -76,34 +85,6 @@ def gmm_parallel_available() raises -> PythonObject:
     """1: every E-step (fit and scoring) reads MOJOLEARN_GMM_DEVICE_COUNT and
     row-shards through mixture/multi_gpu.mojo::gmm_e_step_dispatch."""
     return PythonObject(1)
-
-
-def _gmm_fit_run(
-    x: List[Float32],
-    n: Int,
-    d: Int,
-    params: GmmParams,
-    wp: MutPointer[Float32, MutUntrackedOrigin],
-    mp: MutPointer[Float32, MutUntrackedOrigin],
-    cp: MutPointer[Float32, MutUntrackedOrigin],
-    pp: MutPointer[Float32, MutUntrackedOrigin],
-    lp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises -> Int:
-    var model = gaussian_mixture_fit(x, n, d, params)
-    var k = model.n_components
-    copy_f32(model.weights.unsafe_ptr(), wp, k)
-    copy_f32(model.means.unsafe_ptr(), mp, k * d)
-    copy_f32(model.covariances.unsafe_ptr(), cp, k * d * d)
-    copy_f32(model.precisions_cholesky.unsafe_ptr(), pp, k * d * d)
-    copy_f32(model.log_det_chol.unsafe_ptr(), lp, k)
-    sp.unsafe_store(0, Float64(model.n_iter))
-    var conv = 0
-    if model.converged:
-        conv = 1
-    sp.unsafe_store(1, Float64(conv))
-    sp.unsafe_store(2, Float64(model.lower_bound))
-    return model.n_iter
 
 
 def gmm_fit_binding(
@@ -223,16 +204,6 @@ def _rebuild_model(
     )
 
 
-def _gmm_score_samples_run(
-    model: GaussianMixtureModel,
-    x: List[Float32],
-    n: Int,
-    op: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var s = gaussian_mixture_score_samples(model, x, n)
-    copy_f32(s.unsafe_ptr(), op, n)
-
-
 def gmm_score_samples_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -246,16 +217,6 @@ def gmm_score_samples_binding(
     with GILReleased(Python()):
         _gmm_score_samples_run(model, x, n, op)
     return PythonObject(0)
-
-
-def _gmm_predict_proba_run(
-    model: GaussianMixtureModel,
-    x: List[Float32],
-    n: Int,
-    op: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var r = gaussian_mixture_predict_proba(model, x, n)
-    copy_f32(r.unsafe_ptr(), op, n * model.n_components)
 
 
 def gmm_predict_proba_binding(
@@ -272,17 +233,6 @@ def gmm_predict_proba_binding(
     return PythonObject(0)
 
 
-def _gmm_predict_run(
-    model: GaussianMixtureModel,
-    x: List[Float32],
-    n: Int,
-    op: MutPointer[Int32, MutUntrackedOrigin],
-) raises:
-    var labels = gaussian_mixture_predict(model, x, n)
-    for i in range(n):
-        op.unsafe_store(i, labels[i])
-
-
 def gmm_predict_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -296,20 +246,6 @@ def gmm_predict_binding(
     with GILReleased(Python()):
         _gmm_predict_run(model, x, n, op)
     return PythonObject(0)
-
-
-def _gmm_sample_run(
-    model: GaussianMixtureModel,
-    n: Int,
-    seed: UInt64,
-    xp: MutPointer[Float32, MutUntrackedOrigin],
-    yp: MutPointer[Int32, MutUntrackedOrigin],
-) raises:
-    var labels = List[Int32](length=max(0, n), fill=Int32(0))
-    var x = gaussian_mixture_sample(model, n, seed, labels)
-    copy_f32(x.unsafe_ptr(), xp, n * model.n_features)
-    for i in range(n):
-        yp.unsafe_store(i, labels[i])
 
 
 def gmm_sample_binding(
@@ -336,17 +272,6 @@ def gmm_sample_binding(
     with GILReleased(Python()):
         _gmm_sample_run(model, n, seed, xp, yp)
     return PythonObject(n)
-
-
-def _gmm_score_bic_aic_run(
-    model: GaussianMixtureModel,
-    x: List[Float32],
-    n: Int,
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises:
-    sp.unsafe_store(0, Float64(gaussian_mixture_score(model, x, n)))
-    sp.unsafe_store(1, Float64(gaussian_mixture_bic(model, x, n)))
-    sp.unsafe_store(2, Float64(gaussian_mixture_aic(model, x, n)))
 
 
 def gmm_score_bic_aic_binding(
