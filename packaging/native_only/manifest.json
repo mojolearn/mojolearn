@@ -680,7 +680,9 @@
       "source_dependency_count": 91,
       "canonical_algorithms": [
         "mojolearn.ops.Session"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native Tape records a branched graph, differentiates and consumes exact 2*x+1 gradients; Python Session/Program admission is not exercised."
     },
     {
       "id": "autograd_gpu",
@@ -700,7 +702,9 @@
       "source_dependency_count": 120,
       "canonical_algorithms": [
         "mojolearn.ops.Session"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native Tape records a branched graph, differentiates and consumes exact 2*x+1 gradients; Python Session/Program admission is not exercised."
     },
     {
       "id": "sequential_cpu",
@@ -718,7 +722,9 @@
       "source_dependency_count": 102,
       "canonical_algorithms": [
         "mojolearn.Sequential"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native ModelSpec fit owns one full epoch/batch/tape/backward/SGD update and predict; independent affine loss/gradient/prediction oracle. Public metadata/checkpoint adapters not exercised."
     },
     {
       "id": "sequential_gpu",
@@ -738,7 +744,9 @@
       "source_dependency_count": 131,
       "canonical_algorithms": [
         "mojolearn.Sequential"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native ModelSpec fit owns one full epoch/batch/tape/backward/SGD update and predict; independent affine loss/gradient/prediction oracle. Public metadata/checkpoint adapters not exercised."
     },
     {
       "id": "optimizer_cpu",
@@ -766,7 +774,9 @@
         "mojolearn.AdamW",
         "mojolearn.SGD",
         "mojolearn.clip_grad_norm_"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native optimizer state, six updates per configuration, independent float64 oracle for SGD/momentum/Nesterov/Adam/AdamW/global clipping and three schedules; public optimizer adapters not exercised."
     },
     {
       "id": "optimizer_gpu",
@@ -796,7 +806,9 @@
         "mojolearn.AdamW",
         "mojolearn.SGD",
         "mojolearn.clip_grad_norm_"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native optimizer state, six updates per configuration, independent float64 oracle for SGD/momentum/Nesterov/Adam/AdamW/global clipping and three schedules; public optimizer adapters not exercised."
     },
     {
       "id": "tokenizer",
@@ -820,7 +832,9 @@
       "canonical_algorithms": [
         "mojolearn.BpeTokenizer",
         "mojolearn.tokenizer.BpeVocabularyTrainer"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native BPE vocabulary training on embedded corpus, deterministic replay, encode and byte-exact decode. No downloaded files or CPython initialization."
     },
     {
       "id": "kmeans",
@@ -840,7 +854,9 @@
       "source_dependency_count": 68,
       "canonical_algorithms": [
         "mojolearn.KMeans"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native caller-facing fit with input/output host buffers, Lloyd loop, final label assignment, consumed planted memberships and centers."
     },
     {
       "id": "linear_regression",
@@ -860,7 +876,9 @@
       "source_dependency_count": 108,
       "canonical_algorithms": [
         "mojolearn.LinearRegression"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native OLS fit and consumed coefficients against planted exact model; Python estimator intercept/validation not exercised."
     },
     {
       "id": "ridge",
@@ -880,7 +898,9 @@
       "source_dependency_count": 73,
       "canonical_algorithms": [
         "mojolearn.Ridge"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native ridge fit at three regularization strengths against independent float64 closed form."
     },
     {
       "id": "logistic",
@@ -900,7 +920,9 @@
       "source_dependency_count": 99,
       "canonical_algorithms": [
         "mojolearn.LogisticRegression"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native binary logistic fit loop and consumed fitted coefficients/training accuracy."
     },
     {
       "id": "pca",
@@ -920,7 +942,9 @@
       "source_dependency_count": 62,
       "canonical_algorithms": [
         "mojolearn.PCA"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native PCA fit and consumed eigenvalue/component orthogonality and residual assertions."
     },
     {
       "id": "truncated_svd",
@@ -940,7 +964,9 @@
       "source_dependency_count": 62,
       "canonical_algorithms": [
         "mojolearn.TruncatedSVD"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native truncated SVD fit compared with PCA on centered data."
     },
     {
       "id": "nearest_neighbors",
@@ -960,7 +986,9 @@
       "source_dependency_count": 92,
       "canonical_algorithms": [
         "mojolearn.NearestNeighbors"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native pointer-facing nearest-neighbor search including input upload and consumed indices against brute force."
     },
     {
       "id": "radius_neighbors",
@@ -980,7 +1008,9 @@
       "source_dependency_count": 92,
       "canonical_algorithms": [
         "mojolearn.RadiusNeighbors"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native pointer-facing radius count/fill with consumed membership/distances against brute force."
     },
     {
       "id": "knn_classifier",
@@ -1000,7 +1030,9 @@
       "source_dependency_count": 92,
       "canonical_algorithms": [
         "mojolearn.KNeighborsClassifier"
-      ]
+      ],
+      "whole_operation": false,
+      "operation_boundary": "Native voting/probability aggregation of existing neighbor ids; does not exercise end-to-end search plus classification."
     },
     {
       "id": "knn_regressor",
@@ -1020,7 +1052,9 @@
       "source_dependency_count": 92,
       "canonical_algorithms": [
         "mojolearn.KNeighborsRegressor"
-      ]
+      ],
+      "whole_operation": false,
+      "operation_boundary": "Native regression aggregation of existing neighbor ids; does not exercise end-to-end search plus regression."
     },
     {
       "id": "dbscan",
@@ -1041,7 +1075,9 @@
       "source_dependency_count": 83,
       "canonical_algorithms": [
         "mojolearn.DBSCAN"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native DBSCAN fit graph/propagation/final relabel and consumed planted partition/noise labels."
     },
     {
       "id": "kernel_density",
@@ -1062,7 +1098,9 @@
       "source_dependency_count": 68,
       "canonical_algorithms": [
         "mojolearn.KernelDensity"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native density evaluation and consumed output against scalar oracle; public validation adapter excluded."
     },
     {
       "id": "cholesky",
@@ -1083,7 +1121,9 @@
       "source_dependency_count": 60,
       "canonical_algorithms": [
         "mojolearn.Cholesky"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native factorization and triangular solves with consumed residual against original equation."
     },
     {
       "id": "gaussian_process",
@@ -1103,7 +1143,9 @@
       "source_dependency_count": 94,
       "canonical_algorithms": [
         "mojolearn.GaussianProcessRegressor"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native fit and posterior prediction reproduce planted training observations."
     },
     {
       "id": "gaussian_mixture",
@@ -1123,7 +1165,9 @@
       "source_dependency_count": 104,
       "canonical_algorithms": [
         "mojolearn.GaussianMixture"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native EM fit consumes means, covariance and component weights against planted separated mixture."
     },
     {
       "id": "kernel_ridge",
@@ -1143,7 +1187,9 @@
       "source_dependency_count": 126,
       "canonical_algorithms": [
         "mojolearn.KernelRidge"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native kernel ridge fitted prediction against planted linear function."
     },
     {
       "id": "nystroem",
@@ -1163,7 +1209,9 @@
       "source_dependency_count": 126,
       "canonical_algorithms": [
         "mojolearn.Nystroem"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native full-landmark transformation reconstructs exact kernel."
     },
     {
       "id": "rbf_sampler",
@@ -1183,7 +1231,9 @@
       "source_dependency_count": 126,
       "canonical_algorithms": [
         "mojolearn.RBFSampler"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native seeded random features and consumed transform against independent scalar oracle."
     },
     {
       "id": "ivf",
@@ -1203,7 +1253,9 @@
       "source_dependency_count": 153,
       "canonical_algorithms": [
         "mojolearn.IVFIndex"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native IVF index build and all-list search consumed against brute force."
     },
     {
       "id": "isolation_forest",
@@ -1224,7 +1276,9 @@
       "source_dependency_count": 31,
       "canonical_algorithms": [
         "mojolearn.IsolationForest"
-      ]
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native isolation forest fit/path scoring consumed against independent oracle."
     },
     {
       "id": "exponential_smoothing",
@@ -1244,6 +1298,121 @@
       "source_dependency_count": 40,
       "canonical_algorithms": [
         "mojolearn.ExponentialSmoothing"
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native Holt-Winters fit/forecast consumed against scalar recurrence oracle."
+    },
+    {
+      "id": "umap",
+      "source": "packaging/native_only/cases/smoke_umap.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.UMAP",
+        "mojolearn.manifold.UMAP"
+      ],
+      "marker": "NATIVE_ONLY_PASS umap",
+      "status": "ready",
+      "coverage": "Native whole fit_transform:8 rows,3 neighbors,4 epochs; consumed shape/finite/noncollapsed layout, seeded replay and unsupported-dimension refusal. This is not an independent numerical-accuracy oracle.",
+      "whole_operation": true,
+      "operation_boundary": "Native whole fit_transform:8 rows,3 neighbors,4 epochs; consumed shape/finite/noncollapsed layout, seeded replay and unsupported-dimension refusal. This is not an independent numerical-accuracy oracle.",
+      "canonical_algorithms": [
+        "mojolearn.UMAP"
+      ]
+    },
+    {
+      "id": "spectral_clustering",
+      "source": "packaging/native_only/cases/smoke_spectral_clustering.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.SpectralClustering",
+        "mojolearn.cluster.SpectralClustering"
+      ],
+      "marker": "NATIVE_ONLY_PASS spectral_clustering",
+      "status": "ready",
+      "coverage": "Native whole spectral clustering fit:144 rows,3 planted blobs; consumed labels must reproduce the planted partition bijectively.",
+      "whole_operation": true,
+      "operation_boundary": "Native whole spectral clustering fit:144 rows,3 planted blobs; consumed labels must reproduce the planted partition bijectively.",
+      "canonical_algorithms": [
+        "mojolearn.SpectralClustering"
+      ]
+    },
+    {
+      "id": "hdbscan",
+      "source": "packaging/native_only/cases/smoke_hdbscan.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.HDBSCAN",
+        "mojolearn.cluster.HDBSCAN"
+      ],
+      "marker": "NATIVE_ONLY_PASS hdbscan",
+      "status": "ready",
+      "coverage": "Native whole HDBSCAN fit on7 fixtures of41\u201396 rows; consumed labels/outlier counts versus scalar oracle and independently planted partitions.",
+      "whole_operation": true,
+      "operation_boundary": "Native whole HDBSCAN fit on7 fixtures of41\u201396 rows; consumed labels/outlier counts versus scalar oracle and independently planted partitions.",
+      "canonical_algorithms": [
+        "mojolearn.HDBSCAN"
+      ]
+    },
+    {
+      "id": "agglomerative",
+      "source": "packaging/native_only/cases/smoke_agglomerative.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.AgglomerativeClustering",
+        "mojolearn.cluster.AgglomerativeClustering"
+      ],
+      "marker": "NATIVE_ONLY_PASS agglomerative",
+      "status": "ready",
+      "coverage": "Native single-linkage fit on5 fixtures; consumed dendrogram/labels versus independent Kruskal/cut partition plus actual entry/staged equality. Other linkage methods not exercised.",
+      "whole_operation": true,
+      "operation_boundary": "Native single-linkage fit on5 fixtures; consumed dendrogram/labels versus independent Kruskal/cut partition plus actual entry/staged equality. Other linkage methods not exercised.",
+      "canonical_algorithms": [
+        "mojolearn.AgglomerativeClustering"
+      ]
+    },
+    {
+      "id": "preprocessing",
+      "source": "packaging/native_only/cases/smoke_preprocessing.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.MinMaxScaler",
+        "mojolearn.StandardScaler",
+        "mojolearn.preprocessing.MinMaxScaler",
+        "mojolearn.preprocessing.StandardScaler"
+      ],
+      "marker": "NATIVE_ONLY_PASS preprocessing",
+      "status": "ready",
+      "coverage": "Native pointer-facing scaler fit+transform+inverse on a varying and a constant column, fitted means/variance/extrema and every consumed output checked against independent closed form.",
+      "whole_operation": true,
+      "operation_boundary": "Native pointer-facing scaler fit+transform+inverse on a varying and a constant column, fitted means/variance/extrema and every consumed output checked against independent closed form.",
+      "canonical_algorithms": [
+        "mojolearn.MinMaxScaler",
+        "mojolearn.StandardScaler"
       ]
     }
   ],
@@ -1373,9 +1542,11 @@
     },
     {
       "algorithm": "mojolearn.AgglomerativeClustering",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "agglomerative"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.AgglomerativeClustering",
       "symbol_origin": "mojolearn._hierarchy_impl.AgglomerativeClustering"
@@ -2015,9 +2186,11 @@
     },
     {
       "algorithm": "mojolearn.HDBSCAN",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "hdbscan"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.HDBSCAN",
       "symbol_origin": "mojolearn.hdbscan.HDBSCAN"
@@ -2645,9 +2818,11 @@
     },
     {
       "algorithm": "mojolearn.MinMaxScaler",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "preprocessing"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.MinMaxScaler",
       "symbol_origin": "mojolearn.preprocessing.MinMaxScaler"
@@ -3375,9 +3550,11 @@
     },
     {
       "algorithm": "mojolearn.SpectralClustering",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "spectral_clustering"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.SpectralClustering",
       "symbol_origin": "mojolearn._spectral_impl.SpectralClustering"
@@ -3420,9 +3597,11 @@
     },
     {
       "algorithm": "mojolearn.StandardScaler",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "preprocessing"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.StandardScaler",
       "symbol_origin": "mojolearn.preprocessing.StandardScaler"
@@ -3521,9 +3700,11 @@
     },
     {
       "algorithm": "mojolearn.UMAP",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "umap"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.UMAP",
       "symbol_origin": "mojolearn._umap_impl.UMAP"
@@ -3615,9 +3796,11 @@
     },
     {
       "algorithm": "mojolearn.cluster.AgglomerativeClustering",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "agglomerative"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/_sklearn_modules.py",
       "canonical_algorithm": "mojolearn.AgglomerativeClustering",
       "symbol_origin": "mojolearn._hierarchy_impl.AgglomerativeClustering",
@@ -3647,9 +3830,11 @@
     },
     {
       "algorithm": "mojolearn.cluster.HDBSCAN",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "hdbscan"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/_sklearn_modules.py",
       "canonical_algorithm": "mojolearn.HDBSCAN",
       "symbol_origin": "mojolearn.hdbscan.HDBSCAN",
@@ -3687,9 +3872,11 @@
     },
     {
       "algorithm": "mojolearn.cluster.SpectralClustering",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "spectral_clustering"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/_sklearn_modules.py",
       "canonical_algorithm": "mojolearn.SpectralClustering",
       "symbol_origin": "mojolearn._spectral_impl.SpectralClustering",
@@ -4710,9 +4897,11 @@
     },
     {
       "algorithm": "mojolearn.manifold.UMAP",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "umap"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/manifold.py",
       "canonical_algorithm": "mojolearn.UMAP",
       "symbol_origin": "mojolearn._umap_impl.UMAP",
@@ -6217,9 +6406,11 @@
     },
     {
       "algorithm": "mojolearn.preprocessing.MinMaxScaler",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "preprocessing"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/preprocessing.py",
       "canonical_algorithm": "mojolearn.MinMaxScaler",
       "symbol_origin": "mojolearn.preprocessing.MinMaxScaler",
@@ -6317,9 +6508,11 @@
     },
     {
       "algorithm": "mojolearn.preprocessing.StandardScaler",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "preprocessing"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/preprocessing.py",
       "canonical_algorithm": "mojolearn.StandardScaler",
       "symbol_origin": "mojolearn.preprocessing.StandardScaler",
@@ -6873,8 +7066,8 @@
     "canonical_algorithm_entries": 442,
     "canonical_status_counts": {
       "blocked": 9,
-      "missing": 404,
-      "ready": 29
+      "missing": 398,
+      "ready": 35
     },
     "note": "Algorithm entries include public numerical/helper operations as well as estimator classes; no per-estimator completeness is implied by this denominator."
   }
