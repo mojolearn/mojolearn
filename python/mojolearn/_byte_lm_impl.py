@@ -427,16 +427,16 @@ def _validate_state(value):
 
 def _sha256_hex(data):
     """The SHA-256 of the bytes `data` as 64 hex digits, computed by the Mojo
-    SHA-256 (core/sha256.mojo) behind the CPU tokenizer binding's
+    SHA-256 (core/sha256.mojo) behind the loaded byte LM binding's
     `sha256_hex`: the same digest as before, over the same bytes."""
-    return str(_backend.load_host_module('_mojolearn_tokenizer_host').sha256_hex(data))
+    return str(_backend.binding(_EXTENSION, _mode()).sha256_hex(data))
 
 
-def _sha(path):
-    """The SHA-256 of the file at `path`, streamed by the Mojo file digest
-    (`verify_file_sha256`, autograd/model_verify.mojo) behind the CPU
-    sequence binding; the file never passes through Python."""
-    return str(_backend.load_host_module('_mojolearn_x_sequence_host').verify_file_sha256(str(path))[0])
+def _sha(binding, path):
+    """The SHA-256 of the file at `path`, streamed by the binding's Mojo
+    file digest (`byte_lm_file_sha256`); the file never passes through
+    Python."""
+    return str(binding.byte_lm_file_sha256(str(path)))
 
 
 def _binding_metadata(binding, shape):
@@ -444,10 +444,10 @@ def _binding_metadata(binding, shape):
     names = ('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
              'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
              'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py')
-    inventory = {name: _sha(root / name) for name in names if (root / name).is_file()}  # cpu-route: hashes the binding files (file input)
+    inventory = {name: _sha(binding, root / name) for name in names if (root / name).is_file()}  # glue: one native file digest per named source file
     # Installed wheels may lack native sources; the Python source and exact
     # loaded binding are still identified. Do not claim a full source audit.
-    inventory['loaded_python_wrapper'] = _sha(__file__)
+    inventory['loaded_python_wrapper'] = _sha(binding, __file__)
     # DEVIATION 2534: the attention arm the native launchers run, the
     # column's default and whether the binding is a trial build, so a run
     # names its arm instead of an environment variable that may be unset.
@@ -467,7 +467,7 @@ def _binding_metadata(binding, shape):
     if hasattr(binding, 'byte_lm_step_glue_arm'):
         glue_arm, glue_trial = binding.byte_lm_step_glue_arm()
         step_glue = dict(arm=str(glue_arm), trial_build=bool(int(glue_trial)))
-    return dict(binding_file=binding.__file__, binding_sha256=_sha(binding.__file__),
+    return dict(binding_file=binding.__file__, binding_sha256=_sha(binding, binding.__file__),
                 native_profile=str(binding.byte_lm_profile()),
                 native_vendor=str(binding.byte_lm_vendor()),
                 native_numeric_mode=int(binding.byte_lm_numeric_mode()),

@@ -202,6 +202,17 @@ class _HostTrainerBinding:
     def byte_lm_config_profile(self, shape):
         return str(self._host.byte_lm_host_profile(list(_config(shape).native_shape)))
 
+    # ---- digests ---------------------------------------------------------
+    def sha256_hex(self, data):
+        """The GPU binding's `sha256_hex`: the Mojo SHA-256 of `data`, served
+        by the CPU tokenizer binding's entry of the same name."""
+        return str(_backend.load_host_module("_mojolearn_tokenizer_host").sha256_hex(data))
+
+    def byte_lm_file_sha256(self, path):
+        """The GPU binding's `byte_lm_file_sha256`: the Mojo SHA-256 of the
+        file at `path`, served by the CPU sequence binding's file digest."""
+        return str(_backend.load_host_module("_mojolearn_x_sequence_host").verify_file_sha256(str(path))[0])
+
     # ---- the stateless step ----------------------------------------------
     def _step(self, cfg, p_addr, m_addr, v_addr, ids_addr, grad_addr, out_p, out_m, out_v, opt, completed):
         """One host step on caller-owned addresses; returns the loss's float32."""
