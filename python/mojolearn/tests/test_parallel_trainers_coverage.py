@@ -115,6 +115,8 @@ def test_split_and_fold_refuse_poisoned_inputs_by_message():
                             (owner.shard_gradient, (SHARDS[0],)), (owner.fold_export, ()),
                             (type(owner).has_device_fold.fget, (owner,))):
         assert CLOSED in native_failure(operation, RuntimeError, *args)
+    # the committed step count is host metadata and stays readable after close
+    assert audit_native_call(type(owner).step_.fget, owner).assert_native() == 0
 
 
 @gpu_only
