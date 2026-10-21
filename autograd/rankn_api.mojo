@@ -193,13 +193,13 @@ def rn_check_permutation(axes: List[Int], ndim: Int, what: String) raises -> Lis
     """`axes` normalized (negative axes count from the end), refused unless
     it lists every axis of a rank-`ndim` tensor once."""
     if len(axes) != ndim:
-        raise Error(what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
+        raise Error("ValueError: " + what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
     var seen = List[Bool](length=ndim, fill=False)
     var out = List[Int](capacity=ndim)
     for k in range(ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         var a = rn_normalize_axis(axes[k], ndim)
         if seen[a]:
-            raise Error(what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
+            raise Error("ValueError: " + what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
         seen[a] = True
         out.append(a)
     return out^

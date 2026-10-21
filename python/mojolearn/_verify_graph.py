@@ -171,7 +171,9 @@ def transformer_program_composition():
                 wp[name], wm[name] = plus, minus
             expected = np.sum((_transformer_reference64(xp, wp, 2, 2, 4) -
                                _transformer_reference64(xm, wm, 2, 2, 4)) * seed) / (2 * epsilon)
-            got = np.sum(np.asarray(gradients[name], dtype=np.float64) * direction)
+            gradient = np.asarray(gradients[name], dtype=np.float64)
+            assert gradient.shape == (value.shape if value.ndim != 1 else (value.size, 1))
+            got = np.sum(gradient.reshape(value.shape) * direction)
             np.testing.assert_allclose(got, expected, rtol=3e-3, atol=2e-5)
             outputs.append(gradients[name])
     return outputs
