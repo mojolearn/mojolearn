@@ -1075,9 +1075,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var nf = len(fs)
         var t: Tensor
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR:
-            for h in hs:  # small-loop(hs: at most two transformer primitive operands): dtype metadata
-                if self.int_words[self._slot(h)]:
-                    raise Error("ValueError: transformer primitives require floating-point tensors")
+            # These primitive signatures have at most two handles. Their
+            # arity validation below rejects any additional operands.
+            if ((n > 0 and self.int_words[self._slot(hs[0])])
+                    or (n > 1 and self.int_words[self._slot(hs[1])])):
+                raise Error("ValueError: transformer primitives require floating-point tensors")
         if code == OPS_MATMUL or code == OPS_MATMUL_N:
             _need("matmul", n, 2, 0, ni, 0, nf)
             var ma = self.tape.ndim(x[0])
