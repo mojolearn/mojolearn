@@ -591,6 +591,7 @@ def _attribute_roots(fn, module_globals):
     except (OSError, TypeError, SyntaxError):
         _FOREIGN_CACHE[key] = (foreign, other)
         return foreign, other
+    objects = _call_bound_locals(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
             root = node.value
@@ -599,6 +600,16 @@ def _attribute_roots(fn, module_globals):
             bound = module_globals.get(root.id) if isinstance(root, ast.Name) else None
             if isinstance(bound, types.ModuleType) and \
                     not (bound.__name__ == "mojolearn" or bound.__name__.startswith("mojolearn.")):
+                foreign.add(node.attr)
+            elif isinstance(root, ast.Name) and root.id in objects and node.value is root:
+                # AN ATTRIBUTE OF AN OBJECT A CALL RETURNED (2026-10-21):
+                # `program = s.capture(...)`, `program.run(x)`. It names a
+                # method or a field, never a module-level function of a
+                # package file, and `run` matched `_verify_worker.run`, which
+                # handed sequence-tape-program the verifier (`_verify_all.py`,
+                # `_verify_par.py`). The class is reached by the call that made
+                # the object. Only the first link of the chain, and only for a
+                # local every binding of which is a call.
                 foreign.add(node.attr)
             else:
                 other.add(node.attr)
@@ -609,6 +620,43 @@ def _attribute_roots(fn, module_globals):
                 other.add(alias.asname or alias.name)
     _FOREIGN_CACHE[key] = (foreign, other)
     return foreign, other
+
+
+def _call_bound_locals(tree):
+    """The local names one function binds ONLY to a call's result (`x =
+    f(...)`, `with f(...) as x`): objects, never a module or the package. A
+    name bound any other way anywhere in the function (a parameter, `x = ml`,
+    `x = ml.ops`, a loop target, an import) is left out."""
+    calls, other = set(), set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    (calls if isinstance(node.value, ast.Call) else other).add(target.id)
+                else:
+                    other |= {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            target = node.target
+            if isinstance(target, ast.Name):
+                other.add(target.id)
+        elif isinstance(node, ast.withitem) and node.optional_vars is not None:
+            if isinstance(node.optional_vars, ast.Name) and isinstance(node.context_expr, ast.Call):
+                calls.add(node.optional_vars.id)
+            else:
+                other |= {n.id for n in ast.walk(node.optional_vars) if isinstance(n, ast.Name)}
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            other |= {n.id for n in ast.walk(node.target) if isinstance(n, ast.Name)}
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            args = node.args
+            other |= {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
+            other |= {a.arg for a in (args.vararg, args.kwarg) if a is not None}
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            other |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            other |= set(node.names)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            other.add(node.name)
+    return calls - other
 
 
 def _seed_names(fn, module_globals):
