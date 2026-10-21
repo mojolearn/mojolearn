@@ -13,8 +13,6 @@ verdicts batch 6 (2026-10-05), each with an _OFF rollback:
 IDENTICAL compiles only IDN_LU_RESIDENT_PAIR's entries (unless its _OFF define).
 """
 from std.gpu import block_dim, block_idx, thread_idx
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -29,7 +27,6 @@ from x_decomp.device import (
 )
 from x_decomp.qfix import LU_QFIX, QF_LAUNCH_CELLS, QF_RT, QF_TPB, lu_resid_ff_kernel
 from x_decomp.resident import X_DECOMP_POOL, _ptr
-from x_decomp.resident_pyapi import _id, _n
 
 #: What: `randomized_svd`'s direct input (RSVD_FAST_DIRECT_IN, the FAST +
 #: Apple default) refuses NaN/inf with the base binding's `all_finite_f32`, a
@@ -121,7 +118,7 @@ comptime IDN_LU_RESIDENT_PAIR = (
 comptime LU_RESIDENT_ENTRIES = LU_FAST_RESIDENT or IDN_LU_RESIDENT_PAIR
 
 
-def s_flags_py() raises -> PythonObject:
+def s_flags_run() -> Int:
     """Bit 1 RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS, bit 4
     LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR (0 when none)."""
     var f = 0
@@ -133,7 +130,7 @@ def s_flags_py() raises -> PythonObject:
         f |= 4
     comptime if IDN_LU_RESIDENT_PAIR:
         f |= 8
-    return PythonObject(f)
+    return f
 
 
 def lur_add_kernel(x: F32Ptr, d: F32Ptr, count: Int32):
@@ -143,130 +140,102 @@ def lur_add_kernel(x: F32Ptr, d: F32Ptr, count: Int32):
         x.unsafe_store(i, x.unsafe_load(i) + d.unsafe_load(i))
 
 
-def dev_lu_factor_py(
-    a: PythonObject, lu: PythonObject, piv: PythonObject, info: PythonObject, ia: PythonObject,
-    ilu: PythonObject, ipv: PythonObject, p: PythonObject,
-) raises -> PythonObject:
-    """p = [n]. Host a (n x n) into device matrix ia; -1 when a holds a NaN
-    or infinity (nothing else done). Else device matrix ilu = the LU factor
-    of a copy of it (`launch_lu`), device matrix ipv (n words) its int32
-    pivots, and host lu (n x n float32), piv (n int32) and info (1 float32)
-    their downloads; returns 0. Waits."""
-    var n = _n(p, 0)
+def dev_lu_factor_run(
+    src: F32Ptr, plu: F32Ptr, ppv: F32Ptr, pinf: F32Ptr, ida: Int, idl: Int, idp: Int, n: Int
+) raises -> Int:
+    """`dev_lu_factor_py`'s typed body: host src into pool matrix ida, then
+    the factor (see the door). ppv holds int32 words, moved as 4-byte floats."""
     if n <= 0 or n * n > 2147483647:
         raise Error("x_decomp: dev_lu_factor needs 0 < n and n * n inside Int32")
-    var src = F32Ptr(unsafe_from_address=Int(py=a))
-    var plu = F32Ptr(unsafe_from_address=Int(py=lu))
-    var ppv = F32Ptr(unsafe_from_address=Int(py=piv))     # int32 words, moved as 4-byte floats
-    var pinf = F32Ptr(unsafe_from_address=Int(py=info))
-    var ida = _id(ia)
-    var idl = _id(ilu)
-    var idp = _id(ipv)
     _ = _ptr(ida, n * n)
     var dl = _ptr(idl, n * n)
     var dp = I32Ptr(unsafe_from_address=Int(_ptr(idp, n)))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var rc = 0
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        _up_into(ctx, pool[].bufs[ida], src, n * n)
-        if device_first_nonfinite(ctx, pool[].bufs[ida], n * n) >= 0:
-            rc = -1
-        else:
-            ctx.enqueue_copy(
-                dst_buf=pool[].bufs[idl].create_sub_buffer[DType.float32](0, n * n),
-                src_buf=pool[].bufs[ida].create_sub_buffer[DType.float32](0, n * n),
-            )
-            var di = ctx.enqueue_create_buffer[DType.float32](1)
-            var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
-            var dact = ctx.enqueue_create_buffer[DType.float32](n)
-            launch_lu(ctx, dl, dp, _p(di), _p(ds), _p(dact), n)
-            _down(ctx, pool[].bufs[idl], plu, n * n)
-            _down(ctx, pool[].bufs[idp], ppv, n)
-            _down(ctx, di, pinf, 1)
-            ctx.synchronize()
-            _ = di^
-            _ = ds^
-            _ = dact^
+    var ctx = xd_ctx()
+    _up_into(ctx, pool[].bufs[ida], src, n * n)
+    if device_first_nonfinite(ctx, pool[].bufs[ida], n * n) >= 0:
+        rc = -1
+    else:
+        ctx.enqueue_copy(
+            dst_buf=pool[].bufs[idl].create_sub_buffer[DType.float32](0, n * n),
+            src_buf=pool[].bufs[ida].create_sub_buffer[DType.float32](0, n * n),
+        )
+        var di = ctx.enqueue_create_buffer[DType.float32](1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
+        var dact = ctx.enqueue_create_buffer[DType.float32](n)
+        launch_lu(ctx, dl, dp, _p(di), _p(ds), _p(dact), n)
+        _down(ctx, pool[].bufs[idl], plu, n * n)
+        _down(ctx, pool[].bufs[idp], ppv, n)
+        _down(ctx, di, pinf, 1)
         ctx.synchronize()
-    return PythonObject(rc)
+        _ = di^
+        _ = ds^
+        _ = dact^
+    ctx.synchronize()
+    return rc
 
 
-def dev_lu_solve_py(
-    ilu: PythonObject, ipv: PythonObject, ia: PythonObject, b: PythonObject, x: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """p = [n, nrhs, refine]. Host x (n x nrhs) = the solve of A x = b (host
-    b, n x nrhs) from the device LU ilu / pivots ipv (`dev_lu_factor_py`'s),
-    `launch_lu_solve` as DevExec.lu_solve runs it; with refine, one LU_QFIX
-    step x += LU^-1 (b - A x), A the device matrix ia, the residual in
-    float-float (`lu_resid_ff_kernel`, sliced as `lu_resid_py` slices it).
-    Waits."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var refine = _n(p, 2) != 0
+def dev_lu_solve_run(
+    pb: F32Ptr, px: F32Ptr, il: Int, ip: Int, ida: Int, n: Int, nrhs: Int, rf: Int
+) raises -> Int:
+    """`dev_lu_solve_py`'s typed body (see the door); rf != 0 refines."""
+    var refine = rf != 0
     if n <= 0 or nrhs <= 0 or n * n > 2147483647 or n * nrhs > 2147483647:
         raise Error("x_decomp: dev_lu_solve needs 0 < n, nrhs and n * n inside Int32")
-    var pb = F32Ptr(unsafe_from_address=Int(py=b))
-    var px = F32Ptr(unsafe_from_address=Int(py=x))
-    var dl = _ptr(_id(ilu), n * n)
-    var dp = I32Ptr(unsafe_from_address=Int(_ptr(_id(ipv), n)))
-    var da = _ptr(_id(ia), n * n)
+    var dl = _ptr(il, n * n)
+    var dp = I32Ptr(unsafe_from_address=Int(_ptr(ip, n)))
+    var da = _ptr(ida, n * n)
     var cells = n * nrhs
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        var db = _up(ctx, pb, cells)
-        var dbs = ctx.enqueue_create_buffer[DType.float32](cells)
-        ctx.enqueue_copy(dst_buf=dbs, src_buf=db)
-        var didx = ctx.enqueue_create_buffer[DType.float32](n)
-        var dx = ctx.enqueue_create_buffer[DType.float32](cells)
-        # launch_lu_solve uses its b as scratch: the copy keeps b for the residual
-        launch_lu_solve(ctx, dl, dp, _p(dbs), _p(didx), _p(dx), n, nrhs, 0)
-        if refine:
-            var dr = ctx.enqueue_create_buffer[DType.float32](cells)
-            var cols = (nrhs + QF_RT - 1) // QF_RT
-            var per = max(1, QF_LAUNCH_CELLS // max(1, cells))
-            var row0 = 0
-            while row0 < n:
-                var rows = min(per, n - row0)
-                ctx.enqueue_function[lu_resid_ff_kernel](
-                    da, _p(dx), _p(db), _p(dr), Int32(n), Int32(nrhs), Int32(row0),
-                    grid_dim=(rows, cols, 1), block_dim=(QF_TPB, 1, 1),
-                )
-                ctx.synchronize()
-                row0 += rows
-            var dd = ctx.enqueue_create_buffer[DType.float32](cells)
-            launch_lu_solve(ctx, dl, dp, _p(dr), _p(didx), _p(dd), n, nrhs, 0)
-            ctx.enqueue_function[lur_add_kernel](_p(dx), _p(dd), Int32(cells), grid_dim=_blocks(cells), block_dim=TPB)
+    var ctx = xd_ctx()
+    var db = _up(ctx, pb, cells)
+    var dbs = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=dbs, src_buf=db)
+    var didx = ctx.enqueue_create_buffer[DType.float32](n)
+    var dx = ctx.enqueue_create_buffer[DType.float32](cells)
+    # launch_lu_solve uses its b as scratch: the copy keeps b for the residual
+    launch_lu_solve(ctx, dl, dp, _p(dbs), _p(didx), _p(dx), n, nrhs, 0)
+    if refine:
+        var dr = ctx.enqueue_create_buffer[DType.float32](cells)
+        var cols = (nrhs + QF_RT - 1) // QF_RT
+        var per = max(1, QF_LAUNCH_CELLS // max(1, cells))
+        var row0 = 0
+        while row0 < n:
+            var rows = min(per, n - row0)
+            ctx.enqueue_function[lu_resid_ff_kernel](
+                da, _p(dx), _p(db), _p(dr), Int32(n), Int32(nrhs), Int32(row0),
+                grid_dim=(rows, cols, 1), block_dim=(QF_TPB, 1, 1),
+            )
             ctx.synchronize()
-            _ = dr^
-            _ = dd^
-        _down(ctx, dx, px, cells)
+            row0 += rows
+        var dd = ctx.enqueue_create_buffer[DType.float32](cells)
+        launch_lu_solve(ctx, dl, dp, _p(dr), _p(didx), _p(dd), n, nrhs, 0)
+        ctx.enqueue_function[lur_add_kernel](_p(dx), _p(dd), Int32(cells), grid_dim=_blocks(cells), block_dim=TPB)
         ctx.synchronize()
-        _ = db^
-        _ = dbs^
-        _ = didx^
-        _ = dx^
-    return PythonObject(cells)
+        _ = dr^
+        _ = dd^
+    _down(ctx, dx, px, cells)
+    ctx.synchronize()
+    _ = db^
+    _ = dbs^
+    _ = didx^
+    _ = dx^
+    return cells
 
 
-def dev_upload_scan_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """`dev_upload_py` (host floats into the device matrix `id`), then the
-    first flat index of a NaN or infinity among those n device floats, or -1
-    (one device read; waits)."""
-    var cnt = Int(py=n)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
+def dev_upload_scan_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
+    """`dev_upload_scan_py`'s typed body: cnt host floats into pool matrix
+    i, then the first non-finite index or -1."""
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    var i = _id(id)
     _ = _ptr(i, cnt)
     var r = -1
     if cnt <= 0:
-        return PythonObject(r)
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        _up_into(ctx, p[].bufs[i], src, cnt)
-        r = device_first_nonfinite(ctx, p[].bufs[i], cnt)
-        ctx.synchronize()
-    return PythonObject(r)
+        return r
+    var ctx = xd_ctx()
+    _up_into(ctx, p[].bufs[i], src, cnt)
+    r = device_first_nonfinite(ctx, p[].bufs[i], cnt)
+    ctx.synchronize()
+    return r
 
 
 def orth_ws_on_device(
@@ -302,14 +271,10 @@ def orth_ws_on_device(
     pool_give[NAME](r_buf^)
 
 
-def dev_orth_ws_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`dev_orth_py` (dst = the orthonormalized columns of a; a unchanged)
-    with `orth_ws_on_device`."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
+def dev_orth_ws_run(ia: Int, io: Int, m: Int, l: Int) raises -> Int:
+    """`dev_orth_ws_py`'s typed body: pool matrix io = the orthonormalized
+    columns of pool matrix ia (`orth_ws_on_device`)."""
     var cells = m * l
-    var ia = _id(a)
-    var io = _id(dst)
     _ = _ptr(ia, cells)
     _ = _ptr(io, cells)
     if ia == io:
@@ -318,7 +283,6 @@ def dev_orth_ws_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -
     if cells > 0:
         var src = pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells)
         var out = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
-        with GILReleased(Python()):
-            var ctx = xd_ctx()
-            orth_ws_on_device(ctx, src, out, m, l)
-    return PythonObject(cells)
+        var ctx = xd_ctx()
+        orth_ws_on_device(ctx, src, out, m, l)
+    return cells
