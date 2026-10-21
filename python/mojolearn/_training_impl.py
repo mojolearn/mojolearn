@@ -2315,11 +2315,11 @@ class Generator(object):
     """
 
     def __init__(self, seed, numeric_mode=None):
-        return _native_samba_bridge.RUNTIME.samba_native_call("generator_init", (self, seed, numeric_mode), None)
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_init", (self, seed, numeric_mode), _native_samba_bridge.CONTEXT)
 
     def state_dict(self):
         """Return the generator state as ``{'seed': int, 'counter': int}``."""
-        return _native_samba_bridge.RUNTIME.samba_native_call("generator_snapshot", (self,), None)
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_snapshot", (self,), _native_samba_bridge.CONTEXT)
 
     def load_state_dict(self, state):
         """Restore a state from `state_dict`.
@@ -2327,7 +2327,7 @@ class Generator(object):
         The next-stream counter may equal ``2**32`` to represent exhaustion;
         larger or negative counters raise ``ValueError``.
         """
-        return _native_samba_bridge.RUNTIME.samba_native_call("generator_restore", (self, state), None)
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_restore", (self, state), _native_samba_bridge.CONTEXT)
 
     def next_stream(self):
         """Consume and return the next stream id.
@@ -2335,10 +2335,10 @@ class Generator(object):
         Use it for operations that draw several slices of one stream, such as dropout over
         microbatches. Raises `RuntimeError` when the 32-bit counter is exhausted.
         """
-        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), None)
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), _native_samba_bridge.CONTEXT)
 
     def _next_stream(self):
-        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), None)
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), _native_samba_bridge.CONTEXT)
 
     @staticmethod
     def _shape(shape):
