@@ -6438,6 +6438,14 @@ def build_script_roots(path, seen=None):
         if not os.path.isfile(os.path.join(ROOT, src)):
             return None
         roots.add(src)
+        # THE ENTRY CARRIES NO BODY (be1b6e817, 2026-10-20). A device script
+        # compiles `bindings/entry/entry_<binding>.mojo`, which only exports
+        # the PyInit and imports `build_<binding>()` from the module body.
+        # No lane's map holds the entry, so the script selected nothing; the
+        # body it imports is the binding source a lane reaches.
+        if os.path.dirname(src) == os.path.join("bindings", "entry"):
+            roots |= {f for f in _mojo_imports(src)
+                      if os.path.dirname(f) == "bindings" and os.path.basename(f).startswith("_mojolearn")}
     if nested:
         return roots
     return roots or None
