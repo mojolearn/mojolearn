@@ -414,8 +414,299 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(p1=d(resident[0]), p2=d(resident[1]), back=d(back), copy=d(twin)))
 
 
+# ================================================================ lane verify-coverage-owed (2026-10-21)
+# The rows the audit left owed to the migration lanes, closed after they
+# landed (docs/plans/VERIFY_COVERAGE_20261021.md, "Owed").
+
+# ---------------------------------------------------------------- Mamba-2 and Mamba-3 resident decode sessions
+
+def _coverage_state_pieces(st):
+    """A Mamba-2 or Mamba-3 decode state as (every float buffer in the
+    verifier's fixed piece order, the cursors), so two states compare byte
+    for byte."""
+    pieces, cursors = _RL_ROW_PIECES[type(st).__name__]
+    flat = np.concatenate([np.ascontiguousarray(np.asarray(getattr(st, n)), dtype=np.float32).reshape(-1)
+                           for n in pieces])  # glue: the state's named pieces
+    words = np.asarray([int(getattr(st, n)) for n in cursors], dtype=np.int64)  # glue: the state's cursors
+    return flat, words
+
+
+def _coverage_decode_session(ml, blk, X, dm):
+    """`blk._decode_session(state)` (bindings/mamba_public_native.mojo, the
+    binding's `<kind>_session_open/step/export_state/load_state`) on two rows
+    of the fixture slab: four steps, `sync_state`, four steps the reload
+    discards, `load_state` (the session rewinds to the synced four-token
+    state, which the caller's buffers still hold), four more steps and a
+    final `sync_state`. Each output and both synced states are held byte for
+    byte IN THE CELL to the per-call `block.step` on a second state that
+    stepped the first four tokens and then the same last four, which is the
+    session's contract (the same L = 1 block entry on the same state)."""
+    d = _coverage_digester(ml)
+    x = _seq(X, 2, 12, dm, skip=1024)
+
+    def tok(t):
+        return np.ascontiguousarray(x[:, t:t + 1])
+
+    st = blk.allocate_state(2)
+    with blk._decode_session(st) as sess:
+        first = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
+        sess.sync_state()
+        synced = _coverage_state_pieces(st)
+        for t in range(4, 8):  # glue: four steps the reload discards
+            sess.step(tok(t))
+        sess.load_state()
+        after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        sess.sync_state()
+        resident = _coverage_state_pieces(st)
+    plain = blk.allocate_state(2)
+    want_first = np.concatenate([np.asarray(blk.step(tok(t), plain)) for t in range(4)], axis=1)  # glue: four steps
+    plain_synced = _coverage_state_pieces(plain)
+    want = np.concatenate([np.asarray(blk.step(tok(t), plain)) for t in range(8, 12)], axis=1)  # glue: four steps
+    plain_final = _coverage_state_pieces(plain)
+    _same_bytes("session steps", first, "per-call block.step", want_first)
+    _same_bytes("session sync_state", synced[0], "per-call state", plain_synced[0])
+    _same_bytes("session sync_state cursors", synced[1], "per-call state cursors", plain_synced[1])
+    _same_bytes("steps after load_state", after, "per-call steps after the same four tokens", want)
+    _same_bytes("final sync_state", resident[0], "per-call final state", plain_final[0])
+    _same_bytes("final sync_state cursors", resident[1], "per-call final cursors", plain_final[1])
+    return _fit(dict(first=d(first), after=d(after), state=d(resident[0]), cursors=d(resident[1])))
+
+
+@lane("mamba2-decode-session")
+def _(ml, X, yc, yr, Xh=None):
+    """Mamba2Block's resident decode session on the `mamba2` lane's weights:
+    steps, sync_state and load_state (`mamba2_session_open`,
+    `mamba2_session_export_state`, `mamba2_session_load_state`), held in the
+    cell to the per-call step. The state is conv_window, h, buffer_xbc,
+    buffer_dtraw and buffered_tokens."""
+    dm, di, nh = 32, 64, 1
+    cd, dip = di + 256, 2 * di + 256 + nh
+    w = _block_weights("mamba2", {
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4),
+        "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
+        "out_proj.weight": (dm, di)},
+        ones=("block_norm.weight", "norm.weight"))
+    return _coverage_decode_session(ml, ml.Mamba2Block(w), X, dm)
+
+
+@lane("mamba3-decode-session")
+def _(ml, X, yc, yr, Xh=None):
+    """Mamba3Block's resident decode session on the `mamba3` lane's weights:
+    steps, sync_state and load_state (`mamba3_session_open`,
+    `mamba3_session_step`, `mamba3_session_export_state`,
+    `mamba3_session_load_state`), held in the cell to the per-call step. The
+    state is the ten `_STATE_NAMES` pieces, buffered_tokens and pending."""
+    dm, di, nh = 32, 64, 1
+    dip = 2 * di + 256 + 3 * nh + 32
+    w = _block_weights("mamba3", {
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "dt_bias": (nh,),
+        "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128), "C_bias": (nh, 128),
+        "D": (nh,), "out_proj.weight": (dm, di)},
+        ones=("block_norm.weight",), near_one=("B_norm.weight", "C_norm.weight"))
+    return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)
+
+
+# ---------------------------------------------------------------- training.chunked_lm_head_loss
+
+@lane("training-chunked-lm-head")
+def _(ml, X, yc, yr, Xh=None):
+    """training.chunked_lm_head_loss, the language-model head that never
+    holds the logits (`chunked_lm_head_v2_loss` without gradients,
+    `chunked_lm_head_v2_train` with them), at two shapes: 64 rows of width 16
+    over a vocabulary of 40, and 32 rows of width 8 over 300. Hidden states
+    and the head are the fixture's own values (the head scaled by 1/4),
+    targets its bytes. The loss without gradients is held byte for byte to
+    the loss with them in the cell (the same chain over the vocabulary).
+    Parts: each shape's loss and both gradients."""
+    T = ml.training
+    d = _coverage_digester(ml)
+    parts = {}
+    for tag, rows, vocab, width, skip in (("small", 64, 40, 16, 0), ("wide", 32, 300, 8, 4096)):  # glue: two shapes
+        h = np.ascontiguousarray(_seq(X, 1, rows, width, skip=skip)[0])
+        w = np.ascontiguousarray(_seq(X, 1, vocab, width, skip=skip + rows * width)[0] * np.float32(0.25))
+        t = np.ascontiguousarray(_ids(X, 1, rows, vocab).reshape(-1))
+        alone = np.asarray([T.chunked_lm_head_loss(h, w, t)], dtype=np.float64)
+        loss, dh, dw = T.chunked_lm_head_loss(h, w, t, return_grad=True)
+        loss = np.asarray([loss], dtype=np.float64)
+        _same_bytes(f"{tag} loss", alone, f"{tag} loss with return_grad=True", loss)
+        parts[f"{tag}_loss"] = d(loss)
+        parts[f"{tag}_dhidden"] = d(np.asarray(dh, dtype=np.float32))
+        parts[f"{tag}_dweight"] = d(np.asarray(dw, dtype=np.float32))
+    return _fit(parts)
+
+
+# ---------------------------------------------------------------- training.mlp_inference_sessions
+
+@lane("training-mlp-sessions")
+def _(ml, X, yc, yr, Xh=None):
+    """training.mlp_inference_sessions (`mlp_sessions_rows`, `mlp_sessions`):
+    a seeded 8 -> 24 relu -> 3 model over three sessions of 5, 1 and 64
+    fixture rows in one call, and over the held-out rows. The one call is
+    held byte for byte in the cell to each session run alone and
+    concatenated, which is the function's claim (independent sessions, in
+    the order given). Parts: the training-row and held-out logits."""
+    T = ml.training
+    d = _coverage_digester(ml)
+    w1 = _hw((24, 8), "training-mlp-sessions:w1", -0.5, 0.5)
+    b1 = _hw((24,), "training-mlp-sessions:b1", -0.1, 0.1)
+    w2 = _hw((3, 24), "training-mlp-sessions:w2", -0.5, 0.5)
+    b2 = _hw((3,), "training-mlp-sessions:b2", -0.1, 0.1)
+    spans = ((0, 5), (5, 6), (6, 70))
+
+    def sessions(A):
+        return [np.ascontiguousarray(A[a:b, :8], dtype=np.float32) for a, b in spans]  # glue: three sessions
+
+    out = np.asarray(T.mlp_inference_sessions(sessions(X), w1, b1, w2, b2))
+    alone = np.concatenate([np.asarray(T.mlp_inference_sessions([s], w1, b1, w2, b2))
+                            for s in sessions(X)])  # glue: one call per session
+    _same_bytes("three sessions in one call", out, "each session alone, concatenated", alone)
+    held = np.asarray(T.mlp_inference_sessions(sessions(X if Xh is None else Xh), w1, b1, w2, b2))
+    return _fit(dict(logits=d(out), held=d(held)))
+
+
+# ---------------------------------------------------------------- SambaStack: optimizer state and maximize
+
+@lane("samba-optimizer-state")
+def _(ml, X, yc, yr, Xh=None):
+    """The Samba stack's resident optimizer state: a stack takes one step,
+    `state_dict()` (the slot's moments downloaded, `optimizer_resident_download`)
+    and a second step; a second stack whose slot is already open (one step on
+    other rows) `load_state_dict`s the saved state (`optimizer_resident_upload`)
+    and takes the same second step. Its parameters and logits are held byte for
+    byte in the cell to the uninterrupted stack's, which is load_state_dict's
+    claim. Then `optimizer.maximize = True` on the `samba` lane's stack with
+    dropout 0.1, two steps (on a GPU column the resident step with the
+    maximize word, `optimizer_resident_step_io`). Parts: the saved moments, the
+    resumed parameters and logits, the maximized parameters."""
+    d = _coverage_digester(ml)
+    T = ml.training
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    ids = _ids(X, 8, 17)
+    win = [(ids[2 * k:2 * k + 2, :-1], ids[2 * k:2 * k + 2, 1:]) for k in range(4)]  # glue: four (2, 16) windows
+
+    def flat(m):
+        p = m.parameters()
+        return np.concatenate([np.asarray(p[k], dtype=np.float32).reshape(-1) for k in sorted(p)])  # glue: names
+
+    a = ml.SambaStack(cfg, generator=T.Generator(1), lr=1e-3)
+    a.train_step(*win[0])
+    saved = a.state_dict()
+    a.train_step(*win[1])
+    b = ml.SambaStack(cfg, generator=T.Generator(1), lr=1e-3)
+    b.train_step(*win[2])
+    b.load_state_dict(saved)
+    b.train_step(*win[1])
+    _same_bytes("resumed stack parameters", flat(b), "uninterrupted stack parameters", flat(a))
+    logits = np.asarray(b.forward(ids[:2, :-1]))
+    _same_bytes("resumed stack logits", logits, "uninterrupted stack logits", np.asarray(a.forward(ids[:2, :-1])))
+    moments = np.concatenate([np.asarray(saved[k], dtype=np.float32).reshape(-1) for k in ("exp_avg", "exp_avg_sq")])
+    c = ml.SambaStack(ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2,
+                                     intermediate=64, dropout=0.1),
+                      generator=T.Generator(1), lr=1e-3)
+    c.optimizer.maximize = True
+    for k in range(2):  # glue: two maximized steps
+        c.train_step(*win[k])
+    return _fit(dict(moments=d(moments), resumed=d(flat(b)), logits=d(logits), maximize=d(flat(c))))
+
+
+# ---------------------------------------------------------------- sequence optimizers: state_dict and load_state_dict
+
+@lane("sequence-optimizer-state")
+def _(ml, X, yc, yr, Xh=None):
+    """NAdam and centered RMSprop with momentum (three state slots, NAdam's
+    carried scalars) on two fixture tensors: one step, `state_dict()`
+    (`seq_optimizer_export`), two more steps; a fresh optimizer on copies of
+    the one-step parameters `load_state_dict`s the saved state
+    (`seq_optimizer_import`) and takes the same two steps. Its parameters are
+    held byte for byte in the cell to the uninterrupted optimizer's, which is
+    the resume claim. Parts: the exported state and the resumed parameters."""
+    d = _coverage_digester(ml)
+
+    def grads(k):
+        base = 40 + 48 * k
+        return [np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5),
+                np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)]
+
+    parts = {}
+    for tag, make in (("nadam", lambda ps: ml.NAdam(ps, lr=1e-2)),
+                      ("rmsprop", lambda ps: ml.RMSprop(ps, lr=1e-2, momentum=0.5, centered=True))):  # glue: two
+        ps = [np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy(),
+              np.ascontiguousarray(X[32:40, 0], dtype=np.float32).copy()]
+        opt = make(ps)
+        opt.step(grads(0))
+        saved = opt.state_dict()
+        start = [p.copy() for p in ps]  # glue: the one-step parameters
+        for k in (1, 2):  # glue: two steps
+            opt.step(grads(k))
+        again = make(start)
+        again.load_state_dict(saved)
+        for k in (1, 2):  # glue: the same two steps
+            again.step(grads(k))
+        got = np.concatenate([p.reshape(-1) for p in start])
+        _same_bytes(f"{tag} resumed parameters", got, f"{tag} uninterrupted parameters",
+                    np.concatenate([p.reshape(-1) for p in ps]))
+        parts[f"{tag}_state"] = d(np.concatenate([np.asarray(s, dtype=np.float32).reshape(-1)
+                                                  for s in saved["state"]]))  # glue: the state slots
+        parts[f"{tag}_resumed"] = d(got)
+    return _fit(parts)
+
+
+# ---------------------------------------------------------------- linear models: the per-row Mojo glue (py2mojo_rows)
+
+@lane("x-huber-outliers")
+def _(ml, X, yc, yr, Xh=None):
+    """HuberRegressor.outliers_ (`py2mojo_rows` ROWS_HUBER_OUT: |y - pred| >
+    scale_ * epsilon in binary64) on the `x-huber` lane's planted outliers,
+    at the default epsilon and at 1.1. Parts: both masks and the fitted
+    scale."""
+    d = _coverage_digester(ml)
+    y = yr[:2000].copy()
+    y[::17] = y[::17] + np.float32(25.0)  # planted outliers
+    m = ml.HuberRegressor(max_iter=30).fit(X[:2000], y)
+    t = ml.HuberRegressor(max_iter=30, epsilon=1.1).fit(X[:2000], y)
+    return _fit(dict(outliers=d(np.asarray(m.outliers_, dtype=np.uint8)),
+                     tight=d(np.asarray(t.outliers_, dtype=np.uint8)),
+                     scale=d(np.asarray([m.scale_, t.scale_], dtype=np.float64))))
+
+
+@lane("x-sgd-clf-proba")
+def _(ml, X, yc, yr, Xh=None):
+    """SGDClassifier.predict_proba (`py2mojo_rows` ROWS_SGD_PROBA, log_loss
+    only): the binary target (one sigmoid column to [1 - p, p]) and three
+    classes (the one-vs-rest sigmoids divided by their row sum), on 256
+    training and 256 held-out rows. Parts: the four probability tables."""
+    d = _coverage_digester(ml)
+    xh = (X if Xh is None else Xh)[:256]
+    b = ml.SGDClassifier(loss="log_loss", max_iter=5, tol=None, random_state=3).fit(X[:2000], yc[:2000])
+    m = ml.SGDClassifier(loss="log_loss", max_iter=5, tol=None, random_state=3).fit(
+        X[:2000], _linear_y3(X[:2000]))
+    return _fit(dict(binary=d(np.asarray(b.predict_proba(X[:256]), dtype=np.float32)),
+                     binary_held=d(np.asarray(b.predict_proba(xh), dtype=np.float32)),
+                     multi=d(np.asarray(m.predict_proba(X[:256]), dtype=np.float32)),
+                     multi_held=d(np.asarray(m.predict_proba(xh), dtype=np.float32))))
+
+
+@lane("x-logistic-cv-proba")
+def _(ml, X, yc, yr, Xh=None):
+    """LogisticRegressionCV.predict_proba (`py2mojo_rows` ROWS_LRCV_PROBA): the
+    two-branch sigmoid on the binary target and the softmax on three classes,
+    on 256 training and 256 held-out rows. Parts: the four probability
+    tables."""
+    d = _coverage_digester(ml)
+    xh = (X if Xh is None else Xh)[:256]
+    b = ml.LogisticRegressionCV(Cs=4, cv=3, max_iter=15).fit(X[:1200], yc[:1200])
+    m = ml.LogisticRegressionCV(Cs=4, cv=3, max_iter=15).fit(X[:1200], _linear_y3(X[:1200]))
+    return _fit(dict(binary=d(np.asarray(b.predict_proba(X[:256]), dtype=np.float32)),
+                     binary_held=d(np.asarray(b.predict_proba(xh), dtype=np.float32)),
+                     multi=d(np.asarray(m.predict_proba(X[:256]), dtype=np.float32)),
+                     multi_held=d(np.asarray(m.predict_proba(xh), dtype=np.float32))))
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward", "sequence-export-roundtrip",
             "sequence-onnx-import", "transformer-decode-load-state", "safetensors-widen-f16",
-            "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill", "sequence-device-tensor")
+            "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill", "sequence-device-tensor",
+            "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
+            "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
+            "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba")
