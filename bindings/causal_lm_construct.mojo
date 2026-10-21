@@ -104,12 +104,15 @@ def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObje
         var bits = _model_native_buffer(value.bits, "H", context)
         _model_shape(bits, [rows, cols], "bfloat16 bits")
         _native_function(linalg, "from_bf16")(out._addr, bits._addr, py_ints([rows * cols]))
+        _ = bits^  # read by address above
     else:
         var codes = _model_native_buffer(value.codes, "b", context)
         var exponents = _model_native_buffer(value.exponents, "i", context)
         _model_shape(codes, [rows, cols], "int8 codes")
         _model_shape(exponents, [rows], "int8 exponents")
         _native_function(linalg, "dequantize_int8")(out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
+        _ = codes^  # read by address above
+        _ = exponents^
     return out
 
 

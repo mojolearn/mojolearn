@@ -200,6 +200,10 @@ def samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonOb
         gradients["embed.weight"] = dembed
         if not Bool(py=config["tie_embeddings"]):
             gradients["lm_head.weight"] = dhead
+        # The entries above read `dh` and `dhead` by address; keep both alive
+        # until every one has returned.
+        _ = dh^
+        _ = dhead^
         var ordered = bi.list()
         var names = fields["names"]
         for i in range(len(names)):  # driver-loop: over the complete ordered gradient registry

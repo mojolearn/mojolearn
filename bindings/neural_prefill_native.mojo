@@ -146,6 +146,7 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
         if lock is not None:
             lock.release()
         raise error
+    _ = dy^  # the backward entry read `dy` by address
     var result = bi.dict()
     result["x"] = gradients[0]
     var names = bi.object.__getattribute__(block, "_W_NAMES")

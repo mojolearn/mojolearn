@@ -787,6 +787,9 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
             var dst = i32_ptr(Int(py=next._addr))
             causal_lm_pick_step(raw, dst, b, l, v, s.finished, s.lengths, s.eos, s.pad, s.greedy,
                                 s.temperature, s.top_k, s.top_p, s.seed, s.produced, tokens)
+            # `raw` points into `logits`: keep it alive through the pick (Mojo
+            # destroys a local at its last use, and nothing else owns it).
+            _ = logits^
             s.current = next
             s.produced += 1
             wrote += 1

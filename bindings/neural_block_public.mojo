@@ -240,6 +240,8 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
         var output = _neural_plain(owner, padded, PythonObject(None), False)
         var result = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=result._addr), Int(py=output._addr), sizes, b, l, d)
+        _ = output^  # the copy reads `output` by address
+        _ = padded^
         return result
     return _neural_plain(owner, x, state_value, step)
 
