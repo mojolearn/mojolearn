@@ -463,6 +463,9 @@ class LinearRegression(NumericModeMixin):
     ``fit_intercept=True`` the data are centered on their (weighted) means
     before the solve, as in scikit-learn and cuML.
 
+    The model needs NumPy (``python -m pip install "mojolearn[numpy]"``):
+    ``coef_`` and the predictions are NumPy arrays.
+
     Parameters
     ----------
     fit_intercept : bool, default True
@@ -474,7 +477,7 @@ class LinearRegression(NumericModeMixin):
 
     Attributes
     ----------
-    coef_ : array of shape (n_features,), float32
+    coef_ : ndarray of shape (n_features,), float32
         The fitted coefficients.
     intercept_ : float
         The fitted intercept; 0.0 when ``fit_intercept`` is False.
@@ -547,7 +550,7 @@ class LinearRegression(NumericModeMixin):
 
         Returns
         -------
-        y_pred : array of shape (n_samples,), float64
+        y_pred : ndarray of shape (n_samples,), float64
             ``X @ coef_ + intercept_``.
 
         Raises
@@ -723,6 +726,9 @@ class Ridge(NumericModeMixin):
     and single-feature designs are solved with a Cholesky factorization of
     the regularized normal equations.
 
+    The model needs NumPy (``python -m pip install "mojolearn[numpy]"``):
+    ``coef_`` and the predictions are NumPy arrays.
+
     Parameters
     ----------
     alpha : float, default 1.0
@@ -742,7 +748,7 @@ class Ridge(NumericModeMixin):
 
     Attributes
     ----------
-    coef_ : array of shape (n_features,), float32
+    coef_ : ndarray of shape (n_features,), float32
         The fitted coefficients.
     intercept_ : float
         The fitted intercept; 0.0 when ``fit_intercept`` is False.
@@ -824,7 +830,7 @@ class Ridge(NumericModeMixin):
 
         Returns
         -------
-        y_pred : array of shape (n_samples,), float64
+        y_pred : ndarray of shape (n_samples,), float64
             ``X @ coef_ + intercept_``.
 
         Raises
@@ -1717,7 +1723,7 @@ class QNRegressor(NumericModeMixin):
 
     Attributes
     ----------
-    coef_ : array of shape (n_features,), float32
+    coef_ : ndarray of shape (n_features,), float32
         The fitted coefficients.
     intercept_ : float
         The fitted intercept; 0.0 when ``fit_intercept`` is False.
