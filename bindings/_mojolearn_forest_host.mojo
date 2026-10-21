@@ -97,6 +97,13 @@ from core.forest_host_predict import (
 )
 from core.gbdt_host_ctr import GBDT_CTR_HOST_SABOTAGE, gbdt_host_expand_ctr
 from core.gbdt_host_predict import gbdt_host_predict
+from core.shell_impl.mojolearn_forest_host_impl import (
+    forest_host_gbdt_expand_ctr_into,
+    forest_host_gbdt_raw_into,
+    forest_host_gbdt_sigmoid_into,
+    forest_host_gbdt_sigmoid_pair_into,
+    forest_host_vote_into,
+)
 
 
 comptime FAMILY_RF = 0
@@ -323,21 +330,10 @@ def _predict(
     var wrote = 0
     with GILReleased(Python()):
         var rows = read_f32(x_addr, n_rows * n_cols)
-        var out = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
-        if family == FAMILY_RF:
-            var trees = rf_host_trees(
-                offsets_p, colid_p, quesval_p, left_p, leaves_p,
-                n_trees, n_nodes, n_cols, num_outputs,
-            )
-            rf_host_predict(trees, rows, n_rows, n_cols, n_trees, num_outputs, out)
-        else:
-            var trees = et_host_trees(
-                offsets_p, colid_p, quesval_p, left_p, leaves_p,
-                n_trees, n_nodes, n_cols, num_outputs,
-            )
-            et_host_predict(trees, rows, n_rows, n_cols, n_trees, num_outputs, out)
-        for i in range(n_rows * num_outputs):
-            op[i] = out[i]
+        forest_host_vote_into(
+            family == FAMILY_RF, rows, offsets_p, colid_p, quesval_p, left_p,
+            leaves_p, op, n_rows, n_cols, n_trees, num_outputs, n_nodes,
+        )
         wrote = n_rows
     return PythonObject(wrote)
 
@@ -422,17 +418,14 @@ def forest_host_gbdt_predict_binding(
     var wrote = 0
     with GILReleased(Python()):
         var rows = read_f32(x_addr, n_rows * n_cols)
-        var out = List[Float32](length=n_rows * dim, fill=Float32(0.0))
-        gbdt_host_predict(
+        forest_host_gbdt_raw_into(
             rows, n_rows, n_cols,
             border_offsets_p, borders_p, fold_counts_p, one_hot_p, nan_p,
             tree_offsets_p, split_feature_p, split_bin_p, split_take_bin_p,
             node_left_p, node_right_p, leaf_offsets_p, leaves_p,
             n_trees, dim, non_symmetric, n_splits, n_leaf_values, bias_value,
-            out, row_major=row_major,
+            op, row_major,
         )
-        for i in range(n_rows * dim):
-            op[i] = out[i]
         wrote = n_rows
     return PythonObject(wrote)
 
@@ -462,7 +455,7 @@ def forest_host_gbdt_expand_ctr_binding(
         raise Error(entry + ": n_raw must be positive and n_cols in [n_raw, 65536]")
     if n_rows > 2147483647 // n_cols:
         raise Error(entry + ": n_rows * n_cols must fit int32")
-    for i in range(3, 11):
+    for i in range(3, 11):  # small-loop(the eight count words of params)
         if _index(params[i]) < 0 or _index(params[i]) > 2147483647:
             raise Error(entry + ": counts must be non-negative and fit int32")
     var wrote = 0
@@ -486,14 +479,10 @@ def forest_host_gbdt_expand_ctr_binding(
         var border_offsets = read_i32(a6, n_cols + 1)
         var borders = read_f32(a7, n_borders)
         var one_hot = read_i32(a8, n_cols)
-        var out = gbdt_host_expand_ctr(
-            x, n_rows, n_cols, ctr_ints, ctr_floats, n_ctr, tensor_ints,
-            tensor_floats, n_tensor, counts, border_offsets, borders, one_hot,
+        forest_host_gbdt_expand_ctr_into(
+            entry, x, n_rows, n_cols, ctr_ints, ctr_floats, n_ctr, tensor_ints,
+            tensor_floats, n_tensor, counts, border_offsets, borders, one_hot, op,
         )
-        if len(out) != n_rows * n_cols:
-            raise Error(entry + ": the expansion wrote " + String(len(out)) + " values")
-        for i in range(n_rows * n_cols):
-            op[i] = out[i]
         wrote = n_cols
     return PythonObject(wrote)
 
@@ -514,9 +503,7 @@ def forest_host_gbdt_sigmoid_binding(
     var count = _index(n)
     if count < 0:
         raise Error("forest_host_gbdt_sigmoid: n must be non-negative")
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        op.unsafe_store(i, 1.0 / (1.0 + identical_exp64(-r)))
+    forest_host_gbdt_sigmoid_into(rp, op, count)
     return PythonObject(count)
 
 
@@ -539,15 +526,7 @@ def forest_host_gbdt_sigmoid_pair_binding(
     var count = _index(n)
     if count < 0:
         raise Error("forest_host_gbdt_sigmoid_pair: n must be non-negative")
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        var p = 1.0 / (1.0 + identical_exp64(-r))
-        comptime if FOREST_HOST_SABOTAGE:
-            op.unsafe_store(2 * i, p)
-            op.unsafe_store(2 * i + 1, 1.0 - p)
-        else:
-            op.unsafe_store(2 * i, 1.0 - p)
-            op.unsafe_store(2 * i + 1, p)
+    forest_host_gbdt_sigmoid_pair_into(rp, op, count)
     return PythonObject(count)
 
 
