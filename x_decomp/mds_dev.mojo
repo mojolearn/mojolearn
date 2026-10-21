@@ -5,14 +5,12 @@ py-runtime-b): the same statements on `DKit`, non-metric disparities by
 x_decomp/mds_iso_dev.mojo's setup and isotonic kernels (`_nm_native`'s
 resident form), each stress word home where Python read it. GPU binding only."""
 from std.math import sqrt
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.kit import (
     Mat, OP_ADD, OP_DIV, OP_FMA, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from,
 )
 from x_decomp.kit_device import DKit, DMat
-from x_decomp.mds import MdsArgs, _mds_args
+from x_decomp.mds import MdsArgs
 from x_decomp.mds_iso_dev import mds_disp_dev, mds_setup_dev
 
 
@@ -105,37 +103,26 @@ def mds_single_dev(mut k: DKit, Dis: DMat, var Y: DMat, a: MdsArgs, mut stress: 
     return Y^
 
 
-def mds_fit_dev_py(
-    dis: PythonObject, starts: PythonObject, y: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`mds_fit_py` on the resident kit."""
-    var n = _n(p, 0)
-    var nc = _n(p, 1)
-    var ns = _n(p, 2)
-    if n < 1 or ns < 1 or n * n > 2147483647 or ns * n * nc > 2147483647:
-        raise Error("x_decomp: mds shape out of range")
-    var a = _mds_args(p, f)
-    var pd = _f(dis)
-    var ps = _f(starts)
-    var py_ = _f(y)
+def mds_fit_dev_run(
+    pd: F32Ptr, ps: F32Ptr, py_: F32Ptr, n: Int, nc: Int, ns: Int, a: MdsArgs, mut best_s: Float64
+) raises -> Int:
+    """`mds_fit_run` on the resident kit."""
     var best_it = 0
-    var best_s = 0.0
-    with GILReleased(Python()):
-        var k = DKit()
-        var D = k.upload(mat_from(pd, n, n))
-        var S = k.upload(mat_from(ps, ns * n, nc))
-        var best = DMat(n, nc)
-        for r in range(ns):  # small-loop(ns: restarts): one SMACOF run per start
-            var s = 0.0
-            var it = 0
-            var Y0 = k.rows(S, r * n, (r + 1) * n)
-            var Y = mds_single_dev(k, D, Y0^, a, s, it)
-            if r == 0 or s < best_s:
-                best_s = s
-                best_it = it
-                best = Y^
-        var h = k.get(best)
-        k.sync()
-        for i in range(n * nc):
-            py_.unsafe_store(i, h.d[i])
-    return Python.tuple(best_s, best_it)
+    var k = DKit()
+    var D = k.upload(mat_from(pd, n, n))
+    var S = k.upload(mat_from(ps, ns * n, nc))
+    var best = DMat(n, nc)
+    for r in range(ns):  # small-loop(ns: restarts): one SMACOF run per start
+        var s = 0.0
+        var it = 0
+        var Y0 = k.rows(S, r * n, (r + 1) * n)
+        var Y = mds_single_dev(k, D, Y0^, a, s, it)
+        if r == 0 or s < best_s:
+            best_s = s
+            best_it = it
+            best = Y^
+    var h = k.get(best)
+    k.sync()
+    for i in range(n * nc):
+        py_.unsafe_store(i, h.d[i])
+    return best_it
