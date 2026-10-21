@@ -223,12 +223,10 @@ def test_native_attribute_boundary_refuses_python_hooks_before_execution(where, 
     elif where == "getattr":
         monkeypatch.setattr(Ridge, "__getattr__", hook, raising=False)
     else:
-        fields = object.__getattribute__(model, "__dict__")
-        # Prepare the collision without invoking the poison in test setup.
-        # The native lookup must reject this non-string key before comparing
-        # it against the requested coefficient name.
-        fields.pop("coef_", None)
-        fields[Key()] = 1
+        # A split instance dict can retain the coefficient's shared key even
+        # after pop(), invoking __eq__ during insertion in test setup. Install
+        # a fresh dict so the collision is first encountered by native lookup.
+        object.__setattr__(model, "__dict__", {Key(): 1})
         assert not seen
     clean(getattr, model, "coef_", error=TypeError)
     assert not seen
