@@ -106,7 +106,7 @@ comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_F
 # rows); `column_mean_launch` now has one order, the row tiles, in every
 # mode, so FAST + Apple takes the fused variance below like every other
 # column. Code recoverable at 28b8ed11b.
-# Restore: git show 28b8ed11b:decomposition/estimator.mojo (TSVD_FAST_COLVAR, _column_variance).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def pca_fit_host(

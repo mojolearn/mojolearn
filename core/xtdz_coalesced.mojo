@@ -54,7 +54,7 @@ comptime XTDZ_CO_BLOCK_TARGET = 256
 # takes the tile order in every mode, so the coalesced STATS_TPB-chain form it
 # chose between (and `column_mean_kernel`, one block per column walking all n
 # rows) is gone from this launch. Code recoverable at 28b8ed11b.
-# Restore: git show 28b8ed11b:core/xtdz_coalesced.mojo (column_mean_launch).
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def xtdz_coalesced_applies(d: Int, c: Int) -> Bool:

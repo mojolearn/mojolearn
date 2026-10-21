@@ -337,7 +337,7 @@ comptime SAB_DENOM_SERIAL_CHAIN = is_defined[
 # per-row losses in ONE thread of one block, the forbidden serial shape on a
 # GPU path. The batch fold's other witnesses (the gemm switches through this
 # lane's entry points) remain. Code recoverable at 28b8ed11b.
-# Restore: git show 28b8ed11b:training/checks/loss.mojo (SAB_REDUCE_SERIAL).
+# Restore: git apply experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch; record in docs/TOMBSTONES.md.
 
 comptime ANY_LOSS_SABOTAGE = (
     SAB_MAX_PLAIN_COMPARE

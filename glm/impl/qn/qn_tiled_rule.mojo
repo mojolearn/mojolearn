@@ -20,6 +20,8 @@ candidate `-D MOJOLEARN_QN_TILED_MULTI_ALL` are retired (refused in
 core/six_lane_experiment_guards.mojo); `-D MOJOLEARN_IDN_ALL_OFF` no
 longer reaches this rule.
 """
+# TOMBSTONE: MOJOLEARN_QN_TILED_MULTI_OFF (retired rollback) deleted 2026-10-21 by lane debt-block-per-n; code recoverable at 28b8ed11b.
+# Restore: git apply experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch; record in docs/TOMBSTONES.md.
 
 #: rows per tile (= QNT_ROWS, HOST_QNT_ROWS)
 comptime QNTM_ROWS = 256
