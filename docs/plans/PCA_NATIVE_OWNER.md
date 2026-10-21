@@ -34,6 +34,12 @@ strings. `HostPCA` has separate CPU admission and saved-model semantics.
   orchestration call the existing numerical entries. MLE uses the existing
   resident device operation on GPU and the declared host entry on CPU. No
   numerical algorithm, fold, route policy or performance default is changed.
+- The following source slice adds `pca_randomized.mojo`: the existing Philox
+  draw, power iteration, rank guard, thin SVD, zero padding, sign selection,
+  variance and noise sequence uses `ClassicalKit`'s native matrix descriptors
+  and allocation ledger. CPU/GPU raw C entries remain separately connected.
+  Its source and ten additional complete-operation/refusal cases are pending
+  compilation and runtime qualification; the public route remains unchanged.
 - Native descriptors carry validated dimensions. Exposed arrays still use
   native-owned ndarray/buffer storage and mutable Python API metadata. This
   does **not** claim a persistent all-struct model representation.
@@ -47,11 +53,9 @@ strings. `HostPCA` has separate CPU admission and saved-model semantics.
 
 ## Required before public activation
 
-1. Implement the randomized owner, preserving centered input, seeded normal
-   draws, power iterations, orthonormalization/rank deficiency, thin SVD, sign
-   choices, total variance/noise and all supported options. Reuse a native
-   matrix/handle owner with cleanup for every allocation; never call `_Kit`,
-   `_M` or `_rsvd_core` Python drivers.
+1. Qualify the randomized native slice against all preserved options, including
+   rank deficiency, wide matrices, seeded draws and all mode-dependent native
+   entry choices. It must never call `_Kit`, `_M` or `_rsvd_core` Python drivers.
 2. Preserve sparse CSR/CSC/COO/DOK/LIL/DIA/BSR ingestion (matrix and array,
    32/64-bit indices), duplicate accumulation semantics and all supported input
    shapes through native conversion. Custom Python `toarray` callbacks are

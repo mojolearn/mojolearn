@@ -9,6 +9,7 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.pca_metadata import pca_dictionary, pca_fields, pca_initialize, pca_get_params, pca_set_params, pca_entries
 from bindings.pca_exact import pca_exact_fit, pca_transform
+from bindings.pca_randomized import pca_randomized_fit
 from bindings.pca_archive import pca_archive_save, pca_archive_load
 
 
@@ -56,7 +57,10 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
                     raise Error("NotFittedError: This PCA instance is not fitted yet. Call 'fit' with appropriate arguments first.")
             var entries = pca_entries(fields, context)
             if operation == "fit" or operation == "fit_transform":
-                result = pca_exact_fit(model, args, entries, context)
+                if String(fields["svd_solver"]) == "randomized":
+                    result = pca_randomized_fit(model, args, entries, context)
+                else:
+                    result = pca_exact_fit(model, args, entries, context)
                 if operation == "fit_transform":
                     result = pca_transform(model, args[0], False, entries, context)
             elif operation == "transform" or operation == "inverse_transform":

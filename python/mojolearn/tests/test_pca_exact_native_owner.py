@@ -252,3 +252,79 @@ def test_archive_corruption_does_not_change_a_live_model():
     np.savez(broken, **members)
     clean(audit_native_call(native_load, io.BytesIO(broken.getvalue())), ValueError)
     np.testing.assert_array_equal(bits(model.components_), bits(before))
+
+
+@pytest.mark.parametrize("rows,cols,rank,oversamples,power,normalizer,seed", [
+    (24, 5, 2, 3, "auto", "auto", None),
+    (24, 5, 2, 0, 1, "QR", 37),
+    (5, 24, 2, 2, 2, "LU", -1),
+    (24, 5, 2, 2, 0, "none", 2**70 + 3),
+    (24, 5, 2, 3, -1, "auto", 37),
+    (72, 65, 3, 14, 1, "QR", 7),
+])
+def test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs(
+        rows, cols, rank, oversamples, power, normalizer, seed, monkeypatch):
+    x = fixture(rows, cols)
+    kwargs = dict(n_components=rank, svd_solver="randomized", n_oversamples=oversamples,
+                  iterated_power=power, power_iteration_normalizer=normalizer,
+                  random_state=seed, whiten=True, numeric_mode="identical")
+    expected = PCA(**kwargs).fit(x)
+    projected = np.asarray(expected.transform(x)).copy()
+    restored = np.asarray(expected.inverse_transform(projected)).copy()
+    model = PCA(**kwargs)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Python randomized PCA orchestration reached")
+
+    from mojolearn import _expansion_decomp
+    with monkeypatch.context() as patch:
+        patch.setattr(_expansion_decomp, "_randomized_decompose", forbidden)
+        patch.setattr(_expansion_decomp, "_rsvd_core", forbidden)
+        patch.setattr(_expansion_decomp, "_Kit", forbidden)
+        actual = clean(audit_native_call(native_fit_transform, model, x))
+        inverse = clean(audit_native_call(native_inverse, model, actual))
+    assert_state_equal(model, expected)
+    np.testing.assert_array_equal(bits(actual), bits(projected))
+    np.testing.assert_array_equal(bits(inverse), bits(restored))
+    # Independent reconstruction equations consume the actual fitted state;
+    # approximation is allowed when the randomized range is not complete.
+    xd = x.astype("f8")
+    centered = xd - xd.mean(axis=0)
+    components = np.asarray(model.components_, dtype="f8")
+    raw_projection = centered @ components.T
+    scale = np.sqrt(rows - 1) / np.asarray(model.singular_values_, dtype="f8")
+    np.testing.assert_allclose(actual, raw_projection * scale, rtol=5e-3, atol=5e-4)
+    np.testing.assert_allclose(inverse, raw_projection @ components + xd.mean(axis=0), rtol=5e-3, atol=8e-4)
+    np.testing.assert_allclose(components @ components.T, np.eye(rank), rtol=5e-3, atol=5e-4)
+
+
+def test_randomized_rank_deficiency_preserves_zero_padding():
+    base = fixture(20, 2)
+    x = np.column_stack((base, base[:, 0] * 2, base[:, 1] * 4, base[:, 0] * -2)).astype("f4")
+    kwargs = dict(n_components=3, svd_solver="randomized", n_oversamples=2,
+                  iterated_power=1, random_state=17)
+    expected = PCA(**kwargs).fit(x)
+    model = PCA(**kwargs)
+    actual = clean(audit_native_call(native_fit_transform, model, x))
+    assert_state_equal(model, expected)
+    np.testing.assert_array_equal(bits(actual), bits(expected.transform(x)))
+    reconstructed = clean(audit_native_call(native_inverse, model, actual))
+    np.testing.assert_allclose(reconstructed, x, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize("change", ["normalizer", "seed", "zero"])
+def test_randomized_native_refusals_and_failed_fit_preserve_previous_state(change):
+    model = PCA(2).fit(fixture())
+    original = vars(model)["components_"]
+    model.svd_solver = "randomized"
+    x = fixture()
+    error = ValueError
+    if change == "normalizer":
+        model.power_iteration_normalizer = "invalid"
+    elif change == "seed":
+        model.random_state = True
+        error = TypeError
+    else:
+        x.fill(0)
+    clean(audit_native_call(native_fit, model, x), error)
+    assert vars(model)["components_"] is original

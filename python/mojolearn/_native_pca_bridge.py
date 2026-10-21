@@ -26,6 +26,13 @@ def connect(pca_class):
     else:
         decomp_names = ("x_decomp_dev_pca_mle_rank", "x_decomp_dev_alloc", "x_decomp_dev_free",
                         "x_decomp_dev_upload", "x_decomp_dev_download")
+    randomized_names = ("ew", "gemm", "colsum", "rowsum", "move", "order_f", "svd", "rand", "orth", "absmax_sign")
+    if context["vendor"] == "cpu":
+        randomized_names += ("order_small",)  # cpu-route: host stable-order entry is connected only for CPU execution
+    else:
+        randomized_names += ("dev_ew", "dev_gemm", "dev_colsum", "dev_rowsum", "dev_move",
+                             "dev_order_f", "dev_reduce", "dev_alloc", "dev_free", "dev_upload",
+                             "dev_download", "dev_rand", "dev_orth", "dev_order_small", "dev_absmax")
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
             binding = _backend.binding("_mojolearn_estimators", mode)
@@ -52,8 +59,22 @@ def connect(pca_class):
                         raise TypeError(f"PCA owner requires compiled {name}")
                     ranks[name] = entry
                 entries["rank_bindings"] = ranks
+                cells = {}
+                for suffix in randomized_names + ("dev_svd", "s_flags", "dev_orth_ws"):  # glue: connect randomized PCA's fixed C primitive family
+                    name = "x_decomp_" + suffix
+                    try:
+                        entry = getattr(decomp, name)
+                    except (AttributeError, ImportError):
+                        if suffix in randomized_names:
+                            raise
+                        continue
+                    if not isinstance(entry, BuiltinFunctionType):
+                        raise TypeError(f"PCA owner requires compiled {name}")
+                    cells[name] = entry
+                entries["randomized_bindings"] = cells
             except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-                entries["rank_bindings"] = type(error).__name__ + ": " + str(error)
+                entries.setdefault("rank_bindings", type(error).__name__ + ": " + str(error))
+                entries["randomized_bindings"] = type(error).__name__ + ": " + str(error)
             connected[mode] = entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
