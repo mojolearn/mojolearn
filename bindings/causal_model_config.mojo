@@ -88,7 +88,7 @@ def _config_int(data: PythonObject, field: String, default: PythonObject, requir
     if v is None and not required:
         return v
     if bi.type(v) is not bi.int:
-        raise Error("model config: " + field + " requires an integer")
+        raise Error("model config: " + field + ": an integer is required")
     return v
 
 
@@ -131,7 +131,7 @@ def _config_transformer(data: PythonObject, mt: String, context: PythonObject) r
     if act != "silu" and act != "swish":
         _config_refuse(data, "hidden_act", "requires silu/swish SwiGLU")
     if Bool(py=data.get("use_sliding_window", PythonObject(False))):
-        _config_refuse(data, "use_sliding_window", "alternating layers (max_window_layers=" + String(bi.repr(data.get("max_window_layers"))) + ")")
+        _config_refuse(data, "use_sliding_window", "sliding-window-alternating layers (max_window_layers=" + String(bi.repr(data.get("max_window_layers"))) + ")")
     var types = data.get("layer_types")
     if types is not None and len(bi.set(types)) > 1:
         raise Error("model config: layer_types requests alternating attention kinds")
@@ -145,7 +145,7 @@ def _config_transformer(data: PythonObject, mt: String, context: PythonObject) r
     if nh * hd != dm:
         raise Error("model config: head_dim * num_attention_heads must equal hidden_size")
     if nh % nk != 0:
-        _config_refuse(data, "num_key_value_heads", "must divide num_attention_heads")
+        _config_refuse(data, "num_key_value_heads", "num_attention_heads is not a multiple of it (must divide num_attention_heads)")
     if hd % 2 != 0:
         raise Error("model config: head_dim must be even")
     var inter = _config_int(data, "intermediate_size")
@@ -162,7 +162,7 @@ def _config_transformer(data: PythonObject, mt: String, context: PythonObject) r
     var mlp_bias = Bool(py=data.get("mlp_bias", PythonObject(False)))
     var dropout = data.get("attention_dropout", PythonObject(0.0))
     if dropout is not None and Float64(py=dropout) != 0:
-        raise Error("model config: attention_dropout must be zero for inference")
+        raise Error("model config: attention_dropout must be zero: inference has no dropout")
     var tied = Bool(py=data.get("tie_word_embeddings", PythonObject(False)))
     var maxpos = _config_int(data, "max_position_embeddings", PythonObject(8192))
     var options = bi.dict(context["defaults"])
