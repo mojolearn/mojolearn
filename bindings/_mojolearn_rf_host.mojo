@@ -69,7 +69,21 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.forest_export_binding import (
     ForestExportRegistry,
     copy_forest_export_leaves,
+    forest_export_py_list_f64,
+    forest_export_py_list_i64,
     validate_forest_export_destinations,
+)
+from core.shell_impl.mojolearn_forest_host_impl import forest_host_vote_into
+from core.shell_impl.mojolearn_rf_host_impl import (
+    RfHostSession,
+    RfHostSessionRegistry,
+    _apply_min_weight_fraction,
+    rf_host_col_major,
+    rf_host_dart_member_xy,
+    rf_host_export_into,
+    rf_host_forest_lists,
+    rf_host_session_rows_x,
+    rf_host_weights_from,
 )
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from core.weight_compact_host import (
@@ -230,39 +244,26 @@ def _read_x_col_major(
     `_rowmajor` entries, DEVIATION 2637) is transposed here: the same
     column-major bytes the GPU binding's pinned stage holds."""
     var flat = read_f32(x_addr, n_rows * n_cols)
-    if not row_major:
-        return flat^
-    var out = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
-    for r in range(n_rows):
-        for c in range(n_cols):
-            out[c * n_rows + r] = flat[r * n_cols + c]
-    return out^
+    return rf_host_col_major(flat^, n_rows, n_cols, row_major)
 
 
 def _forest_out(forest: RfHostForest) raises -> PythonObject:
     """`bindings/_mojolearn_rf.mojo::_forest_out_trees`, the same six lists."""
-    var offsets = Python.list()
-    var colid = Python.list()
-    var quesval = Python.list()
-    var left_child = Python.list()
-    var leaves = Python.list()
-    for t in range(len(forest.offsets)):
-        offsets.append(PythonObject(Int(forest.offsets[t])))
-    for i in range(forest.n_nodes()):
-        colid.append(PythonObject(Int(forest.colid[i])))
-        quesval.append(PythonObject(Float64(forest.quesval[i])))
-        left_child.append(PythonObject(Int(forest.left_child[i])))
-    for i in range(len(forest.leaves)):
-        leaves.append(PythonObject(Float64(forest.leaves[i])))
+    var offsets = List[Int64]()
+    var colid = List[Int64]()
+    var quesval = List[Float64]()
+    var left_child = List[Int64]()
+    var leaves = List[Float64]()
+    rf_host_forest_lists(forest, offsets, colid, quesval, left_child, leaves)
     var meta = Python.list()
     meta.append(PythonObject(forest.n_trees))
     meta.append(PythonObject(forest.num_outputs))
     var out = Python.list()
-    out.append(offsets)
-    out.append(colid)
-    out.append(quesval)
-    out.append(left_child)
-    out.append(leaves)
+    out.append(forest_export_py_list_i64(offsets))
+    out.append(forest_export_py_list_i64(colid))
+    out.append(forest_export_py_list_f64(quesval))
+    out.append(forest_export_py_list_i64(left_child))
+    out.append(forest_export_py_list_f64(leaves))
     out.append(meta)
     return out
 
@@ -303,56 +304,14 @@ def _min_weight_fraction(params: PythonObject) raises -> Float64:
     return f
 
 
-def _apply_min_weight_fraction(
-    mut p: RfHostParams, frac: Float64, weights: List[Float32], n_rows: Int
-) -> Float32:
-    """`bindings/_mojolearn_rf.mojo::_rf_fold_min_weight_count` and
-    `_rf_min_weight_leaf`: on the weighted objective (non-unit weights, no
-    bootstrap) returns `frac * total weight` for `rf_host_fit`; on a count
-    objective raises `p.min_samples_leaf` to ceil(frac * the tree's row
-    count) and returns 0. frac == 0 changes nothing."""
-    if not (frac > 0.0):
-        return Float32(0)
-    if len(weights) > 0 and not p.bootstrap:
-        var total = Float64(0)
-        for i in range(len(weights)):
-            total += Float64(weights[i])
-        return Float32(frac * total)
-    var n_tree = n_sampled_rows_host(
-        p.bootstrap, p.max_samples if p.bootstrap else Float32(1.0), n_rows
-    )
-    var bound = frac * Float64(n_tree)
-    var need = Int(bound)
-    if Float64(need) < bound:
-        need += 1
-    if need > p.min_samples_leaf:
-        p.min_samples_leaf = need
-    return Float32(0)
-
-
 def _read_weights(weights_addr: Int, n_rows: Int, noun: String = "class") raises -> List[Float32]:
     """The weighted fit's Float32 row weights (0: none), with the GPU
     binding's checks in its words (`bindings/_mojolearn_rf.mojo:363-380`;
     `noun` "sample" for the regressor's, as its device scan says);
     all-unit weights fit unweighted (an empty list)."""
-    var weights = List[Float32]()
     if weights_addr == 0:
-        return weights^
-    var wp = f32_ptr(weights_addr)
-    var total = Float64(0)
-    var all_unit = True
-    for i in range(n_rows):
-        var w = wp[i]
-        if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
-            raise Error(noun + " weights must be finite and nonnegative")
-        weights.append(w)
-        total += Float64(w)
-        all_unit = all_unit and w == Float32(1)
-    if total <= 0:
-        raise Error(noun + " weights must have positive total")
-    if all_unit:
         return List[Float32]()
-    return weights^
+    return rf_host_weights_from(f32_ptr(weights_addr), n_rows, noun)
 
 
 def _host_drop_zero_weight_rows(
@@ -744,34 +703,6 @@ def rf_regressor_fit_shard_binding(
 # host column computes the bits it computes without a session. The same
 # names, params and refusals as the GPU binding. One thread uses a session at
 # a time.
-struct RfHostSession(Movable):
-    var id: Int
-    var x: List[Float32]
-    var n_rows: Int
-    var n_cols: Int
-
-    def __init__(out self, id: Int, var x: List[Float32], n_rows: Int, n_cols: Int):
-        self.id = id
-        self.x = x^
-        self.n_rows = n_rows
-        self.n_cols = n_cols
-
-
-struct RfHostSessionRegistry(Defaultable, Movable):
-    var sessions: List[RfHostSession]
-    var next_id: Int
-
-    def __init__(out self):
-        self.sessions = List[RfHostSession]()
-        self.next_id = 1
-
-    def find(self, id: Int) raises -> Int:
-        for i in range(len(self.sessions)):
-            if self.sessions[i].id == id:
-                return i
-        raise Error("unknown or closed forest data session handle")
-
-
 comptime RF_HOST_SESSIONS = _Global[
     StorageType=RfHostSessionRegistry,
     name="MojoRFDataSessionHost",
@@ -903,14 +834,9 @@ def rf_regressor_fit_session_rows_binding(
     var src_rows = reg[].sessions[si].n_rows
     if reg[].sessions[si].n_cols != n_cols:
         raise Error(entry + ": the session holds another column count")
-    for i in range(n_rows):
-        var r = Int(rp[i])
-        if r < 0 or r >= src_rows:
-            raise Error(entry + ": a row id is outside the session's X")
-    var x = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
-    for c in range(n_cols):
-        for i in range(n_rows):
-            x[c * n_rows + i] = reg[].sessions[si].x[c * src_rows + Int(rp[i])]
+    var x = rf_host_session_rows_x(
+        entry, reg[].sessions[si].x, src_rows, rp, n_rows, n_cols
+    )
     var y_address = _index(y_addr)
     var forest: RfHostForest
     with GILReleased(Python()):
@@ -1004,38 +930,12 @@ def rf_regressor_fit_dart_binding(
         # the row and column ids, checked against the session (the device
         # entry trusts its callers; a host read out of range is not a word
         # the device writes, so refuse it instead)
-        var rows = List[Int](length=n_rows, fill=0)
-        for i in range(n_rows):
-            rows[i] = i
-        if rows_a != 0:
-            var rp = i32_ptr(rows_a)
-            for i in range(n_rows):
-                var r = Int(rp[i])
-                if r < 0 or r >= n:
-                    raise Error(entry + ": a row id is outside the DART session's X")
-                rows[i] = r
-        var cols = List[Int](length=n_cols, fill=0)
-        for j in range(n_cols):
-            cols[j] = j
-        if cols_a != 0:
-            var cp = i32_ptr(cols_a)
-            for j in range(n_cols):
-                var q = Int(cp[j])
-                if q < 0 or q >= d:
-                    raise Error(entry + ": a column id is outside the DART session's X")
-                cols[j] = q
-        # `dart_member_x_kernel` / `dart_member_y_kernel` on the host: pure
-        # copies, so the column-major X and the labels are the device's bytes
-        var xs = f32_ptr(dreg[].sessions[di].x_addr)
-        var x = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
-        for j in range(n_cols):
-            var col = cols[j]
-            for i in range(n_rows):
-                x[j * n_rows + i] = xs[rows[i] * d + col]
-        var y = List[Float32](length=n_rows, fill=Float32(0.0))
-        var coff = c * n
-        for i in range(n_rows):
-            y[i] = dreg[].sessions[di].target[coff + rows[i]]
+        var x = List[Float32]()
+        var y = List[Float32]()
+        rf_host_dart_member_xy(
+            entry, rows_a, cols_a, n_rows, n_cols, n, d, c,
+            dreg[].sessions[di].x_addr, dreg[].sessions[di].target, x, y,
+        )
         var y_address = Int(y.unsafe_ptr())
         var forest: RfHostForest
         with GILReleased(Python()):
@@ -1075,14 +975,7 @@ def rf_forest_export_binding(
     var cp = i32_ptr(_index(columns))
     var tp = f32_ptr(_index(thresholds))
     var lp = i32_ptr(_index(left))
-    ref model = registry[].entries[id].model
-    for t in range(len(model.offsets)):
-        op[t] = model.offsets[t]
-    for i in range(model.n_nodes()):
-        cp[i] = model.colid[i]
-        tp[i] = model.quesval[i]
-        lp[i] = model.left_child[i]
-    copy_forest_export_leaves(model.leaves, _index(leaves), 0)
+    rf_host_export_into(registry[].entries[id].model, op, cp, tp, lp, _index(leaves))
     return PythonObject(None)
 
 
@@ -1149,14 +1042,10 @@ def _rf_predict(
     var wrote = 0
     with GILReleased(Python()):
         var rows = read_f32(x_address, n_rows * n_cols)
-        var out = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
-        var trees = rf_host_trees(
-            offsets_p, colid_p, quesval_p, left_p, leaves_p,
-            n_trees, n_nodes, n_cols, num_outputs,
+        forest_host_vote_into(
+            True, rows, offsets_p, colid_p, quesval_p, left_p,
+            leaves_p, op, n_rows, n_cols, n_trees, num_outputs, n_nodes,
         )
-        rf_host_predict(trees, rows, n_rows, n_cols, n_trees, num_outputs, out)
-        for i in range(n_rows * num_outputs):
-            op[i] = out[i]
         wrote = n_rows
     return PythonObject(wrote)
 
