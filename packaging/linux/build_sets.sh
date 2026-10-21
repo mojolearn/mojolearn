@@ -182,14 +182,7 @@ unset MOJOLEARN_BYTE_LM_OUTDIR
 # MEMBER in either layout: the vendor and architecture read-back load or read
 # each member from the file that serves it (packaging/linux/merged_layout.py).
 MERGED=$(python3 packaging/linux/merged_layout.py enabled) || exit 2
-ML="python3 $REPO/packaging/linux/merged_layout.py"
-if [[ "$MERGED" = 1 ]]; then
-  # merged_build.sh compiles one --target-accelerator for every member, so a
-  # Linux GPU set must name it; the per-binding scripts that read it from the
-  # box GPU when unset have no merged equivalent.
-  [[ -n "${MOJOLEARN_GPU_ARCHS:-}" ]] || { echo 'MOJOLEARN_MERGED_BINDINGS=1 needs one explicit MOJOLEARN_GPU_ARCHS (or MOJOLEARN_MERGED_BINDINGS=0)' >&2; exit 2; }
-  [[ -z "${MOJOLEARN_BUILD_SCRIPTS:-}" ]] || { echo 'MOJOLEARN_BUILD_SCRIPTS selects per-binding scripts; set MOJOLEARN_MERGED_BINDINGS=0 with it' >&2; exit 2; }
-fi
+ML="python3 packaging/linux/merged_layout.py"  # relative: this block is also evaluated by tools/release_github_build.py plan, which defines no REPO
 tier_names() {
   printf '%s' "$EXT_NAMES"
   if [[ "$1" = identical ]]; then printf ' %s' "$IDENTICAL_ONLY_NAMES"; fi
@@ -239,6 +232,15 @@ tier_dir() { case "$1" in fast) printf 'python/mojolearn' ;; *) printf 'python/m
 # The file a member loads from: its own .so (per-binding) or the merged file
 # the directory's index names (merged); the loader's rule, read here.
 member_so() { $ML member "$1" "$2"; }
+# The merged-layout checks live below the SCRIPTS..host_so() block: that block is
+# evaluated by the release planner with MOJOLEARN_* unset to list the scripts.
+if [[ "$MERGED" = 1 ]]; then
+  # merged_build.sh compiles one --target-accelerator for every member, so a
+  # Linux GPU set must name it; the per-binding scripts that read it from the
+  # box GPU when unset have no merged equivalent.
+  [[ -n "${MOJOLEARN_GPU_ARCHS:-}" ]] || { echo 'MOJOLEARN_MERGED_BINDINGS=1 needs one explicit MOJOLEARN_GPU_ARCHS (or MOJOLEARN_MERGED_BINDINGS=0)' >&2; exit 2; }
+  [[ -z "${MOJOLEARN_BUILD_SCRIPTS:-}" ]] || { echo 'MOJOLEARN_BUILD_SCRIPTS selects per-binding scripts; set MOJOLEARN_MERGED_BINDINGS=0 with it' >&2; exit 2; }
+fi
 say() { echo "[$(date +%T) build_sets] $*"; }
 
 say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS, gpu compile workers: $GPU_COMPILE_JOBS, per-binding bound: ${BINDING_TIMEOUT}s"
