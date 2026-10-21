@@ -85,7 +85,8 @@ def samba_admit_value(value: PythonObject, admission: PythonObject, depth: Int =
     if _samba_exact(cls, admission["mapping_types"]):
         if cls is admission["defaultdict_type"]:
             var factory = value.default_factory
-            if factory is not None and not _samba_exact(factory, admission["native_factories"]):
+            var numpy_factory = bi.type(factory) is bi.type and _samba_numpy(factory, admission)
+            if factory is not None and not _samba_exact(factory, admission["native_factories"]) and not numpy_factory:
                 raise Error("TypeError: Samba mapping defaults require native builtin constructors; Python callbacks cannot execute")
         var pairs = bi.list(value.items())
         for i in range(len(pairs)):  # driver-loop: over native mapping entries before lookup
