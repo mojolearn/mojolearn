@@ -9,6 +9,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from x_ann.abi_shell_impl import rabitq_padded_dim
 from x_ann.filter_topk import filter_topk_device
 from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, tsne_first_components, tsne_init_y0
 from checks.vendor import COMPILED_VENDOR
@@ -378,9 +379,7 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     var k = p_int(params, 5)
     var n_probes = p_int(params, 6)
     check_search(n_lists, m, k, n_probes)
-    var D = 1
-    while D < dim:
-        D *= 2
+    var D = rabitq_padded_dim(dim)
     var words = (D + 31) // 32
     var centers = in_f32(addrs, 0, n_lists * dim)
     var offsets = in_i32(addrs, 1, n_lists + 1)

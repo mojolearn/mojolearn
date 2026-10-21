@@ -28,30 +28,13 @@ from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM
 from x_linear.cls1_fast import cls1_flags
 from x_linear.class_prep_device import class_prep_device
-from core.input_device import device_all_finite, IND_MAX_N
+from x_linear.x_linear_input_impl import x_linear_finite_device as _finite
 
 
 def _fp(addr: Int) raises -> FP:
     if addr == 0:
         raise Error("x_linear: null float32 buffer address")
     return FP(unsafe_from_address=addr)
-
-
-def _finite(p: FP, count: Int, name: String) raises:
-    """The input check both columns run before a fit: NaN or infinity is
-    refused by name. cpu3-bindings: the routes whose grids do not test the
-    uploaded words themselves (FAST, or the IDENTICAL defines off) test the
-    caller's words with one device scan (`core/input_device`, one status
-    word back per launch) instead of a host walk over every value."""
-    if count <= 0:
-        return
-    var ctx = _p2m_ctx()
-    var off = 0
-    while off < count:
-        var m = min(IND_MAX_N, count - off)
-        if not device_all_finite(ctx, Int(p) + off * 4, m, False):
-            raise Error(String("mojolearn: ", name, " contains NaN or infinity"))
-        off += m
 
 
 def best_alpha_binding(scores_addr: PythonObject, n: PythonObject) raises -> PythonObject:

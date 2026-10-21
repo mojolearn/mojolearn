@@ -56,6 +56,7 @@ The sabotage builds (`HOTPATH_SABOTAGE`) keep every host helper, so the
 negative control still answers wrong on purpose.
 """
 
+from core.hotpath_device_impl import device_all_finite_span
 from std.math import isfinite
 from std.memory import bitcast
 from std.python import Python, PythonObject
@@ -845,15 +846,8 @@ def hpdev_try_all_finite(addr: Int, n: Int, is_f64: Bool) raises -> Int:
             return -1
         var ctx = process_ctx[_HPDEV_SLOT]()
         var ok = True
-        var width = 8 if is_f64 else 4
         with GILReleased(Python()):
-            # cpu3-bindings: spans past the twin's Int32 range go through
-            # in IND_MAX_N-element launches instead of the host loop
-            var off = 0
-            while off < n and ok:
-                var m = min(IND_MAX_N, n - off)
-                ok = device_all_finite(ctx, addr + off * width, m, is_f64)
-                off += m
+            ok = device_all_finite_span(ctx, addr, n, is_f64)
         return 1 if ok else 0
     return -1
 
