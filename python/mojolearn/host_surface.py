@@ -2494,6 +2494,7 @@ FAMILIES = (
         display="the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities",
         host_modules=(
             "bindings/gp_host_predict.mojo",
+            "gaussian_process/host/gp_host_entries.mojo",
             "gaussian_process/host/gpr_oracle.mojo",
             "gaussian_process/host/gpc_oracle.mojo",
             "gaussian_process/host/gpc_steps.mojo",
@@ -3012,7 +3013,7 @@ FAMILIES = (
         display="IVF-Flat search over a saved index and extending it",
         host_modules=(
             "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
-            "bindings/ivf_index_arrays.mojo",
+            "bindings/ivf_index_arrays.mojo", "ivf/host/ivf_index_arrays_impl.mojo",
             "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
         ),
         exports=(

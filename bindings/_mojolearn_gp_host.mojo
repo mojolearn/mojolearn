@@ -84,9 +84,9 @@ from cholesky.host.chol_oracle import (
     chol_host_solve,
 )
 from gaussian_process.unnorm import GP_UNNORM_COV, GP_UNNORM_MEAN, gp_unnorm_cell, gpc_ovr_targets
+from gaussian_process.host.gp_host_entries import _rebuild_kernel_spec
 from bindings.gp_host_predict import (
     gp_py2mojo_binding,
-    _rebuild_kernel_spec,
     gpc_ovr_combine_binding,
     gpc_predict_binding,
     gpr_predict_binding,
