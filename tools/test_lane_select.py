@@ -2218,9 +2218,10 @@ def test_any_other_row_field_edit_selects_the_rows_lanes():
 
 def test_the_real_manifest_edits_of_the_three_branches_are_placed():
     """The three branches' host_surface.py edits, replayed on the manifest in
-    this tree (a lane that exists here stands in for ivf-filter)."""
+    this tree (a lane that exists here stands in for ivf-filter). The IVF
+    family's training lanes gained ivf-short-fill on 2026-10-21 (354b8049a)."""
     old = lane_select._read(lane_select.MANIFEST)
-    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf")',
+    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf", "ivf-short-fill")',
                'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")',
                '"gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad"',
                '"pca_fit", "pca_fit_full", "tsvd_fit"')
