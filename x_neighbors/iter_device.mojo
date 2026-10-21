@@ -51,7 +51,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
-from std.python import PythonObject
 from x_neighbors.nan_cells_device import (
     nan_cells_device, nan_group_sum_kernel, nan_top_scan_kernel, nan_down_scan_kernel,
     NC_TPB, NC_PER, NC_CHUNK, NC_SMEM_FITS, nan_colmiss_kernel, NC_RB,
@@ -3223,12 +3222,12 @@ comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
 )
 
 
-def lp_fast_resident_binding() raises -> PythonObject:
+def lp_fast_resident() -> Int:
     """1 when this binary takes the resident kNN-graph loop by default
     (LP_FAST_RESIDENT on FAST + Apple, LP_IDN_RESIDENT on IDENTICAL)."""
     comptime if LP_FAST_RESIDENT or LP_IDN_RESIDENT:
-        return PythonObject(1)
-    return PythonObject(0)
+        return 1
+    return 0
 
 
 def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
