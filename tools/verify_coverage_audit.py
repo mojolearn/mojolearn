@@ -774,6 +774,24 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill",
                        "sequence-device-tensor"})
 
+#: What each new lane is for: the endpoints only it reaches.
+NEW_LANE_PURPOSE = {
+    "gp-lml-theta": "GaussianProcessRegressor.log_marginal_likelihood(theta, eval_gradient): `gp_theta_params`, "
+                    "`gpr_lml_grad`",
+    "cross-vendor-fold": "mojolearn.cross_vendor ordered_fold and fold_pair: `fold_pair_f32`, `cross_vendor_call`",
+    "sequence-moe-backward": "MoEBlock.backward: `moe_backward`",
+    "sequence-export-roundtrip": "Sequential.export, Sequential.load, predict and predict_proba",
+    "sequence-onnx-import": "mojolearn.import_model on an ONNX file: `onnx_import`, the Mojo ONNX reader",
+    "transformer-decode-load-state": "TransformerDecodeSession.load_state: `transformer_decode_session_load_state`",
+    "safetensors-widen-f16": "float16 checkpoint weights (models.safetensors.widen_f16): `from_f16`, device and host",
+    "sequence-program-save-load": "ops.Program.save and Session.load_program (the public `ops.Program` class)",
+    "hf-causal-lm-stream": "CausalLM.stream and models.GenerationStream.read, greedy and sampled",
+    "ivf-short-fill": "IVFIndex.search with fewer candidates than k: the short fill on the device search and "
+                      "the host column (`ivf_out_of_bounds_distance`)",
+    "sequence-device-tensor": "resident sequence tensors (`seq_tensor_alloc`, `seq_tensor_upload`, "
+                              "`seq_tensor_download`, `seq_tensor_copy`) through RMSprop",
+}
+
 _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "the CPU column routes _mojolearn_byte_lm through _byte_lm_trainer_host "
                  "(host_surface ADAPTED_MODULES), whose TrainerOwnerEntries call it for every "
@@ -883,7 +901,43 @@ def sabotage_of(row):
         return "armed", "; ".join(bits)
     if not row["changed_kernel"]:
         return "n/a", "door-only change (conversion, no arithmetic)"
-    return "owed", "no arm reaches " + row["changed_kernel"][0]
+    pending = [n for n in row["changed_kernel"] if _sab_na(n) is None]
+    if not pending:
+        return "n/a", _sab_na(row["changed_kernel"][0])
+    if all(n.startswith("core/py2mojo_rows.mojo:") for n in pending):
+        return "owed", ("rows_call's faulted values (the Huber threshold, the SGD and LogisticRegressionCV "
+                        "probability modes) reach no hashed part until lanes for HuberRegressor.outliers_ and "
+                        "SGD/LogisticRegressionCV predict_proba exist; python/mojolearn/linear_model.py belongs "
+                        "to a running migration lane, so the lanes and the arm are owed after it lands")
+    if all(n.startswith("mamba/") for n in pending):
+        return "owed", ("migration lane on mamba/ (running): the arm for " + pending[0]
+                        + " is owed after it lands")
+    return "owed", "no arm reaches " + pending[0]
+
+
+_SAB_NA = None
+_POINTER_ALIAS = re.compile(r"^_?[A-Z0-9]{1,4}P$")
+
+
+def _sab_na(node):
+    """The reason a changed definition carries no fault arm, or None
+    (tools/identity_lanes/coverage_sabotage_na.tsv; pointer type aliases)."""
+    global _SAB_NA
+    if _SAB_NA is None:
+        _SAB_NA = {}
+        path = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage_na.tsv")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    if line.strip() and not line.startswith("#"):
+                        key, _, why = line.rstrip("\n").partition("\t")
+                        _SAB_NA[key] = why
+        except OSError:
+            pass
+    f, _, name = node.partition(":")
+    if _POINTER_ALIAS.match(name):
+        return "a pointer type alias, no value"
+    return _SAB_NA.get(node) or _SAB_NA.get(f + ":*")
 
 
 def _short(lanes, n=3):
@@ -963,9 +1017,7 @@ def render_markdown(audit, path):
       "the pending reason `no reference`.")
     w("")
     for lane in sorted(NEW_LANES):
-        reached = sorted({r["entry"] for r in nat if lane in r["lanes_precise"]})
-        w(f"- `{lane}`: " + (", ".join(f"`{e}`" for e in reached[:8]) + (" ..." if len(reached) > 8 else "")
-                             if reached else "public call path (see the Python table)"))
+        w(f"- `{lane}`: {NEW_LANE_PURPOSE[lane]}")
     w("")
     w("## Fault-injection arms added (tools/identity_lanes/coverage_sabotage.tsv)")
     w("")
@@ -1000,14 +1052,33 @@ def render_markdown(audit, path):
     sab_owed = defaultdict(set)
     for r, t, (ss, txt) in tri:
         if ss == "owed" and not t[0].startswith("n/a"):
-            sab_owed[r["changed_kernel"][0].split(":")[0]].add(r["entry"])
+            sab_owed[txt].add(r["entry"])
     if sab_owed:
         w("")
-        w("Sabotage arms still owed (changed kernel file -> entries it reaches):")
+        w("Sabotage arms still owed:")
         w("")
-        for f in sorted(sab_owed):
-            names = sorted(sab_owed[f])
-            w(f"- `{f}`: " + ", ".join(f"`{n}`" for n in names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else ""))
+        for why in sorted(sab_owed):
+            names = sorted(sab_owed[why])
+            w(f"- " + ", ".join(f"`{n}`" for n in names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else "")
+              + f": {why}")
+    w("")
+    w("## Method and limits")
+    w("")
+    w("- A registration is CHANGED when a Mojo definition its export reaches (lane_select's definition graph, "
+      "by name through imports) differs from the base, moves excluded (the same text at the base under the same "
+      "name in any file). A shared helper's change therefore marks every export that reaches it.")
+    w("- A lane REACHES an entry when the entry's name is in the lane's scoped closure: the lane function, its "
+      "helpers and property probes (the harness's shared helpers excluded), the package definitions those name "
+      "(resolved through imports, methods of reached classes by attribute name, import-time calls, module tables, "
+      "`name + \"_suffix\"` composition), or the public method walk of tools/public_runtime_inventory.py. It is "
+      "static: a reach is a call path, not a run. The new lanes were run; the rest rest on their recorded cells.")
+    w("- A row is ARMED when a definition in its export's closure reads a `MOJOLEARN_*SABOTAGE*` define or is "
+      "edited by a `*/sabotage/*.patch`. `CPU gate HOST_SABOTAGE` is the arm the CPU identity gate builds and "
+      "requires to move every covered part; family defines and seam patches are their checks' arms; coverage arms "
+      "are this audit's (RUN OWED). Definitions with no value to fault are listed with the reason in "
+      "tools/identity_lanes/coverage_sabotage_na.tsv.")
+    w("- `n/a` lanes: no Python caller in the package, the fast tier (the verifier refuses fast), a verifier or "
+      "build probe, or a dead helper; each with its reason in the row.")
     w("")
     w("## Public Python methods")
     w("")
