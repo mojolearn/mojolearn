@@ -69,6 +69,7 @@ from training.neural_arithmetic_profile import neural_training_profile
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.sha256_door import sha256_hexdigest
 from core.mojolearn_neural_host_impl import _finite
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -921,6 +922,11 @@ def linear_forward_binding(addrs: PythonObject, params: PythonObject) raises -> 
     return PythonObject(m * n)
 
 
+def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
+    """The SHA-256 of a bytes-like value, 64 lowercase hex digits (core/sha256.mojo)."""
+    return sha256_hexdigest(value)
+
+
 def neural_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(neural_training_profile())
 
@@ -932,6 +938,7 @@ def build__mojolearn_neural_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_neural_host")
         module.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
+        module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_function[neural_host_numeric_mode_binding]("neural_host_numeric_mode")
         module.def_function[neural_host_vendor_binding]("neural_host_vendor")
         module.def_function[neural_host_column_binding]("neural_host_column")

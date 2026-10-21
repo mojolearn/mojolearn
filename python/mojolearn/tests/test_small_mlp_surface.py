@@ -63,6 +63,11 @@ class FakeTraining:
         # base profile plus the IDENTICAL toggle suffix (empty by default).
         return 'mojolearn.neural-training.fp32.v1'
 
+    def sha256_hex(self, value):
+        # the binding's Mojo SHA-256 (core/sha256.mojo) gives hashlib's hex
+        import hashlib
+        return hashlib.sha256(bytes(value)).hexdigest()
+
     def neural_gemm(self, a, b, out, params):
         # IDENTICAL `SmallMLPTrainer._matmul` calls the training binding's
         # `neural_gemm` (bindings/_mojolearn_training.mojo) directly:
