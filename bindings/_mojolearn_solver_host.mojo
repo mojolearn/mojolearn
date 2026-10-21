@@ -50,6 +50,7 @@ literal `single_linkage.mojo` returns on the pairwise arm.
 """
 from std.os import abort
 from std.python import Python, PythonObject
+from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_host_into, cd_fit_host_into
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
