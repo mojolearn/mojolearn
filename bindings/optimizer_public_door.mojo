@@ -171,7 +171,7 @@ def is_instance(value: PythonObject, cls: PythonObject) raises -> Bool:
 def shape_text(dims: List[Int]) -> String:
     """A shape as Python prints a tuple: `(3, 4)`, `(5,)`, `()`."""
     var text = String("(")
-    for i in range(len(dims)):  # small-loop(shape words of a refusal message)
+    for i in range(len(dims)):  # driver-loop: over shape words of a refusal message
         if i > 0:
             text += ", "
         text += String(dims[i])
@@ -183,7 +183,7 @@ def shape_text(dims: List[Int]) -> String:
 def same_shape(a: List[Int], b: List[Int]) -> Bool:
     if len(a) != len(b):
         return False
-    for i in range(len(a)):  # small-loop(shape words)
+    for i in range(len(a)):  # driver-loop: over shape words
         if a[i] != b[i]:
             return False
     return True
@@ -192,7 +192,7 @@ def same_shape(a: List[Int], b: List[Int]) -> Bool:
 def py_ints(values: List[Int]) raises -> PythonObject:
     """A Python tuple of ints (a shape argument)."""
     var out = Python.list()
-    for i in range(len(values)):  # small-loop(shape words)
+    for i in range(len(values)):  # driver-loop: over shape words
         _ = py_call(out.append, PythonObject(values[i]))
     return py_call(_bi().tuple, out)
 
@@ -238,7 +238,7 @@ struct TensorView(Copyable, Movable):
 
     def count(self) -> Int:
         var n = 1
-        for i in range(len(self.shape)):  # small-loop(shape words)
+        for i in range(len(self.shape)):  # driver-loop: over shape words
             n *= self.shape[i]
         return n
 
@@ -248,12 +248,12 @@ def _contiguous(shape: List[Int], strides: List[Int], has_strides: Bool, itemsiz
     if len(shape) == 0:
         return True
     var n = 1
-    for i in range(len(shape)):  # small-loop(shape words)
+    for i in range(len(shape)):  # driver-loop: over shape words
         n *= shape[i]
     if n <= 1 or not has_strides:
         return True
     var expect = itemsize
-    for k in range(len(shape) - 1, -1, -1):  # small-loop(one stride word per axis)
+    for k in range(len(shape) - 1, -1, -1):  # driver-loop: over one stride word per axis
         if shape[k] != 1 and strides[k] != expect:
             return False
         expect *= shape[k]
@@ -417,10 +417,10 @@ def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
         var t = String(py=obj.dtype)
         v.fmt = _array_code(t)
         var shape = obj.shape
-        for i in range(len(shape)):  # small-loop(shape words)
+        for i in range(len(shape)):  # driver-loop: over shape words
             v.shape.append(Int(py=shape[i]))
         var strides = obj.strides
-        for i in range(len(strides)):  # small-loop(stride words)
+        for i in range(len(strides)):  # driver-loop: over stride words
             v.strides.append(Int(py=strides[i]))
         v.has_strides = True
         v.c_contig = truth(obj.flags["C_CONTIGUOUS"])
@@ -443,7 +443,7 @@ def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
     if p[5] != 0:
         var fp = BP(unsafe_from_address=p[5])
         var text = String("")
-        for k in range(64):  # small-loop(format characters of one buffer)
+        for k in range(64):  # driver-loop: over format characters of one buffer
             if fp[k] == 0:
                 break
             text += chr(Int(fp[k]))
@@ -451,18 +451,18 @@ def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
     if ndim > 0:
         if p[6] != 0:
             var sp = IP(unsafe_from_address=p[6])
-            for k in range(ndim):  # small-loop(shape words of one buffer)
+            for k in range(ndim):  # driver-loop: over shape words of one buffer
                 v.shape.append(sp[k])
         else:
             v.shape.append(v.nbytes // max(v.itemsize, 1))
         if p[7] != 0:
             var tp = IP(unsafe_from_address=p[7])
-            for k in range(ndim):  # small-loop(stride words of one buffer)
+            for k in range(ndim):  # driver-loop: over stride words of one buffer
                 v.strides.append(tp[k])
             v.has_strides = True
         if p[8] != 0:
             var op = IP(unsafe_from_address=p[8])
-            for k in range(ndim):  # small-loop(suboffset words of one buffer)
+            for k in range(ndim):  # driver-loop: over suboffset words of one buffer
                 if op[k] >= 0:
                     indirect = True
     _release_buffer(view)
@@ -547,7 +547,7 @@ def as_seq(x: PythonObject, name: String, where: String) raises -> PythonObject:
             "ValueError: mojolearn." + where + ": " + name + " is empty; there is nothing to do and an "
             + "empty parameter registry is refused rather than answered (training/estimator.mojo)"
         )
-    for i in range(len(out)):  # small-loop(parameter buffers)
+    for i in range(len(out)):  # driver-loop: over parameter buffers
         if not tensor_view(out[i], v):
             raise Error(
                 "TypeError: mojolearn." + where + ": " + name + "[" + String(i) + "] is "
@@ -560,7 +560,7 @@ def check_tensors(seq: PythonObject, name: String, where: String, inplace: Bool)
     """`_check_dtype`: float32 or refused by name, never cast; non-empty;
     with `inplace`, C-contiguous and writable. Returns every tensor's view."""
     var views = List[TensorView]()
-    for i in range(len(seq)):  # small-loop(parameter buffers)
+    for i in range(len(seq)):  # driver-loop: over parameter buffers
         var v = TensorView()
         if not tensor_view(seq[i], v):
             raise Error("TypeError: mojolearn: object does not support the buffer protocol")
@@ -612,7 +612,7 @@ def read_addr(obj: PythonObject, name: String) raises -> Int:
 
 
 def _addrs_of(views: List[TensorView], mut addrs: List[Int], mut nbytes: List[Int]):
-    for j in range(len(views)):  # small-loop(parameter buffers)
+    for j in range(len(views)):  # driver-loop: over parameter buffers
         addrs.append(views[j].addr)
         nbytes.append(views[j].nbytes)
 
@@ -624,7 +624,7 @@ def _check_grads(params: PythonObject, gs: PythonObject, views: List[TensorView]
             "ValueError: mojolearn." + owhere + "." + where + ": " + String(len(gs)) + " gradients for "
             + String(len(params)) + " parameter tensors"
         )
-    for j in range(len(params)):  # small-loop(parameter buffers)
+    for j in range(len(params)):  # driver-loop: over parameter buffers
         var pv = TensorView()
         if not tensor_view(params[j], pv):
             raise Error("TypeError: mojolearn: object does not support the buffer protocol")
@@ -640,7 +640,7 @@ def refuse_kwargs(kwargs: PythonObject, where: String) raises:
     by name."""
     var d = OPT_DOOR.get_or_create_ptr()
     var keys = py_call(d[].bi.list, kwargs)
-    for i in range(len(keys)):  # small-loop(keyword argument names)
+    for i in range(len(keys)):  # driver-loop: over keyword argument names
         var k = String(py=keys[i])
         if k == "dropout":
             var refusal = _not_covered("dropout", where)
@@ -759,7 +759,7 @@ def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
     var views = check_tensors(seq, "params", where, True)
     var j = len(seq)
     var nbytes = List[Int]()
-    for k in range(j):  # small-loop(parameter buffers)
+    for k in range(j):  # driver-loop: over parameter buffers
         nbytes.append(views[k].nbytes)
     var offsets = new_array([j + 1], "<i4")
     var n_total = registry_offsets(nbytes, I32P(unsafe_from_address=Int(py=offsets._addr)))
@@ -825,12 +825,12 @@ def door_step[K: OptKernels](
     req.a_count = 1
     if op == OP_STEP_ACCUMULATED:
         req.a_count = len(parts)
-        for i in range(len(parts)):  # small-loop(microbatch arguments)
+        for i in range(len(parts)):  # driver-loop: over microbatch arguments
             var label = "microbatch_grads[" + String(i) + "]"
             var gs = as_seq(parts[i], label, owhere)
             var views = check_tensors(gs, label, owhere, req.a_count == 1)
             _check_grads(params, gs, views, owhere, where)
-            for k in range(len(views)):  # small-loop(parameter buffers)
+            for k in range(len(views)):  # driver-loop: over parameter buffers
                 if req.a_count > 1:
                     # read-only inputs: strided buffers are made contiguous
                     req.g_addr.append(contiguous_addr(gs[k], views[k], keep))
@@ -852,12 +852,12 @@ def door_step[K: OptKernels](
                 "ValueError: mojolearn." + owhere + "." + where + ": " + String(len(gs)) + " gradients for "
                 + String(j) + " parameter tensors"
             )
-        for k in range(len(gs)):  # small-loop(parameter buffers)
+        for k in range(len(gs)):  # driver-loop: over parameter buffers
             if not is_instance(gs[k], d[].dev_cls):
                 raise Error("ValueError: mojolearn." + owhere + "." + where + ": grads[" + String(k)
                             + "] must be a device array")
         req.g_mode = GRADS_DEVICE
-        for k in range(len(gs)):  # small-loop(parameter buffers: one device handle each)
+        for k in range(len(gs)):  # driver-loop: over parameter buffers: one device handle each
             req.g_addr.append(Int(py=gs[k].h))
             req.g_bytes.append(Int(py=gs[k].size))
     elif p_dev and grads is None:
@@ -1124,18 +1124,18 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
     var first = TensorView()
     var single = tensor_view(parts[0], first)
     var seqs = Python.list()
-    for i in range(len(parts)):  # small-loop(microbatch arguments)
+    for i in range(len(parts)):  # driver-loop: over microbatch arguments
         _ = py_call(seqs.append, as_seq(parts[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads"))
     var probes = List[List[TensorView]]()
-    for i in range(len(parts)):  # small-loop(microbatch arguments)
+    for i in range(len(parts)):  # driver-loop: over microbatch arguments
         probes.append(check_tensors(seqs[i], "microbatch_grads[" + String(i) + "]", "accumulate_grads", False))
     var j0 = len(seqs[0])
-    for i in range(len(parts)):  # small-loop(microbatch arguments)
+    for i in range(len(parts)):  # driver-loop: over microbatch arguments
         var ji = len(seqs[i])
         if ji != j0:
             raise Error("ValueError: mojolearn.accumulate_grads: microbatch " + String(i) + " has " + String(ji)
                         + " tensors, microbatch 0 has " + String(j0))
-        for k in range(ji):  # small-loop(parameter buffers)
+        for k in range(ji):  # driver-loop: over parameter buffers
             if not same_shape(probes[i][k].shape, probes[0][k].shape):
                 raise Error("ValueError: mojolearn.accumulate_grads: microbatch " + String(i) + " tensor "
                             + String(k) + " has shape " + shape_text(probes[i][k].shape)
@@ -1147,14 +1147,14 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
             raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
     var keep = List[List[Float32]]()
     var in_addrs = List[Int]()
-    for i in range(len(parts)):  # small-loop(microbatch arguments)
+    for i in range(len(parts)):  # driver-loop: over microbatch arguments
         var sq = seqs[i]
-        for k in range(j0):  # small-loop(parameter buffers)
+        for k in range(j0):  # driver-loop: over parameter buffers
             in_addrs.append(contiguous_addr(sq[k], probes[i][k], keep))
     var nbytes = List[Int]()
     var out_addrs = List[Int]()
     var result = Python.list()
-    for k in range(j0):  # small-loop(parameter buffers: one result array each)
+    for k in range(j0):  # driver-loop: over parameter buffers: one result array each
         var a = new_array(probes[0][k].shape, "<f4")
         _ = py_call(result.append, a)
         out_addrs.append(Int(py=a._addr))
