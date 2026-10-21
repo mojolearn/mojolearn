@@ -157,7 +157,9 @@ def test_ols_native_admission_errors_do_not_enter_python(case):
     if case == "one_row":
         x, y = x[:1], y[:1]
     elif case == "target_rank":
-        y = y[:, None]
+        # Ordinary column targets are supported and have warning coverage.
+        # A rank-three target remains invalid.
+        y = y[:, None, None]
     elif case == "target_length":
         y = y[:-1]
     elif case == "zero_weights":

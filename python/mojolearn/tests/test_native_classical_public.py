@@ -223,7 +223,13 @@ def test_native_attribute_boundary_refuses_python_hooks_before_execution(where, 
     elif where == "getattr":
         monkeypatch.setattr(Ridge, "__getattr__", hook, raising=False)
     else:
-        object.__getattribute__(model, "__dict__")[Key()] = 1
+        fields = object.__getattribute__(model, "__dict__")
+        # Prepare the collision without invoking the poison in test setup.
+        # The native lookup must reject this non-string key before comparing
+        # it against the requested coefficient name.
+        fields.pop("coef_", None)
+        fields[Key()] = 1
+        assert not seen
     clean(getattr, model, "coef_", error=TypeError)
     assert not seen
 
