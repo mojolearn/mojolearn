@@ -19,6 +19,12 @@ from bindings.generation_policy import generation_pick
 from bindings.hostptr import f32_ptr, i32_ptr
 from std.math import isfinite
 from std.os import getenv
+from bindings.causal_lm_public_impl import (
+    causal_lm_rows_done, causal_lm_join_resident, causal_lm_join_continuation,
+    causal_lm_pick_step, causal_lm_tokens_row_major, causal_lm_drop_eos,
+    causal_lm_utf8_cut, causal_lm_store_ids, causal_lm_flags_as_ints,
+    causal_lm_restore_rows,
+)
 
 
 def _native_function(module: PythonObject, name: String) raises -> PythonObject:
@@ -58,13 +64,13 @@ def causal_lm_admit_binding(
     model._native_vendor = PythonObject(vendor)
     model._native_numeric_mode = PythonObject(mode)
     entries["weight_names"] = g[].bi.object.__getattribute__(model._blocks[0], "_W_NAMES")
-    for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:
+    for name in [String("embedding_forward"), String("rms_norm_forward"), String("linear_forward")]:  # small-loop(primitive entry names)
         entries[name] = _native_function(primitives, name)
     if kind == "transformer":
         entries["forward"] = _native_function(block_binding, "transformer_forward")
         entries["decode"] = _native_function(block_binding, "transformer_decode_step")
         entries["block_binding"] = block_binding
-        for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:
+        for name in [String("transformer_forward_fresh"), String("transformer_session_forward_fresh")]:  # small-loop(optional entry names)
             if Bool(py=g[].bi.hasattr(block_binding, name)):
                 entries[name] = _native_function(block_binding, name)
         if Bool(py=g[].bi.hasattr(block_binding, "transformer_session_forward")):
@@ -83,7 +89,7 @@ def causal_lm_admit_binding(
         # generation. No performance default changes with this migration.
         if Bool(py=g[].bi.hasattr(block_binding, "causal_lm_session_run")):
             entries["resident_vendor"] = _native_function(block_binding, "transformer_vendor")()
-            for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),
+            for name in [String("transformer_decode_session_create"), String("transformer_decode_session_open"),  # small-loop(resident entry names)
                          String("transformer_decode_session_close"), String("causal_lm_session_create"),
                          String("causal_lm_session_open"), String("causal_lm_session_run"), String("causal_lm_session_close")]:
                 entries[name] = _native_function(block_binding, name)
@@ -328,7 +334,7 @@ def _mutable(
     if len(shape) != len(expected):
         raise Error("CausalLM: state buffer rank differs")
     var size = 1
-    for i in range(len(expected)):
+    for i in range(len(expected)):  # small-loop(state buffer shape dims)
         if Int(py=shape[i]) != expected[i]:
             raise Error("CausalLM: state buffer shape differs")
         size *= expected[i]
@@ -345,7 +351,7 @@ def _mutable(
 
 def _writeback(mut copies: List[PythonObject]) raises:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    for i in range(len(copies)):
+    for i in range(len(copies)):  # driver-loop: over copied state buffer handles
         var view = copies[i][0].cast("B")
         var source = g[].bi.memoryview(copies[i][1]).cast("B")
         view[g[].bi.slice(PythonObject(None))] = source
@@ -357,17 +363,17 @@ def _transformer_args(
     b: Int, l: Int, planes: Bool, mut keep: List[PythonObject],
 ) raises -> PythonObject:
     var addresses = py_ints([_addr(x, keep)])
-    for j in range(len(blk["_w"])):
+    for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
         addresses.append(0 if planes and j >= 2 else _addr(blk["_w"][j], keep))
     addresses.append(_addr(st.k_cache, keep))
     addresses.append(_addr(st.v_cache, keep))
     addresses.append(_addr(y, keep))
-    for j in range(len(blk["_wopt"])):
+    for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
         addresses.append(_addr(blk["_wopt"][j], keep))
     if planes:
-        for j in range(len(blk["_int15"])):
+        for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
             var trip = blk["_int15"][j]
-            for k in range(3):
+            for k in range(3):  # small-loop(int15 plane triple)
                 addresses.append(0 if trip is None else _addr(trip[k], keep))
     return addresses
 
@@ -433,7 +439,7 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
         if GENERATION_BOUNDARY.get_or_create_ptr()[].bi.getattr(st, "_resident_session", PythonObject(None)) is not None:
             raise Error("neural block: state is owned by a resident decode session")
         addresses = py_ints([_addr(x, keep)])
-        for j in range(len(blk["_w"])):
+        for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
             addresses.append(_addr(blk["_w"][j], keep))
         if kind == "mamba1":
             var di = Int(py=blk["d_inner"])
@@ -572,7 +578,7 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
 
 def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
     entries["causal_lm_session_close"](lm)
-    for i in range(len(sessions)):
+    for i in range(len(sessions)):  # driver-loop: over layer decode sessions
         entries["transformer_decode_session_close"](sessions[i])
 
 
@@ -600,18 +606,18 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     var keep = List[PythonObject]()
     var out = generation_array([b, n], "i")
     try:
-        for i in range(len(model._blocks)):
+        for i in range(len(model._blocks)):  # driver-loop: over model layers
             var blk = _block(model, i)
             var st = state.layers[i]
             var a = _transformer_args(model, blk, st, PythonObject(None), PythonObject(None), b, l, int15, keep)
             var open_a = g[].bi.list()
-            for j in range(1, 12):
+            for j in range(1, 12):  # driver-loop: over layer argument spans
                 open_a.append(a[j])
-            for j in range(13, len(a)):
+            for j in range(13, len(a)):  # driver-loop: over layer argument spans
                 open_a.append(a[j])
             var p = _transformer_params(blk, st, b, l)
             var open_p = g[].bi.list()
-            for j in range(len(p)):
+            for j in range(len(p)):  # driver-loop: over layer shape parameters
                 if j != 1:
                     open_p.append(p[j])
             var ss = e["transformer_decode_session_create"]()
@@ -619,7 +625,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
             e["transformer_decode_session_open_int15" if int15 else "transformer_decode_session_open"](ss, open_a, open_p)
         var top = py_ints([_addr(model._embed, keep), _addr(model._norm, keep)])
         if int15:
-            for i in range(3):
+            for i in range(3):  # small-loop(int15 head plane triple)
                 top.append(_addr(model._head_int15[i], keep))
         else:
             top.append(0 if model._head is model._embed else _addr(model._head, keep))
@@ -635,9 +641,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     var dst = i32_ptr(Int(py=result._addr))
     var prompt = i32_ptr(Int(py=ids._addr))
     var generated = i32_ptr(Int(py=out._addr))
-    for r in range(b):
-        memcpy(dest=dst + r * (l + n), src=prompt + r * l, count=l)
-        memcpy(dest=dst + r * (l + n) + l, src=generated + r * n, count=n)
+    causal_lm_join_resident(dst, prompt, generated, b, l, n)
     _ = keep^
     return result
 
@@ -693,10 +697,7 @@ struct GenerationHandle(Movable, Writable):
     def done(self) -> Bool:
         if self.produced >= self.max_new:
             return True
-        for i in range(len(self.finished)):
-            if not self.finished[i]:
-                return False
-        return True
+        return causal_lm_rows_done(self.finished)
 
 
 def _options(mut s: GenerationHandle, options: PythonObject) raises:
@@ -725,7 +726,7 @@ def _options(mut s: GenerationHandle, options: PythonObject) raises:
         var values = options[5]
         if g[].bi.type(values) is g[].bi.int:
             values = py_ints([Int(py=values)])
-        for i in range(len(values)):
+        for i in range(len(values)):  # small-loop(eos token id arguments)
             if g[].bi.type(values[i]) is not g[].bi.int:
                 raise Error("generation: eos_token_id must be integer or sequence of integers")
             var id = Int(py=values[i])
@@ -774,25 +775,14 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
     var wrote = 0
     s.busy = True
     try:
-        while wrote < capacity and not s.done():
+        while wrote < capacity and not s.done():  # driver-loop: over decode steps, one model forward each
             var l = Int(py=s.current.shape[1])
             var logits = _run(s.model, s.current, s.state, s.produced > 0)
             var raw = f32_ptr(Int(py=logits._addr))
             var next = generation_array([b, 1], "i")
             var dst = i32_ptr(Int(py=next._addr))
-            for r in range(b):
-                var pick = s.pad
-                if not s.finished[r]:
-                    var row = List[Float32](capacity=v)
-                    for j in range(v):
-                        row.append(raw[(r * l + l - 1) * v + j])
-                    pick = generation_pick(row, s.greedy, s.temperature, s.top_k, s.top_p, s.seed, r, s.produced)
-                    s.lengths[r] += 1
-                    for i in range(len(s.eos)):
-                        if pick == s.eos[i]:
-                            s.finished[r] = True
-                dst[r] = Int32(pick)
-                tokens.append(Int32(pick))
+            causal_lm_pick_step(raw, dst, b, l, v, s.finished, s.lengths, s.eos, s.pad, s.greedy,
+                                s.temperature, s.top_k, s.top_p, s.seed, s.produced, tokens)
             s.current = next
             s.produced += 1
             wrote += 1
@@ -801,9 +791,7 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
             s.busy = False
             return out
         var dst = i32_ptr(Int(py=out._addr))
-        for r in range(b):
-            for t in range(wrote):
-                dst[r * wrote + t] = tokens[t * b + r]
+        causal_lm_tokens_row_major(tokens, dst, b, wrote)
         s.busy = False
         return out
     except error:
@@ -815,41 +803,16 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
 def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var n = Int(py=ids.shape[1])
-    var values = g[].bi.list()
     var raw = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
-    for i in range(n):
-        var special = False
-        for j in range(len(s.eos)):
-            special = special or Int(raw[i]) == s.eos[j]
-        if not special:
-            values.append(Int(raw[i]))
+    var values = py_ints(causal_lm_drop_eos(raw, n, s.eos))
     s.pending_bytes.extend(_native_function(s.tokenizer._m, "vocab_decode_public")(s.tokenizer, values, PythonObject(True), PythonObject("replace")))
     var size = len(s.pending_bytes)
-    var cut = size
-    # Preserve an incomplete trailing UTF-8 sequence across tokens. Invalid
-    # complete sequences are handled by the normal CPython UTF-8 decoder.
-    if not s.done() and size > 0:
-        var lead = size - 1
-        while lead > max(-1, size - 4) and (Int(py=s.pending_bytes[lead]) & 0xC0) == 0x80:
-            lead -= 1
-        if lead >= 0:
-            var first = Int(py=s.pending_bytes[lead])
-            var need = 1
-            if first >= 0xC2 and first <= 0xDF:
-                need = 2
-            elif first >= 0xE0 and first <= 0xEF:
-                need = 3
-            elif first >= 0xF0 and first <= 0xF4:
-                need = 4
-            if size - lead < need:
-                cut = lead
-    var prefix = g[].bi.bytearray()
-    var remaining = g[].bi.bytearray()
-    for i in range(size):
-        if i < cut:
-            prefix.append(s.pending_bytes[i])
-        else:
-            remaining.append(s.pending_bytes[i])
+    # The CPython array constructor copies the pending bytes to native storage.
+    var pending = g[].arrays("B", s.pending_bytes)
+    var cut = causal_lm_utf8_cut(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=pending.buffer_info()[0])), size, s.done())
+    _ = pending^
+    var prefix = s.pending_bytes.__getitem__(g[].bi.slice(PythonObject(0), PythonObject(cut)))
+    var remaining = s.pending_bytes.__getitem__(g[].bi.slice(PythonObject(cut), PythonObject(None)))
     s.pending_bytes = remaining
     return prefix.decode("utf-8", "replace")
 
@@ -885,10 +848,7 @@ def _generate_complete(model: PythonObject, value: PythonObject, maximum: Python
     var dest = i32_ptr(Int(py=result._addr))
     var prompt = i32_ptr(Int(py=s.prompt._addr))
     var tail = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=continuation._addr))
-    for r in range(b):
-        memcpy(dest=dest + r * (l + n), src=prompt + r * l, count=l)
-        if n > 0:
-            memcpy(dest=dest + r * (l + n) + l, src=tail + r * n, count=n)
+    causal_lm_join_continuation(dest, prompt, tail, b, l, n)
     _ = continuation^
     return result
 
@@ -917,8 +877,10 @@ def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, 
     var ids = encode(tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
     var prompt = generation_array([1, len(ids)], "i")
     var ptr = i32_ptr(Int(py=prompt._addr))
-    for i in range(len(ids)):
-        ptr[i] = Int32(Int(py=ids[i]))
+    # The CPython array constructor unpacks the id list to native int64 storage.
+    var packed = GENERATION_BOUNDARY.get_or_create_ptr()[].arrays("q", ids)
+    causal_lm_store_ids(ptr, MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=packed.buffer_info()[0])), len(ids))
+    _ = packed^
     var stream = causal_lm_stream_binding(model, prompt, maximum, options)
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
     owner[].tokenizer = tokenizer
@@ -973,31 +935,31 @@ def _fingerprint(model: PythonObject) raises -> PythonObject:
     if model._norm is not None:
         h.update(_array_bytes(model._norm))
     h.update(_array_bytes(model._head))
-    for i in range(len(model._blocks)):
+    for i in range(len(model._blocks)):  # driver-loop: over model layers
         var blk = _block(model, i)
         if String(model.kind) == "transformer":
             _hash_scalar(h, blk["_opts_tail"])
             _hash_scalar(h, blk["n_heads"])
             _hash_scalar(h, blk["n_kv_heads"])
             _hash_scalar(h, blk["window"])
-            for j in range(len(blk["_wopt"])):
+            for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
                 if blk["_wopt"][j] is not None:
                     h.update(_array_bytes(blk["_wopt"][j]))
         elif String(model.kind) == "mamba2":
             _hash_scalar(h, blk["dt_limit"])
         else:
             _hash_scalar(h, model._native_entries["mamba1_profile"])
-        for j in range(len(blk["_w"])):
+        for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
                 _hash_scalar(h, blk["_w"][j].shape)
                 h.update(_array_bytes(blk["_w"][j]))
         if model._head_int15 is not None:
-            for j in range(len(blk["_int15"])):
+            for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
                 if blk["_int15"][j] is not None:
-                    for k in range(3):
+                    for k in range(3):  # small-loop(int15 plane triple)
                         h.update(_array_bytes(blk["_int15"][j][k]))
     if model._head_int15 is not None:
-        for k in range(3):
+        for k in range(3):  # small-loop(int15 head plane triple)
             h.update(_array_bytes(model._head_int15[k]))
     return h.hexdigest()
 
@@ -1015,16 +977,16 @@ def _state_arrays(kind: String, profile: Int = 1) -> List[String]:
 def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     var h = _hash()
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    for name in [String("schema"), String("model"), String("options"), String("maximum"),
+    for name in [String("schema"),  # small-loop(checkpoint scalar fields) String("model"), String("options"), String("maximum"),
                  String("produced"), String("positions"), String("lengths"), String("finished"), String("text"), String("tokenizer")]:
         _hash_scalar(h, checkpoint[name])
     h.update(checkpoint["pending_bytes"])
     h.update(_array_bytes(checkpoint["prompt"]))
     h.update(_array_bytes(checkpoint["current"]))
-    for i in range(len(checkpoint["layers"])):
+    for i in range(len(checkpoint["layers"])):  # driver-loop: over checkpoint layers
         var layer = checkpoint["layers"][i]
         var names = g[].bi.sorted(layer.keys())
-        for j in range(len(names)):
+        for j in range(len(names)):  # driver-loop: over layer state field names
             _hash_scalar(h, names[j])
             var value = layer[names[j]]
             if g[].bi.type(value) is g[].array_cls:
@@ -1050,10 +1012,7 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
     result["prompt"] = generation_copy(s[].prompt)
     result["current"] = generation_copy(s[].current)
     result["lengths"] = py_ints(s[].lengths)
-    var finished = g[].bi.list()
-    for i in range(len(s[].finished)):
-        finished.append(s[].finished[i])
-    result["finished"] = finished
+    result["finished"] = g[].bi.list(g[].bi.map(g[].bi.bool, py_ints(causal_lm_flags_as_ints(s[].finished))))
     result["text"] = PythonObject(s[].tokenizer is not None)
     result["tokenizer"] = PythonObject(None)
     if s[].tokenizer is not None:
@@ -1074,13 +1033,13 @@ def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:
     var kind = String(s[].model.kind)
     var profile = Int(py=s[].model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
     var arrays = _state_arrays(kind, profile)
-    for i in range(len(s[].state.layers)):
+    for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
         var st = s[].state.layers[i]
         var parallel = s[].model._native_entries.get("parallel_call")
         if parallel is not None:
             st = parallel("state_snapshot", Python.list(st))
         var entry = g[].bi.dict()
-        for j in range(len(arrays)):
+        for j in range(len(arrays)):  # driver-loop: over layer state arrays
             entry[arrays[j]] = generation_copy(g[].bi.getattr(st, arrays[j]))
         if kind == "transformer":
             entry["cached_tokens"] = st.cached_tokens
@@ -1125,23 +1084,28 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
         if Int(py=checkpoint["positions"]) != position:
             raise Error("generation: checkpoint cache position disagrees with output count")
         s[].state.positions = PythonObject(position)
-        for i in range(b):
-            s[].lengths[i] = Int(py=checkpoint["lengths"][i])
-            s[].finished[i] = Bool(py=checkpoint["finished"][i])
-            if s[].lengths[i] < 0 or s[].lengths[i] > s[].produced:
-                raise Error("generation: invalid checkpoint row length")
+        # The CPython array constructor unpacks the per-row lists to native storage.
+        var packed_lengths = g[].arrays("q", checkpoint["lengths"])
+        var packed_finished = g[].arrays("b", g[].bi.map(g[].bi.bool, checkpoint["finished"]))
+        causal_lm_restore_rows(
+            MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=packed_lengths.buffer_info()[0])),
+            MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=Int(py=packed_finished.buffer_info()[0])),
+            b, s[].produced, s[].lengths, s[].finished,
+        )
+        _ = packed_lengths^
+        _ = packed_finished^
         if len(checkpoint["layers"]) != len(s[].state.layers):
             raise Error("generation: checkpoint layer count differs")
         var kind = String(model.kind)
         var profile = Int(py=model._native_entries["mamba1_profile"]) if kind == "mamba1" else 1
         var arrays = _state_arrays(kind, profile)
-        for i in range(len(s[].state.layers)):
+        for i in range(len(s[].state.layers)):  # driver-loop: over model layer states
             var dest = s[].state.layers[i]
             var parallel = model._native_entries.get("parallel_call")
             if parallel is not None:
                 dest = parallel("state_snapshot", Python.list(dest))
             var source = checkpoint["layers"][i]
-            for j in range(len(arrays)):
+            for j in range(len(arrays)):  # driver-loop: over layer state arrays
                 var expected = g[].bi.getattr(dest, arrays[j])
                 var supplied = source[arrays[j]]
                 if g[].bi.type(supplied) is not g[].array_cls or String(supplied.dtype) != "<f4" or not Bool(py=supplied.shape == expected.shape):
