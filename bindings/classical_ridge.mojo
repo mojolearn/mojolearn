@@ -167,3 +167,19 @@ def classical_linear_predict(model: PythonObject, value: PythonObject, entries: 
     _ = x^
     _ = coef^
     return out
+
+
+def classical_linear_predict_public(model: PythonObject, value: PythonObject,
+                                   entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    # PublicOutputsMixin historically widens the completed float32 prediction
+    # to float64. Preserve this output conversion without changing the fitted
+    # kernel or the float32 prediction consumed internally by R2 scoring.
+    var narrow = classical_linear_predict(model, value, entries, context)
+    var size = Int(py=narrow.size)
+    var wide = classical_array(size, 0, context, True)
+    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(narrow)))
+    var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(wide)))
+    for k in range(size):  # native output marshaling: exact widening of the completed prediction buffer
+        dst[k] = Float64(src[k])
+    _ = narrow^
+    return wide
