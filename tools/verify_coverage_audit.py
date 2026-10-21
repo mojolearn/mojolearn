@@ -150,15 +150,31 @@ def patch_nodes(ls):
             text = open(os.path.join(ROOT, patch)).read()
         except OSError:
             continue
-        target, removed = None, defaultdict(list)
+        # per hunk, the lines it removes, or, for a hunk that only adds, its
+        # context lines: the definition holding them is the one patched
+        target, removed, hunk = None, defaultdict(list), None
+
+        def close(h):
+            if h and target:
+                removed[target].extend(h["minus"] or h["ctx"])
+
         for line in text.splitlines():
-            if line.startswith("+++ "):
+            if line.startswith("--- "):
+                close(hunk)
+                hunk = None
+            elif line.startswith("+++ "):
                 target = line[4:].strip()
                 target = target[2:] if target.startswith("b/") else target
-            elif line.startswith("-") and not line.startswith("---") and target:
-                body = line[1:].strip()
-                if len(body) > 6:
-                    removed[target].append(body)
+            elif line.startswith("@@"):
+                close(hunk)
+                hunk = dict(minus=[], ctx=[])
+            elif hunk is not None and line.startswith("-"):
+                if len(line[1:].strip()) > 6:
+                    hunk["minus"].append(line[1:].strip())
+            elif hunk is not None and line.startswith(" "):
+                if len(line[1:].strip()) > 6:
+                    hunk["ctx"].append(line[1:].strip())
+        close(hunk)
         for tgt, lines in removed.items():
             if not tgt.endswith(".mojo") or not os.path.exists(os.path.join(ROOT, tgt)):
                 continue
@@ -855,8 +871,13 @@ def sabotage_of(row):
     if other:
         bits.append(", ".join(d.replace("MOJOLEARN_", "") for d in other[:2]) + (" +%d" % (len(other) - 2)
                                                                                if len(other) > 2 else ""))
-    if patches:
-        bits.append(f"{len(patches)} seam patch(es)")
+    cov = [x for x in patches if os.path.basename(x).startswith("coverage_")]
+    seam = [x for x in patches if x not in cov]
+    if cov:
+        bits.append("coverage arm " + ", ".join(f"`{os.path.basename(x)[:-len('.patch')]}`" for x in cov[:2])
+                    + (f" +{len(cov) - 2}" if len(cov) > 2 else ""))
+    if seam:
+        bits.append(f"{len(seam)} seam patch(es)")
     if bits:
         return "armed", "; ".join(bits)
     if not row["changed_kernel"]:
