@@ -143,7 +143,7 @@ def mlp_store_index(handle: Int) raises -> Int:
     return index
 
 
-def mlp_store_release(handle: Int) -> Bool:
+def mlp_store_release(handle: Int) raises -> Bool:
     """Free `handle`'s slot; False when it is not live (already released)."""
     var store = MLP_STORE.get_or_create_ptr()
     var index = handle % MLP_HANDLE_SPAN if handle > 0 else -1

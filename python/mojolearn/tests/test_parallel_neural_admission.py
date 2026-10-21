@@ -101,18 +101,18 @@ def test_public_train_refuses_hooks_without_launch_or_state_change(location):
         audit_native_call(owner.close).assert_native()
 
 
-@pytest.mark.parametrize('field', ['optimizer', 'config', 'schedule', 'default_factory'])
+@pytest.mark.parametrize('field', ['optimizer', 'handle', 'default_factory'])
 def test_mutated_model_metadata_is_refused_but_native_cleanup_remains_available(field):
     model = model_fixture()
     owner = audit_native_call(ParallelNeuralTrainer, model).assert_native()
+    # The model's state lives behind its native handle; what a caller can
+    # still mutate is the instance dictionary itself.
     if field == 'optimizer':
         model._opt = Hook()
-    elif field == 'config':
-        model._config['lr'] = Hook()
-    elif field == 'schedule':
-        model._schedule['callback'] = Hook()
+    elif field == 'handle':
+        model._handle = Hook()
     else:
-        model._schedule = defaultdict(lambda: Hook().fail('default factory'), model._schedule)
+        model._schedule = defaultdict(lambda: Hook().fail('default factory'), {'dataset': 'x'})
     rejected(owner.checkpoint)
     assert owner._pool['workers'] == owner._update_pool['workers'] == []
     # Closing touches native locks/process owners, not rejected model data.

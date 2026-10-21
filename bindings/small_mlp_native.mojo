@@ -599,8 +599,6 @@ def _resident_steps(index: Int, entries: PythonObject, x: PythonObject, y: Pytho
     var params = Python.list(rows, k, mode, t, s.lr, s.beta1, s.beta2, s.eps, s.weight_decay, 1 if want_dx else 0)
     var entry = entries["mlp_resident_steps"] if k > 1 else entries["mlp_resident_step"]
     var written = _native_resident_step(entry, PythonObject(handle), addresses, params)
-    _ = x^
-    _ = y^
     if written != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
     if mode == _FORWARD:
@@ -648,8 +646,6 @@ def _fused(mut state: MlpState, entries: PythonObject, x: PythonObject, y: Pytho
     var params = Python.list(rows, mode, t, state.lr, state.beta1, state.beta2, state.eps,
                              state.weight_decay, 1 if want_dx else 0)
     var written = _native_step(entries["mlp_train_step"], addresses, params)
-    _ = x^
-    _ = y^
     _ = info^
     _ = scratch_m^
     _ = scratch_v^
@@ -742,8 +738,6 @@ def _gradient(state: MlpState, entries: PythonObject, x: PythonObject, y: Python
     var dx = PythonObject(None)
     if want_dx:
         dx = _gemm(entries, Int(py=dhidden._addr), state.params_addr(0), rows, 8, 16, _NN)
-    _ = x^
-    _ = y^
     _ = row_loss^
     _ = incoming^
     return Python.list(value, logits, Python.list(dw1, db1, dw2, db2), dx)
