@@ -661,6 +661,36 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         if not eps > 0:
             raise Error("ValueError: eps must be positive")
         fs.append(eps)
+    if name == "transformer_linear":
+        var b = Python.import_module("builtins")
+        for j in range(2):  # small-loop(2: projection handles): exact native scalar admission
+            if not (b.type(args[j]) is b.int):
+                raise Error("TypeError: transformer handles must be exact native integers")
+        code = 79
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
+    if name == "rms_norm":
+        var b = Python.import_module("builtins")
+        for j in range(2):  # small-loop(2: RMSNorm handles): exact native scalar admission
+            if not (b.type(args[j]) is b.int):
+                raise Error("TypeError: transformer handles must be exact native integers")
+        var kind = b.type(args[2])
+        if not (kind is b.float or kind is b.int):
+            raise Error("TypeError: RMSNorm epsilon must be an exact native scalar")
+        code = 77
+        hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
+        fs.append(Float32(py=args[2]))
+    if name == "rotary":
+        var b = Python.import_module("builtins")
+        for j in range(3):  # small-loop(3: rotary handle/position metadata): exact native scalar admission
+            if not (b.type(args[j]) is b.int):
+                raise Error("TypeError: rotary handles and positions must be exact native integers")
+        var kind = b.type(args[3])
+        if not (kind is b.float or kind is b.int):
+            raise Error("TypeError: rotary theta must be an exact native scalar")
+        code = 78
+        hs = [_int(args[0], "input", 1)]
+        ints = [_int(args[1], "head_dim", 1), _int(args[2], "offset", 0)]
+        fs.append(Float32(py=args[3]))
     if name == "dropout":
         code = 21
         hs.append(_int(args[0], "handle", 1))

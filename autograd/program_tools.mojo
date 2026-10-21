@@ -159,6 +159,12 @@ def program_op_name(code: Int) -> String:
         return "cumsum"
     if code == 76:
         return "index"
+    if code == 77:
+        return "rms_norm"
+    if code == 78:
+        return "rotary"
+    if code == 79:
+        return "transformer_linear"
     return "op_" + String(code)
 
 

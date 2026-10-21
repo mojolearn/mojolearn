@@ -123,9 +123,10 @@ This was `--validation-only`, not a CPU performance race or GPU qualification.
 
 No retained real full model currently demonstrates active reshape,
 permutation, pruning, broadcast/ReLU or duplicate-elimination coverage.
-Transformer attention layout is a plausible next capture, but the existing
-specialized block is opaque and primitive RMSNorm/rotary/attention lowering
-has not been shown bit-identical to that block. Sequential's native model-fit
+Transformer attention layout now has a source-only capture adapter described
+in [the native capture handoff](GRAPH_TRANSFORMER_CAPTURE_20261020.md), but its
+RMSNorm/rotary/projection additions and complete-block equivalence remain
+uncompiled and unverified. Sequential's native model-fit
 ABI is also distinct from OpsProgram replay. Substituting either specialized
 runner, or constructing artificial redundant nodes, would not fill the gap.
 Actual source-derived captures, their complete datasets/checkpoints and

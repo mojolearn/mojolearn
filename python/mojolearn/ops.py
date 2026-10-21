@@ -762,6 +762,17 @@ class Session:
         the element position: use a new ``counter`` for every step."""
         return self._session_native(self, "dropout", (x, p, seed, counter))
 
+    def _transformer_linear(self, x, weight):
+        return self._session_native(self, "transformer_linear", (x, weight))
+
+    def rms_norm(self, x, weight, eps=1e-6):
+        """Normalize each last-axis row by its root mean square, then scale by weight."""
+        return self._session_native(self, "rms_norm", (x, weight, eps))
+
+    def rotary(self, x, head_dim, *, offset=0, theta=10000.0):
+        """Apply full-width rotary embeddings to sequence-by-concatenated-head features."""
+        return self._session_native(self, "rotary", (x, head_dim, offset, theta))
+
     # ------------------------------------------------------------ data steps
     def permutation(self, n, seed=0, epoch=0):
         """A random order of the rows ``0 .. n-1`` as an ``(n, 1)`` tensor,
