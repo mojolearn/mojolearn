@@ -53,7 +53,15 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.byte_lm_afn import BYTE_LM_FAST_APPLE
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
+from training.byte_lm_session_ops import (
+    BYTE_LM_NEURAL_CTX,
+    byte_session_open, byte_session_step, byte_session_eval,
+    byte_session_export_state, byte_session_export_gradients, byte_session_rollback,
+    byte_session_logits, byte_owner_step, byte_owner_export_state,
+    byte_owner_export_gradients, byte_owner_logits, byte_scatter_named, byte_file_sha256,
+)
+from bindings.sha256_door import sha256_hexdigest
+comptime _NEURAL_CTX = BYTE_LM_NEURAL_CTX
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_contract import OptimizerConfig
@@ -528,76 +536,31 @@ def byte_lm_session_open_binding(session: PythonObject, addresses: PythonObject,
     """Admit host state ONCE and upload it ONCE (design 1.1 item 1).
 
     addresses[4] = [in_param, in_m, in_v, in_flags_i32]; params[12] as
-    `_byte_lm_run` (action ignored; completed is params[1]). The Lists are
-    validated by `byte_validate_state` before any device operation and the
-    trainer re-validates them at construction. Returns the admitted
-    completed step. Refused on an open session: close it first.
+    `_byte_lm_run` (action ignored; completed is params[1]). Returns the
+    admitted completed step. Refused on an open session: close it first.
+    The work is `byte_session_open` (training/byte_lm_session_ops.mojo).
     """
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    var n = cfg_shape.n_total()
-    var n_tensors = cfg_shape.n_tensors()
     var completed = _params_completed(params)
     var cfg = _params_optimizer(params)
     var addr = _read_addresses(addresses, 4)
-    var cells: List[Int] = [n, n, n, n_tensors]
-    _validate_slot_table(addr, cells, 4)
-    if owner[].busy:
-        raise Error("byte LM: session is busy")
-    if Bool(owner[].trainer) or Bool(owner[].ctx):
-        raise Error("byte LM: session is already open; close it first")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
-    var tk = Int(perf_counter_ns())
-    # No GPU work before all borrowed inputs become validated owned host lists.
-    var initial_p = _read_f32(addr[0], n)
-    var initial_m = _read_f32(addr[1], n)
-    var initial_v = _read_f32(addr[2], n)
-    var flags = _read_flags(addr[3], n_tensors)
-    _btick(ton, tk, "open.bind_read_inputs")
-    _bbytes(ton, "open.bind_read_inputs_bytes", 3 * n * 4 + n_tensors * 4)
-    byte_validate_state(initial_p, initial_m, initial_v, flags, completed, cfg_shape)
-    _btick(ton, tk, "open.bind_validate_inputs")
-    owner[].busy = True
-    owner[].usable = False
-    try:
-        with GILReleased(Python()):
-            if keep_context:
-                # DEVIATION 2513: the same keeper the per-call path uses.
-                BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
-            owner[].ctx = neural_ctx[_NEURAL_CTX]()
-            owner[].trainer = ByteTrainer(owner[].ctx.value(), initial_p, initial_m,
-                initial_v, flags, completed, cfg, cfg_shape)
-            owner[].ctx.value().synchronize()
-            # Context creation, allocation and the one upload of 3n floats.
-            _btick(ton, tk, "open.bind_context_and_upload")
-            _bbytes(ton, "open.bind_context_and_upload_bytes", 3 * n * 4)
-    except error:
-        owner[].busy = False
-        owner[].logits_scratch = None
-        owner[].trainer = None
-        owner[].ctx = None
-        raise error
-    owner[].busy = False
-    owner[].usable = True
-    return PythonObject(completed)
+    var result = completed
+    with GILReleased(Python()):
+        result = byte_session_open(owner[], addr, completed, cfg, cfg_shape)
+    return PythonObject(result)
 
 
 def byte_lm_session_step_binding(session: PythonObject, addresses: PythonObject,
                                  params: PythonObject, shape: PythonObject) raises -> PythonObject:
     """One device-owned step. addresses[4] = [in_ids_i32, in_flags_i32,
     out_loss_f32, out_flags_i32]; params[12] as `_byte_lm_run` with
-    action=1. In: the ids (8 KB at the target) and the flags for the scalar
-    admission. Out: the 4 B loss and the flags. Returns completed+1. A
-    failure after the update is rolled back on the device by the trainer
-    before it propagates; a lost context marks the session unusable.
+    action=1. Returns completed+1. The work is `byte_session_step`.
     """
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    var n_tensors = cfg_shape.n_tensors()
-    var n_ids = cfg_shape.batch * (cfg_shape.length + 1)
     if _params_action(params) != 1:
         raise Error("byte LM: session step requires action 1")
     var completed = _params_completed(params)
@@ -605,233 +568,74 @@ def byte_lm_session_step_binding(session: PythonObject, addresses: PythonObject,
         raise Error("byte LM: completed step outside admitted bound")
     var cfg = _params_optimizer(params)
     var addr = _read_addresses(addresses, 4)
-    var cells: List[Int] = [n_ids, n_tensors, 1, n_tensors]
-    _validate_slot_table(addr, cells, 2)
-    var ids = _read_ids(addr[0], n_ids)
-    var flags = _read_flags(addr[1], n_tensors)
-    byte_validate_tokens(ids, cfg_shape)
-    _require_open(owner[])
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    var tk = Int(perf_counter_ns())
-    var loss = Float32(0)
-    var result_step = completed
-    var out_flags = List[Bool]()
-    # DEVIATION 2630: the step's launch, synchronize, copy and allocation
-    # counts (core/step_phase.mojo): zeros and no print on a build without
-    # -D MOJOLEARN_STEP_PHASE_TIMERS=1.
-    var counts0 = step_counts_now()
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            ref ctx = owner[].ctx.value()
-            _admit_session_scalars(owner[], completed, cfg, flags, cfg_shape)
-            _btick(ton, tk, "step.bind_scalar_admission")
-            var result = byte_train_step_resident(ctx, owner[].trainer.value(), ids)
-            if ton:
-                tk = Int(perf_counter_ns())
-            loss = result.loss
-            result_step = result.completed_steps
-            out_flags = result.flags.copy()
-            if result_step != completed + 1:
-                raise Error("byte LM: successful result has wrong completed step")
-            if _nonfinite(loss):
-                raise Error("byte LM: nonfinite returned loss")
-            if len(out_flags) != n_tensors:
-                raise Error("byte LM: wrong flags length")
-            step_count_sync()
-            ctx.synchronize()
-            _btick(ton, tk, "step.bind_final_sync")
-            step_counts_report(counts0)
-    except error:
-        owner[].busy = False
-        _mark_if_lost(owner[])
-        raise error
-    owner[].busy = False
-    _write_flags(addr[3], out_flags)
-    _write_loss(addr[2], loss)
-    _btick(ton, tk, "step.bind_publish")
-    _bbytes(ton, "step.bind_publish_bytes", 4 + n_tensors * 4)
-    return PythonObject(result_step)
+    var result = completed
+    with GILReleased(Python()):
+        result = byte_session_step(owner[], addr, completed, cfg, cfg_shape)
+    return PythonObject(result)
 
 
 def byte_lm_session_eval_binding(session: PythonObject, addresses: PythonObject,
                                  params: PythonObject, shape: PythonObject) raises -> PythonObject:
     """Forward-only loss on the resident state. addresses[3] = [in_ids_i32,
     in_flags_i32, out_loss_f32]; params[12] with action=0. Returns the
-    unchanged completed step. No state download (design 2.3); gate G1
-    exports before and after an evaluation to show it writes nothing.
+    unchanged completed step. The work is `byte_session_eval`.
     """
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    var n_tensors = cfg_shape.n_tensors()
-    var n_ids = cfg_shape.batch * (cfg_shape.length + 1)
     if _params_action(params) != 0:
         raise Error("byte LM: session eval requires action 0")
     var completed = _params_completed(params)
     var cfg = _params_optimizer(params)
     var addr = _read_addresses(addresses, 3)
-    var cells: List[Int] = [n_ids, n_tensors, 1]
-    _validate_slot_table(addr, cells, 2)
-    var ids = _read_ids(addr[0], n_ids)
-    var flags = _read_flags(addr[1], n_tensors)
-    byte_validate_tokens(ids, cfg_shape)
-    _require_open(owner[])
-    var loss = Float32(0)
-    var result_step = completed
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            ref ctx = owner[].ctx.value()
-            _admit_session_scalars(owner[], completed, cfg, flags, cfg_shape)
-            loss = byte_eval_loss_resident(ctx, owner[].trainer.value(), ids)
-            result_step = owner[].trainer.value().completed_steps
-            if result_step != completed:
-                raise Error("byte LM: successful result has wrong completed step")
-            if _nonfinite(loss):
-                raise Error("byte LM: nonfinite returned loss")
-            for i in range(n_tensors):  # small-loop(n_tensors: momentum flags, one per parameter tensor): compares per tensor flags, not data
-                if flags[i] != owner[].trainer.value().buffers.buf_initialized[i]:
-                    raise Error("byte LM eval changed momentum flags")
-            ctx.synchronize()
-    except error:
-        owner[].busy = False
-        _mark_if_lost(owner[])
-        raise error
-    owner[].busy = False
-    _write_loss(addr[2], loss)
-    return PythonObject(result_step)
+    var result = completed
+    with GILReleased(Python()):
+        result = byte_session_eval(owner[], addr, completed, cfg, cfg_shape)
+    return PythonObject(result)
 
 
 def byte_lm_session_export_state_binding(session: PythonObject, addresses: PythonObject,
                                          shape: PythonObject) raises -> PythonObject:
     """Copy the resident state out. addresses[4] = [out_param, out_m,
-    out_v, out_flags_i32], all outputs, all disjoint. The device state is
-    re-scanned (`byte_validate_device_state`) before the download, staged
-    in pinned host buffers and published into the caller's arrays with
-    `copy_f32` only after the synchronized scope succeeds; no List is
-    built and the session retains no pointer. Returns the completed step.
+    out_v, out_flags_i32]. Returns the completed step. The work is
+    `byte_session_export_state`.
     """
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    var n = cfg_shape.n_total()
-    var n_tensors = cfg_shape.n_tensors()
     var addr = _read_addresses(addresses, 4)
-    var cells: List[Int] = [n, n, n, n_tensors]
-    _validate_slot_table(addr, cells, 0)
-    _require_open(owner[])
-    if owner[].trainer.value().config.profile() != cfg_shape.profile():
-        raise Error("byte LM: resident model shape mismatch")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    var tk = Int(perf_counter_ns())
-    ref ctx = owner[].ctx.value()
-    var hp = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var hm = ctx.enqueue_create_host_buffer[DType.float32](n)
-    var hv = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    var flags = List[Bool]()
-    var step = 0
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            owner[].trainer.value().validate_device_state(ctx, owner[].trainer.value().completed_steps)
-            _btick(ton, tk, "export.validate_device_state")
-            _stage_download(ctx, hp, owner[].trainer.value().buffers.param, n)
-            _stage_download(ctx, hm, owner[].trainer.value().buffers.m_state, n)
-            _stage_download(ctx, hv, owner[].trainer.value().buffers.v_state, n)
-            flags = owner[].trainer.value().buffers.buf_initialized.copy()
-            step = owner[].trainer.value().completed_steps
-            ctx.synchronize()
-            _btick(ton, tk, "export.download_state")
-            _bbytes(ton, "export.download_state_bytes", 3 * n * 4)
-    except error:
-        owner[].busy = False
-        _mark_if_lost(owner[])
-        raise error
-    owner[].busy = False
-    copy_f32(hp.unsafe_ptr(), f32_ptr(addr[0]), n)
-    copy_f32(hm.unsafe_ptr(), f32_ptr(addr[1]), n)
-    copy_f32(hv.unsafe_ptr(), f32_ptr(addr[2]), n)
-    _write_flags(addr[3], flags)
-    _btick(ton, tk, "export.publish")
-    _bbytes(ton, "export.publish_bytes", 3 * n * 4 + n_tensors * 4)
-    _ = hp^
-    _ = hm^
-    _ = hv^
-    return PythonObject(step)
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_session_export_state(owner[], addr, cfg_shape)
+    return PythonObject(result)
 
 
 def byte_lm_session_export_gradients_binding(session: PythonObject, addresses: PythonObject,
                                              shape: PythonObject) raises -> PythonObject:
     """Copy the gradient of the LAST completed step out. addresses[1] =
-    [out_grad]. Refused unless a step completed since open, rollback or
-    any failure (`grad_step == completed_steps`); the device `grad` is
-    scratch for the next backward. Returns the step the gradient belongs to.
+    [out_grad]. Returns the step the gradient belongs to. The work is
+    `byte_session_export_gradients`.
     """
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    var n = cfg_shape.n_total()
     var addr = _read_addresses(addresses, 1)
-    var cells: List[Int] = [n]
-    _validate_slot_table(addr, cells, 0)
-    _require_open(owner[])
-    if owner[].trainer.value().config.profile() != cfg_shape.profile():
-        raise Error("byte LM: resident model shape mismatch")
-    var grad_step = owner[].trainer.value().grad_step
-    if grad_step < 0 or grad_step != owner[].trainer.value().completed_steps:
-        raise Error("byte LM: no gradient to export; complete a step first")
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    var tk = Int(perf_counter_ns())
-    ref ctx = owner[].ctx.value()
-    var hg = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    var bad_g = -1
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            # lane cgr4-download-loop: the finite scan runs on the device
-            bad_g = owner[].trainer.value().scan.first_nonfinite(
-                ctx, owner[].trainer.value().buffers.grad, n)
-            _stage_download(ctx, hg, owner[].trainer.value().buffers.grad, n)
-            ctx.synchronize()
-            _btick(ton, tk, "export.download_gradients")
-            _bbytes(ton, "export.download_gradients_bytes", n * 4)
-    except error:
-        owner[].busy = False
-        _mark_if_lost(owner[])
-        raise error
-    owner[].busy = False
-    if bad_g >= 0:
-        raise Error("byte LM: nonfinite returned gradient")
-    copy_f32(hg.unsafe_ptr(), f32_ptr(addr[0]), n)
-    _btick(ton, tk, "export.publish_gradients")
-    _ = hg^
-    return PythonObject(grad_step)
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_session_export_gradients(owner[], addr[0], cfg_shape)
+    return PythonObject(result)
 
 
 def byte_lm_session_rollback_binding(session: PythonObject) raises -> PythonObject:
     """Restore the device state from the shadow of the last step that
-    reached its shadow point (design 4.2 item 6): for a failure the Python
-    layer detects after native success. Nothing to restore (no such step,
-    or the trainer already rolled back inside the step) is not an error.
-    Returns the completed step after the call. A rollback whose re-scan
-    does not answer marks the session lost.
+    reached its shadow point (design 4.2 item 6). Returns the completed step
+    after the call. The work is `byte_session_rollback`.
     """
     var owner = session.downcast_value_ptr[ByteLMSession]()
-    _require_open(owner[])
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _ = byte_rollback(owner[].ctx.value(), owner[].trainer.value())
-            owner[].ctx.value().synchronize()
-    except error:
-        owner[].busy = False
-        _mark_if_lost(owner[])
-        raise error
-    owner[].busy = False
-    return PythonObject(owner[].trainer.value().completed_steps)
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_session_rollback(owner[])
+    return PythonObject(result)
 
 
 def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
@@ -993,55 +797,31 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
     return PythonObject(cells_out)
 
 
+def _claimed_step(completed: PythonObject) raises -> Int:
+    var claimed = Int(py=Python.import_module("operator").index(completed))
+    if claimed < 0 or claimed >= 1000000:
+        raise Error("byte LM: completed step outside admitted bound")
+    return claimed
+
+
 def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObject,
                                    dims: PythonObject, shape: PythonObject,
                                    completed: PythonObject) raises -> PythonObject:
     """Forward-only logits on an open resident session. addresses[2] =
     [in_ids_i32 (batch * length), out_logits_f32 (batch * length * vocab)];
     dims = [batch, length]; `completed` is the caller's committed step, which
-    must equal the session's, the scalar half of the admission
-    `byte_lm_session_eval` performs (a read-only call that silently used a
-    different state than the caller believes is a wrong provenance, not a
-    convenience). Writes no parameter, moment, flag or step. Returns the
-    number of logits written."""
+    must equal the session's. Writes no parameter, moment, flag or step.
+    Returns the number of logits written. The work is `byte_session_logits`."""
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
     var owner = session.downcast_value_ptr[ByteLMSession]()
     var bl = _logits_dims(dims, cfg_shape)
-    var claimed = Int(py=Python.import_module("operator").index(completed))
-    if claimed < 0 or claimed >= 1000000:
-        raise Error("byte LM: completed step outside admitted bound")
-    var m = bl[0] * bl[1]
-    var cells_out = m * cfg_shape.vocab_size
+    var claimed = _claimed_step(completed)
     var addr = _read_addresses(addresses, 2)
-    var cells: List[Int] = [m, cells_out]
-    _validate_slot_table(addr, cells, 1)
-    var ids = _read_ids(addr[0], m)
-    byte_logits_validate(ids, bl[0], bl[1], cfg_shape)
-    _require_open(owner[])
-    if owner[].trainer.value().config.profile() != cfg_shape.profile():
-        raise Error("byte LM: resident model shape mismatch")
-    if owner[].trainer.value().completed_steps != claimed:
-        raise Error("byte LM: resident completed-step mismatch")
-    var step_before = owner[].trainer.value().completed_steps
-    # lane/neural-net-experiment: one device-to-host copy into the caller's
-    # array (`byte_logits_resident_into`); see `_logits_forward_into`.
-    var out = f32_ptr(addr[1])
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            ref ctx = owner[].ctx.value()
-            byte_logits_resident_into(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
-                                      owner[].logits_scratch, out)
-            if owner[].trainer.value().completed_steps != step_before:
-                raise Error("byte LM logits changed the completed step")
-            ctx.synchronize()
-    except error:
-        owner[].busy = False
-        _mark_if_lost(owner[])
-        raise error
-    owner[].busy = False
-    return PythonObject(cells_out)
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_session_logits(owner[], addr, bl[0], bl[1], claimed, cfg_shape, False)
+    return PythonObject(result)
 
 
 def byte_lm_session_next_bytes_binding(session: PythonObject, addresses: PythonObject,
@@ -1050,45 +830,162 @@ def byte_lm_session_next_bytes_binding(session: PythonObject, addresses: PythonO
     """cpu3-seq (2026-10-04): the greedy next byte of every row on an open
     resident session. addresses[2] = [in_ids_i32 (batch * length),
     out_next_i32 (batch)]; dims = [batch, length]; `completed` as in
-    `byte_lm_session_logits`. The logits stay on the device: the forward,
-    the non-finite refusal and the per-row argmax (ties to the lowest byte)
-    run there and `batch` int32 come back. Writes no parameter, moment, flag
-    or step. Returns `batch`."""
+    `byte_lm_session_logits`. The logits stay on the device. Returns
+    `batch`. The work is `byte_session_logits`."""
     _require_binding_profile()
     var cfg_shape = _byte_config(shape)
     var owner = session.downcast_value_ptr[ByteLMSession]()
     var bl = _logits_dims(dims, cfg_shape)
-    var claimed = Int(py=Python.import_module("operator").index(completed))
-    if claimed < 0 or claimed >= 1000000:
-        raise Error("byte LM: completed step outside admitted bound")
-    var m = bl[0] * bl[1]
+    var claimed = _claimed_step(completed)
     var addr = _read_addresses(addresses, 2)
-    var cells: List[Int] = [m, bl[0]]
-    _validate_slot_table(addr, cells, 1)
-    var ids = _read_ids(addr[0], m)
-    byte_logits_validate(ids, bl[0], bl[1], cfg_shape)
-    _require_open(owner[])
-    if owner[].trainer.value().config.profile() != cfg_shape.profile():
-        raise Error("byte LM: resident model shape mismatch")
-    if owner[].trainer.value().completed_steps != claimed:
-        raise Error("byte LM: resident completed-step mismatch")
-    var step_before = owner[].trainer.value().completed_steps
-    var out = i32_ptr(addr[1])
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            ref ctx = owner[].ctx.value()
-            byte_next_bytes_resident_into(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
-                                          owner[].logits_scratch, out)
-            if owner[].trainer.value().completed_steps != step_before:
-                raise Error("byte LM next bytes changed the completed step")
-            ctx.synchronize()
-    except error:
-        owner[].busy = False
-        _mark_if_lost(owner[])
-        raise error
-    owner[].busy = False
-    return PythonObject(bl[0])
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_session_logits(owner[], addr, bl[0], bl[1], claimed, cfg_shape, True)
+    return PythonObject(result)
+
+
+# ---------------------------------------------------------------------------
+# The single-device trainer owner (mojolearn.SmallByteLanguageModelTrainer):
+# one entry per public method; each unpacks its arguments, calls ONE typed
+# owner function (training/byte_lm_session_ops.mojo) and returns its typed
+# result. Nothing is assigned to a Python object here.
+# ---------------------------------------------------------------------------
+
+
+def _read_address_list(addresses: PythonObject) raises -> List[Int]:
+    var addr = List[Int]()
+    for i in range(len(addresses)):  # small-loop(addresses: the call's address slots, one per buffer): reads the addresses, no data
+        addr.append(Int(py=addresses[i]))
+    return addr^
+
+
+def byte_lm_trainer_step_binding(session: PythonObject, addresses: PythonObject,
+                                 params: PythonObject, shape: PythonObject) raises -> PythonObject:
+    """`train_step` (params[0] = 1) or `evaluate` (params[0] = 0) of a
+    resident trainer in one call: admission of the host state when the
+    session is not open, the step or evaluation, and the gradient export
+    split by name when out_grad is given. addresses as `byte_owner_step`;
+    params[12] as `_byte_lm_run`. Returns the completed step after the
+    call; the loss, flags and gradients are written to the outputs."""
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var owner = session.downcast_value_ptr[ByteLMSession]()
+    var action = _params_action(params)
+    var completed = _params_completed(params)
+    var cfg = _params_optimizer(params)
+    var addr = _read_address_list(addresses)
+    var result = completed
+    with GILReleased(Python()):
+        result = byte_owner_step(owner[], addr, completed, cfg, cfg_shape, action == 1)
+    return PythonObject(result)
+
+
+def byte_lm_trainer_export_state_binding(session: PythonObject, addresses: PythonObject,
+                                         shape: PythonObject, completed: PythonObject,
+                                         release: PythonObject) raises -> PythonObject:
+    """The trainer's state export in one call. addresses[5] = [in_flags_i32,
+    out_param, out_m, out_v, out_flags_i32]; `completed` the committed step;
+    a true `release` closes the session after the export. Returns the
+    exported step. The work is `byte_owner_export_state`."""
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var owner = session.downcast_value_ptr[ByteLMSession]()
+    var claimed = _claimed_step(completed)
+    var close = Bool(py=release)
+    var addr = _read_addresses(addresses, 5)
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_owner_export_state(owner[], addr, claimed, cfg_shape, close)
+    return PythonObject(result)
+
+
+def byte_lm_trainer_export_gradients_binding(session: PythonObject, addresses: PythonObject,
+                                             shape: PythonObject, completed: PythonObject) raises -> PythonObject:
+    """The trainer's gradient export in one call. addresses = [out_grad]
+    and, for the gradient by name, one output per parameter tensor. Returns
+    the gradient's step, which must be `completed`. The work is
+    `byte_owner_export_gradients`."""
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var owner = session.downcast_value_ptr[ByteLMSession]()
+    var claimed = _claimed_step(completed)
+    var addr = _read_address_list(addresses)
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_owner_export_gradients(owner[], addr, claimed, cfg_shape)
+    return PythonObject(result)
+
+
+def _byte_lm_trainer_logits(session: PythonObject, addresses: PythonObject, dims: PythonObject,
+                            params: PythonObject, shape: PythonObject, next_bytes: Bool) raises -> PythonObject:
+    _require_binding_profile()
+    var cfg_shape = _byte_config(shape)
+    var owner = session.downcast_value_ptr[ByteLMSession]()
+    var bl = _logits_dims(dims, cfg_shape)
+    var completed = _params_completed(params)
+    var cfg = _params_optimizer(params)
+    var addr = _read_addresses(addresses, 6)
+    var result = 0
+    with GILReleased(Python()):
+        result = byte_owner_logits(owner[], addr, bl[0], bl[1], completed, cfg, cfg_shape, next_bytes)
+    return PythonObject(result)
+
+
+def byte_lm_trainer_logits_binding(session: PythonObject, addresses: PythonObject, dims: PythonObject,
+                                   params: PythonObject, shape: PythonObject) raises -> PythonObject:
+    """The trainer's `logits` in one call. addresses[6] = [in_ids_i32,
+    out_logits_f32, in_flags_i32, in_param, in_m, in_v] (the last three 0
+    on an open session); dims = [batch, length]; params[12] as
+    `_byte_lm_run` (the committed step and optimizer the admission uses).
+    Returns the number of logits written."""
+    return _byte_lm_trainer_logits(session, addresses, dims, params, shape, False)
+
+
+def byte_lm_trainer_next_bytes_binding(session: PythonObject, addresses: PythonObject, dims: PythonObject,
+                                       params: PythonObject, shape: PythonObject) raises -> PythonObject:
+    """The trainer's `next_bytes` in one call: as `byte_lm_trainer_logits`
+    with an int32 output of `batch` greedy next bytes. Returns `batch`."""
+    return _byte_lm_trainer_logits(session, addresses, dims, params, shape, True)
+
+
+def byte_lm_trainer_run_binding(addresses: PythonObject, named: PythonObject,
+                                params: PythonObject, shape: PythonObject) raises -> PythonObject:
+    """`train_step` / `evaluate` of a stateless trainer in one call:
+    `byte_lm_run_configured` (addresses[11], params[12]), then, for a
+    training step with `named` holding one output per parameter tensor, the
+    returned gradient split by name. Returns the completed step."""
+    var cfg = _byte_config(shape)
+    var named_addr = _read_address_list(named)
+    if len(named_addr) > 0:
+        if Int(py=params[0]) != 1:
+            raise Error("byte LM trainer: an evaluation returns no gradient")
+        var slots: List[Int] = [Int(py=addresses[8])]
+        var cells: List[Int] = [cfg.n_total()]
+        for j in range(len(named_addr)):  # driver-loop: over model parameter tensors
+            slots.append(named_addr[j])
+            cells.append(cfg.param_count(j))
+        if len(named_addr) != cfg.n_tensors():
+            raise Error("byte LM: expected one named output per parameter tensor")
+        _validate_slot_table(slots, cells, 0)
+    var session = ByteLMSession()
+    var result = _byte_lm_run(addresses, params, cfg, session)
+    if len(named_addr) > 0:
+        byte_scatter_named(Int(py=addresses[8]), named_addr, cfg)
+    return result
+
+
+def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
+    """hashlib.sha256(value).hexdigest() for a bytes-like value, by the Mojo SHA-256."""
+    return sha256_hexdigest(value)
+
+
+def byte_lm_file_sha256_binding(path: PythonObject) raises -> PythonObject:
+    """The SHA-256 of the file at `path`, streamed by `byte_file_sha256`."""
+    var name = String(py=path)
+    var hex = String()
+    with GILReleased(Python()):
+        hex = byte_file_sha256(name)
+    return PythonObject(hex)
 
 
 def byte_lm_parallel_create_binding() raises -> PythonObject:
@@ -1656,6 +1553,14 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_logits_binding]("byte_lm_logits")
         module.def_function[byte_lm_session_logits_binding]("byte_lm_session_logits")
         module.def_function[byte_lm_session_next_bytes_binding]("byte_lm_session_next_bytes")
+        module.def_function[byte_lm_trainer_step_binding]("byte_lm_trainer_step")
+        module.def_function[byte_lm_trainer_export_state_binding]("byte_lm_trainer_export_state")
+        module.def_function[byte_lm_trainer_export_gradients_binding]("byte_lm_trainer_export_gradients")
+        module.def_function[byte_lm_trainer_logits_binding]("byte_lm_trainer_logits")
+        module.def_function[byte_lm_trainer_next_bytes_binding]("byte_lm_trainer_next_bytes")
+        module.def_function[byte_lm_trainer_run_binding]("byte_lm_trainer_run")
+        module.def_function[sha256_hex_binding]("sha256_hex")
+        module.def_function[byte_lm_file_sha256_binding]("byte_lm_file_sha256")
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
