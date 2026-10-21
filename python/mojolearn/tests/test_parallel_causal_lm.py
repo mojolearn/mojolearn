@@ -387,6 +387,7 @@ def test_public_load_and_transport_failure_refuse_lost_state(tmp_path):
         with pytest.raises(ChildProcessError):
             os.waitpid(pid, os.WNOHANG)
     refused(split.forward, RuntimeError, 'closed', np.array([[1]], 'i4'))
+    refused(split.parameters, RuntimeError, 'closed')
 
 
 def test_apple_fast_parent_preserves_existing_identical_worker_contract(tmp_path):

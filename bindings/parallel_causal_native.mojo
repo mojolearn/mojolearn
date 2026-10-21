@@ -253,11 +253,18 @@ def parallel_causal_worker(argv: PythonObject) raises:
     transport_close(socket)
 
 
-def _parallel_causal_rpc(owner: PythonObject, device: PythonObject, operation: String, args: PythonObject) raises -> PythonObject:
+def _parallel_causal_usable(owner: PythonObject) raises:
+    # A closed model or a lost worker state is a RuntimeError on every public
+    # call (forward, step, parameters, ...); an invalid argument stays a
+    # ValueError. One check so the calls cannot disagree.
     if Bool(py=owner._closed):
         raise Error("RuntimeError: ParallelCausalLM is closed")
     if Bool(py=owner._failed):
         raise Error("RuntimeError: ParallelCausalLM worker state was lost; reload the model")
+
+
+def _parallel_causal_rpc(owner: PythonObject, device: PythonObject, operation: String, args: PythonObject) raises -> PythonObject:
+    _parallel_causal_usable(owner)
     var index = Int(py=owner._worker_index[device])
     try:
         return process_pool_call(owner._pool, index, Python.list(PythonObject(operation), args))
@@ -492,6 +499,7 @@ def parallel_causal_call(operation: String, args: PythonObject) raises -> Python
     elif operation == "rpc":
         return _parallel_causal_rpc(args[0], args[1], String(args[2]), args[3])
     elif operation == "parameters":
+        _parallel_causal_usable(args[0])
         return causal_lm_parameters_binding(args[0])
     elif operation == "block_fields":
         return _parallel_causal_rpc(args[0], args[0].layer_devices[Int(py=args[1])], "block_fields", Python.list(args[1]))

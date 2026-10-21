@@ -1183,6 +1183,26 @@ def causal_state_init_binding(state: PythonObject, values: PythonObject) raises 
     return PythonObject(None)
 
 
+def _causal_owner_unusable(args_ptr: PyObjectPtr) -> Bool:
+    """True when the call's model is closed or lost its worker state.
+
+    A ParallelCausalLM refusal raised through `py_call` (the parallel entry)
+    arrives here as a bare message: CPython's exception class does not cross
+    that boundary. A closed model or a lost state is a RuntimeError, so the
+    door classes it by the owner's state, not by the message text."""
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        if len(args) == 0:
+            return False
+        var bi = Python.import_module("builtins")
+        var owner = args[0]
+        if Bool(py=py_call(bi.getattr, owner, PythonObject("_closed"), PythonObject(False))):
+            return True
+        return Bool(py=py_call(bi.getattr, owner, PythonObject("_failed"), PythonObject(False)))
+    except:
+        return False
+
+
 def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
@@ -1226,4 +1246,6 @@ def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        if _causal_owner_unusable(args_ptr):
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

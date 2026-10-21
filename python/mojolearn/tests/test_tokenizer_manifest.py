@@ -54,8 +54,13 @@ def test_manifest_declares_the_family():
     # `mojolearn.models.Tokenizer` encodes through this binding's compiled
     # door for the `gpt2` pattern, and through Python for `llama3` and
     # `qwen2`, so this family serves its cell on a CPU column.
+    # `cross-vendor-fold` joined on 2026-10-21 (lane/verify-coverage-audit):
+    # `mojolearn.cross_vendor`'s ordered fold runs in this binding
+    # (`cross_vendor_call`), so the coverage lane names this family.
     assert f["training_lanes"] == ("tokenizer", "bpe-trainer", "bpe-vocabulary",
-                                   "tokenized-corpus", "hf-tokenizer") and f["inference_lanes"] == ()
+                                   "tokenized-corpus", "hf-tokenizer",
+                                   "cross-vendor-fold") and f["inference_lanes"] == ()
+    assert host_surface.PUBLIC_HOST_ONLY_LANES["cross-vendor-fold"] == "tokenizer"
     # The trainer's own arm is in the gate's set too: the encoder arm above
     # cannot reach `bpe-trainer`, which never encodes (measured: that lane's
     # cell was byte-identical under MOJOLEARN_TOKENIZER_HOST_SABOTAGE alone).
@@ -114,15 +119,19 @@ def test_cpu_identity_gate_builds_the_binding():
 
 
 def test_binding_source_reads_the_sabotage_define():
+    # The encoder bodies and the define moved into the shared shell
+    # (tokenizer/impl/tokenizer_host_shell_impl.mojo); the binding imports it.
+    shell = _read("tokenizer/impl/tokenizer_host_shell_impl.mojo")
+    assert 'is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]' in shell
     src = _read("bindings/_mojolearn_tokenizer_host.mojo")
-    assert 'is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]' in src
+    assert "TOKENIZER_HOST_SABOTAGE," in src
     names = re.findall(r'module\.def_function\[[A-Za-z0-9_]+\]\("([A-Za-z0-9_]+)"\)', src)
     assert sorted(names) == sorted(host_surface.family("tokenizer")["exports"])
 
 
 def test_batch_encoder_parallelizes_whole_documents_only():
-    src = _read("bindings/_mojolearn_tokenizer_host.mojo")
-    body = src[src.index("def bpe_encode_batch_binding("):src.index("def bpe_decode_binding(")]
+    src = _read("tokenizer/impl/tokenizer_host_shell_impl.mojo")
+    body = src[src.index("def bpe_encode_batch_into("):src.index("def bpe_decode_into(")]
     assert "host_parallelize(_documents, tasks)" in body
     assert "host_predict_task_count(n_docs) if n >= 16384 else 1" in body
     assert "stagep.unsafe_store(a + j" in body
