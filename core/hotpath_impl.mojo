@@ -615,3 +615,400 @@ def gather_i32(table_addr: Int, nt: Int, codes_addr: Int, count: Int, dst_addr: 
     if bad:
         raise Error("gather_i32: code out of range")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 3104: fold bookkeeping of model_selection
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def _bit_test_set(bits: MutPointer[UInt64, MutUntrackedOrigin], index: Int) -> Bool:
+    """Set bit `index`; True when it was already set."""
+    var word = bits.unsafe_load(index >> 6)
+    var mask = UInt64(1) << UInt64(index & 63)
+    bits.unsafe_store(index >> 6, word | mask)
+    return (word & mask) != 0
+
+
+def check_indices_i64(addr: Int, count: Int, limit: Int) raises -> Int:
+    """0 when the `n` int64 indices are all in `[0, bound)` and distinct, 1
+    when any is out of range, else 2 for a duplicate: the order
+    `model_selection._indices` tests them in."""
+    if count < 1 or limit < 0:
+        raise Error("check_indices_i64: n must be positive and bound non-negative")
+    var p = _ptr[DType.int64](addr)
+    var status = 0
+    for i in range(count):
+        var v = Int(p.unsafe_load(i))
+        if v < 0 or v >= limit:
+            status = 1
+            break
+    if status == 0:
+        var words = (limit + 63) // 64
+        var bits = List[UInt64](length=words, fill=UInt64(0))
+        var bp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bits.unsafe_ptr())
+        for i in range(count):
+            if _bit_test_set(bp, Int(p.unsafe_load(i))):
+                comptime if not HOTPATH_SABOTAGE:
+                    status = 2
+                    break
+        _ = len(bits)
+    return status
+
+
+def indices_overlap_i64(a_addr: Int, na: Int, b_addr: Int, nb: Int, limit: Int) raises -> Int:
+    """1 when two int64 index sets share a member, else 0. Both must already
+    have passed `check_indices_i64` against `bound`."""
+    if na < 1 or nb < 1 or limit < 1:
+        raise Error("indices_overlap_i64: counts and bound must be positive")
+    var ap = _ptr[DType.int64](a_addr)
+    var bp = _ptr[DType.int64](b_addr)
+    var hit = 0
+    var bad = False
+    var words = (limit + 63) // 64
+    var bits = List[UInt64](length=words, fill=UInt64(0))
+    var wp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bits.unsafe_ptr())
+    for i in range(na):
+        var v = Int(ap.unsafe_load(i))
+        if v < 0 or v >= limit:
+            bad = True
+            break
+        _ = _bit_test_set(wp, v)
+    if not bad:
+        for i in range(nb):
+            var v = Int(bp.unsafe_load(i))
+            if v < 0 or v >= limit:
+                bad = True
+                break
+            var word = wp.unsafe_load(v >> 6)
+            if (word & (UInt64(1) << UInt64(v & 63))) != 0:
+                comptime if not HOTPATH_SABOTAGE:
+                    hit = 1
+                    break
+    _ = len(bits)
+    if bad:
+        raise Error("indices_overlap_i64: index out of range")
+    return hit
+
+
+def fold_ids(
+    codes_addr: Int, rows: Int, k: Int, splits: Int, counts_addr: Int,
+    fold_addr: Int, fold_counts_addr: Int,
+) raises -> Int:
+    """The unshuffled default folds of `model_selection._default_folds` as one
+    int32 fold id per row (DEVIATION 3104).
+
+    `codes_addr == 0`: KFold, contiguous blocks, the first `n % n_splits`
+    folds one row longer. Otherwise the stratified assignment over `n`
+    int32 class codes in `[0, n_classes)`: classes are taken in FIRST-SEEN
+    order, class `c` occupies `[offset, offset + count)` of the class-sorted
+    label sequence, fold `f` receives `0 if first >= count else 1 + (count -
+    1 - first) // n_splits` of its rows with `first = (f - offset) mod
+    n_splits`, and the class's rows are dealt to folds 0, 1, ... in row
+    order. `counts_addr` receives the int64 row count per class code (it is
+    not read for KFold) and `fold_counts_addr` the int64 row count per fold.
+    Every quantity is an integer; there is nothing to round."""
+    if rows < 1 or splits < 2:
+        raise Error("fold_ids: n must be positive and n_splits at least 2")
+    var fp = _ptr[DType.int32](fold_addr)
+    var fcp = _ptr[DType.int64](fold_counts_addr)
+    if codes_addr == 0:
+        var offset = 0
+        for fold in range(splits):
+            var size = rows // splits
+            if fold < rows % splits:
+                size += 1
+            for i in range(offset, offset + size):
+                fp.unsafe_store(i, Int32(fold))
+            fcp.unsafe_store(fold, Int64(size))
+            offset += size
+        return 0
+    if k < 1:
+        raise Error("fold_ids: n_classes must be positive")
+    var cp = _ptr[DType.int32](codes_addr)
+    var np = _ptr[DType.int64](counts_addr)
+    var bad = False
+    var counts = List[Int](length=k, fill=0)
+    var order = List[Int]()  # class codes in first-seen order
+    for i in range(rows):
+        var c = Int(cp.unsafe_load(i))
+        if c < 0 or c >= k:
+            bad = True
+            break
+        if counts[c] == 0:
+            order.append(c)
+        counts[c] += 1
+    if not bad:
+        # quota[c * splits + f]: rows of class c that fold f receives
+        var quota = List[Int](length=k * splits, fill=0)
+        var offset = 0
+        for j in range(len(order)):
+            var c = order[j]
+            var count = counts[c]
+            for fold in range(splits):
+                var first = (fold - offset) % splits
+                if first < 0:
+                    first += splits
+                var take = 0
+                if first < count:
+                    take = 1 + (count - 1 - first) // splits
+                quota[c * splits + fold] = take
+            offset += count
+        var current = List[Int](length=k, fill=0)
+        var per_fold = List[Int](length=splits, fill=0)
+        for i in range(rows):
+            var c = Int(cp.unsafe_load(i))
+            var fold = current[c]
+            while quota[c * splits + fold] == 0:
+                fold += 1
+            quota[c * splits + fold] -= 1
+            current[c] = fold
+            per_fold[fold] += 1
+            fp.unsafe_store(i, Int32(fold))
+        for c in range(k):
+            np.unsafe_store(c, Int64(counts[c]))
+        for fold in range(splits):
+            fcp.unsafe_store(fold, Int64(per_fold[fold]))
+    if bad:
+        raise Error("fold_ids: class code out of range")
+    return 0
+
+
+def select_fold_i64(fold_addr: Int, rows: Int, fold: Int, test_addr: Int, train_addr: Int) raises -> Int:
+    """Ascending int64 row indices with fold id `fold` into `test`, every
+    other row into `train`; returns the test count. Each output must hold
+    `n` entries at most (the caller sizes them from the fold's count)."""
+    var want = Int32(fold)
+    if rows < 1:
+        raise Error("select_fold_i64: n must be positive")
+    var fp = _ptr[DType.int32](fold_addr)
+    var tp = _ptr[DType.int64](test_addr)
+    var rp = _ptr[DType.int64](train_addr)
+    var n_test = 0
+    var n_train = 0
+    for i in range(rows):
+        var at = i
+        comptime if HOTPATH_SABOTAGE:
+            at = (i + 1) % rows  # the row-to-fold assignment, rotated by one
+        if fp.unsafe_load(at) == want:
+            tp.unsafe_store(n_test, Int64(i))
+            n_test += 1
+        else:
+            rp.unsafe_store(n_train, Int64(i))
+            n_train += 1
+    return n_test
+
+
+# ---------------------------------------------------------------------------
+# lane cgr4-py-compute: the remaining CV-splitter index generation
+# ---------------------------------------------------------------------------
+
+
+def arange_i64(dst_addr: Int, start: Int, count: Int) raises -> Int:
+    """`dst[i] = start + i` for i < n, int64: every contiguous row range a
+    splitter hands out (TimeSeriesSplit, train_test_split, `_as_index`)."""
+    if count < 0:
+        raise Error("arange_i64: n must be non-negative")
+    if count == 0:
+        return 0
+    var lo = Int64(start)
+    var dp = _ptr[DType.int64](dst_addr)
+    for i in range(count):
+        comptime if HOTPATH_SABOTAGE:
+            dp.unsafe_store(i, lo + Int64(count - 1 - i))
+        else:
+            dp.unsafe_store(i, lo + Int64(i))
+    return 0
+
+
+def leave_range_i64(rows: Int, a: Int, b: Int, train_addr: Int, test_addr: Int) raises -> Int:
+    """test = rows [lo, hi), train = rows [0, lo) then [hi, n), ascending
+    int64 (LeaveOneOut's split i is lo = i, hi = i + 1). Returns hi - lo."""
+    if rows < 1 or a < 0 or b < a or b > rows:
+        raise Error("leave_range_i64: needs 0 <= lo <= hi <= n, n >= 1")
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=test_addr)
+    var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=train_addr)
+    for i in range(a, b):
+        tp.unsafe_store(i - a, Int64(i))
+    var at = 0
+    for i in range(rows):
+        if i < a or i >= b:
+            comptime if HOTPATH_SABOTAGE:
+                rp.unsafe_store(at, Int64(rows - 1 - i))
+            else:
+                rp.unsafe_store(at, Int64(i))
+            at += 1
+    return b - a
+
+
+def mask_from_indices_u8(idx_addr: Int, count: Int, rows: Int, mask_addr: Int) raises -> Int:
+    """mask[r] = 1 for every int64 index r of the k at `idx` (mask zeroed
+    first, n bytes); returns the number of distinct rows set. An index
+    outside [0, n) raises before the mask is read."""
+    if count < 0 or rows < 1:
+        raise Error("mask_from_indices_u8: k must be non-negative and n positive")
+    var mp = _ptr[DType.uint8](mask_addr)
+    var bad = False
+    var set = 0
+    for r in range(rows):
+        mp.unsafe_store(r, 0)
+    if count > 0:
+        var ip = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=idx_addr)
+        for i in range(count):
+            var r = Int(ip.unsafe_load(i))
+            if r < 0 or r >= rows:
+                bad = True
+                break
+            if mp.unsafe_load(r) == 0:
+                set += 1
+            mp.unsafe_store(r, 1)
+    if bad:
+        raise Error("mask_from_indices_u8: index out of range")
+    return set
+
+
+def select_mask_u8_i64(mask_addr: Int, rows: Int, ta: Int, ra: Int) raises -> Int:
+    """Ascending int64 rows whose mask byte is nonzero into `test`, the rest
+    into `train`; returns the test count. A null output address is legal
+    when that side is empty. `n_test` = count of nonzero bytes: the caller
+    sizes the outputs from `count_mask_u8`."""
+    if rows < 1:
+        raise Error("select_mask_u8_i64: n must be positive")
+    var mp = _ptr[DType.uint8](mask_addr)
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ta)
+    var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ra)
+    var n_test = 0
+    var n_train = 0
+    for i in range(rows):
+        var at = i
+        comptime if HOTPATH_SABOTAGE:
+            at = (i + 1) % rows
+        if mp.unsafe_load(at) != 0:
+            tp.unsafe_store(n_test, Int64(i))
+            n_test += 1
+        else:
+            rp.unsafe_store(n_train, Int64(i))
+            n_train += 1
+    return n_test
+
+
+def count_mask_u8(mask_addr: Int, rows: Int) raises -> Int:
+    """The number of nonzero bytes of the n-byte mask."""
+    if rows < 0:
+        raise Error("count_mask_u8: n must be non-negative")
+    if rows == 0:
+        return 0
+    var mp = _ptr[DType.uint8](mask_addr)
+    var c = 0
+    for i in range(rows):
+        if mp.unsafe_load(i) != 0:
+            c += 1
+    return c
+
+
+def next_combination_i64(addr: Int, k: Int, rows: Int) raises -> Int:
+    """Advance the ascending p-combination of range(n) at `addr` (int64) to
+    its lexicographic successor (itertools.combinations order); 1 when it
+    advanced, 0 when it was the last (left unchanged)."""
+    if k < 1 or k > rows:
+        raise Error("next_combination_i64: needs 1 <= p <= n")
+    var cp = _ptr[DType.int64](addr)
+    var i = k - 1
+    while i >= 0 and Int(cp.unsafe_load(i)) == i + rows - k:
+        i -= 1
+    if i < 0:
+        return 0
+    var v = cp.unsafe_load(i) + 1
+    for j in range(i, k):
+        cp.unsafe_store(j, v + Int64(j - i))
+    return 1
+
+
+@always_inline
+def _ic_ftz_bits(v: Float32) -> Float32:
+    """A subnormal becomes a zero of the same sign (checks/numerics `ftz`)."""
+    var b = bitcast[DType.uint32](v)
+    if (b & UInt32(0x7F800000)) == 0 and (b & UInt32(0x007FFFFF)) != 0:
+        return bitcast[DType.float32](b & UInt32(0x80000000))
+    return v
+
+
+def ic_running_min_f32_host(
+    llf_addr: Int, count: Int, penalty: Float64, k: Int,
+    ic_addr: Int, best_ic_addr: Int, best_idx_addr: Int,
+) raises -> Int:
+    """lane/fam2-timeseries: `ic_running_min_f64` with the criterion in
+    float32, the host column of the device order choice
+    (`arima/impl/fast_order_search.mojo::order_ic_argmin_kernel`):
+    ic[b] = -2 llf[b] + Float32(penalty), ONE rounding (the product is exact,
+    so contraction cannot change it), then the same running first minimum.
+    `ic` and `best_ic` are float32, `best_idx` int64. A NaN best criterion is
+    the kernel's canonical NaN once chosen."""
+    if count < 1 or k < 0:
+        raise Error("ic_running_min_f32: n must be positive and order non-negative")
+    var pen = Float32(penalty)
+    var lp = _ptr[DType.float32](llf_addr)
+    var ip = _ptr[DType.float32](ic_addr)
+    var bp = _ptr[DType.float32](best_ic_addr)
+    var xp = _ptr[DType.int64](best_idx_addr)
+    for b in range(count):
+        # lane/review-fixes: flushed as the device's
+        # `ftz(fma(-2, ftz(ll), pen))` (arima fast_order_search); -2 x is
+        # exact, so mul + add is the fma's word
+        var v = _ic_ftz_bits(Float32(-2.0) * _ic_ftz_bits(lp.unsafe_load(b)) + pen)
+        if v != v:
+            v = bitcast[DType.float32](UInt32(0x7FC00000))
+        ip.unsafe_store(b, v)
+        if k == 0:
+            bp.unsafe_store(b, v)
+            xp.unsafe_store(b, 0)
+        else:
+            var cur = bp.unsafe_load(b)
+            var take = False
+            if cur == cur:
+                take = (v != v) or v < cur
+            comptime if HOTPATH_SABOTAGE:
+                take = not take
+            if take:
+                bp.unsafe_store(b, v)
+                xp.unsafe_store(b, Int64(k))
+    return 0
+
+
+def ic_running_min_f64_host(
+    llf_addr: Int, count: Int, pen: Float64, k: Int,
+    ic_addr: Int, best_ic_addr: Int, best_idx_addr: Int,
+) raises -> Int:
+    """AutoARIMA's information criterion and order choice per series (lane
+    cgr4-py-compute): ic[b] = -2 llf[b] + penalty in float64 from the fit's
+    float32 log-likelihood, written to `ic`; then the running argmin over
+    the orders tried so far, `np.argmin`'s rule: the FIRST minimum, a NaN
+    taken as the minimum (the first NaN wins). order 0 initialises."""
+    if count < 1 or k < 0:
+        raise Error("ic_running_min_f64: n must be positive and order non-negative")
+    var lp = _ptr[DType.float32](llf_addr)
+    var ip = _ptr[DType.float64](ic_addr)
+    var bp = _ptr[DType.float64](best_ic_addr)
+    var xp = _ptr[DType.int64](best_idx_addr)
+    for b in range(count):
+        var v = -2.0 * Float64(lp.unsafe_load(b)) + pen
+        # lane cpu4-python: a NaN criterion is the canonical quiet NaN,
+        # as the device form (core/ic_min_device.mojo, soft binary64)
+        if v != v:
+            v = bitcast[DType.float64](UInt64(0x7FF8000000000000))
+        ip.unsafe_store(b, v)
+        if k == 0:
+            bp.unsafe_store(b, v)
+            xp.unsafe_store(b, 0)
+        else:
+            var cur = bp.unsafe_load(b)
+            var take = False
+            if cur == cur:
+                take = (v != v) or v < cur
+            comptime if HOTPATH_SABOTAGE:
+                take = not take
+            if take:
+                bp.unsafe_store(b, v)
+                xp.unsafe_store(b, Int64(k))
+    return 0
