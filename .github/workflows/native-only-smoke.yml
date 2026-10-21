@@ -1,0 +1,57 @@
+name: Native-only release smoke
+
+# Manual qualification of the standalone native artifact. Python runs the
+# test controller/compiler setup; each tested executable runs in a rootfs
+# containing no interpreter, Python library, package, or source tree.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Frozen source commit to qualify
+        required: true
+      only:
+        description: Optional case selection (partial diagnostic, never release qualification)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  native-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          environments: default
+      - name: Test the gate's negative controls
+        run: python3 -m unittest discover -s tools -p test_native_only_smoke.py
+      - name: Build and execute without Python
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -eu
+          mkdir -p native-only-results
+          git rev-parse HEAD > native-only-results/source-commit.txt
+          mojo=$(pixi run which mojo)
+          sudo env PATH="$PATH" python3 tools/native_only_smoke.py \
+            --source-root "$PWD" --mojo "$mojo" \
+            --out "$PWD/native-only-results" \
+            --cache "$RUNNER_TEMP/native-only-cache" \
+            --backend cpu --isolated --jobs 2 --run-timeout 10 \
+            --compile-timeout 600 --only "$ONLY" \
+            > native-only-results/controller.log 2>&1
+      - name: Retain all evidence, binaries and interpreter-free runtime
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-only-${{ github.run_id }}
+          path: native-only-results
+          if-no-files-found: error
+          retention-days: 30
