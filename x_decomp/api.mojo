@@ -1,28 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The decomp lane's Python entry points, written ONCE and instantiated for
-both executors: `bindings/_mojolearn_x_decomp.mojo` registers `*_py[DevExec]`,
-`bindings/_mojolearn_x_decomp_host.mojo` registers `*_py[HostExec]` under the
-same names, so the GPU binding and the CPU host binding share the address
-contract by construction. Every address is a host buffer the caller owns."""
+"""The decomp lane's typed entries, written ONCE and instantiated for both
+executors: the Python doors in the sibling shell module (`*_py[DevExec]` in
+`bindings/_mojolearn_x_decomp.mojo`, `*_py[HostExec]` in
+`bindings/_mojolearn_x_decomp_host.mojo`) unpack their arguments and call the
+`*_run` entries here, so the GPU binding and the CPU host binding share the
+address contract by construction. Every address is a host buffer the caller
+owns. The IDENTICAL route flags (`IDN_*`) live here too."""
 from std.memory import bitcast
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import (
-    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq_host, gather, iso_order, move_host, order_f,
-    scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
+    F64Ptr, accuracy, argmin_all, dsum_sq_host, gather, move_host, order_f, scatter, select_smallest, sign_labels,
+    topn_desc, triu_nonzero,
 )
 from x_decomp.tsqr_core import TS_MAX_N
 from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
-from x_decomp.api_pyapi import _d, _f, _i, _n
 
 
 def _fp(a: Int) raises -> F32Ptr:
@@ -328,7 +327,7 @@ comptime IDN_LLE_PAD_DEV = _API_IDN and not (is_defined["MOJOLEARN_IDN_LLE_PAD_D
 comptime IDN_DEV_MAXABS = IDN_ICA_LIM_DEV or IDN_POLAR_MAX_DEV
 
 
-def idn_flags_py() raises -> PythonObject:
+def idn_flags_run() -> Int:
     """Bit 0: LinearRegression takes `ols_tsqr_r_py`; bit 1: solve takes
     `lu_gesv_py`; bit 2: LLE builds F0 in cells (IDN_LLE_DEV_F0); bit 3: the
     kit's `rand` stays on the device (IDN_RAND_RESIDENT); bit 4: resident
@@ -356,379 +355,189 @@ def idn_flags_py() raises -> PythonObject:
         bits |= 1
     comptime if IDN_LU_GESV:
         bits |= 2
-    return PythonObject(bits)
+    return bits
 
 
-def ols_tsqr_r_py[E: Exec](
-    a: PythonObject, b: PythonObject, r: PythonObject, mu: PythonObject, ymean: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """r ((d + 1) x (d + 1)) = R of the blocked TSQR of [a - mu | b - ymean]
-    (a m x d, b m), mu (float32 [d]) and ymean (float64 [1]) written: X and
-    y cross to the device once (Exec.ols_tsqr_factor). p = [m, d]."""
-    var m = _n(p, 0)
-    var d = _n(p, 1)
+def ols_tsqr_r_run[E: Exec](
+    pa: F32Ptr, pb: F32Ptr, pr: F32Ptr, pm: F32Ptr, ya: Int, m: Int, d: Int
+) raises -> Int:
+    """`ols_tsqr_r_py`'s typed entry: r ((d + 1) x (d + 1)) = R of the
+    blocked TSQR of [a - mu | b - ymean], ymean (float64 [1]) at address ya;
+    returns n = d + 1."""
     var n = d + 1
     if d < 1 or n > TS_MAX_N or m < n:
         raise Error("x_decomp: ols_tsqr_r needs 1 <= d, d + 1 <= " + String(TS_MAX_N) + " and m >= d + 1")
     if m * n > 2147483647:
         raise Error("x_decomp: ols_tsqr_r exceeds the Int32 index bound")
-    var pa = _f(a)
-    var pb = _f(b)
-    var pr = _f(r)
-    var pm = _f(mu)
-    var ya = Int(py=ymean)
     if ya == 0:
         raise Error("x_decomp: null float64 buffer address")
     var py = MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=ya)
-    with GILReleased(Python()):
-        E.ols_tsqr_factor(pa, pb, pr, pm, py, m, d)
-    return PythonObject(n)
+    E.ols_tsqr_factor(pa, pb, pr, pm, py, m, d)
+    return n
 
 
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 
 
-def lu_gesv_py[E: Exec](a: PythonObject, b: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
-    """b (n x nrhs) = the solution of a x = b through `lu` then `lu_solve`
-    with the factor resident (Exec.lu_gesv); info (1) is `lu`'s. p = [n, nrhs]."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
+def lu_gesv_run[E: Exec](pa: F32Ptr, pb: F32Ptr, pi: F32Ptr, n: Int, nrhs: Int) raises:
+    """`lu_gesv_py`'s typed entry: the exact-integer check, then Exec.lu_gesv."""
     if n >= 1 << 24:
         raise Error("x_decomp: lu_gesv row numbers exceed float32's exact integers")
-    var pa = _f(a)
-    var pb = _f(b)
-    var pi = _f(info)
-    with GILReleased(Python()):
-        E.lu_gesv(pa, pb, pi, n, nrhs)
-    return PythonObject(n)
+    E.lu_gesv(pa, pb, pi, n, nrhs)
 
 
-def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
-    """q (m x k) = Q c (c n x k) for the factorization `tsqr_r_py` kept,
-    which is then released; p = [m, n, k], k == 0 releases it only."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
-    var k = _n(p, 2)
+def tsqr_q_run[E: Exec](pc: F32Ptr, pq: F32Ptr, m: Int, n: Int, k: Int) raises:
+    """`tsqr_q_py`'s typed entry: the Int32 bound, then Exec.tsqr_apply."""
     if k > 0 and m * k > 2147483647:
         raise Error("x_decomp: tsqr_q exceeds the Int32 index bound")
-    var pc = _f(c)
-    var pq = _f(q)
-    with GILReleased(Python()):
-        E.tsqr_apply(pc, pq, m, n, k)
-    return PythonObject(k)
+    E.tsqr_apply(pc, pq, m, n, k)
 
 
-def geqrf_py[E: Exec](a: PythonObject, tau: PythonObject, p: PythonObject) raises -> PythonObject:
-    """In place: a (m x n, row major) becomes geqrf's factored form, tau
-    (min(m, n)) its scalars."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
+def geqrf_run[E: Exec](pa: F32Ptr, pt: F32Ptr, m: Int, n: Int) raises -> Int:
+    """`geqrf_py`'s typed entry; returns min(m, n)."""
     if m <= 0 or n <= 0:
         raise Error("x_decomp: geqrf needs m, n >= 1")
-    var pa = _f(a)
-    var pt = _f(tau)
-    with GILReleased(Python()):
-        E.geqrf(pa, pt, m, n)
-    return PythonObject(m if m < n else n)
+    E.geqrf(pa, pt, m, n)
+    return m if m < n else n
 
 
-def orgqr_py[E: Exec](h: PythonObject, tau: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
-    """q (m x qc) = the first qc columns of H_0 ... H_{kk-1} from geqrf's
-    factored h (m x n) and tau (kk)."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
-    var kk = _n(p, 2)
-    var qc = _n(p, 3)
+def orgqr_run[E: Exec](ph: F32Ptr, pt: F32Ptr, pq: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+    """`orgqr_py`'s typed entry: the shape checks, then Exec.orgqr."""
     if m <= 0 or n <= 0 or kk > m or kk > n or qc > m or qc <= 0:
         raise Error("x_decomp: orgqr needs 1 <= qc <= m and kk <= min(m, n)")
-    var ph = _f(h)
-    var pt = _f(tau)
-    var pq = _f(q)
-    with GILReleased(Python()):
-        E.orgqr(ph, pt, pq, m, n, kk, qc)
-    return PythonObject(qc)
+    E.orgqr(ph, pt, pq, m, n, kk, qc)
 
 
-def als_cg_rows_py[E: Exec](
-    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, steps: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
-    """implicit's conjugate-gradient half-sweep: x (n x f) is the start and
-    the result."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var f = _n(p, 2)
-    var cg = _n(p, 3)
-    var r = Float32(Float64(py=reg))
-    var pc = _f(c)
-    var py_ = _f(y)
-    var pg = _f(yty)
-    var px = _f(x)
-    var ps = _f(steps)
-    with GILReleased(Python()):
-        E.als_cg_rows(pc, py_, pg, px, ps, n, m, f, r, cg)
-    return PythonObject(n)
-
-
-def mcd_py[E: Exec](
-    x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
-    p: PythonObject,
-) raises -> PythonObject:
-    """MinCovDet's fast_mcd (x_decomp/mcd.mojo): x (n x d) in; location
-    (d), covariance (d x d), support (n int32 0/1) and distances (n) out.
-    p = [n, d, h, seed, n_sub, n_ss, h_sub, n_trials, n_m, h_m, n_best_m]."""
-    var q = List[Int]()
-    for i in range(11):
-        q.append(Int(py=p[i]))
+def mcd_run[E: Exec](px: F32Ptr, pl: F32Ptr, pc: F32Ptr, ps: I32Ptr, pd: F32Ptr, q: List[Int]) raises:
+    """`mcd_py`'s typed entry: MinCovDet's fast_mcd (x_decomp/mcd.mojo) after
+    the plan checks. q = [n, d, h, seed, n_sub, n_ss, h_sub, n_trials, n_m,
+    h_m, n_best_m]."""
     var n = q[0]
     var d = q[1]
     if n < 1 or d < 2 or n * d > 2147483647 or q[2] < 1 or q[2] > n:
         raise Error("x_decomp: mcd needs n >= 1, d >= 2 and 1 <= h <= n")
     if n > 500 and (q[4] < 1 or q[4] * q[5] > n or q[8] > n or q[8] < 1 or q[10] < 1):
         raise Error("x_decomp: mcd subset plan out of range")
-    var px = _f(x)
-    var pl = _f(loc)
-    var pc = _f(cov)
-    var ps = _i(sup)
-    var pd = _f(dist)
-    with GILReleased(Python()):
-        var X = mat_from(px, n, d)
-        fast_mcd[E](X, q, pl, pc, ps, pd)
-    return PythonObject(n)
+    var X = mat_from(px, n, d)
+    fast_mcd[E](X, q, pl, pc, ps, pd)
 
 
-def lda_online_py[E: Exec](
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """One online pass of LatentDirichletAllocation (x_decomp/lda_online.mojo)
-    over x (n x v): comps and exp_dir (nc x v) updated in place.
-    p = [n, v, nc, batch_size, max_doc_update_iter, seed, draw, n_batch_iter];
-    f = [doc_topic_prior, topic_word_prior, learning_offset, learning_decay,
-    mean_change_tol, total_samples]. Returns (draw, n_batch_iter)."""
-    var n = _n(p, 0)
-    var v = _n(p, 1)
-    var nc = _n(p, 2)
-    var bs = _n(p, 3)
-    var mdi = _n(p, 4)
-    var seed = Int(py=p[5])
-    var draw = Int(py=p[6])
-    var nbi = Int(py=p[7])
+def lda_online_run[E: Exec](
+    px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, bs: Int, mdi: Int, seed: Int, draw: Int, nbi: Int,
+    fv: List[Float64],
+) raises -> Tuple[Int, Int]:
+    """`lda_online_py`'s typed entry: one online LDA pass
+    (x_decomp/lda_online.mojo), comps and exp_dir (nc x v) written back;
+    fv = [doc_topic_prior, topic_word_prior, learning_offset,
+    learning_decay, mean_change_tol, total_samples]. Returns (draw,
+    n_batch_iter)."""
     if bs < 1 or v < 1 or nc < 1 or n * v > 2147483647 or nc * v > 2147483647:
         raise Error("x_decomp: lda_online shape out of range")
-    var fv = List[Float64]()
-    for i in range(6):
-        fv.append(Float64(py=f[i]))
-    var px = _f(x)
-    var pc = _f(comps)
-    var pe = _f(exp_dir)
-    with GILReleased(Python()):
-        var X = mat_from(px, n, v)
-        var C = mat_from(pc, nc, v)
-        var ED = mat_from(pe, nc, v)
-        lda_online_pass[E](X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5])
-        for i in range(nc * v):
-            pc.unsafe_store(i, C.d[i])
-            pe.unsafe_store(i, ED.d[i])
-    return Python.tuple(draw, nbi)
+    var dr = draw
+    var nb = nbi
+    var X = mat_from(px, n, v)
+    var C = mat_from(pc, nc, v)
+    var ED = mat_from(pe, nc, v)
+    lda_online_pass[E](X, C, ED, bs, mdi, seed, dr, nb, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5])
+    for i in range(nc * v):
+        pc.unsafe_store(i, C.d[i])
+        pe.unsafe_store(i, ED.d[i])
+    return (dr, nb)
 
 
-def gather_py(src: PythonObject, idx: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """dst[a] = src[idx[a]] for a < m (exact copies; x_decomp/moves.mojo)."""
-    var n = Int(py=m)
+def gather_run(ps: F32Ptr, pi: I32Ptr, n: Int, pd: F32Ptr) raises:
+    """`gather_py`'s typed entry: dst[a] = src[idx[a]] for a < n."""
     if n < 0:
         raise Error("x_decomp: negative gather count")
-    var ps = _f(src)
-    var pi = _i(idx)
-    var pd = _f(dst)
-    with GILReleased(Python()):
-        gather(ps, pi, n, pd)
-    return PythonObject(n)
+    gather(ps, pi, n, pd)
 
 
-def scatter_py(dst: PythonObject, idx: PythonObject, m: PythonObject, src: PythonObject) raises -> PythonObject:
-    """dst[idx[a]] = src[a] for a < m, in order (exact copies)."""
-    var n = Int(py=m)
+def scatter_run(pd: F32Ptr, pi: I32Ptr, n: Int, ps: F32Ptr) raises:
+    """`scatter_py`'s typed entry: dst[idx[a]] = src[a] for a < n, in order."""
     if n < 0:
         raise Error("x_decomp: negative scatter count")
-    var pd = _f(dst)
-    var pi = _i(idx)
-    var ps = _f(src)
-    with GILReleased(Python()):
-        scatter(pd, pi, n, ps)
-    return PythonObject(n)
+    scatter(pd, pi, n, ps)
 
 
-def triu_nonzero_py(dis: PythonObject, n: PythonObject, pos: PythonObject, mir: PythonObject) raises -> PythonObject:
-    """The row-major positions of the nonzero strict upper triangle of an
-    n x n matrix (and their mirrors); returns their count."""
-    var nn = Int(py=n)
+def triu_nonzero_run(pd: F32Ptr, nn: Int, pp: I32Ptr, pm: I32Ptr) raises -> Int:
+    """`triu_nonzero_py`'s typed entry: the Int32 bound, then the count."""
     if nn < 0 or nn * nn > 2147483647:
         raise Error("x_decomp: triu_nonzero exceeds the Int32 index bound")
-    var pd = _f(dis)
-    var pp = _i(pos)
-    var pm = _i(mir)
-    var m = 0
-    with GILReleased(Python()):
-        m = triu_nonzero(pd, nn, pp, pm)
-    return PythonObject(m)
+    return triu_nonzero(pd, nn, pp, pm)
 
 
-def argsort_f32_py(x: PythonObject, m: PythonObject, order: PythonObject) raises -> PythonObject:
-    """The stable order of x (m float32 values); NaN refused."""
-    var n = Int(py=m)
-    var px = _f(x)
-    var po = _i(order)
-    argsort_f32(px, n, po)
-    return PythonObject(n)
-
-
-def iso_order_py(
-    x: PythonObject, y: PythonObject, xorder: PythonObject, m: PythonObject, order: PythonObject
-) raises -> PythonObject:
-    """The stable order by (x, y) given the stable order by x; NaN refused."""
-    var n = Int(py=m)
-    var px = _f(x)
-    var py_ = _f(y)
-    var pxo = _i(xorder)
-    var po = _i(order)
-    iso_order(px, py_, pxo, n, po)
-    return PythonObject(n)
-
-
-# ---- lane apple-fast-py2mojo-decomp (2026-10-03): host buffers, both bindings
-def py2mojo_py() raises -> PythonObject:
-    """1: the Mojo data path; 0: built with -D MOJOLEARN_PY2MOJO_decomp_OFF (the A/B arm)."""
-    return PythonObject(1 if PY2MOJO_DECOMP else 0)
-
-
-def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """x_decomp/moves.mojo `move` on host buffers; p = [op, count, a1, a2, a3,
-    ist, ioff, nsrc, ndst, nidx], every index checked."""
-    var op = Int(py=p[0])
-    var count = _n(p, 1)
-    var nsrc = _n(p, 7)
-    var ndst = _n(p, 8)
-    var ps = _f(src)
-    var pi = _f(idx)
-    var pd = _f(dst)
-    var a1 = _n(p, 2)
-    var a2 = _n(p, 3)
-    var a3 = _n(p, 4)
-    var ist = _n(p, 5)
-    var ioff = _n(p, 6)
-    var nidx = _n(p, 9)
+def move_run(
+    op: Int, ps: F32Ptr, pi: F32Ptr, pd: F32Ptr, count: Int, a1: Int, a2: Int, a3: Int, ist: Int, ioff: Int,
+    nsrc: Int, ndst: Int, nidx: Int,
+) raises:
+    """`move_py`'s typed entry: take_rows' index-list bound, then `move_host`."""
     if op == 0 and count > 0 and (count - 1) // max(a1, 1) * ist + ioff >= nidx:
         raise Error("x_decomp: take_rows reads past its index list")
-    with GILReleased(Python()):
-        move_host(op, ps, pi, pd, count, a1, a2, a3, ist, ioff, nsrc, ndst)
-    return PythonObject(count)
+    move_host(op, ps, pi, pd, count, a1, a2, a3, ist, ioff, nsrc, ndst)
 
 
-def dsum_sq_py(x: PythonObject, m: PythonObject) raises -> PythonObject:
-    """The binary64 sum of the squares of m float32 values in the device
-    form's chunked order (`dsum_sq_host`): the host column."""
-    var n = Int(py=m)
+def dsum_sq_run(xa: Int, n: Int) raises -> Float64:
+    """`dsum_sq_py`'s typed entry: the binary64 sum of squares of n float32
+    values at address xa (read only when n > 0)."""
     if n <= 0:
-        return PythonObject(Float64(0))
-    var px = _f(x)
-    var t = UInt64(0)
-    with GILReleased(Python()):
-        t = dsum_sq_host(px, n)
-    return PythonObject(bitcast[DType.float64](t))
+        return Float64(0)
+    var px = _fp(xa)
+    var t = dsum_sq_host(px, n)
+    return bitcast[DType.float64](t)
 
 
-def order_f_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """The stable order of x (m float32 values) as exact floats; NaN refused."""
-    var n = Int(py=m)
+def order_f_run(xa: Int, n: Int, da: Int) raises:
+    """`order_f_py`'s typed entry; the buffers are read only when n > 0."""
     if n > 0:
-        order_f(_f(x), n, _f(dst))
-    return PythonObject(n)
+        order_f(_fp(xa), n, _fp(da))
 
 
-def select_smallest_py(x: PythonObject, p: PythonObject, sel: PythonObject, mask: PythonObject) raises -> PythonObject:
-    """p = [m, h]: the h smallest of x by (value, index), ascending by index,
-    as exact floats, and the int32 membership of every row."""
-    var m = _n(p, 0)
-    var h = _n(p, 1)
+def select_smallest_run(xa: Int, m: Int, h: Int, sa: Int, ma: Int) raises:
+    """`select_smallest_py`'s typed entry; the buffers are read only when m > 0."""
     if m > 0:
-        select_smallest(_f(x), m, h, _f(sel), _i(mask))
-    return PythonObject(h)
+        select_smallest(_fp(xa), m, h, _fp(sa), _ip(ma))
 
 
-def argmin_all_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """The positions (exact floats) of every value equal to the minimum; their count."""
-    var n = Int(py=m)
+def argmin_all_run(xa: Int, n: Int, da: Int) raises -> Int:
+    """`argmin_all_py`'s typed entry; 0 when n <= 0."""
     if n <= 0:
-        return PythonObject(0)
-    return PythonObject(argmin_all(_f(x), n, _f(dst)))
+        return 0
+    return argmin_all(_fp(xa), n, _fp(da))
 
 
-def sign_labels_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """int32 1 where x >= 0, else -1."""
-    var n = Int(py=m)
+def sign_labels_run(xa: Int, n: Int, da: Int) raises:
+    """`sign_labels_py`'s typed entry; the buffers are read only when n > 0."""
     if n > 0:
-        sign_labels(_f(x), n, _i(dst))
-    return PythonObject(n)
+        sign_labels(_fp(xa), n, _ip(da))
 
 
-def accuracy_py(y: PythonObject, pred: PythonObject, w: PythonObject, m: PythonObject) raises -> PythonObject:
-    """(matches, total): float64 labels against int32 predictions; w = 0
-    for unweighted, else a float64 weight address (sums in order)."""
-    var n = Int(py=m)
-    var weighted = Int(py=w) != 0
+def accuracy_run(ya: Int, pa: Int, wa: Int, n: Int) raises -> Tuple[Float64, Float64]:
+    """`accuracy_py`'s typed entry: (matches, total); wa = 0 unweighted."""
+    var weighted = wa != 0
     if n <= 0:
-        return Python.tuple(Float64(0), Float64(0))
-    var pw = _d(w) if weighted else _d(y)
-    var r = accuracy(_d(y), _i(pred), pw, weighted, n)
-    return Python.tuple(r[0], r[1])
+        return (Float64(0), Float64(0))
+    var pw = _dp(wa) if weighted else _dp(ya)
+    var r = accuracy(_dp(ya), _ip(pa), pw, weighted, n)
+    return r
 
 
-def pca_mle_rank_host_py(sp: PythonObject, p: PythonObject) raises -> PythonObject:
-    """The host column of `x_decomp_dev_pca_mle_rank` (x_decomp/pca_mle.mojo):
-    sp = the address of d binary64 spectrum values, p = [d, n_samples]; the
-    Minka MLE rank (0 when d < 2)."""
-    var d = _n(p, 0)
-    var n = _n(p, 1)
+def pca_mle_rank_host_run(spa: Int, d: Int, n: Int) raises -> Int:
+    """`pca_mle_rank_host_py`'s typed entry: the Minka MLE rank (0 when d < 2)."""
     if d < 2:
-        return PythonObject(0)
+        return 0
     var scratch = List[Float32](length=mle_scratch_words(d), fill=Float32(0))
-    var r = pca_mle_rank_host(_f(sp), d, n, F32Ptr(unsafe_from_address=Int(scratch.unsafe_ptr())))
+    var r = pca_mle_rank_host(_fp(spa), d, n, F32Ptr(unsafe_from_address=Int(scratch.unsafe_ptr())))
     _ = scratch^
-    return PythonObject(r)
+    return r
 
 
-def topn_desc_py(x: PythonObject, p: PythonObject, skip: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """p = [m, n]: the n best positions by (-x, index), skipping the nonzero
-    entries of the float32 row at `skip` (0: none); their count."""
-    var m = _n(p, 0)
-    var n = _n(p, 1)
+def topn_desc_run(xa: Int, m: Int, ska: Int, n: Int, da: Int) raises -> Int:
+    """`topn_desc_py`'s typed entry: the n best positions by (-x, index),
+    skipping the nonzero entries of the row at ska (0: none); their count."""
     if m == 0 or n == 0:
-        return PythonObject(0)
-    var has = Int(py=skip) != 0
-    var px = _f(x)
-    var ps = _f(skip) if has else px
-    return PythonObject(topn_desc(px, m, ps, has, n, _i(dst)))
-
-
-def numeric_mode_py() raises -> PythonObject:
-    return PythonObject(Int(GLOBAL_NUMERIC_MODE))
-
-
-def vendor_py[E: Exec]() raises -> PythonObject:
-    return PythonObject(E.vendor())
-
-
-def fast_defines_py() raises -> PythonObject:
-    """The recovered Apple FAST switches the Python linalg doors read
-    (lane/apple-fast-rec-decomp, 2026-10-04; from
-    lane/apple-fast-decomp-linalg@74d52352b), comma-joined: the build's
-    switches. Both (MOJOLEARN_QR_FAST_DEV, MOJOLEARN_SVD_FAST_CHOLQR) were
-    deleted 2026-10-09 (lane/owed-deletions-D1), so this is always empty;
-    the binding stays for `_kit_fast_define` in
-    python/mojolearn/_expansion_decomp.py."""
-    # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
-    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch.
-    # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1; code
-    # recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch.
-    return PythonObject(String(""))
+        return 0
+    var has = ska != 0
+    var px = _fp(xa)
+    var ps = _fp(ska) if has else px
+    return topn_desc(px, m, ps, has, n, _ip(da))
