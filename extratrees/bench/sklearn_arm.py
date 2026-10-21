@@ -6,7 +6,7 @@
 Why a Python module and not a second process: this box drifts. The repository
 has it measured -- 1.7x on the same binary and the same fixture inside twenty
 minutes -- so two numbers taken in two processes minutes apart are not
-comparable. `sklearn_interleaved.mojo` alternates the arms inside a single
+comparable. `bench/extratrees_sklearn_interleaved.mojo` alternates the arms inside a single
 process and this file is the other arm.
 
 THE DATA IS THE SAME BYTES, not the same generator. Both arms read

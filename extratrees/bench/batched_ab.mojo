@@ -152,7 +152,7 @@ def main() raises:
     var dev: DeviceDataset
     var n_feat = n_features
     if regression:
-        # Column 0 is the target, as in sklearn_interleaved.
+        # Column 0 is the target, as in bench/extratrees_sklearn_interleaved.mojo.
         n_feat = n_features - 1
         var x = read_column_prefix(
             data_dir + "/" + name + "_Xcol.f32", total_rows, n_rows, n_features
