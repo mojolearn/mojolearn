@@ -22,7 +22,7 @@ resident tensor. The Python entry (`moe_forward_dev_py`) is
 `sequence/moe_dev_pyapi.mojo`'s."""
 from sequence.exec_device import DeviceExec
 from sequence.moe_weights import moe_weights_ptrs
-from sequence.pyapi_impl import moe_forward_core
+from sequence.ops_impl import moe_forward_core
 from sequence.seq_tensor import seq_tensor_ptr
 
 

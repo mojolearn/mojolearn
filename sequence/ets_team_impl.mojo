@@ -15,7 +15,7 @@ from sequence.exec_device import DeviceExec
 from sequence.fit_team import SEQ_TEAM_TPB
 from sequence.fit_team_impl import _group, _run_team, _saves, _team_budget, _zero
 from sequence.ops import OP_ETS, Args
-from sequence.pyapi_impl import ETS_FAST_STALL_ITERS, ETS_FAST_STALL_REL, fptr, fval, ival
+from sequence.ops_impl import ETS_FAST_STALL_ITERS, ETS_FAST_STALL_REL, fptr, fval, ival
 from x_linear.witness import Witness
 
 

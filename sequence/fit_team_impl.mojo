@@ -33,7 +33,7 @@ from sequence.fit_team import (
 )
 from sequence.prophet_coop import PROPHET_COOP, PROPHET_COOP_TPB, prophet_coop_priv, prophet_coop_shared
 from sequence.ops import FP, OP_FILL, OP_GARCH, OP_PROPHET_FIT, Args
-from sequence.pyapi_impl import (
+from sequence.ops_impl import (
     GARCH_FAST_STALL_ITERS,
     GARCH_FAST_STALL_REL,
     PROPHET_FAST_MIN_N,

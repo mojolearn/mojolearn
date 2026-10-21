@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.os import getenv as _getenv_seq
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from sequence.pyapi_impl import (
+from sequence.ops_impl import (
     ETS_FAST_STALL_ITERS,
     ETS_FAST_STALL_REL,
     GARCH_FAST_STALL_ITERS,
@@ -90,107 +90,107 @@ def py_f64s(p: PythonObject) raises -> List[Float64]:
 
 
 def rnn_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `rnn_fit_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `rnn_fit_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(rnn_fit_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def rnn_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `rnn_predict_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `rnn_predict_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(rnn_predict_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def rnn_n_params_py(ip: PythonObject) raises -> PythonObject:
-    """The Python door of `rnn_n_params_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `rnn_n_params_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(rnn_n_params_impl(py_ints(ip)))
 
 
 def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `opt_step_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `opt_step_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(opt_step_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `stl_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `stl_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(stl_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `var_fit_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `var_fit_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(var_fit_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `var_forecast_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `var_forecast_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(var_forecast_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `mlp_fit_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `mlp_fit_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(mlp_fit_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `mlp_predict_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `mlp_predict_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(mlp_predict_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `adafactor_step_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `adafactor_step_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(adafactor_step_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `lamb_step_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `lamb_step_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(lamb_step_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `layer_norm_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `layer_norm_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(layer_norm_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `theta_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `theta_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(theta_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `croston_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `croston_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(croston_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def croston_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `croston_forecast_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `croston_forecast_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(croston_forecast_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `ets_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `ets_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(ets_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `garch_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `garch_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(garch_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def prophet_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `prophet_fit_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `prophet_fit_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(prophet_fit_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def prophet_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `prophet_predict_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `prophet_predict_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(prophet_predict_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `moe_forward_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `moe_forward_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(moe_forward_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
 def moe_backward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `moe_backward_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `moe_backward_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(moe_backward_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
@@ -211,12 +211,12 @@ def moe_forward_check(addrs: PythonObject, ip: PythonObject, n_ip: Int) raises -
 def moe_forward_run[E: Exec](
     mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
 ) raises -> PythonObject:
-    """The Python door of `moe_forward_run_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `moe_forward_run_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(moe_forward_run_impl(ex, py_ints(addrs), T, D, F, En, k, renorm, Wg, Gu, Dn))
 
 
 def moe_backward_run[E: Exec](
     mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
 ) raises -> PythonObject:
-    """The Python door of `moe_backward_run_impl` (sequence/pyapi_impl.mojo)."""
+    """The Python door of `moe_backward_run_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(moe_backward_run_impl(ex, py_ints(addrs), T, D, F, En, k, renorm, Wg, Gu, Dn))
