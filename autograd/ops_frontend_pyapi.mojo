@@ -16,7 +16,7 @@ from autograd.weight_frontend_pyapi import ops_weights_native_py
 from autograd.session_lifetime import SessionLifetime
 from autograd.execution_profile_pyapi import execution_profile_object
 from autograd.control_checkpoint_pyapi import control_save_py, control_load_py
-from autograd.gradient_diagnostics import gradient_report_py
+from autograd.gradient_diagnostics_pyapi import gradient_report_py
 
 
 def _nil(x: PythonObject) -> Bool:
