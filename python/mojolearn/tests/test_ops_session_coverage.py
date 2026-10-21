@@ -184,3 +184,27 @@ def test_closed_session_refuses_every_operation(name):
     else:
         # the launch profile is process-wide, so it still answers after close
         getattr(s, name)()
+
+
+# Scalar arguments that are not real numbers are refused naming the argument.
+SCALAR = [
+    ("pow_scalar", lambda s, a: s.pow_scalar(a, "two"), "exponent"),
+    ("scale", lambda s, a: s.scale(a, "x"), "factor"),
+    ("leaky_relu", lambda s, a: s.leaky_relu(a, alpha="x"), "alpha"),
+    ("elu", lambda s, a: s.elu(a, alpha=None), "alpha"),
+    ("hard_sigmoid", lambda s, a: s.hard_sigmoid(a, beta="x"), "beta"),
+    ("full", lambda s, a: s.full((2, 2), "x"), "value"),
+    ("clip", lambda s, a: s.clip(a, min="x"), "min"),
+    ("pad", lambda s, a: s.pad(a, (1, 1), value="x"), "value"),
+    ("dropout", lambda s, a: s.dropout(a, "x"), "p"),
+    ("huber", lambda s, a: s.huber(a, a, delta="x"), "delta"),
+    ("optimizer", lambda s, a: s.optimizer("sgd", lr="x"), "lr"),
+]
+
+
+@pytest.mark.parametrize("name,call,argument", SCALAR, ids=[r[0] for r in SCALAR])
+def test_non_numeric_scalar_argument_is_refused_by_name(name, call, argument):
+    with _ops().Session() as s:
+        a = s.tensor(A)
+        with pytest.raises(TypeError, match=f"^{argument} must be a real number"):
+            call(s, a)
