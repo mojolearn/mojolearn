@@ -362,7 +362,7 @@ def test_trainer_and_caller_inputs_are_released(tmp_path):
     model = trainer()
     x, y = batch()
     counts = sys.getrefcount(x), sys.getrefcount(y)
-    for _ in range(3):  # glue: repeated public calls in a test
+    for _ in range(3):
         model.train_step(x, y, return_input_grad=True)
         model.predict_logits(x)
         model.loss_and_grads(x, y)
