@@ -96,6 +96,7 @@ from bindings.parallel_byte_native import parallel_byte_c
 from bindings.native_codec import codec_c
 from bindings.native_process_pool import process_c
 from bindings.parallel_mlp_native import parallel_mlp_c
+from bindings.small_mlp_native import small_mlp_c
 from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_causal_native import parallel_causal_c
 from bindings.optimizer_lifecycle import optimizer_finalize_binding
@@ -1424,6 +1425,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(codec_c, "native_codec_call")
         module.def_py_c_function(process_c, "native_process_call")
         module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
+        module.def_py_c_function(small_mlp_c, "small_mlp_call")
         module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
         module.def_function[optimizer_finalize_binding]("optimizer_finalize")

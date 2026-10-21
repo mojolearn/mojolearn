@@ -150,7 +150,9 @@ def test_complete_training_oracle_checkpoint_replay_and_child_audit(tmp_path, mo
 
 def test_worker_failure_rolls_back_and_retry_restarts_owned_processes():
     model = model_fixture()
-    np.asarray(model._opt.params[0])[0, 0] = 2
+    state = model.state_dict()
+    np.asarray(state['weights']['weight1'])[0, 0] = 2
+    model.load_state_dict(state)
     owner = object.__new__(ParallelNeuralTrainer)
     audit_native_call(owner.__init__, model, devices=(0,), logical_shards=1).assert_native()
     x = np.zeros((1, 8), np.float32)

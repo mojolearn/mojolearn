@@ -10,8 +10,10 @@ struct NativeJSON(Movable):
     var buf: List[UInt8]
     var bi: PythonObject
     var at: Int
+    var unique: Bool
 
-    def __init__(out self, raw: PythonObject) raises:
+    def __init__(out self, raw: PythonObject, unique: Bool = False) raises:
+        self.unique = unique
         self.bi = Python.import_module("builtins")
         if self.bi.type(raw) is not self.bi.str and self.bi.type(raw) is not self.bi.bytes and self.bi.type(raw) is not self.bi.bytearray:
             raise Error("TypeError: JSON requires str or bytes")
@@ -141,6 +143,8 @@ struct NativeJSON(Movable):
                 return result
             while True:  # driver-loop: over a JSON object's members
                 var key = self.string()
+                if self.unique and Bool(py=result.__contains__(key)):
+                    raise Error("JSON: duplicate object key at " + String(self.at))
                 self.take(58)
                 result[key] = self.value(depth + 1)
                 self.ws()
@@ -176,6 +180,16 @@ struct NativeJSON(Movable):
 
 def native_json_parse(raw: PythonObject) raises -> PythonObject:
     var cursor = NativeJSON(raw)
+    var result = cursor.value()
+    cursor.ws()
+    if cursor.at != len(cursor.raw):
+        raise Error("JSON: trailing data at " + String(cursor.at))
+    return result
+
+
+def native_json_parse_unique(raw: PythonObject) raises -> PythonObject:
+    """`native_json_parse`, refusing an object that repeats a key."""
+    var cursor = NativeJSON(raw, True)
     var result = cursor.value()
     cursor.ws()
     if cursor.at != len(cursor.raw):

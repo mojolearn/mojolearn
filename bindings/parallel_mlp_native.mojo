@@ -17,6 +17,7 @@ from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, g
 from bindings.parallel_byte_native import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
 from bindings.native_transport import _transport_json
 from bindings.native_json import native_json_parse
+from bindings.small_mlp_native import small_mlp_call, small_mlp_from_state
 
 
 struct ParallelMlpBoundary(Defaultable, Movable):
@@ -167,95 +168,23 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
 
 
 def mlp_snapshot(model: PythonObject) raises -> PythonObject:
+    """The model's complete state, read from its native state handle (the
+    public `state_dict` call, under the model's lock), admitted as identical."""
     _mlp_mode()
-    var bi = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    # AdamW inherits the Python public-output attribute adapter. These are
-    # internal stored fields, so read their native instance dictionary through
-    # object.__getattribute__, preserving the Array owners without that adapter.
-    var fields = bi.object.__getattribute__(model, "__dict__")
-    var opt = bi.object.__getattribute__(fields["_opt"], "__dict__")
-    # The supported identical MLP explicitly constructs AdamW resident=False;
-    # its only model session is an Apple fast numerical path.
-    if fields["_session"] is not None or opt["_res"] is not None:
-        raise Error("parallel MLP: unexpected resident owner under identical admission")
-    var result = bi.dict()
-    result["schema"] = "mojolearn.small-mlp-trainer.v1"
-    result["architecture"] = py_ints([8, 16, 3])
-    result["numeric_mode"] = "identical"
-    var names = _mlp_names()
-    var weights = bi.dict()
-    var order = bi.list()
-    for i in range(4):  # driver-loop: over fixed MLP snapshot parameter owners
-        weights[names[i]] = opt["params"][i]
-        order.append(names[i])
-    result["parameter_order"] = order
-    result["weights"] = weights
-    var optimizer = bi.dict()
-    optimizer["kind"] = "AdamW"
-    optimizer["step"] = opt["t"]
-    optimizer["m"] = generation_array([195]) if opt["_m"] is None else opt["_m"]
-    optimizer["v"] = generation_array([195]) if opt["_v"] is None else opt["_v"]
-    optimizer["flags"] = opt["buf_initialized"]
-    result["optimizer"] = optimizer
-    result["config"] = fields["_config"]
-    result["data_schedule"] = fields["_schedule"]
-    return mlp_validate_state(result)
+    return mlp_validate_state(small_mlp_call("state_dict", Python.tuple(model.__dict__.get("_handle"))))
 
 
 def mlp_publish(model: PythonObject, state: PythonObject) raises:
-    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
+    """Replace the model's native state with a validated copy of `state`."""
+    _mlp_mode()
     var checked = mlp_validate_state(state)
-    var opt = b[].bi.object.__new__(b[].opt_cls)
-    var config = checked["config"]
-    var saved = checked["optimizer"]
-    var names = _mlp_names()
-    var params = b[].bi.list()
-    for i in range(4):  # driver-loop: over replacement MLP parameter owners
-        params.append(checked["weights"][names[i]])
-    opt._where = "AdamW"
-    opt._res = PythonObject(None)
-    opt._res_binding = PythonObject(None)
-    opt._host_fresh = True
-    opt._resident_wanted = False
-    opt.params = params
-    opt.lr_schedule = PythonObject(None)
-    opt.accumulation_steps = 1
-    var offsets = generation_array([5], "i")
-    var op = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=offsets._addr))
-    var registry = [0, 128, 144, 192, 195]
-    for i in range(5):  # small-loop(the five fixed offset-registry words)
-        op[i] = Int32(registry[i])
-    opt.offsets = offsets
-    opt.n_total = 195
-    opt._m = saved["m"]
-    opt._v = saved["v"]
-    opt._pristine = False
-    opt.buf_initialized = saved["flags"]
-    opt.t = saved["step"]
-    opt.packed_ = PythonObject(None)
-    opt.total_norm_ = PythonObject(None)
-    opt.clip_coef_ = PythonObject(None)
-    opt.lr = config["lr"]
-    var betas = b[].bi.list()
-    betas.append(config["beta1"])
-    betas.append(config["beta2"])
-    opt.betas = b[].bi.tuple(betas)
-    opt.eps = config["eps"]
-    opt.weight_decay = config["weight_decay"]
-    opt.maximize = False
-    opt.numeric_mode = "identical"
-    model._opt = opt
-    model._config = config
-    model._schedule = checked["data_schedule"]
-    model._session = PythonObject(None)
+    _ = small_mlp_call("load_state_dict", Python.tuple(model.__dict__.get("_handle"), checked))
 
 
 def mlp_from_state(state: PythonObject) raises -> PythonObject:
+    _mlp_mode()
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var model = b[].bi.object.__new__(b[].model_cls)
-    model._lock = b[].lock()
-    mlp_publish(model, state)
-    return model
+    return small_mlp_from_state(b[].model_cls, mlp_validate_state(state), "identical")
 
 
 def mlp_batch(value: PythonObject) raises -> PythonObject:
