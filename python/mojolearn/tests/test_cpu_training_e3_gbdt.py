@@ -119,7 +119,9 @@ def test_nan_modes_and_adapters_are_declared():
         assert lane in host_surface.covered_lanes(), lane
     for cls in ("GradientBoostingClassifier", "GradientBoostingRegressor"):
         assert cls in fam["classes"], cls
-    src = _read(host_surface.binding_source("gbdt"))
+    # The transforms' typed bodies moved to gbdt/host/gbdt_host_entries_impl.mojo
+    # (lane thin-trees-metrics, 2026-10-21); the shell is the Python door.
+    src = _read(host_surface.binding_source("gbdt")) + _read("gbdt/host/gbdt_host_entries_impl.mojo")
     assert "var positive = ftz(identical_sigmoid(ftz(margin)))" in src, "the probability body"
     assert "Scalar[dtype](ftz(Float32(1) - positive))" in src, "the flushed complement"
     assert "(bits & UInt32(0x80000000)) == 0 and (bits & UInt32(0x7fffffff)) != 0" in src, (
