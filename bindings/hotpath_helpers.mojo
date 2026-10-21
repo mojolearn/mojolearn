@@ -62,163 +62,39 @@ from core.hotpath_impl import (
     _ptr,
     _tasks,
 )
+from core.hotpath_impl import (
+    HP_STAT_FLOAT,
+    HP_STAT_TUPLE,
+    HpStat,
+    arange_i64,
+    cast_elements,
+    check_indices_i64,
+    count_mask_u8,
+    encode_labels,
+    equal_elements,
+    fold_ids,
+    gather_i32,
+    ic_running_min_f32_host,
+    ic_running_min_f64_host,
+    indices_overlap_i64,
+    leave_range_i64,
+    mask_from_indices_u8,
+    next_combination_i64,
+    reduce_stat,
+    select_fold_i64,
+    select_mask_u8_i64,
+)
 
 
 
 
 
 # ---------------------------------------------------------------------------
-# DEVIATION 3100: cast_elements
+# The Python doors of the helpers. Each unpacks its PythonObject arguments,
+# calls ONE typed kernel of `core/hotpath_impl.mojo` with the GIL released
+# and returns its answer (lane thin-core, 2026-10-21: the compute moved
+# there word for word).
 # ---------------------------------------------------------------------------
-
-
-@always_inline
-def _refused[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> Bool:
-    """True when any lane is a value the Python conversion refuses."""
-    comptime if dst == DType.float16:
-        # struct's 'e' packing refuses a finite value that rounds past
-        # 65504 (|v| >= 65520); infinities and NaN pack
-        var d = v.cast[DType.float64]()
-        var big = abs(d).ge(SIMD[DType.float64, W](65520.0)) & abs(d).lt(
-            SIMD[DType.float64, W](Float64.MAX))
-        return big.reduce_or()
-    elif dst.is_floating_point():
-        return False
-    elif src.is_floating_point():
-        var d = v.cast[DType.float64]()
-        comptime if dst == DType.int64:
-            var ok = d.ge(SIMD[DType.float64, W](-9223372036854775808.0)) & d.lt(
-                SIMD[DType.float64, W](9223372036854775808.0))
-            return not ok.reduce_and()
-        elif dst == DType.int32:
-            var ok = d.gt(SIMD[DType.float64, W](-2147483649.0)) & d.lt(
-                SIMD[DType.float64, W](2147483648.0))
-            return not ok.reduce_and()
-        elif dst == DType.uint32:
-            var ok = d.gt(SIMD[DType.float64, W](-1.0)) & d.lt(
-                SIMD[DType.float64, W](4294967296.0))
-            return not ok.reduce_and()
-        elif dst == DType.uint16:
-            var ok = d.gt(SIMD[DType.float64, W](-1.0)) & d.lt(
-                SIMD[DType.float64, W](65536.0))
-            return not ok.reduce_and()
-        elif dst == DType.int8:
-            var ok = d.gt(SIMD[DType.float64, W](-129.0)) & d.lt(
-                SIMD[DType.float64, W](128.0))
-            return not ok.reduce_and()
-        else:
-            var ok = d.gt(SIMD[DType.float64, W](-1.0)) & d.lt(
-                SIMD[DType.float64, W](256.0))
-            return not ok.reduce_and()
-    else:
-        comptime if dst == DType.int64:
-            return False
-        else:
-            var w = v.cast[DType.int64]()
-            comptime if dst == DType.int32:
-                var ok = w.ge(SIMD[DType.int64, W](-2147483648)) & w.le(
-                    SIMD[DType.int64, W](2147483647))
-                return not ok.reduce_and()
-            elif dst == DType.uint32:
-                var ok = w.ge(SIMD[DType.int64, W](0)) & w.le(
-                    SIMD[DType.int64, W](4294967295))
-                return not ok.reduce_and()
-            elif dst == DType.uint16:
-                var ok = w.ge(SIMD[DType.int64, W](0)) & w.le(
-                    SIMD[DType.int64, W](65535))
-                return not ok.reduce_and()
-            elif dst == DType.int8:
-                var ok = w.ge(SIMD[DType.int64, W](-128)) & w.le(
-                    SIMD[DType.int64, W](127))
-                return not ok.reduce_and()
-            else:
-                var ok = w.ge(SIMD[DType.int64, W](0)) & w.le(
-                    SIMD[DType.int64, W](255))
-                return not ok.reduce_and()
-
-
-@always_inline
-def _convert[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> SIMD[dst, W]:
-    comptime if (dst == DType.float32 or dst == DType.float16) and not src.is_floating_point():
-        # The C item setter's route: integer -> double -> float (struct's
-        # 'e' packing of a Python int goes through the double too).
-        return v.cast[DType.float64]().cast[dst]()
-    elif dst == DType.float32 and src == DType.float32:
-        # `array.array('f', <float32 memoryview>)` widens each element to a
-        # Python float and narrows it back. That round trip is the identity
-        # on every float32 EXCEPT a signaling NaN, which the widening quiets
-        # (quiet bit set, sign and payload kept; measured on the M4:
-        # 0x7fa00001 -> 0x7fe00001). An fpext/fptrunc pair would be folded
-        # away by the optimizer, so the quieting is spelled on the bits.
-        var bits = bitcast[DType.uint32, W](rebind[SIMD[DType.float32, W]](v))
-        var nan = (bits & SIMD[DType.uint32, W](0x7fffffff)).gt(SIMD[DType.uint32, W](0x7f800000))
-        var quiet = nan.select(bits | SIMD[DType.uint32, W](0x00400000), bits)
-        return rebind[SIMD[dst, W]](bitcast[DType.float32, W](quiet))
-    else:
-        return v.cast[dst]()
-
-
-def _cast_run[src: DType, dst: DType](src_addr: Int, dst_addr: Int, n: Int) raises -> Int:
-    var sp = _ptr[src](src_addr)
-    var dp = _ptr[dst](dst_addr)
-    var tasks = _tasks(n)
-    var chunk = n
-    var flags = List[Int](length=tasks, fill=0)
-    var fp = flags.unsafe_ptr()
-
-    def _range(c: Int) {imm sp, imm dp, imm n, imm chunk, imm fp}:
-        var i = c * chunk
-        var hi = min(i + chunk, n)
-        var bad = False
-        while i + HP_W <= hi:
-            var v = sp.unsafe_load[width=HP_W](i)
-            if _refused[src, dst, HP_W](v):
-                bad = True
-                break
-            comptime if HOTPATH_SABOTAGE:
-                dp.unsafe_store[width=HP_W](i, _convert[src, dst, HP_W](v.reversed()))
-            else:
-                dp.unsafe_store[width=HP_W](i, _convert[src, dst, HP_W](v))
-            i += HP_W
-        while i < hi and not bad:
-            var s = SIMD[src, 1](sp.unsafe_load(i))
-            if _refused[src, dst, 1](s):
-                bad = True
-                break
-            dp.unsafe_store(i, _convert[src, dst, 1](s)[0])
-            i += 1
-        if bad:
-            fp.unsafe_store(c, 1)
-
-    with GILReleased(Python()):
-        _range(0)
-    _ = len(flags)
-    for c in range(tasks):
-        if flags[c] != 0:
-            return 1
-    return 0
-
-
-def _cast_from[src: DType](src_addr: Int, dst_code: Int, dst_addr: Int, n: Int) raises -> Int:
-    if dst_code == HP_F32:
-        return _cast_run[src, DType.float32](src_addr, dst_addr, n)
-    if dst_code == HP_F64:
-        return _cast_run[src, DType.float64](src_addr, dst_addr, n)
-    if dst_code == HP_I32:
-        return _cast_run[src, DType.int32](src_addr, dst_addr, n)
-    if dst_code == HP_I64:
-        return _cast_run[src, DType.int64](src_addr, dst_addr, n)
-    if dst_code == HP_U32:
-        return _cast_run[src, DType.uint32](src_addr, dst_addr, n)
-    if dst_code == HP_U8:
-        return _cast_run[src, DType.uint8](src_addr, dst_addr, n)
-    if dst_code == HP_U16:
-        return _cast_run[src, DType.uint16](src_addr, dst_addr, n)
-    if dst_code == HP_I8:
-        return _cast_run[src, DType.int8](src_addr, dst_addr, n)
-    if dst_code == HP_F16:
-        return _cast_run[src, DType.float16](src_addr, dst_addr, n)
-    raise Error("cast_elements: unknown destination dtype code " + String(dst_code))
 
 
 def cast_elements_binding(
@@ -230,139 +106,14 @@ def cast_elements_binding(
     1 when some element is one the Python conversion refuses; `dst` is then
     unspecified and the caller reruns the Python path for its refusal."""
     var count = Int(py=n)
-    if count < 0:
-        raise Error("cast_elements: n must be non-negative, got " + String(count))
-    if count == 0:
-        return PythonObject(0)
     var sa = Int(py=src_addr)
     var da = Int(py=dst_addr)
     var sc = Int(py=src_code)
     var dc = Int(py=dst_code)
     var status: Int
-    if sc == HP_F32:
-        status = _cast_from[DType.float32](sa, dc, da, count)
-    elif sc == HP_F64:
-        status = _cast_from[DType.float64](sa, dc, da, count)
-    elif sc == HP_I32:
-        status = _cast_from[DType.int32](sa, dc, da, count)
-    elif sc == HP_I64:
-        status = _cast_from[DType.int64](sa, dc, da, count)
-    elif sc == HP_U32:
-        status = _cast_from[DType.uint32](sa, dc, da, count)
-    elif sc == HP_U8:
-        status = _cast_from[DType.uint8](sa, dc, da, count)
-    elif sc == HP_U16:
-        status = _cast_from[DType.uint16](sa, dc, da, count)
-    elif sc == HP_I8:
-        status = _cast_from[DType.int8](sa, dc, da, count)
-    elif sc == HP_F16:
-        status = _cast_from[DType.float16](sa, dc, da, count)
-    else:
-        raise Error("cast_elements: unknown source dtype code " + String(sc))
+    with GILReleased(Python()):
+        status = cast_elements(sa, sc, da, dc, count)
     return PythonObject(status)
-
-
-# ---------------------------------------------------------------------------
-# DEVIATION 3101: reduce_stat
-# ---------------------------------------------------------------------------
-
-comptime HP_MIN = 0
-comptime HP_MAX = 1
-comptime HP_SUM = 2
-comptime HP_ARGMAX = 3
-comptime HP_INTEGRAL = 4
-#: lane apple-fast-py2mojo-core: Python's exact integer `sum`.
-comptime HP_ISUM = 5
-
-
-def _isum[dt: DType](addr: Int, n: Int) raises -> PythonObject:
-    """Python's exact `sum` of `n` integers: a 128-bit two's complement
-    accumulator (lo unsigned, hi signed), so no sum of fewer than 2**63
-    int64 values can overflow it, in any order. Returns the tuple (hi,
-    lo >> 32, lo & 0xFFFFFFFF); the caller's total is
-    (hi << 64) + (mid << 32) + low. Under the sabotage define the total is
-    one too large."""
-    var p = _ptr[dt](addr)
-    var lo = UInt64(0)
-    var hi = Int64(0)
-    with GILReleased(Python()):
-        for i in range(n):
-            var v = p.unsafe_load(i).cast[DType.int64]()
-            var nlo = lo + bitcast[DType.uint64](v)
-            if nlo < lo:
-                hi += 1
-            if v < 0:
-                hi -= 1
-            lo = nlo
-        comptime if HOTPATH_SABOTAGE:
-            var bumped = lo + UInt64(1)
-            if bumped < lo:
-                hi += 1
-            lo = bumped
-    return Python.tuple(
-        PythonObject(Int(hi)), PythonObject(Int(lo >> 32)), PythonObject(Int(lo & UInt64(0xFFFFFFFF)))
-    )
-
-
-def _reduce[dt: DType](addr: Int, n: Int, what: Int) raises -> PythonObject:
-    var p = _ptr[dt](addr)
-    var best = p.unsafe_load(0)
-    var at = 0
-    var total = Float64(0.0)
-    var integral = 1
-    with GILReleased(Python()):
-        var want_min = what == HP_MIN
-        comptime if HOTPATH_SABOTAGE:
-            want_min = what == HP_MAX
-        if want_min:
-            for i in range(1, n):
-                var v = p.unsafe_load(i)
-                if v < best:
-                    best = v
-        elif what == HP_MIN or what == HP_MAX:
-            for i in range(1, n):
-                var v = p.unsafe_load(i)
-                if v > best:
-                    best = v
-        elif what == HP_ARGMAX:
-            for i in range(1, n):
-                var v = p.unsafe_load(i)
-                comptime if HOTPATH_SABOTAGE:
-                    if v >= best:
-                        best = v
-                        at = i
-                    continue
-                if v > best:
-                    best = v
-                    at = i
-        elif what == HP_SUM:
-            for i in range(n):
-                comptime if HOTPATH_SABOTAGE:
-                    total = total + p.unsafe_load(n - 1 - i).cast[DType.float64]()
-                else:
-                    total = total + p.unsafe_load(i).cast[DType.float64]()
-        else:
-            comptime if dt.is_floating_point():
-                for i in range(n):
-                    var d = p.unsafe_load(i).cast[DType.float64]()
-                    # finite and equal to its own truncation; every float at
-                    # or beyond 2**53 in magnitude is an integer already
-                    if not isfinite(d):
-                        integral = 0
-                        break
-                    if abs(d) < 9007199254740992.0 and Float64(Int(d)) != d:
-                        integral = 0
-                        break
-    if what == HP_ARGMAX:
-        return PythonObject(at)
-    if what == HP_SUM:
-        return PythonObject(total)
-    if what == HP_INTEGRAL:
-        return PythonObject(integral)
-    comptime if dt.is_floating_point():
-        return PythonObject(best.cast[DType.float64]())
-    else:
-        return PythonObject(Int(best))
 
 
 def reduce_stat_binding(
@@ -373,98 +124,18 @@ def reduce_stat_binding(
     (what = 4) whether every float is finite and integer valued, or (what =
     5, lane apple-fast-py2mojo-core) the exact integer sum as (hi, mid, low)."""
     var count = Int(py=n)
-    if count < 1:
-        raise Error("reduce_stat: n must be positive, got " + String(count))
     var w = Int(py=what)
-    if w < HP_MIN or w > HP_ISUM:
-        raise Error("reduce_stat: unknown reduction " + String(w))
     var c = Int(py=code)
     var a = Int(py=addr)
-    if w == HP_ISUM:
-        if c == HP_I32:
-            return _isum[DType.int32](a, count)
-        if c == HP_I64:
-            return _isum[DType.int64](a, count)
-        if c == HP_U32:
-            return _isum[DType.uint32](a, count)
-        if c == HP_U8:
-            return _isum[DType.uint8](a, count)
-        if c == HP_U16:
-            return _isum[DType.uint16](a, count)
-        if c == HP_I8:
-            return _isum[DType.int8](a, count)
-        raise Error("reduce_stat: the integer sum takes an integer buffer")
-    if w == HP_SUM and c != HP_F32 and c != HP_F64 and c != HP_F16:
-        raise Error("reduce_stat: the float sum takes a float buffer")
-    if c == HP_F32:
-        return _reduce[DType.float32](a, count, w)
-    if c == HP_F64:
-        return _reduce[DType.float64](a, count, w)
-    if c == HP_I32:
-        return _reduce[DType.int32](a, count, w)
-    if c == HP_I64:
-        return _reduce[DType.int64](a, count, w)
-    if c == HP_U32:
-        return _reduce[DType.uint32](a, count, w)
-    if c == HP_U8:
-        return _reduce[DType.uint8](a, count, w)
-    if c == HP_U16:
-        return _reduce[DType.uint16](a, count, w)
-    if c == HP_I8:
-        return _reduce[DType.int8](a, count, w)
-    if c == HP_F16:
-        return _reduce[DType.float16](a, count, w)
-    raise Error("reduce_stat: unknown dtype code " + String(c))
-
-
-# ---------------------------------------------------------------------------
-# DEVIATION 3102: equal_elements
-# ---------------------------------------------------------------------------
-
-
-def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
-    var ap = _ptr[dt](a_addr)
-    var bp = _ptr[dt](b_addr)
-    var dp = _ptr[DType.uint8](dst_addr)
-    var tasks = _tasks(n)
-    var chunk = n
-
-    def _range(c: Int) {imm ap, imm bp, imm dp, imm n, imm chunk}:
-        var i = c * chunk
-        var hi = min(i + chunk, n)
-        while i + HP_W <= hi:
-            var eq = ap.unsafe_load[width=HP_W](i).eq(bp.unsafe_load[width=HP_W](i))
-            comptime if HOTPATH_SABOTAGE:
-                eq = ~eq
-            dp.unsafe_store[width=HP_W](i, eq.cast[DType.uint8]())
-            i += HP_W
-        while i < hi:
-            var one = UInt8(1) if ap.unsafe_load(i) == bp.unsafe_load(i) else UInt8(0)
-            dp.unsafe_store(i, one)
-            i += 1
-
+    var r: HpStat
     with GILReleased(Python()):
-        _range(0)
+        r = reduce_stat(a, c, count, w)
+    if r.kind == HP_STAT_TUPLE:
+        return Python.tuple(PythonObject(r.hi), PythonObject(r.mid), PythonObject(r.low))
+    if r.kind == HP_STAT_FLOAT:
+        return PythonObject(r.f)
+    return PythonObject(r.i)
 
-
-def _equal_i64_f64(a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
-    """Python's exact `int == float` per element (lane py-runtime round 3):
-    equal iff the float is finite, integral, inside int64 and its integer is
-    the int64 (no rounding of either side, so 2**53 + 1 != 2.0**53)."""
-    var ap = _ptr[DType.int64](a_addr)
-    var bp = _ptr[DType.float64](b_addr)
-    var dp = _ptr[DType.uint8](dst_addr)
-    with GILReleased(Python()):
-        var i = 0
-        while i < n:
-            var f = bp.unsafe_load(i)
-            var one = UInt8(0)
-            if f == f and f >= -9223372036854775808.0 and f < 9223372036854775808.0:
-                var k = Int64(f)
-                if Float64(k) == f and k == ap.unsafe_load(i):
-                    one = UInt8(1)
-            dp.unsafe_store(i, one)
-            i += 1
 
 def equal_elements_binding(
     a_addr: PythonObject, b_addr: PythonObject, code: PythonObject,
@@ -474,103 +145,14 @@ def equal_elements_binding(
     (DEVIATION 3102): IEEE equality for floats, which is Python's (NaN is
     unequal to itself, -0.0 equals 0.0)."""
     var count = Int(py=n)
-    if count < 0:
-        raise Error("equal_elements: n must be non-negative")
-    if count == 0:
-        return PythonObject(0)
     var c = Int(py=code)
     var a = Int(py=a_addr)
     var b = Int(py=b_addr)
     var d = Int(py=dst_addr)
-    if c == HP_F32:
-        _equal[DType.float32](a, b, count, d)
-    elif c == HP_F64:
-        _equal[DType.float64](a, b, count, d)
-    elif c == HP_I32:
-        _equal[DType.int32](a, b, count, d)
-    elif c == HP_I64:
-        _equal[DType.int64](a, b, count, d)
-    elif c == HP_U32:
-        _equal[DType.uint32](a, b, count, d)
-    elif c == HP_U8:
-        _equal[DType.uint8](a, b, count, d)
-    elif c == HP_U16:
-        _equal[DType.uint16](a, b, count, d)
-    elif c == HP_I8:
-        _equal[DType.int8](a, b, count, d)
-    elif c == HP_F16:
-        _equal[DType.float16](a, b, count, d)
-    elif c == HP_I64_F64:
-        _equal_i64_f64(a, b, count, d)
-    else:
-        raise Error("equal_elements: unknown dtype code " + String(c))
-    return PythonObject(0)
-
-
-# ---------------------------------------------------------------------------
-# DEVIATION 3103: the ORDER RULE's encoder for the core host binding, and
-# gather_i32
-# ---------------------------------------------------------------------------
-
-
-def _encode_labels_host[dt: DType](
-    src: MutPointer[Scalar[dt], MutUntrackedOrigin], n: Int,
-    classes: MutPointer[Scalar[dt], MutUntrackedOrigin], max_classes: Int,
-    codes: MutPointer[Int32, MutUntrackedOrigin],
-) -> Int:
-    """`bindings/_mojolearn.mojo::_encode_labels`, DEVIATION 2500, verbatim:
-    n_classes, or -1 when more than `max_classes` distinct values were seen,
-    or -2 when a label compared unequal to itself (NaN)."""
-    var k = 0
-    var last = src.unsafe_load(0)
-    var have_last = False
-    for i in range(n):
-        var v = src.unsafe_load(i)
-        if v != v:
-            return -2
-        if have_last and v == last:
-            continue
-        var lo = 0
-        var hi = k
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if classes.unsafe_load(mid) < v:
-                lo = mid + 1
-            else:
-                hi = mid
-        last = v
-        have_last = True
-        if lo < k and classes.unsafe_load(lo) == v:
-            continue
-        if k == max_classes:
-            return -1
-        var j = k
-        while j > lo:
-            classes.unsafe_store(j, classes.unsafe_load(j - 1))
-            j -= 1
-        classes.unsafe_store(lo, v)
-        k += 1
-    var last_code = -1
-    for i in range(n):
-        var v = src.unsafe_load(i)
-        if last_code >= 0 and v == last:
-            codes.unsafe_store(i, Int32(last_code))
-            continue
-        var lo = 0
-        var hi = k
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if classes.unsafe_load(mid) < v:
-                lo = mid + 1
-            else:
-                hi = mid
-        codes.unsafe_store(i, Int32(lo))
-        last = v
-        last_code = lo
-    comptime if HOTPATH_SABOTAGE:
-        for i in range(n):
-            codes.unsafe_store(i, Int32(k - 1) - codes.unsafe_load(i))
-    return k
+    var status: Int
+    with GILReleased(Python()):
+        status = equal_elements(a, b, c, count, d)
+    return PythonObject(status)
 
 
 def _encode_labels_binding[dt: DType](
@@ -579,18 +161,12 @@ def _encode_labels_binding[dt: DType](
 ) raises -> PythonObject:
     var count = Int(py=n)
     var cap = Int(py=max_classes)
-    if count < 1:
-        raise Error("encode_labels: n must be positive, got " + String(count))
-    if cap < 1:
-        raise Error("encode_labels: max_classes must be positive")
-    var sp = _ptr[dt](Int(py=src_addr))
-    var cp = _ptr[dt](Int(py=classes_addr))
-    var dp = _ptr[DType.int32](Int(py=codes_addr))
+    var sa = Int(py=src_addr)
+    var ca = Int(py=classes_addr)
+    var da = Int(py=codes_addr)
     var k: Int
     with GILReleased(Python()):
-        k = _encode_labels_host[dt](sp, count, cp, cap, dp)
-    if k == -2:
-        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+        k = encode_labels[dt](sa, count, ca, cap, da)
     return PythonObject(k)
 
 
@@ -641,86 +217,29 @@ def gather_i32_binding(
     n: PythonObject, dst_addr: PythonObject,
 ) raises -> PythonObject:
     """`dst[i] = table[codes[i]]`, int32 codes into an int32 table
-    (DEVIATION 3103): the remap of dense label codes onto a caller's label
-    order, where the table may hold -1 for "not a requested label". A code
-    outside `[0, n_table)` raises before any write."""
+    (DEVIATION 3103). A code outside `[0, n_table)` raises before any write."""
     var count = Int(py=n)
     var nt = Int(py=n_table)
-    if count < 0 or nt < 1:
-        raise Error("gather_i32: n must be non-negative and the table non-empty")
-    if count == 0:
-        return PythonObject(0)
-    var tp = _ptr[DType.int32](Int(py=table_addr))
-    var cp = _ptr[DType.int32](Int(py=codes_addr))
-    var dp = _ptr[DType.int32](Int(py=dst_addr))
-    var bad = False
+    var ta = Int(py=table_addr)
+    var ca = Int(py=codes_addr)
+    var da = Int(py=dst_addr)
+    var status: Int
     with GILReleased(Python()):
-        for i in range(count):
-            var c = Int(cp.unsafe_load(i))
-            if c < 0 or c >= nt:
-                bad = True
-                break
-        if not bad:
-            var tasks = _tasks(count)
-            var chunk = count
-
-            def _range(t: Int) {imm tp, imm cp, imm dp, imm count, imm chunk, imm nt}:
-                var lo = t * chunk
-                var hi = min(lo + chunk, count)
-                for i in range(lo, hi):
-                    comptime if HOTPATH_SABOTAGE:
-                        dp.unsafe_store(i, tp.unsafe_load((Int(cp.unsafe_load(i)) + 1) % nt))
-                    else:
-                        dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
-
-            _range(0)
-    if bad:
-        raise Error("gather_i32: code out of range")
-    return PythonObject(0)
-
-
-# ---------------------------------------------------------------------------
-# DEVIATION 3104: fold bookkeeping of model_selection
-# ---------------------------------------------------------------------------
-
-
-@always_inline
-def _bit_test_set(bits: MutPointer[UInt64, MutUntrackedOrigin], index: Int) -> Bool:
-    """Set bit `index`; True when it was already set."""
-    var word = bits.unsafe_load(index >> 6)
-    var mask = UInt64(1) << UInt64(index & 63)
-    bits.unsafe_store(index >> 6, word | mask)
-    return (word & mask) != 0
+        status = gather_i32(ta, nt, ca, count, da)
+    return PythonObject(status)
 
 
 def check_indices_i64_binding(
     addr: PythonObject, n: PythonObject, bound: PythonObject,
 ) raises -> PythonObject:
     """0 when the `n` int64 indices are all in `[0, bound)` and distinct, 1
-    when any is out of range, else 2 for a duplicate: the order
-    `model_selection._indices` tests them in."""
+    when any is out of range, else 2 for a duplicate."""
     var count = Int(py=n)
     var limit = Int(py=bound)
-    if count < 1 or limit < 0:
-        raise Error("check_indices_i64: n must be positive and bound non-negative")
-    var p = _ptr[DType.int64](Int(py=addr))
-    var status = 0
+    var a = Int(py=addr)
+    var status: Int
     with GILReleased(Python()):
-        for i in range(count):
-            var v = Int(p.unsafe_load(i))
-            if v < 0 or v >= limit:
-                status = 1
-                break
-        if status == 0:
-            var words = (limit + 63) // 64
-            var bits = List[UInt64](length=words, fill=UInt64(0))
-            var bp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bits.unsafe_ptr())
-            for i in range(count):
-                if _bit_test_set(bp, Int(p.unsafe_load(i))):
-                    comptime if not HOTPATH_SABOTAGE:
-                        status = 2
-                        break
-            _ = len(bits)
+        status = check_indices_i64(a, count, limit)
     return PythonObject(status)
 
 
@@ -728,41 +247,15 @@ def indices_overlap_i64_binding(
     a_addr: PythonObject, n_a: PythonObject, b_addr: PythonObject,
     n_b: PythonObject, bound: PythonObject,
 ) raises -> PythonObject:
-    """1 when two int64 index sets share a member, else 0. Both must already
-    have passed `check_indices_i64` against `bound`."""
+    """1 when two int64 index sets share a member, else 0."""
     var na = Int(py=n_a)
     var nb = Int(py=n_b)
     var limit = Int(py=bound)
-    if na < 1 or nb < 1 or limit < 1:
-        raise Error("indices_overlap_i64: counts and bound must be positive")
-    var ap = _ptr[DType.int64](Int(py=a_addr))
-    var bp = _ptr[DType.int64](Int(py=b_addr))
-    var hit = 0
-    var bad = False
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    var hit: Int
     with GILReleased(Python()):
-        var words = (limit + 63) // 64
-        var bits = List[UInt64](length=words, fill=UInt64(0))
-        var wp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bits.unsafe_ptr())
-        for i in range(na):
-            var v = Int(ap.unsafe_load(i))
-            if v < 0 or v >= limit:
-                bad = True
-                break
-            _ = _bit_test_set(wp, v)
-        if not bad:
-            for i in range(nb):
-                var v = Int(bp.unsafe_load(i))
-                if v < 0 or v >= limit:
-                    bad = True
-                    break
-                var word = wp.unsafe_load(v >> 6)
-                if (word & (UInt64(1) << UInt64(v & 63))) != 0:
-                    comptime if not HOTPATH_SABOTAGE:
-                        hit = 1
-                        break
-        _ = len(bits)
-    if bad:
-        raise Error("indices_overlap_i64: index out of range")
+        hit = indices_overlap_i64(a, na, b, nb, limit)
     return PythonObject(hit)
 
 
@@ -772,87 +265,18 @@ def fold_ids_binding(
     fold_counts_addr: PythonObject,
 ) raises -> PythonObject:
     """The unshuffled default folds of `model_selection._default_folds` as one
-    int32 fold id per row (DEVIATION 3104).
-
-    `codes_addr == 0`: KFold, contiguous blocks, the first `n % n_splits`
-    folds one row longer. Otherwise the stratified assignment over `n`
-    int32 class codes in `[0, n_classes)`: classes are taken in FIRST-SEEN
-    order, class `c` occupies `[offset, offset + count)` of the class-sorted
-    label sequence, fold `f` receives `0 if first >= count else 1 + (count -
-    1 - first) // n_splits` of its rows with `first = (f - offset) mod
-    n_splits`, and the class's rows are dealt to folds 0, 1, ... in row
-    order. `counts_addr` receives the int64 row count per class code (it is
-    not read for KFold) and `fold_counts_addr` the int64 row count per fold.
-    Every quantity is an integer; there is nothing to round."""
+    int32 fold id per row (DEVIATION 3104; `core/hotpath_impl.mojo::fold_ids`)."""
     var rows = Int(py=n)
     var k = Int(py=n_classes)
     var splits = Int(py=n_splits)
-    if rows < 1 or splits < 2:
-        raise Error("fold_ids: n must be positive and n_splits at least 2")
-    var fp = _ptr[DType.int32](Int(py=fold_addr))
-    var fcp = _ptr[DType.int64](Int(py=fold_counts_addr))
-    if Int(py=codes_addr) == 0:
-        with GILReleased(Python()):
-            var offset = 0
-            for fold in range(splits):
-                var size = rows // splits
-                if fold < rows % splits:
-                    size += 1
-                for i in range(offset, offset + size):
-                    fp.unsafe_store(i, Int32(fold))
-                fcp.unsafe_store(fold, Int64(size))
-                offset += size
-        return PythonObject(0)
-    if k < 1:
-        raise Error("fold_ids: n_classes must be positive")
-    var cp = _ptr[DType.int32](Int(py=codes_addr))
-    var np = _ptr[DType.int64](Int(py=counts_addr))
-    var bad = False
+    var ca = Int(py=codes_addr)
+    var na = Int(py=counts_addr)
+    var fa = Int(py=fold_addr)
+    var fca = Int(py=fold_counts_addr)
+    var status: Int
     with GILReleased(Python()):
-        var counts = List[Int](length=k, fill=0)
-        var order = List[Int]()  # class codes in first-seen order
-        for i in range(rows):
-            var c = Int(cp.unsafe_load(i))
-            if c < 0 or c >= k:
-                bad = True
-                break
-            if counts[c] == 0:
-                order.append(c)
-            counts[c] += 1
-        if not bad:
-            # quota[c * splits + f]: rows of class c that fold f receives
-            var quota = List[Int](length=k * splits, fill=0)
-            var offset = 0
-            for j in range(len(order)):
-                var c = order[j]
-                var count = counts[c]
-                for fold in range(splits):
-                    var first = (fold - offset) % splits
-                    if first < 0:
-                        first += splits
-                    var take = 0
-                    if first < count:
-                        take = 1 + (count - 1 - first) // splits
-                    quota[c * splits + fold] = take
-                offset += count
-            var current = List[Int](length=k, fill=0)
-            var per_fold = List[Int](length=splits, fill=0)
-            for i in range(rows):
-                var c = Int(cp.unsafe_load(i))
-                var fold = current[c]
-                while quota[c * splits + fold] == 0:
-                    fold += 1
-                quota[c * splits + fold] -= 1
-                current[c] = fold
-                per_fold[fold] += 1
-                fp.unsafe_store(i, Int32(fold))
-            for c in range(k):
-                np.unsafe_store(c, Int64(counts[c]))
-            for fold in range(splits):
-                fcp.unsafe_store(fold, Int64(per_fold[fold]))
-    if bad:
-        raise Error("fold_ids: class code out of range")
-    return PythonObject(0)
+        status = fold_ids(ca, rows, k, splits, na, fa, fca)
+    return PythonObject(status)
 
 
 def select_fold_i64_binding(
@@ -860,53 +284,27 @@ def select_fold_i64_binding(
     test_addr: PythonObject, train_addr: PythonObject,
 ) raises -> PythonObject:
     """Ascending int64 row indices with fold id `fold` into `test`, every
-    other row into `train`; returns the test count. Each output must hold
-    `n` entries at most (the caller sizes them from the fold's count)."""
+    other row into `train`; returns the test count."""
     var rows = Int(py=n)
-    var want = Int32(Int(py=fold))
-    if rows < 1:
-        raise Error("select_fold_i64: n must be positive")
-    var fp = _ptr[DType.int32](Int(py=fold_addr))
-    var tp = _ptr[DType.int64](Int(py=test_addr))
-    var rp = _ptr[DType.int64](Int(py=train_addr))
-    var n_test = 0
+    var want = Int(py=fold)
+    var fa = Int(py=fold_addr)
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var n_test: Int
     with GILReleased(Python()):
-        var n_train = 0
-        for i in range(rows):
-            var at = i
-            comptime if HOTPATH_SABOTAGE:
-                at = (i + 1) % rows  # the row-to-fold assignment, rotated by one
-            if fp.unsafe_load(at) == want:
-                tp.unsafe_store(n_test, Int64(i))
-                n_test += 1
-            else:
-                rp.unsafe_store(n_train, Int64(i))
-                n_train += 1
+        n_test = select_fold_i64(fa, rows, want, ta, ra)
     return PythonObject(n_test)
 
 
-# ---------------------------------------------------------------------------
-# lane cgr4-py-compute: the remaining CV-splitter index generation
-# ---------------------------------------------------------------------------
-
-
 def arange_i64_binding(dst_addr: PythonObject, start: PythonObject, n: PythonObject) raises -> PythonObject:
-    """`dst[i] = start + i` for i < n, int64: every contiguous row range a
-    splitter hands out (TimeSeriesSplit, train_test_split, `_as_index`)."""
+    """`dst[i] = start + i` for i < n, int64."""
     var count = Int(py=n)
-    if count < 0:
-        raise Error("arange_i64: n must be non-negative")
-    if count == 0:
-        return PythonObject(0)
-    var lo = Int64(Int(py=start))
-    var dp = _ptr[DType.int64](Int(py=dst_addr))
+    var lo = Int(py=start)
+    var da = Int(py=dst_addr)
+    var status: Int
     with GILReleased(Python()):
-        for i in range(count):
-            comptime if HOTPATH_SABOTAGE:
-                dp.unsafe_store(i, lo + Int64(count - 1 - i))
-            else:
-                dp.unsafe_store(i, lo + Int64(i))
-    return PythonObject(0)
+        status = arange_i64(da, lo, count)
+    return PythonObject(status)
 
 
 def leave_range_i64_binding(
@@ -914,56 +312,30 @@ def leave_range_i64_binding(
     train_addr: PythonObject, test_addr: PythonObject,
 ) raises -> PythonObject:
     """test = rows [lo, hi), train = rows [0, lo) then [hi, n), ascending
-    int64 (LeaveOneOut's split i is lo = i, hi = i + 1). Returns hi - lo."""
+    int64. Returns hi - lo."""
     var rows = Int(py=n)
     var a = Int(py=lo)
     var b = Int(py=hi)
-    if rows < 1 or a < 0 or b < a or b > rows:
-        raise Error("leave_range_i64: needs 0 <= lo <= hi <= n, n >= 1")
-    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=test_addr))
-    var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=train_addr))
+    var ra = Int(py=train_addr)
+    var ta = Int(py=test_addr)
+    var width: Int
     with GILReleased(Python()):
-        for i in range(a, b):
-            tp.unsafe_store(i - a, Int64(i))
-        var at = 0
-        for i in range(rows):
-            if i < a or i >= b:
-                comptime if HOTPATH_SABOTAGE:
-                    rp.unsafe_store(at, Int64(rows - 1 - i))
-                else:
-                    rp.unsafe_store(at, Int64(i))
-                at += 1
-    return PythonObject(b - a)
+        width = leave_range_i64(rows, a, b, ra, ta)
+    return PythonObject(width)
 
 
 def mask_from_indices_u8_binding(
     idx_addr: PythonObject, k: PythonObject, n: PythonObject, mask_addr: PythonObject,
 ) raises -> PythonObject:
-    """mask[r] = 1 for every int64 index r of the k at `idx` (mask zeroed
-    first, n bytes); returns the number of distinct rows set. An index
-    outside [0, n) raises before the mask is read."""
+    """mask[r] = 1 for every int64 index r of the k at `idx`; returns the
+    number of distinct rows set."""
     var count = Int(py=k)
     var rows = Int(py=n)
-    if count < 0 or rows < 1:
-        raise Error("mask_from_indices_u8: k must be non-negative and n positive")
-    var mp = _ptr[DType.uint8](Int(py=mask_addr))
-    var bad = False
-    var set = 0
+    var ia = Int(py=idx_addr)
+    var ma = Int(py=mask_addr)
+    var set: Int
     with GILReleased(Python()):
-        for r in range(rows):
-            mp.unsafe_store(r, 0)
-        if count > 0:
-            var ip = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=idx_addr))
-            for i in range(count):
-                var r = Int(ip.unsafe_load(i))
-                if r < 0 or r >= rows:
-                    bad = True
-                    break
-                if mp.unsafe_load(r) == 0:
-                    set += 1
-                mp.unsafe_store(r, 1)
-    if bad:
-        raise Error("mask_from_indices_u8: index out of range")
+        set = mask_from_indices_u8(ia, count, rows, ma)
     return PythonObject(set)
 
 
@@ -971,154 +343,72 @@ def select_mask_u8_i64_binding(
     mask_addr: PythonObject, n: PythonObject, test_addr: PythonObject, train_addr: PythonObject,
 ) raises -> PythonObject:
     """Ascending int64 rows whose mask byte is nonzero into `test`, the rest
-    into `train`; returns the test count. A null output address is legal
-    when that side is empty. `n_test` = count of nonzero bytes: the caller
-    sizes the outputs from `count_mask_u8`."""
+    into `train`; returns the test count."""
     var rows = Int(py=n)
-    if rows < 1:
-        raise Error("select_mask_u8_i64: n must be positive")
-    var mp = _ptr[DType.uint8](Int(py=mask_addr))
+    var ma = Int(py=mask_addr)
     var ta = Int(py=test_addr)
     var ra = Int(py=train_addr)
-    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ta)
-    var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ra)
-    var n_test = 0
+    var n_test: Int
     with GILReleased(Python()):
-        var n_train = 0
-        for i in range(rows):
-            var at = i
-            comptime if HOTPATH_SABOTAGE:
-                at = (i + 1) % rows
-            if mp.unsafe_load(at) != 0:
-                tp.unsafe_store(n_test, Int64(i))
-                n_test += 1
-            else:
-                rp.unsafe_store(n_train, Int64(i))
-                n_train += 1
+        n_test = select_mask_u8_i64(ma, rows, ta, ra)
     return PythonObject(n_test)
 
 
 def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> PythonObject:
     """The number of nonzero bytes of the n-byte mask."""
     var rows = Int(py=n)
-    if rows < 0:
-        raise Error("count_mask_u8: n must be non-negative")
-    if rows == 0:
-        return PythonObject(0)
-    var mp = _ptr[DType.uint8](Int(py=mask_addr))
-    var c = 0
+    var ma = Int(py=mask_addr)
+    var c: Int
     with GILReleased(Python()):
-        for i in range(rows):
-            if mp.unsafe_load(i) != 0:
-                c += 1
+        c = count_mask_u8(ma, rows)
     return PythonObject(c)
 
 
 def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonObject) raises -> PythonObject:
     """Advance the ascending p-combination of range(n) at `addr` (int64) to
-    its lexicographic successor (itertools.combinations order); 1 when it
-    advanced, 0 when it was the last (left unchanged)."""
+    its lexicographic successor; 1 when it advanced, 0 when it was the last."""
     var k = Int(py=p)
     var rows = Int(py=n)
-    if k < 1 or k > rows:
-        raise Error("next_combination_i64: needs 1 <= p <= n")
-    var cp = _ptr[DType.int64](Int(py=addr))
-    var i = k - 1
-    while i >= 0 and Int(cp.unsafe_load(i)) == i + rows - k:
-        i -= 1
-    if i < 0:
-        return PythonObject(0)
-    var v = cp.unsafe_load(i) + 1
-    for j in range(i, k):
-        cp.unsafe_store(j, v + Int64(j - i))
-    return PythonObject(1)
+    var a = Int(py=addr)
+    return PythonObject(next_combination_i64(a, k, rows))
 
 
 def ic_running_min_f32_host_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
 ) raises -> PythonObject:
-    """lane/fam2-timeseries: `ic_running_min_f64` with the criterion in
-    float32, the host column of the device order choice
-    (`arima/impl/fast_order_search.mojo::order_ic_argmin_kernel`):
-    ic[b] = -2 llf[b] + Float32(penalty), ONE rounding (the product is exact,
-    so contraction cannot change it), then the same running first minimum.
-    `ic` and `best_ic` are float32, `best_idx` int64. A NaN best criterion is
-    the kernel's canonical NaN once chosen."""
+    """`ic_running_min_f64` with the criterion in float32
+    (`core/hotpath_impl.mojo::ic_running_min_f32_host`)."""
     var count = Int(py=n)
     var k = Int(py=order)
-    if count < 1 or k < 0:
-        raise Error("ic_running_min_f32: n must be positive and order non-negative")
-    var pen = Float32(Float64(py=penalty))
-    var lp = _ptr[DType.float32](Int(py=llf_addr))
-    var ip = _ptr[DType.float32](Int(py=ic_addr))
-    var bp = _ptr[DType.float32](Int(py=best_ic_addr))
-    var xp = _ptr[DType.int64](Int(py=best_idx_addr))
+    var pen = Float64(py=penalty)
+    var la = Int(py=llf_addr)
+    var ia = Int(py=ic_addr)
+    var ba = Int(py=best_ic_addr)
+    var xa = Int(py=best_idx_addr)
+    var status: Int
     with GILReleased(Python()):
-        for b in range(count):
-            # lane/review-fixes: flushed as the device's
-            # `ftz(fma(-2, ftz(ll), pen))` (arima fast_order_search); -2 x is
-            # exact, so mul + add is the fma's word
-            var v = _ftz_bits(Float32(-2.0) * _ftz_bits(lp.unsafe_load(b)) + pen)
-            if v != v:
-                v = bitcast[DType.float32](UInt32(0x7FC00000))
-            ip.unsafe_store(b, v)
-            if k == 0:
-                bp.unsafe_store(b, v)
-                xp.unsafe_store(b, 0)
-            else:
-                var cur = bp.unsafe_load(b)
-                var take = False
-                if cur == cur:
-                    take = (v != v) or v < cur
-                comptime if HOTPATH_SABOTAGE:
-                    take = not take
-                if take:
-                    bp.unsafe_store(b, v)
-                    xp.unsafe_store(b, Int64(k))
-    return PythonObject(0)
+        status = ic_running_min_f32_host(la, count, pen, k, ia, ba, xa)
+    return PythonObject(status)
 
 
 def ic_running_min_f64_host_binding(
     llf_addr: PythonObject, n: PythonObject, penalty: PythonObject, order: PythonObject,
     ic_addr: PythonObject, best_ic_addr: PythonObject, best_idx_addr: PythonObject,
 ) raises -> PythonObject:
-    """AutoARIMA's information criterion and order choice per series (lane
-    cgr4-py-compute): ic[b] = -2 llf[b] + penalty in float64 from the fit's
-    float32 log-likelihood, written to `ic`; then the running argmin over
-    the orders tried so far, `np.argmin`'s rule: the FIRST minimum, a NaN
-    taken as the minimum (the first NaN wins). order 0 initialises."""
+    """AutoARIMA's information criterion and running first-minimum order
+    choice per series (`core/hotpath_impl.mojo::ic_running_min_f64_host`)."""
     var count = Int(py=n)
     var k = Int(py=order)
-    if count < 1 or k < 0:
-        raise Error("ic_running_min_f64: n must be positive and order non-negative")
     var pen = Float64(py=penalty)
-    var lp = _ptr[DType.float32](Int(py=llf_addr))
-    var ip = _ptr[DType.float64](Int(py=ic_addr))
-    var bp = _ptr[DType.float64](Int(py=best_ic_addr))
-    var xp = _ptr[DType.int64](Int(py=best_idx_addr))
+    var la = Int(py=llf_addr)
+    var ia = Int(py=ic_addr)
+    var ba = Int(py=best_ic_addr)
+    var xa = Int(py=best_idx_addr)
+    var status: Int
     with GILReleased(Python()):
-        for b in range(count):
-            var v = -2.0 * Float64(lp.unsafe_load(b)) + pen
-            # lane cpu4-python: a NaN criterion is the canonical quiet NaN,
-            # as the device form (core/ic_min_device.mojo, soft binary64)
-            if v != v:
-                v = bitcast[DType.float64](UInt64(0x7FF8000000000000))
-            ip.unsafe_store(b, v)
-            if k == 0:
-                bp.unsafe_store(b, v)
-                xp.unsafe_store(b, 0)
-            else:
-                var cur = bp.unsafe_load(b)
-                var take = False
-                if cur == cur:
-                    take = (v != v) or v < cur
-                comptime if HOTPATH_SABOTAGE:
-                    take = not take
-                if take:
-                    bp.unsafe_store(b, v)
-                    xp.unsafe_store(b, Int64(k))
-    return PythonObject(0)
+        status = ic_running_min_f64_host(la, count, pen, k, ia, ba, xa)
+    return PythonObject(status)
 
 
 @always_inline
