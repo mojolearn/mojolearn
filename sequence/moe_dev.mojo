@@ -18,29 +18,28 @@ values: no bit moves.
 
 Registered unless -D MOJOLEARN_SEQ_MOE_DEVICE_IO_OFF (the grid's before
 arm); `MoEBlock.forward` uses it only when the binding has it and x is a
-resident tensor."""
-from std.python import PythonObject
-
+resident tensor. The Python entry (`moe_forward_dev_py`) is
+`sequence/moe_dev_pyapi.mojo`'s."""
 from sequence.exec_device import DeviceExec
 from sequence.moe_weights import moe_weights_ptrs
-from sequence.pyapi import ival, moe_forward_core
+from sequence.pyapi import moe_forward_core
 from sequence.seq_tensor import seq_tensor_ptr
 
 
-def moe_forward_dev_py(handles: PythonObject, ip: PythonObject) raises -> PythonObject:
+def moe_forward_dev(handles: List[Int], ip: List[Int]) raises -> Int:
     """handles = [x (T, D), y (T, D) out, logits (T, E) out, selected (T, k)
     out as floats, weights (T, k) out] (seq_tensor handles); ip = [T, D, F,
     E, k, renormalise, weight handle (> 0, `moe_weights_put`)]. Returns
     T * D."""
     if len(handles) != 5 or len(ip) != 7:
         raise Error("moe_forward_dev: requires 5 tensor handles and 7 integer parameters")
-    var T = ival(ip, 0)
-    var D = ival(ip, 1)
-    var F = ival(ip, 2)
-    var En = ival(ip, 3)
-    var k = ival(ip, 4)
-    var renorm = ival(ip, 5)
-    var wh = ival(ip, 6)
+    var T = ip[0]
+    var D = ip[1]
+    var F = ip[2]
+    var En = ip[3]
+    var k = ip[4]
+    var renorm = ip[5]
+    var wh = ip[6]
     if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
         raise Error("moe_forward_dev: T, D, F, E >= 1 and 1 <= k <= E")
     if wh < 1:
@@ -55,4 +54,4 @@ def moe_forward_dev_py(handles: PythonObject, ip: PythonObject) raises -> Python
     # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
     moe_forward_core(ex, X, Y, L, Sel, W, T, D, F, En, k, renorm, w[0], w[1], w[2])
-    return PythonObject(T * D)
+    return T * D

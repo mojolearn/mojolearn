@@ -84,7 +84,7 @@ comptime SCHED_FAST_TABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_g
                              and not is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]())
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
-from sequence.moe_dev import moe_forward_dev_py
+from sequence.moe_dev_pyapi import moe_forward_dev_py
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
