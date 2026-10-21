@@ -11,6 +11,7 @@ def connect(context, owner_cls, model_cls):
     fields = (
         '_operation', '_pool', '_update_pool', 'model', 'logical_shards',
         '_lock', '_closed', '_gradients', '_opt', '_session', '_config', '_schedule',
+        '_handle',
     )
     records, guards = list(source['records']), list(source['guards'])
     for cls in (owner_cls, model_cls):  # glue: connect exact public model/owner record layouts
@@ -25,6 +26,7 @@ def connect(context, owner_cls, model_cls):
     admission['guards'] = tuple(guards)
     admission['metadata_fields'] = source['metadata_fields'] + (
         '_operation', 'logical_shards', '_closed', '_session', '_config', '_schedule',
+        '_handle',
     )
     admission['opaque_types'] = source['opaque_types'] + (_socket.socket,)
     admission['scalar_types'] = source['scalar_types'] + (range,)
