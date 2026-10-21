@@ -99,7 +99,7 @@ from bindings.native_process_pool import process_c
 from bindings.parallel_mlp_native import parallel_mlp_c
 from bindings.small_mlp_native import small_mlp_c
 from bindings.parallel_neural_native import parallel_neural_c
-from bindings.parallel_causal_native import parallel_causal_c
+from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
 from bindings.optimizer_lifecycle import optimizer_finalize_binding
 from bindings.sequential_native import sequential_c
 from bindings.classical_native import classical_c
@@ -1516,6 +1516,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         module.def_function[generation_initialize_binding]("generation_initialize")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
+        _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         module.def_py_c_function(causal_public_c[0], "causal_lm_admit")
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")

@@ -390,12 +390,56 @@ def _parallel_causal_load(cls: PythonObject, path_value: PythonObject, layer_dev
     return owner
 
 
+struct RemoteStateLifetime(Movable, Writable):
+    """Releases a remote layer state's worker state when the parent-side
+    state object is freed. It replaces a Python `__del__`, which ran inside
+    whichever native call dropped the last reference (a state allocated and
+    released within one `forward` or `generate`, a layer list replaced by
+    `reset_state`). `released` is set by an explicit release, so the worker
+    is asked once."""
+    var layer: PythonObject
+    var token: PythonObject
+    var released: Bool
+
+    def __init__(out self, layer: PythonObject, token: PythonObject):
+        self.layer = layer
+        self.token = token
+        self.released = False
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("_RemoteStateLifetime(released=", self.released, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+    def __deinit__(deinit self):
+        if self.released or self.token is None:
+            return
+        try:
+            _parallel_causal_release_token(self.layer, self.token)
+        except:
+            # Quiet, as the former finalizer: a closed or lost pool has no
+            # worker state left to release.
+            pass
+
+
+def _parallel_causal_release_token(block: PythonObject, token: PythonObject) raises:
+    var owner = block.model
+    if not Bool(py=owner._closed) and not Bool(py=owner._failed):
+        _ = _parallel_causal_rpc(owner, owner.layer_devices[Int(py=block.index)], "release", token)
+
+
+def _parallel_causal_attach(remote: PythonObject, layer: PythonObject, token: PythonObject) raises:
+    py_setattr(remote, "layer", layer)
+    py_setattr(remote, "token", token)
+    py_setattr(remote, "_lifetime", PythonObject(alloc=RemoteStateLifetime(layer, token)))
+
+
 def _parallel_causal_allocate(owner: PythonObject, index: Int, batch: PythonObject, capacity: PythonObject) raises -> PythonObject:
     var p = PARALLEL_CAUSAL.get_or_create_ptr()
     var token = _parallel_causal_rpc(owner, owner.layer_devices[index], "allocate", Python.list(index, batch, capacity))
     var result = py_call(p[].bi.object.__new__, p[].classes["state"])
-    py_setattr(result, "layer", owner._blocks[index])
-    py_setattr(result, "token", token)
+    _parallel_causal_attach(result, owner._blocks[index], token)
     return result
 
 
@@ -405,10 +449,11 @@ def _parallel_causal_release(remote: PythonObject) raises:
     if token is None:
         return
     var block = fields["layer"]
-    var owner = block.model
-    if not Bool(py=owner._closed) and not Bool(py=owner._failed):
-        _ = _parallel_causal_rpc(owner, owner.layer_devices[Int(py=block.index)], "release", token)
+    _parallel_causal_release_token(block, token)
     py_setitem(fields, "token", PythonObject(None))
+    var lifetime = py_get(fields, "_lifetime")
+    if lifetime is not None:
+        lifetime.downcast_value_ptr[RemoteStateLifetime]()[].released = True
 
 
 def _parallel_causal_snapshot(remote: PythonObject) raises -> PythonObject:
@@ -468,8 +513,7 @@ def parallel_causal_call(operation: String, args: PythonObject) raises -> Python
             _ = py_call(result.append, _parallel_causal_block(args[0], i, args[1][i]))
         return result
     elif operation == "state_init":
-        py_setattr(args[0], "layer", args[1])
-        py_setattr(args[0], "token", args[2])
+        _parallel_causal_attach(args[0], args[1], args[2])
     elif operation == "state_snapshot":
         return _parallel_causal_snapshot(args[0])
     elif operation == "state_publish":

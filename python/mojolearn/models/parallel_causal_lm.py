@@ -53,8 +53,8 @@ class _RemoteState:
     def close(self):
         return _native_parallel_causal("state_close", (self,))
 
-    def __del__(self):
-        return _native_parallel_causal("state_close_quiet", (self,))
+    # No __del__: the native owner attaches `_lifetime`, which releases the
+    # worker state when this object is freed without running Python.
 
 
 class _RemoteBlock:
