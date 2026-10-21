@@ -1,10 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time ABI connection for the incremental native classical owner."""
 
+_ERROR_ENTRY = None
+_ERROR_CONTEXT = None
+_ERROR_BRIDGES = {}
+
+
+def _restore_not_fitted(message):
+    return _ERROR_ENTRY(None, "restore_not_fitted", (message,), _ERROR_CONTEXT)
+
+
+def _reduce_not_fitted(error):
+    return _ERROR_ENTRY(error, "reduce_not_fitted", (), _ERROR_CONTEXT)
+
 
 def connect(ridge_class, linear_class=None):
     # glue: connect compiled entries and exact native buffer classes once
-    from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType
+    global _ERROR_ENTRY, _ERROR_CONTEXT
+    from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType
     import _codecs
     import io
     import os
@@ -13,6 +26,7 @@ def connect(ridge_class, linear_class=None):
     from . import _backend
     from .tokenizer import _binding
     from ._x_sequence_model import _SEQUENTIAL_CONTEXT
+    from .exceptions import NotFittedError
 
     try:
         import _bz2
@@ -24,6 +38,10 @@ def connect(ridge_class, linear_class=None):
         _lzma = None
 
     context = dict(_SEQUENTIAL_CONTEXT)
+    context.update(not_fitted_class=NotFittedError, not_fitted_doc=NotFittedError.__doc__,
+                   native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
+                   not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
+                   active_not_fitted_class=NotFittedError)
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
@@ -152,4 +170,5 @@ def connect(ridge_class, linear_class=None):
                    classical_fields=("numeric_mode", "fit_intercept", "alpha", "solver", "normalize",
                                      "coef_", "intercept_", "n_features_in_",
                                      "_mojolearn_fitted", "_mojolearn_fitting"))
-    return _binding()._module.classical_native_call, context
+    _ERROR_ENTRY, _ERROR_CONTEXT = _binding()._module.classical_native_call, context
+    return _ERROR_ENTRY, context

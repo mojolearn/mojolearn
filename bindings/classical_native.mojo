@@ -12,6 +12,8 @@ from bindings.classical_score import classical_linear_score
 from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load
+from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
+from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -42,6 +44,12 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var args = call[2]
         var context = call[3]
         var b = Python.import_module("builtins")
+        if operation == "restore_not_fitted":
+            var error = classical_error_restore(args, context)
+            return error.steal_data()
+        if operation == "reduce_not_fitted":
+            var reduced = classical_error_reduce(model, context)
+            return reduced.steal_data()
         var loading = operation == "load"
         var ridge = model is context["ridge_class"] if loading else b.type(model) is context["ridge_class"]
         var linear = model is context.get("linear_class") if loading else b.type(model) is context.get("linear_class")
@@ -73,6 +81,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "save":
             result = classical_archive_save(model, args[0], ridge, context)
             return result.steal_data()
+        if operation == "predict_public" or operation == "score_public":
+            classical_require_fitted(model, ridge, "predict" if operation == "predict_public" else "score", context)
         var entries = classical_entries(model, context)
         if operation == "ridge_fit":
             if not ridge:
@@ -86,7 +96,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_linear_predict(model, args[0], entries, context)
         elif operation == "predict_public":
             result = classical_linear_predict_public(model, args[0], entries, context)
-        elif operation == "score":
+        elif operation == "score" or operation == "score_public":
             result = classical_linear_score(model, args, entries, context)
         elif operation == "numeric_mode_used":
             result = PythonObject("identical" if Int(py=entries["estimators_numeric_mode"]()) == 1 else "fast")
@@ -96,6 +106,15 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             raise Error("unknown private classical operation")
         return result.steal_data()
     except error:
+        if String(error).startswith("NotFittedError:"):
+            try:
+                ref cpy = Python().cpython()
+                var context = cpy.PyTuple_GetItem(args_ptr, 3)
+                var cls = causal_borrowed_item(context, "active_not_fitted_class")
+                var message = String(error)
+                return causal_set_exception(Error(String(message[16:])), cls)
+            except nested:
+                return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error, ExceptionType.TypeError)
         if String(error).startswith("NotImplementedError:"):
