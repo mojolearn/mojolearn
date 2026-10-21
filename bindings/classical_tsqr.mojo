@@ -243,7 +243,9 @@ struct ClassicalKit(Movable):
         var rows = self.matrices[a].rows
         var cols = self.matrices[a].cols
         if rows == 1 or cols == 1:
-            return self.add(self.matrices[a].host, cols, rows, self.matrices[a].device)
+            var host = self.matrices[a].host
+            var handle = self.matrices[a].device
+            return self.add(host, cols, rows, handle)
         var one = self.zeros(1, 1)
         return self.move(a, one, cols, rows, Python.list(1, rows * cols, rows, cols, 0, 0, 0,
             rows * cols, rows * cols, 1), self.resident)
