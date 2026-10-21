@@ -17,9 +17,9 @@ SPEC.loader.exec_module(INV)
 FILES = {
     "__init__.py": '''
         from .est import (Native, Stateless, Orchestrated, Helper, Python, Driven, Flow, Typed,
-                          Refuses, native_function)
+                          Refuses, Dispatched, native_function)
         __all__ = ["Native", "Stateless", "Orchestrated", "Helper", "Python", "Driven", "Flow", "Typed",
-                   "Refuses", "native_function", "LIMIT"]
+                   "Refuses", "Dispatched", "native_function", "LIMIT"]
         LIMIT = 4
     ''',
     "_backend.py": '''
@@ -140,6 +140,14 @@ FILES = {
                 raise NotImplementedError("pickle it")
 
 
+        _ENTRY, _CONTEXT = _backend.binding("_mojolearn_x").connect_public()
+
+
+        class Dispatched:
+            def fit(self, X, y=None):
+                return _ENTRY(self, "fit", (X, y), _CONTEXT)
+
+
         def native_function(X):
             return _backend.binding("_mojolearn_x").entry(X)
     ''',
@@ -182,6 +190,8 @@ def test_verdicts_and_counts():
     typed = rows[("Typed", "fit")]                                     # methods on a constructed object
     assert typed.native_calls == 1 and typed.helpers == 3 and typed.verdict == "orchestrated"
     assert ("Refuses", "save") not in rows and rows[("Refuses", "fit")].verdict == "native"
+    dispatched = rows[("Dispatched", "fit")]                           # the staged one-call shell
+    assert (dispatched.verdict, dispatched.native_calls) == ("native", 1)
     assert not any(key[0] == "LIMIT" for key in rows)                  # constants are not operations
 
 

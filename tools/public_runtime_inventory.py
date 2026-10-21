@@ -761,6 +761,8 @@ def _call(index, scope, node, facts):
         entry = func_expr.attr
     elif isinstance(func_expr, ast.Name) and func_expr.id in scope.entry_names:
         entry = scope.entry_names[func_expr.id]
+    elif isinstance(func_expr, ast.Name) and scope.is_binding(func_expr):
+        entry = func_expr.id   # a compiled dispatcher called directly: `_ENTRY(self, "fit", args, _CONTEXT)`
     elif isinstance(func_expr, ast.Call):
         entry = scope.entry_of(func_expr)
     if entry is not None:
