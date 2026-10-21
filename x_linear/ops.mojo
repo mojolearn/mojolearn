@@ -13,9 +13,8 @@ allocation happens inside a fit; the caller hands in the work buffers.
 Speed (a parallel schedule with the same fold order) is pass 2.
 """
 from std.sys.compile import is_defined
-from std.sys.info import is_gpu, is_amd_gpu, is_apple_gpu, is_nvidia_gpu, num_physical_cores
+from std.sys.info import is_gpu, is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from std.sys import llvm_intrinsic
-from core.host_parallel import host_parallelize
 from std.memory import bitcast
 from checks.numerics import (
     ftz, identical_mul, identical_mul_add, identical_div, identical_sqrt,
@@ -369,32 +368,15 @@ def seq_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK)
 def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK):
     """Runs f(lo, hi) over blocks of at most `grain` units covering [0, n).
     f must write only slots owned by its own units, so the block split
-    (and, on the host, the thread count) cannot move a bit. The device runs
-    one block."""
-    comptime if is_gpu():
-        f(0, n)
-    else:
-        # lane/neural-pass82 (2026-10-01): the blocks run on the host pool
-        # (core/host_parallel.mojo, in the caller's floating-point
-        # environment), one contiguous group of blocks per physical core.
-        # Until this lane they ran one after another on the calling thread,
-        # so every x_linear host fit's row passes (GLM, Huber, LogisticCV,
-        # quantile, Bayes, ridge LOO, SGD one-vs-rest) were single threaded.
-        # Every caller's f writes only its own rows' (or units') slots and
-        # per-block scratch (audited again on cgr3-pr86 against the
-        # cgr-linear rewrite), so the bits are the serial loop's.
-        var blocks = (n + grain - 1) // grain
-        var groups = min(blocks, max(1, num_physical_cores()))
-        if groups <= 1:
-            seq_rows(f, n, grain)
-            return
-        var per = (blocks + groups - 1) // groups
-
-        def group(g: Int) {imm f, imm n, imm grain, imm per, imm blocks}:
-            for bk in range(g * per, min(blocks, (g + 1) * per)):
-                f(bk * grain, min(n, (bk + 1) * grain))
-
-        host_parallelize(group, groups)
+    cannot move a bit. The device runs one block; the host runs the blocks
+    one after another (`seq_rows`)."""
+    # lane debt-host-misc (2026-10-21): the host branch ran the blocks on the
+    # core host thread pool (lane/neural-pass82). This module is
+    # reachable from the GPU bindings, and a GPU-reachable module keeps no
+    # host threads (tools/hooks/no_host_routes.py, rule host-threads; the
+    # x_decomp precedent is 0ee57eef8). Every caller's f wrote only its own
+    # units' slots, so the serial walk gives the pool's bits.
+    seq_rows(f, n, grain)
 
 
 # ----------------------------------------------------------------- RNG
