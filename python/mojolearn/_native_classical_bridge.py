@@ -10,7 +10,7 @@ def _connect_tags():
     # glue: connect optional sklearn's native record layout once at ABI setup
     from types import MemberDescriptorType
     try:
-        from sklearn.utils import Tags, TargetTags, InputTags, RegressorTags
+        from sklearn.utils import Tags, TargetTags, InputTags, RegressorTags  # glue: connect optional sklearn tag record descriptors at import only
     except ImportError as error:
         return str(error)
     target, inputs, regression = TargetTags(required=True), InputTags(), RegressorTags()
