@@ -1061,6 +1061,17 @@ def _stat(p):
     return (st.st_ino, st.st_mtime_ns, st.st_size)
 
 
+def shard_entry(mode, script, args):
+    """A build's name in a shard list: "<numeric mode>:<script file name>", the
+    planner's entries (tools/release_github_build.py plan_set). The merged host
+    set builds under MOJOLEARN_NUMERIC_MODE=identical with the same script as
+    the identical tier (bindings/merged_build.sh host), so it is "host:merged_build.sh"."""
+    name = os.path.basename(script)
+    if name == "merged_build.sh" and list(args)[:1] == ["host"]:
+        return "host:" + name
+    return "%s:%s" % (mode, name)
+
+
 def cmd_build(argv, environ=None):
     environ = dict(os.environ if environ is None else environ)
     if not argv:
@@ -1078,7 +1089,7 @@ def cmd_build(argv, environ=None):
     # linux_surface_qualification.sh's completeness check by construction.
     only = environ.get("MOJOLEARN_BINCACHE_SHARD_ONLY", "").split()
     if only:
-        me = "%s:%s" % (environ.get("MOJOLEARN_NUMERIC_MODE") or "identical", os.path.basename(script))
+        me = shard_entry(environ.get("MOJOLEARN_NUMERIC_MODE") or "identical", script, args)
         if me not in only:
             print("BINCACHE skipped %s (not in this shard)" % me)
             return 0

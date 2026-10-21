@@ -139,10 +139,67 @@ def partition():
 
 
 # ---------------------------------------------------------------- the plan (on a runner)
-def set_builds(src):
-    """[(entry, is_host)] of one set, "<tier>:<script>", from the SOURCE's own
-    build_sets.sh: its list variables and tier_scripts() are evaluated (not
-    retyped) with the release's MOJOLEARN_PACKAGE_BYTE_LM=1, over its tiers."""
+#: THE MERGED LAYOUT DOES NOT FIT A FREE RUNNER (2026-10-21). With
+#: MOJOLEARN_MERGED_BINDINGS=1 (packaging/linux/merged_layout.py, the default
+#: since lane/merged-bindings, 2026-10-20) build_sets.sh's pool runs ONE merged
+#: compile per directory set (tools/merged_bindings.py plan --platform linux
+#: --byte-lm 1: one group `_mojolearn_native` per tier, `_mojolearn_native_host`
+#: for host/). Measured on the DO MI325X 2026-10-20, two compiler workers each:
+#: host 6m23s peak 6.9 GB, fast 16m peak 36.6 GB, identical (+ byte LM)
+#: 18m45s peak 46.4 GB. GiB a runner must have for each, the peak rounded up
+#: with headroom for the toolchain and the read-backs:
+NEEDED_GIB = {"fast": 40, "identical": 50, "host": 8}
+MEASURED_PEAK = "identical (+ byte LM) 46.4 GB, fast 36.6 GB, host 6.9 GB"
+#: GitHub's free ubuntu-24.04 runner (4 vCPU); the org has no larger runners.
+FREE_RUNNER = "4 vCPU, 15 GB"
+
+
+def merged_refusal(needed_gib):
+    """The one sentence every GitHub entry point refuses the merged layout with."""
+    return (f"the merged binding layout (MOJOLEARN_MERGED_BINDINGS=1) cannot build on GitHub's free runners "
+            f"({FREE_RUNNER}): one merged compile per tier peaked at {MEASURED_PEAK} on the DO MI325X "
+            f"2026-10-20, so build the Linux sets on the cpu-box route (`pixi run release <v>` defaults to "
+            f"it; one set: `bash tools/release_linux_build.sh <commit> --rent --archs <arch>`), or pass "
+            f"--runner-mem-gib N when the runners have N >= {needed_gib} GiB")
+
+
+def layout_merged(text, environ):
+    """Whether a source's packaging/linux/merged_layout.py (its TEXT, None when
+    the source predates it) says the merged layout under `environ`: its own
+    enabled(), so the default is the source's, never retyped here."""
+    if text is None:
+        return False
+    ns = {"__name__": "source_merged_layout", "__file__": "/source/packaging/linux/merged_layout.py"}
+    exec(compile(text, "packaging/linux/merged_layout.py", "exec"), ns)
+    try:
+        return bool(ns["enabled"](environ))
+    except ValueError as exc:
+        raise SystemExit(f"plan: {exc}")
+
+
+def planner_env():
+    """The environment the plan evaluates the source with: the box's, which
+    the workflow gives no MOJOLEARN_* variable."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MOJOLEARN_")}
+    env["MOJOLEARN_PACKAGE_BYTE_LM"] = "1"
+    return env
+
+
+def source_merged(src):
+    """Whether build_sets.sh in SRC builds the merged layout under the planner's env."""
+    p = Path(src) / "packaging/linux/merged_layout.py"
+    return layout_merged(p.read_text() if p.is_file() else None, planner_env())
+
+
+def plan_set(src):
+    """One set's builds from the SOURCE's own build_sets.sh: its list variables,
+    tier_scripts() and pool_jobs() are evaluated (not retyped) with the
+    release's MOJOLEARN_PACKAGE_BYTE_LM=1, over its tiers. Returns
+    dict(builds=[(entry, is_host)], per_binding=[(entry, is_host)],
+    merged=bool, weights={entry: w}, members={entry: n}). `builds` is exactly
+    what pool_jobs() runs: the per-binding scripts, or (merged) one
+    "<tier>:merged_build.sh" per tier plus "host:merged_build.sh" riding the
+    identical pass; a merged build's weight is its members' per-binding weights."""
     text = (Path(src) / "packaging/linux/build_sets.sh").read_text()
     m = re.search(r"^SCRIPTS=.*?^host_so\(\)", text, re.M | re.S)
     if not m:
@@ -152,16 +209,45 @@ def set_builds(src):
     t = re.search(r'^TIERS="\$\{MOJOLEARN_BUILD_TIERS:-([a-z ]+)\}"', text, re.M)
     if t:
         tiers = t.group(1)
-    script = block + "\nfor t in " + tiers + "; do for s in $(tier_scripts $t); do echo \"$t:$s\"; done; done\n"
-    env = {k: v for k, v in os.environ.items() if not k.startswith("MOJOLEARN_")}
-    env["MOJOLEARN_PACKAGE_BYTE_LM"] = "1"
-    r = subprocess.run(["bash", "-c", "set -u\n" + script], cwd=src, env=env, capture_output=True, text=True)
+    merged = source_merged(src)
+    pj = re.search(r"^pool_jobs\(\) \{.*?^\}\n", text, re.M | re.S)
+    if merged and not pj:
+        raise SystemExit("plan: the source builds the merged layout but its build_sets.sh has no pool_jobs()")
+    script = block + "\nfor t in " + tiers + "; do for s in $(tier_scripts $t); do echo \"P $t:$s\"; done; done\n"
+    if pj:
+        # pool_jobs() reads MERGED, which the block above set from the source's merged_layout.py
+        script += pj.group(0) + "for t in " + tiers + "; do for j in $(pool_jobs $t); do echo \"J $j\"; done; done\n"
+    r = subprocess.run(["bash", "-c", "set -u\n" + script], cwd=src, env=planner_env(), capture_output=True, text=True)
     if r.returncode != 0:
         raise SystemExit("plan: evaluating build_sets.sh's lists failed: " + r.stderr.strip()[-400:])
-    rows = [line.strip() for line in r.stdout.splitlines() if line.strip()]
-    if len(rows) != len(set(rows)):
-        raise SystemExit("plan: a build appears twice in one set")
-    return [(e, e.endswith("_host.sh")) for e in rows]
+    lines = [line.strip() for line in r.stdout.splitlines() if line.strip()]
+    per = [x[2:] for x in lines if x.startswith("P ")]
+    jobs = [x[2:] for x in lines if x.startswith("J ")] if pj else per
+    for rows in (per, jobs):
+        if len(rows) != len(set(rows)):
+            raise SystemExit("plan: a build appears twice in one set")
+    is_host = lambda e: e.endswith("_host.sh") or e.startswith("host:")
+    if merged != any(e.endswith(":merged_build.sh") for e in jobs):
+        raise SystemExit(f"plan: merged_layout.py says {'merged' if merged else 'per-binding'} but pool_jobs() "
+                         f"runs {' '.join(jobs)[:200]}")
+    pw = lambda e: WEIGHTS.get(e, DEFAULT_HOST_WEIGHT if is_host(e) else DEFAULT_GPU_WEIGHT)
+    weights, members = {}, {}
+    for e in jobs:
+        if e.endswith(":merged_build.sh"):
+            tier = e.split(":")[0]
+            mine = [p for p in per if (is_host(p) if tier == "host" else (not is_host(p) and p.split(":")[0] == tier))]
+            if not mine:
+                raise SystemExit(f"plan: the merged {tier} build has no member in the per-binding lists")
+            weights[e], members[e] = sum(pw(p) for p in mine), len(mine)
+        else:
+            weights[e], members[e] = pw(e), 1
+    return dict(builds=[(e, is_host(e)) for e in jobs], per_binding=[(e, is_host(e)) for e in per],
+                merged=merged, weights=weights, members=members)
+
+
+def set_builds(src):
+    """[(entry, is_host)] of one set, "<tier>:<script>": what build_sets.sh's pool runs (plan_set)."""
+    return plan_set(src)["builds"]
 
 
 def check_counts(src, builds):
@@ -178,9 +264,11 @@ def check_counts(src, builds):
             raise SystemExit(f"plan: {got} {mode} builds, the verifier expects {want}")
 
 
-def split(builds, shards):
-    """Longest first onto the least loaded shard (deterministic)."""
-    w = lambda e, host: WEIGHTS.get(e, DEFAULT_HOST_WEIGHT if host else DEFAULT_GPU_WEIGHT)
+def split(builds, shards, weights=None):
+    """Longest first onto the least loaded shard (deterministic); `weights`
+    (plan_set's) overrides WEIGHTS per entry."""
+    weights = weights or {}
+    w = lambda e, host: weights.get(e) or WEIGHTS.get(e, DEFAULT_HOST_WEIGHT if host else DEFAULT_GPU_WEIGHT)
     order = sorted(builds, key=lambda b: (-w(*b), b[0]))
     load = [[0, i, []] for i in range(shards)]
     for e, host in order:
@@ -196,13 +284,23 @@ def cmd_plan(a):
         raise SystemExit(f"plan: sets must be distinct names from {' '.join(ARCHS)}")
     if not 1 <= a.shards <= 16:
         raise SystemExit("plan: shards must be 1..16")
-    builds = set_builds(a.src)
-    check_counts(a.src, builds)
+    ps = plan_set(a.src)
+    builds = ps["builds"]
+    # the verifier's bindings are the per-binding members, in either layout
+    check_counts(a.src, ps["per_binding"])
+    shards = a.shards
+    if ps["merged"]:
+        needed = max(NEEDED_GIB[e.split(":")[0]] for e, _ in builds)
+        if a.runner_mem_gib < needed:
+            raise SystemExit("plan: " + merged_refusal(needed))
+        # one merged compile per shard at most: a merged build cannot be split
+        shards = min(shards, len(builds))
     include = []
     for si, arch in enumerate(sets):
-        for sh in split(builds, a.shards):
+        for sh in split(builds, shards, ps["weights"]):
             include.append(dict(arch=arch, vendor=ARCHS[arch], set_index=si, **sh))
-    doc = dict(matrix=dict(include=include), sets=sets, builds=len(builds), shards=a.shards)
+    doc = dict(matrix=dict(include=include), sets=sets, builds=len(builds), shards=shards,
+               layout="merged" if ps["merged"] else "per-binding", members=ps["members"])
     text = json.dumps(doc, indent=1)
     if a.json:
         Path(a.json).write_text(text + "\n")
@@ -532,6 +630,9 @@ def main(argv=None):
     p.add_argument("--shards", type=int, default=6)
     p.add_argument("--json")
     p.add_argument("--github-output")
+    p.add_argument("--runner-mem-gib", type=int, default=0,
+                   help="the runners' memory; the merged layout plans only when it covers NEEDED_GIB "
+                        "(the workflow passes none: free runners)")
     p.set_defaults(fn=cmd_plan)
     p = sub.add_parser("job-map")
     p.add_argument("--event")
