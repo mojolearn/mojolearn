@@ -6,6 +6,7 @@ both allocations alive for the entire call. Copies require disjoint spans (or ex
 span); partial overlap is not supported. No pointer is retained.
 """
 from std.memory import memcpy
+from core.shell_impl.hostptr_impl import copy_f32
 
 
 def f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -30,22 +31,6 @@ def u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null uint32 buffer address")
     return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
-
-
-@always_inline
-def copy_f32[src_origin: Origin, dst_origin: MutOrigin, //](
-    src_ptr: Pointer[Float32, src_origin],
-    dst_ptr: MutPointer[Float32, dst_origin], n: Int,
-):
-    """Hostpass B2 SIMD-8 copy, including the non-multiple-of-eight tail."""
-    var i = 0
-    var body = n - n % 8
-    while i < body:
-        dst_ptr.unsafe_store[width=8](i, src_ptr.unsafe_load[width=8](i))
-        i += 8
-    while i < n:
-        dst_ptr.unsafe_store(i, src_ptr.unsafe_load(i))
-        i += 1
 
 
 def read_f32(addr: Int, n: Int) raises -> List[Float32]:
