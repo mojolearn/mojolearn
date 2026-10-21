@@ -1643,6 +1643,33 @@ def _mojo_defs_for(rel):
     return out, "\n".join(units["residue"])
 
 
+def _mojo_import_statements(text):
+    """Import statements with their original line boundaries, outside strings.
+
+    Flattening every parenthesized span in a whole Mojo file lets parentheses
+    in comments interrupt an import list. It also turns a mid-list comment
+    into a comment covering the remaining imports. The definition scanner
+    already tracks strings, comments and continuations; group only imports
+    with that scanner, then let _mojo_import_bindings strip comments per line.
+    """
+    scanned = _mojo_scan(text)
+    if scanned is None:
+        return None
+    statements, current = [], None
+    for line, continuation in scanned:
+        if not continuation:
+            if current is not None:
+                statements.append("\n".join(current))
+                current = None
+            if re.match(r"^\s*(?:from|import)\s", line):
+                current = [line]
+        elif current is not None:
+            current.append(line)
+    if current is not None:
+        statements.append("\n".join(current))
+    return statements
+
+
 @_by_path
 def _mojo_import_targets(rel):
     """(local name -> the (file, name) nodes it is bound to; files to close
@@ -1658,11 +1685,11 @@ def _mojo_import_targets(rel):
         text = _read(rel)
     except OSError:
         return {}, set()
-    text = re.sub(r"\(\s*([^()]*?)\s*\)", lambda m: m.group(1).replace("\n", " "), text, flags=re.S)
+    statements = _mojo_import_statements(text)
+    if statements is None:
+        return {}, _mojo_imports(rel)     # uncertain syntax keeps the full import closure
     names, whole = {}, set()
-    for line in text.splitlines():
-        if not re.match(r"^\s*(?:from|import)\s", line):
-            continue
+    for line in statements:
         for local, module, orig, star in _mojo_import_bindings(line) or ():
             files = _mojo_module_files(module, rel, [orig] if orig and not star else [])
             if star:
@@ -1776,37 +1803,10 @@ def _mojo_blocks_for(rel):
 def _mojo_import_symbols(rel):
     """symbol -> the file it is imported from, for one Mojo source, including
     the parenthesized multi-line form the bindings use."""
-    try:
-        text = _read(rel)
-    except OSError:
-        return {}
-    text = re.sub(r"\(\s*([^()]*?)\s*\)", lambda m: m.group(1).replace("\n", " "), text, flags=re.S)
-    out = {}
-    for line in text.splitlines():
-        m = re.match(r"^\s*from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$", line)
-        if not m:
-            continue
-        files = _mojo_module_files(m.group(1), rel)
-        if not files:
-            continue                         # the toolchain's own modules, not ours
-        for name in m.group(2).split(","):
-            # THE LOCAL NAME, WHICH IS THE ALIAS WHEN THERE IS ONE. An export's
-            # body is searched for these names, and the body writes what the
-            # import BOUND. `bindings/_mojolearn_metrics.mojo:56` is
-            # `from umap.estimator import fit_transform as umap_fit_transform`
-            # and `umap_fit_transform_binding` calls `umap_fit_transform`.
-            # Recording `fit_transform` made `\bfit_transform\b` miss it (the
-            # underscore before `fit` is a word character), so the whole umap
-            # tree was invisible to the per-export scan and reached the `umap`
-            # lane only because the metrics HOST family happens to list
-            # umap/graph.mojo among its host modules. `par-graph-umap`, which
-            # runs the same fit across devices and is not in that family, was
-            # credited with none of it.
-            parts = [p.strip() for p in name.strip().split(" as ")]
-            local = parts[-1] if len(parts) > 1 else parts[0]
-            if local and local != "*":
-                out.setdefault(local, set()).update(files)
-    return out
+    targets, _whole = _mojo_import_targets(rel)
+    # Keep the local alias, which is what callers actually write. The target
+    # reader also preserves the original name for per-definition traversal.
+    return {local: {file for file, _name in nodes} for local, nodes in targets.items()}
 
 
 @_by_path

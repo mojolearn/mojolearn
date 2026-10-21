@@ -2364,6 +2364,44 @@ def dispatched(module):
     assert {"changed", "direct", "dispatched"} <= runs, runs
 
 
+def test_mojo_import_lists_ignore_comment_parentheses_and_keep_aliases():
+    path = "bindings/_probe_import_layout.mojo"
+    text = '''"""Documentation only:
+from bindings.hotpath_helpers import not_a_real_import
+"""
+from bindings.hotpath_device import (
+    # A comment (with parentheses) must not end the import statement.
+    equal_elements_binding,
+    cast_elements_binding as cast_alias,  # another comment (after an alias)
+    reduce_stat_binding,
+)
+def nested():
+    from core import input_device as input_alias
+'''
+    caches = (lane_select._read.cache, lane_select._mojo_import_targets.cache,
+              lane_select._mojo_import_symbols.cache)
+    saved = [cache.get(path) for cache in caches]
+    lane_select._read.cache[path] = text
+    for cache in caches[1:]:
+        cache.pop(path, None)
+    try:
+        targets, _ = lane_select._mojo_import_targets(path)
+        symbols = lane_select._mojo_import_symbols(path)
+        for local, original in (("equal_elements_binding", "equal_elements_binding"),
+                                ("cast_alias", "cast_elements_binding"),
+                                ("reduce_stat_binding", "reduce_stat_binding")):
+            assert ("bindings/hotpath_device.mojo", original) in targets.get(local, ()), targets
+            assert "bindings/hotpath_device.mojo" in symbols.get(local, ()), symbols
+        assert ("core/input_device.mojo", None) in targets.get("input_alias", ()), targets
+        assert "not_a_real_import" not in targets, targets
+    finally:
+        for cache, old in zip(caches, saved):
+            if old is None:
+                cache.pop(path, None)
+            else:
+                cache[path] = old
+
+
 def test_a_helper_added_to_a_module_every_lane_reaches_selects_its_callers():
     """The lane/algos-neighbors `_buffer.py` shape, on the real files: a new
     helper, and a real estimator (neighbors.NearestNeighbors) that calls it.
