@@ -1020,19 +1020,19 @@
         "cuda",
         "hip"
       ],
-      "scope": "native-core",
+      "scope": "native-estimator",
       "algorithms": [
         "mojolearn.KNeighborsClassifier"
       ],
       "marker": "NATIVE_ONLY_PASS knn_classifier",
       "status": "ready",
-      "coverage": "Native voting/probability aggregation of existing neighbor ids; does not exercise end-to-end search plus classification.",
+      "coverage": "Native search plus class prediction/probabilities; independent vote transcription reuses native search results and does not independently validate neighbor selection.",
       "source_dependency_count": 92,
       "canonical_algorithms": [
         "mojolearn.KNeighborsClassifier"
       ],
-      "whole_operation": false,
-      "operation_boundary": "Native voting/probability aggregation of existing neighbor ids; does not exercise end-to-end search plus classification."
+      "whole_operation": true,
+      "operation_boundary": "knn_classifier_predict owns search, class voting and consumed prediction/probability output. The reference transcribes votes over a separate knn_search result."
     },
     {
       "id": "knn_regressor",
@@ -1042,19 +1042,19 @@
         "cuda",
         "hip"
       ],
-      "scope": "native-core",
+      "scope": "native-estimator",
       "algorithms": [
         "mojolearn.KNeighborsRegressor"
       ],
       "marker": "NATIVE_ONLY_PASS knn_regressor",
       "status": "ready",
-      "coverage": "Native regression aggregation of existing neighbor ids; does not exercise end-to-end search plus regression.",
+      "coverage": "Native search plus regression prediction; independent serial target fold reuses native search results and does not independently validate neighbor selection.",
       "source_dependency_count": 92,
       "canonical_algorithms": [
         "mojolearn.KNeighborsRegressor"
       ],
-      "whole_operation": false,
-      "operation_boundary": "Native regression aggregation of existing neighbor ids; does not exercise end-to-end search plus regression."
+      "whole_operation": true,
+      "operation_boundary": "knn_regressor_predict owns search, target reduction and consumed predictions at k=5 and k=50. The reference transcribes the fold over a separate knn_search result."
     },
     {
       "id": "dbscan",
@@ -1413,6 +1413,52 @@
       "canonical_algorithms": [
         "mojolearn.MinMaxScaler",
         "mojolearn.StandardScaler"
+      ]
+    },
+    {
+      "id": "extra_trees_classifier",
+      "source": "packaging/native_only/cases/smoke_extra_trees_classifier.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.ExtraTreesClassifier",
+        "mojolearn.ensemble.ExtraTreesClassifier"
+      ],
+      "marker": "NATIVE_ONLY_PASS extra_trees_classifier",
+      "status": "ready",
+      "coverage": "Native three-tree fit on 64 rows and two features, then ordered GPU prediction. Every output is checked against the exact analytic two-population target; all three trained trees must split. No broader parameter-matrix claim.",
+      "source_dependency_count": 67,
+      "whole_operation": true,
+      "operation_boundary": "fit_extra_trees_classifier_device owns forest training; fitted flat nodes feed forest_predict_gpu[False,False] for validated upload, ordered inference, synchronization, readback and consumed class probabilities.",
+      "canonical_algorithms": [
+        "mojolearn.ExtraTreesClassifier"
+      ]
+    },
+    {
+      "id": "extra_trees_regressor",
+      "source": "packaging/native_only/cases/smoke_extra_trees_regressor.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.ExtraTreesRegressor",
+        "mojolearn.ensemble.ExtraTreesRegressor"
+      ],
+      "marker": "NATIVE_ONLY_PASS extra_trees_regressor",
+      "status": "ready",
+      "coverage": "Native three-tree fit on 64 rows and two features, then ordered GPU prediction. Every output is checked against the exact analytic two-population target; all three trained trees must split. No broader parameter-matrix claim.",
+      "source_dependency_count": 67,
+      "whole_operation": true,
+      "operation_boundary": "fit_extra_trees_regressor_device owns forest training; fitted flat nodes feed forest_predict_gpu[False,False] for validated upload, ordered inference, synchronization, readback and consumed regression outputs.",
+      "canonical_algorithms": [
+        "mojolearn.ExtraTreesRegressor"
       ]
     }
   ],
@@ -2020,18 +2066,22 @@
     },
     {
       "algorithm": "mojolearn.ExtraTreesClassifier",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "extra_trees_classifier"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.ExtraTreesClassifier",
       "symbol_origin": "mojolearn.extratrees.ExtraTreesClassifier"
     },
     {
       "algorithm": "mojolearn.ExtraTreesRegressor",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "extra_trees_regressor"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.ExtraTreesRegressor",
       "symbol_origin": "mojolearn.extratrees.ExtraTreesRegressor"
@@ -4070,9 +4120,11 @@
     },
     {
       "algorithm": "mojolearn.ensemble.ExtraTreesClassifier",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "extra_trees_classifier"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/_sklearn_modules.py",
       "canonical_algorithm": "mojolearn.ExtraTreesClassifier",
       "symbol_origin": "mojolearn.extratrees.ExtraTreesClassifier",
@@ -4080,9 +4132,11 @@
     },
     {
       "algorithm": "mojolearn.ensemble.ExtraTreesRegressor",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "extra_trees_regressor"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/_sklearn_modules.py",
       "canonical_algorithm": "mojolearn.ExtraTreesRegressor",
       "symbol_origin": "mojolearn.extratrees.ExtraTreesRegressor",
@@ -7066,8 +7120,8 @@
     "canonical_algorithm_entries": 442,
     "canonical_status_counts": {
       "blocked": 9,
-      "missing": 398,
-      "ready": 35
+      "missing": 396,
+      "ready": 37
     },
     "note": "Algorithm entries include public numerical/helper operations as well as estimator classes; no per-estimator completeness is implied by this denominator."
   }

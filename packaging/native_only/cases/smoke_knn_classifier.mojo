@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native voting/probability aggregation of existing neighbor ids; does not exercise end-to-end search plus classification.
+# Native search plus classification. The vote oracle reuses native search ids.
 from neighbors.checks.knn_classify_check import check_knn_classify_matches_host_transcription
 
 

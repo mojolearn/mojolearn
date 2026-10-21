@@ -72,13 +72,14 @@ def test_canonicalization_is_reproducible_without_importing_product():
     assert INVENTORY.canonicalize(ROOT, data) == manifest()
 
 
-def test_whole_operation_metadata_keeps_partial_voting_visible():
+def test_whole_operation_metadata_preserves_knn_oracle_limits():
     cases = {case["id"]: case for case in manifest()["cases"]}
     for case in cases.values():
         assert isinstance(case["whole_operation"], bool)
         assert case["operation_boundary"]
     for name in ("knn_classifier", "knn_regressor"):
-        assert cases[name]["whole_operation"] is False
-        assert "does not exercise end-to-end search" in cases[name]["operation_boundary"]
+        assert cases[name]["whole_operation"] is True
+        assert "owns search" in cases[name]["operation_boundary"]
+        assert "does not independently validate neighbor selection" in cases[name]["coverage"]
     for name in ("autograd_cpu", "sequential_cpu", "optimizer_cpu", "tokenizer", "preprocessing"):
         assert cases[name]["whole_operation"] is True
