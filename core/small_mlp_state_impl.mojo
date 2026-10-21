@@ -214,3 +214,8 @@ def mlp_require_state(state: MlpState) raises:
     mlp_require_finite(state.m_addr(), MLP_TOTAL, "m")
     mlp_require_finite(state.v_addr(), MLP_TOTAL, "v")
     mlp_require_moments(state)
+
+
+def mlp_read_f32(addr: Int) -> Float64:
+    """The float32 scalar a training entry wrote at `addr` (a loss), widened."""
+    return Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)[0])
