@@ -113,3 +113,15 @@ hot path. `bindings/py_balanced.mojo` calls the documented CPython entries direc
 library. `python/mojolearn/tests/test_native_classical_public.py` checks that the caller's arrays keep their reference
 counts, the model and its outputs are collected, and repeated calls allocate nothing lasting. The ask stands: once the
 supported operations balance, these call sites can return to the ordinary syntax.
+
+**Shared shells (2026-10-21, lane leak-shared-helpers).** The shared door helpers (`bindings/generation_buffers.mojo`,
+`native_json`, `native_transport`, `native_codec`), the SmallMLPTrainer, Sequential, CausalLM, Samba, parallel,
+cross-vendor and autograd doors, and every host binding's `operator.index` argument read use the same helpers.
+`python/mojolearn/tests/test_native_steady_state.py` holds the caller's input reference counts and the traced bytes per
+call flat for `SmallMLPTrainer.train_step`, the byte-LM `train_step`, `Sequential.fit`, `CausalLM.generate` and both
+`sha256_hex` doors. Measured on the Mac (Mojo 1.0.0, CPython 3.14), quietest of three 200-call windows: SmallMLPTrainer
+12.5 KB to 38 B per call, Sequential.fit 5.2 KB to 26 B, CausalLM.generate 62.7 KB (and two references on the caller's
+ids) to 29 B, the byte-LM `sha256_hex` one reference on the caller's bytes to none. Retaining every array had also hidden
+reads after a local's last use (Mojo destroys a local at its last named use): the decode loop read `logits` by address
+after that point, which showed as nondeterministic sampled tokens once arrays were freed. Every array read by raw address
+now stays alive until the reading call returns.
