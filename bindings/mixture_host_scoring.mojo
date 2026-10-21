@@ -15,9 +15,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
-from mixture.checks.sample import gmm_sample_host
-from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
-from std.memory import bitcast
+# The sampling body (lane thin-trees-metrics, 2026-10-21) is the kernel
+# module's; the output copies below are one memcpy each.
+from mixture.host.gmm_host_entries import gmm_sample_into
+from std.memory import memcpy
 from mixture.host.gmm_host_oracle import (
     gmmh_predict,
     gmmh_predict_proba,
@@ -80,8 +81,7 @@ def gmm_score_samples_binding(
         var s = gmmh_score_samples(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
-        for i in range(m.n):
-            op.unsafe_store(i, s[i])
+        memcpy(dest=op, src=s.unsafe_ptr(), count=max(0, m.n))
         _ = s^
     _ = m^
     return PythonObject(0)
@@ -97,8 +97,7 @@ def gmm_predict_proba_binding(
         var r = gmmh_predict_proba(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
-        for i in range(m.n * m.k):
-            op.unsafe_store(i, r[i])
+        memcpy(dest=op, src=r.unsafe_ptr(), count=max(0, m.n * m.k))
         _ = r^
     _ = m^
     return PythonObject(0)
@@ -114,8 +113,7 @@ def gmm_predict_binding(
         var labels = gmmh_predict(
             m.weights, m.means, m.precisions, m.log_det, m.k, m.d, m.x, m.n
         )
-        for i in range(m.n):
-            op.unsafe_store(i, labels[i])
+        memcpy(dest=op, src=labels.unsafe_ptr(), count=max(0, m.n))
         _ = labels^
     _ = m^
     return PythonObject(0)
@@ -170,19 +168,5 @@ def gmm_sample_binding(
     var xp = f32_ptr(Int(py=addrs[5]))
     var yp = i32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
-        var labels = List[Int32](length=max(0, n), fill=Int32(0))
-        var x = gmm_sample_host(weights, means, precisions, k, d, n, seed, labels)
-        for i in range(n * d):
-            var v = x[i]
-            comptime if GEMM_ORACLE_HOST_SABOTAGE:
-                # THE SAMPLE SABOTAGE ARM (the neighbors and density inference
-                # lane, 2026-09-15): the lowest bit of every sampled cell, wrong
-                # on purpose. gmm_sample_host reads no GEMM leaf, so the
-                # descending-leaf arm cannot reach a sample drawn from a saved
-                # model; without this the host sabotage build could not be seen
-                # to move gmm-sample inference.
-                v = bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1))
-            xp.unsafe_store(i, v)
-        for i in range(n):
-            yp.unsafe_store(i, labels[i])
+        gmm_sample_into(weights, means, precisions, k, d, n, seed, xp, yp)
     return PythonObject(n)
