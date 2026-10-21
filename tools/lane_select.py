@@ -173,6 +173,10 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "changed_lanes_summary.py"),
     os.path.join("tools", "mac_changed_lanes.sh"),
     os.path.join("tools", "test_changed_lanes_summary.py"),
+    # The lane accounting check (2026-10-21, lane/verify-coverage-audit): it reads the harness registry, the
+    # shipped table and host_surface's declarations and reports a lane that is neither referenced nor declared.
+    # Nothing a lane runs imports it (the package and harness only name it in comments).
+    os.path.join("tools", "lane_accounting.py"),
 )
 
 #: FILES THE HARNESS IMPORTS WHILE IT RECORDS A COLUMN. `lane_applicability.py`

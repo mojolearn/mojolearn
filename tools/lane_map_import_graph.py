@@ -72,6 +72,13 @@ def build_scripts():
             continue
         for root in plan[0]:
             name = root.name[:-5]
+            # Host family builds compile `bindings/entry/entry_<binding>.mojo`
+            # (the merged-bindings layout, 2026-10-20), which only exports the
+            # binding's PyInit. Key the script by the binding it builds, or
+            # every host binding reads "no build script" and its closure (the
+            # files it imports) reaches no lane.
+            if root.parent.name == "entry" and name.startswith("entry_"):
+                name = name[len("entry_"):]
             out.setdefault(name, os.path.relpath(script, ROOT))
     return out
 
