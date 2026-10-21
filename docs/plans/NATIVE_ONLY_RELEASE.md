@@ -59,11 +59,12 @@ Its workflow correctly exits nonzero because library-wide coverage remains
 incomplete. These are frozen integration-source results, not an assertion that
 the current main branch or an installed wheel has the same native closure.
 
-AMD additionally passes 34 GPU fixtures and the optimizer CPU fixture inside
-an interpreter-free chroot. All seven optimizer state digests match Apple CPU,
+AMD additionally passes all 35 GPU fixtures and both the optimizer and
+convolution CPU fixtures inside an interpreter-free chroot. All seven optimizer state digests match Apple CPU,
 Apple GPU, AMD GPU and the AMD machine's CPU. SVC and SVR output digests match
 Apple and AMD GPUs; their independent RBF oracle still uses its stated tolerance.
-The final convolution AMD run is pending. GPU execution has dependency screening,
+Four convolution geometry digests also match on all four tested CPU/GPU targets.
+GPU execution has dependency screening,
 but has not been isolated from an installed interpreter.
 
 The manifest inventories 603 public exports, including 101 proven aliases.
@@ -89,7 +90,8 @@ is verified on the Mac and uploaded to R2 at
 `measurements/core-completion/2026-10-20/native-only/first-linux-and-mac-artifacts.tgz`.
 AMD's actual source, binary and native-library bundles are verified on the Mac
 and by full R2 readback under `native-only/amd-round1-artifacts.tgz` and
-`native-only/amd-incremental-artifacts.tgz` in that same measurement prefix.
+`native-only/amd-incremental-artifacts.tgz`, plus
+`native-only/amd-conv-artifacts.tgz`, in that same measurement prefix.
 Later Mac smoke rounds, original failures and source snapshots are also verified
 by full R2 readback at `native-only/incremental-mac-artifacts.tgz`. NVIDIA
 standalone runs, installed-wheel checks, and complete native
