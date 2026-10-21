@@ -4,6 +4,7 @@
 from bindings.native_json import native_path
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_setitem
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.partition_plan import GraphBytes
@@ -101,39 +102,39 @@ def partition_save_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObjec
 def partition_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
     var r = partition_state_native[E, KIND](Int(py=id))
     var result = Python.dict()
-    result["parameters"] = host_arrays_py(r.arrays[0])
-    result["first_moments"] = host_arrays_py(r.arrays[1])
-    result["second_moments"] = host_arrays_py(r.arrays[2])
-    result["epoch"] = PythonObject(r.epoch)
-    result["step"] = PythonObject(r.step)
-    result["seed"] = PythonObject(r.seed)
-    result["logical_stages"] = PythonObject(r.stages)
-    result["tensor_shards"] = PythonObject(r.tensor_shards)
-    result["microbatches"] = PythonObject(r.microbatches)
+    py_setitem(result, "parameters", host_arrays_py(r.arrays[0]))
+    py_setitem(result, "first_moments", host_arrays_py(r.arrays[1]))
+    py_setitem(result, "second_moments", host_arrays_py(r.arrays[2]))
+    py_setitem(result, "epoch", PythonObject(r.epoch))
+    py_setitem(result, "step", PythonObject(r.step))
+    py_setitem(result, "seed", PythonObject(r.seed))
+    py_setitem(result, "logical_stages", PythonObject(r.stages))
+    py_setitem(result, "tensor_shards", PythonObject(r.tensor_shards))
+    py_setitem(result, "microbatches", PythonObject(r.microbatches))
     return result
 
 
 def _int_list(xs: List[Int]) raises -> PythonObject:
     var out = Python.list()
     for k in range(len(xs)):  # small-loop(xs: one word per device, parameter or node): result packing, no data
-        out.append(PythonObject(xs[k]))
+        _ = py_call(out.append, PythonObject(xs[k]))
     return out
 
 
 def partition_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
     var r = partition_residency_native[E, KIND](Int(py=id))
     var result = Python.dict()
-    result["devices"] = _int_list(r.devices)
-    result["parameter_elements_per_rank"] = _int_list(r.counts)
-    result["parameter_owner_devices"] = _int_list(r.owners)
-    result["node_devices"] = _int_list(r.placements)
-    result["parameter_residency"] = PythonObject("one authoritative device owner per tensor shard")
-    result["optimizer_residency"] = PythonObject("same unique owner as its parameter shard")
-    result["activation_residency"] = PythonObject("native host-staged bytes with local recomputation")
-    result["logical_stages"] = PythonObject(r.stages)
-    result["tensor_shards"] = PythonObject(r.tensor_shards)
-    result["microbatches"] = PythonObject(r.microbatches)
-    result["partitioned_products"] = PythonObject(r.partitioned_products)
+    py_setitem(result, "devices", _int_list(r.devices))
+    py_setitem(result, "parameter_elements_per_rank", _int_list(r.counts))
+    py_setitem(result, "parameter_owner_devices", _int_list(r.owners))
+    py_setitem(result, "node_devices", _int_list(r.placements))
+    py_setitem(result, "parameter_residency", PythonObject("one authoritative device owner per tensor shard"))
+    py_setitem(result, "optimizer_residency", PythonObject("same unique owner as its parameter shard"))
+    py_setitem(result, "activation_residency", PythonObject("native host-staged bytes with local recomputation"))
+    py_setitem(result, "logical_stages", PythonObject(r.stages))
+    py_setitem(result, "tensor_shards", PythonObject(r.tensor_shards))
+    py_setitem(result, "microbatches", PythonObject(r.microbatches))
+    py_setitem(result, "partitioned_products", PythonObject(r.partitioned_products))
     return result
 
 
@@ -143,14 +144,14 @@ def partition_profile_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonOb
     for k in range(len(events)):  # small-loop(events: one row per recorded operation interval): result packing, no data
         var e = events[k]
         var row = Python.dict()
-        row["node"] = PythonObject(e.node)
-        row["microbatch"] = PythonObject(e.microbatch)
-        row["stage"] = PythonObject(e.stage)
-        row["device"] = PythonObject(e.device)
-        row["backward"] = PythonObject(e.backward)
-        row["start_ns"] = PythonObject(e.start_ns)
-        row["end_ns"] = PythonObject(e.end_ns)
-        result.append(row)
+        py_setitem(row, "node", PythonObject(e.node))
+        py_setitem(row, "microbatch", PythonObject(e.microbatch))
+        py_setitem(row, "stage", PythonObject(e.stage))
+        py_setitem(row, "device", PythonObject(e.device))
+        py_setitem(row, "backward", PythonObject(e.backward))
+        py_setitem(row, "start_ns", PythonObject(e.start_ns))
+        py_setitem(row, "end_ns", PythonObject(e.end_ns))
+        _ = py_call(result.append, row)
     return result
 
 

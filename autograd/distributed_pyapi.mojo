@@ -5,6 +5,7 @@
 # in the typed entries.
 from bindings.native_json import native_path
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_setitem
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.distributed_entries import (
@@ -22,9 +23,9 @@ def distributed_object(cls: PythonObject, binding: PythonObject, handle: PythonO
     # Allocate the Python-facing shell through C builtins, without executing
     # its Python __init__. The native registry owns all execution state.
     var b = Python.import_module("builtins")
-    var out = b.object.__new__(cls)
-    b.setattr(out, "_b", binding)
-    b.setattr(out, "_id", handle)
+    var out = py_call(b.object.__new__, cls)
+    _ = py_call(b.setattr, out, "_b", binding)
+    _ = py_call(b.setattr, out, "_id", handle)
     return out
 
 
@@ -112,13 +113,13 @@ def distributed_save_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObj
 def distributed_state_py[E: Exec & Movable & Deinitable, KIND: Int](id: PythonObject) raises -> PythonObject:
     var r = distributed_state_native[E, KIND](Int(py=id))
     var result = Python.dict()
-    result["parameters"] = host_arrays_py(r.parameters)
-    result["first_moments"] = host_arrays_py(r.first_moments)
-    result["second_moments"] = host_arrays_py(r.second_moments)
-    result["epoch"] = PythonObject(r.epoch)
-    result["step"] = PythonObject(r.step)
-    result["seed"] = PythonObject(r.seed)
-    result["logical_shards"] = PythonObject(r.logical_shards)
+    py_setitem(result, "parameters", host_arrays_py(r.parameters))
+    py_setitem(result, "first_moments", host_arrays_py(r.first_moments))
+    py_setitem(result, "second_moments", host_arrays_py(r.second_moments))
+    py_setitem(result, "epoch", PythonObject(r.epoch))
+    py_setitem(result, "step", PythonObject(r.step))
+    py_setitem(result, "seed", PythonObject(r.seed))
+    py_setitem(result, "logical_shards", PythonObject(r.logical_shards))
     return result
 
 
@@ -129,22 +130,22 @@ def distributed_residency_py[E: Exec & Movable & Deinitable, KIND: Int](id: Pyth
     var owned = Python.list()
     var ranges = Python.list()
     for rank in range(len(r.devices)):  # small-loop(devices: one record per physical device): result packing, no data
-        devices.append(PythonObject(r.devices[rank]))
+        _ = py_call(devices.append, PythonObject(r.devices[rank]))
         var row = Python.list()
         for j in range(r.n_params):  # small-loop(params: one range per program parameter): result packing, no data
             var pair = Python.list()
-            pair.append(PythonObject(r.first[rank * r.n_params + j]))
-            pair.append(PythonObject(r.width[rank * r.n_params + j]))
-            row.append(pair)
-        owned.append(PythonObject(r.owned[rank]))
-        ranges.append(row)
-    result["devices"] = devices
-    result["optimizer_elements_per_rank"] = owned
-    result["optimizer_ranges"] = ranges
-    result["parameter_residency"] = PythonObject("replicated")
-    result["optimizer_residency"] = PythonObject("disjoint contiguous ranges")
-    result["logical_shards"] = PythonObject(r.logical_shards)
-    result["transport"] = PythonObject("native host staging")
+            _ = py_call(pair.append, PythonObject(r.first[rank * r.n_params + j]))
+            _ = py_call(pair.append, PythonObject(r.width[rank * r.n_params + j]))
+            _ = py_call(row.append, pair)
+        _ = py_call(owned.append, PythonObject(r.owned[rank]))
+        _ = py_call(ranges.append, row)
+    py_setitem(result, "devices", devices)
+    py_setitem(result, "optimizer_elements_per_rank", owned)
+    py_setitem(result, "optimizer_ranges", ranges)
+    py_setitem(result, "parameter_residency", PythonObject("replicated"))
+    py_setitem(result, "optimizer_residency", PythonObject("disjoint contiguous ranges"))
+    py_setitem(result, "logical_shards", PythonObject(r.logical_shards))
+    py_setitem(result, "transport", PythonObject("native host staging"))
     return result
 
 

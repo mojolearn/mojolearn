@@ -2,6 +2,7 @@
 # Python doors for the ONNX model reader (import_reader.mojo): each converts
 # its arguments and the reader's typed results, nothing else.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from autograd.import_reader import onnx_read, onnx_info, onnx_copy_blob, onnx_close
 
 
@@ -15,17 +16,17 @@ def onnx_info_py(h: PythonObject) raises -> PythonObject:
     var info = onnx_info(Int(py=h))
     var w = Python.list()
     for i in range(len(info.words)):  # driver-loop: over the graph's words, converted; cpu-route: model file parsing conversion
-        w.append(PythonObject(info.words[i]))
+        _ = py_call(w.append, PythonObject(info.words[i]))
     var strs = Python.list()
     for i in range(len(info.strs)):  # driver-loop: over the graph's strings, converted; cpu-route: model file parsing conversion
-        strs.append(PythonObject(info.strs[i]))
+        _ = py_call(strs.append, PythonObject(info.strs[i]))
     var floats = Python.list()
     for i in range(len(info.floats)):  # driver-loop: over attribute floats, converted; cpu-route: model file parsing conversion
-        floats.append(PythonObject(info.floats[i]))
+        _ = py_call(floats.append, PythonObject(info.floats[i]))
     var out = Python.list()
-    out.append(w)
-    out.append(strs)
-    out.append(floats)
+    _ = py_call(out.append, w)
+    _ = py_call(out.append, strs)
+    _ = py_call(out.append, floats)
     return out
 
 

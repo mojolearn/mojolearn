@@ -2,6 +2,7 @@
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
 from autograd.python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
@@ -73,53 +74,53 @@ def _seed_words(x: PythonObject) raises -> List[Int]:
 def _tuple_ints(xs: List[Int]) raises -> PythonObject:
     var out = Python.list()
     for k in range(len(xs)):  # driver-loop: over returned metadata
-        out.append(xs[k])
-    return Python.import_module("builtins").tuple(out)
+        _ = py_call(out.append, xs[k])
+    return py_call(Python.import_module("builtins").tuple, out)
 
 
 def _program_initialize(mut out: PythonObject, session: PythonObject, info: PythonObject) raises:
     var b = Python.import_module("builtins")
-    out._s = session
-    out._id = graph_int(info[0])
-    out._execute_native = session._program_execute
-    out._inspect_native = session._program_inspect
-    out._control_native = session._program_control
-    out._fit_native = session._program_fit
-    out._session_native = session._session_native
+    py_setattr(out, "_s", session)
+    py_setattr(out, "_id", graph_int(info[0]))
+    py_setattr(out, "_execute_native", session._program_execute)
+    py_setattr(out, "_inspect_native", session._program_inspect)
+    py_setattr(out, "_control_native", session._program_control)
+    py_setattr(out, "_fit_native", session._program_fit)
+    py_setattr(out, "_session_native", session._session_native)
     for k in range(2):  # small-loop(2: input/output shape descriptors): metadata only
         # The original constructor accepts iterable metadata, including
         # builtin tuple/list iterators. Materialize with the native C tuple
         # constructor before the Mojo metadata walk.
-        var shapes = b.tuple(info[k + 1])
+        var shapes = py_call(b.tuple, info[k + 1])
         var dims = Python.list()
         for j in range(len(shapes)):  # driver-loop: over graph input/output shapes
-            var source = b.tuple(shapes[j])
+            var source = py_call(b.tuple, shapes[j])
             var shape = Python.list()
             for axis in range(len(source)):  # driver-loop: over tensor rank metadata
-                shape.append(graph_int(source[axis]))
-            dims.append(b.tuple(shape))
+                _ = py_call(shape.append, graph_int(source[axis]))
+            _ = py_call(dims.append, py_call(b.tuple, shape))
         if k == 0:
-            out.input_shapes = b.tuple(dims)
+            py_setattr(out, "input_shapes", py_call(b.tuple, dims))
         else:
-            out.output_shapes = b.tuple(dims)
-    var parameter_source = b.tuple(info[3])
+            py_setattr(out, "output_shapes", py_call(b.tuple, dims))
+    var parameter_source = py_call(b.tuple, info[3])
     var params = Python.list()
     for k in range(len(parameter_source)):  # driver-loop: over parameter handle metadata
-        params.append(graph_int(parameter_source[k]))
-    out.params = b.tuple(params)
+        _ = py_call(params.append, graph_int(parameter_source[k]))
+    py_setattr(out, "params", py_call(b.tuple, params))
     var kinds = Python.list()
     if len(info) > 4:
-        var kind_source = b.tuple(info[4])
+        var kind_source = py_call(b.tuple, info[4])
         for k in range(len(kind_source)):  # driver-loop: over input kind metadata
-            kinds.append(graph_int(kind_source[k]))
+            _ = py_call(kinds.append, graph_int(kind_source[k]))
     else:
         for k in range(len(out.input_shapes)):  # driver-loop: over legacy value-only input descriptors
-            kinds.append(0)
-    out.input_kinds = b.tuple(kinds)
+            _ = py_call(kinds.append, 0)
+    py_setattr(out, "input_kinds", py_call(b.tuple, kinds))
 
 
 def _program_object(session: PythonObject, info: PythonObject) raises -> PythonObject:
-    var out = Python.import_module("builtins").object.__new__(session._program_class)
+    var out = py_call(Python.import_module("builtins").object.__new__, session._program_class)
     _program_initialize(out, session, info)
     return out
 
@@ -139,14 +140,14 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             var owner = ops_session[E, KIND](Int(py=session._id))
             owner[].program_free(Int(py=args[0]._id))
         var program = args[0]
-        program._id = PythonObject(None)
+        py_setattr(program, "_id", PythonObject(None))
         return PythonObject(None)
     if name == "close" or name == "exit":
         if not _nil(session._id):
             var owner = session._lifetime.downcast_value_ptr[SessionLifetime[E, KIND]]()
             owner[].close()
             var target = session
-            target._id = PythonObject(None)
+            py_setattr(target, "_id", PythonObject(None))
         return PythonObject(False) if name == "exit" else PythonObject(None)
     if name == "profile_reset":
         _ = ops_profile_reset_py()
@@ -172,10 +173,10 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         var result = ops_program_fit_native_py[E, KIND](
             sid, program._id, args[3], args[4], options[0], options[1], options[2], options[3],
             options[4], options[5], options[6], options[7], condition, otherwise)
-        program.loss_curve_ = result[0]
-        program.n_iter_ = result[1]
+        py_setattr(program, "loss_curve_", result[0])
+        py_setattr(program, "n_iter_", result[1])
         if name == "fit_if":
-            program.branch_counts_ = result[2]
+            py_setattr(program, "branch_counts_", result[2])
         return program
     if name == "gradient_report":
         return gradient_report_py[E, KIND](Int(py=sid), _ints(args[0], "handle", 1), Bool(py=args[1]))
@@ -189,10 +190,10 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         return control_save_py[E, KIND](sid, args[0], args[2], args[3], args[4], args[1], opt, uint64_input(args[6], "seed"))
     if name == "load_control":
         var bundle = control_load_py[E, KIND](sid, args[0])
-        bundle["body"] = _program_object(session, bundle["body"])
-        bundle["condition"] = _program_object(session, bundle["condition"])
+        py_setitem(bundle, "body", _program_object(session, bundle["body"]))
+        py_setitem(bundle, "condition", _program_object(session, bundle["condition"]))
         if bundle["otherwise"] is not PythonObject(None):
-            bundle["otherwise"] = _program_object(session, bundle["otherwise"])
+            py_setitem(bundle, "otherwise", _program_object(session, bundle["otherwise"]))
         return bundle
     if name == "save_program":
         return ops_program_save_native_py[E, KIND](args[0], args[1])
@@ -240,10 +241,10 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             _ = s[]._opt_index(opt)
         var seed = _seed_words(args[3])
         var counters = Python.list()
-        counters.append(seed[0])
-        counters.append(seed[1])
-        counters.append(_int(args[4], "epoch", 0))
-        counters.append(_int(args[5], "step", 0))
+        _ = py_call(counters.append, seed[0])
+        _ = py_call(counters.append, seed[1])
+        _ = py_call(counters.append, _int(args[4], "epoch", 0))
+        _ = py_call(counters.append, _int(args[5], "step", 0))
         _ = ops_save_state_py[E, KIND](sid, native_path(args[0]), _tuple_ints(params), PythonObject(opt), counters)
         return PythonObject(None)
     if name == "load_state":
@@ -253,10 +254,10 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         var grad = Bool(py=args[2]) and s[].recording()
         var res = ops_load_state_py[E, KIND](sid, native_path(args[0]), PythonObject(Int(grad)), PythonObject(opt))
         var result = Python.import_module("builtins").dict()
-        result["params"] = res[0]
-        result["seed"] = res[3].__lshift__(32).__or__(res[2])
-        result["epoch"] = res[4]
-        result["step"] = res[5]
+        py_setitem(result, "params", res[0])
+        py_setitem(result, "seed", res[3].__lshift__(32).__or__(res[2]))
+        py_setitem(result, "epoch", res[4])
+        py_setitem(result, "step", res[5])
         return result
     if name == "reset":
         s[].reset()
@@ -288,7 +289,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             out = s[].hvp(_int(args[0], "loss", 1), inputs, directions)
         var result = Python.list()
         for k in range(len(out)):  # driver-loop: over derivative result handles
-            result.append(out[k])
+            _ = py_call(result.append, out[k])
         return result
     if name == "zero_grad":
         s[].zero_grad()
@@ -306,7 +307,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         fp = [Float32(py=args[1]), Float32(py=args[2]), Float32(py=args[4]), Float32(py=args[5]),
               Float32(py=args[6]), Float32(py=args[7]), Float32(py=args[10])]
         var opt = s[].optimizer(ip, fp)
-        session._opt_kind[opt] = args[0]
+        py_setitem(session._opt_kind, opt, args[0])
         return PythonObject(opt)
     if name == "step" or name == "scheduler_step" or name == "learning_rate" or name == "optimizer_state" or name == "load_optimizer_state":
         var opt = _int(args[0], "optimizer", 1)
@@ -324,16 +325,16 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         if name == "optimizer_state":
             var st = s[].optimizer_state(opt, _int(args[1], "param", 1))
             var state = b.dict()
-            state["step"] = st[0]
+            py_setitem(state, "step", st[0])
             if kind != 0:
-                state["beta1_power"] = Float64(st[1])
-                state["beta2_power"] = Float64(st[2])
+                py_setitem(state, "beta1_power", Float64(st[1]))
+                py_setitem(state, "beta2_power", Float64(st[2]))
                 if st[4] != 0:
-                    state["exp_avg"] = st[4]
+                    py_setitem(state, "exp_avg", st[4])
                 if st[5] != 0:
-                    state["exp_avg_sq"] = st[5]
+                    py_setitem(state, "exp_avg_sq", st[5])
             elif st[4] != 0:
-                state["momentum_buffer"] = st[4]
+                py_setitem(state, "momentum_buffer", st[4])
             return state
         var state = args[2]
         var ip = List[Int]()
@@ -542,7 +543,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         var views = session_split[E, KIND](Int(py=sid), hs, axis, tail, count, fs)
         var out = Python.list()
         for k in range(len(views)):  # small-loop(views: one handle per requested section): result packing, no data
-            out.append(views[k])
+            _ = py_call(out.append, views[k])
         return out
     if name == "embedding" or name == "take":
         code = 32 if name == "embedding" else 41
@@ -557,7 +558,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             var input = program_input(args[1], True)
             var b = Python.import_module("builtins")
             var dtype_num = 9
-            if Bool(py=b.hasattr(args[1], "dtype")):
+            if Bool(py=py_call(b.hasattr, args[1], "dtype")):
                 dtype_num = Int(py=args[1].dtype.num)
             ints = [input.src.addr, dtype_num, input.src.itemsize, input.src.rows,
                     input.src.cols, input.src.s0, input.src.s1, option]
@@ -661,23 +662,23 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         fs.append(eps)
     if name == "transformer_softmax":
         var b = Python.import_module("builtins")
-        if not (b.type(args[0]) is b.int):
+        if not (py_type(args[0]) is b.int):
             raise Error("TypeError: transformer handles must be exact native integers")
         code = 80
         hs = [_int(args[0], "input", 1)]
     if name == "transformer_linear":
         var b = Python.import_module("builtins")
         for j in range(2):  # small-loop(2: projection handles): exact native scalar admission
-            if not (b.type(args[j]) is b.int):
+            if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: transformer handles must be exact native integers")
         code = 79
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1)]
     if name == "rms_norm":
         var b = Python.import_module("builtins")
         for j in range(2):  # small-loop(2: RMSNorm handles): exact native scalar admission
-            if not (b.type(args[j]) is b.int):
+            if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: transformer handles must be exact native integers")
-        var kind = b.type(args[2])
+        var kind = py_type(args[2])
         if not (kind is b.float or kind is b.int):
             raise Error("TypeError: RMSNorm epsilon must be an exact native scalar")
         code = 77
@@ -686,9 +687,9 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "rotary":
         var b = Python.import_module("builtins")
         for j in range(3):  # small-loop(3: rotary handle/position metadata): exact native scalar admission
-            if not (b.type(args[j]) is b.int):
+            if not (py_type(args[j]) is b.int):
                 raise Error("TypeError: rotary handles and positions must be exact native integers")
-        var kind = b.type(args[3])
+        var kind = py_type(args[3])
         if not (kind is b.float or kind is b.int):
             raise Error("TypeError: rotary theta must be an exact native scalar")
         code = 78

@@ -5,6 +5,7 @@
 # outside any graph run/fit. No ndarray.ctypes (a Python helper) is invoked.
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.memory import memcpy
 from sequence.ops import FP
 from autograd.rankn import ShapeN
@@ -48,11 +49,11 @@ def output_array(shape: ShapeN, dtype: String = "float32") raises -> PythonObjec
         raise Error("program array boundary must be initialized during session setup")
     var dims = Python.list()
     for k in range(shape.ndim):  # small-loop(shape.ndim: tensor rank): shape metadata, never array elements
-        dims.append(PythonObject(shape.d[k]))
-    var storage = state[].builtins.bytearray(shape.count() * 4)
+        _ = py_call(dims.append, PythonObject(shape.d[k]))
+    var storage = py_call(state[].builtins.bytearray, shape.count() * 4)
     # The C ndarray constructor retains storage as .base. Native executor
     # writes every value; no Python ndarray constructor/helper is involved.
-    return state[].ndarray(dims, dtype=PythonObject(dtype), buffer=storage)
+    return py_call(state[].ndarray, dims, dtype=PythonObject(dtype), buffer=storage)
 
 
 def is_integer_input(value: PythonObject) raises -> Bool:
@@ -60,8 +61,8 @@ def is_integer_input(value: PythonObject) raises -> Bool:
     # or an integer option. Match the public int/np.integer contract exactly.
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
     var b = state[].builtins
-    return not Bool(py=b.isinstance(value, b.bool)) and (
-        Bool(py=b.isinstance(value, b.int)) or Bool(py=b.isinstance(value, state[].integer_type)))
+    return not Bool(py=py_call(b.isinstance, value, b.bool)) and (
+        Bool(py=py_call(b.isinstance, value, b.int)) or Bool(py=py_call(b.isinstance, value, state[].integer_type)))
 
 
 def uint64_input(value: PythonObject, name: String) raises -> UInt64:
@@ -69,7 +70,7 @@ def uint64_input(value: PythonObject, name: String) raises -> UInt64:
         raise Error("TypeError: " + name + " must be an integer")
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
     var b = state[].builtins
-    var number = b.int(value)
+    var number = py_call(b.int, value)
     var high = number.__rshift__(32)
     if Bool(py=number.__lt__(0)) or Bool(py=high.__gt__(4294967295)):
         raise Error("ValueError: " + name + " must be in [0, 2**64)")
@@ -82,15 +83,15 @@ def mapped_byte_array(path: PythonObject) raises -> PythonObject:
     # mmap is a native CPython buffer owner. The ndarray C type keeps the
     # mapping alive, so no Python safetensors reader or ndarray helper runs.
     var state = _PROGRAM_ARRAYS.get_or_create_ptr()
-    var file = state[].builtins.open(path, "rb")
+    var file = py_call(state[].builtins.open, path, "rb")
     var mapping = PythonObject(None)
     try:
-        mapping = state[].mmap_type(file.fileno(), 0, access=1)
+        mapping = py_call(state[].mmap_type, file.fileno(), 0, access=1)
     finally:
         file.close()
     var dims = Python.list()
-    dims.append(len(mapping))
-    return state[].ndarray(dims, dtype="uint8", buffer=mapping)
+    _ = py_call(dims.append, len(mapping))
+    return py_call(state[].ndarray, dims, dtype="uint8", buffer=mapping)
 
 
 def host_array_py(h: HostArray) raises -> PythonObject:
@@ -106,5 +107,5 @@ def host_arrays_py(hs: List[HostArray]) raises -> PythonObject:
     """A Python list of host_array_py results."""
     var out = Python.list()
     for k in range(len(hs)):  # small-loop(hs: one array per program output): result packing, no data
-        out.append(host_array_py(hs[k]))
+        _ = py_call(out.append, host_array_py(hs[k]))
     return out

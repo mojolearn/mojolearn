@@ -4,6 +4,7 @@
 # internals or a Python catch-and-rethrow callback.
 from std.python._cpython import PyObjectPtr
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_type
 from std.python.bindings import ExceptionType, raise_python_exception
 
 
@@ -22,7 +23,7 @@ def graph_int(var value: PythonObject) raises -> PythonObject:
         return PythonObject(from_owned=result)
     var raised = cpy.PyErr_Fetch() if cpy.version.minor < 12 else cpy.PyErr_GetRaisedException()
     var exception = PythonObject(from_owned=raised)
-    var kind = String(Python.import_module("builtins").type(exception).__name__)
+    var kind = String(py_type(exception).__name__)
     var message = String(exception)
     _ = owner^
     raise Error(kind + ": " + message)

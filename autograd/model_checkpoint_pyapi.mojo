@@ -2,6 +2,7 @@
 # Python doors for model and session checkpoints (model_checkpoint.mojo):
 # argument unpacking and Python results around the typed checkpoint entries.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
 from sequence.pyapi import py_f64s, py_ints
 from autograd.pyapi import program_info
@@ -43,24 +44,24 @@ def model_checkpoint_info_py(path: PythonObject) raises -> PythonObject:
     schedule gamma, huber delta] (model_fit's fp head)."""
     var r = model_checkpoint_info(String(py=path))
     var out = Python.list()
-    out.append(PythonObject(1 if r.is_export else 0))
+    _ = py_call(out.append, PythonObject(1 if r.is_export else 0))
     var layers = Python.list()
     for i in range(len(r.layer_floats)):  # small-loop(layers: one record per model layer): result packing, no data
         var rec = Python.list()
-        rec.append(PythonObject(r.layer_ints[3 * i]))
-        rec.append(PythonObject(r.layer_ints[3 * i + 1]))
-        rec.append(PythonObject(r.layer_ints[3 * i + 2]))
-        rec.append(PythonObject(r.layer_floats[i]))
-        layers.append(rec)
-    out.append(layers)
+        _ = py_call(rec.append, PythonObject(r.layer_ints[3 * i]))
+        _ = py_call(rec.append, PythonObject(r.layer_ints[3 * i + 1]))
+        _ = py_call(rec.append, PythonObject(r.layer_ints[3 * i + 2]))
+        _ = py_call(rec.append, PythonObject(r.layer_floats[i]))
+        _ = py_call(layers.append, rec)
+    _ = py_call(out.append, layers)
     var ints = Python.list()
     for i in range(len(r.ints)):  # small-loop(ints: the record's option words): result packing, no data
-        ints.append(PythonObject(r.ints[i]))
-    out.append(ints)
+        _ = py_call(ints.append, PythonObject(r.ints[i]))
+    _ = py_call(out.append, ints)
     var floats = Python.list()
     for i in range(len(r.floats)):  # small-loop(floats: the nine option floats): result packing, no data
-        floats.append(PythonObject(r.floats[i]))
-    out.append(floats)
+        _ = py_call(floats.append, PythonObject(r.floats[i]))
+    _ = py_call(out.append, floats)
     return out
 
 
@@ -102,12 +103,12 @@ def ops_load_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     var r = ops_load_state[E, KIND](Int(py=sid), file, grad, opt)
     var hs = Python.list()
     for i in range(len(r.handles)):  # small-loop(handles: one per restored parameter tensor): result packing, no data
-        hs.append(PythonObject(r.handles[i]))
+        _ = py_call(hs.append, PythonObject(r.handles[i]))
     var res = Python.list()
-    res.append(hs)
-    res.append(PythonObject(1 if r.has_opt else 0))
+    _ = py_call(res.append, hs)
+    _ = py_call(res.append, PythonObject(1 if r.has_opt else 0))
     for i in range(len(r.counters)):  # small-loop(4: the saved counters): result packing, no data
-        res.append(PythonObject(r.counters[i]))
+        _ = py_call(res.append, PythonObject(r.counters[i]))
     return res
 
 

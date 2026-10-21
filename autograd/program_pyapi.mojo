@@ -3,6 +3,7 @@
 # to allocate returned ABI buffers; conversion and every computed value use
 # the executor. No user callbacks drive execution, epochs or batches.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_setitem, py_type
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
 from autograd.execution_profile_pyapi import execution_profile_object
@@ -65,7 +66,7 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
 def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
                      mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int) raises:
     var b = Python.import_module("builtins")
-    if Bool(py=b.isinstance(a, b.list)) or Bool(py=b.isinstance(a, b.tuple)):
+    if Bool(py=py_call(b.isinstance, a, b.list)) or Bool(py=py_call(b.isinstance, a, b.tuple)):
         var n = len(a)
         if depth >= 8 or n == 0:
             raise Error("ValueError: program input sequences must be nonempty and have rank at most eight")
@@ -81,7 +82,7 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
         if depth != len(dims) or depth != leaf_depth:
             raise Error("ValueError: program input sequences must be rectangular")
         if integer:
-            if Bool(py=b.isinstance(a, b.bool)) or not Bool(py=b.hasattr(a, "__index__")):
+            if Bool(py=py_call(b.isinstance, a, b.bool)) or not Bool(py=py_call(b.hasattr, a, "__index__")):
                 raise Error("TypeError: program ids must be integers")
             ids.append(Int64(py=a))
         else:
@@ -94,7 +95,7 @@ def program_input(a: PythonObject, integer: Bool) raises -> ProgramInput:
     var values = List[Float64]()
     var ids = List[Int64]()
     var b = Python.import_module("builtins")
-    if Bool(py=b.hasattr(a, "dtype")) and Bool(py=b.hasattr(a, "strides")):
+    if Bool(py=py_call(b.hasattr, a, "dtype")) and Bool(py=py_call(b.hasattr, a, "strides")):
         var parsed = array_input(a, "numeric program input")
         if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
             raise Error("TypeError: program input holds ids and must be integers (an integer array)")
@@ -137,38 +138,38 @@ def _dict() raises -> PythonObject:
 def _result(arrays: PythonObject) raises -> PythonObject:
     if len(arrays) == 1:
         return arrays[0]
-    return Python.import_module("builtins").tuple(arrays)
+    return py_call(Python.import_module("builtins").tuple, arrays)
 
 
 def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
     var out = _dict()
-    out["schema"] = "mojolearn-graph-passes/1"
-    out["scope"] = "inference only; original graph and derivative order unchanged"
-    out["storage_reuse"] = False
-    out["rewritten_relu_elements_before"] = plan.relu_elements_before
-    out["rewritten_relu_elements_after"] = plan.relu_elements_after
-    out["liveness_scope"] = "logical values only; tape owns aliases and storage"
+    py_setitem(out, "schema", "mojolearn-graph-passes/1")
+    py_setitem(out, "scope", "inference only; original graph and derivative order unchanged")
+    py_setitem(out, "storage_reuse", False)
+    py_setitem(out, "rewritten_relu_elements_before", plan.relu_elements_before)
+    py_setitem(out, "rewritten_relu_elements_after", plan.relu_elements_after)
+    py_setitem(out, "liveness_scope", "logical values only; tape owns aliases and storage")
     var passes = Python.list()
     for k in range(len(plan.pass_names)):  # driver-loop: over graph transformation report
         var row = _dict()
-        row["name"] = plan.pass_names[k]
-        row["nodes_before"] = plan.before[k]
-        row["nodes_after"] = plan.after[k]
-        row["rewrites"] = plan.rewrites[k]
-        passes.append(row)
-    out["passes"] = passes
+        py_setitem(row, "name", plan.pass_names[k])
+        py_setitem(row, "nodes_before", plan.before[k])
+        py_setitem(row, "nodes_after", plan.after[k])
+        py_setitem(row, "rewrites", plan.rewrites[k])
+        _ = py_call(passes.append, row)
+    py_setitem(out, "passes", passes)
     var origins = Python.list()
     for k in range(len(plan.source_nodes)):  # driver-loop: over source node provenance
-        origins.append(PythonObject(plan.source_nodes[k]))
-    out["source_nodes"] = origins
+        _ = py_call(origins.append, PythonObject(plan.source_nodes[k]))
+    py_setitem(out, "source_nodes", origins)
     var liveness = Python.list()
     for k in range(len(plan.last_use)):  # driver-loop: over logical reference use metadata
         var row = _dict()
-        row["value"] = k
-        row["last_use"] = plan.last_use[k]
-        row["uses"] = plan.uses[k]
-        liveness.append(row)
-    out["liveness"] = liveness
+        py_setitem(row, "value", k)
+        py_setitem(row, "last_use", plan.last_use[k])
+        py_setitem(row, "uses", plan.uses[k])
+        _ = py_call(liveness.append, row)
+    py_setitem(out, "liveness", liveness)
     return out
 
 
@@ -190,35 +191,35 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         return _result(result)
     var s = ops_session[E, KIND](sid_i)
     var report = _dict()
-    report["executor"] = execution_profile_object(r.executor)
-    report["optimization"] = _optimization_object(plan.optimization)
-    report["timing"] = "host enqueue and synchronized wait; profiling serializes the queue"
-    report["original_nodes"] = plan.original_nodes
-    report["executed_nodes"] = plan.program.n_nodes()
-    report["input_logical_bytes"] = r.upload_bytes
-    report["input_device_bytes"] = r.input_bytes
-    report["output_bytes"] = r.download_bytes
-    report["parameter_bytes"] = r.parameter_bytes
-    report["peak_tape_reserved_bytes"] = s[].program_trace.peak_tape_bytes
-    report["upload_and_cast_ns"] = r.upload_ns
-    report["download_and_allocate_ns"] = r.download_ns
-    report["node_sync_count"] = s[].program_trace.sync_count
-    report["node_sync_ns"] = s[].program_trace.sync_ns
+    py_setitem(report, "executor", execution_profile_object(r.executor))
+    py_setitem(report, "optimization", _optimization_object(plan.optimization))
+    py_setitem(report, "timing", "host enqueue and synchronized wait; profiling serializes the queue")
+    py_setitem(report, "original_nodes", plan.original_nodes)
+    py_setitem(report, "executed_nodes", plan.program.n_nodes())
+    py_setitem(report, "input_logical_bytes", r.upload_bytes)
+    py_setitem(report, "input_device_bytes", r.input_bytes)
+    py_setitem(report, "output_bytes", r.download_bytes)
+    py_setitem(report, "parameter_bytes", r.parameter_bytes)
+    py_setitem(report, "peak_tape_reserved_bytes", s[].program_trace.peak_tape_bytes)
+    py_setitem(report, "upload_and_cast_ns", r.upload_ns)
+    py_setitem(report, "download_and_allocate_ns", r.download_ns)
+    py_setitem(report, "node_sync_count", s[].program_trace.sync_count)
+    py_setitem(report, "node_sync_ns", s[].program_trace.sync_ns)
     var rows = Python.list()
     for j in range(len(s[].program_trace.nodes)):  # driver-loop: over diagnostic rows
         var row = _dict()
-        row["node"] = s[].program_trace.nodes[j]
-        row["source_node"] = plan.optimization.source_nodes[s[].program_trace.nodes[j]]
-        row["op"] = program_op_name(s[].program_trace.codes[j])
-        row["shape"] = s[].program_trace.shapes[j]
-        row["output_bytes"] = s[].program_trace.output_bytes[j]
-        row["enqueue_ns"] = s[].program_trace.enqueue_ns[j]
-        row["wait_ns"] = s[].program_trace.wait_ns[j]
-        rows.append(row)
-    report["nodes"] = rows
+        py_setitem(row, "node", s[].program_trace.nodes[j])
+        py_setitem(row, "source_node", plan.optimization.source_nodes[s[].program_trace.nodes[j]])
+        py_setitem(row, "op", program_op_name(s[].program_trace.codes[j]))
+        py_setitem(row, "shape", s[].program_trace.shapes[j])
+        py_setitem(row, "output_bytes", s[].program_trace.output_bytes[j])
+        py_setitem(row, "enqueue_ns", s[].program_trace.enqueue_ns[j])
+        py_setitem(row, "wait_ns", s[].program_trace.wait_ns[j])
+        _ = py_call(rows.append, row)
+    py_setitem(report, "nodes", rows)
     var out = _dict()
-    out["outputs"] = _result(result)
-    out["profile"] = report
+    py_setitem(out, "outputs", _result(result))
+    py_setitem(out, "profile", report)
     return out
 
 
@@ -238,39 +239,39 @@ def ops_program_inspect_py[E: Exec & Movable & Deinitable, KIND: Int](
     var optimization = program_optimize(p, Bool(py=optimize))
     p = optimization.program.copy()
     var report = _dict()
-    report["original_nodes"] = original_nodes
-    report["nodes_removed"] = original_nodes - p.n_nodes()
-    report["input_shapes"] = _dims_out(p.in_shapes)
-    report["output_shapes"] = _dims_out(p.out_shapes)
-    report["parameter_shapes"] = _dims_out(p.param_shapes)
-    report["optimization"] = "structural_pass_pipeline" if Bool(py=optimize) else "none"
-    report["pass_report"] = _optimization_object(optimization)
+    py_setitem(report, "original_nodes", original_nodes)
+    py_setitem(report, "nodes_removed", original_nodes - p.n_nodes())
+    py_setitem(report, "input_shapes", _dims_out(p.in_shapes))
+    py_setitem(report, "output_shapes", _dims_out(p.out_shapes))
+    py_setitem(report, "parameter_shapes", _dims_out(p.param_shapes))
+    py_setitem(report, "optimization", "structural_pass_pipeline" if Bool(py=optimize) else "none")
+    py_setitem(report, "pass_report", _optimization_object(optimization))
     var rows = Python.list()
     for k in range(p.n_nodes()):  # driver-loop: over graph node metadata
         var row = _dict()
-        row["node"] = k
-        row["source_node"] = optimization.source_nodes[k]
-        row["value"] = p.n_in + k
-        row["op"] = program_op_name(p.code[k])
-        row["code"] = p.code[k]
+        py_setitem(row, "node", k)
+        py_setitem(row, "source_node", optimization.source_nodes[k])
+        py_setitem(row, "value", p.n_in + k)
+        py_setitem(row, "op", program_op_name(p.code[k]))
+        py_setitem(row, "code", p.code[k])
         var args = Python.list()
         var ints = Python.list()
         var floats = Python.list()
         for j in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over input refs
-            args.append(PythonObject(p.args[j]))
+            _ = py_call(args.append, PythonObject(p.args[j]))
         for j in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over integer attributes
-            ints.append(PythonObject(p.ints[j]))
+            _ = py_call(ints.append, PythonObject(p.ints[j]))
         for j in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over float attributes
-            floats.append(PythonObject(p.fs[j]))
-        row["inputs"] = args
-        row["integers"] = ints
-        row["floats"] = floats
-        rows.append(row)
-    report["nodes"] = rows
+            _ = py_call(floats.append, PythonObject(p.fs[j]))
+        py_setitem(row, "inputs", args)
+        py_setitem(row, "integers", ints)
+        py_setitem(row, "floats", floats)
+        _ = py_call(rows.append, row)
+    py_setitem(report, "nodes", rows)
     var outputs = Python.list()
     for k in range(len(p.outs)):  # driver-loop: over output refs
-        outputs.append(PythonObject(p.outs[k]))
-    report["outputs"] = outputs
+        _ = py_call(outputs.append, PythonObject(p.outs[k]))
+    py_setitem(report, "outputs", outputs)
     return report
 
 
@@ -339,14 +340,14 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     if kind < 0:
         raise Error("ValueError: unknown loss " + name)
     var b = Python.import_module("builtins")
-    var no_target = String(py=b.type(targets).__name__) == "NoneType"
+    var no_target = String(py=py_type(targets).__name__) == "NoneType"
     if (kind == 0) != no_target:
         raise Error("ValueError: omit targets only when loss='output'")
     var count = _integer(epochs, "epochs", 1)
     var batch = _integer(batch_size, "batch_size", 1)
     var opt = _integer(optimizer, "optimizer", 1)
     var seed_word = uint64_input(seed, "seed")
-    var explicit = String(py=b.type(parameters).__name__) != "NoneType"
+    var explicit = String(py=py_type(parameters).__name__) != "NoneType"
     var selected = List[Int]()
     if explicit:
         if is_integer_input(parameters):
@@ -366,11 +367,11 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
         condition_id, otherwise_id,
     )
     var out = Python.list()
-    out.append(curve)
-    out.append(PythonObject(count))
+    _ = py_call(out.append, curve)
+    _ = py_call(out.append, PythonObject(count))
     if condition_id > 0:
         var counts = b.dict()
-        counts["true"] = branches[0]
-        counts["false"] = branches[1]
-        out.append(counts)
+        py_setitem(counts, "true", branches[0])
+        py_setitem(counts, "false", branches[1])
+        _ = py_call(out.append, counts)
     return out

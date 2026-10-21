@@ -2,6 +2,7 @@
 # Python door for explicit control flow (program_control.mojo): argument
 # unpacking, input conversion and ndarray results around the typed entries.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_setitem
 from sequence.exec_trait import Exec
 from autograd.program_pyapi import program_inputs, _dict, _result, _integer
 from autograd.program_arrays_pyapi import host_arrays_py
@@ -23,7 +24,7 @@ def ops_program_control_py[E: Exec & Movable & Deinitable, KIND: Int](
     if not plan.is_loop:
         return _result(result)
     var report = _dict()
-    report["outputs"] = _result(result)
-    report["iterations"] = r.iterations
-    report["stopped"] = r.stopped
+    py_setitem(report, "outputs", _result(result))
+    py_setitem(report, "iterations", r.iterations)
+    py_setitem(report, "stopped", r.stopped)
     return report

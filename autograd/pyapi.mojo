@@ -16,6 +16,7 @@ count, then per layer (code, arg0 .. arg5, 0)], the per-sample input shape
 of any rank; X arrives as its (N, product of the sample dims) row-major
 matrix view."""
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
 from sequence.pyapi import fptr, fval, ival
 from sequence.recurrent import OptConfig
@@ -203,8 +204,8 @@ def model_n_params_py(prog: PythonObject, ptab: PythonObject) raises -> PythonOb
     """[parameter count, output width] of a description (validates it)."""
     var spec = parse_model(_ints(prog), _floats(ptab, 0))
     var out = Python.list()
-    out.append(PythonObject(spec.n_params))
-    out.append(PythonObject(spec.out_features()))
+    _ = py_call(out.append, PythonObject(spec.n_params))
+    _ = py_call(out.append, PythonObject(spec.out_features()))
     return out
 
 
@@ -234,9 +235,9 @@ def model_import_params_py[E: Exec](
     var spec = parse_model(_ints(prog), _floats(ptab, 0))
     model_import_params(ex, spec, _record_ints(recs), _names(names), fptr(params_addr, "params"))
     var out = Python.list()
-    out.append(PythonObject(spec.n_params))
-    out.append(PythonObject(spec.out_features()))
-    out.append(PythonObject(spec.n_inputs))
+    _ = py_call(out.append, PythonObject(spec.n_params))
+    _ = py_call(out.append, PythonObject(spec.out_features()))
+    _ = py_call(out.append, PythonObject(spec.n_inputs))
     return out
 
 
@@ -370,7 +371,7 @@ def ops_shape_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h
     var dims = rn_dims(p[].shape_nd(Int(py=h)))
     var out = Python.list()
     for k in range(len(dims)):  # small-loop(dims: a tensor's rank, at most 8): result packing, no data
-        out.append(PythonObject(dims[k]))
+        _ = py_call(out.append, PythonObject(dims[k]))
     return out
 
 
@@ -426,7 +427,7 @@ def _input_handles(p: PythonObject) raises -> List[Int]:
 def _handles_out(hs: List[Int]) raises -> PythonObject:
     var res = Python.list()
     for i in range(len(hs)):  # small-loop(hs: one result handle per input of vjp or hvp): handle list building, no data
-        res.append(PythonObject(hs[i]))
+        _ = py_call(res.append, PythonObject(hs[i]))
     return res
 
 
@@ -543,13 +544,13 @@ def ops_optimizer_state_py[E: Exec & Movable & Deinitable, KIND: Int](
     var p = ops_session[E, KIND](Int(py=sid))
     var st = p[].optimizer_state(Int(py=opt), Int(py=h))
     var out = Python.list()
-    out.append(PythonObject(st[0]))
-    out.append(PythonObject(Float64(st[1])))
-    out.append(PythonObject(Float64(st[2])))
-    out.append(PythonObject(Float64(st[3])))
-    out.append(PythonObject(st[4]))
-    out.append(PythonObject(st[5]))
-    out.append(PythonObject(st[6]))
+    _ = py_call(out.append, PythonObject(st[0]))
+    _ = py_call(out.append, PythonObject(Float64(st[1])))
+    _ = py_call(out.append, PythonObject(Float64(st[2])))
+    _ = py_call(out.append, PythonObject(Float64(st[3])))
+    _ = py_call(out.append, PythonObject(st[4]))
+    _ = py_call(out.append, PythonObject(st[5]))
+    _ = py_call(out.append, PythonObject(st[6]))
     return out
 
 
@@ -585,8 +586,8 @@ def _dims_out(shapes: List[ShapeN]) raises -> PythonObject:
         var dims = rn_dims(shapes[k])
         var d = Python.list()
         for j in range(len(dims)):  # small-loop(dims: a tensor's rank, at most 8): result packing, no data
-            d.append(PythonObject(dims[j]))
-        out.append(d)
+            _ = py_call(d.append, PythonObject(dims[j]))
+        _ = py_call(out.append, d)
     return out
 
 
@@ -595,17 +596,17 @@ def program_info(pid: Int, p: OpsProgram) raises -> PythonObject:
     kinds (autograd/program.mojo PROGRAM_IN_*: 0 float32 values, 1 int32
     ids)]."""
     var res = Python.list()
-    res.append(PythonObject(pid))
-    res.append(_dims_out(p.in_shapes))
-    res.append(_dims_out(p.out_shapes))
+    _ = py_call(res.append, PythonObject(pid))
+    _ = py_call(res.append, _dims_out(p.in_shapes))
+    _ = py_call(res.append, _dims_out(p.out_shapes))
     var ph = Python.list()
     for j in range(len(p.params)):  # small-loop(params: a program's parameter handles): result packing, no data
-        ph.append(PythonObject(p.params[j]))
-    res.append(ph)
+        _ = py_call(ph.append, PythonObject(p.params[j]))
+    _ = py_call(res.append, ph)
     var kinds = Python.list()
     for k in range(len(p.in_kinds)):  # small-loop(in_kinds: a program's inputs): result packing, no data
-        kinds.append(PythonObject(p.in_kinds[k]))
-    res.append(kinds)
+        _ = py_call(kinds.append, PythonObject(p.in_kinds[k]))
+    _ = py_call(res.append, kinds)
     return res
 
 

@@ -3,6 +3,7 @@
 # (program_save.mojo): it converts the program object's names and the
 # install's version and platform strings, nothing else.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
 from autograd.program_save import program_save_verified
@@ -14,9 +15,9 @@ def _names(owner: PythonObject, attribute: String, count: Int) raises -> List[St
     it holds exactly `count` entries; empty otherwise."""
     var out = List[String]()
     var b = Python.import_module("builtins")
-    if not Bool(py=b.hasattr(owner, attribute)):
+    if not Bool(py=py_call(b.hasattr, owner, attribute)):
         return out^
-    var entries = b.getattr(owner, attribute)
+    var entries = py_call(b.getattr, owner, attribute)
     if len(entries) != count:
         return out^
     for k in range(count):  # small-loop(entries: one name per program input or output): argument parsing, no data

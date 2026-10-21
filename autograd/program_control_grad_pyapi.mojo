@@ -2,6 +2,7 @@
 # Python door for control-flow VJPs (program_control_grad.mojo): argument
 # unpacking and ndarray gradient results around the typed entries.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_setitem
 from sequence.exec_trait import Exec
 from autograd.program_io import ProgramInput, HostArray
 from autograd.program_pyapi import program_input, program_inputs, _integer, _result, _dict
@@ -42,7 +43,7 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
         var seeds = programs[4]
         var seed_arrays = Python.list()
         if len(st.outputs) == 1:
-            seed_arrays.append(seeds)
+            _ = py_call(seed_arrays.append, seeds)
         else:
             if len(seeds) != len(st.outputs):
                 raise Error("ValueError: control VJP needs one seed per output")
@@ -55,14 +56,14 @@ def ops_program_control_vjp_py[E: Exec & Movable & Deinitable, KIND: Int](
     var r = control_vjp_finish[E, KIND](Int(py=sid), st^, seed_list^)
     var input_gradients = Python.list()
     for k in range(len(r.input_gradients)):  # small-loop(inputs: one gradient per program input): result packing, no data
-        input_gradients.append(_gradient_py(r.input_gradients, r.input_present, k))
+        _ = py_call(input_gradients.append, _gradient_py(r.input_gradients, r.input_present, k))
     var parameter_gradients = _dict()
     for k in range(len(r.parameters)):  # small-loop(parameters: one gradient per parameter): result packing, no data
-        parameter_gradients[r.parameters[k]] = _gradient_py(r.parameter_gradients, r.parameter_present, k)
+        py_setitem(parameter_gradients, r.parameters[k], _gradient_py(r.parameter_gradients, r.parameter_present, k))
     var result = _dict()
-    result["outputs"] = _result(host_arrays_py(r.values))
-    result["input_gradients"] = Python.import_module("builtins").tuple(input_gradients)
-    result["parameter_gradients"] = parameter_gradients
-    result["iterations"] = r.iterations
-    result["stopped"] = r.stopped
+    py_setitem(result, "outputs", _result(host_arrays_py(r.values)))
+    py_setitem(result, "input_gradients", py_call(Python.import_module("builtins").tuple, input_gradients))
+    py_setitem(result, "parameter_gradients", parameter_gradients)
+    py_setitem(result, "iterations", r.iterations)
+    py_setitem(result, "stopped", r.stopped)
     return result

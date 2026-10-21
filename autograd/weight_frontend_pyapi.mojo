@@ -3,6 +3,7 @@
 # Checkpoint files use native mmap ownership; no Python safetensors reader,
 # NumPy conversion, tensor conversion or package callback executes here.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.native_torch_admission import native_torch_metadata
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
@@ -38,13 +39,13 @@ def _file_header(path: PythonObject) raises -> PythonObject:
     if count > UInt64(len(raw) - 8):
         raise Error("ValueError: safetensors header exceeds the file")
     var b = Python.import_module("builtins")
-    var header = native_json_parse(raw[b.slice(8, 8 + Int(count))])
-    if b.type(header) is not b.dict:
+    var header = native_json_parse(raw[py_call(b.slice, 8, 8 + Int(count))])
+    if py_type(header) is not b.dict:
         raise Error("ValueError: safetensors header must be an object")
     var out = Python.list()
-    out.append(view)
-    out.append(header)
-    out.append(8 + Int(count))
+    _ = py_call(out.append, view)
+    _ = py_call(out.append, header)
+    _ = py_call(out.append, 8 + Int(count))
     return out
 
 
@@ -59,32 +60,32 @@ def _checkpoint(path: PythonObject, mut owners: PythonObject) raises -> PythonOb
         if native_path_exists(index):
             var metadata = native_json_read(index)
             weight_map = metadata["weight_map"]
-            if b.type(weight_map) is not b.dict or len(weight_map) == 0:
+            if py_type(weight_map) is not b.dict or len(weight_map) == 0:
                 raise Error("ValueError: safetensors index has no weight_map")
-            var shards = b.list(weight_map.values())
+            var shards = py_call(b.list, weight_map.values())
             var seen = b.set()
             for k in range(len(shards)):  # driver-loop: over named checkpoint shards
                 var full = PythonObject(base + "/" + String(shards[k]))
-                if not Bool(py=seen.__contains__(full)):
-                    seen.add(full)
-                    files.append(full)
+                if not py_contains(seen, full):
+                    _ = py_call(seen.add, full)
+                    _ = py_call(files.append, full)
         elif native_path_exists(PythonObject(base + "/model.safetensors")):
-            files.append(base + "/model.safetensors")
+            _ = py_call(files.append, base + "/model.safetensors")
         else:
-            var names = Python.import_module("os").listdir(file)
+            var names = py_call(Python.import_module("os").listdir, file)
             for k in range(len(names)):  # driver-loop: over checkpoint directory entries
                 if String(names[k]).endswith(".safetensors"):
-                    files.append(base + "/" + String(names[k]))
+                    _ = py_call(files.append, base + "/" + String(names[k]))
             if len(files) != 1:
                 raise Error("FileNotFoundError: checkpoint directory needs one safetensors file or model.safetensors.index.json")
     else:
-        files.append(file)
+        _ = py_call(files.append, file)
     var tensors = b.dict()
     for k in range(len(files)):  # driver-loop: over checkpoint shard headers
         var entry = _file_header(files[k])
-        owners.append(entry)
+        _ = py_call(owners.append, entry)
         var header = entry[1]
-        var keys = b.list(header.keys())
+        var keys = py_call(b.list, header.keys())
         for j in range(len(keys)):  # driver-loop: over tensor metadata in the shard
             var key = keys[j]
             if String(key) == "__metadata__":
@@ -92,11 +93,11 @@ def _checkpoint(path: PythonObject, mut owners: PythonObject) raises -> PythonOb
             if Bool(py=tensors.__contains__(key)):
                 raise Error("ValueError: tensor appears in two checkpoint shards: " + String(key))
             var located = Python.list()
-            located.append(entry[0])
-            located.append(header[key])
-            located.append(entry[2])
-            tensors[key] = located
-    var expected = b.list(weight_map.keys())
+            _ = py_call(located.append, entry[0])
+            _ = py_call(located.append, header[key])
+            _ = py_call(located.append, entry[2])
+            py_setitem(tensors, key, located)
+    var expected = py_call(b.list, weight_map.keys())
     for k in range(len(expected)):  # driver-loop: over index declarations
         if not Bool(py=tensors.__contains__(expected[k])):
             raise Error("ValueError: safetensors index names a tensor absent from its shards: " + String(expected[k]))
@@ -130,7 +131,7 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
         offset = Int(py=value[2]) + begin
         if end - begin != n * size or Int(py=value[2]) + end > len(view):
             raise Error("ValueError: safetensors tensor extent disagrees with shape or file length: " + String(name))
-    elif String(b.type(value).__module__).startswith("torch"):
+    elif String(py_type(value).__module__).startswith("torch"):
         var metadata = native_torch_metadata(value)
         var dt = _dtype(String(metadata[0]))
         dtype = dt[0]
@@ -141,7 +142,7 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
         dims = metadata[2]
         strides = metadata[3]
         unit = 2
-    elif Bool(py=b.hasattr(value, "dtype")) and Bool(py=b.hasattr(value, "strides")):
+    elif Bool(py=py_call(b.hasattr, value, "dtype")) and Bool(py=py_call(b.hasattr, value, "strides")):
         if not Bool(py=value.dtype.isnative):
             raise Error("TypeError: a weight must use native byte order")
         dtype = 4096 if String(value.dtype.type.__name__) == "bfloat16" else Int(py=value.dtype.num)
@@ -158,24 +159,24 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
         size = 8
         dims = Python.list()
         for k in range(scalar_owners[at].shape.ndim):  # small-loop(rank: list weight shape): metadata only
-            dims.append(scalar_owners[at].shape.d[k])
+            _ = py_call(dims.append, scalar_owners[at].shape.d[k])
     var nd = len(dims)
     if nd < 1 or nd > 4:
         raise Error("ValueError: a weight must have one to four dimensions")
     var row = Python.list()
-    row.append(target)
-    row.append(0)
-    row.append(layout)
-    row.append(addr)
-    row.append(offset)
-    row.append(dtype)
-    row.append(size)
-    row.append(nd)
+    _ = py_call(row.append, target)
+    _ = py_call(row.append, 0)
+    _ = py_call(row.append, layout)
+    _ = py_call(row.append, addr)
+    _ = py_call(row.append, offset)
+    _ = py_call(row.append, dtype)
+    _ = py_call(row.append, size)
+    _ = py_call(row.append, nd)
     for k in range(4):  # small-loop(4: fixed weight descriptor dimensions): metadata only
-        row.append(_integer(dims[k], "dimension", 1) if k < nd else 0)
-    row.append(unit)
+        _ = py_call(row.append, _integer(dims[k], "dimension", 1) if k < nd else 0)
+    _ = py_call(row.append, unit)
     for k in range(4):  # small-loop(4: fixed weight descriptor strides): metadata only
-        row.append(Int(py=strides[k]) if unit != 0 and k < nd else 0)
+        _ = py_call(row.append, Int(py=strides[k]) if unit != 0 and k < nd else 0)
     return row
 
 
@@ -183,19 +184,19 @@ def ops_weights_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, obj: PythonObject, names: PythonObject, source: PythonObject,
 ) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var path = Bool(py=b.isinstance(obj, b.str)) or Bool(py=b.isinstance(obj, b.bytes)) or Bool(py=b.hasattr(obj, "__fspath__"))
+    var path = Bool(py=py_call(b.isinstance, obj, b.str)) or Bool(py=py_call(b.isinstance, obj, b.bytes)) or Bool(py=py_call(b.hasattr, obj, "__fspath__"))
     var kind = ("safetensors" if path else "torch") if source is PythonObject(None) else String(source)
     if kind != "torch" and kind != "safetensors":
         raise Error("ValueError: source must be 'torch' or 'safetensors'")
     if (kind == "safetensors") != path:
         raise Error("TypeError: safetensors takes a path; torch takes a mapping of names to tensors")
-    if not path and (not Bool(py=b.hasattr(obj, "keys")) or not Bool(py=b.hasattr(obj, "__getitem__"))):
+    if not path and (not Bool(py=py_call(b.hasattr, obj, "keys")) or not Bool(py=py_call(b.hasattr, obj, "__getitem__"))):
         raise Error("TypeError: source='torch' takes a mapping of names to tensors")
     var owners = Python.list()
     var tensor_owners = Python.list()
     var values = _checkpoint(obj, owners) if path else obj
-    var known = b.set(values.keys())
-    var requested = b.list(names)
+    var known = py_call(b.set, values.keys())
+    var requested = py_call(b.list, names)
     if len(requested) == 0:
         raise Error("ValueError: names must hold at least one (handle, name) pair")
     var records = Python.list()
@@ -204,25 +205,25 @@ def ops_weights_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var scalar_owners = List[ProgramInput]()
     for k in range(len(requested)):  # driver-loop: over requested named tensors
         var item = requested[k]
-        if (b.type(item) is not b.list and b.type(item) is not b.tuple) or (len(item) != 2 and len(item) != 3):
+        if (py_type(item) is not b.list and py_type(item) is not b.tuple) or (len(item) != 2 and len(item) != 3):
             raise Error("ValueError: names takes (handle, name) or (handle, name, 'transpose') pairs")
         var handle = _integer(item[0], "handle", 1)
-        if not Bool(py=b.isinstance(item[1], b.str)):
+        if not Bool(py=py_call(b.isinstance, item[1], b.str)):
             raise Error("TypeError: a tensor name must be a string")
         var layout = 2
         if len(item) == 3:
             if String(item[2]) != "transpose":
                 raise Error("ValueError: the third item of a names entry must be 'transpose'")
             layout = 3
-        if not Bool(py=known.__contains__(item[1])):
+        if not py_contains(known, item[1]):
             raise Error("ValueError: load_weights source has no tensor '" + String(item[1]) + "'")
         # A caller mapping may create a fresh tensor on lookup. Keep the
         # returned object, as well as the mapping, through native transfer.
         var value = values[item[1]]
-        tensor_owners.append(value)
-        records.extend(_record(item[1], handle, layout, value, path, scalar_owners))
-        keys.append(item[1])
-        handles.append(handle)
+        _ = py_call(tensor_owners.append, value)
+        _ = py_call(records.extend, _record(item[1], handle, layout, value, path, scalar_owners))
+        _ = py_call(keys.append, item[1])
+        _ = py_call(handles.append, handle)
     _ = ops_load_weights_py[E, KIND](sid, records, keys)
     _ = owners^
     _ = values^

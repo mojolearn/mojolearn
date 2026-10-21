@@ -2,6 +2,7 @@
 # Python doors for the import lowering (import_lower.mojo): each converts its
 # arguments and the typed result to the established lists, nothing else.
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
 from autograd.import_lower import (
     IMPORT_BAD_VALUE, IMPORT_OK, IMPORT_PROBLEMS, _Found, onnx_from_words, onnx_import,
@@ -27,20 +28,20 @@ def _problems_out(found: List[_Found]) raises -> PythonObject:
     var out = Python.list()
     for i in range(len(found)):  # driver-loop: over the reported problems; cpu-route: model graph lowered on the host conversion
         var p = Python.list()
-        p.append(PythonObject(found[i].name))
+        _ = py_call(p.append, PythonObject(found[i].name))
         if found[i].has_op:
-            p.append(PythonObject(found[i].op))
+            _ = py_call(p.append, PythonObject(found[i].op))
         else:
-            p.append(PythonObject(None))
-        p.append(PythonObject(found[i].why))
-        out.append(p)
+            _ = py_call(p.append, PythonObject(None))
+        _ = py_call(p.append, PythonObject(found[i].why))
+        _ = py_call(out.append, p)
     return out
 
 
 def _dims_py(v: List[Int]) raises -> PythonObject:
     var d = Python.list()
     for i in range(len(v)):  # driver-loop: over the axes of one shape; cpu-route: model graph lowered on the host conversion
-        d.append(PythonObject(v[i]))
+        _ = py_call(d.append, PythonObject(v[i]))
     return d
 
 
@@ -54,31 +55,31 @@ def onnx_import_py[E: Exec & Movable & Deinitable, KIND: Int](
                                  _int_list(addrs), String(py=source))
     var res = Python.list()
     if r.status == IMPORT_BAD_VALUE:
-        res.append(PythonObject(IMPORT_BAD_VALUE))
-        res.append(PythonObject(r.message))
+        _ = py_call(res.append, PythonObject(IMPORT_BAD_VALUE))
+        _ = py_call(res.append, PythonObject(r.message))
         return res
     if r.status == IMPORT_PROBLEMS:
-        res.append(PythonObject(IMPORT_PROBLEMS))
-        res.append(_problems_out(r.problems))
+        _ = py_call(res.append, PythonObject(IMPORT_PROBLEMS))
+        _ = py_call(res.append, _problems_out(r.problems))
         return res
     var in_meta = Python.list()
     for q in range(len(r.in_names)):  # driver-loop: over graph inputs; cpu-route: model graph lowered on the host conversion
         var m = Python.list()
-        m.append(PythonObject(r.in_names[q]))
-        m.append(_dims_py(r.in_dims[q]))
-        m.append(PythonObject(r.in_dtypes[q]))
-        in_meta.append(m)
+        _ = py_call(m.append, PythonObject(r.in_names[q]))
+        _ = py_call(m.append, _dims_py(r.in_dims[q]))
+        _ = py_call(m.append, PythonObject(r.in_dtypes[q]))
+        _ = py_call(in_meta.append, m)
     var out_meta = Python.list()
     for i in range(len(r.out_names)):  # driver-loop: over graph outputs; cpu-route: model graph lowered on the host conversion
         var m = Python.list()
-        m.append(PythonObject(r.out_names[i]))
-        m.append(_dims_py(r.out_dims[i]))
-        m.append(PythonObject(r.out_int32[i]))
-        out_meta.append(m)
-    res.append(PythonObject(IMPORT_OK))
-    res.append(program_info(r.pid, r.prog))
-    res.append(in_meta)
-    res.append(out_meta)
+        _ = py_call(m.append, PythonObject(r.out_names[i]))
+        _ = py_call(m.append, _dims_py(r.out_dims[i]))
+        _ = py_call(m.append, PythonObject(r.out_int32[i]))
+        _ = py_call(out_meta.append, m)
+    _ = py_call(res.append, PythonObject(IMPORT_OK))
+    _ = py_call(res.append, program_info(r.pid, r.prog))
+    _ = py_call(res.append, in_meta)
+    _ = py_call(res.append, out_meta)
     return res
 
 
