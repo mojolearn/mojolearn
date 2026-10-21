@@ -143,7 +143,7 @@ from ivf.checks.sabotage_layout import (
     sabotage_sort_probe_slots,
 )
 from ivf.impl.neighbors.ivf_common import calc_chunk_indices
-from ivf.host.ivf_host import IvfHostIndex, host_ivf_search
+from ivf.host.ivf_host import IvfHostIndex, host_ivf_search, host_pinned_distance
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import (
     compute_row_norms,
     download_f32,
@@ -399,6 +399,34 @@ def check_distance_oracle_policy() raises:
         raise Error("IVF oracle selected arithmetic differs from the compiled distance policy")
 
 
+def check_host_distance_sabotage_reach() raises:
+    """The reverse-feature negative control changes the selected fold's bits."""
+    # These exactly representable inputs distinguish ascending and descending
+    # addition; no host search/build mutation or post-result value flip can
+    # accidentally satisfy this check. Ordinary results still match the
+    # independent scalar oracle from ivf_oracle.mojo.
+    var q: List[Float32] = [Float32(4096.0), Float32(1.0), Float32(1.0)]
+    var y: List[Float32] = [Float32(0.0), Float32(0.0), Float32(0.0)]
+    var expected = Float32(16777216.0)
+    var reversed_expected = Float32(16777218.0)
+    comptime if not IVF_DIRECT_DISTANCE:
+        q[0] = Float32(8192.0)
+        y[0] = Float32(2048.0)
+        y[1] = Float32(1.0)
+        y[2] = Float32(1.0)
+        expected = Float32(37748736.0)
+        reversed_expected = Float32(37748732.0)
+    var qn = oracle_row_norms(q, 1, 3, False)
+    var yn = oracle_row_norms(y, 1, 3, False)
+    var ordinary = host_pinned_distance(q, 0, y, 0, 3, qn[0], yn[0], False)
+    var reversed = host_pinned_distance(q, 0, y, 0, 3, qn[0], yn[0], True)
+    var reference = oracle_scan_distance(q, 0, y, 0, 3, qn[0], yn[0], False)
+    if not _same_bits(ordinary, expected) or not _same_bits(ordinary, reference):
+        raise Error("IVF host ordinary distance differs from its exact fixture and independent oracle")
+    if not _same_bits(reversed, reversed_expected) or _same_bits(ordinary, reversed):
+        raise Error("IVF host descending negative control did not reach the selected distance policy")
+
+
 # =====================================================================
 # THE HEADLINE GATE. Written first, for the reason the brief gives: it is
 # the strongest statement this lane can make, and everything else is a
@@ -416,6 +444,7 @@ def check_nprobe_equals_nlists_is_brute_force() raises:
     FAST retains its vendor-matmul report because shape can change its fold.
     """
     check_distance_oracle_policy()
+    check_host_distance_sabotage_reach()
     var ctx = DeviceContext()
     var x = ivf_index_fixture(N_ROWS, DIM, 3)
     var q = ivf_query_fixture(x, N_ROWS, N_QUERIES, DIM, 3)
