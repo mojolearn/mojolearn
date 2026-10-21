@@ -93,6 +93,7 @@ from bindings.msel_host import (
 )
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.sys.compile import is_defined
@@ -223,7 +224,7 @@ def _index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("core host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=operator_module.index(value))
+    return Int(py=py_call(operator_module.index, value))
 
 
 def core_host_numeric_mode_binding() raises -> PythonObject:

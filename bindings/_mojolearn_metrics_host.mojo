@@ -61,6 +61,7 @@ from std.math import isfinite
 from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -139,7 +140,7 @@ def _index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("metrics host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=operator_module.index(value))
+    return Int(py=py_call(operator_module.index, value))
 
 
 def _want(name: String, params: PythonObject, k: Int) raises:

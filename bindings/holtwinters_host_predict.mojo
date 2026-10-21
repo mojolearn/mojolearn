@@ -24,6 +24,7 @@ must read a mismatch on every forecast and in-sample prediction. The GPU
 build scripts pass neither define.
 """
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr
@@ -42,7 +43,7 @@ def _hw_index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("holtwinters host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=operator_module.index(value))
+    return Int(py=py_call(operator_module.index, value))
 
 
 def _refuse_state(n: Int, batch_size: Int, frequency: Int, who: String) raises:

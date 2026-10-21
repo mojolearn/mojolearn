@@ -77,6 +77,7 @@ from training.neural_session_mlp_host import nn_mlp_sessions_host
 
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from bindings.sha256_door import sha256_hexdigest
 from core.mojolearn_training_host_impl import (
     _host_offsets,
@@ -154,7 +155,7 @@ def _index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("training host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=operator_module.index(value))
+    return Int(py=py_call(operator_module.index, value))
 
 
 def training_host_numeric_mode_binding() raises -> PythonObject:

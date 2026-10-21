@@ -744,7 +744,7 @@ def _logits_dims(dims: PythonObject, shape: ByteConfig) raises -> List[Int]:
         var type_name = String(py=dims[i].__class__.__name__)
         if type_name == "bool" or type_name == "bool_":
             raise Error("byte LM logits: dims must be integers, not booleans")
-        out.append(Int(py=operator_module.index(dims[i])))
+        out.append(Int(py=py_call(operator_module.index, dims[i])))
     if out[0] < 1 or out[0] > BYTE_LOGITS_MAX_BATCH or out[1] < 1 or out[1] > shape.length:
         raise Error("byte LM logits: batch in [1, " + String(BYTE_LOGITS_MAX_BATCH)
                     + "] and length in [1, " + String(shape.length) + "]")

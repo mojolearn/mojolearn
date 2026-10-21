@@ -30,6 +30,7 @@ re-exported here so both bindings' `*_host_sabotage` read-backs report it and
 a sabotage build is refused outside the gate.
 """
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 
 from core.hostptr import f32_ptr, i32_ptr
@@ -42,7 +43,7 @@ def _kpss_index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("kpss host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=operator_module.index(value))
+    return Int(py=py_call(operator_module.index, value))
 
 
 def kpss_test_binding(
