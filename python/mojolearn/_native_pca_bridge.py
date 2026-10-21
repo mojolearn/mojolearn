@@ -12,8 +12,8 @@ def connect(pca_class):
 
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
-    descriptor = next((vars(base)["__dict__"] for base in pca_class.__mro__
-                       if "__dict__" in vars(base)), None)  # glue: connect the native instance dictionary descriptor
+    descriptor = next((vars(base)["__dict__"] for base in pca_class.__mro__  # glue: connect the native instance dictionary descriptor
+                       if "__dict__" in vars(base)), None)
     if type(pca_class) is not type or type(descriptor) is not GetSetDescriptorType:
         raise TypeError("PCA owner requires a standard native instance dictionary")
     connected = {}
@@ -21,9 +21,11 @@ def connect(pca_class):
     required = ("estimators_vendor", "estimators_numeric_mode", "pca_fit",
                 "pca_transform", "inverse_transform", "pca_rank_finish")
     optional = ("pca_fit_full", "pca_whiten_transform", "pca_whiten_inverse_transform")
-    decomp_names = ("x_decomp_pca_mle_rank", "x_decomp_dev_pca_mle_rank",
-                    "x_decomp_dev_alloc", "x_decomp_dev_free",
-                    "x_decomp_dev_upload", "x_decomp_dev_download")
+    if context["vendor"] == "cpu":
+        decomp_names = ("x_decomp_pca_mle_rank",)  # cpu-route: connect only the explicit CPU rank entry on a CPU install
+    else:
+        decomp_names = ("x_decomp_dev_pca_mle_rank", "x_decomp_dev_alloc", "x_decomp_dev_free",
+                        "x_decomp_dev_upload", "x_decomp_dev_download")
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
             binding = _backend.binding("_mojolearn_estimators", mode)
