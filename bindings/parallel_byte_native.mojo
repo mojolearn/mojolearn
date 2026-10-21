@@ -14,6 +14,13 @@ from std.math import isfinite
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
 from bindings.native_json import native_json_parse
 from bindings.native_transport import _transport_json, transport_initialize
+from training.parallel_byte_impl import (
+    _parallel_span,
+    parallel_copy_words,
+    parallel_require_binary_i32,
+    parallel_require_finite_f32,
+    parallel_require_nonnegative_f32,
+)
 
 
 struct ParallelByteBoundary(Defaultable, Movable):
@@ -65,7 +72,7 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
         var mode = mode_keys[k]
         var binding = modes[mode]
         var table = p[].bi.dict()
-        for name in [String("create"), String("open"), String("open_pooled"), String("close"),
+        for name in [String("create"), String("open"), String("open_pooled"), String("close"),  # small-loop(names: sixteen session entry names)
                      String("step"), String("export"), String("rollback"), String("set_lr"),
                      String("ownership"), String("shard_gradient"), String("apply_gradient"),
                      String("fold_reset"), String("shard_gradient_fold"), String("fold_add"),
@@ -93,7 +100,7 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
         table["suffix"] = suffix()
         # Resolve and prove the same mode/vendor/profile witness as _load;
         # the connection-time host proxy is never retained as a runtime call.
-        for name in [String("numeric_mode"), String("vendor"), String("profile"), String("config_profile")]:
+        for name in [String("numeric_mode"), String("vendor"), String("profile"), String("config_profile")]:  # small-loop(names: four profile entry names)
             var native_name = "byte_lm_" + name
             if expected_vendor == "cpu":
                 native_name = "byte_lm_host_" + ("profile" if name == "config_profile" else name)
@@ -119,15 +126,6 @@ def _parallel_int(value: PythonObject, minimum: Int, maximum: Int, label: String
     if n < minimum or n > maximum:
         raise Error(label + " outside admitted range")
     return n
-
-
-def _parallel_span(dims: List[Int]) raises -> Int:
-    var count = 1
-    for d in dims:
-        if d < 0 or (d != 0 and count > 2147483647 // d):
-            raise Error("Byte-LM shape exceeds signed 32-bit indexing")
-        count *= d
-    return count
 
 
 def _parallel_float(value: PythonObject, label: String) raises -> Float32:
@@ -156,7 +154,7 @@ def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False,
         raise Error("TypeError: parallel input requires exact float32 or int32 buffer dtype")
     if len(shape) != len(dims):
         raise Error("parallel input has wrong rank")
-    for i in range(len(dims)):
+    for i in range(len(dims)):  # small-loop(dims: array rank words)
         if Int(py=shape[i]) != dims[i]:
             raise Error("parallel input has wrong shape")
     var output = generation_array(dims, "i" if integer else "f")
@@ -165,29 +163,12 @@ def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False,
     var n = Int(py=output.size)
     if len(store) != n:
         raise Error("parallel input byte count differs from shape")
-    var src = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=store.buffer_info()[0]))
-    var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-    if own_array and String(value.order) == "F" and len(dims) > 1:
-        var strides = List[Int]()
-        var stride = 1
-        for axis in range(len(dims)):
-            strides.append(stride)
-            stride *= dims[axis]
-        for i in range(n):
-            var remaining = i
-            var source = 0
-            for reverse in range(len(dims)):
-                var axis = len(dims) - reverse - 1
-                source += (remaining % dims[axis]) * strides[axis]
-                remaining //= dims[axis]
-            dst[i] = src[source]
-    else:
-        memcpy(dest=dst, src=src, count=n)
+    var src_addr = Int(py=store.buffer_info()[0])
+    var dst_addr = Int(py=output._addr)
+    parallel_copy_words(src_addr, dst_addr, dims, n,
+                        own_array and String(value.order) == "F" and len(dims) > 1)
     if not integer and finite:
-        var fp = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-        for i in range(n):
-            if not isfinite(fp[i]):
-                raise Error("parallel input requires finite float32 values")
+        parallel_require_finite_f32(Int(py=output._addr), n)
     _ = store^
     return output
 
@@ -226,14 +207,14 @@ def _parallel_schedule_check(value: PythonObject, depth: Int, mut budget: Int) r
         if len(value) > 128:
             raise Error("Byte-LM schedule has too many keys")
         var keys = bi.list(value)
-        for i in range(len(keys)):
+        for i in range(len(keys)):  # small-loop(keys: schedule JSON keys, at most 128)
             if bi.type(keys[i]) is not bi.str or len(keys[i]) > 2048:
                 raise Error("Byte-LM schedule keys exceed bounds")
             _parallel_schedule_check(value[keys[i]], depth + 1, budget)
     elif cls is bi.list:
         if len(value) > 128:
             raise Error("Byte-LM schedule list exceeds its bound")
-        for i in range(len(value)):
+        for i in range(len(value)):  # small-loop(value: schedule JSON list, at most 128)
             _parallel_schedule_check(value[i], depth + 1, budget)
     elif cls is bi.str:
         if len(value) > 2048:
@@ -267,18 +248,18 @@ def _parallel_shape(state: PythonObject) raises -> PythonObject:
         if p[].bi.type(shape) is not p[].bi.dict:
             raise Error("Byte-LM model_shape must be a dict")
         var keys = p[].bi.list(shape)
-        for i in range(len(keys)):
+        for i in range(len(keys)):  # small-loop(keys: model_shape dimension names)
             var key = String(keys[i])
             if key != "chunked_lm_head_v2" and key not in names:
                 raise Error("Byte-LM model_shape has unknown dimensions")
-        for i in range(7):
+        for i in range(7):  # small-loop(names: seven required dimension names)
             if not Bool(py=shape.__contains__(PythonObject(names[i]))):
                 raise Error("Byte-LM model_shape has missing dimensions")
         if Bool(py=shape.__contains__("n_layers")) != Bool(py=shape.__contains__("vocab_size")):
             raise Error("Byte-LM model_shape must specify both layers and vocabulary")
     var dims = p[].bi.list()
     var normalized = p[].bi.dict()
-    for i in range(len(names)):
+    for i in range(len(names)):  # small-loop(names: nine dimension names)
         var value = PythonObject(defaults[i]) if shape is None else shape.get(PythonObject(names[i]), PythonObject(defaults[i]))
         var n = _parallel_int(value, 1, 1048576, names[i], False)
         dims.append(n)
@@ -366,7 +347,7 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject) raises ->
     var has_shape = Bool(py=value.__contains__("model_shape"))
     if len(value) != len(names) + Int(has_shape):
         raise Error("Byte-LM state has missing or unknown fields")
-    for name in names:
+    for name in names:  # small-loop(names: fourteen state field names)
         if not Bool(py=value.__contains__(PythonObject(name))):
             raise Error("Byte-LM state is missing " + name)
     var mode = String(value["numeric_mode"])
@@ -384,7 +365,7 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject) raises ->
                      String("weight_decay"), String("momentum"), String("dampening"), String("nesterov"), String("max_norm")]
     if p[].bi.type(cfg) is not p[].bi.dict or len(cfg) != len(cfg_names):
         raise Error("Byte-LM optimizer configuration mismatch")
-    for name in cfg_names:
+    for name in cfg_names:  # small-loop(cfg_names: ten optimizer field names)
         if not Bool(py=cfg.__contains__(PythonObject(name))):
             raise Error("Byte-LM optimizer configuration is missing " + name)
     if _parallel_int(cfg["kind"], 2, 2, "optimizer kind") != 2 or p[].bi.type(cfg["nesterov"]) is not p[].bi.bool or Bool(py=cfg["nesterov"]):
@@ -392,7 +373,7 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject) raises ->
     var config = p[].bi.dict()
     config["kind"] = PythonObject(2)
     config["nesterov"] = PythonObject(False)
-    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"),
+    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"),  # small-loop(names: eight optimizer scalars)
                  String("momentum"), String("dampening"), String("max_norm")]:
         var number = _parallel_float(cfg[name], name)
         if ((name == "lr" or name == "eps") and number <= 0) or (name == "weight_decay" and number < 0):
@@ -407,17 +388,11 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject) raises ->
         raise Error("Byte-LM schedule cursor must match completed_steps")
     var result = p[].bi.dict(value)
     var n = Int(py=shape["n_total"])
-    for name in [String("parameters"), String("m"), String("v")]:
+    for name in [String("parameters"), String("m"), String("v")]:  # small-loop(names: three state arrays)
         result[name] = _parallel_array(value[name], [n])
     var flags = _parallel_array(value["flags"], [Int(py=shape["n_tensors"])], True)
-    var vp = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=result["v"]._addr))
-    for i in range(n):
-        if vp[i] < 0:
-            raise Error("Byte-LM requires nonnegative second moments")
-    var fp = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(py=flags._addr))
-    for i in range(Int(py=shape["n_tensors"])):
-        if fp[i] < 0 or fp[i] > 1:
-            raise Error("Byte-LM requires binary optimizer flags")
+    parallel_require_nonnegative_f32(Int(py=result["v"]._addr), n)
+    parallel_require_binary_i32(Int(py=flags._addr), Int(py=shape["n_tensors"]))
     result["flags"] = flags
     result["config"] = config
     result["completed_steps"] = PythonObject(completed)
@@ -445,7 +420,7 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
     if len(ids) < 1 or len(ids) > count:
         raise Error("require 1 <= device count <= logical_shards <= 1024")
     var unique = p[].bi.set()
-    for i in range(len(ids)):
+    for i in range(len(ids)):  # small-loop(ids: physical device indices)
         var id = _parallel_int(ids[i], 0, 2147483647, "device index")
         if Bool(py=unique.__contains__(id)):
             raise Error("devices must be distinct nonnegative integer indices")
@@ -482,7 +457,7 @@ def parallel_byte_open(owner: PythonObject) raises:
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var entries = owner._entries
     var open_name = "open_pooled" if Bool(py=owner.pool_optimizer) else "open"
-    for name in [String("create"), String(open_name), String("close"), String("step"), String("export"), String("rollback"), String("reduction_pool_available")]:
+    for name in [String("create"), String(open_name), String("close"), String("step"), String("export"), String("rollback"), String("reduction_pool_available")]:  # small-loop(names: seven session entry names)
         if entries[name] is None:
             raise Error("NotImplementedError: installed binding has no cooperative GPU byte-LM session " + name)
     if Int(py=entries["reduction_pool_available"]()) != 1:
@@ -492,11 +467,11 @@ def parallel_byte_open(owner: PythonObject) raises:
     var params = p[].bi.list()
     params.append(0)
     params.append(state["completed_steps"])
-    for key in [String("kind"), String("lr"), String("beta1"), String("beta2"), String("eps"),
+    for key in [String("kind"), String("lr"), String("beta1"), String("beta2"), String("eps"),  # small-loop(keys: ten optimizer scalars)
                 String("weight_decay"), String("momentum"), String("dampening"), String("nesterov"), String("max_norm")]:
         params.append(config[key])
     var addresses = p[].bi.list()
-    for key in [String("parameters"), String("m"), String("v"), String("flags")]:
+    for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(keys: four state arrays)
         addresses.append(state[key]._addr)
     var session = entries["create"]()
     try:
@@ -537,11 +512,11 @@ def _parallel_export(owner: PythonObject, rank: PythonObject, into: PythonObject
         var keys = [String("parameters"), String("m"), String("v"), String("flags")]
         if output is None:
             output = p[].bi.dict()
-            for key in keys:
+            for key in keys:  # small-loop(keys: four state arrays)
                 output[key] = generation_array([nt if key == "flags" else n], "i" if key == "flags" else "f")
         if p[].bi.type(output) is not p[].bi.dict or len(output) != 4:
             raise Error("into must be a dict with parameters, m, v and flags")
-        for key in keys:
+        for key in keys:  # small-loop(keys: four state arrays)
             if not Bool(py=output.__contains__(PythonObject(key))):
                 raise Error("into is missing " + key)
             addresses.append(_parallel_target(output[key], nt if key == "flags" else n, key == "flags", pins))
@@ -687,7 +662,7 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         for i in range(len(rows)):  # driver-loop: over actual physical device ownership records
             var row = p[].bi.dict()
             row["device"] = owner.devices[i]
-            for j in range(len(fields)):
+            for j in range(len(fields)):  # small-loop(fields: five ownership record words)
                 row[fields[j]] = rows[i][j]
             result.append(row)
         return p[].bi.tuple(result)
