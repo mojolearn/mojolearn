@@ -58,7 +58,13 @@ Before local removal, the migration fully decodes and checks each new pack local
 with the upload for S3 validation, and verifies the exact version's size, checksum and storage class with HEAD.
 It also preserves the complete manifest and restore program. This establishes server-side checksum retention;
 it does not claim a completed Glacier restore/download. Open or changed files remain local. Duplicate-container
-removals have separate proofs identifying retained byte-identical content.
+removals have separate proofs recording the complete content comparisons performed before deletion.
+
+During the initial migration, a separate cleanup subsequently removed `measure-0852`, including the verified
+extracted counterparts of three duplicate-pruned race tarballs. This migration did not archive those tarballs
+in Glacier, and no complete replacement copy has been verified. The latest `index.json` and `README.txt` record
+this exception and link the separate cleanup's retained deletion journal; earlier object versions preserve
+the original records. The 27 cataloged Glacier groups remain retained.
 
 To recover a group, fetch its catalog, manifest and restore program, request Glacier restoration of every pack's
 exact version, and wait for availability. Download each pack using the catalog's `download_name`, falling back
