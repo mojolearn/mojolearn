@@ -2,6 +2,7 @@
 """Native public Samba refusal before user protocols, with unchanged state."""
 import array
 import sys
+from collections import defaultdict
 
 import numpy as np
 import pytest
@@ -62,6 +63,34 @@ def test_config_dict_refuses_custom_mapping_before_getitem():
             return 1
 
     _assert_refusal(audit_native_call(SambaConfig.from_dict, Mapping()), TypeError)
+    assert calls == []
+
+
+def test_defaultdict_factory_is_refused_before_missing_config_lookup():
+    calls = []
+
+    def factory():
+        calls.append("factory")
+        return 13
+
+    _assert_refusal(audit_native_call(SambaConfig.from_dict, defaultdict(factory)), TypeError)
+    assert calls == []
+
+
+def test_registered_record_key_refused_before_replaced_hash(monkeypatch):
+    model, _ = _model()
+    key = SambaConfig(13, 8, ["attention"], n_heads=2, intermediate=11)
+    weights = {key: model.flat}
+    calls = []
+
+    def hash_callback(self):
+        calls.append("hash")
+        return 0
+
+    with monkeypatch.context() as patch:
+        patch.setattr(SambaConfig, "__hash__", hash_callback)
+        result = audit_native_call(model.load_weights, weights)
+    _assert_refusal(result, TypeError)
     assert calls == []
 
 

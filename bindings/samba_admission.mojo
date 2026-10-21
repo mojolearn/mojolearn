@@ -33,6 +33,20 @@ def samba_admit_schedule(value: PythonObject, admission: PythonObject) raises:
         raise Error("NotImplementedError: Samba requires ConstantLR, WarmupLinearLR or WarmupCosineLR; Python schedule callbacks cannot execute in the native runtime")
 
 
+def _samba_mapping_key(value: PythonObject, admission: PythonObject, depth: Int) raises:
+    if depth > 64:
+        raise Error("TypeError: Samba mapping keys exceed the native metadata limit")
+    var bi = Python.import_module("builtins")
+    var cls = bi.type(value)
+    if _samba_exact(cls, admission["scalar_types"]) or _samba_numpy(cls, admission):
+        return
+    if cls is bi.tuple:
+        for i in range(len(value)):  # driver-loop: over native tuple key elements before hashing
+            _samba_mapping_key(value[i], admission, depth + 1)
+        return
+    raise Error("TypeError: Samba mapping keys require native scalar types without Python hash or equality hooks")
+
+
 def samba_admit_value(value: PythonObject, admission: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: Samba input nesting exceeds the native metadata limit")
@@ -45,9 +59,13 @@ def samba_admit_value(value: PythonObject, admission: PythonObject, depth: Int =
             samba_admit_value(value[i], admission, depth + 1)
         return
     if _samba_exact(cls, admission["mapping_types"]):
+        if cls is admission["defaultdict_type"]:
+            var factory = value.default_factory
+            if factory is not None and not _samba_exact(factory, admission["native_factories"]):
+                raise Error("TypeError: Samba mapping defaults require native builtin constructors; Python callbacks cannot execute")
         var pairs = bi.list(value.items())
         for i in range(len(pairs)):  # driver-loop: over native mapping entries before lookup
-            samba_admit_value(pairs[i][0], admission, depth + 1)
+            _samba_mapping_key(pairs[i][0], admission, depth + 1)
             samba_admit_value(pairs[i][1], admission, depth + 1)
         return
     if cls is admission["array_class"]:
