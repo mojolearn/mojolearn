@@ -7,6 +7,7 @@ from std.python import Python, PythonObject
 from std.memory import memcpy
 from bindings.classical_arrays import classical_array, classical_word
 from bindings.sequential_arrays import sequential_address
+from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
 
 
 struct ClassicalMatrix(Movable, Copyable):
@@ -94,9 +95,7 @@ struct ClassicalKit(Movable):
         var out = self.zeros(rows, cols)
         var owner = self.host(out)
         var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(owner)))
-        # Native host constant construction, matching the original input array.
-        for i in range(rows * cols):
-            data[i] = value
+        tsqr_fill_constant(data, rows * cols, value)
         _ = owner^
         return out
 
@@ -104,9 +103,7 @@ struct ClassicalKit(Movable):
         var out = self.zeros(stop - start, 1)
         var owner = self.host(out)
         var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(owner)))
-        # Native index metadata, bounded by the TSQR width (512).
-        for i in range(stop - start):
-            data[i] = Float32(start + i)
+        tsqr_fill_indices(data, start, stop)
         _ = owner^
         return out
 
@@ -231,10 +228,7 @@ struct ClassicalKit(Movable):
         var result = self.host(out)
         var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(source)))
         var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
-        # Host ABI copy of existing host words; no arithmetic route changes.
-        for r in range(rows):
-            for c in range(width):
-                dst[r * width + c] = src[r * cols + start + c]
+        tsqr_copy_columns(src, dst, rows, cols, start, width)
         _ = source^
         _ = result^
         return out
@@ -358,8 +352,7 @@ struct ClassicalKit(Movable):
             var eye = self.zeros(m, n)
             var owner = self.host(eye)
             var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(owner)))
-            for i in range(min(m, n)):
-                data[i * (n + 1)] = 1.0
+            tsqr_fill_eye(data, m, n)
             _ = owner^
             return (eye, s, vt)
         var h = self.copy_host(ug)
