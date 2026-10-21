@@ -180,7 +180,16 @@ def _parallel_float(value: PythonObject, label: String) raises -> Float32:
 
 def _parallel_view(value: PythonObject) raises -> PythonObject:
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
-    return value._mv if p[].bi.type(value) is p[].array_cls else p[].bi.memoryview(value)
+    if p[].bi.type(value) is p[].array_cls:
+        return value._mv
+    var view = PythonObject(None)
+    try:
+        view = p[].bi.memoryview(value)
+    except error:
+        # An object without the buffer protocol is the wrong type; keep
+        # Python's TypeError instead of the boundary's default ValueError.
+        raise Error("TypeError: " + String(error))
+    return view
 
 
 def _parallel_array(value: PythonObject, dims: List[Int], integer: Bool = False, finite: Bool = True) raises -> PythonObject:
