@@ -182,64 +182,40 @@ def _ptr(id: Int, n: Int) raises -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
 
 
-# ---- Python entries (GPU binding only)
-def dev_alloc_py(n: PythonObject) raises -> PythonObject:
-    return PythonObject(pool_alloc(Int(py=n)))
-
-
-def dev_free_py(id: PythonObject) raises -> PythonObject:
-    pool_free(_id(id))
-    return PythonObject(None)
-
-
-def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+# ---- Typed entries of the Python doors (x_decomp/resident_pyapi.mojo; GPU binding only)
+def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     """Host floats into the device matrix; waits (the host store may change
     after this returns)."""
-    var cnt = Int(py=n)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    var i = _id(id)
     _ = _ptr(i, cnt)
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        _up_into(ctx, p[].bufs[i], src, cnt)
-        ctx.synchronize()
-    return PythonObject(cnt)
+    var ctx = xd_ctx()
+    _up_into(ctx, p[].bufs[i], src, cnt)
+    ctx.synchronize()
+    return cnt
 
 
-def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+def dev_download_run(i: Int, dst: F32Ptr, cnt: Int) raises -> Int:
     """The device matrix into host floats, after every launch before it."""
-    var cnt = Int(py=n)
-    var dst = F32Ptr(unsafe_from_address=Int(py=addr))
     var p = X_DECOMP_POOL.get_or_create_ptr()
-    var i = _id(id)
     _ = _ptr(i, cnt)
-    with GILReleased(Python()):
-        var ctx = xd_ctx()
-        _down(ctx, p[].bufs[i], dst, cnt)
-        ctx.synchronize()
-    return PythonObject(cnt)
+    var ctx = xd_ctx()
+    _down(ctx, p[].bufs[i], dst, cnt)
+    ctx.synchronize()
+    return cnt
 
 
-def dev_ew_py(
-    a: PythonObject, b: PythonObject, c: PythonObject, dst: PythonObject, p: PythonObject, s: PythonObject
-) raises -> PythonObject:
+def dev_ew_run(
+    a: Int, b: Int, c: Int, dst: Int, op: Int, count: Int, d: Int, lb: Int, bm: Int, lc: Int, cm: Int, s: Float64
+) raises -> Int:
     # p = [op, count, d, lb, bm, lc, cm], as x_decomp_ew
-    var op = Int(py=p[0])
-    var count = _n(p, 1)
-    var d = _n(p, 2)
-    var lb = _n(p, 3)
-    var bm = Int(py=p[4])
-    var lc = _n(p, 5)
-    var cm = Int(py=p[6])
     if d <= 0:
         raise Error("x_decomp: ew needs a positive row width")
-    var pa = _ptr(_id(a), count)
-    var pb = _ptr(_id(b), lb)
-    var pc = _ptr(_id(c), lc)
-    var po = _ptr(_id(dst), count)
-    launch_ew(xd_ctx(), op, pa, pb, bm, pc, cm, po, count, d, Float32(Float64(py=s)))
-    return PythonObject(count)
+    var pa = _ptr(a, count)
+    var pb = _ptr(b, lb)
+    var pc = _ptr(c, lc)
+    var po = _ptr(dst, count)
+    launch_ew(xd_ctx(), op, pa, pb, bm, pc, cm, po, count, d, Float32(s))
+    return count
 
 
 struct _CovGate(Defaultable, Movable):
@@ -253,12 +229,10 @@ struct _CovGate(Defaultable, Movable):
 comptime MCD_COV_GATE = _Global[StorageType=_CovGate, name="MojoMCDOrderedCovGate", init_fn=_CovGate.__init__]
 
 
-def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_mcd_cov_run(a: Int, c: Int, rows: Int, d: Int) raises -> Int:
     """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
     comptime if not MCD_ORDERED_COV:
         raise Error("ordered MCD covariance is disabled")
-    var rows = _n(p, 0)
-    var d = _n(p, 1)
     if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
         raise Error("ordered covariance invalid shape or Int32 bound exceeded")
     note_cov_route(False, rows, d)
@@ -275,51 +249,43 @@ def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> 
     var gate = state[].bufs[0]
     var gate_ptr = gate.unsafe_ptr[MutAnyOrigin]()
     var sid = pool_alloc(words)
-    launch_mcd_cov_ordered(ctx, _ptr(_id(a), rows*d), _ptr(_id(c), d*d),
+    launch_mcd_cov_ordered(ctx, _ptr(a, rows*d), _ptr(c, d*d),
         _ptr(sid, words), rows, d, 1, rows*d, d*d, gate_ptr, True)
-    # Resident pool reuse is ordered on the same context, as dev_gemm_py.
+    # Resident pool reuse is ordered on the same context, as dev_gemm_run.
     pool_free(sid)
-    return PythonObject(d*d)
+    return d*d
 
 
-def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var k = _n(p, 1)
-    var n = _n(p, 2)
+def dev_gemm_run(a: Int, b: Int, c: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises -> Int:
     if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
         raise Error("x_decomp: gemm exceeds the Int32 index bound")
-    var ta = Int(py=p[3]) != 0
-    var tb = Int(py=p[4]) != 0
     var ns = gemm_scratch(m, k, n)
     var sid = pool_alloc(ns)
-    launch_gemm(xd_ctx(), _ptr(_id(a), m * k), _ptr(_id(b), k * n), _ptr(_id(c), m * n), _ptr(sid, ns),
+    launch_gemm(xd_ctx(), _ptr(a, m * k), _ptr(b, k * n), _ptr(c, m * n), _ptr(sid, ns),
                 m, k, n, ta, tb)
     pool_free(sid)
-    return PythonObject(m * n)
+    return m * n
 
 
-def dev_project_py(a: PythonObject, b: PythonObject, c: PythonObject, flag: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_project_run(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) raises -> Int:
     """c = a b^T (a m x k, b n x k; `dev_gemm` with tb=1's words) by the
     tiled projection kernel, enqueued (no sync), and flag[0] = 1 when an
     entry of a is not finite, else 0 (the random projection's transform;
     lane gap-nb-maxabs-grp). Returns -1, launching nothing, on a column
     whose shared memory does not hold the tile."""
-    var m = _n(p, 0)
-    var k = _n(p, 1)
-    var n = _n(p, 2)
     if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
         raise Error("x_decomp: projection exceeds the Int32 index bound")
     comptime if not PROJECT_TILED:
-        return PythonObject(-1)
-    var pf = _ptr(_id(flag), 1)
-    var pa = _ptr(_id(a), m * k)
-    var pb = _ptr(_id(b), k * n)
-    var pc = _ptr(_id(c), m * n)
+        return -1
+    var pf = _ptr(flag, 1)
+    var pa = _ptr(a, m * k)
+    var pb = _ptr(b, k * n)
+    var pc = _ptr(c, m * n)
     var ctx = xd_ctx()
     var pool = X_DECOMP_POOL.get_or_create_ptr()
-    enqueue_fill(ctx, pool[].bufs[_id(flag)], Float32(0))
+    enqueue_fill(ctx, pool[].bufs[flag], Float32(0))
     launch_project(ctx, pa, pb, pc, pf, m, k, n)
-    return PythonObject(m * n)
+    return m * n
 
 
 def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
