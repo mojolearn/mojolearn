@@ -9,9 +9,19 @@ def connect(ridge_class, linear_class=None):
     import io
     import os
     import zlib
+    import numpy as np
     from . import _backend
     from .tokenizer import _binding
     from ._x_sequence_model import _SEQUENTIAL_CONTEXT
+
+    try:
+        import _bz2
+    except ImportError:
+        _bz2 = None
+    try:
+        import _lzma
+    except ImportError:
+        _lzma = None
 
     context = dict(_SEQUENTIAL_CONTEXT)
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
@@ -24,11 +34,42 @@ def connect(ridge_class, linear_class=None):
                 raise TypeError(f"classical archives require native {cls.__name__}.{name}")
             methods[name] = entry
         archive_methods.append(methods)
-    for entry in (zlib.crc32, _codecs.utf_32_le_encode):  # glue: validate format metadata C entries once
+    codec_entries = (zlib.crc32, zlib.decompress, _codecs.utf_32_le_encode, _codecs.utf_32_le_decode,
+                     _codecs.unicode_escape_decode)
+    if _lzma is not None:
+        codec_entries += (_lzma._decode_filter_properties,)
+    for entry in codec_entries:  # glue: validate format metadata C entries once
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError("classical archives require native CRC and Unicode metadata entries")
+    decompressor_types = (() if _bz2 is None else (_bz2.BZ2Decompressor,)) + (() if _lzma is None else (_lzma.LZMADecompressor,))
+    for cls in decompressor_types:  # glue: native archive codec admission at setup
+        if (type(cls) is not type or not isinstance(cls.decompress, MethodDescriptorType)
+                or not isinstance(cls.__new__, BuiltinFunctionType)
+                or not isinstance(cls.__init__, WrapperDescriptorType)):
+            raise TypeError("classical archives require native byte decompressor types")
+    try:
+        from compression import zstd
+    except ImportError:
+        zstd_class = None
+    else:
+        zstd_class = zstd.ZstdDecompressor
+        if (type(zstd_class) is not type or not isinstance(zstd_class.decompress, MethodDescriptorType)
+                or not isinstance(zstd_class.__new__, BuiltinFunctionType)
+                or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
+            raise TypeError("classical archives require a native Zstandard byte decompressor")
+    npy_dtypes = {name: np.dtype(name) for name in ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2", "=f4", "=f8", "=i4", "=i8", "=u4")}  # glue: connect fixed archive dtype metadata
+    npy_dtypes.update({"|u1": np.dtype("u1"), "|b1": np.dtype("u1")})
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
-                   archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode)
+                   archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
+                   archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
+                   archive_inflate=zlib.decompress, archive_bzip=None if _bz2 is None else _bz2.BZ2Decompressor,
+                   archive_lzma=None if _lzma is None else _lzma.LZMADecompressor,
+                   archive_lzma_properties=None if _lzma is None else _lzma._decode_filter_properties,
+                   archive_lzma1=None if _lzma is None else _lzma.FILTER_LZMA1,
+                   archive_lzma_raw=None if _lzma is None else _lzma.FORMAT_RAW,
+                   archive_zstd=zstd_class, archive_npy_dtypes=npy_dtypes,
+                   archive_cp437=tuple(bytes(range(256)).decode("cp437")),
+                   archive_npy_magic=b"\x93NUMPY", archive_zip_end=b"PK\x05\x06")
     connected = {}
     metric_bindings = {}
     selected = _backend.default_mode()

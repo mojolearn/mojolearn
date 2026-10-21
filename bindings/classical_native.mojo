@@ -11,6 +11,7 @@ from bindings.classical_ols import classical_ols_fit
 from bindings.classical_score import classical_linear_score
 from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted
 from bindings.classical_archive import classical_archive_save
+from bindings.classical_archive_read import classical_archive_load
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -41,10 +42,14 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var args = call[2]
         var context = call[3]
         var b = Python.import_module("builtins")
-        var ridge = b.type(model) is context["ridge_class"]
-        var linear = b.type(model) is context.get("linear_class")
+        var loading = operation == "load"
+        var ridge = model is context["ridge_class"] if loading else b.type(model) is context["ridge_class"]
+        var linear = model is context.get("linear_class") if loading else b.type(model) is context.get("linear_class")
         if not ridge and not linear:
             raise Error("TypeError: the private classical owner requires an exact Ridge or LinearRegression instance")
+        if loading:
+            var loaded = classical_archive_load(model, args[0], ridge, context)
+            return loaded.steal_data()
         if operation != "save":
             sequential_admit_value(args, context)
         var fields = sequential_fields(model)
