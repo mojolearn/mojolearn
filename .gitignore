@@ -161,3 +161,7 @@ EXPERIMENTS.md
 
 # Canonical planning matrix is tracked as lossless deterministic gzip.
 /experiments/six_lane_integration/matrix.json
+
+# tools/kernel_closure_check.py output: the generated import-everything program and its results
+checks/kernel_closure_main.mojo
+kernel-closure-results/
