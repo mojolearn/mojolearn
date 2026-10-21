@@ -95,6 +95,22 @@ def assert_state_equal(actual, expected):
 @pytest.mark.parametrize("whiten", [False, True])
 def test_complete_exact_owner_matches_existing_bits_and_independent_subspace(solver, rank, rows, cols, whiten):
     x = fixture(rows, cols)
+    if CONTEXT["vendor"] == "cpu" and solver == "full" and rows < cols:
+        # The established host oracle explicitly carries only the tall route:
+        # decomposition/host/pca_full_oracle.mojo::host_pca_full_validate.
+        # Preserve both refusals under a full native operation audit. GPU
+        # cases below still exercise the wide numerical route and its oracle.
+        reason = "pca_fit_full on the CPU: the wide route"
+        old = PCA(rank, svd_solver=solver, whiten=whiten, numeric_mode="identical")
+        with pytest.raises(Exception, match=reason) as refused:
+            old.fit(x)
+        model = PCA(rank, svd_solver=solver, whiten=whiten, numeric_mode="identical")
+        audit = audit_native_call(native_fit_transform, model, x)
+        clean(audit, ValueError)
+        assert str(audit.exception) == str(refused.value)
+        assert "has no host restatement" in str(audit.exception)
+        assert "components_" not in vars(model)
+        return
     old = PCA(rank, svd_solver=solver, whiten=whiten, numeric_mode="identical").fit(x)
     expected = np.asarray(old.transform(x)).copy()
     expected_inverse = np.asarray(old.inverse_transform(expected)).copy()
