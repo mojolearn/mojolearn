@@ -9,6 +9,7 @@ opt-in) and the planner its workflow calls.
     python3 tools/release_github_build.py run ... --run-id N      attach to a dispatched run
     python3 tools/release_github_build.py plan --src SRC --sets 'sm_89 gfx942' --shards 6   (the workflow)
     python3 tools/release_github_build.py job-map ...                                       (the workflow)
+    python3 tools/release_github_build.py layout --commit C [--planner]    merged | per-binding
 
 WHAT RUNS WHERE. .github/workflows/release-linux-build.yml (workflow_dispatch
 only) builds one or more sets on ubuntu-24.04 runners (4 vCPU, 16 GB): a plan
@@ -183,7 +184,7 @@ def layout_merged(text, environ):
     try:
         return bool(ns["enabled"](environ))
     except ValueError as exc:
-        raise SystemExit(f"plan: {exc}")
+        raise SystemExit(f"merged_layout: {exc}")
 
 
 def planner_env():
@@ -328,6 +329,15 @@ def cmd_plan(a):
             fh.write("sets=" + json.dumps(sets, separators=(",", ":")) + "\n")
     for row in include:
         print(f"{row['vendor']}-{row['arch']} shard {row['shard']}: {row['n']} builds, weight {row['weight']}")
+    return 0
+
+
+def cmd_layout(a):
+    """The binding layout a commit builds: `merged` or `per-binding`. Default:
+    under this process's MOJOLEARN_MERGED_BINDINGS (the cpu-box route passes
+    it on to the box when set); --planner: under the GitHub box's environment."""
+    env = None if a.planner else {k: v for k, v in os.environ.items() if k == "MOJOLEARN_MERGED_BINDINGS"}
+    print("merged" if commit_merged(a.commit, env) else "per-binding")
     return 0
 
 
@@ -655,6 +665,10 @@ def main(argv=None):
                    help="the runners' memory; the merged layout plans only when it covers NEEDED_GIB "
                         "(the workflow passes none: free runners)")
     p.set_defaults(fn=cmd_plan)
+    p = sub.add_parser("layout")
+    p.add_argument("--commit", required=True)
+    p.add_argument("--planner", action="store_true")
+    p.set_defaults(fn=cmd_layout)
     p = sub.add_parser("job-map")
     p.add_argument("--event")
     p.add_argument("--dest", required=True)
