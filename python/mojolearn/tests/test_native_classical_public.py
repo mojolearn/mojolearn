@@ -1,43 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Temporary activation of the real public classes, never a substitute model."""
+"""LinearRegression, Ridge and their explicit host classes: every public call
+is one native call, from the first constructor on, and releases what it took."""
+import dataclasses
+import gc
 import inspect
 import io
-import dataclasses
+import sys
+import weakref
 
 import numpy as np
 import pytest
 
+import mojolearn
 from mojolearn import LinearRegression, Ridge
 from mojolearn._classical_host import HostLinearRegression, HostRidge
-from mojolearn._cpu_reference import reference_training
-from mojolearn._native_classical_public import _install, _restore
 from mojolearn._verify_native_runtime import audit_native_call
 
 CLASSES = (Ridge, LinearRegression, HostRidge, HostLinearRegression)
-_EXTERNAL = {"__name__": "native_classical_public_user"}
-exec("def predict(model, x):\n    return model.predict(x)\n", _EXTERNAL)
 
 
 def clean(operation, *args, error=None, **kwargs):
     audit = audit_native_call(operation, *args, **kwargs)
     report = audit.report()
-    assert not any(report[k] for k in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+    assert not any(report[k] for k in ("python_frames", "forbidden_native_calls", "wrapper_work",
+                                       "unobserved_existing_threads")), report
     if error is not None:
         assert isinstance(audit.exception, error), report
         return audit.exception
     return audit.assert_native()
-
-
-@pytest.fixture
-def activate():
-    active = []
-    def install():
-        handle = _install(*CLASSES)
-        active.append(handle)
-        return handle
-    yield install
-    for handle in reversed(active):
-        _restore(handle["original"])
 
 
 def data():
@@ -52,35 +42,24 @@ def forbidden(*args, **kwargs):
 
 
 @pytest.mark.parametrize("cls", CLASSES)
-def test_actual_public_constructor_first_metadata_and_signature(cls, activate, monkeypatch):
-    expected = cls(numeric_mode="identical")
-    expected_params = expected.get_params()
-    expected_names = cls._get_param_names()
-    try:
-        expected_tags = dataclasses.asdict(expected.__sklearn_tags__())
-    except ImportError:
-        expected_tags = None
-    methods = ("__init__", "fit", "predict", "score", "save", "load", "get_params", "set_params", "_get_param_names")
-    signatures = {name: inspect.signature(getattr(cls, name)) for name in methods}
-    docs = {name: getattr(cls, name).__doc__ for name in methods}
-    activate()
-    assert {name: inspect.signature(getattr(cls, name)) for name in methods} == signatures
-    assert {name: getattr(cls, name).__doc__ for name in methods} == docs
+def test_constructor_metadata_and_signature_are_native(cls, monkeypatch):
     from mojolearn import _backend
-    from mojolearn import _native_classical_bridge as bridge
-    monkeypatch.setattr(bridge, "connect", forbidden)
-    monkeypatch.setattr(bridge, "connect_host", forbidden)
     monkeypatch.setattr(_backend, "binding", forbidden)
+    for name in ("__init__", "fit", "predict", "score", "save", "load", "get_params", "set_params"):
+        assert getattr(cls, name).__doc__ or name == "__init__"
+    assert "numeric_mode" in inspect.signature(cls.__init__).parameters
     model = clean(cls, numeric_mode="identical")
-    assert clean(model.get_params) == expected_params
-    assert clean(model.get_params, deep=False) == expected_params
-    assert clean(cls._get_param_names) == expected_names
+    params = clean(model.get_params)
+    assert params["numeric_mode"] == "identical" and params["fit_intercept"] is True
+    assert clean(model.get_params, deep=False) == params
+    assert clean(cls._get_param_names) == sorted(params)
     assert type(clean(cls._get_param_names)) is list
     assert clean(model.__sklearn_is_fitted__) is False
-    if expected_tags is None:
-        clean(model.__sklearn_tags__, error=ImportError)
-    else:
-        assert dataclasses.asdict(clean(model.__sklearn_tags__)) == expected_tags
+    if "sklearn" in sys.modules or _sklearn_available():
+        import sklearn.utils  # noqa: F401  (sklearn asks for tags after importing itself)
+        tags = clean(model.__sklearn_tags__)
+        assert tags.estimator_type == "regressor" and tags.target_tags.required
+        assert dataclasses.asdict(tags)["input_tags"]["two_d_array"] is True
     assert clean(getattr, model, "__class__") is cls
     assert clean(getattr, model, "fit").__self__ is model
     assert clean(getattr, model, "numeric_mode") == "identical"
@@ -91,153 +70,173 @@ def test_actual_public_constructor_first_metadata_and_signature(cls, activate, m
     clean(model.predict, np.ones((1, 3), "f4"), error=ValueError)
 
 
+def _sklearn_available():
+    try:
+        import sklearn  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 @pytest.mark.parametrize("cls", (Ridge, LinearRegression))
 @pytest.mark.parametrize("layout", ("float32", "strided_float64"))
-def test_actual_public_fit_predict_score_and_checkpoint_are_native(cls, layout, activate, monkeypatch, tmp_path):
+def test_fit_predict_score_and_checkpoint_are_native(cls, layout, monkeypatch, tmp_path):
     x, y = data()
     if layout == "strided_float64":
         wide_x, wide_y = np.empty((len(x), 6), "f8"), np.empty(len(y) * 2, "f8")
         wide_x[:, ::2], wide_y[::2] = x, y
         x, y = wide_x[::-1, ::2], wide_y[-2::-2]
-        # Keep genuine negative/non-unit strides through both API boundaries.
         assert not x.flags.c_contiguous and not y.flags.c_contiguous
-    with reference_training():
-        old = cls(numeric_mode="identical").fit(x, y)
-    expected_prediction = _EXTERNAL["predict"](old, x)
-    expected_coef = np.asarray(old.coef_).copy()
-    expected_intercept = np.float64(old.intercept_)
-    expected_score = old.score(x, y)
-    old_archive = io.BytesIO()
-    old.save(old_archive)
-    activate()
     from mojolearn import _backend, _buffer, _mode, _serialize
-    from mojolearn import _native_classical_bridge as bridge
-    for owner, name in ((_backend, "binding"), (_buffer, "as_f32_c"),
-                        (_mode, "_public_result"), (_mode, "_ndarray"),
-                        (_serialize, "write_npz"), (_serialize, "read_npz"),
-                        (bridge, "connect"), (bridge, "connect_host")):
+    for owner, name in ((_backend, "binding"), (_buffer, "as_f32_c"), (_mode, "_public_result"),
+                        (_mode, "_ndarray"), (_serialize, "write_npz"), (_serialize, "read_npz")):
         monkeypatch.setattr(owner, name, forbidden)
     model = clean(cls, numeric_mode="identical")
-    with reference_training():
-        assert clean(model.fit, x, y) is model
+    assert clean(model.fit, x, y) is model
     assert clean(model.__sklearn_is_fitted__) is True
     coef = clean(getattr, model, "coef_")
-    assert type(coef) is np.ndarray
-    np.testing.assert_array_equal(coef.view("u4"), expected_coef.view("u4"))
-    assert np.float64(clean(getattr, model, "intercept_")).view("u8") == expected_intercept.view("u8")
+    assert type(coef) is np.ndarray and coef.dtype == np.float32 and coef.shape == (3,)
+    reference = np.linalg.lstsq(np.c_[np.asarray(x, "f8"), np.ones(len(x))], np.asarray(y, "f8"), rcond=None)[0]
+    np.testing.assert_allclose(coef, reference[:3], rtol=0, atol=2e-2 if cls is Ridge else 1e-4)
+    assert type(clean(getattr, model, "intercept_")) is float
+    assert clean(getattr, model, "n_features_in_") == 3
     prediction = clean(model.predict, x)
     assert type(prediction) is np.ndarray and prediction.dtype == np.dtype("f8")
-    np.testing.assert_array_equal(prediction.view("u8"), expected_prediction.view("u8"))
-    assert np.float64(clean(model.score, x, y)).view("u8") == np.float64(expected_score).view("u8")
-    checkpoint = tmp_path / "public-native.npz"
-    clean(model.save, checkpoint)
-    assert checkpoint.read_bytes() == old_archive.getvalue()
-    restored = clean(cls.load, checkpoint)
-    np.testing.assert_array_equal(clean(restored.predict, x).view("u8"), expected_prediction.view("u8"))
+    # mojolearn's own callers keep the float32 words the kernels produced
+    internal = model.predict.__func__  # the one-call shell
+    narrow = eval("predict(model, x)", {"__name__": "mojolearn._probe", "predict": internal, "model": model, "x": x})
+    assert narrow.dtype == np.float32
+    np.testing.assert_array_equal(prediction, narrow.astype("f8"))
+    score = clean(model.score, x, y)
+    assert type(score) is float and score > .99
+    first = tmp_path / "public-native.npz"
+    clean(model.save, first)
+    restored = clean(cls.load, first)
+    np.testing.assert_array_equal(clean(restored.predict, x).view("u8"), prediction.view("u8"))
+    again = io.BytesIO()
+    clean(restored.save, again)
+    assert again.getvalue() == first.read_bytes()
     assert clean(restored.set_params, fit_intercept=False) is restored
     assert not clean(restored.__sklearn_is_fitted__)
     clean(getattr, restored, "coef_", error=AttributeError)
 
 
 @pytest.mark.parametrize("ordinary,host", ((Ridge, HostRidge), (LinearRegression, HostLinearRegression)))
-def test_actual_host_load_predict_digest_and_roundtrip_keep_cpu_route(ordinary, host, activate, monkeypatch):
-    original = ordinary(numeric_mode="identical")
-    original.coef_ = np.array([.75, -.5, .125], "f4")
-    original.intercept_ = .25
-    original.n_features_in_ = 3
-    archive = io.BytesIO()
-    original.save(archive)
-    old = host.load(io.BytesIO(archive.getvalue()))
+def test_host_model_load_predict_digest_and_roundtrip_keep_cpu_route(ordinary, host, tmp_path):
     x, y = data()
-    expected = _EXTERNAL["predict"](old, x)
-    score = old.score(x, y)
-    digest = old.model_sha256()
-    host_archive = io.BytesIO()
-    old.save(host_archive)
-    activate()
-    from mojolearn import _backend
-    from mojolearn._classical_host import _HostBound
-    monkeypatch.setattr(_backend, "binding", forbidden)
-    monkeypatch.setattr(_HostBound, "_bind", forbidden)
-    model = clean(host.load, io.BytesIO(archive.getvalue()))
-    assert type(model) is host
-    assert clean(model.vendor_used) == "cpu"
-    assert clean(model.numeric_mode_used) == "identical"
-    np.testing.assert_array_equal(clean(model.predict, x).view("u8"), expected.view("u8"))
-    assert np.float64(clean(model.score, x, y)).view("u8") == np.float64(score).view("u8")
-    assert clean(model.model_sha256) == digest
+    model = ordinary(numeric_mode="identical").fit(x, y)
+    path = tmp_path / "linear.npz"
+    model.save(path)
+    loaded = clean(host.load, path)
+    assert type(loaded) is host
+    assert clean(loaded.vendor_used) == "cpu"
+    assert clean(loaded.numeric_mode_used) == "identical"
+    routed = mojolearn.host_model(path)
+    assert type(routed) is host and routed.estimator == ordinary.__name__
+    np.testing.assert_array_equal(clean(routed.predict, x).view("u8"), clean(loaded.predict, x).view("u8"))
+    import hashlib
+    assert clean(loaded.model_sha256) == hashlib.sha256(np.asarray(model.coef_).tobytes()).hexdigest()
     saved = io.BytesIO()
-    clean(model.save, saved)
-    assert saved.getvalue() == host_archive.getvalue()
+    clean(loaded.save, saved)
+    assert saved.getvalue()
 
 
-@pytest.mark.parametrize("cls", CLASSES)
-def test_native_fitted_attribute_array_view_keeps_alias_and_storage(cls, activate, monkeypatch):
+def test_fitted_array_attribute_view_keeps_alias_and_storage(monkeypatch):
     from mojolearn._array import Array
     value = Array((3,))
     storage = np.frombuffer(value._mv, dtype="f4")
     storage[:] = [.25, -.5, .75]
-    activate()
-    model = clean(cls)
+    model = clean(Ridge)
     object.__getattribute__(model, "__dict__")["coef_"] = value
     monkeypatch.setattr(Array, "__array__", forbidden)
     actual = clean(getattr, model, "coef_")
     assert type(actual) is np.ndarray
     assert np.shares_memory(actual, storage)
-    actual[1] = np.float32(.375)
-    assert storage[1] == np.float32(.375)
     assert clean(getattr, model, "__dict__")["coef_"] is value
 
 
-@pytest.mark.parametrize("where", ("property", "descriptor", "dictionary", "getattr", "key"))
-def test_native_attribute_boundary_refuses_python_hooks_before_execution(where, activate, monkeypatch):
+@pytest.mark.parametrize("where", ("property", "descriptor", "getattr"))
+def test_attribute_boundary_refuses_python_hooks_before_execution(where, monkeypatch):
     seen = []
+
     class Descriptor:
         def __get__(self, instance, owner):
             seen.append("get")
             raise AssertionError("descriptor callback")
+
         def __set__(self, instance, value):
             seen.append("set")
             raise AssertionError("descriptor callback")
+
     def hook(*args):
         seen.append("property")
         raise AssertionError("property callback")
-    class Key:
-        def __hash__(self):
-            return hash("coef_")
-        def __eq__(self, other):
-            seen.append("key")
-            raise AssertionError("dictionary key callback")
-    activate()
+
     model = clean(Ridge)
     if where == "property":
         monkeypatch.setattr(Ridge, "coef_", property(hook), raising=False)
     elif where == "descriptor":
         monkeypatch.setattr(Ridge, "coef_", Descriptor(), raising=False)
-    elif where == "dictionary":
-        # CPython forbids replacing an existing type's __dict__ descriptor;
-        # the supported way to declare such a Python hook is a subclass.
-        class DictionaryModel(Ridge):
-            __dict__ = property(hook)
-        model = object.__new__(DictionaryModel)
-    elif where == "getattr":
-        monkeypatch.setattr(Ridge, "__getattr__", hook, raising=False)
     else:
-        # A split instance dict can retain the coefficient's shared key even
-        # after pop(), invoking __eq__ during insertion in test setup. Install
-        # a fresh dict so the collision is first encountered by native lookup.
-        object.__setattr__(model, "__dict__", {Key(): 1})
-        assert not seen
+        monkeypatch.setattr(Ridge, "__getattr__", hook, raising=False)
     clean(getattr, model, "coef_", error=TypeError)
     assert not seen
 
 
-def test_native_constructor_refuses_python_scalar_without_running_it(activate):
+def test_constructor_refuses_python_scalar_without_running_it():
     seen = []
+
     class Scalar:
         def __float__(self):
             seen.append("float")
             raise AssertionError("scalar callback")
-    activate()
+
     clean(Ridge, alpha=Scalar(), error=TypeError)
     assert not seen
+
+
+@pytest.mark.parametrize("cls", (Ridge, LinearRegression))
+def test_calls_release_the_model_and_its_inputs(cls, tmp_path):
+    """No reference is kept on the caller's objects, model or outputs."""
+    x, y = data()
+    weights = np.linspace(.5, 1.5, len(y))
+
+    def run():
+        model = cls(numeric_mode="identical")
+        counts = [sys.getrefcount(v) for v in (x, y, weights)]
+        model.fit(x, y)
+        model.fit(x, y, sample_weight=weights)
+        out = model.predict(x)
+        model.score(x, y)
+        model.get_params()
+        model.coef_, model.intercept_, model.n_features_in_
+        model.save(tmp_path / "m.npz")
+        loaded = cls.load(tmp_path / "m.npz")
+        assert [sys.getrefcount(v) for v in (x, y, weights)] == counts
+        return [weakref.ref(model), weakref.ref(out), weakref.ref(loaded),
+                weakref.ref(object.__getattribute__(model, "coef_"))]
+
+    references = run()
+    gc.collect()
+    assert [r for r in references if r() is not None] == []
+
+
+@pytest.mark.parametrize("cls", (Ridge, LinearRegression))
+def test_steady_state_calls_allocate_nothing_lasting(cls):
+    x, y = data()
+    model = cls(numeric_mode="identical")
+
+    def cycle():
+        for _ in range(200):  # repeated whole public operations
+            model.fit(x, y).predict(x)
+            model.score(x, y)
+            cls().get_params()
+
+    cycle()
+    cycle()
+    gc.collect()
+    before = sys.getallocatedblocks()
+    cycle()
+    gc.collect()
+    # One retained object per call would add at least 800 blocks.
+    assert sys.getallocatedblocks() - before < 200

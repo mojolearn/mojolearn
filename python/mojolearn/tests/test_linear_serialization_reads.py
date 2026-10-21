@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Regression tests for single-pass linear-model archive loading."""
+"""Linear-model archives load natively and restore the exact saved state."""
 
 import numpy as np
 
@@ -7,7 +7,7 @@ from mojolearn import Ridge
 from mojolearn import linear_model
 
 
-def test_ridge_load_reads_archive_once_and_restores_exact_state(tmp_path, monkeypatch):
+def test_ridge_load_restores_exact_state_without_python_reader(tmp_path, monkeypatch):
     model = Ridge(alpha=0.25, fit_intercept=True)
     model.coef_ = linear_model.Array.from_list([1.0, -2.0, 3.0], "<f4")
     model.intercept_ = -0.125
@@ -15,16 +15,11 @@ def test_ridge_load_reads_archive_once_and_restores_exact_state(tmp_path, monkey
     path = tmp_path / "ridge.npz"
     model.save(path)
 
-    original = linear_model._serialize.read_npz
-    calls = []
+    def refused(*args, **kwargs):
+        raise AssertionError("the Python archive reader ran")
 
-    def counted(*args, **kwargs):
-        calls.append(args[0])
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(linear_model._serialize, "read_npz", counted)
+    monkeypatch.setattr(linear_model._serialize, "read_npz", refused)
     restored = Ridge.load(path)
-    assert len(calls) == 1
     assert restored.alpha == model.alpha
     assert restored.fit_intercept is model.fit_intercept
     assert restored.intercept_ == model.intercept_
