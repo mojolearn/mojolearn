@@ -86,6 +86,15 @@ from transformer.block_options import (
     BlockOptions,
 )
 
+# Typed kernel side of this shell (thin-shell move, pure, no bit change).
+from transformer.transformer_host_binding_impl import (
+    _write,
+    _opt_read,
+    _host_weights_from,
+    _run_forward,
+    HostTransformerSession,
+)
+
 
 def transformer_host_numeric_mode_binding() raises -> PythonObject:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, (
@@ -146,10 +155,6 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
     return a^
 
 
-def _write(addr: Int, values: List[Float32]) raises:
-    copy_f32(values.unsafe_ptr(), f32_ptr(addr), len(values))
-
-
 def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raises -> List[Int]:
     """`n` addresses or `n + BLOCK_OPTION_ADDRS`; returned as the longer
     form with zeros where the tail was not sent. Base slots are null-checked
@@ -184,94 +189,6 @@ def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]
     for i in range(got):
         p.append(Int(py=params[i]))
     return p^
-
-
-def _opt_read(addr: Int, n: Int, on: Bool, name: String, what: String) raises -> List[Float32]:
-    """One optional tensor: read at its length when its flag is on, empty
-    otherwise; a presence/flag mismatch is refused by the tensor's name."""
-    if on:
-        if addr == 0:
-            raise Error(what + ": " + name + " is required by its option and its address is null")
-        return read_f32(addr, n)
-    if addr != 0:
-        raise Error(what + ": " + name + " was passed but its option is off; pass the option or drop the tensor")
-    return List[Float32]()
-
-
-def _host_weights_from(
-    a: List[Int], dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
-    rope_positions: Int, opts: BlockOptions, what: String,
-) raises -> TransformerWeights:
-    """The oracle's weight struct from the 13 + 11 address layout under the
-    record: the nine (the gate only when the MLP is gated) and the eleven
-    optional tensors, each read at its length or left empty."""
-    var qw = nh * hd
-    var kw = nkv * hd
-    var w_gate = List[Float32]()
-    if opts.gated():
-        if a[7] == 0:
-            raise Error(what + ": gate_proj.weight address is null (a gated MLP needs it)")
-        w_gate = read_f32(a[7], it * dm)
-    elif a[7] != 0:
-        raise Error(what + ": gate_proj.weight was passed but the MLP is ungated (mlp gelu / gelu_tanh)")
-    return transformer_host_weights_opts(
-        dm, nh, nkv, hd, it, rope_positions, opts,
-        read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
-        read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-        w_gate^, read_f32(a[8], it * dm), read_f32(a[9], dm * it),
-        _opt_read(a[13], qw, opts.qkv_bias, "q_proj.bias", what),
-        _opt_read(a[14], kw, opts.qkv_bias, "k_proj.bias", what),
-        _opt_read(a[15], kw, opts.qkv_bias, "v_proj.bias", what),
-        _opt_read(a[16], dm, opts.o_bias, "o_proj.bias", what),
-        _opt_read(a[17], dm, opts.norm_bias, "input_layernorm.bias", what),
-        _opt_read(a[18], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
-        _opt_read(a[19], it, opts.mlp_bias, "up_proj.bias", what),
-        _opt_read(a[20], dm, opts.mlp_bias, "down_proj.bias", what),
-        _opt_read(a[21], it, opts.has_gate_bias(), "gate_proj.bias", what),
-        _opt_read(a[22], hd, opts.qk_norm, "q_norm.weight", what),
-        _opt_read(a[23], hd, opts.qk_norm, "k_norm.weight", what),
-    )
-
-
-def _run_forward(
-    a: List[Int], b: Int, l: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
-    it: Int, smax: Int, s0: Int, window: Int, carried: Bool,
-    opts: BlockOptions,
-) raises -> Int:
-    """`a` is the device binding's thirteen: x, the nine weights, k_cache,
-    v_cache, y_out, then the eleven optional addresses (zeros when absent).
-    With `carried` False the caches are zero and not written back (the
-    fresh prefill). `opts` is the record from the params tail (the default
-    record when no tail was sent; `TransformerWeights` at the default
-    record with every optional list empty is exactly what
-    `transformer_host_weights` built before this lane)."""
-    if b <= 0 or l <= 0:
-        raise Error("transformer: B and L must be positive")
-    if smax <= 0:
-        raise Error("transformer: max_tokens must be positive")
-    if window < 0:
-        raise Error("transformer: window must be >= 0 (0 = full causal)")
-    var qw = nh * hd
-    var kw = nkv * hd
-    var w = _host_weights_from(a, dm, nh, nkv, hd, it, smax, opts, String("transformer"))
-    var cap = smax
-    if window > 0:
-        cap = window
-    var cache_n = b * nkv * cap * hd
-    var k_in = List[Float32]()
-    var v_in = List[Float32]()
-    if carried:
-        k_in = read_f32(a[10], cache_n)
-        v_in = read_f32(a[11], cache_n)
-    var x = read_f32(a[0], b * l * dm)
-    var out = transformer_host_forward(
-        w, x, b, l, smax, s0, window, k_in, v_in, carried
-    )
-    _write(a[12], out.y)
-    if carried:
-        _write(a[10], out.k_cache)
-        _write(a[11], out.v_cache)
-    return out.cached_tokens
 
 
 def transformer_forward_fresh_binding(
@@ -419,29 +336,6 @@ def transformer_backward_binding(
 
 from transformer.host.attention_tape import HostAttentionTape
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
-
-
-struct HostTransformerSession(Movable, Writable):
-    var tape: Optional[HostAttentionTape]
-    var generation: Int
-    var busy: Bool
-    var closed: Bool
-
-    def __init__(out self):
-        self.tape = None
-        self.generation = 1
-        self.busy = False
-        self.closed = False
-
-    def write_to(self,mut writer: Some[Writer]):
-        writer.write("HostTransformerSession")
-
-    def write_repr_to(self,mut writer: Some[Writer]):
-        writer.write("HostTransformerSession")
-
-    def invalidate_tape(mut self):
-        self.tape = None
-        self.generation += 1
 
 
 def transformer_arithmetic_profile_changed_binding() raises -> PythonObject:
