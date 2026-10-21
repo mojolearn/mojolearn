@@ -175,25 +175,33 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "    if operation == 'gpc_class_predict':\n" in worker
     assert "        mean, _, probability = state._latent(ext, fit, q, want_proba)\n" in worker
     wanted.update(("gpc_class_fit", "gpc_class_predict"))
-    # ParallelCausalLM's one operation and cross_val_score's two
-    # (lane/cpu-routes-gpu-only-four, 2026-09-20). `causal_lm_layer` is the
-    # ONLY admitted operation that does not go through `pool.map`:
-    # `_rpc` addresses a single worker by index, so it calls `_cpu_refusal`
-    # itself and that call is what this checks, in place of the
-    # "non-cooperative pool" body check every other operation gets. The
-    # partition is `layer_devices`, one index per layer, and the merge is
-    # `CausalLM._run`'s sequential hand-off; the worker builds the route it
-    # was TOLD, never a route it guessed.
+    # ParallelCausalLM (lane/cpu-routes-gpu-only-four, 2026-09-20) now enters
+    # one native owner (0edc97a26): bindings/parallel_causal_native.mojo builds
+    # ONE non-cooperative native process pool over the distinct layer owners,
+    # configures each worker with the route the driver resolved (the worker
+    # refuses anything before it is told and a route that differs from its
+    # connected backend), then builds each layer only on its assigned worker,
+    # in layer order. The partition is `layer_devices`, one index per layer;
+    # the merge is the sequential hand-off through the embedding owner first
+    # and the norm/head owner last.
     causal = _read("python/mojolearn/models/parallel_causal_lm.py")
-    assert "pool = DevicePool(devices)" in causal and "cooperative=True" not in causal
-    assert "refusal = _cpu_refusal([request], False)" in causal
-    assert "request = ('causal_lm_layer', operation, args)" in causal
-    assert "self._rpc(device, 'route', self.route)" in causal
-    assert "return [_RemoteBlock(self, i, weights, kwargs) for i, weights in enumerate(layers)]" in causal
-    assert "MOJOLEARN_" not in causal
+    assert "DevicePool" not in causal and "MOJOLEARN_" not in causal
+    assert 'return _native_parallel_causal("route", (layer_devices,))' in causal
+    assert 'return _native_parallel_causal("init", (self, plan, weights, layer_devices, kwargs), _CAUSAL_CONTEXT)' in causal
+    owner = _read("bindings/parallel_causal_native.mojo")
+    assert "owner._pool = process_pool_create(bi.tuple(unique), False, child_module)" in owner
+    assert owner.count("process_pool_create(") == 1  # the one pool, never a cooperative one
+    assert '_ = _parallel_causal_rpc(owner, unique[i], "configure", Python.list(metadata, wire_plan))' in owner
+    assert 'owner._blocks.append(_parallel_causal_block(owner, i, weights["layers"][i]))' in owner
+    assert 'var metadata = _parallel_causal_rpc(owner, owner.layer_devices[index], "block", Python.list(index, weights))' in owner
+    assert 'raise Error("ParallelCausalLM: worker was not told its route")' in owner
+    assert 'raise Error("ParallelCausalLM: worker route differs from its connected backend")' in owner
+    assert 'var x = _parallel_causal_rpc(owner, owner.layer_devices[0], "embedding", ids)' in owner
+    assert 'var result = _parallel_causal_rpc(owner, owner.layer_devices[len(owner.layer_devices) - 1], "final", x)' in owner
+    # The legacy shared worker retains `causal_lm_layer` for its other
+    # callers; this is not evidence that its Python execution is compliant.
     layer_worker = _read("python/mojolearn/_causal_lm_worker.py")
     assert "block = _block_classes(_route)[kind](weights, **kwargs)" in layer_worker
-    assert "prims = _GpuPrimitives() if _route == 'gpu' else _CpuPrimitives()" in layer_worker
     assert "raise RuntimeError('loaded-model worker was not told its route')" in layer_worker
     wanted.add("causal_lm_layer")
     # cross_val_score's fold dispatch and its process witness. The split is
