@@ -73,7 +73,7 @@ from isolation_forest.estimator import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 # cgfin-c-svm: the epilogues, Platt, the shuffle and the row glue run on
 # the device (the CPU binding runs svm/host/svc_proba.mojo's host twin)
-from svm.impl.svc_epilogue import (
+from svm.impl.svc_epilogue_pyapi import (
     svc_pair_epilogue_device_binding,
     svc_platt_train_device_binding,
     svc_portable_math_device_binding,

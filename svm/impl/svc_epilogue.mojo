@@ -30,13 +30,13 @@ THE SAME BITS AS BEFORE, EXCEPT PLATT AND THE SHUFFLE:
     Feistel bijection with its cycle walk now, one thread per index, keyed
     by the low 32 bits of one SplitMix64 step of the 64-bit seed. The fold
     membership of the probability cross-validation changes.
+
+The Python entry points are in `svm/impl/svc_epilogue_pyapi.mojo`.
 """
 
 from std.atomic import Atomic, Ordering
 from std.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -607,18 +607,6 @@ def device_fold_finish(
     _ = ctx^
 
 
-# ------------------------------------------------------------ Python doors
-def _ix(v: PythonObject) raises -> Int:
-    var x = Int(py=v)
-    if x < 0:
-        raise Error("svc epilogue: negative size")
-    return x
-
-
-def _f64_bits(v: PythonObject) raises -> UInt64:
-    return bitcast[DType.uint64](Float64(py=v))
-
-
 def check_pairs(pairs_addr: Int, n_pairs: Int, k: Int) raises:
     """The pair codes (2 per pair, a host list of K(K-1)/2 entries) are in
     range and distinct."""
@@ -630,190 +618,49 @@ def check_pairs(pairs_addr: Int, n_pairs: Int, k: Int) raises:
             raise Error("svc_pair_epilogue: invalid class pair")
 
 
-def svc_pair_epilogue_device_binding(
-    dec_addr: PythonObject, pairs_addr: PythonObject, ab_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params[0] is the mode. Modes 0..5 (params [mode, n_rows, n_pairs,
-    n_classes, label1]): 0 ovo (float32 n x P), 1 ovr (float64 n x K), 2
-    vote codes (int64 n), 3 probabilities (float64 n x K; ab = 2P float64
-    (A, B) per pair), 4 their logs, 5 binary codes from the device's labels
-    (int64 n); returns n.
-    6 GATHER: dec=src float32, pairs=row indices int32 or 0, ab=column
-      indices int32 or 0, out float32; params [6, n_src_rows, n_src_cols,
-      n_out_rows, n_out_cols]; returns n_out_rows.
-    7 SELECT: dec=class codes int32 (n), pairs=per-row bounds float32 or 0,
-      ab=labels out float32 (n), out=indices int32 (n); params [7, n, ci, cj,
-      bounds-out address or 0]; returns the count.
-    8 C_ROWS: dec=sample weights float64 or 0, pairs=class codes int32 or 0,
-      ab=class weights float64 (K) or 0, out float32 (n); params [8, n, K,
-      C, 0]; returns n.
-    9 FOLD (lane/cgr-kernel): dec=pair rows int32 (m), pairs=shuffle int32
-      (m), ab=pair labels float32 (m), out=training rows then held rows
-      int32 (m); params [9, m, begin, end, training-labels-out address
-      (float32, m - (end - begin))]; returns the class-i training count.
-    10 FOLD_FINISH: dec=decisions float32 in shuffle order (m), pairs=shuffle
-      int32, ab=pair labels float32, out=decisions float64 in pair row order
-      (m); params [10, m, fold constants address (10 float32: flag, value per
-      fold), labels-out address (float64 +1/-1, m), 0]; returns m."""
-    if len(params) != 5:
-        raise Error("svc_pair_epilogue: params must contain 5 values")
-    var mode = _ix(params[0])
-    var dst = Int(py=out_addr)
-    if dst == 0:
-        raise Error("svc_pair_epilogue: null output")
-    if mode == GLUE_GATHER:
-        var nsr = _ix(params[1])
-        var nsc = _ix(params[2])
-        var nor = _ix(params[3])
-        var noc = _ix(params[4])
-        var ra = Int(py=pairs_addr)
-        var ca = Int(py=ab_addr)
-        if (ra == 0 and nor != nsr) or (ca == 0 and noc != nsc):
-            raise Error("svc gather: an identity axis must keep its length")
-        var sa = Int(py=dec_addr)
-        with GILReleased(Python()):
-            device_gather(sa, nsr, nsc, ra, nor, ca, noc, dst)
-        return PythonObject(nor)
-    if mode == GLUE_SELECT:
-        var n = _ix(params[1])
-        var ci = Int(py=params[2])
-        var cj = Int(py=params[3])
-        var cout = Int(py=params[4])
-        var ca = Int(py=dec_addr)
-        var cb = Int(py=pairs_addr)
-        var la = Int(py=ab_addr)
-        var count = 0
-        with GILReleased(Python()):
-            count = device_select(ca, n, ci, cj, cb, dst, la, cout)
-        return PythonObject(count)
-    if mode == GLUE_FOLD:
-        var m = _ix(params[1])
-        var begin = _ix(params[2])
-        var end = _ix(params[3])
-        var lo = Int(py=params[4])
-        if begin > end or end > m:
-            raise Error("svc fold: bad fold range")
-        var ia = Int(py=dec_addr)
-        var pa2 = Int(py=pairs_addr)
-        var la = Int(py=ab_addr)
-        var npos = 0
-        with GILReleased(Python()):
-            npos = device_fold_split(ia, pa2, la, m, begin, end, dst, lo)
-        return PythonObject(npos)
-    if mode == GLUE_FOLD_FINISH:
-        var m = _ix(params[1])
-        var ca = Int(py=params[2])
-        var lba = Int(py=params[3])
-        var da2 = Int(py=dec_addr)
-        var pa2 = Int(py=pairs_addr)
-        var la = Int(py=ab_addr)
-        with GILReleased(Python()):
-            device_fold_finish(da2, pa2, la, ca, m, dst, lba)
-        return PythonObject(m)
-    if mode == GLUE_C_ROWS:
-        var n = _ix(params[1])
-        var k = _ix(params[2])
-        var c = _f64_bits(params[3])
-        var swa = Int(py=dec_addr)
-        var coa = Int(py=pairs_addr)
-        var cwa = Int(py=ab_addr)
-        with GILReleased(Python()):
-            device_c_rows(swa, coa, cwa, k, c, n, dst)
-        return PythonObject(n)
-    var n = _ix(params[1])
-    var n_pairs = _ix(params[2])
-    var k = _ix(params[3])
-    var label1 = _f64_bits(params[4])
-    if mode > EPI_BINARY_CODES:
-        raise Error("svc_pair_epilogue: unknown mode")
-    if n == 0:
-        return PythonObject(0)
-    if n_pairs < 1 or k < 2:
-        raise Error("svc_pair_epilogue: needs a pair and two classes")
-    var pa = Int(py=pairs_addr)
-    if mode != EPI_BINARY_CODES:
-        check_pairs(pa, n_pairs, k)
-    var da = Int(py=dec_addr)
-    var aa = Int(py=ab_addr) if mode == EPI_PROBA or mode == EPI_LOG_PROBA else 0
-    with GILReleased(Python()):
-        device_pair_epilogue(mode, da, n, n_pairs, k, pa, aa, label1, dst)
-    return PythonObject(n)
+def device_platt_train(dec_addr: Int, labels_addr: Int, count: Int, out_addr: Int) raises:
+    """libsvm's `sigmoid_train` over `count` float64 decision values and
+    +1/-1 float64 labels, the row sums on the device; writes (A, B) as two
+    float64 at `out_addr`."""
+    var op = U64P(unsafe_from_address=out_addr)
+    var ctx = _family_ctx()
+    var src = DevicePlatt(ctx, dec_addr, labels_addr, count)
+    var r = platt_solve(src, count)
+    op[0] = r[0]
+    op[1] = r[1]
+    _ = src^
+    _ = ctx^
 
 
-def svc_platt_train_device_binding(
-    dec_addr: PythonObject, labels_addr: PythonObject, out_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """libsvm's `sigmoid_train` over n float64 decision values and +1/-1
-    float64 labels, the row sums on the device; writes (A, B) as two float64
-    at out_addr. Returns n."""
-    var count = _ix(n)
-    var op = U64P(unsafe_from_address=Int(py=out_addr))
-    var da = Int(py=dec_addr)
-    var la = Int(py=labels_addr)
-    if count == 0:
-        raise Error("svc_platt_train: no decision values")
-    with GILReleased(Python()):
-        var ctx = _family_ctx()
-        var src = DevicePlatt(ctx, da, la, count)
-        var r = platt_solve(src, count)
-        op[0] = r[0]
-        op[1] = r[1]
-        _ = src^
-        _ = ctx^
-    return PythonObject(count)
-
-
-def svc_splitmix_perm_device_binding(
-    out_addr: PythonObject, n: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject
-) raises -> PythonObject:
-    """The probability shuffle of `[0, n)` into n int32 at out_addr, the
-    64-bit seed handed in as two 32-bit halves. Returns n."""
-    var count = _ix(n)
-    if count == 0:
-        return PythonObject(0)
-    if count > 2147483647:
-        raise Error("svc_splitmix_perm: n exceeds int32")
-    var lo = UInt64(_ix(seed_lo)) & UInt64(0xFFFFFFFF)
-    var hi = UInt64(_ix(seed_hi)) & UInt64(0xFFFFFFFF)
+def device_splitmix_perm(dst: Int, count: Int, seed_lo: Int, seed_hi: Int) raises:
+    """The probability shuffle of `[0, count)` into `count` int32 at `dst`,
+    the 64-bit seed as two 32-bit halves."""
+    var lo = UInt64(seed_lo) & UInt64(0xFFFFFFFF)
+    var hi = UInt64(seed_hi) & UInt64(0xFFFFFFFF)
     var key = shuffle_seed32((hi << 32) | lo)
-    var dst = Int(py=out_addr)
-    with GILReleased(Python()):
-        var ctx = _family_ctx()
-        var d = ctx.enqueue_create_buffer[DType.int32](count)
-        ctx.enqueue_function[perm_kernel](
-            d.unsafe_ptr(), Int32(count), key, grid_dim=_grid(count), block_dim=FOLD_TPB,
-        )
-        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=dst), src_buf=d)
-        ctx.synchronize()
-        _ = d^
-        _ = ctx^
-    return PythonObject(count)
+    var ctx = _family_ctx()
+    var d = ctx.enqueue_create_buffer[DType.int32](count)
+    ctx.enqueue_function[perm_kernel](
+        d.unsafe_ptr(), Int32(count), key, grid_dim=_grid(count), block_dim=FOLD_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=dst), src_buf=d)
+    ctx.synchronize()
+    _ = d^
+    _ = ctx^
 
 
-def svc_portable_math_device_binding(
-    in_addr: PythonObject, out_addr: PythonObject, n: PythonObject, which: PythonObject
-) raises -> PythonObject:
-    """THE TWIN'S OWN CHECK DOOR: `sp_exp` (which 0) or `sf64_log` (which 1)
-    over n float64 on the device, so a job can hold them to
-    `_portable_math.exp/log` bit for bit. Returns n."""
-    var count = _ix(n)
-    if count == 0:
-        return PythonObject(0)
-    var w = Int(py=which)
-    var ia = Int(py=in_addr)
-    var oa = Int(py=out_addr)
-    with GILReleased(Python()):
-        var ctx = _family_ctx()
-        var d_in = _up_u64(ctx, ia, count)
-        var d_out = ctx.enqueue_create_buffer[DType.uint64](count)
-        ctx.enqueue_function[pmath_kernel](
-            d_out.unsafe_ptr(), d_in.unsafe_ptr(), Int32(count), Int32(w),
-            grid_dim=_grid(count), block_dim=FOLD_TPB,
-        )
-        ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=oa), src_buf=d_out)
-        ctx.synchronize()
-        _ = d_in^
-        _ = d_out^
-        _ = ctx^
-    return PythonObject(count)
+def device_portable_math(ia: Int, oa: Int, count: Int, w: Int) raises:
+    """`sp_exp` (w 0) or `sf64_log` (w 1) over `count` float64 words on the
+    device."""
+    var ctx = _family_ctx()
+    var d_in = _up_u64(ctx, ia, count)
+    var d_out = ctx.enqueue_create_buffer[DType.uint64](count)
+    ctx.enqueue_function[pmath_kernel](
+        d_out.unsafe_ptr(), d_in.unsafe_ptr(), Int32(count), Int32(w),
+        grid_dim=_grid(count), block_dim=FOLD_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=oa), src_buf=d_out)
+    ctx.synchronize()
+    _ = d_in^
+    _ = d_out^
+    _ = ctx^
