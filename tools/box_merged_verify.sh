@@ -32,13 +32,21 @@ if [ $V = amd ]; then ARCHENV="MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_TARGET_COLUM
   ARCHENV="MOJOLEARN_GPU_ARCHS=sm_$CC MOJOLEARN_TARGET_COLUMN=nvidia"
 fi
 st "arch env: $ARCHENV ($(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)$(rocm-smi --showproductname 2>/dev/null | grep -m1 -o 'MI3[0-9A-Z]*'))"
-find python/mojolearn -name "*.so" -delete
+[ "${BOX_BUILDS:-all}" = all ] || [ -z "${BOX_BUILDS:-}" ] && find python/mojolearn -name "*.so" -delete
 command -v /usr/bin/time >/dev/null || apt-get install -y -qq time > /dev/null 2>&1
 mb() { tag=$1; shift; /usr/bin/time -v env "$@" pixi run -q sh bindings/merged_build.sh ${tag%%-*} > $O/build-$tag.log 2> $O/build-$tag.time; rc=$?
   st "BUILD $tag rc=$rc seconds=$(grep -oP 'Elapsed \(wall clock\) time.*: \K.*' $O/build-$tag.time) peak_rss_gb=$(awk '/Maximum resident/ {printf "%.1f", $6/1048576}' $O/build-$tag.time) errors=$(grep -c ': error:' $O/build-$tag.log)"; }
-mb gpu-identical $ARCHENV MOJOLEARN_NUMERIC_MODE=identical &
-mb gpu-fast $ARCHENV MOJOLEARN_NUMERIC_MODE=fast &
-mb host MOJOLEARN_TARGET_COLUMN=cpu &
+# BOX_BUILDS selects the merged builds (default all three); the identical and host
+# sets carry the byte LM on Linux only when MOJOLEARN_PACKAGE_BYTE_LM=1 (the release
+# sets it in build_sets.sh; merged_build.sh defaults it to 0 on Linux), and `verify`
+# in identical mode refuses without it (2026-10-21 AMD run: VERIFY rc=1 in one second).
+BOX_BUILDS="${BOX_BUILDS:-gpu-identical gpu-fast host}"
+for b in $BOX_BUILDS; do case "$b" in
+  gpu-identical) mb gpu-identical $ARCHENV MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PACKAGE_BYTE_LM=1 & ;;
+  gpu-fast) mb gpu-fast $ARCHENV MOJOLEARN_NUMERIC_MODE=fast & ;;
+  host) mb host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_PACKAGE_BYTE_LM=1 & ;;
+  *) st "unknown BOX_BUILDS entry $b" ;;
+esac; done
 wait
 find python/mojolearn -name "_mojolearn_native*.so" -exec ls -l {} \; | awk '{print $5, $9}' > $O/merged-files.txt; st "merged files: $(wc -l < $O/merged-files.txt)"
 export PYTHONPATH=$PWD/python
