@@ -101,3 +101,19 @@ def test_sequence_optimizer_engine_witness_does_not_admit_public_or_uncovered_ow
     for name in ("mojolearn.Adafactor", "mojolearn.LAMB"):
         assert rows[name]["status"] != "ready"
         assert not rows[name]["cases"]
+
+
+def test_svm_fit_prediction_witness_preserves_binary_and_backend_scope():
+    data = manifest()
+    rows = {row["algorithm"]: row for row in data["inventory"]}
+    cases = {case["id"]: case for case in data["cases"]}
+    for name, algorithm in (("svc", "SVC"), ("svr", "SVR")):
+        case = cases[name]
+        assert case["scope"] == "native-estimator"
+        assert case["whole_operation"] is True
+        assert set(case["backends"]) == {"metal", "cuda", "hip"}
+        assert "multiclass/probabilities" in case["coverage"]
+        assert "CPython" in rows["mojolearn." + algorithm]["boundary_blocker"]
+    for name in ("mojolearn.LinearSVC", "mojolearn.LinearSVR"):
+        assert rows[name]["status"] != "ready"
+        assert not rows[name]["cases"]

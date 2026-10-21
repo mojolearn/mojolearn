@@ -1518,6 +1518,50 @@
       ],
       "whole_operation": true,
       "operation_boundary": "Initialize resident parameter and moment buffers; advance native scalar state and apply six opt_step calls; synchronize, download and consume every parameter/moment/scalar/gradient word after each update; release buffers. Independent exact host oracle does not call the product update or scalar helper. Public ownership/adapters are not covered."
+    },
+    {
+      "id": "svc",
+      "source": "packaging/native_only/cases/smoke_svc.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.SVC"
+      ],
+      "marker": "NATIVE_ONLY_PASS svc",
+      "status": "ready",
+      "coverage": "Binary noncontiguous sorted labels, hard/soft margin linear fits, bounded-C RBF fit, full support/dual/intercept validation, exact linear margins/classes and independent binary64 RBF prediction oracle. Each fixture fits from host data through the native GPU-backed estimator, then consumes every fitted model word and prediction at two cache budgets. Two-point analytic smoke only; multiclass/probabilities, weighted/precomputed/polynomial/tanh variants, public adapters and checkpoints are not covered.",
+      "source_dependency_count": 77,
+      "canonical_algorithms": [
+        "mojolearn.SVC"
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native estimator fit validates and uploads inputs, runs SMO and downloads support/model state; native prediction rebuilds/uploads that complete fitted model, runs kernel/decision/class epilogue as applicable and returns consumed host outputs. Three independent analytic optima and two prediction cache budgets per case. No CPython or test module defining main is imported."
+    },
+    {
+      "id": "svr",
+      "source": "packaging/native_only/cases/smoke_svr.mojo",
+      "backends": [
+        "metal",
+        "cuda",
+        "hip"
+      ],
+      "scope": "native-estimator",
+      "algorithms": [
+        "mojolearn.SVR"
+      ],
+      "marker": "NATIVE_ONLY_PASS svr",
+      "status": "ready",
+      "coverage": "Epsilon=0.25 linear interior/active-C fits and bounded-C RBF fit; full support/dual/intercept validation, exact linear predictions and independent binary64 RBF prediction oracle. Each fixture fits from host data through the native GPU-backed estimator, then consumes every fitted model word and prediction at two cache budgets. Two-point analytic smoke only; multiclass/probabilities, weighted/precomputed/polynomial/tanh variants, public adapters and checkpoints are not covered.",
+      "source_dependency_count": 77,
+      "canonical_algorithms": [
+        "mojolearn.SVR"
+      ],
+      "whole_operation": true,
+      "operation_boundary": "Native estimator fit validates and uploads inputs, runs SMO and downloads support/model state; native prediction rebuilds/uploads that complete fitted model, runs kernel/decision/class epilogue as applicable and returns consumed host outputs. Three independent analytic optima and two prediction cache budgets per case. No CPython or test module defining main is imported."
     }
   ],
   "inventory": [
@@ -3539,12 +3583,15 @@
     },
     {
       "algorithm": "mojolearn.SVC",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "svc"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.SVC",
-      "symbol_origin": "mojolearn._svm_impl.SVC"
+      "symbol_origin": "mojolearn._svm_impl.SVC",
+      "boundary_blocker": "Standalone native binary estimator fit/predict coverage only; public ownership/metadata/checkpoint and broader option orchestration still require separate native-only qualification. No CPython adapter is exercised."
     },
     {
       "algorithm": "mojolearn.SVGP",
@@ -3557,12 +3604,15 @@
     },
     {
       "algorithm": "mojolearn.SVR",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "status": "ready",
+      "cases": [
+        "svr"
+      ],
+      "reason": "Coverage is limited to each case scope; source presence does not certify compilation or execution.",
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.SVR",
-      "symbol_origin": "mojolearn._svm_impl.SVR"
+      "symbol_origin": "mojolearn._svm_impl.SVR",
+      "boundary_blocker": "Standalone native binary estimator fit/predict coverage only; public ownership/metadata/checkpoint and broader option orchestration still require separate native-only qualification. No CPython adapter is exercised."
     },
     {
       "algorithm": "mojolearn.SambaConfig",
@@ -7198,8 +7248,8 @@
     "canonical_algorithm_entries": 442,
     "canonical_status_counts": {
       "blocked": 9,
-      "missing": 391,
-      "ready": 42
+      "missing": 389,
+      "ready": 44
     },
     "note": "Algorithm entries include public numerical/helper operations as well as estimator classes; no per-estimator completeness is implied by this denominator."
   }
