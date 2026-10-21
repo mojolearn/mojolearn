@@ -23,7 +23,6 @@ through `load_host_module`) while this one refused.
 the directory, which is how the gate loads its sabotage build; a sabotage
 build is refused unless `MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1`.
 """
-import hashlib
 import importlib.machinery
 import importlib.util
 import os
@@ -41,6 +40,12 @@ from . import _ragged
 _EXTENSION = '_mojolearn_byte_lm_host'
 _MODULE_NAME = 'mojolearn._host.' + _EXTENSION
 _IDENTICAL_CODE = 1
+
+
+def _parameters_sha256(parameters):
+    """SHA-256 of float32 parameters' little-endian bytes, by the Mojo SHA-256
+    (core/sha256.mojo) behind the CPU tokenizer binding's `sha256_hex`."""
+    return str(_backend.load_host_module('_mojolearn_tokenizer_host').sha256_hex(le_bytes(parameters, 'f')))
 
 
 # THE LOADER LIVES IN `_backend` (lane/lazy-imports, 2026-10-10):
@@ -298,7 +303,7 @@ class LanguageModelInference:
 
     def parameters_sha256(self):
         """SHA-256 of the parameters' little-endian float32 bytes."""
-        return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
+        return _parameters_sha256(self._parameters)
 
     def logits(self, ids, *, lengths=None, threaded=None, threads=None):
         """Float32 logits for every position.
@@ -541,7 +546,7 @@ class LanguageModelHostTrainer:
         return self._gradient
 
     def parameters_sha256(self):
-        return hashlib.sha256(le_bytes(self._parameters, 'f')).hexdigest()
+        return _parameters_sha256(self._parameters)
 
     def train_step(self, ids):
         """One step on int32 ids `[shape.batch, shape.length + 1]`, the

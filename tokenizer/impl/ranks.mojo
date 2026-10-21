@@ -149,7 +149,13 @@ def load_rank_table(path: String) raises -> RankTable:
     var text: String
     with open(path, "r") as f:
         text = f.read()
+    return parse_rank_table(text, path)
 
+
+def parse_rank_table(text: String, path: String) raises -> RankTable:
+    """`load_rank_table`'s parse of rank-file text already in memory (the
+    FAST tokenizer binding reads the canonical text the host binding renders).
+    `path` names the source in every refusal."""
     # Two passes over the lines: the first counts entries so the bucket array
     # is sized once rather than rehashed, the second fills the tables.
     var n_lines = 0
