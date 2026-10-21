@@ -448,7 +448,8 @@ def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, c
     var arrays = classical_archive_read(path, context)
     if String(_archive_string(arrays, "format", context)) != "mojolearn-linear-1":
         raise Error("model archive format does not match mojolearn-linear-1")
-    if String(_archive_string(arrays, "estimator", context)) != ("Ridge" if ridge else "LinearRegression"):
+    var saved_as = _archive_string(arrays, "estimator", context)
+    if not Bool(py=context["ridge_saved_names" if ridge else "linear_saved_names"].__contains__(saved_as)):
         raise Error("model archive was saved by a different estimator")
     var meta = _archive_exact(arrays, "meta", "<i8", context)
     if Int(py=meta.size) != 2:

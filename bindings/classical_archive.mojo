@@ -184,7 +184,7 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     meta_ptr[1] = 1 if Bool(py=fields["fit_intercept"]) else 0
     var values = Python.dict()
     values["format"] = "mojolearn-linear-1"
-    values["estimator"] = "Ridge" if ridge else "LinearRegression"
+    values["estimator"] = context["ridge_name" if ridge else "linear_name"]
     values["numeric_mode"] = mode
     values["coef"] = fields["coef_"]
     values["intercept"] = bias

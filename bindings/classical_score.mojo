@@ -60,7 +60,7 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var bi = Python.import_module("builtins")
     if bi.type(metrics) is bi.str:
         raise Error("ImportError: " + String(metrics))
-    if String(metrics["x_metrics_vendor"]()) != String(context["vendor"]):
+    if String(metrics["x_metrics_vendor"]()) != String(context.get("classical_metric_vendor", context["vendor"])):
         raise Error("RuntimeError: score vendor differs from selected execution")
     if Int(py=metrics["x_metrics_numeric_mode"]()) != (1 if String(mode) == "identical" else 0):
         raise Error("RuntimeError: score mode differs from process default")
