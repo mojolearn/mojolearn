@@ -240,6 +240,27 @@ def _shape(value: PythonObject, view: PythonObject) raises -> PythonObject:
     return view.shape
 
 
+def _source_address(value: PythonObject, view: PythonObject) raises -> Int:
+    """The address of a C-contiguous caller buffer read without copying it
+    through a temporary: a row-major mojolearn Array, a NumPy array (its array
+    interface) or an array.array. 0 when only a byte copy can read it."""
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    var cls = value.__class__
+    if cls is b[].array_cls:
+        return Int(py=value._addr) if String(py=value.order) == "C" else 0
+    if not Bool(py=view.c_contiguous):
+        return 0
+    if cls is b[].arrays:
+        return Int(py=value.buffer_info()[0])
+    try:
+        var interface = value.__array_interface__
+        if interface["strides"] is None:
+            return Int(py=interface["data"][0])
+    except:
+        pass
+    return 0
+
+
 def _words_into(value: PythonObject, dims: List[Int], label: String, dst: Int, integer: Bool = False) raises:
     """Copy a float32 (or int32) buffer of exactly `dims` into `dst`, row-major.
     The dtype is refused, never converted."""
@@ -263,8 +284,12 @@ def _words_into(value: PythonObject, dims: List[Int], label: String, dst: Int, i
         n *= dims[i]
         if same and Int(py=shape[i]) != dims[i]:
             same = False
-    if not same:
+    if not same or Int(py=view.nbytes) != 4 * n:
         raise Error("SmallMLPTrainer " + label + " must have shape " + _shape_text(dims))
+    var source = _source_address(value, view)
+    if source != 0:
+        parallel_copy_words(source, dst, dims, n, False)
+        return
     var store = b[].arrays("i" if integer else "f")
     store.frombytes(view.tobytes("C"))
     if len(store) != n:
@@ -274,16 +299,8 @@ def _words_into(value: PythonObject, dims: List[Int], label: String, dst: Int, i
     _ = store^
 
 
-def _owned_f32(value: PythonObject, dims: List[Int], label: String) raises -> PythonObject:
-    """An owned, row-major, finite float32 copy of `value` as a mojolearn Array."""
-    var out = generation_array(dims)
-    _words_into(value, dims, label, Int(py=out._addr))
-    mlp_require_finite(Int(py=out._addr), Int(py=out.size), label)
-    return out
-
-
-def _batch_in(value: PythonObject) raises -> PythonObject:
-    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+def _batch_in(value: PythonObject) raises -> List[Float32]:
+    """An owned, row-major, finite copy of the batch X (rows x 8)."""
     var view = _view(value, "SmallMLPTrainer X must be a float32 array of shape (batch, 8) (a NumPy array, an array.array or a mojolearn Array), got " + String(py=value.__class__.__name__))
     var shape = _shape(value, view)
     if len(shape) != 2 or Int(py=shape[1]) != 8:
@@ -291,10 +308,17 @@ def _batch_in(value: PythonObject) raises -> PythonObject:
     var rows = Int(py=shape[0])
     if rows < 1 or rows > 256:
         raise Error("SmallMLPTrainer batch must be in [1, 256]")
-    return _owned_f32(value, [rows, 8], "X")
+    return _owned_rows(value, rows, "X")
 
 
-def _targets_in(value: PythonObject, rows: Int) raises -> PythonObject:
+def _owned_rows(value: PythonObject, rows: Int, label: String) raises -> List[Float32]:
+    var x = List[Float32](length=rows * 8, fill=Float32(0))
+    _words_into(value, [rows, 8], label, Int(x.unsafe_ptr()))
+    mlp_require_finite(Int(x.unsafe_ptr()), rows * 8, label)
+    return x^
+
+
+def _targets_in(value: PythonObject, rows: Int) raises -> List[Int32]:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var view = _view(value, "SmallMLPTrainer targets must be an integer array")
     var fmt = _base_format(view)
@@ -303,17 +327,22 @@ def _targets_in(value: PythonObject, rows: Int) raises -> PythonObject:
     var shape = _shape(value, view)
     if len(shape) != 1 or Int(py=shape[0]) != rows:
         raise Error("SmallMLPTrainer targets must have shape (batch,) with classes 0..2")
-    var packed = b[].arrays(fmt)
-    packed.frombytes(view.tobytes("C"))
-    var output = generation_array([rows], "i")
-    var ids = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
+    var ids = List[Int32](length=rows, fill=Int32(0))
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
+    var itemsize = Int(py=view.itemsize)
+    var source = _source_address(value, view)
+    var packed = PythonObject(None)
+    if source == 0:
+        packed = b[].arrays(fmt)
+        packed.frombytes(view.tobytes("C"))
+        source = Int(py=packed.buffer_info()[0])
+        itemsize = Int(py=packed.itemsize)
     try:
-        mlp_targets_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, ids)
+        mlp_targets_into(source, itemsize, signed, rows, MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(ids.unsafe_ptr())))
     except:
         raise Error("SmallMLPTrainer targets must have shape (batch,) with classes 0..2")
     _ = packed^
-    return output
+    return ids^
 
 
 def _scalar(value: PythonObject, name: String) raises -> Float64:
@@ -606,61 +635,71 @@ def _native_resident_step(entry: PythonObject, a: PythonObject, b: PythonObject,
         raise _step_error(error)
 
 
-def _resident_steps(index: Int, entries: PythonObject, x: PythonObject, y: PythonObject,
+def _resident_steps(index: Int, entries: PythonObject, x: List[Float32], y: List[Int32],
                     rows: Int, k: Int, mode: Int, want_dx: Bool) raises -> PythonObject:
     """`k` steps on the session; `[losses, logits, gradients, input_grad]`
     (the logits and gradients are the last step's)."""
+    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
     var store = MLP_STORE.get_or_create_ptr()
     var handle = _resident_open(index, entries, k)
-    var losses = generation_array([k])
+    var losses = List[Float32](length=k, fill=Float32(0))
     var logits = generation_array([rows, 3])
     var g0 = generation_array(_dims(0))
     var g1 = generation_array(_dims(1))
     var g2 = generation_array(_dims(2))
     var g3 = generation_array(_dims(3))
-    var dx = generation_array([rows, 8]) if want_dx else generation_array([1])
+    var dx = generation_array([rows, 8]) if want_dx else PythonObject(None)
+    var scratch_dx = List[Float32](length=1, fill=Float32(0))
+    var dx_addr = Int(py=dx._addr) if want_dx else Int(scratch_dx.unsafe_ptr())
     var t = store[].slots[index].state.step + 1
     ref s = store[].slots[index].state
     # addresses and params in this exact order (mirrored word for word in
     # `bindings/_mojolearn_training.mojo::mlp_resident_steps_binding`).
-    var addresses = Python.list(x._addr, y._addr, losses._addr, logits._addr, g0._addr, g1._addr,
-                                g2._addr, g3._addr, dx._addr)
+    var addresses = Python.list(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(losses.unsafe_ptr()),
+                                logits._addr, g0._addr, g1._addr, g2._addr, g3._addr, dx_addr)
     var params = Python.list(rows, k, mode, t, s.lr, s.beta1, s.beta2, s.eps, s.weight_decay, 1 if want_dx else 0)
     var entry = entries["mlp_resident_steps"] if k > 1 else entries["mlp_resident_step"]
     var written = _native_resident_step(entry, PythonObject(handle), addresses, params)
+    _ = scratch_dx^
     if written != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
     if mode == _FORWARD:
         return Python.list(PythonObject(None), logits, PythonObject(None), PythonObject(None))
-    var values = losses._mv.tolist()
+    var values = bi.list()
+    for i in range(k):  # driver-loop: over the k step losses the session returned
+        _ = values.append(mlp_read_f32(Int(losses.unsafe_ptr()) + 4 * i))
+    _ = losses^
     if mode == _TRAIN:
         store[].slots[index].state.step = t + k - 1
-    return Python.list(values, logits, Python.list(g0, g1, g2, g3), dx if want_dx else PythonObject(None))
+    return Python.list(values, logits, Python.list(g0, g1, g2, g3), dx)
 
 
 # ------------------------------------------------------------ fused step
 
-def _fused(mut state: MlpState, entries: PythonObject, x: PythonObject, y: PythonObject,
+def _fused(mut state: MlpState, entries: PythonObject, x: List[Float32], y: List[Int32],
            rows: Int, mode: Int, want_dx: Bool) raises -> PythonObject:
     """The forward (mode 0), the forward and backward (mode 1) or the whole
     step (mode 2) as ONE binding call. Under mode 2 the parameters, moments,
     flags and step of `state` are updated in place. Returns
     `[loss, logits, gradients, input_grad]`."""
     var train = mode == _TRAIN
-    var loss = generation_array([1])
+    var loss = List[Float32](length=1, fill=Float32(0))
     var logits = generation_array([rows, 3])
-    var g0 = generation_array(_dims(0))
-    var g1 = generation_array(_dims(1))
-    var g2 = generation_array(_dims(2))
-    var g3 = generation_array(_dims(3))
-    var dx = generation_array([rows, 8]) if want_dx else generation_array([1])
-    var info = generation_array([3])
-    var scratch_m = generation_array([1])
-    var scratch_v = generation_array([1])
-    var scratch_flags = generation_array([4], "i")
-    var m = state.m_addr() if train else Int(py=scratch_m._addr)
-    var v = state.v_addr() if train else Int(py=scratch_v._addr)
-    var flags = state.flags_addr() if train else Int(py=scratch_flags._addr)
+    var grads = mode != _FORWARD
+    var g0 = generation_array(_dims(0)) if grads else PythonObject(None)
+    var g1 = generation_array(_dims(1)) if grads else PythonObject(None)
+    var g2 = generation_array(_dims(2)) if grads else PythonObject(None)
+    var g3 = generation_array(_dims(3)) if grads else PythonObject(None)
+    # The forward writes no gradient; it still takes their addresses.
+    var scratch_grads = List[Float32](length=1 if grads else MLP_TOTAL, fill=Float32(0))
+    var dx = generation_array([rows, 8]) if want_dx else PythonObject(None)
+    var info = List[Float32](length=3, fill=Float32(0))
+    var scratch = List[Float32](length=2, fill=Float32(0))
+    var scratch_flags = List[Int32](length=4, fill=Int32(0))
+    var sg = Int(scratch_grads.unsafe_ptr())
+    var m = state.m_addr() if train else Int(scratch.unsafe_ptr())
+    var v = state.v_addr() if train else Int(scratch.unsafe_ptr()) + 4
+    var flags = state.flags_addr() if train else Int(scratch_flags.unsafe_ptr())
     var t = state.step + 1 if train else 1
     # addresses and params in this exact order (mirrored word for word in
     # `bindings/_mojolearn_training.mojo::mlp_train_step_binding`):
@@ -668,107 +707,133 @@ def _fused(mut state: MlpState, entries: PythonObject, x: PythonObject, y: Pytho
     #                dw1, db1, dw2, db2, dx, info
     #     params:    rows, mode, t, lr, beta1, beta2, eps, weight_decay,
     #                want_input_grad
-    var addresses = Python.list(x._addr, y._addr, state.params_addr(0), state.params_addr(1),
-                                state.params_addr(2), state.params_addr(3), m, v, flags,
-                                loss._addr, logits._addr, g0._addr, g1._addr, g2._addr, g3._addr,
-                                dx._addr, info._addr)
+    var addresses = Python.list(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), state.params_addr(0),
+                                state.params_addr(1), state.params_addr(2), state.params_addr(3),
+                                m, v, flags, Int(loss.unsafe_ptr()), logits._addr,
+                                g0._addr if grads else PythonObject(sg + 4 * mlp_offset(0)),
+                                g1._addr if grads else PythonObject(sg + 4 * mlp_offset(1)),
+                                g2._addr if grads else PythonObject(sg + 4 * mlp_offset(2)),
+                                g3._addr if grads else PythonObject(sg + 4 * mlp_offset(3)),
+                                dx._addr if want_dx else PythonObject(Int(scratch.unsafe_ptr())),
+                                Int(info.unsafe_ptr()))
     var params = Python.list(rows, mode, t, state.lr, state.beta1, state.beta2, state.eps,
                              state.weight_decay, 1 if want_dx else 0)
     var written = _native_step(entries["mlp_train_step"], addresses, params)
+    var value = mlp_read_f32(Int(loss.unsafe_ptr()))
+    _ = loss^
     _ = info^
-    _ = scratch_m^
-    _ = scratch_v^
+    _ = scratch^
     _ = scratch_flags^
+    _ = scratch_grads^
     if written != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
     if mode == _FORWARD:
         return Python.list(0.0, logits, PythonObject(None), PythonObject(None))
-    var value = mlp_read_f32(Int(py=loss._addr))
     if not isfinite(value):
         raise Error("RuntimeError: SmallMLPTrainer loss is not finite")
     if train:
         state.step = t
-    return Python.list(value, logits, Python.list(g0, g1, g2, g3), dx if want_dx else PythonObject(None))
+    return Python.list(value, logits, Python.list(g0, g1, g2, g3), dx)
 
 
 # ------------------------------------------------------------ per-operation route
 
-def _gemm(entries: PythonObject, a: Int, b: Int, m: Int, n: Int, k: Int, layout: Int) raises -> PythonObject:
-    var out = generation_array([m, n])
+def _gemm_into(entries: PythonObject, a: Int, b: Int, dst: Int, m: Int, n: Int, k: Int, layout: Int) raises:
     if _mode_name(entries) == "identical":
         if not Bool(py=entries.__contains__("neural_gemm")):
             raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing neural_gemm")
-        var written = Int(py=entries["neural_gemm"](a, b, out._addr, py_ints([m, n, k, layout])))
+        var written = Int(py=entries["neural_gemm"](a, b, dst, py_ints([m, n, k, layout])))
         if written != m * n:
             raise Error("RuntimeError: SmallMLPTrainer neural GEMM returned an incomplete result")
     else:
         if not Bool(py=entries.__contains__("linalg_gemm")):
             raise Error("ImportError: SmallMLPTrainer requires the linalg binding's gemm")
         # THE OUTPUT ADDRESS COMES FIRST in the linalg entry.
-        _ = entries["linalg_gemm"](out._addr, a, b, py_ints([m, n, k, layout]))
-    mlp_require_result_finite(Int(py=out._addr), m * n, "GEMM")
-    return out
+        _ = entries["linalg_gemm"](dst, a, b, py_ints([m, n, k, layout]))
+    mlp_require_result_finite(dst, m * n, "GEMM")
 
 
-def _bias(entries: PythonObject, values: PythonObject, bias: Int, rows: Int, cols: Int, relu: Bool) raises -> PythonObject:
-    var out = generation_array([rows, cols])
-    var written = Int(py=entries["mlp_bias_activation"](values._addr, bias, out._addr, py_ints([rows, cols, Int(relu)])))
+def _bias_into(entries: PythonObject, values: Int, bias: Int, dst: Int, rows: Int, cols: Int, relu: Bool) raises:
+    var written = Int(py=entries["mlp_bias_activation"](values, bias, dst, py_ints([rows, cols, Int(relu)])))
     if written != rows * cols:
         raise Error("RuntimeError: SmallMLPTrainer bias/activation returned an invalid result")
-    mlp_require_result_finite(Int(py=out._addr), rows * cols, "bias/activation")
-    return out
+    mlp_require_result_finite(dst, rows * cols, "bias/activation")
 
 
-def _sum(entries: PythonObject, values: PythonObject, rows: Int, cols: Int) raises -> PythonObject:
-    var out = generation_array([cols])
-    var written = Int(py=entries["mlp_sum_rows"](values._addr, out._addr, py_ints([rows, cols])))
+def _sum_into(entries: PythonObject, values: Int, dst: Int, rows: Int, cols: Int) raises:
+    var written = Int(py=entries["mlp_sum_rows"](values, dst, py_ints([rows, cols])))
     if written != cols:
         raise Error("RuntimeError: SmallMLPTrainer bias gradient returned an invalid result")
-    mlp_require_result_finite(Int(py=out._addr), cols, "bias gradient")
-    return out
+    mlp_require_result_finite(dst, cols, "bias gradient")
 
 
-def _forward(state: MlpState, entries: PythonObject, x: PythonObject, rows: Int) raises -> PythonObject:
-    var hidden = _bias(entries, _gemm(entries, Int(py=x._addr), state.params_addr(0), rows, 16, 8, _NT),
-                       state.params_addr(1), rows, 16, True)
-    var logits = _bias(entries, _gemm(entries, Int(py=hidden._addr), state.params_addr(2), rows, 3, 16, _NT),
-                       state.params_addr(3), rows, 3, False)
-    return Python.list(hidden, logits)
+def _forward_into(state: MlpState, entries: PythonObject, x: Int, rows: Int, hidden: Int, logits: Int) raises:
+    """`relu(x @ w1.T + b1) @ w2.T + b2`, the hidden activation kept."""
+    var z1 = List[Float32](length=rows * 16, fill=Float32(0))
+    var z2 = List[Float32](length=rows * 3, fill=Float32(0))
+    _gemm_into(entries, x, state.params_addr(0), Int(z1.unsafe_ptr()), rows, 16, 8, _NT)
+    _bias_into(entries, Int(z1.unsafe_ptr()), state.params_addr(1), hidden, rows, 16, True)
+    _gemm_into(entries, hidden, state.params_addr(2), Int(z2.unsafe_ptr()), rows, 3, 16, _NT)
+    _bias_into(entries, Int(z2.unsafe_ptr()), state.params_addr(3), logits, rows, 3, False)
+    _ = z1^
+    _ = z2^
 
 
-def _gradient(state: MlpState, entries: PythonObject, x: PythonObject, y: PythonObject,
+def _predict_route(state: MlpState, entries: PythonObject, x: List[Float32], rows: Int) raises -> PythonObject:
+    var hidden = List[Float32](length=rows * 16, fill=Float32(0))
+    var logits = generation_array([rows, 3])
+    _forward_into(state, entries, Int(x.unsafe_ptr()), rows, Int(hidden.unsafe_ptr()), Int(py=logits._addr))
+    _ = hidden^
+    return logits
+
+
+def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[Int32],
               rows: Int, want_dx: Bool) raises -> PythonObject:
     """The per-operation forward and backward: `[loss, logits, gradients, input_grad]`."""
-    var forward = _forward(state, entries, x, rows)
-    var hidden = forward[0]
-    var logits = forward[1]
-    var loss = generation_array([1])
-    var row_loss = generation_array([rows])
-    var dlogits = generation_array([rows, 3])
+    var xa = Int(x.unsafe_ptr())
+    var hidden = List[Float32](length=rows * 16, fill=Float32(0))
+    var ha = Int(hidden.unsafe_ptr())
+    var logits = generation_array([rows, 3])
+    _forward_into(state, entries, xa, rows, ha, Int(py=logits._addr))
+    var loss = List[Float32](length=1, fill=Float32(0))
+    var row_loss = List[Float32](length=rows, fill=Float32(0))
+    var dlogits = List[Float32](length=rows * 3, fill=Float32(0))
+    var dl = Int(dlogits.unsafe_ptr())
     # ce_loss params: rows, vocab, ignore_index, reduction (2 mean),
     # num_items, return_grad, label_smoothing
     # (bindings/_mojolearn_training.mojo::ce_loss_binding).
-    _ = entries["ce_loss"](loss._addr, row_loss._addr, dlogits._addr, logits._addr, y._addr,
-                           Python.list(rows, 3, -100, 2, 0, 1, 0.0))
-    var value = mlp_read_f32(Int(py=loss._addr))
+    _ = entries["ce_loss"](Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, logits._addr,
+                           Int(y.unsafe_ptr()), Python.list(rows, 3, -100, 2, 0, 1, 0.0))
+    var value = mlp_read_f32(Int(loss.unsafe_ptr()))
     if not isfinite(value):
         raise Error("RuntimeError: SmallMLPTrainer loss is not finite")
-    mlp_require_finite(Int(py=dlogits._addr), rows * 3, "logit gradient")
-    var dw2 = _gemm(entries, Int(py=dlogits._addr), Int(py=hidden._addr), 3, 16, rows, _TN)
-    var db2 = _sum(entries, dlogits, rows, 3)
-    var incoming = _gemm(entries, Int(py=dlogits._addr), state.params_addr(2), rows, 16, 3, _NN)
-    var dhidden = generation_array([rows, 16])
-    var written = Int(py=entries["mlp_relu_backward"](hidden._addr, incoming._addr, dhidden._addr, py_ints([rows, 16])))
+    mlp_require_finite(dl, rows * 3, "logit gradient")
+    var dw1 = generation_array(_dims(0))
+    var db1 = generation_array(_dims(1))
+    var dw2 = generation_array(_dims(2))
+    var db2 = generation_array(_dims(3))
+    _gemm_into(entries, dl, ha, Int(py=dw2._addr), 3, 16, rows, _TN)
+    _sum_into(entries, dl, Int(py=db2._addr), rows, 3)
+    var incoming = List[Float32](length=rows * 16, fill=Float32(0))
+    _gemm_into(entries, dl, state.params_addr(2), Int(incoming.unsafe_ptr()), rows, 16, 3, _NN)
+    var dhidden = List[Float32](length=rows * 16, fill=Float32(0))
+    var dh = Int(dhidden.unsafe_ptr())
+    var written = Int(py=entries["mlp_relu_backward"](ha, Int(incoming.unsafe_ptr()), dh, py_ints([rows, 16])))
     if written != rows * 16:
         raise Error("RuntimeError: SmallMLPTrainer ReLU gradient returned an invalid result")
-    mlp_require_result_finite(Int(py=dhidden._addr), rows * 16, "ReLU gradient")
-    var dw1 = _gemm(entries, Int(py=dhidden._addr), Int(py=x._addr), 16, 8, rows, _TN)
-    var db1 = _sum(entries, dhidden, rows, 16)
+    mlp_require_result_finite(dh, rows * 16, "ReLU gradient")
+    _gemm_into(entries, dh, xa, Int(py=dw1._addr), 16, 8, rows, _TN)
+    _sum_into(entries, dh, Int(py=db1._addr), rows, 16)
     var dx = PythonObject(None)
     if want_dx:
-        dx = _gemm(entries, Int(py=dhidden._addr), state.params_addr(0), rows, 8, 16, _NN)
+        dx = generation_array([rows, 8])
+        _gemm_into(entries, dh, state.params_addr(0), Int(py=dx._addr), rows, 8, 16, _NN)
+    _ = hidden^
+    _ = loss^
     _ = row_loss^
+    _ = dlogits^
     _ = incoming^
+    _ = dhidden^
     return Python.list(value, logits, Python.list(dw1, db1, dw2, db2), dx)
 
 
@@ -908,7 +973,7 @@ def _weights(handle: Int) raises -> PythonObject:
 def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var x = _batch_in(X)
-    var rows = Int(py=x.shape[0])
+    var rows = len(x) // 8
     var y = _targets_in(targets, rows)
     if want.__class__ is not b[].bi.bool:
         raise Error("TypeError: SmallMLPTrainer return_input_grad must be a bool")
@@ -969,7 +1034,7 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
     var batch = total // k
     if batch < 1 or batch > 256:
         raise Error("SmallMLPTrainer batch must be in [1, 256]")
-    var x = _owned_f32(X, [total, 8], "X")
+    var x = _owned_rows(X, total, "X")
     var y = _targets_in(targets, total)
     var index = mlp_store_index(handle)
     var store = MLP_STORE.get_or_create_ptr()
@@ -987,10 +1052,10 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
 
 def _predict_logits(handle: Int, X: PythonObject) raises -> PythonObject:
     var x = _batch_in(X)
-    var rows = Int(py=x.shape[0])
+    var rows = len(x) // 8
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
-    var zeros = generation_array([rows], "i")
+    var zeros = List[Int32](length=rows, fill=Int32(0))
     if _resident_enabled(entries):
         return _resident_steps(index, entries, x, zeros, rows, 1, _FORWARD, False)[1]
     _settle(index, False)
@@ -998,14 +1063,12 @@ def _predict_logits(handle: Int, X: PythonObject) raises -> PythonObject:
     var state = store[].slots[index].state.copy()
     if _fused_enabled(entries):
         return _fused(state, entries, x, zeros, rows, _FORWARD, False)[1]
-    var result = _forward(state, entries, x, rows)[1]
-    _ = x^
-    return result
+    return _predict_route(state, entries, x, rows)
 
 
 def _loss_and_grads(handle: Int, X: PythonObject, targets: PythonObject) raises -> PythonObject:
     var x = _batch_in(X)
-    var rows = Int(py=x.shape[0])
+    var rows = len(x) // 8
     var y = _targets_in(targets, rows)
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
@@ -1055,8 +1118,8 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     var index = mlp_store_index(handle)
     _settle(index, False)
     var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
-    # Mojo-side owners keep every session copy alive across the call.
-    var sessions = List[PythonObject]()
+    # Mojo-owned row-major copies, alive across the call.
+    var sessions = List[List[Float32]]()
     var shapes = bi.list()
     var addresses = bi.list()
     for i in range(len(listed)):  # driver-loop: over the caller's session batches
@@ -1066,14 +1129,16 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
             raise Error("TypeError: mojolearn.mlp_inference_sessions: session input must be float32")
         var shape = _shape(value, view)
         var dims = List[Int]()
+        var n = 1
         for axis in range(len(shape)):  # small-loop(session shape words)
             dims.append(Int(py=shape[axis]))
-        var owned = generation_array(dims)
-        if Int(py=owned.size) > 0:
-            _words_into(value, dims, "session input", Int(py=owned._addr))
-        sessions.append(owned)
-        shapes.append(owned.shape)
-        addresses.append(owned._addr)
+            n *= dims[axis]
+        var owned = List[Float32](length=max(n, 1), fill=Float32(0))
+        if n > 0:
+            _words_into(value, dims, "session input", Int(owned.unsafe_ptr()))
+        _ = addresses.append(Int(owned.unsafe_ptr()))
+        _ = shapes.append(shape)
+        sessions.append(owned^)
     var total: Int
     try:
         total = Int(py=entries["mlp_sessions_rows"](shapes, 8))
