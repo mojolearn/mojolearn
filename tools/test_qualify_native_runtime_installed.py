@@ -181,6 +181,31 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing requested native source"):
             q.native_source_inventory(frozen, commit, committed, repo)
 
+    def test_fixture_device_matches_requested_vendor_and_cannot_inherit_cpu_override(self):
+        parent = dict(PATH="/bin", PYTHONPATH="/unchecked/source", PYTHONHOME="/unchecked/python",
+                      MOJOLEARN_GENERATION_DEVICE="cpu", MOJOLEARN_VENDOR="cpu",
+                      MOJOLEARN_UNCHECKED_BINARY="/stale/native.so")
+        for vendor, expected in (("cpu", "cpu"), ("metal", "gpu"), ("cuda", "gpu"), ("hip", "gpu")):
+            with self.subTest(vendor=vendor):
+                env = q.test_environment(parent, vendor, "identical")
+                self.assertEqual(env["MOJOLEARN_GENERATION_DEVICE"], expected)
+                self.assertEqual(env["MOJOLEARN_VENDOR"], vendor)
+                self.assertEqual(env["MOJOLEARN_NUMERIC_MODE"], "identical")
+                self.assertEqual(env["PATH"], "/bin")
+                self.assertNotIn("MOJOLEARN_UNCHECKED_BINARY", env)
+                self.assertNotIn("PYTHONPATH", env)
+                self.assertNotIn("PYTHONHOME", env)
+
+    def test_generation_fixture_device_is_observed_and_wrong_route_refuses(self):
+        module = types.ModuleType("frozen.test_generation_native")
+        module.__file__ = "/frozen/test_generation_native.py"
+        module.DEVICE = "gpu"
+        self.assertEqual(q.generation_test_devices({module.__name__: module}, "gpu"),
+                         {module.__name__: "gpu"})
+        module.DEVICE = "cpu"
+        with self.assertRaisesRegex(ValueError, "generation fixture selected a different device"):
+            q.generation_test_devices({module.__name__: module}, "gpu")
+
 
 if __name__ == "__main__":
     unittest.main()

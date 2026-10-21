@@ -196,6 +196,30 @@ def junit_summary(path):
                 failures=failed, skipped=skipped)
 
 
+def test_environment(parent, vendor, numeric_mode):
+    env = {k: v for k, v in parent.items() if k not in ("PYTHONPATH", "PYTHONHOME")
+           and not k.startswith("MOJOLEARN_")}
+    # These test fixtures pass an explicit device to CausalLM.load. Their CPU
+    # default overrides MOJOLEARN_VENDOR unless this testing knob is also set.
+    env.update(PYTHONNOUSERSITE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
+               MOJOLEARN_NUMERIC_MODE=numeric_mode, MOJOLEARN_VENDOR=vendor,
+               MOJOLEARN_GENERATION_DEVICE="cpu" if vendor == "cpu" else "gpu")
+    return env
+
+
+def generation_test_devices(modules, expected):
+    found = {}
+    for name, module in list(modules.items()):
+        if not isinstance(module, types.ModuleType):
+            continue
+        path = vars(module).get("__file__", "")
+        if path and Path(path).name in ("test_generation_native.py", "test_causal_model_native_loading.py"):
+            actual = vars(module).get("DEVICE")
+            require(actual == expected, "generation fixture selected a different device: " + name)
+            found[name] = actual
+    return found
+
+
 def worker(request_path):
     request = json.loads(Path(request_path).read_text())
     out, tests = Path(request["out"]), Path(request["tests"])
@@ -205,16 +229,19 @@ def worker(request_path):
     require(mojolearn.vendor() == request["vendor"], "installed backend silently changed")
     from mojolearn import _backend
     require(_backend.default_mode() == request["numeric_mode"], "installed numeric mode differs")
+    require(os.environ.get("MOJOLEARN_GENERATION_DEVICE") == request["generation_device"],
+            "generation test device override differs")
     namespace = types.ModuleType("mojolearn.tests")
     namespace.__path__ = [str(tests)]
     namespace.__package__ = "mojolearn.tests"
     sys.modules["mojolearn.tests"] = namespace
     mojolearn.tests = namespace
-    loaded = {}
+    loaded, test_devices = {}, {}
 
     class InstalledGuard:
         def pytest_runtest_teardown(self, item, nextitem):
             loaded.update(installed_module_inventory(sys.modules, sys.prefix, request["payload"], tests))
+            test_devices.update(generation_test_devices(sys.modules, request["generation_device"]))
 
     code = 1
     try:
@@ -229,7 +256,8 @@ def worker(request_path):
         (out / "installed-modules.json").write_text(json.dumps(dict(
             package=str(Path(mojolearn.__file__).resolve()), prefix=sys.prefix,
             vendor=mojolearn.vendor(), numeric_mode=_backend.default_mode(), modules=loaded,
-            pytest_exit=code), indent=2) + "\n")
+            generation_test_device=request["generation_device"],
+            observed_generation_test_devices=test_devices, pytest_exit=code), indent=2) + "\n")
     return code
 
 
@@ -322,10 +350,8 @@ def main():
         venv = out / "venv"
         run_command("venv", [args.python, "-m", "venv", str(venv)], out, cwd=out)
         python = venv / "bin/python"
-        env = {k:v for k,v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")
-               and not k.startswith("MOJOLEARN_")}
-        env.update(PYTHONNOUSERSITE="1", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
-                   MOJOLEARN_NUMERIC_MODE=args.numeric_mode, MOJOLEARN_VENDOR=args.vendor)
+        env = test_environment(os.environ, args.vendor, args.numeric_mode)
+        report["test_device_overrides"] = {"MOJOLEARN_GENERATION_DEVICE": env["MOJOLEARN_GENERATION_DEVICE"]}
         run_command("install-wheels", [str(python), "-m", "pip", "install", "--no-deps", "--no-cache-dir"]
                     + [str(Path(p).resolve()) for p in wheels], out, cwd=out, env=env)
         run_command("install-test-dependencies", [str(python), "-m", "pip", "install", "numpy", "pytest"]
@@ -333,7 +359,8 @@ def main():
         run_command("pip-freeze", [str(python), "-m", "pip", "freeze", "--all"], out, cwd=out, env=env)
         shutil.copyfile(__file__, out / "controller.py")
         request = dict(out=str(out), tests=str(tests), payload=payload, test_files=selected,
-                       vendor=args.vendor, numeric_mode=args.numeric_mode)
+                       vendor=args.vendor, numeric_mode=args.numeric_mode,
+                       generation_device=env["MOJOLEARN_GENERATION_DEVICE"])
         (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
         (out / "work").mkdir()
         with (out / "tests.log").open("wb") as log:
