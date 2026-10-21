@@ -649,8 +649,8 @@ def ce_case(k: Int) raises -> CeCase:
             "wide_v129", 2, 129, REDUCTION_MEAN, False, 0, 0, CE_PLANT_NONE, 0
         )
     if k == 7:
-        # `N = 300`. The BATCH fold's witness -- `L_REDUCE_SERIAL` is inert
-        # at every `N <= 128` and `N = 300` gives it the same `P = 3`,
+        # `N = 300`. The BATCH fold's witness (`L_REDUCE_SERIAL`, retired
+        # 2026-10-21, was inert at every `N <= 128`): `N = 300` gives it the same `P = 3`,
         # ragged, carrying tree the vocabulary fold gets at `V = 300`.
         # `count == 300`, not a power of two, so the divide arms bite here
         # too.
