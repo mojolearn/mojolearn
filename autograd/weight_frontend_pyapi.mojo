@@ -7,7 +7,8 @@ from bindings.native_torch_admission import native_torch_metadata
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
 from autograd.program_arrays_pyapi import mapped_byte_array
-from autograd.program_pyapi import ProgramInput, _integer
+from autograd.program_io import ProgramInput
+from autograd.program_pyapi import program_input, _integer
 from autograd.pyapi import ops_load_weights_py
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 
@@ -150,7 +151,7 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
         strides = value.strides
         unit = 1
     else:
-        scalar_owners.append(ProgramInput(value, False))
+        scalar_owners.append(program_input(value, False))
         var at = len(scalar_owners) - 1
         addr = scalar_owners[at].src.addr
         dtype = 12
