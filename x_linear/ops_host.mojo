@@ -3,7 +3,7 @@
 # modules (x_linear/*_host.mojo, built into the host bindings) import it, so
 # no GPU binding reaches CPU threads through x_linear/ops.mojo. The GPU fits
 # run on their grid drivers and never call this.
-from std.sys import is_gpu
+from std.sys import is_gpu, num_physical_cores
 from core.host_parallel import host_parallelize
 from x_linear.ops import ROW_CHUNK, seq_rows
 

@@ -15,6 +15,8 @@ so the host column's bits are unchanged.
 from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.tops import FOLD_BLOCK
 from x_linear.ops_host import par_rows
+from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight
+from x_linear.ops import fd, i2f, sti
 from x_linear.ops import FP, IP, axpy_acc, fa, fexp, fill, flog, fm, fmax, fs, ld, ldi, row_dots, st
 from x_linear.lbfgs import Objective
 from x_linear.team import Team
