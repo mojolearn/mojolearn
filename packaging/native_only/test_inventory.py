@@ -83,3 +83,9 @@ def test_whole_operation_metadata_preserves_knn_oracle_limits():
         assert "does not independently validate neighbor selection" in cases[name]["coverage"]
     for name in ("autograd_cpu", "sequential_cpu", "optimizer_cpu", "tokenizer", "preprocessing"):
         assert cases[name]["whole_operation"] is True
+
+
+def test_model_inventory_matches_the_current_branch_exports():
+    path = "python/mojolearn/models/__init__.py"
+    actual = set(INVENTORY.explicit_exports(ROOT / path))
+    assert set(manifest()["inventory_sources"][path]) == actual
