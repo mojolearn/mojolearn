@@ -27,7 +27,12 @@ def _linear(cell: Int, a: Args):
         var part = neural_partition[NEURAL_LEAF](a.i2)
         leaf = part[0]
         leaves = part[1]
-    var value = neural_cell[NEURAL_CHAINS](a.p0, a.p1, cell // a.i1, cell % a.i1,
+    # Args carries executor-owned buffers with an untracked origin. Borrow
+    # those same live buffers for the shared scalar helper; no owner moves,
+    # pointer reconstruction or lifetime extension occurs at this boundary.
+    var left = a.p0.unsafe_origin_cast[MutAnyOrigin]()
+    var right = a.p1.unsafe_origin_cast[MutAnyOrigin]()
+    var value = neural_cell[NEURAL_CHAINS](left, right, cell // a.i1, cell % a.i1,
         a.i2, leaf, leaves, a.i3, a.i4, a.i5, a.i6)
     a.p2.unsafe_store(cell, value)
 
@@ -40,7 +45,8 @@ def _rms(row: Int, a: Args):
         var x = ftz(a.p0.unsafe_load(base + j))
         acc = ftz(identical_mul_add(x, x, acc))
     comptime if NN24_NORM_LANES8:
-        acc = norm_profile_dot[NN24_LANES](a.p0, a.p0, base, base, d)
+        var values = a.p0.unsafe_origin_cast[MutAnyOrigin]()
+        acc = norm_profile_dot[NN24_LANES](values, values, base, base, d)
     var rstd = ftz(identical_rsqrt(ftz(ftz(identical_div(acc, Float32(d))) + a.f0)))
     a.p3.unsafe_store(row, rstd)
     for j in range(d):  # device-loop: two separate rounded products per feature
@@ -57,7 +63,9 @@ def _rms_dx(row: Int, a: Args):
         a.p5.unsafe_store(base + j, dh)
         dot = ftz(identical_mul_add(dh, ftz(a.p0.unsafe_load(base + j)), dot))
     comptime if NN24_NORM_LANES8:
-        dot = norm_profile_dot[NN24_LANES](a.p5, a.p0, base, base, d)
+        var products = a.p5.unsafe_origin_cast[MutAnyOrigin]()
+        var values = a.p0.unsafe_origin_cast[MutAnyOrigin]()
+        dot = norm_profile_dot[NN24_LANES](products, values, base, base, d)
     var rstd = ftz(a.p4.unsafe_load(row))
     var r2 = ftz(identical_mul(rstd, rstd))
     var r3 = ftz(identical_mul(r2, rstd))
