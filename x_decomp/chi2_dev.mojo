@@ -5,9 +5,6 @@ cells launched on the device (lane py-runtime-b), as Python's resident kit
 launched them: logs, lgamma and exp of 1 x 1 float32 words through `DKit`
 (the same `ew_cell` per element), each read home; the series and the
 bisection in float64 as on the host column. GPU binding only."""
-from std.python import PythonObject
-from std.python._cpython import GILReleased
-from std.python import Python
 from x_decomp.chi2 import CHI2_BISECT, chi2_cf, chi2_series
 from x_decomp.kit import OP_EXP, OP_LOGS, mat_const
 from x_decomp.kit_device import DKit
@@ -54,14 +51,10 @@ def chi2_quantile_dev(mut k: DKit, dof: Float64, upper: Float64) raises -> Float
     return Float64(Float32(0.5 * (lo + hi)))
 
 
-def chi2_cdf_dev_py(dof: PythonObject, m: PythonObject) raises -> PythonObject:
-    var d = Float64(py=dof)
-    var x = Float64(py=m)
-    var r = 0.0
-    with GILReleased(Python()):
-        var k = DKit()
-        r = chi2_cdf_dev(k, d, x)
-    return PythonObject(r)
+def chi2_cdf_dev_run(d: Float64, x: Float64) raises -> Float64:
+    """`chi2_cdf_dev_py`'s typed body: one kit, one cdf."""
+    var k = DKit()
+    return chi2_cdf_dev(k, d, x)
 
 
 def consistency_factor_dev(mut k: DKit, p: Float64, alpha: Float64) raises -> Float64:
@@ -73,24 +66,17 @@ def consistency_factor_dev(mut k: DKit, p: Float64, alpha: Float64) raises -> Fl
     return Float64(Float32(alpha / c))
 
 
-def consistency_factor_dev_py(p: PythonObject, num: PythonObject, den: PythonObject) raises -> PythonObject:
-    var pp = Float64(py=p)
-    var dn = Float64(py=den)
+def consistency_factor_dev_run(pp: Float64, num: Float64, dn: Float64) raises -> Float64:
+    """`consistency_factor_dev_py`'s typed body: the den check, alpha = num / den,
+    one kit, the factor."""
     if not (dn > 0.0):
         raise Error("x_decomp: chi2 consistency factor: den must be > 0")
-    var al = Float64(py=num) / dn
-    var r = 0.0
-    with GILReleased(Python()):
-        var k = DKit()
-        r = consistency_factor_dev(k, pp, al)
-    return PythonObject(r)
+    var al = num / dn
+    var k = DKit()
+    return consistency_factor_dev(k, pp, al)
 
 
-def chi2_quantile_dev_py(dof: PythonObject, upper: PythonObject) raises -> PythonObject:
-    var d = Float64(py=dof)
-    var u = Float64(py=upper)
-    var r = 0.0
-    with GILReleased(Python()):
-        var k = DKit()
-        r = chi2_quantile_dev(k, d, u)
-    return PythonObject(r)
+def chi2_quantile_dev_run(d: Float64, u: Float64) raises -> Float64:
+    """`chi2_quantile_dev_py`'s typed body: one kit, one quantile."""
+    var k = DKit()
+    return chi2_quantile_dev(k, d, u)
