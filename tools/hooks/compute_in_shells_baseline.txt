@@ -2,22 +2,7 @@
 # One row per hit: path:line: code. A hit is grandfathered by a row with the same path and code text;
 # the line number is informational. Generated once from main; the thin-* lanes remove rows as they move
 # the work into kernel files (python3 tools/hooks/no_compute_in_shells.py --prune-baseline). Never add a row.
-autograd/import_lower_pyapi.mojo:14: for i in range(len(p)):  # cpu-route: model graph lowered on the host (argument words, converted)
-autograd/import_lower_pyapi.mojo:21: for i in range(len(p)):  # cpu-route: model graph lowered on the host (argument strings, converted)
-autograd/import_lower_pyapi.mojo:28: for i in range(len(found)):  # cpu-route: model graph lowered on the host (one per problem)
-autograd/import_lower_pyapi.mojo:42: for i in range(len(v)):  # cpu-route: model graph lowered on the host (one per axis)
-autograd/import_lower_pyapi.mojo:65: for q in range(len(r.in_names)):  # cpu-route: model graph lowered on the host (graph inputs)
-autograd/import_lower_pyapi.mojo:72: for i in range(len(r.out_names)):  # cpu-route: model graph lowered on the host (graph outputs)
-autograd/import_lower_pyapi.mojo:91: for i in range(len(floats)):  # cpu-route: model graph description (attribute numbers, converted)
-autograd/import_reader_pyapi.mojo:17: for i in range(len(info.words)):  # cpu-route: model file parsing (the graph's words, converted)
-autograd/import_reader_pyapi.mojo:20: for i in range(len(info.strs)):  # cpu-route: model file parsing (the graph's strings, converted)
-autograd/import_reader_pyapi.mojo:23: for i in range(len(info.floats)):  # cpu-route: model file parsing (attribute floats, converted)
-autograd/import_resolve_pyapi.mojo:11: for i in range(len(names)):  # cpu-route: model file parsing (the shapes argument, converted)
-autograd/import_resolve_pyapi.mojo:14: for i in range(len(flat)):  # cpu-route: model file parsing (the shapes argument, converted)
-autograd/import_resolve_pyapi.mojo:18: for i in range(len(r.words)):  # cpu-route: model file parsing (the resolution's words, converted)
-autograd/import_resolve_pyapi.mojo:21: for i in range(len(r.strs)):  # cpu-route: model file parsing (the graph's strings, converted)
-autograd/program_control_pyapi.mojo:89: while True:  # native control-flow driver, bounded by the explicit iteration limit
-autograd/program_pyapi.mojo:73: for k in range(n):  # native input marshaling: elements supplied as Python scalar objects
+autograd/program_pyapi.mojo:76: for k in range(n):  # native input marshaling: elements supplied as Python scalar objects
 bindings/_mojolearn_embedding_host.mojo:147: for i in range(cells):
 bindings/_mojolearn_forest_host.mojo:339: for i in range(n_rows * num_outputs):
 bindings/_mojolearn_forest_host.mojo:434: for i in range(n_rows * dim):
