@@ -1935,6 +1935,8 @@ FAMILIES = (
             "py2mojo_rows", "py2mojo_linear_flags", "lm_classical_stats",
             "lm_col_sums_pair", "lm_means_finish", "lm_intercept",
             "pca_rank_finish", "linear_gram_fit", "linear_gram_solve_default",
+            # lane activate-pca-owner (2026-10-21): PCA.fit / fit_transform in one call
+            "pca_fit_owned", "pca_fit_randomized",
         ),
         gate="tools/identity_break.py and tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(

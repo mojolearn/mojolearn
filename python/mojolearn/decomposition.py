@@ -4,7 +4,7 @@
 
 from . import _backend, _mojolearn_estimators, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
@@ -280,22 +280,31 @@ class PCA(NumericModeMixin):
         """DEVIATION 2368: the four model arrays are inspected through the
         buffer protocol, so the `Array` fit stores and any other float32
         C-contiguous buffer a caller assigned (the surface tests assign
-        NumPy arrays) both pass; anything else is refused by name. The
-        finiteness scan is `_buffer.all_finite` (native when the helper is
-        loadable), the sign test is `Array.min()`."""
-        views = {}
+        NumPy arrays) both pass; anything else is refused by name. Only
+        dtypes, shapes and layouts are read here: the whitened transforms
+        refuse non-finite values and negative singular values themselves,
+        on the device, in the same call that transforms."""
         for name, shape in (("components_", (self.n_components_, self.n_features_in_)),  # glue: loops over saved attribute names
                             ("mean_", (self.n_features_in_,)),
                             ("singular_values_", (self.n_components_,)),
                             ("explained_variance_", (self.n_components_,))):
             a = _as_array_view(getattr(self, name, None))
-            if (a is None or a.dtype != "<f4" or tuple(a.shape) != shape
-                    or not a.flags["C_CONTIGUOUS"] or not all_finite(a)):
+            if a is None or a.dtype != "<f4" or tuple(a.shape) != shape or not a.flags["C_CONTIGUOUS"]:
                 raise ValueError(f"mojolearn PCA whitening requires finite C-order float32 {name} with shape {shape}")
-            views[name] = a
-        if (self.n_samples_ < 2 or views["singular_values_"].min() < 0
-                or views["explained_variance_"].min() < 0):
+        if self.n_samples_ < 2:
             raise ValueError("mojolearn PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
+
+    @staticmethod
+    def _native(entry, *args):
+        """One native call. Its refusals of the data or the fitted state
+        (non-finite values, negative singular values, a numerically zero
+        matrix) are plain exceptions; they reach the caller as ValueError."""
+        try:
+            return entry(*args)
+        except Exception as err:
+            if type(err) is Exception:
+                raise ValueError(f"mojolearn PCA: {err}") from err
+            raise
 
     def _dense_binding(self):
         """The binding, checked for the dense arm.
@@ -346,6 +355,16 @@ class PCA(NumericModeMixin):
             ``svd_solver="full"`` on a wide matrix outside ``"identical"``
             mode.
         """
+        self._fit(X, False)
+        return self
+
+    def _fit(self, X, project):
+        """The fit, and with `project` X's projection onto the kept
+        components (`fit_transform`), as ONE native call: the exact solvers
+        through `pca_fit_owned` (decomposition/impl/pca_owner.mojo), the
+        randomized one through `pca_fit_randomized`. Python checks the
+        arguments, allocates the outputs at the fitted component count and
+        keeps the prefix the call reports. Returns the projection or None."""
         if self.svd_solver not in self._SOLVERS:
             raise NotImplementedError(
                 f"mojolearn PCA: svd_solver={self.svd_solver!r} is not "
@@ -363,8 +382,8 @@ class PCA(NumericModeMixin):
         if self.whiten:
             self._whiten_binding()
         if self.svd_solver in self._RANDOM_SOLVERS:
-            return self._fit_randomized(X)
-        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
+            return self._fit_randomized(X, project)
+        x, copied = as_f32_c(_dense(X), ndim=2, name="X")
         # One feature is a fit scikit-learn makes (check_fit2d_1feature): the
         # covariance arm takes the 1 x 1 covariance without a rotation
         # (decomposition/impl/linalg/detail/pca.mojo `_eig_and_truncate_one`).
@@ -376,8 +395,6 @@ class PCA(NumericModeMixin):
             binding = self._dense_binding()
         else:
             binding = self._bind("_mojolearn_estimators")
-        if self.whiten and not all_finite(x):
-            raise ValueError("mojolearn PCA whitening requires finite X")
         if x.shape[0] < 2:
             raise ValueError(_too_small(x.shape, "PCA"))
         if dense and x.shape[0] < x.shape[1] and self.numeric_mode_used() != "identical":
@@ -395,101 +412,113 @@ class PCA(NumericModeMixin):
                 "substituting it here would be the substitution this class "
                 "refuses to make for the solver name itself"
             )
-        frac = None
-        mle = isinstance(self.n_components, str) and self.n_components == "mle"
-        if mle:
-            # scikit-learn's Minka MLE (lane/algos-decomp, 2026-09-27): fit
-            # every component, keep the rank `_infer_dimension` picks from the
-            # full explained-variance spectrum.
+        # How the kept count is chosen after the fit, in the native call
+        # (decomposition/impl/pca_owner.mojo): 0 every fitted component,
+        # 1 scikit-learn's variance fraction (the fewest components whose
+        # cumulative explained variance ratio EXCEEDS it), 2 Minka's MLE
+        # (scikit-learn's `_infer_dimension`) over the full spectrum.
+        keep_mode, frac = 0, 0.0
+        if isinstance(self.n_components, str) and self.n_components == "mle":
             if x.shape[0] < x.shape[1]:
                 raise ValueError("n_components='mle' is only supported if n_samples >= n_features")
-            nc = min(x.shape)  # glue: smaller of two shape dims
+            keep_mode, nc = 2, min(x.shape)  # glue: smaller of two shape dims
         elif isinstance(self.n_components, float) and not isinstance(self.n_components, bool):
-            # scikit-learn's variance fraction (lane/algos-decomp, 2026-09-27):
-            # fit every component, keep the fewest whose cumulative explained
-            # variance ratio EXCEEDS the fraction (searchsorted side='right'),
-            # the cumulative sum in float64 on the host (sequential IEEE adds).
             if not 0.0 < self.n_components < 1.0:
                 raise ValueError("mojolearn PCA: a float n_components must be in (0, 1)")
-            frac = float(self.n_components)
-            nc = min(x.shape)  # glue: smaller of two shape dims
+            keep_mode, frac, nc = 1, float(self.n_components), min(x.shape)  # glue: smaller of two shape dims
         else:
             nc = _component_count(self.n_components, x.shape)
         if dense and nc > min(x.shape):  # glue: smaller of two shape dims
             raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
-        self.components_ = empty((nc, x.shape[1]), "<f4")
-        self.mean_ = empty((x.shape[1],), "<f4")
-        self.explained_variance_ = empty((nc,), "<f4")
-        self.explained_variance_ratio_ = empty((nc,), "<f4")
-        self.singular_values_ = empty((nc,), "<f4")
-        fit_fn = binding.pca_fit_full if dense else binding.pca_fit
-        self.noise_variance_ = float(fit_fn(
-            addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.mean_, name="mean_"),
-            addr(self.explained_variance_, name="explained_variance_"), addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
-            addr(self.singular_values_, name="singular_values_"), [x.shape[0], x.shape[1], nc],
-        ))
-        if frac is not None or mle:
-            keep_in = -1
-            if mle:
-                from ._expansion_decomp import _pca_mle_rank
-                keep_in = _pca_mle_rank(list(self.explained_variance_), x.shape[0], self.numeric_mode_used())
-            # the rank for a float n_components and the dropped tail's noise
-            # variance, in Mojo (decomposition/impl/pca_rank.mojo)
-            keep, noise = binding.pca_rank_finish(
-                addr_ro(self.explained_variance_ratio_, name="explained_variance_ratio_"),
-                addr_ro(self.explained_variance_, name="explained_variance_"),
-                [nc, int(keep_in)], float(frac) if frac is not None else 0.0)
-            keep = int(keep)
-            self.noise_variance_ = float(noise)
-            import array as _arr
-            from ._buffer import frombytes
-            d = x.shape[1]
-            comp = _arr.array("f")
-            comp.frombytes(self.components_.tobytes()[:4 * keep * d])
-            self.components_ = frombytes(comp.tobytes(), "<f4", (keep, d))
-            for name in ("explained_variance_", "explained_variance_ratio_", "singular_values_"):  # glue: loops over three attribute names
-                setattr(self, name, frombytes(getattr(self, name).tobytes()[:4 * keep], "<f4", (keep,)))
-            nc = keep
-        self.n_components_ = nc
-        self.n_features_in_ = x.shape[1]
-        self.n_samples_ = x.shape[0]
-        if self.whiten:
-            self._validate_whiten_state()
-        return self
+        fit_owned = getattr(binding, "pca_fit_owned", None)
+        if fit_owned is None:
+            raise NotImplementedError(
+                "mojolearn PCA: this build of _mojolearn_estimators does not "
+                "export pca_fit_owned; rebuild it with bindings/build_estimators.sh"
+            )
+        n, d = x.shape
+        components = empty((nc, d), "<f4")
+        mean = empty((d,), "<f4")
+        variance = empty((nc,), "<f4")
+        ratio = empty((nc,), "<f4")
+        singular = empty((nc,), "<f4")
+        z = empty((n, nc), "<f4") if project else None
+        # ONE native call: the fit, the rank choice, the dropped tail's noise
+        # variance and (fit_transform) the projection. The kept components
+        # are the prefix of the outputs.
+        # Its refusals keep the binding's exception class (the CPU wide
+        # full-SVD refusal is a plain Exception, as before).
+        keep, noise = fit_owned(
+            addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
+            addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
+            addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
+            [n, d, nc, int(dense), keep_mode, int(bool(self.whiten)), frac],
+        )
+        if keep != nc:
+            components, variance = components[:keep], variance[:keep]
+            ratio, singular = ratio[:keep], singular[:keep]
+            if project:
+                z = z.reshape((n * nc,))[:n * keep].reshape((n, keep))
+        self._keep_fit(copied, components, mean, variance, ratio, singular, noise, keep, d, n)
+        return z
 
-    def _fit_randomized(self, X):
+    def _keep_fit(self, copied, components, mean, variance, ratio, singular, noise, keep, d, n):
+        self.input_copied_ = copied
+        self.components_ = components
+        self.mean_ = mean
+        self.explained_variance_ = variance
+        self.explained_variance_ratio_ = ratio
+        self.singular_values_ = singular
+        self.noise_variance_ = noise
+        self.n_components_ = keep
+        self.n_features_in_ = d
+        self.n_samples_ = n
+
+    def _fit_randomized(self, X, project):
         """svd_solver='randomized' (scikit-learn `_pca.py::_fit_truncated`):
         the centered data through `mojolearn.randomized_svd`, then
         svd_flip on Vt; explained variance S^2 / (n - 1), the ratio against
         the total sample variance, the noise variance the mean of what is
-        left. random_state None means seed 0 (the Philox stream)."""
-        from ._expansion_decomp import _randomized_decompose
-        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
+        left. random_state None means seed 0 (the Philox stream). One
+        native call (x_decomp/pca_randomized.mojo through `pca_fit_randomized`)."""
+        x, copied = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError(_too_small(x.shape, "PCA"))
         nc = _component_count(self.n_components, x.shape)
         if nc >= min(x.shape):  # glue: smaller of two shape dims
             raise ValueError("svd_solver='randomized' needs n_components < min(n_samples, n_features)")
-        n_iter = self.iterated_power
-        if n_iter == "auto":
-            n_iter = 7 if nc < 0.1 * min(x.shape) else 4  # glue: smaller of two shape dims
-        got = _randomized_decompose(
-            x, nc, center=True, n_oversamples=self.n_oversamples, n_iter=n_iter,
-            power_iteration_normalizer=self.power_iteration_normalizer, random_state=self.random_state,
-            numeric_mode=self.numeric_mode_used(),
-            binding=_backend.binding("_mojolearn_x_decomp", self.numeric_mode_used()))
-        self.components_ = got["components"]
-        self.mean_ = got["mean"]
-        self.explained_variance_ = got["explained_variance"]
-        self.explained_variance_ratio_ = got["explained_variance_ratio"]
-        self.singular_values_ = got["singular_values"]
-        self.noise_variance_ = float(got["noise_variance"])
-        self.n_components_ = nc
-        self.n_features_in_ = x.shape[1]
-        self.n_samples_ = x.shape[0]
-        if self.whiten:
-            self._validate_whiten_state()
-        return self
+        if self.power_iteration_normalizer not in ("auto", "QR", "LU", "none"):
+            raise ValueError("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
+        seed = 0 if self.random_state is None else self.random_state
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise TypeError("random_state must be None or an int (the counter-based RNG takes an integer seed)")
+        oversamples = int(self.n_oversamples)
+        if oversamples < 0:
+            raise ValueError("n_oversamples must be nonnegative")
+        auto = isinstance(self.iterated_power, str) and self.iterated_power == "auto"
+        iterations = 0 if auto else int(self.iterated_power)
+        fit = getattr(self._bind("_mojolearn_estimators"), "pca_fit_randomized", None)
+        if fit is None:
+            raise NotImplementedError(
+                "mojolearn PCA: this build of _mojolearn_estimators does not "
+                "export pca_fit_randomized; rebuild it with bindings/build_estimators.sh"
+            )
+        n, d = x.shape
+        components = empty((nc, d), "<f4")
+        mean = empty((d,), "<f4")
+        variance = empty((nc,), "<f4")
+        ratio = empty((nc,), "<f4")
+        singular = empty((nc,), "<f4")
+        z = empty((n, nc), "<f4") if project else None
+        noise = self._native(
+            fit, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
+            addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
+            addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
+            [n, d, nc, oversamples, iterations, int(auto), int(bool(self.whiten)),
+             seed & 0xFFFFFFFF],  # glue: the Philox seed is taken mod 2^32
+        )
+        self._keep_fit(copied, components, mean, variance, ratio, singular, noise, nc, d, n)
+        return z
 
     def transform(self, X):
         """Project ``X`` onto the principal components.
@@ -517,20 +546,17 @@ class PCA(NumericModeMixin):
         out = empty((x.shape[0], self.n_components_), "<f4")
         if self.whiten:
             self._validate_whiten_state()
-            if not all_finite(x):
-                raise ValueError("mojolearn PCA whitening requires finite X")
             # `n_samples_` and NOT `x.shape[0]`. DEVIATION 580: cuML's dense
             # path scales by the row count of THIS CALL (pca.pyx:770), so
             # their `transform(X[:100])` disagrees with `transform(X)[:100]`.
             # Their own sparse path uses the fit's count and so does
             # scikit-learn, and so does this.
-            self._whiten_binding().pca_whiten_transform(
+            self._native(
+                self._whiten_binding().pca_whiten_transform,
                 addr_ro(x, name="x"), addr_ro(self.mean_, name="mean_"), addr_ro(self.components_, name="components_"),
                 addr_ro(self.singular_values_, name="singular_values_"), addr(out, name="out"),
                 [x.shape[0], x.shape[1], self.n_components_, self.n_samples_],
             )
-            if not all_finite(out):
-                raise ValueError("mojolearn PCA whitening produced nonfinite output")
             return out
         self._bind("_mojolearn_estimators").pca_transform(
             addr_ro(x, name="x"), addr_ro(self.mean_, name="mean_"), addr_ro(self.components_, name="components_"),
@@ -552,7 +578,7 @@ class PCA(NumericModeMixin):
         Z : Array of shape (n_samples, ``n_components_``), float32
             The projected data.
         """
-        return self.fit(X, y=y).transform(X)
+        return self._fit(X, True)
 
     def inverse_transform(self, X):
         """Map projected data back to the original feature space.
@@ -580,17 +606,14 @@ class PCA(NumericModeMixin):
         out = empty((z.shape[0], self.n_features_in_), "<f4")
         if self.whiten:
             self._validate_whiten_state()
-            if not all_finite(z):
-                raise ValueError("mojolearn PCA whitening requires finite scores")
-            self._whiten_binding().pca_whiten_inverse_transform(
+            self._native(
+                self._whiten_binding().pca_whiten_inverse_transform,
                 addr_ro(z, name="z"), addr_ro(self.components_, name="components_"),
                 addr_ro(self.singular_values_, name="singular_values_"), addr_ro(self.mean_, name="mean_"),
                 addr(out, name="out"),
                 [z.shape[0], self.n_features_in_, self.n_components_,
                  self.n_samples_],
             )
-            if not all_finite(out):
-                raise ValueError("mojolearn PCA whitening produced nonfinite output")
             return out
         self._bind("_mojolearn_estimators").inverse_transform(
             addr_ro(z, name="z"), addr_ro(self.components_, name="components_"), addr_ro(self.mean_, name="mean_"),
