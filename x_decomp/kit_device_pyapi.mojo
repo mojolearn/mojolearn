@@ -19,7 +19,7 @@ def mcd_dev_py(
 ) raises -> PythonObject:
     """`mcd_py` on the resident kit."""
     var q = List[Int]()
-    for i in range(11):  # driver-loop: over the 11 plan words of p
+    for i in range(11):  # small-loop(the 11 plan words of p)
         q.append(Int(py=p[i]))
     mcd_dev_check(q)
     var px = _f(x)
@@ -47,7 +47,7 @@ def lda_online_dev_py(
     var nbi = Int(py=p[7])
     lda_online_dev_check(n, v, nc, bs)
     var fv = List[Float64]()
-    for i in range(6):  # driver-loop: over the six float words of f
+    for i in range(6):  # small-loop(the six float words of f)
         fv.append(Float64(py=f[i]))
     var px = _f(x)
     var pc = _f(comps)

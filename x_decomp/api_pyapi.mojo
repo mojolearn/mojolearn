@@ -801,8 +801,8 @@ def sign_labels_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -
 
 
 def accuracy_py(y: PythonObject, pred: PythonObject, w: PythonObject, m: PythonObject) raises -> PythonObject:
-    """(matches, total): float64 labels against int32 predictions; w = 0
-    for unweighted, else a float64 weight address (sums in order)."""
+    """(matches, total): float64 labels against int32 predictions; w is
+    0 when unweighted, else a float64 weight address (sums in order)."""
     var n = Int(py=m)
     var r = accuracy_run(Int(py=y), Int(py=pred), Int(py=w), n)
     return Python.tuple(r[0], r[1])
