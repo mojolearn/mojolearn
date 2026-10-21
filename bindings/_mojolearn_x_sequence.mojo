@@ -55,7 +55,7 @@ from autograd.pyapi import (
 from autograd.ops_api import OPS_DEVICE
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from autograd.import_reader import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
+from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
 from autograd.import_resolve import onnx_resolve_py
 # the lowering onto session operations and the GraphIR-from-words handle (autograd/import_lower.mojo)
 from autograd.import_lower import onnx_import_py, onnx_from_words_py
