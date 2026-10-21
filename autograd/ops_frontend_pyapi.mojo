@@ -15,7 +15,7 @@ from bindings.native_json import native_path
 from autograd.weight_frontend import ops_weights_native_py
 from autograd.session_lifetime import SessionLifetime
 from autograd.execution_profile_pyapi import execution_profile_object
-from autograd.control_checkpoint import control_save_py, control_load_py
+from autograd.control_checkpoint_pyapi import control_save_py, control_load_py
 from autograd.gradient_diagnostics import gradient_report_py
 
 
