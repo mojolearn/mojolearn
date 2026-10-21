@@ -4,13 +4,31 @@
 
 def connect(ridge_class, linear_class=None):
     # glue: connect compiled entries and exact native buffer classes once
-    from types import BuiltinFunctionType
+    from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType
+    import _codecs
+    import io
     import os
+    import zlib
     from . import _backend
     from .tokenizer import _binding
     from ._x_sequence_model import _SEQUENTIAL_CONTEXT
 
     context = dict(_SEQUENTIAL_CONTEXT)
+    archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
+    archive_methods = []
+    for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
+        methods = {}
+        for name in ("read", "write", "seek", "tell", "flush", "close"):  # glue: validate native descriptor origin once
+            entry = getattr(cls, name)
+            if not isinstance(entry, (MethodDescriptorType, WrapperDescriptorType)):
+                raise TypeError(f"classical archives require native {cls.__name__}.{name}")
+            methods[name] = entry
+        archive_methods.append(methods)
+    for entry in (zlib.crc32, _codecs.utf_32_le_encode):  # glue: validate format metadata C entries once
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError("classical archives require native CRC and Unicode metadata entries")
+    context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
+                   archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode)
     connected = {}
     metric_bindings = {}
     selected = _backend.default_mode()
