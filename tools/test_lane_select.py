@@ -911,17 +911,37 @@ def test_the_mojo_conformance_inversion_holds_over_the_whole_tree():
     subclassing: a conforming struct is reached only when something
     parametrises on the trait AND IS HANDED THAT STRUCT BY NAME, and naming a
     symbol from another file requires importing it, so the forward walk
-    already has it."""
+    already has it.
+
+    PER EXPORT, THE LANE MUST ALSO REACH AN IMPORTER (2026-10-21). The map
+    reads a binding per export and the impl module below a thin shell per
+    definition, so a lane can reach the declaration B through one export while
+    NO file in its map imports the implementation F: autograd/tape.mojo
+    reaches the byte LM host lanes through one `_mojolearn_byte_lm` export, and
+    nothing those lanes reach imports autograd/layers.mojo, so nothing they run
+    can hand BackwardRules a layers struct. The argument above is about the
+    lanes that reach a file importing F, and that is what is held: each of
+    them reaches F."""
     sources, rev = _lane_sets()
     edges = lane_select.mojo_conformance_edges()
     assert len(edges) >= 5, f"only {len(edges)} conformance edges found; the scan is broken"
+    bad = _conformance_misses(sources, rev, edges, lane_select._mojo_imports)
+    assert not bad, "\n  ".join([""] + bad[:6])
+
+
+def _conformance_misses(sources, rev, edges, imports):
+    """For each conformance edge (F conforms to a trait declared in B), the
+    lanes that reach B and a file importing F (`imports`: file -> the files it
+    imports) and not F itself."""
     bad = []
     for f, trait, b in edges:
-        missing = rev.get(b, set()) - rev.get(f, set())
+        missing = {lane for lane in rev.get(b, set()) - rev.get(f, set())
+                   if any(f in imports(x) for x in sources[lane] if x.endswith(".mojo"))}
         if missing:
             bad.append(f"{f} conforms to {trait} declared in {b}, but {len(missing)} lane(s) "
-                       f"reach the declaration and not the implementation, e.g. {sorted(missing)[:4]}")
-    assert not bad, "\n  ".join([""] + bad[:6])
+                       f"reach the declaration and an importer of the implementation and not the "
+                       f"implementation, e.g. {sorted(missing)[:4]}")
+    return bad
 
 
 def test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose():
@@ -947,12 +967,14 @@ def test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose():
                                              if rel != victim else real(rel))
     lane_select.reset_caches()
     try:
-        _, broken = _lane_sets()
+        broken_sources, broken = _lane_sets()
         assert len(broken.get(declarer, set())) == before_b, \
             "the sabotage moved the DECLARER too, so the two arms move together and prove nothing"
         assert not broken.get(victim, set()), "the sabotage did not detach the implementation"
+        # The importers are the tree's REAL imports: the sabotage hid the
+        # victim from the walk, not from the source.
         fired = [f for f, _t, b in lane_select.mojo_conformance_edges()
-                 if broken.get(b, set()) - broken.get(f, set())]
+                 if _conformance_misses(broken_sources, broken, [(f, _t, b)], real)]
         assert victim in fired, f"the inversion did not name {victim}; it caught {fired[:4]}"
     finally:
         lane_select._mojo_imports = real
@@ -1116,9 +1138,28 @@ def test_no_docstring_is_read_back_at_run_time():
     strip, plus argparse help. A docstring copied straight into another
     docstring (exceptions.py builds the scikit-learn NotFittedError bridge
     with `type(..., {"__doc__": NotFittedError.__doc__})`, f436729ea) stays
-    documentation: it is read only to become a `__doc__`, never a value."""
+    documentation: it is read only to become a `__doc__`, never a value.
+    Since 81a34c4e5 the bridge class is built natively: the doc rides in the
+    native context as a keyword (`not_fitted_doc=NotFittedError.__doc__`) and
+    bindings/classical_exceptions.mojo stores it as the class's `__doc__`. A
+    keyword is a doc copy only when every native read of that context key is
+    such a store."""
+    mojo_texts = []
+    for d in ("bindings", "core"):
+        for root, _dirs, files in os.walk(os.path.join(lane_select.ROOT, d)):
+            mojo_texts += [open(os.path.join(root, f), errors="replace").read()
+                           for f in files if f.endswith(".mojo")]
+
+    def native_doc_key(key):
+        reads = [m.group(0) for text in mojo_texts
+                 for m in re.finditer(r'[^\n]*context\["%s"\][^\n]*' % re.escape(key), text)]
+        return bool(reads) and all(re.search(r'py_setitem\(\s*\w+\s*,\s*"__doc__"\s*,\s*context\["%s"\]\s*\)'
+                                             % re.escape(key), r) for r in reads)
+
     def doc_to_doc(node, parents):
         parent = parents.get(node)
+        if isinstance(parent, ast.keyword) and parent.value is node and parent.arg:
+            return native_doc_key(parent.arg)
         if isinstance(parent, ast.Dict):
             return any(v is node and isinstance(k, ast.Constant) and k.value == "__doc__"
                        for k, v in zip(parent.keys, parent.values))
@@ -1675,13 +1716,31 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     linear_model.py's LogisticRegression weight helper imports
     `_trees_x_bind` and `_class_weight_rows` from the trees doors inside its
     body (e9608596a), and every linear lane took the forest trees
-    (`_region_import_edges`, `_extender_fires`)."""
+    (`_region_import_edges`, `_extender_fires`).
+
+    REMEASURED 2026-10-21 (lane/fix-lane-select-tests, main d470e46eb). Found
+    red: kmeans_oracle answered 530 once 19307b24a moved the estimators host
+    binding's oracle calls into core/estimators_host_impl.mojo, whose whole
+    closure every caller of any export took (fixed in the selector,
+    `_mojo_symbol_reach`, not re-pinned to 530):
+      kmeans_oracle        83 -> 84  ivf-short-fill (354b8049a, 2026-10-21),
+                                     an IVF index over this library's KMeans
+      neural_inference.py  41 -> 44  four NEW lanes (cross-vendor-fold,
+                                     sequence-export-roundtrip,
+                                     transformer-decode-load-state, 9adda0406;
+                                     hf-causal-lm-stream, a1e1635b1), minus
+                                     gbdt-categorical-ctr-tables: its edge was
+                                     `m.save(...)` on the fitted model matching
+                                     `_samba_checkpoint.save` by name (an
+                                     attribute of a call's result is a method,
+                                     `_call_bound_locals`); `host_model` reads
+                                     forest, GBDT and classical files only"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 83),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 84),
                       ("core/gbdt_host_predict.mojo", 55),
                       ("core/forest_host_predict.mojo", 92),
                       ("core/forest_inference.mojo", 52),
-                      ("python/mojolearn/neural_inference.py", 41)):
+                      ("python/mojolearn/neural_inference.py", 44)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
@@ -1809,10 +1868,11 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 41, \
-        ("the re-export rule moved neural_inference.py off its measured 41 lanes (40 + hf-checkpoint,"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 44, \
+        ("the re-export rule moved neural_inference.py off its measured 44 lanes (40 + hf-checkpoint,"
          " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
-         " plus optim-maximize, 2026-09-28)")
+         " plus optim-maximize, 2026-09-28; plus four new lanes and minus gbdt-categorical-ctr-tables,"
+         " 2026-10-21, see test_the_wider_mojo_walk_did_not_widen_the_narrow_answers)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
     # checked for loses it. Held per LANE and not per file since 2026-09-21:
@@ -2158,9 +2218,10 @@ def test_any_other_row_field_edit_selects_the_rows_lanes():
 
 def test_the_real_manifest_edits_of_the_three_branches_are_placed():
     """The three branches' host_surface.py edits, replayed on the manifest in
-    this tree (a lane that exists here stands in for ivf-filter)."""
+    this tree (a lane that exists here stands in for ivf-filter). The IVF
+    family's training lanes gained ivf-short-fill on 2026-10-21 (354b8049a)."""
     old = lane_select._read(lane_select.MANIFEST)
-    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf")',
+    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf", "ivf-short-fill")',
                'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")',
                '"gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad"',
                '"pca_fit", "pca_fit_full", "tsvd_fit"')

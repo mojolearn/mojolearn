@@ -532,12 +532,41 @@ def _code_names(fn, module_globals, seen=None, funcs=None):
         for const in code.co_consts:
             if hasattr(const, "co_names"):
                 stack.append(const)
+    # A HELPER IS FOLLOWED ONLY WHEN THE FUNCTION NAMES IT (2026-10-21).
+    # `co_names` holds attribute names too, so `program.run(x)` in the
+    # sequence-tape-program lane left `run` there, `run` is also the harness's
+    # own entry point, and the lane was handed everything the harness's `run`
+    # names: the verifier worker and through it `_verify_all.py` and
+    # `_verify_par.py`, which no lane runs. An attribute cannot call a module
+    # global; only a bare name (or a source that cannot be read) can.
+    bare = _bare_names(fn)
     for name in list(out):
         helper = module_globals.get(name)
+        if bare is not None and name not in bare:
+            continue
         if callable(helper) and hasattr(helper, "__code__") and id(helper) not in seen:
             seen.add(id(helper))
             out |= _code_names(helper, module_globals, seen, funcs)
     return out
+
+
+_BARE_CACHE = {}
+
+
+def _bare_names(fn):
+    """Every name one function's source uses BARE (`ast.Name`, a decorator, a
+    default), or None when the source cannot be read (then every name counts)."""
+    key = id(fn.__code__)
+    if key not in _BARE_CACHE:
+        import inspect
+        import textwrap
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+        except (OSError, TypeError, SyntaxError, IndentationError):
+            _BARE_CACHE[key] = None
+        else:
+            _BARE_CACHE[key] = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    return _BARE_CACHE[key]
 
 
 _FOREIGN_CACHE = {}
@@ -562,6 +591,7 @@ def _attribute_roots(fn, module_globals):
     except (OSError, TypeError, SyntaxError):
         _FOREIGN_CACHE[key] = (foreign, other)
         return foreign, other
+    objects = _call_bound_locals(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
             root = node.value
@@ -570,6 +600,16 @@ def _attribute_roots(fn, module_globals):
             bound = module_globals.get(root.id) if isinstance(root, ast.Name) else None
             if isinstance(bound, types.ModuleType) and \
                     not (bound.__name__ == "mojolearn" or bound.__name__.startswith("mojolearn.")):
+                foreign.add(node.attr)
+            elif isinstance(root, ast.Name) and root.id in objects and node.value is root:
+                # AN ATTRIBUTE OF AN OBJECT A CALL RETURNED (2026-10-21):
+                # `program = s.capture(...)`, `program.run(x)`. It names a
+                # method or a field, never a module-level function of a
+                # package file, and `run` matched `_verify_worker.run`, which
+                # handed sequence-tape-program the verifier (`_verify_all.py`,
+                # `_verify_par.py`). The class is reached by the call that made
+                # the object. Only the first link of the chain, and only for a
+                # local every binding of which is a call.
                 foreign.add(node.attr)
             else:
                 other.add(node.attr)
@@ -580,6 +620,43 @@ def _attribute_roots(fn, module_globals):
                 other.add(alias.asname or alias.name)
     _FOREIGN_CACHE[key] = (foreign, other)
     return foreign, other
+
+
+def _call_bound_locals(tree):
+    """The local names one function binds ONLY to a call's result (`x =
+    f(...)`, `with f(...) as x`): objects, never a module or the package. A
+    name bound any other way anywhere in the function (a parameter, `x = ml`,
+    `x = ml.ops`, a loop target, an import) is left out."""
+    calls, other = set(), set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    (calls if isinstance(node.value, ast.Call) else other).add(target.id)
+                else:
+                    other |= {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            target = node.target
+            if isinstance(target, ast.Name):
+                other.add(target.id)
+        elif isinstance(node, ast.withitem) and node.optional_vars is not None:
+            if isinstance(node.optional_vars, ast.Name) and isinstance(node.context_expr, ast.Call):
+                calls.add(node.optional_vars.id)
+            else:
+                other |= {n.id for n in ast.walk(node.optional_vars) if isinstance(n, ast.Name)}
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            other |= {n.id for n in ast.walk(node.target) if isinstance(n, ast.Name)}
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            args = node.args
+            other |= {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
+            other |= {a.arg for a in (args.vararg, args.kwarg) if a is not None}
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            other |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            other |= set(node.names)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            other.add(node.name)
+    return calls - other
 
 
 def _seed_names(fn, module_globals):
@@ -1543,6 +1620,152 @@ def _mojo_blocks(text):
 
 
 @_by_path
+def _mojo_defs_for(rel):
+    """(name -> the text of every top-level definition of that name; the
+    file's residue) for one Mojo source, from `_mojo_units`, or None when it
+    cannot be read with certainty. A function's overloads are joined; a struct
+    or trait carries its header AND every method, since which method a caller
+    runs is not read here; a `comptime` value carries its text. The residue
+    (top-level statements that define no name) is read as part of every
+    definition."""
+    try:
+        units = _mojo_units(_read(rel))
+    except OSError:
+        return None
+    if units is None:
+        return None
+    out = {}
+    for name, (_kind, texts) in units["top"].items():
+        parts = list(texts)
+        for mtexts in units["methods"].get(name, {}).values():
+            parts.extend(mtexts)
+        out[name] = "\n".join(parts)
+    return out, "\n".join(units["residue"])
+
+
+@_by_path
+def _mojo_import_targets(rel):
+    """(local name -> the (file, name) nodes it is bound to; files to close
+    over whole) over EVERY import statement of one Mojo source, the ones
+    inside function bodies included, resolved the way the build resolves them
+    (`_mojo_module_files` with the imported name, so `from xtrees import
+    ops_device_boost as boost_dev` means `xtrees/ops_device_boost.mojo`, not
+    only the package's `__init__.mojo`). A MODULE bound to a local (`import
+    a.b as c`, or `from pkg import module`) is a node named None: its file is
+    closed over whole, since `c.f` is not read here. A star import is closed
+    over whole."""
+    try:
+        text = _read(rel)
+    except OSError:
+        return {}, set()
+    text = re.sub(r"\(\s*([^()]*?)\s*\)", lambda m: m.group(1).replace("\n", " "), text, flags=re.S)
+    names, whole = {}, set()
+    for line in text.splitlines():
+        if not re.match(r"^\s*(?:from|import)\s", line):
+            continue
+        for local, module, orig, star in _mojo_import_bindings(line) or ():
+            files = _mojo_module_files(module, rel, [orig] if orig and not star else [])
+            if star:
+                whole |= files
+                continue
+            for f in files:
+                base = os.path.basename(f)
+                is_module = orig is None or base == orig + ".mojo" or (
+                    base == "__init__.mojo" and os.path.basename(os.path.dirname(f)) == orig)
+                names.setdefault(local, set()).add((f, None if is_module else orig))
+    return names, whole
+
+
+_SYMBOL_STEPS = {}
+
+
+def _mojo_named_imports(rel, idents):
+    """The (file, name) nodes the identifiers `idents`, written in `rel`, are
+    imported as (`_mojo_import_targets`, and `_mojo_import_symbols` for the
+    package files the old scan named), plus every star-imported file whole."""
+    out = []
+    for sym, files in _mojo_import_symbols(rel).items():
+        if sym in idents:
+            out.extend((f, sym) for f in files)
+    targets, whole = _mojo_import_targets(rel)
+    for local, nodes in targets.items():
+        if local in idents:
+            out.extend(nodes)
+    out.extend((f, None) for f in whole)
+    return out
+
+
+def _mojo_symbol_step(rel, name):
+    """The (file, name) nodes one top-level definition `name` of `rel` names
+    (`_mojo_symbol_reach`), or None when `rel` does not define it (or cannot
+    be read with certainty) and must be closed over whole. A node named None
+    is a file to close over whole. Memoized: every lane asks for the same
+    nodes."""
+    key = (rel, name)
+    if key in _SYMBOL_STEPS:
+        return _SYMBOL_STEPS[key]
+    defs = _mojo_defs_for(rel) if rel.endswith(".mojo") else None
+    if defs is None or name not in defs[0]:
+        _SYMBOL_STEPS[key] = None
+        return None
+    blocks, preamble = defs
+    pre_idents = set(_MOJO_IDENT_RE.findall(preamble))
+    bodies, local_seen, local = [preamble], set(), [name] + [o for o in blocks if o in pre_idents]
+    while local:
+        fn_name = local.pop()
+        if fn_name in local_seen:
+            continue
+        local_seen.add(fn_name)
+        body = blocks.get(fn_name)
+        if body is None:
+            continue
+        bodies.append(body)
+        idents = set(_MOJO_IDENT_RE.findall(body))
+        local.extend(other for other in blocks if other in idents and other not in local_seen)
+    idents = set(_MOJO_IDENT_RE.findall("\n".join(bodies)))
+    out = _mojo_named_imports(rel, idents)
+    _SYMBOL_STEPS[key] = out
+    return out
+
+
+def _mojo_symbol_reach(pending):
+    """(files reached by name, files to close over whole) for imported
+    symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
+
+    A THIN-SHELL BINDING MOVED THE MULTIPLEXER ONE HOP DOWN (2026-10-21). The
+    per-export scan in `lane_sources` reads the export's body in the binding
+    and, for every imported symbol it names, closed over the WHOLE file
+    defining it. When `bindings/_mojolearn_estimators_host.mojo` became a door
+    that calls one function of `core/estimators_host_impl.mojo` per export, that
+    impl file became what the binding used to be: one module importing the
+    PCA, DBSCAN, scaler, ridge and k-NN oracles at once. Every lane calling
+    any export of the binding then took every oracle, and
+    `preprocessing/host/scaler_oracle.mojo` selected 503 of 530 lanes, k-means
+    among them. So a symbol that names a top-level definition of the file the
+    binding imports it from (`_mojo_units`: a function with its overloads, a
+    struct or trait with all its methods, a `comptime` value) is read the way
+    the binding's own export is: its text and the file's residue, and the
+    same-file definitions it names. That file is reached; every file those
+    definitions import a name from is closed over WHOLE, exactly as the
+    binding's direct imports were before. ONE HOP, ON PURPOSE: it undoes what
+    the thin shell moved and nothing more, so every file below the impl
+    module keeps the file-level closure the Mojo conformance inversion
+    (`test_the_mojo_conformance_inversion_holds_over_the_whole_tree`) is
+    stated over. A symbol the file does not define (a package re-export, a
+    module) or a file `_mojo_units` cannot read with certainty is closed over
+    whole, the old answer."""
+    reached, whole = set(), set()
+    for node in set(pending):
+        step = None if node[1] is None else _mojo_symbol_step(*node)
+        if step is None:
+            whole.add(node[0])
+            continue
+        reached.add(node[0])
+        whole |= {f for f, _ in step if f != node[0]}
+    return reached, whole
+
+
+@_by_path
 def _mojo_blocks_for(rel):
     """`_mojo_blocks` of one file, memoized: a binding is asked for its blocks
     once per distinct set of exports a lane's door calls."""
@@ -1604,6 +1827,31 @@ def _binding_exports(rel):
         return {}
     return {m.group(2): m.group(1) for m in re.finditer(
         r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
+
+
+@_by_path
+def _delegated_exports(rel):
+    """export name -> (file, impl) for the exports a binding registers through
+    a function it IMPORTS: `bindings/_mojolearn_x_trees.mojo` calls
+    `xtrees.api_pyapi.register(module)`, which holds 87
+    `m.def_function[impl]("name")` lines. `_binding_exports` reads the
+    binding's own file only, so those exports were invisible to the per-export
+    scan and reached a lane only through the whole closure of whatever else
+    the lane called. Read from the registrar's own text; an export the
+    binding also registers itself stays the binding's."""
+    out = {}
+    targets, _ = _mojo_import_targets(rel)
+    for nodes in targets.values():
+        for f, name in nodes:
+            if name is None or not f.endswith(".mojo"):
+                continue
+            defs = _mojo_defs_for(f)
+            if defs is None or "def_function[" not in defs[0].get(name, ""):
+                continue
+            for m in re.finditer(r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"",
+                                 defs[0][name]):
+                out.setdefault(m.group(2), (f, m.group(1)))
+    return out
 
 
 def _binding_export_params(rel):
@@ -2632,6 +2880,7 @@ def lane_sources():
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
+    read_by_name = {}        # seed_cache key -> the files of it read definition by definition
 
     def binding_seeds(src, used, wide=True):
         """The Mojo files ONE binding contributes to a lane whose door calls
@@ -2664,9 +2913,11 @@ def lane_sources():
         one lane, so such a binding contributes its SOURCE only, and a change
         to the binding file still selects every lane."""
         if wide is False:
+            narrowed_files.add(src)
             return {src}
         exports = _binding_exports(src)
-        hit = tuple(sorted(e for e in used if e in exports))
+        delegated = _delegated_exports(src)
+        hit = tuple(sorted(e for e in used if e in exports or e in delegated))
         key = (src, hit, wide)
         if key not in seed_cache:
             if not hit:
@@ -2681,12 +2932,18 @@ def lane_sources():
                 # every estimator, and taking `_mojolearn_core_host` entire for
                 # each of them handed the k-means oracles to the scaler lanes.
                 seed_cache[key] = {src} if wide == "narrow" else _mojo_closure([src])
+                read_by_name[key] = {src} if wide == "narrow" else set()
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 params = _binding_export_params(src)
-                seeds = set()
+                seeds, pending = set(), []
                 for export in hit:
+                    if export not in exports:
+                        # REGISTERED BY A FUNCTION THE BINDING IMPORTS
+                        # (`_delegated_exports`): the impl is that file's.
+                        pending.append(delegated[export])
+                        continue
                     # A PARAMETRIZED IMPL'S PARAMETERS ARE PART OF THE EXPORT:
                     # the executor struct in `gemm_py[DevExec]` is where its
                     # arithmetic lives (`_binding_export_params`).
@@ -2714,7 +2971,7 @@ def lane_sources():
                         if name in seen:
                             continue
                         seen.add(name)
-                        seeds |= syms.get(name, set())
+                        pending.extend(_mojo_named_imports(src, {name}))
                         body = blocks.get(name)
                         if body is None:
                             continue
@@ -2724,10 +2981,16 @@ def lane_sources():
                                     r"\b%s\b" % re.escape(other), body):
                                 stack.append(other)
                     body = "\n".join(bodies)
-                    for sym, files in syms.items():
-                        if re.search(r"\b%s\b" % re.escape(sym), body):
-                            seeds |= files
-                seed_cache[key] = _mojo_closure(seeds) | {src}
+                    pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
+                # An imported symbol is followed definition by definition
+                # into the file defining it (`_mojo_symbol_reach`), so a
+                # thin-shell binding's impl module does not hand every
+                # export's oracles to every lane.
+                reached, whole = _mojo_symbol_reach(pending)
+                seed_cache[key] = _mojo_closure(seeds | whole) | reached | {src}
+                read_by_name[key] = (reached | {src}) - _mojo_closure(seeds | whole)
+        if wide is not False:
+            narrowed_files.update(read_by_name[key])
         return seed_cache[key]
 
     sources, why = {}, {}
@@ -2838,6 +3101,7 @@ def lane_sources():
         # can narrow it) from one it reaches through a whole-closure fallback
         # (the old whole-file rule stands for that lane).
         calls = seed_calls[lane] = []
+        narrowed_files = set()     # files a contribution read per definition, not closed over
 
         def recorded_seeds(src, wide=True):
             got = binding_seeds(src, used, wide)
@@ -2908,8 +3172,19 @@ def lane_sources():
         # the lane already reaches (to a fixed point): taking every conformer
         # the sources import handed 40 lanes x_cluster's host ops and with them
         # the ClusterOps trait without its device implementation.
-        if source_only_hosts:
-            imported = set().union(*[_mojo_imports(h) for h in source_only_hosts])
+        #
+        # THE SAME FOR EVERY FILE READ BY NAME (2026-10-21). A binding read
+        # per export, and an impl module read per definition one hop below it
+        # (`_mojo_symbol_reach`), are in the map without the closure of what
+        # they import: autograd/tape.mojo reached a byte LM host lane through
+        # one export and autograd/layers.mojo, which conforms to its
+        # BackwardRules, did not. Whether a definition the lane runs hands the
+        # trait that struct is not read here, so a conformer such a file
+        # imports comes in with its closure whenever the lane reaches the
+        # trait: the same fixed point, the safe direction.
+        by_name = source_only_hosts | narrowed_files
+        if by_name:
+            imported = set().union(*[_mojo_imports(h) for h in by_name])
             pending = [(f, b) for f, _, b in mojo_conformance_edges() if f in imported]
             grew = True
             while grew:
@@ -3009,10 +3284,14 @@ _GIT_SHOW = {}
 
 @_by_path
 def _hashes_a_file(rel):
-    """True when this module builds a hashlib digest out of a file it opens in
-    binary mode. Its own bytes, and the repository paths it names, are then
+    """True when this module builds a digest out of a file: a hashlib digest
+    of a file it opens in binary mode, or a call to a binding's Mojo file
+    digest (`*_file_sha256`, which streams the file's bytes natively; the byte
+    LM moved its `source_sha256` inventory there from hashlib, a4c66f9ff and
+    80a40d6be). Its own bytes, and the repository paths it names, are then
     hashed at run time."""
-    if "hashlib" not in _read(rel):
+    text = _read(rel)
+    if "hashlib" not in text and "file_sha256" not in text:
         return False
     tree = _parse(rel)
     if tree is None:
@@ -3020,8 +3299,10 @@ def _hashes_a_file(rel):
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
-            if name == "open" and any(isinstance(a, ast.Constant) and a.value == "rb"
-                                      for a in node.args):
+            if name == "open" and "hashlib" in text and any(
+                    isinstance(a, ast.Constant) and a.value == "rb" for a in node.args):
+                return True
+            if isinstance(name, str) and name.endswith("file_sha256"):
                 return True
     return False
 
@@ -6157,6 +6438,14 @@ def build_script_roots(path, seen=None):
         if not os.path.isfile(os.path.join(ROOT, src)):
             return None
         roots.add(src)
+        # THE ENTRY CARRIES NO BODY (be1b6e817, 2026-10-20). A device script
+        # compiles `bindings/entry/entry_<binding>.mojo`, which only exports
+        # the PyInit and imports `build_<binding>()` from the module body.
+        # No lane's map holds the entry, so the script selected nothing; the
+        # body it imports is the binding source a lane reaches.
+        if os.path.dirname(src) == os.path.join("bindings", "entry"):
+            roots |= {f for f in _mojo_imports(src)
+                      if os.path.dirname(f) == "bindings" and os.path.basename(f).startswith("_mojolearn")}
     if nested:
         return roots
     return roots or None
