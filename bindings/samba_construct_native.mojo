@@ -10,6 +10,7 @@ from bindings.generator_state_native import generator_init, generator_fields, ge
 from bindings.samba_state_native import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
+from bindings.py_balanced import py_call, py_setitem
 
 
 def samba_load_weights(model: PythonObject, weights: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -17,7 +18,7 @@ def samba_load_weights(model: PythonObject, weights: PythonObject, context: Pyth
     var bi = Python.import_module("builtins")
     var fields = samba_fields(model)
     var names = fields["names"]
-    if Bool(py=bi.set(names) != bi.set(weights)):
+    if Bool(py=py_call(bi.set, names) != py_call(bi.set, weights)):
         raise Error("SambaStack: weight dict mismatch; missing or unknown registry names")
     for i in range(len(names)):  # driver-loop: over ordered named parameter buffers
         var name = names[i]
@@ -27,7 +28,7 @@ def samba_load_weights(model: PythonObject, weights: PythonObject, context: Pyth
         for axis in range(len(shape)):  # driver-loop: over tensor shape metadata
             dims.append(Int(py=shape[axis]))
         _model_shape(value, dims, String(name))
-        if Int(py=context["all_finite_f32"](value._addr, value.size)) != 1:
+        if Int(py=py_call(context["all_finite_f32"], value._addr, value.size)) != 1:
             raise Error("SambaStack: " + String(name) + " is not finite")
         var target = fields["arrays"][name]
         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=target._addr)),
@@ -41,7 +42,7 @@ def samba_parameters(model: PythonObject) raises -> PythonObject:
     var result = Python.dict()
     for i in range(len(fields["names"])):  # driver-loop: over the public named parameter registry
         var name = fields["names"][i]
-        result[name] = fields["arrays"][name]
+        py_setitem(result, name, fields["arrays"][name])
     return result
 
 
@@ -86,9 +87,9 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
         if random:
             var stream = generator_next(generator)
             var plan = py_ints([Int(py=output.size), 0, low, high, Int(py=stream), kind])
-            plan.append(Float64(first))
-            plan.append(Float64(second))
-            _native_function(entries, "neural_rng")(Python.list(output._addr, unused._addr), plan)
+            _ = py_call(plan.append, Float64(first))
+            _ = py_call(plan.append, Float64(second))
+            _ = py_call(_native_function(entries, "neural_rng"), Python.list(output._addr, unused._addr), plan)
     _ = unused^
 
 
@@ -97,7 +98,7 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = Python.import_module("builtins")
     var config = args[0]
-    if not Bool(py=bi.isinstance(config, context["config_class"])):
+    if not Bool(py=py_call(bi.isinstance, config, context["config_class"])):
         raise Error("TypeError: SambaStack: config must be a SambaConfig")
     var weights = args[1]
     var generator = args[2]
@@ -105,7 +106,7 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
         raise Error("SambaStack: pass exactly one of weights= or generator=")
     var mode = args[10]
     _ = samba_entries(context, mode)
-    var accumulation = Int(py=bi.int(args[9]))
+    var accumulation = Int(py=py_call(bi.int, args[9]))
     if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
         raise Error("SambaStack: accumulation_steps must be a power of two >= 1")
     _ = samba_schedule_snapshot(args[7], context)
@@ -113,14 +114,14 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     var last = registry[len(registry) - 1]
     var n = Int(py=last["offset"]) + Int(py=last["size"])
     var fields = samba_fields(model)
-    fields["config"] = config
-    fields["numeric_mode"] = mode
-    fields["n_total"] = n
-    fields["flat"] = generation_array([n])
-    fields["names"] = Python.list()
-    fields["shapes"] = Python.dict()
-    fields["offsets"] = Python.list()
-    fields["arrays"] = Python.dict()
+    py_setitem(fields, "config", config)
+    py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "n_total", n)
+    py_setitem(fields, "flat", generation_array([n]))
+    py_setitem(fields, "names", Python.list())
+    py_setitem(fields, "shapes", Python.dict())
+    py_setitem(fields, "offsets", Python.list())
+    py_setitem(fields, "arrays", Python.dict())
     var params = Python.list()
     for i in range(len(registry)):  # driver-loop: over flat storage views in registry order
         var item = registry[i]
@@ -128,53 +129,53 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
         for axis in range(len(item["shape"])):  # driver-loop: over tensor shape metadata
             dims.append(Int(py=item["shape"][axis]))
         var value = samba_view(fields["flat"], Int(py=item["offset"]), dims, context)
-        fields["names"].append(item["name"])
-        fields["shapes"][item["name"]] = bi.tuple(item["shape"])
-        fields["offsets"].append(item["offset"])
-        fields["arrays"][item["name"]] = value
-        params.append(value)
-    fields["offsets"].append(n)
+        _ = py_call(fields["names"].append, item["name"])
+        py_setitem(fields["shapes"], item["name"], py_call(bi.tuple, item["shape"]))
+        _ = py_call(fields["offsets"].append, item["offset"])
+        py_setitem(fields["arrays"], item["name"], value)
+        _ = py_call(params.append, value)
+    _ = py_call(fields["offsets"].append, n)
     if generator is None:
-        generator = bi.object.__new__(context["generator_class"])
+        generator = py_call(bi.object.__new__, context["generator_class"])
         _ = generator_init(generator, PythonObject(0), mode)
-    fields["generator"] = generator
+    py_setitem(fields, "generator", generator)
     if weights is None:
         _samba_initialize_parameters(model, context)
     else:
         _ = samba_load_weights(model, weights, context)
-    fields["max_norm"] = PythonObject(None) if args[8] is None else bi.float(args[8])
-    var optimizer = bi.object.__new__(context["optimizer_class"])
+    py_setitem(fields, "max_norm", PythonObject(None) if args[8] is None else py_call(bi.float, args[8]))
+    var optimizer = py_call(bi.object.__new__, context["optimizer_class"])
     var opt = samba_fields(optimizer)
-    opt["_where"] = "AdamW"
-    opt["_res"] = PythonObject(None)
-    opt["_res_binding"] = PythonObject(None)
-    opt["_host_fresh"] = True
-    opt["_resident_wanted"] = PythonObject(None)
+    py_setitem(opt, "_where", "AdamW")
+    py_setitem(opt, "_res", PythonObject(None))
+    py_setitem(opt, "_res_binding", PythonObject(None))
+    py_setitem(opt, "_host_fresh", True)
+    py_setitem(opt, "_resident_wanted", PythonObject(None))
     var lazy = getenv("MOJOLEARN_OPT_LAZY_MOMENTS", "1") != "0"
-    opt["_pristine"] = lazy
-    opt["_m"] = PythonObject(None) if lazy else generation_array([n])
-    opt["_v"] = PythonObject(None) if lazy else generation_array([n])
-    opt["params"] = params
-    opt["n_total"] = n
-    opt["accumulation_steps"] = accumulation
-    opt["numeric_mode"] = mode
-    opt["lr"] = bi.float(args[3])
-    opt["betas"] = Python.tuple(bi.float(args[4][0]), bi.float(args[4][1]))
-    opt["eps"] = bi.float(args[5])
-    opt["weight_decay"] = bi.float(args[6])
-    opt["lr_schedule"] = args[7]
-    opt["maximize"] = False
-    opt["t"] = 0
-    opt["packed_"] = PythonObject(None)
-    opt["total_norm_"] = PythonObject(None)
-    opt["clip_coef_"] = PythonObject(None)
-    opt["buf_initialized"] = generation_array([len(registry)], "i")
+    py_setitem(opt, "_pristine", lazy)
+    py_setitem(opt, "_m", PythonObject(None) if lazy else generation_array([n]))
+    py_setitem(opt, "_v", PythonObject(None) if lazy else generation_array([n]))
+    py_setitem(opt, "params", params)
+    py_setitem(opt, "n_total", n)
+    py_setitem(opt, "accumulation_steps", accumulation)
+    py_setitem(opt, "numeric_mode", mode)
+    py_setitem(opt, "lr", py_call(bi.float, args[3]))
+    py_setitem(opt, "betas", Python.tuple(py_call(bi.float, args[4][0]), py_call(bi.float, args[4][1])))
+    py_setitem(opt, "eps", py_call(bi.float, args[5]))
+    py_setitem(opt, "weight_decay", py_call(bi.float, args[6]))
+    py_setitem(opt, "lr_schedule", args[7])
+    py_setitem(opt, "maximize", False)
+    py_setitem(opt, "t", 0)
+    py_setitem(opt, "packed_", PythonObject(None))
+    py_setitem(opt, "total_norm_", PythonObject(None))
+    py_setitem(opt, "clip_coef_", PythonObject(None))
+    py_setitem(opt, "buf_initialized", generation_array([len(registry)], "i"))
     var offsets = generation_array([len(registry) + 1], "i")
     var ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=offsets._addr))
     for i in range(len(registry) + 1):  # driver-loop: over registry offset metadata
         ptr[i] = Int32(Int(py=fields["offsets"][i]))
-    opt["offsets"] = offsets
-    fields["optimizer"] = optimizer
+    py_setitem(opt, "offsets", offsets)
+    py_setitem(fields, "optimizer", optimizer)
     samba_build_blocks(model, context)
-    fields["last_"] = PythonObject(None)
+    py_setitem(fields, "last_", PythonObject(None))
     return PythonObject(None)
