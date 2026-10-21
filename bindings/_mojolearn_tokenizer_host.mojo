@@ -99,6 +99,7 @@ from bindings.parallel_neural_native import parallel_neural_c
 from bindings.optimizer_lifecycle import optimizer_finalize_binding
 from bindings.sequential_native import sequential_c
 from bindings.classical_native import classical_c
+from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.pca_native import pca_c
 from bindings.generator_draw_native import generator_draw_c
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -1827,6 +1828,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[optimizer_finalize_binding]("optimizer_finalize")
         module.def_py_c_function(sequential_c, "sequential_native_call")
         module.def_py_c_function(classical_c, "classical_native_call")
+        module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
+        module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(pca_c, "pca_native_call")
         module.def_py_c_function(generator_draw_c, "generator_draw")
         module.def_py_c_function(samba_config_c, "samba_config_call")

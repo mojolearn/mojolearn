@@ -97,6 +97,7 @@ def connect(ridge_class, linear_class=None):
     from .tokenizer import _binding
     from ._x_sequence_model import _SEQUENTIAL_CONTEXT
     from .exceptions import NotFittedError
+    from ._native_classical_warnings import connect_warnings
 
     try:
         import _bz2
@@ -113,6 +114,7 @@ def connect(ridge_class, linear_class=None):
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
                    active_not_fitted_class=NotFittedError)
     context.update(classical_tag_plan=_connect_tags(), native_member_descriptor=MemberDescriptorType)
+    context.update(connect_warnings())
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
