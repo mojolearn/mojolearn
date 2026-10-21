@@ -77,6 +77,25 @@ def fval(p: PythonObject, i: Int) raises -> Float32:
     return Float32(Float64(py=p[i]))
 
 
+def py_ints(p: PythonObject) raises -> List[Int]:
+    """A Python list of integers (addresses, handles, parameters) as typed
+    Ints for a kernel entry; a conversion only, no data."""
+    var out = List[Int]()
+    for i in range(len(p)):  # small-loop(p: entry arguments): argument conversion, no data
+        out.append(Int(py=p[i]))
+    return out^
+
+
+def py_f64s(p: PythonObject) raises -> List[Float64]:
+    """A Python list of floats as typed Float64s for a kernel entry; a
+    conversion only, no data (an entry's Float32 is Float32 of this value,
+    `fval`'s rounding)."""
+    var out = List[Float64]()
+    for i in range(len(p)):  # small-loop(p: entry arguments): argument conversion, no data
+        out.append(Float64(py=p[i]))
+    return out^
+
+
 def net_of(ip: PythonObject) raises -> Net:
     """ip[0:5] = cell, D, H, L, O."""
     var net = Net(ival(ip, 0), ival(ip, 1), ival(ip, 2), ival(ip, 3), ival(ip, 4))
