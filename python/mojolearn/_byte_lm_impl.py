@@ -425,7 +425,7 @@ def _sha(binding, path):
     """The SHA-256 of the file at `path`, streamed by the binding's Mojo
     file digest (`byte_lm_file_sha256`); the file never passes through
     Python."""
-    return str(binding.byte_lm_file_sha256(str(path)))
+    return str(binding.byte_lm_file_sha256(str(path)))  # cpu-route: hashes a source or binding file (file input)
 
 
 def _binding_metadata(binding, shape):
@@ -554,7 +554,7 @@ def _gradient_outputs(shape, named):
     flat = empty((shape.n_total,), '<f4')
     by_name = {}
     if named:
-        for name, tensor_shape in zip(shape.parameter_names, shape.parameter_shapes):  # driver-loop: over model parameter tensors
+        for name, tensor_shape in zip(shape.parameter_names, shape.parameter_shapes):  # glue: one output array per model parameter tensor
             by_name[name] = empty(tuple(tensor_shape), '<f4')
     return flat, by_name
 
@@ -1012,8 +1012,7 @@ class SmallByteLanguageModelTrainer:
         with `named`, also split into one fresh array per tensor."""
         shape = state_shape(self._state)
         flat, by_name = _gradient_outputs(shape, named)
-        addresses = [addr(flat, name='out_grad')] + [addr(by_name[name], name='out_grad')  # driver-loop: over model parameter tensors
-                                                     for name in by_name]
+        addresses = [addr(flat, name='out_grad')] + [addr(by_name[name], name='out_grad') for name in by_name]  # glue: one address per model parameter tensor
         returned = self._session_binding.byte_lm_trainer_export_gradients(
             self._native_session, addresses, list(shape.native_shape), step)
         if _is_bool(returned) or not isinstance(returned, int) or returned != step:
@@ -1228,7 +1227,7 @@ class SmallByteLanguageModelTrainer:
                      addr_ro(tokens, name='ids'), addr(out_p, name='out_p'), addr(out_m, name='out_m'),
                      addr(out_v, name='out_v'), addr(flat, name='out_grad') if train else 0,
                      addr(out_flags, name='out_flags'), addr(out_loss, name='out_loss')]
-        named = [addr(by_name[name], name='out_grad') for name in by_name]  # driver-loop: over model parameter tensors
+        named = [addr(by_name[name], name='out_grad') for name in by_name]  # glue: one address per model parameter tensor
         completed = getattr(binding, _RUN_ENTRY)(addresses, named, self._parameters(train),
                                                  list(shape.native_shape))
         expected = state['completed_steps'] + int(train)
@@ -1265,7 +1264,7 @@ class SmallByteLanguageModelTrainer:
                      *self._admission_addresses(), addr(out_loss, name='out_loss'),
                      addr(out_flags, name='out_flags') if train else 0,
                      addr(flat, name='out_grad') if full else 0,
-                     *(addr(by_name[name], name='out_grad') for name in by_name)]  # driver-loop: over model parameter tensors
+                     *(addr(by_name[name], name='out_grad') for name in by_name)]  # glue: one address per model parameter tensor
         if train:
             self._grad_step = -1
         try:
