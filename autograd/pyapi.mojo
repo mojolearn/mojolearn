@@ -364,8 +364,8 @@ def ops_scalar_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, 
 
 
 def ops_shape_py[E: Exec & Movable & Deinitable, KIND: Int](sid: PythonObject, h: PythonObject) raises -> PythonObject:
-    """The dims of a tensor: [rows, cols] for a matrix, the full shape
-    for any other rank (lane ag-rankn-python)."""
+    """The dims of a tensor: [rows, cols] for a matrix, and the full
+    shape of a tensor of any other rank."""
     var p = ops_session[E, KIND](Int(py=sid))
     var dims = rn_dims(p[].shape_nd(Int(py=h)))
     var out = Python.list()
