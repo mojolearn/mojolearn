@@ -777,7 +777,7 @@ def gmm_initial_resp_host(
                 + " at row "
                 + String(i)
                 + ", which has no normalizer. At any seed a caller will"
-                " use this cannot happen; it refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather"
+                " use this cannot happen; it is refused by name rather"
                 " than divided through to a NaN, because gmm.init.resp is"
                 " a certified card stage and a computed NaN carries the"
                 " vendor's payload (IDENTITY_PATHS row 39)"
@@ -1017,7 +1017,7 @@ def gmm_initial_resp_device(
             " responsibilities with no positive sum at row "
             + String(Int(bad))
             + ", which has no normalizer. At any seed a caller will"
-            " use this cannot happen; it refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather"
+            " use this cannot happen; it is refused by name rather"
             " than divided through to a NaN, because gmm.init.resp is"
             " a certified card stage and a computed NaN carries the"
             " vendor's payload (IDENTITY_PATHS row 39)"

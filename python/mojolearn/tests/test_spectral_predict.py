@@ -118,7 +118,7 @@ def arm_nearest_neighbors(rep):
         vals = np.asarray(bad._pd_eigenvalues).copy()
         vals[1] = np.float32(-1.0)
         bad._pd_eigenvalues = Array.from_list([float(v) for v in vals], "<f4")
-        rep.raises("NN", (Exception,), "DEVIATION 2860", "a used column with 1 + theta = 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+        rep.raises("NN", (Exception,), "DEVIATION 2860", "a used column with 1 + theta = 0 is refused by name",
                    bad.predict, x[:3])
 
     rep.raises("NN", ValueError, "prediction_data=True", "predict without prediction data refused by name", plain.predict, x)

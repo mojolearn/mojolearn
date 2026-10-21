@@ -119,7 +119,7 @@ def _kernel_code(kernel, where, precomputed=False):
         return KERNEL_PRECOMPUTED
     if kernel == "precomputed":
         raise ValueError(
-            f"mojolearn {where}: kernel='precomputed' refuses by name (the reader admits F32, F16, BF16, I32 and I64); the "
+            f"mojolearn {where}: kernel='precomputed' is refused by name; the "
             "lane forms the kernel matrix on the device and takes no matrix "
             "from the caller (kernel_methods/NOT_IMPLEMENTED.tsv)"
         )
@@ -200,7 +200,7 @@ class _KernelMethodBase(NumericModeMixin):
 
 
 # Maintainer notes: `alpha` IS the Cholesky ridge (DEVIATION 1660); a kernel
-# matrix that does not factor refuses by name (the reader admits F32, F16, BF16, I32 and I64), never solved by a
+# matrix that does not factor is refused by name, never solved by a
 # least-squares fallback (DEVIATION 1662). Negative or NaN alpha and
 # non-positive gamma are refused on the Mojo host. The cosine and chi2 kernels
 # are each cell one pinned chain. `info_` is LAPACK's info from the

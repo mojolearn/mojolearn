@@ -297,7 +297,7 @@ class ElasticNet(ParamsMixin):
         # random_state is accepted and stored, scikit-learn's semantics:
         # it seeds the coordinate draw of selection='random' only and is
         # inert under 'cyclic' (sklearn ElasticNet: "Used when selection ==
-        # 'random'"). 'random' refuses by name (the reader admits F32, F16, BF16, I32 and I64) above (DEVIATION 611), so
+        # 'random'"). 'random' is refused by name above (DEVIATION 611), so
         # no fit reads it and no output bit depends on it. Refusing it broke
         # every nested Lasso(random_state=...) (the board's voting-reg and
         # stacking-reg members), so it is now accepted.

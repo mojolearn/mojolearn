@@ -300,7 +300,7 @@ _batch_decl(_rows_calls("score_samples", "predict", sl=np.s_[:256, 1:5]), "x-clu
 
 def _cluster_cosine_rows(A):
     """Columns 0-3 clipped and shifted off the origin: a zero row has no
-    cosine distance and refuses by name (the reader admits F32, F16, BF16, I32 and I64) (DEVIATION 5113)."""
+    cosine distance and is refused by name (DEVIATION 5113)."""
     return np.ascontiguousarray(np.clip(A[:, :4], -50, 50) + np.float32(3.0), dtype=np.float32)
 
 
@@ -311,7 +311,7 @@ def _(ml, X, yc, yr, Xh=None):
     2 * eps) with predict, and metric='precomputed' (DEVIATION 5114) on an
     exact integer L1 distance matrix, so pairs sit exactly at eps and the
     `<=` is reached. Rows are shifted off the origin for cosine (a zero row
-    refuses by name (the reader admits F32, F16, BF16, I32 and I64))."""
+    is refused by name)."""
     Z = _cluster_cosine_rows(X[:3000])
     m = ml.DBSCAN(eps=0.002, min_samples=5, metric="cosine", algorithm="brute",
                   prediction_data=True).fit(Z)

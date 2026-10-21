@@ -226,7 +226,7 @@ class _RecurrentBlockInference:
     weight checks, and the block's whole INFERENCE surface over the shipped
     neural binding -- `forward(x, lengths=None)` from a zero state,
     `allocate_state(B)`, `forward(x, state)` and `step(x, state)`. Only
-    `backward` refuses by name (the reader admits F32, F16, BF16, I32 and I64): the binding exports no VJP.
+    `backward` is refused by name: the binding exports no VJP.
 
     NOTHING IS OVERRIDDEN HERE EXCEPT THE BINDING AND `backward`
     (lane/stateful-cpu-decoding, 2026-09-16). Until that lane each class

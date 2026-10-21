@@ -807,7 +807,7 @@ class SpectralClustering(ParamsMixin):
     # seeded +0.0, one query at a time, so labels do not depend on the batch
     # and the GPU binding and the CPU host binding compute the same bytes.
     # Nothing is dropped (the clustering fit keeps the trivial column); a
-    # column with |mu_c| < 1e-3 refuses by name (the reader admits F32, F16, BF16, I32 and I64). How often
+    # column with |mu_c| < 1e-3 is refused by name. How often
     # predict(X_train) == labels_ holds is measured in
     # bench/results/identity_break/2026-09-15_spectral-predict/.
     @available_if(lambda self: bool(self.prediction_data) or getattr(self, "_fit_X", None) is not None)

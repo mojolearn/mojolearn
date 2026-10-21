@@ -286,7 +286,7 @@ def spectral_fit_predict_graph_host_keep(
     inserts a zero diagonal where a row lacks one, and then refuses a
     repeated `(row, col)` key by name (DEVIATIONS 775/777; RAFT's
     `coo_reduce_duplicates`, which would SUM them instead, is not implemented).
-    A non-finite or negative value refuses by name (the reader admits F32, F16, BF16, I32 and I64) by `transform_graph`.
+    A non-finite or negative value is refused by name by `transform_graph`.
 
     Returns `n_out`, the number of embedding columns."""
     if n_samples <= 0:

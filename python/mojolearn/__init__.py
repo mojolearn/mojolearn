@@ -70,7 +70,7 @@ set_numeric_mode = _backend.set_default_mode
 #: `fixed15_v1` for the transformer models of `mojolearn.models`; every
 #: other family (the Mamba models, a bare TransformerBlock) and every
 #: trainer compute `fp32_v1` when the caller names nothing, and say so. A
-#: profile named where it cannot compute refuses by name (the reader admits F32, F16, BF16, I32 and I64), never replaced;
+#: profile named where it cannot compute is refused by name, never replaced;
 #: one that was measured and failed quality is not offered at all.
 #: `weight_format=` is how weights are STORED; this is how the products are
 #: COMPUTED. See `_numeric_profile.py`.

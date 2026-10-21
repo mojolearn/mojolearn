@@ -14,7 +14,7 @@ Four claims, hashed fixture throughout:
 2. `check_knn_regress_reach_by_sabotage`: add 1000 to ONE target, the
    nearest neighbour of query 0; query 0's prediction must move by about
    `1000/k`, and every row that does NOT hold that index among its
-   neighbours must not move at all. Then `k = 0` refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+   neighbours must not move at all. Then `k = 0` is refused by name.
 3. `check_knn_regress_multi_output_layout`: `y` and `-y` as two columns;
    `out[:, 1]` is bitwise `-out[:, 0]` (IEEE negation commutes with a
    round-to-nearest serial sum and with the division), which gates the

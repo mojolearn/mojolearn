@@ -194,7 +194,7 @@ def _series_major(y, name):
 #                               float32 answers to a float32 problem, not
 #                               cuML's float64 answers.
 #
-# `d + D > 2` refuses by name (the reader admits F32, F16, BF16, I32 and I64) (`prepare_data`; cuML enforces the same
+# `d + D > 2` is refused by name (`prepare_data`; cuML enforces the same
 # bound one layer up at `arima.pyx:313`).
 #
 # Returns a `mojolearn.Array` of length `n_series` and dtype `'<u1'`

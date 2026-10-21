@@ -191,7 +191,7 @@ def kmh_validate_kernel(
 ) raises:
     """The device's five kernel kinds and polynomial degree contract."""
     if kernel == KMH_KERNEL_PRECOMPUTED:
-        raise Error(what + ": kernel='precomputed' refuses by name (the reader admits F32, F16, BF16, I32 and I64) (DEVIATION 1683)")
+        raise Error(what + ": kernel='precomputed' is refused by name (DEVIATION 1683)")
     if kernel < 0 or kernel > KMH_KERNEL_ADDITIVE_CHI2:
         raise Error(what + ": unknown kernel value " + String(kernel))
     if kernel == KMH_KERNEL_POLYNOMIAL:

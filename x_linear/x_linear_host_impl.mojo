@@ -25,7 +25,7 @@ def _fp(addr: Int) raises -> FP:
 
 
 def _finite(p: FP, count: Int, name: String) raises:
-    """The input check both columns run before a fit: NaN or infinity refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
+    """The input check both columns run before a fit: NaN or infinity is refused by name."""
     for i in range(count):
         var v = p.unsafe_load(i)
         if not (v == v) or v > Float32(3.4028234e38) or v < Float32(-3.4028234e38):

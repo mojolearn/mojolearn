@@ -310,7 +310,7 @@ def test_an_old_state_is_adopted_under_the_new_default(monkeypatch):
     # a state written under the new default carries it and is adopted as such
     new = dict(g.state_field("fixed15_v1"))
     assert g.adopt_saved(new) == "fixed15_v1"
-    # a caller who names a different profile refuses by name (the reader admits F32, F16, BF16, I32 and I64)
+    # a caller who names a different profile is refused by name
     with pytest.raises(ValueError) as e:
         g.adopt_saved({}, "fixed15_v1")
     assert "fp32_v1" in str(e.value) and "fixed15_v1" in str(e.value)
@@ -643,7 +643,7 @@ def test_a_trainer_state_with_no_field_loads_under_the_new_default():
     """SambaStack, the reader that checks the field: a state written with no
     field (every state before 2026-09-29, and every fp32_v1 state since)
     loads under the shipped default, after a real training step; a state
-    carrying fixed15_v1 refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
+    carrying fixed15_v1 is refused by name."""
     ml = _package()
     _clean_default(ml)
     assert ml.numeric_profile() == "fp32_v1"

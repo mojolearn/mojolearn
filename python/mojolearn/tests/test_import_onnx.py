@@ -94,7 +94,7 @@ def test_external_data_is_a_view_of_the_shard(tmp_path):
     w2 = g.initializers["w2"]
     assert isinstance(w2.data, memoryview) and isinstance(w2.data.obj, mmap.mmap)
     assert bytes(w2.data) == f.initializers["w2"].data
-    # a location outside the model's directory refuses by name (the reader admits F32, F16, BF16, I32 and I64)
+    # a location outside the model's directory is refused by name
     sub = tmp_path / "sub"
     sub.mkdir()
     t = fx.weight("w", (2, 2), 1, external="../escape.bin")

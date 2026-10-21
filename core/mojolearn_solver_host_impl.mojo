@@ -68,7 +68,7 @@ def linkage_fit_host_into(
             "hierarchy.pairwise_distances: n_rows=" + String(n_rows)
             + " > " + String(PAIRWISE_MAX_ROWS)
             + "; their `int nnz = m * m` (connectivities.cuh:145) overflows"
-            " and the dense connectivity matrix refuses by name (the reader admits F32, F16, BF16, I32 and I64)"
+            " and the dense connectivity matrix is refused by name"
         )
     if metric != DISTANCE_L2_SQRT_EXPANDED and metric != DISTANCE_L2_EXPANDED:
         raise Error(

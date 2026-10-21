@@ -427,7 +427,7 @@ def arima_fit_ptr_host(
 
     `exog_address` reads `batch_size * n_obs * n_exog` float32 as
     `(batch_size, n_obs, n_exog)` C order (DEVIATION 996), and is not read
-    when `n_exog == 0`. A non-finite regressor refuses by name (the reader admits F32, F16, BF16, I32 and I64)
+    when `n_exog == 0`. A non-finite regressor is refused by name
     (DEVIATION 997) before any device work.
 
     `y_ptr` reads `batch_size * n_obs` float32 with each SERIES CONTIGUOUS,

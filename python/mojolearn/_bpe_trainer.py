@@ -315,7 +315,7 @@ def json_string(s):
     reproduce it exactly: `"` and `\\` take their short escapes, every
     codepoint above 0x7E takes `\\uXXXX` with LOWERCASE hex, and everything
     else is itself. No control character can occur in a spelled token; one in
-    the PATTERN would, so it refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather than mis-escaped."""
+    the PATTERN would, so it is refused by name rather than mis-escaped."""
     out = ['"']
     for ch in s:  # cpu-route: verification oracle or fixture text, not a runtime route
         cp = ord(ch)

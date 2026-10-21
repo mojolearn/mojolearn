@@ -2869,7 +2869,7 @@ def fit_with_test(
             # (`optimal_const_for_loss.h:230-239`); the model's bias here
             # is ONE Float64 (`TAdditiveModel.bias`, the model text's one-
             # token `bias` record), so the per-dimension `SetBias` is not
-            # carried and the option refuses by name (the reader admits F32, F16, BF16, I32 and I64)
+            # carried and the option is refused by name
             raise Error(
                 "boost_from_average with loss MultiRMSE is not carried here:"
                 " its StartingPoint is per-dimension"

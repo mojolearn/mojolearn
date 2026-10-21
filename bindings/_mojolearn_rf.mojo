@@ -1343,7 +1343,7 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
 ) raises -> PythonObject:
     """Fit the cuML-implementation RandomForest regressor. Same contract; slot 2
     MUST be 0 and `y` is float32. `criterion` is MSE (2), POISSON (4),
-    GAMMA (5) or INVERSE_GAUSSIAN (6); anything else refuses by name (the reader admits F32, F16, BF16, I32 and I64)
+    GAMMA (5) or INVERSE_GAUSSIAN (6); anything else is refused by name
     (DEVIATION 407). The log criteria are DEVIATION 406's: they RUN in
     both numeric modes, comparable to cuML in neither."""
     if not _rf_params_len_ok(params):

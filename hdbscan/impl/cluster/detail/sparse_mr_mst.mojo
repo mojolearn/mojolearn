@@ -35,7 +35,7 @@ holds the GPU for seconds (the output stays partly stale and
 `synchronize` reports nothing). Every search launch is bounded to
 `SPARSE_MR_LAUNCH_MACS` multiply-adds and drained, its output is POISONED
 before the launch and every cell is folded on the device after it; a
-poisoned cell that survives refuses by name (the reader admits F32, F16, BF16, I32 and I64). The same bound runs on every column so the arithmetic
+poisoned cell that survives is refused by name. The same bound runs on every column so the arithmetic
 and the launches are one program.
 
 NON-FINITE WEIGHTS. Round 1 searches every point against every other, so

@@ -259,7 +259,7 @@ def gemm_int15_oracle(
     """**THE NORMATIVE ANSWER of `mojolearn.identical.gemm.int15i64.v1`**
     at OP_NT: `C[i, j] = ftz( f32(q_a[i] . q_b[j]) * 2^(ea[i] + eb[j]) )`.
     Row-major `m x n`. `ea` has `m` entries and `eb` has `n`. A `k` above
-    `INT15_MAX_K` refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
+    `INT15_MAX_K` is refused by name."""
     _refuse_k(k, String("gemm_int15_oracle"))
     var c = List[Float32]()
     for i in range(m):

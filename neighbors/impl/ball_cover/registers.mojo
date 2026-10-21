@@ -1506,7 +1506,7 @@ def rbc_eps_pass_max_k(
     # AND A HOLE CANONICALIZATION CANNOT CLOSE. When `actual_max > max_k` this
     # arm keeps the FIRST `max_k` hits IN EMISSION ORDER, so a 64-lane column
     # keeps a DIFFERENT SUBSET, not merely a different order. That is the
-    # MEMBERS diverging and a sort cannot repair it, so it refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+    # MEMBERS diverging and a sort cannot repair it, so it is refused by name.
     # It costs nothing today: DBSCAN never dispatches this arm
     # (`dbscan/impl/runner.mojo` returns False unconditionally), and
     # the check picks max_k from a prior count. The refusal exists so the hole

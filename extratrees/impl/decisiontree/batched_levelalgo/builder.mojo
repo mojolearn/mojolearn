@@ -268,7 +268,7 @@ def max_nodes(max_depth: Int32) -> Int:
 # frontier would pop, do nothing, and consume no budget -- their `is_leaf`
 # arm at `:456-462` writes exactly the state ours never leaves. (b) Their
 # `lower_bound` / `upper_bound` / `middle_value` members exist only for
-# `monotonic_cst`, which refuses by name (the reader admits F32, F16, BF16, I32 and I64) here (NOT_IMPLEMENTED.tsv).
+# `monotonic_cst`, which is refused by name here (NOT_IMPLEMENTED.tsv).
 # (c) Their `_add_split_node` computes the node VALUE at add time; this lane
 # computes every leaf value in one launch at the end (`SetLeafPredictions`,
 # DEVIATION 214) and that is unchanged.

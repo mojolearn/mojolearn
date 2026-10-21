@@ -973,7 +973,7 @@ class TransformerBlock(NumericModeMixin):
         the session after its first call). A CPU host binding:
         `transformer_forward_int15`, the float32 weights (the host oracle
         quantizes them by the same rule). Either way both option tails are
-        sent. A binding with neither entry refuses by name (the reader admits F32, F16, BF16, I32 and I64); there is no
+        sent. A binding with neither entry is refused by name; there is no
         silent fp32 route."""
         b, l = int(x.shape[0]), int(x.shape[1])
         if state is None:

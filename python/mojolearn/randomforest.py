@@ -207,7 +207,7 @@ _UNSUPPORTED_CRITERIA = {
 # is the answer that was asked for.
 # THE FIX IS AT THIS BOUNDARY, not in the builder: cuML's knob is now
 # carried under cuML's own name (`max_leaves=`, slot 5, unchanged), and
-# sklearn's spelling refuses by name (the reader admits F32, F16, BF16, I32 and I64) with a pointer at the surface that
+# sklearn's spelling is refused by name with a pointer at the surface that
 # does implement it.
 _MAX_LEAF_NODES_WHY = (
     "sklearn's max_leaf_nodes=k is BEST-FIRST GROWTH to exactly k leaves"
@@ -585,7 +585,7 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
 # DEVIATION 113/406's: it runs in both numeric modes and is bit-comparable to
 # cuML's in neither. `max_depth=None` matches cuML >= v26.08.00; this surface
 # substituted 16 until 2026-09-01 (DEVIATION 409, closed by aligning).
-# `max_leaf_nodes` refuses by name (the reader admits F32, F16, BF16, I32 and I64) (DEVIATION 408, see _MAX_LEAF_NODES_WHY).
+# `max_leaf_nodes` is refused by name (DEVIATION 408, see _MAX_LEAF_NODES_WHY).
 @forest_estimator("classifier")
 class RandomForestClassifier(_RandomForestBase):
     """Random forest classifier with cuML's defaults.

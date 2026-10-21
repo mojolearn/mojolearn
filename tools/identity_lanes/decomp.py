@@ -321,7 +321,7 @@ def _(ml, X, yc, yr, Xh=None):
     w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
     t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
     f = ml.PCA(n_components=0.8, svd_solver="full").fit(X[:3000])
-    # svd_solver='arpack' refuses by name (the reader admits F32, F16, BF16, I32 and I64) (merge review, 2026-09-27); this
+    # svd_solver='arpack' is refused by name (merge review, 2026-09-27); this
     # part is the 'full' arm at the same n_components it ran, the same bits
     a = ml.PCA(n_components=3, svd_solver="full").fit(X[:3000])
     mle = ml.PCA(n_components="mle", svd_solver="full").fit(X[:3000])

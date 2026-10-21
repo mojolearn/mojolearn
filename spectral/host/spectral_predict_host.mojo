@@ -159,7 +159,7 @@ def spectral_slots_from_knn(idx: List[UInt32], n_queries: Int, k: Int) -> Spectr
 
 def spectral_slots_from_dense(affinity: List[Float32], n_queries: Int, n_train: Int) raises -> SpectralSlots:
     """Slot `j` of query `q` is training row `j` with `affinity[q, j]`. A
-    non-finite or negative affinity refuses by name (the reader admits F32, F16, BF16, I32 and I64), as the fit refuses
+    non-finite or negative affinity is refused by name, as the fit refuses
     one (a negative degree has a NaN square root)."""
     var cols = List[Int32](capacity=n_queries * n_train)
     var vals = List[Float32](capacity=n_queries * n_train)

@@ -170,7 +170,7 @@ def safetensors_read_binding(value: PythonObject, name: PythonObject, bf16: Pyth
     var info = safetensors_info_binding(value, name)
     var dtype = String(info.dtype)
     if dtype != "F32" and dtype != "F16" and dtype != "BF16" and dtype != "I32" and dtype != "I64":
-        raise Error("TypeError: tensor " + String(name) + " dtype " + dtype + " refuses by name (the reader admits F32, F16, BF16, I32 and I64)")
+        raise Error("TypeError: tensor " + String(name) + " dtype " + dtype + " is refused by name")
     var bi = Python.import_module("builtins")
     var mmap = safetensors_map_binding(value)
     var begin = Int(py=value.data_start) + Int(py=info.begin)
@@ -240,7 +240,7 @@ def checkpoint_open_binding(cls: PythonObject, input_path: PythonObject, context
                 if Bool(py=entries[i].endswith(".safetensors")):
                     files.append(path.rstrip("/") + PythonObject("/") + entries[i])
             if len(files) != 1:
-                raise Error("FileNotFoundError: checkpoint holds neither model.safetensors nor model.safetensors.index.json (shard files alone are not an index)")
+                raise Error("FileNotFoundError: checkpoint holds neither model.safetensors nor model.safetensors.index.json")
     elif native_path_exists(path):
         files.append(path)
         var pieces = path.rsplit("/", 1)

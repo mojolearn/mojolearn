@@ -280,7 +280,7 @@ class PCA(NumericModeMixin):
         """DEVIATION 2368: the four model arrays are inspected through the
         buffer protocol, so the `Array` fit stores and any other float32
         C-contiguous buffer a caller assigned (the surface tests assign
-        NumPy arrays) both pass; anything else refuses by name (the reader admits F32, F16, BF16, I32 and I64). The
+        NumPy arrays) both pass; anything else is refused by name. The
         finiteness scan is `_buffer.all_finite` (native when the helper is
         loadable), the sign test is `Array.min()`."""
         views = {}
@@ -758,7 +758,7 @@ class TruncatedSVD(NumericModeMixin):
     _BINDING = "_mojolearn_estimators"
 
     #: The two names for the ONE exact arm this class runs (see
-    #: `PCA._SOLVERS`) and 'randomized'. 'arpack' refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+    #: `PCA._SOLVERS`) and 'randomized'. 'arpack' is refused by name.
     _ALGORITHMS = ("covariance_eigh", "jacobi", "randomized")
 
     def __init__(self, n_components=2, *, algorithm="covariance_eigh", n_iter=5, n_oversamples=10,

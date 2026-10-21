@@ -423,19 +423,19 @@ def arm_refusals(rep):
     p = np.zeros(4, dtype=np.float32)
 
     rep.raises("REFUSALS", ValueError, "nesterov=True needs momentum",
-               "SGD(nesterov=True, momentum=0) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "SGD(nesterov=True, momentum=0) is refused by name",
                T.SGD, p, nesterov=True)
     rep.raises("REFUSALS", ValueError, "nesterov=True needs momentum",
-               "SGD(nesterov=True, dampening!=0) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "SGD(nesterov=True, dampening!=0) is refused by name",
                T.SGD, p, momentum=0.9, dampening=0.1, nesterov=True)
     rep.raises("REFUSALS", TypeError, "amsgrad",
-               "Adam(amsgrad=True) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "Adam(amsgrad=True) is refused by name",
                T.Adam, p, amsgrad=True)
     rep.raises("REFUSALS", TypeError, "maximize must be True or False",
-               "Adam(maximize=1) refuses by name (the reader admits F32, F16, BF16, I32 and I64) (maximize=True is honored, DEVIATION 6200)",
+               "Adam(maximize=1) is refused by name (maximize=True is honored, DEVIATION 6200)",
                T.Adam, p, maximize=1)
     rep.raises("REFUSALS", TypeError, "foreach",
-               "Adam(foreach=True) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "Adam(foreach=True) is refused by name",
                T.Adam, p, foreach=True)
     rep.raises("REFUSALS", TypeError, "unexpected keyword",
                "an unknown keyword is refused rather than ignored",
@@ -449,11 +449,11 @@ def arm_refusals(rep):
                T.Adam, np.zeros(4, dtype=np.float16))
     rep.raises("REFUSALS", NotImplementedError,
                "dropout is not an OPTIMIZER option",
-               "dropout= refuses by name (the reader admits F32, F16, BF16, I32 and I64) and pointed at Generator.dropout",
+               "dropout= is refused by name and pointed at Generator.dropout",
                T.Adam, p, dropout=0.1)
     rep.raises("REFUSALS", NotImplementedError,
                "DISTRIBUTED TRAINING IS NOT COVERED",
-               "distributed= refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "distributed= is refused by name",
                T.Adam, p, distributed=True)
 
     rep.raises("REFUSALS", TypeError, "float32 only",
@@ -477,13 +477,13 @@ def arm_refusals(rep):
 
     g = np.zeros(4, dtype=np.float32)
     rep.raises("REFUSALS", NotImplementedError, "norm_type",
-               "clip_grad_norm_(norm_type=inf) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "clip_grad_norm_(norm_type=inf) is refused by name",
                T.clip_grad_norm_, g, 1.0, float("inf"))
     rep.raises("REFUSALS", NotImplementedError, "error_if_nonfinite=False",
-               "clip_grad_norm_(error_if_nonfinite=False) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "clip_grad_norm_(error_if_nonfinite=False) is refused by name",
                T.clip_grad_norm_, g, 1.0, 2.0, False)
     rep.raises("REFUSALS", ValueError, "max_norm must be > 0",
-               "clip_grad_norm_(max_norm=0) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "clip_grad_norm_(max_norm=0) is refused by name",
                T.clip_grad_norm_, g, 0.0)
 
     rep.raises("REFUSALS", NotImplementedError, "NO BACKWARD",
@@ -491,14 +491,14 @@ def arm_refusals(rep):
                T.cross_entropy, LOSS_LOGITS, LOSS_TARGETS,
                reduction="none", return_grad=True)
     rep.raises("REFUSALS", TypeError, "weight",
-               "cross_entropy(weight=...) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "cross_entropy(weight=...) is refused by name",
                T.cross_entropy, LOSS_LOGITS, LOSS_TARGETS,
                weight=np.ones(LOSS_V, dtype=np.float32))
     rep.raises("REFUSALS", TypeError, "size_average",
-               "cross_entropy(size_average=...) refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "cross_entropy(size_average=...) is refused by name",
                T.cross_entropy, LOSS_LOGITS, LOSS_TARGETS, size_average=True)
     rep.raises("REFUSALS", ValueError, "reduction=",
-               "an unknown reduction refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "an unknown reduction is refused by name",
                T.cross_entropy, LOSS_LOGITS, LOSS_TARGETS, reduction="avg")
     rep.raises("REFUSALS", ValueError, "class-PROBABILITY targets",
                "2-D targets are refused by name",
@@ -512,17 +512,17 @@ def arm_refusals(rep):
     # message is what is asserted.
     bad_target = np.array([0, 9, 1], dtype=np.int32)
     rep.raises("REFUSALS", Exception, "REFUSED",
-               "a target outside [0, vocab) refuses by name (the reader admits F32, F16, BF16, I32 and I64), with its row",
+               "a target outside [0, vocab) is refused by name, with its row",
                T.cross_entropy, LOSS_LOGITS, bad_target)
     nan_logits = LOSS_LOGITS.copy()
     nan_logits[1, 2] = np.float32("nan")
     rep.raises("REFUSALS", Exception, "REFUSED",
-               "a non-finite logit refuses by name (the reader admits F32, F16, BF16, I32 and I64) before any stage",
+               "a non-finite logit is refused by name before any stage",
                T.cross_entropy, nan_logits, LOSS_TARGETS)
     nan_grad = [np.zeros(4, dtype=np.float32)]
     nan_grad[0][2] = np.float32("inf")
     rep.raises("REFUSALS", Exception, "REFUSED",
-               "a non-finite gradient refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "a non-finite gradient is refused by name",
                T.Adam(np.zeros(4, dtype=np.float32)).step, nan_grad)
 
 

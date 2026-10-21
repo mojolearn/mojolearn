@@ -444,7 +444,7 @@ def _native_sigmoid_train(binding, dec, labels):
 # waiting for a caller (the house rule):
 #
 #     C               honored   the penalty. Must be finite and positive;
-#                               a non-finite C refuses by name (the reader admits F32, F16, BF16, I32 and I64)
+#                               a non-finite C is refused by name
 #                               (DEVIATION 636)
 #     kernel          honored   'linear', 'rbf' and 'poly'. 'poly' is the
 #                               identical linear Gram then

@@ -134,7 +134,7 @@ that NaN then enters a top-k selection. In RAFT's radix selector a NaN's
 loses a real neighbour to a garbage one; in the FAISS warp queue the
 comparison is `<` and a NaN is never less than anything, so it sorts to the
 other end. Two selectors, two different wrong answers, no error either way.
-HERE, a zero-norm row refuses by name (the reader admits F32, F16, BF16, I32 and I64) at the host entry (`cosine_zero_norm_
+HERE, a zero-norm row is refused by name at the host entry (`cosine_zero_norm_
 row` below finds it), because cosine distance to the origin is undefined
 and returning a vendor-shaped NaN for it is worse than saying so. This is
 NOT implementing their bug and it is NOT improving their algorithm: the

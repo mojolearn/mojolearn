@@ -9,7 +9,7 @@ What this file holds, on the host it runs on:
   - MLP logits from a saved checkpoint equal the four-weight constructor's,
     each row equals the row alone, and every checkpoint refusal is by name;
   - the Transformer stateless forward equals itself split by batch rows and
-    by ragged lengths, and every training entry refuses by name (the reader admits F32, F16, BF16, I32 and I64);
+    by ragged lengths, and every training entry is refused by name;
   - when the source reference bindings are also present (a CPU identity
     column, never a wheel), both equal `SmallMLPTrainer.predict_logits` and
     `TransformerBlock.forward` byte for byte.

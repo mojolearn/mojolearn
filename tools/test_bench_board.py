@@ -1080,7 +1080,7 @@ def test_neural_driver_tables_and_arm_refusals(tmp_path):
         assert bbn.precision_text(bbn.arm_setting(arm)[1])
     with pytest.raises(ValueError):
         bbn.arm_setting("ours")
-    # a CPU arm on a GPU lane (and the reverse) refuses by name (the reader admits F32, F16, BF16, I32 and I64) before torch loads
+    # a CPU arm on a GPU lane (and the reverse) is refused by name before torch loads
     np = pytest.importorskip("numpy")
     for lane, arm in (("gemm", "torch-cpu-eager-fp32"), ("mlp-infer", "torch-eager-fp32")):
         with pytest.raises(RuntimeError, match="REFUSED: arm %s" % arm):

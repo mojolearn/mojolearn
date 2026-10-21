@@ -180,7 +180,7 @@ def batched_loglike_x(
 ) raises -> LoglikeResult:
     """`:393-469`, the `MLE` arm with `host_loglike = true`: the Jones
     transform when `trans`, the Kalman filter, the host copy of the
-    log-likelihood. `method = CSS` refuses by name (the reader admits F32, F16, BF16, I32 and I64) by the caller.
+    log-likelihood. `method = CSS` is refused by name by the caller.
 
     `check_finite` is OURS and defaults to theirs' behaviour (see
     `_refuse_non_finite`). It exists for ONE caller,

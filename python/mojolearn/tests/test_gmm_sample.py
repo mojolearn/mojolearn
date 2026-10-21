@@ -101,7 +101,7 @@ def arm_whiten(rep):
 def arm_refuse(rep):
     rep.raises("REFUSE", ValueError, "call fit before sample", "sample before fit", GaussianMixture(n_components=2).sample, 4)
     m = _fit(_blobs(4, n=600), n_components=2, random_state=3)
-    rep.raises("REFUSE", Exception, "requires at least one sample", "n_samples=0 refuses by name (the reader admits F32, F16, BF16, I32 and I64) in Mojo", m.sample, 0)
+    rep.raises("REFUSE", Exception, "requires at least one sample", "n_samples=0 is refused by name in Mojo", m.sample, 0)
     rep.raises("REFUSE", TypeError, "must be an int", "a float n_samples", m.sample, 2.0)
     m.random_state = -1
     rep.raises("REFUSE", ValueError, "random_state", "a negative random_state", m.sample, 4)

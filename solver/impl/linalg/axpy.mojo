@@ -20,7 +20,7 @@ axpy computes up to the contraction the vendor picks. Order-free: each
 thread owns one cell, no reduction, so the launch shape (the block size, a
 1-D or 2-D grid) is SCHEDULING and the launch-invariance gate varies it.
 
-`incx = incy = 1` only; a stride refuses by name (the reader admits F32, F16, BF16, I32 and I64) at the caller.
+`incx = incy = 1` only; a stride is refused by name at the caller.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

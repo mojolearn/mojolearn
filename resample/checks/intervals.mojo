@@ -42,7 +42,7 @@ p-value's and bias percentile's integer counts.
 DEVIATION 1699. **BCa, CLOSED 2026-09-28 BY DEVIATION 5410.** Until then
 `method='BCa'` was refused by name in both modes for want of one function,
 `ndtri`; it now ships for the three statistics that have a jackknife arm
-(mean, std, diff_means) and refuses by name (the reader admits F32, F16, BF16, I32 and I64) for the others
+(mean, std, diff_means) and is refused by name for the others
 (`bca_validate`).
 
 WHAT SciPy DOES (`_resampling.py::_bca_interval`):

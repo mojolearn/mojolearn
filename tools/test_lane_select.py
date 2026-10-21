@@ -1174,7 +1174,7 @@ def test_a_build_script_selects_the_lanes_of_the_binding_it_compiles():
 def test_a_build_script_whose_source_is_not_literal_is_refused():
     """THE ARM THAT MUST NOT NARROW. A `mojo build` line whose source is a
     variable cannot be attributed, and a build script is lane arithmetic: the
-    path refuses by name (the reader admits F32, F16, BF16, I32 and I64) (never widened, never dropped)."""
+    path is refused by name (never widened, never dropped)."""
     path = "bindings/build_armprobe.sh"
     _with_fake(path, 'src=bindings/_mojolearn_svm.mojo\npixi run mojo build "$src" -o x.so\n')
     try:
@@ -2408,7 +2408,7 @@ def test_a_grown_host_binding_selects_the_lanes_that_run_it():
 # call. The gate is now read like the manifest: an entry edit selects the lane
 # whose entry changed, a helper edit the lanes whose entries reach it, a
 # machinery edit the gate's own lanes (never the whole registry), and an edit
-# it cannot read refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+# it cannot read is refused by name.
 
 _GATE = os.path.join("tools", "classical_host_gate.py")
 

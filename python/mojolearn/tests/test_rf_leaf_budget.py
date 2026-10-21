@@ -33,7 +33,7 @@ Run against the code as it stood on 2026-08-31, the REFUSAL arm goes RED
 and this program exits 1. `RandomForestClassifier(max_leaf_nodes=64)`
 constructed without complaint on that code, so `Report.raises` prints
 
-    FAIL max_leaf_nodes refuses by name (the reader admits F32, F16, BF16, I32 and I64) on the classifier
+    FAIL max_leaf_nodes is refused by name on the classifier
          -- IS INERT: the call was ACCEPTED
 
 for both estimator classes and for both an int and a numpy int. Nothing
@@ -74,7 +74,7 @@ THE ARMS, AND WHAT EACH ONE CAN SEE
     PROVENANCE   which binary answered and which tier this run reports
                  about, read back off the binding rather than off the
                  environment variable that asked for it
-    REFUSAL      `max_leaf_nodes` refuses by name (the reader admits F32, F16, BF16, I32 and I64) on both classes, with
+    REFUSAL      `max_leaf_nodes` is refused by name on both classes, with
                  a message that names best-first growth, names `max_leaves`
                  as cuML's different knob and names the surface where
                  sklearn's semantics do exist. THE ARM THAT GOES RED ON THE
@@ -390,7 +390,7 @@ def arm_provenance(rep):
 
 
 def arm_refusal(rep):
-    """`max_leaf_nodes` refuses by name (the reader admits F32, F16, BF16, I32 and I64), on both classes, with a message
+    """`max_leaf_nodes` is refused by name, on both classes, with a message
     that leaves the caller somewhere to go.
 
     On the code before DEVIATION 408 every row in this arm reads
@@ -412,7 +412,7 @@ def arm_refusal(rep):
     for name, cls in (("classifier", RandomForestClassifier),
                       ("regressor", RandomForestRegressor)):
         rep.raises(arm, NotImplementedError, needles,
-                   "max_leaf_nodes=64 refuses by name (the reader admits F32, F16, BF16, I32 and I64) on the %s" % name,
+                   "max_leaf_nodes=64 is refused by name on the %s" % name,
                    cls, max_leaf_nodes=64)
         rep.raises(arm, NotImplementedError, ("max_leaf_nodes",),
                    "a numpy int max_leaf_nodes is refused on the %s too"

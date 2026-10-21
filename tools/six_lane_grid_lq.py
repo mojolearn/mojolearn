@@ -24,7 +24,7 @@ Two routes per workload id, both one build per line:
         bench_board TREE_TASK_DATASETS).
 Lane and dataset names are checked against bench_board_algos LANES (RACE) and the races bench_board.plan_races
 plans on the vendor (CMD). Anything else (a lane variant `lane@variant@...`, a tree driver dataset with no board
-dataset such as rf:year or iforest:anomaly) refuses by name (the reader admits F32, F16, BF16, I32 and I64), never substituted. `@input=<variant>` is accepted
+dataset such as rf:year or iforest:anomaly) is refused by name, never substituted. `@input=<variant>` is accepted
 and recorded: the board races its own full-row block, not the registered full-input variant, so A and B share
 one input but it is not the saved recipe's input.
 """

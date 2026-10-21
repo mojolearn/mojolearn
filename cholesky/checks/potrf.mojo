@@ -260,7 +260,7 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 # both. Metal has no float64 (`mojolearn hardware limits`), so the device
 # path here is float32 end to end and `cholesky/checks/cholesky_oracle.
 # mojo::reference_potrf_f64` is the only float64 in the lane. A float64
-# request refuses by name (the reader admits F32, F16, BF16, I32 and I64) at the host entry rather than silently
+# request is refused by name at the host entry rather than silently
 # narrowed.
 #
 # The consequence a Gaussian-process caller must know: FP32 Cholesky loses

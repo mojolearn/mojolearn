@@ -297,7 +297,7 @@ def _bootstrap_unpaired(data, statistic, n_resamples, confidence_level, method,
         raise ValueError(f"mojolearn {where}: data must be two samples (x, y), got {len(data)}")
     if statistic != "diff_means":
         raise ValueError(
-            f"mojolearn {where}: statistic {statistic!r} refuses by name (the reader admits F32, F16, BF16, I32 and I64): the unpaired bootstrap's"
+            f"mojolearn {where}: statistic {statistic!r} is refused by name: the unpaired bootstrap's"
             " two-sample statistic is 'diff_means' (a one-sample statistic has no pairing; pearson needs pairs)")
     xx, _ = as_f32_c(data[0], ndim=1, name="x")
     yy, _ = as_f32_c(data[1], ndim=1, name="y")
@@ -390,7 +390,7 @@ def permutation_test(x, y=None, statistic="diff_means", n_resamples=9999,
                                     r_first, numeric_mode)
     if ptype == "pairings":
         raise ValueError(
-            f"mojolearn {where}: permutation_type='pairings' refuses by name (the reader admits F32, F16, BF16, I32 and I64): its null permutes every"
+            f"mojolearn {where}: permutation_type='pairings' is refused by name: its null permutes every"
             " sample's observation order, which for the implemented statistics (mean, std, diff_means)"
             " leaves the statistic unchanged -- the null is the observed value R times; pearson, the"
             " statistic it exists for, has no permutation arm (resample/NOT_IMPLEMENTED.tsv)")
@@ -427,7 +427,7 @@ def _permutation_samples(x, y, statistic, n_resamples, alternative, random_state
     want = "mean" if y is None else "diff_means"
     if statistic != want:
         raise ValueError(
-            f"mojolearn {where}: statistic {statistic!r} refuses by name (the reader admits F32, F16, BF16, I32 and I64); the implemented arm for "
+            f"mojolearn {where}: statistic {statistic!r} is refused by name; the implemented arm for "
             f"{'one sample' if y is None else 'two paired samples'} is {want!r}")
     if y is None:
         yy, ny = xx, 0
@@ -701,10 +701,10 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     """
     where = "resample"
     if stratify is not None:
-        raise ValueError(f"mojolearn {where}: stratify= refuses by name (the reader admits F32, F16, BF16, I32 and I64) (resample/NOT_IMPLEMENTED.tsv): "
+        raise ValueError(f"mojolearn {where}: stratify= is refused by name (resample/NOT_IMPLEMENTED.tsv): "
                          "scikit-learn's per-class allocation (_approximate_mode) breaks ties with its RNG stream")
     if sample_weight is not None:
-        raise ValueError(f"mojolearn {where}: sample_weight= refuses by name (the reader admits F32, F16, BF16, I32 and I64) (resample/NOT_IMPLEMENTED.tsv): "
+        raise ValueError(f"mojolearn {where}: sample_weight= is refused by name (resample/NOT_IMPLEMENTED.tsv): "
                          "a weighted draw is an inverse-CDF lookup over a float cumulative sum not yet pinned")
     if not arrays:
         return None

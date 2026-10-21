@@ -17,7 +17,7 @@ _UMAP_FORMAT = "mojolearn-umap-1"
 
 
 def _integer(value, name, minimum, maximum=(1 << 63) - 1):
-    # A bool is an int to `operator.index` and refuses by name (the reader admits F32, F16, BF16, I32 and I64) here; the
+    # A bool is an int to `operator.index` and is refused by name here; the
     # NumPy bool scalar is caught by its type name so a caller who still
     # passes one gets the same answer (DEVIATION 2370).
     if isinstance(value, bool) or type(value).__name__ == "bool_":
@@ -242,7 +242,7 @@ class UMAP(NumericModeMixin):
         if not isinstance(self.metric, str) or self.metric not in _METRICS:
             raise ValueError(
                 f"UMAP metric={self.metric!r} is not supported; the kNN computes "
-                f"{sorted(_METRICS)} (a callable, and every other name, refuses by name (the reader admits F32, F16, BF16, I32 and I64))")
+                f"{sorted(_METRICS)} (a callable, and every other name, is refused by name)")
         code = _METRICS[self.metric]
         kw = dict(getattr(self, "metric_kwds", None) or {})
         p = 2.0

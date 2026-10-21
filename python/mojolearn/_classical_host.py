@@ -188,7 +188,7 @@ class HostLogisticRegression(_HostBound, LogisticRegression):
     def _host_refusals(self):
         """A model with more than two classes needs the softmax link
         (`qn_softmax`, lane/logistic-multiclass, 2026-09-14); a host build
-        without it refuses by name (the reader admits F32, F16, BF16, I32 and I64) at load, not at the first predict."""
+        without it is refused by name at load, not at the first predict."""
         if len(self.classes_) > 2:
             binding = self._bind("_mojolearn_estimators")
             if not callable(getattr(binding, "qn_softmax", None)):
@@ -269,7 +269,7 @@ class HostKMeans(_HostBound, KMeans):
     (lane/kmeans-save, 2026-09-16). The arithmetic is
     `cluster/host/kmeans_oracle.mojo`, the fit's own final assignment, so a
     model fitted on a GPU labels a row on a CPU with the GPU's bits. The
-    cosine metric refuses by name (the reader admits F32, F16, BF16, I32 and I64) inside `host_validate_params`, as it is
+    cosine metric is refused by name inside `host_validate_params`, as it is
     at fit, so the refusal is the same one on both sides.
 
     `labels_` is in the file and in the hash: it is the fit's assignment of
@@ -572,7 +572,7 @@ def _merge_expansion_doors():
     binding -> its host binding) and `classical_host_formats()` (format ->
     {estimator: host class}), called here once this module is complete so
     its host classes can subclass `_HostBound`. A format or family already
-    routed refuses by name (the reader admits F32, F16, BF16, I32 and I64). This module is imported lazily (by
+    routed is refused by name. This module is imported lazily (by
     `host_model`), after the package, so every door is complete by now."""
     # By name, not by a static import: tools/lane_select.py follows static
     # imports, and a static edge here would hand every lane that reaches a

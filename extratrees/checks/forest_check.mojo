@@ -28,7 +28,7 @@ to be a with-replacement sample (duplicates, every id in range, `n_sampled`
 long, different per tree, identical per (seed, tree) twice), and requires a
 bootstrap forest to DIFFER from the no-bootstrap forest on the same data and
 seed and to equal itself on a second fit. And a sabotage: `max_samples`
-(`n_sampled_rows`) without bootstrap refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+(`n_sampled_rows`) without bootstrap is refused by name.
 """
 
 from std.testing import assert_equal, assert_true

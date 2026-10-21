@@ -29,7 +29,7 @@ dt_limit=(0.0, inf))` take no shape arguments: every constant is a profile
 constant (`mamba/IDENTICAL_MAMBA_CONTRACT.md` section 3: d_state 16, d_conv
 4, expand 2, dt_rank ceil(d_model/16), rms eps 1e-5; the Mamba-2 contract:
 d_state 128, headdim 64, ngroups 1, chunk 256, eps 1e-5), so a config field
-that names another value refuses by name (the reader admits F32, F16, BF16, I32 and I64) here.
+that names another value is refused by name here.
 
 TENSOR NAMES. The Hugging Face names per family, with `{i}` the layer
 index; the plan maps each block-dict key (the block classes' own names) to
@@ -390,7 +390,7 @@ _BYTE_LM_LAYER = [
     ("down_proj.weight", "block{i}.w_down", None),
 ]
 
-#: byte-LM config field -> the value the stack spells (anything else refuses by name (the reader admits F32, F16, BF16, I32 and I64))
+#: byte-LM config field -> the value the stack spells (anything else is refused by name)
 _BYTE_LM_FIXED = {"positional_encoding": "rotary", "rope_pairing": "rotate_half", "norm": "rmsnorm",
                   "norm_placement": "pre-norm, no final norm", "mlp": "swiglu", "bias": False,
                   "tie_word_embeddings": False}

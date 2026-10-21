@@ -387,7 +387,7 @@ def arm_c_domain_guards(ctx: DeviceContext) raises -> Int:
 
 
 def arm_d_mae_refused() raises -> Int:
-    """MAE refuses by name (the reader admits F32, F16, BF16, I32 and I64), as cuML refuses it."""
+    """MAE is refused by name, as cuML refuses it."""
     var p = _params(MAE)
     var raised = False
     try:

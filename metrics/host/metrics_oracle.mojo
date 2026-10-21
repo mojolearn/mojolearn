@@ -304,7 +304,7 @@ def host_accuracy_score(
         raise Error(
             "accuracy_score: n must be positive, got "
             + String(n)
-            + " (0 / 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64))"
+            + " (0 / 0 is refused by name)"
         )
     var count = 0
     for i in range(n):
@@ -328,7 +328,7 @@ def host_accuracy_score_ptr(
     if n <= 0:
         raise Error(
             "accuracy_score: n must be positive, got " + String(n)
-            + " (0 / 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64))"
+            + " (0 / 0 is refused by name)"
         )
     var tasks = host_predict_task_count(n)
     if n < 32768:
@@ -793,7 +793,7 @@ def _host_mutual_info(
         raise Error(
             "mutual_info_score: size must be positive, got "
             + String(size)
-            + " (0 / 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64))"
+            + " (0 / 0 is refused by name)"
         )
     var k = Int(upper - lower + 1)
     var c = host_contingency(first, second, size, lower, upper)
@@ -834,7 +834,7 @@ def host_mutual_info_ptr(
         raise Error(
             "mutual_info_score: size must be positive, got "
             + String(size)
-            + " (0 / 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64))"
+            + " (0 / 0 is refused by name)"
         )
     var k = Int(upper - lower + 1)
     if k <= 0:

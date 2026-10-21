@@ -1184,7 +1184,7 @@ def lane_floors():
 #: key that changed a SIZE says so in its first token (`rows-`, `obs-`,
 #: `steps-`, `seqlen-`, `batch-`) and MUST carry a matching @floor; every other
 #: key lands here with a sentence saying what moved. An entry whose key does
-#: name a size refuses by name (the reader admits F32, F16, BF16, I32 and I64), so this cannot become a way of opting out.
+#: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
     "linalg-eigh": "2026-10-12: Gram fixture uses explicit float32 products and ascending-row sums; BLAS and array-layout dependent input bytes removed, fixture dimensions unchanged",
     "x-metrics-regression": "2026-09-28: undefined variance-weighted scores return explicit NaN before zero-times-infinity; platform NaN sign removed at API arithmetic, fixture sizes unchanged",
@@ -3019,7 +3019,7 @@ def _(ml, X, yc, yr, Xh=None):
     be the same bytes: the lane holds them to that and records the answer
     as the number `same`, never as an assertion (a raise would read
     REFUSED). `refuses` is 1 when a contracted extent above `INT15_MAX_K`
-    refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
+    is refused by name."""
     a = np.ascontiguousarray(X[:256]).astype(np.float32)
     b = np.ascontiguousarray(X[256:256 + 128]).astype(np.float32)
     ah, al, ea = ml.linalg.quantize_int15(a)
@@ -4267,7 +4267,7 @@ def _(ml, X, yc, yr, Xh=None):
     global-norm clip and a warmup-cosine schedule: the training knobs the
     samba lane leaves at their defaults. Batches of 32 rows of 17, so each
     step is T = 512 tokens, a split clause 9.2 admits at A = 4 (64 at
-    A = 4 refuses by name (the reader admits F32, F16, BF16, I32 and I64); the admitted (T, A) pairs come from
+    A = 4 is refused by name; the admitted (T, A) pairs come from
     `training.accumulation_is_aligned`)."""
     cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64,
                          tie_embeddings=False, dropout=0.1)
@@ -4751,7 +4751,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("arima-seasonal-c")
 def _(ml, X, yc, yr, Xh=None):
     """A seasonal AR block (period 4, so rd = 5 stays inside the
-    implemented Kalman kernel; period 12 refuses by name (the reader admits F32, F16, BF16, I32 and I64) at rd = 13)
+    implemented Kalman kernel; period 12 is refused by name at rd = 13)
     and an explicit intercept."""
     series = np.ascontiguousarray(X[:512, :4].T)
     m = ml.ARIMA(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c").fit(series)

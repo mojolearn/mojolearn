@@ -677,7 +677,7 @@ class TrainedBpeVocabulary:
 # reference `_bpe_trainer.train` is a VERIFICATION oracle only
 # (lane/pyglue-text-io, 2026-10-03: Python is glue at run time), held to
 # the Mojo trainer's bytes by `pixi run check-bpe-trainer` and the
-# tokenizer surface test; `backend="python"` refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+# tokenizer surface test; `backend="python"` is refused by name.
 # `stats["backend"]` records "mojo".
 # `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break (the negative
 # control).

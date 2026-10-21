@@ -475,7 +475,7 @@ def main(out=sys.stdout):
     # d_model == n_heads*head_dim, which is exactly q_proj's row count, and
     # o_proj is its mirror. Measured on the first run of this file: a
     # transposed q_proj and a transposed o_proj are both ACCEPTED, every
-    # other transposed projection refuses by name (the reader admits F32, F16, BF16, I32 and I64). So the trap is
+    # other transposed projection is refused by name. So the trap is
     # asserted where it can fire -- on the non-square k/v pair (n_kv *
     # head_dim rows under GQA, 16 x 32 at config A) -- and the square pair
     # is recorded here as a NAMED LIMIT of shape checking, not tested as a
@@ -507,7 +507,7 @@ def main(out=sys.stdout):
     st_bad = blk.allocate_state(1, CAP)
     st_bad.k_cache = st_bad.k_cache[: len(st_bad.k_cache) // 2]
     rep.raises(arm, ValueError, "state buffer k_cache",
-               "a wrong-shape state buffer refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "a wrong-shape state buffer is refused by name",
                blk.step, np.zeros((1, 1, A_DM), np.float32), st_bad)
     st_wrong_b = blk.allocate_state(1, CAP)
     rep.raises(arm, ValueError, "batch_size",
@@ -666,7 +666,7 @@ def main(out=sys.stdout):
                    "are byte-identical to the full causal block" % W_WIN,
                    assert_bits)
     rep.raises(arm, ValueError, "window",
-               "a negative window refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "a negative window is refused by name",
                TransformerBlock, wa, n_heads=A_NH, n_kv_heads=A_NKV,
                window=-1)
     rep.raises(arm, ValueError, "window",
@@ -820,10 +820,10 @@ def main(out=sys.stdout):
                       "window %d: two backward calls are byte-identical on "
                       "all ten gradients" % win)
     rep.raises(arm, ValueError, "grad_output",
-               "a grad_output of the wrong shape refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "a grad_output of the wrong shape is refused by name",
                blk.backward, xa, xa[:, :1, :])
     rep.raises(arm, TypeError, "float64",
-               "a float64 grad_output refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
+               "a float64 grad_output is refused by name",
                blk.backward, xa, xa.astype(np.float64))
 
     # -- THE CORPUS DEBT (recorded, cannot rot -- header) ----------------

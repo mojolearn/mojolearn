@@ -119,7 +119,7 @@ def arm_refuse(rep):
     rep.raises("REFUSE", ValueError, "call fit() first", "sample_y before fit",
                GaussianProcessRegressor().sample_y, q)
     m = _fit(x, y)
-    rep.raises("REFUSE", Exception, "n_samples must be at least 1", "n_samples=0 refuses by name (the reader admits F32, F16, BF16, I32 and I64) in Mojo",
+    rep.raises("REFUSE", Exception, "n_samples must be at least 1", "n_samples=0 is refused by name in Mojo",
                m.sample_y, q, 0)
     rep.raises("REFUSE", TypeError, "must be an int", "a float n_samples", m.sample_y, q, 2.0)
     rep.raises("REFUSE", ValueError, "random_state", "random_state=None (the key is an int)",

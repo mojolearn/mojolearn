@@ -66,7 +66,7 @@ _METRICS = {"euclidean": METRIC_L2_SQRT_EXPANDED, "l2": METRIC_L2_SQRT_EXPANDED}
 #: None), max_cluster_size, allow_single_cluster, n_exemplars], `reals` `<f8`
 #: [alpha, cluster_selection_epsilon],
 #: `metric` and `cluster_selection_method` as text. A model fitted without
-#: prediction_data=True has nothing to save and refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+#: prediction_data=True has nothing to save and is refused by name.
 _HDBSCAN_FORMAT = "mojolearn-hdbscan-2"
 _HDBSCAN_INTS = 11
 _SELECTION = {"eom": SELECTION_EOM, "leaf": SELECTION_LEAF}

@@ -529,7 +529,7 @@ def check_int15_bounds_are_where_the_contract_says() raises:
     var largest = Int64(16383) * Int64(16383) * Int64(INT15_MAX_K)
     if largest >= (Int64(1) << Int64(44)):
         raise Error("the largest admitted sum is not below 2^44")
-    # A k above the bound refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+    # A k above the bound is refused by name.
     var refused = False
     try:
         var one = _const_codes(1, 1)

@@ -302,7 +302,7 @@ struct CatBoostOptions(Copyable, Movable):
     through their `NeedEstimation` arm, applied by
     `models/add_non_symmetric_tree_doc_parallel.mojo` (their
     `TAddModelDocParallel<TNonSymmetricTree>`), and written as `ntree`
-    records by `models/model_text.mojo`. `Region` refuses by name (the reader admits F32, F16, BF16, I32 and I64): no
+    records by `models/model_text.mojo`. `Region` is refused by name: no
     lane implements it. `pixi run check-grow-policy` gates the dispatch."""
 
     var max_leaves: Int

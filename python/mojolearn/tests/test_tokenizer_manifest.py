@@ -5,7 +5,7 @@ checked from SOURCE so it runs on a box with nothing built: the manifest
 declares the family, the package exports the class, the alpha API document
 names it, the build shim execs the one builder, the CPU identity gate builds
 the binding it will read back, no vocabulary or table file is tracked, and a
-missing vocabulary refuses by name (the reader admits F32, F16, BF16, I32 and I64) before any binding is loaded.
+missing vocabulary is refused by name before any binding is loaded.
 
     cd python && python3 -m mojolearn.tests.test_tokenizer_manifest
 """

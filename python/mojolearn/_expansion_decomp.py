@@ -2422,7 +2422,7 @@ _F32_EPS = 1.1920928955078125e-07
 # `_cdnmf_fast.pyx::_update_cdnmf_fast`. The NNDSVD SVD is exact (through
 # the Gram eigh) where sklearn calls randomized_svd. 'random' init and
 # shuffle use the lane's Philox stream, not numpy's. A general float beta
-# refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+# is refused by name.
 class NMF(_Base):
     """Non-negative matrix factorization ``X ~ W @ H``.
 
@@ -2722,7 +2722,7 @@ class NMF(_Base):
 # of X^T X (both of sklearn's whiten_solver values take this route); a
 # singular value below 10 float32 eps is clamped there, as sklearn's 'eigh'
 # solver clamps it. w_init defaults to a draw from the lane's Philox
-# stream, not numpy's. A callable `fun` refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+# stream, not numpy's. A callable `fun` is refused by name.
 class FastICA(_Base):
     """Independent component analysis with the FastICA algorithm.
 
@@ -3378,7 +3378,7 @@ def _exact_eigen_solver(name, who):
     """Isomap's and LLE's eigen_solver: 'auto' and 'dense' name an exact
     solve, which is what runs (LLE's 'auto' past 200 rows: shift-invert
     subspace iteration to convergence, `_lle_smallest`). 'arpack' (a
-    Lanczos) is a different algorithm and refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather than run
+    Lanczos) is a different algorithm and is refused by name rather than run
     as another solve (a silent substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
     if name == "arpack":
         raise NotImplementedError(
@@ -4614,7 +4614,7 @@ def _check_sparse_algos(fit_algorithm, transform_algorithm):
 # `_BaseSparseCoding._transform`. The initial SVD is exact (QR + one-sided
 # Jacobi); a resampled unused atom is drawn from the Philox stream.
 # fit_algorithm 'lars' solves its Lasso by coordinate descent (the same
-# optimum). callback refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+# optimum). callback is refused by name.
 class DictionaryLearning(_SparseCoding):
     """Learn a dictionary in which the data has a sparse representation.
 
@@ -5577,7 +5577,7 @@ def _metric_spec(metric, p=2, metric_params=None, who="metric"):
     """sklearn's metric name (and minkowski p) as (kind, p) for `_dist`:
     kind 0 is Euclidean (sqrt of the squared distance cell), the rest
     x_decomp/cells.mojo `pdist_cell` (DEVIATION 5319). A callable or any
-    other name refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
+    other name is refused by name."""
     if metric_params:
         extra = set(metric_params) - {"p"}
         if extra:
@@ -5774,7 +5774,7 @@ def _top_eig(k, A, nc, topk=False):
 # (one source per thread), the kernel -0.5 * D^2 centered, its top
 # eigenpairs (Jacobi eigh). path_method 'FW' runs the same Dijkstra
 # (x_decomp/NOT_IMPLEMENTED.tsv: deliberately divergent). Metrics per
-# DEVIATION 5319. A callable or any other metric refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+# DEVIATION 5319. A callable or any other metric is refused by name.
 class Isomap(_Base):
     """Isomap embedding: kernel PCA on geodesic distances.
 

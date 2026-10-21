@@ -107,7 +107,7 @@ comptime IDN_SIL_NO_WAIT = (
 
 
 #: `ML::distance::DistanceType` (cuml/common/distance_type.hpp): the one
-#: arm cuML's default takes. Every other value refuses by name (the reader admits F32, F16, BF16, I32 and I64).
+#: arm cuML's default takes. Every other value is refused by name.
 comptime DISTANCE_L2_SQRT_UNEXPANDED = 5
 
 #: `std::numeric_limits<value_t>::max()` for Float32 (:59, :253).

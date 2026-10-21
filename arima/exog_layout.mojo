@@ -24,7 +24,7 @@ checks `exog` with `ensure_all_finite=False` (`arima.pyx:344-351`,
 `:705-712`) and has no missing-value arm for it: a NaN regressor goes
 through the gemm into `obs_intercept` and makes the prediction, the
 innovation and the log-likelihood NaN with the vendor's payload, silently.
-A non-finite `y` refuses by name (the reader admits F32, F16, BF16, I32 and I64) here (`_refuse_non_finite`); the
+A non-finite `y` is refused by name here (`_refuse_non_finite`); the
 regressors take the same rule, naming the series, row and regressor.
 """
 from std.math import isfinite
@@ -53,7 +53,7 @@ def exog_filter_layout(
                         "ARIMA: " + name + " contains a non-finite value at series "
                         + String(b) + ", row " + String(t) + ", regressor " + String(i)
                         + "; exogenous regressors have no missing-value arm and a"
-                        + " non-finite one refuses by name (the reader admits F32, F16, BF16, I32 and I64) (DEVIATION 997)"
+                        + " non-finite one is refused by name (DEVIATION 997)"
                     )
                 out[b * n_exog * n_rows + i * n_rows + t] = v
     return out^
