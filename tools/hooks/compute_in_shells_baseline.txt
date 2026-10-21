@@ -2,16 +2,3 @@
 # One row per hit: path:line: code. A hit is grandfathered by a row with the same path and code text;
 # the line number is informational. Generated once from main; the thin-* lanes remove rows as they move
 # the work into kernel files (python3 tools/hooks/no_compute_in_shells.py --prune-baseline). Never add a row.
-autograd/program_pyapi.mojo:76: for k in range(n):  # native input marshaling: elements supplied as Python scalar objects
-bindings/_mojolearn_tokenizer_host.mojo:515: for k in range(n):
-bindings/_mojolearn_tokenizer_host.mojo:635: for k in range(n):
-bindings/_mojolearn_tokenizer_host.mojo:554: for k in range(m):
-bindings/_mojolearn_tokenizer_host.mojo:682: for s in range(n):
-bindings/_mojolearn_tokenizer_host.mojo:1103: for i in range(len(entries)):
-bindings/_mojolearn_tokenizer_host.mojo:1117: for i in range(len(pairs)):
-arima/k3_df_probe.mojo:32: ctx.enqueue_function[k3_df_parts_kernel](
-arima/k3_df_probe.mojo:37: ctx.enqueue_function[k3_df_finish_kernel](
-arima/k3_df_probe.mojo:42: ctx.enqueue_function[k3_df_gradient_kernel](
-dbscan/core_device.mojo:106: ctx.enqueue_function[_core_flag_kernel](
-dbscan/core_device.mojo:133: ctx.enqueue_function[_core_gather_kernel](
-bindings/sequential_inputs.mojo:155: for k in range(n):  # native input marshaling: nested scalar/container values become native storage
