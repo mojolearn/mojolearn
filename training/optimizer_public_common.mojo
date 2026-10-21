@@ -5,8 +5,9 @@
 (training/host/optimizer_public_host.mojo). No Python here.
 
 `mojolearn.SGD` / `Adam` / `AdamW` (python/mojolearn/_training_impl.py)
-check their arguments in Python and then make ONE native call per public
-method. What used to be Python moved here (lane neural-optimizers,
+make ONE native call per public method: the door
+(bindings/optimizer_public_door.mojo) reads the optimizer and the caller's
+tensors, refuses by name, and calls one entry here or in its siblings. What used to be Python moved here (lane neural-optimizers,
 2026-10-21), the same operations in the same order:
 
   * the parameter TRAVERSAL: the registry's flat buffer is the caller's
