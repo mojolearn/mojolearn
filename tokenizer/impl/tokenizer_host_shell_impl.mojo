@@ -15,7 +15,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 from core.hostptr import i32_ptr
-from autograd.model_verify import sha256_hex
+from core.sha256 import sha256_hex
 from tokenizer.encoding import (
     GPT2_ENDOFTEXT,
     BpeTokenizer,
