@@ -150,6 +150,31 @@ def test_native_sequential_torch_parameters_and_views_avoid_array_protocol(dtype
     assert out.params_.tobytes() == expected.tobytes()
 
 
+def test_native_sequential_refuses_torch_subclass_before_tensor_properties():
+    import mojolearn as ml
+    entered = []
+
+    class Foreign(torch.Tensor):
+        @property
+        def dtype(self):
+            entered.append("dtype")
+            raise AssertionError("Python Tensor subclass property entered native execution")
+
+        def data_ptr(self):
+            entered.append("data_ptr")
+            raise AssertionError("Python Tensor subclass method entered native execution")
+
+    state = _module("float32").state_dict()
+    state["0.weight"] = state["0.weight"].as_subclass(Foreign)
+    entered.clear()
+    out = ml.Sequential().linear(H).layer_norm().linear(O)
+    trace = audit_native_call(out.load_state_dict, state)
+    assert isinstance(trace.exception, TypeError), trace.report()
+    for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+        assert not trace.report()[key], trace.report()
+    assert entered == []
+
+
 @pytest.mark.parametrize("dtype", DTYPES)
 def test_session_load_torch_state_dict(dtype):
     from mojolearn import ops

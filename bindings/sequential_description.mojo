@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential model-description and option metadata."""
 from std.python import Python, PythonObject
+from bindings.sequential_admission import sequential_integer, sequential_admit_value
 
 
 def sequential_fields(value: PythonObject) raises -> PythonObject:
@@ -8,9 +9,7 @@ def sequential_fields(value: PythonObject) raises -> PythonObject:
 
 
 def _integer(value: PythonObject, context: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
-    return not Bool(py=b.isinstance(value, b.bool)) and (
-        Bool(py=b.isinstance(value, b.int)) or Bool(py=b.isinstance(value, context["integer"])))
+    return sequential_integer(value, context)
 
 
 def _positive(value: PythonObject, name: String, low: Int, context: PythonObject) raises -> Int:
@@ -22,6 +21,7 @@ def _positive(value: PythonObject, name: String, low: Int, context: PythonObject
 def _shape(value: PythonObject, name: String, infer: Bool, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var source = b.tuple(value)
+    sequential_admit_value(source, context)
     if len(source) < 1 or len(source) > 6:
         raise Error(name + " must list 1 to 6 dimensions")
     var out = Python.list()

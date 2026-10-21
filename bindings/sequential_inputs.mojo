@@ -70,7 +70,7 @@ def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises ->
     var dummy_size = 0
     _promote(dummy_kind, dummy_size, kind, size)
     var dtype = context["numeric_dtypes"][Python.tuple(kind, size)]
-    if len(prefix) > 0 and kind != "b":
+    if prefix.byte_length() > 0 and kind != "b":
         dtype = PythonObject(prefix + kind + String(size))
     if Bool(py=view.contiguous):
         # Both C and Fortran contiguous buffers are borrowed without a copy.
@@ -127,10 +127,10 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
     if Bool(py=b.isinstance(value, context["ndarray"])) or Bool(py=b.isinstance(value, context["scalar_type"])):
         _array_values(value, depth, dims, values, kind, size, leaf_depth, context)
     elif b.type(value) is context["array_class"]:
-        var view = b.object.__getattribute__(value, "_mv")
-        var shape = b.object.__getattribute__(value, "shape")
-        var dtype = b.object.__getattribute__(value, "dtype")
-        var order = b.object.__getattribute__(value, "order")
+        var view = context["array_fields"]["_mv"](value, context["array_class"])
+        var shape = context["array_fields"]["shape"](value, context["array_class"])
+        var dtype = context["array_fields"]["dtype"](value, context["array_class"])
+        var order = context["array_fields"]["order"](value, context["array_class"])
         var array = context["ndarray"](shape, dtype=dtype, buffer=view, order=order)
         _array_values(array, depth, dims, values, kind, size, leaf_depth, context)
     elif b.type(value) is b.memoryview or b.type(value) is context["array_type"] or b.type(value) is b.bytearray:
@@ -168,10 +168,10 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
     if Bool(py=b.isinstance(value, context["ndarray"])):
         return value
     if b.type(value) is context["array_class"]:
-        var view = b.object.__getattribute__(value, "_mv")
-        var shape = b.object.__getattribute__(value, "shape")
-        var dtype = b.object.__getattribute__(value, "dtype")
-        var order = b.object.__getattribute__(value, "order")
+        var view = context["array_fields"]["_mv"](value, context["array_class"])
+        var shape = context["array_fields"]["shape"](value, context["array_class"])
+        var dtype = context["array_fields"]["dtype"](value, context["array_class"])
+        var order = context["array_fields"]["order"](value, context["array_class"])
         return context["ndarray"](shape, dtype=dtype, buffer=view, order=order)
     if b.type(value) is b.memoryview or b.type(value) is context["array_type"] or b.type(value) is b.bytearray:
         return _buffer(value, context, samples)

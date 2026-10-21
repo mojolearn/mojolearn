@@ -10,6 +10,7 @@ from bindings.sequential_execution import sequential_entries, sequential_fit, se
 from bindings.sequential_weights import sequential_parameter_layers, sequential_load_weights
 from bindings.sequential_checkpoint import sequential_save, sequential_load_checkpoint
 from autograd.program_arrays import initialize_program_arrays
+from bindings.sequential_admission import sequential_admit
 
 
 def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -19,6 +20,7 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var operation = String(call[1])
         var args = call[2]
         var context = call[3]
+        sequential_admit(model, operation, args, context)
         var result = PythonObject(None)
         if operation == "initialize":
             initialize_program_arrays()
