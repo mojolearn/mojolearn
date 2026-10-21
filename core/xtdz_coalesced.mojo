@@ -31,6 +31,7 @@ from core.blocked_moments import bm_column_mean
 
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
@@ -226,6 +227,8 @@ def xty_tiled(
     partials here and SYNCHRONIZES before releasing them. `n_rows == 0`
     launches no pass 1: every column folds no tile, `0.0` (the mean `0 / 0`,
     as the one-block kernels it replaced stored)."""
+    # removed-define refusals (lane debt-block-per-n, 2026-10-21; docs/TOMBSTONES.md)
+    comptime assert not (is_defined["MOJOLEARN_IDN_XTY_TILED_OFF"]() or is_defined["MOJOLEARN_PCA_FAST_COLMEAN_OFF"]()), "removed: IDN_XTY_TILED_OFF / PCA_FAST_COLMEAN_OFF selected a column mean or A^T b with one block per column walking all n rows (or its STATS_TPB-chain twin); the row-tile order is the only one"
     if n_cols < 1:
         return
     var tiles = xty_tiles(n_rows)

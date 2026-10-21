@@ -1676,6 +1676,7 @@ def qntm_tiled_into(
     Asynchronous. Lane debt-block-per-n (2026-10-21): this replaced
     `xtdz_multi_kernel` / `xty_kernel`, one block per cell walking all n
     rows, wherever the gradient took them."""
+    comptime assert not (is_defined["MOJOLEARN_QN_TILED_MULTI_OFF"]() or is_defined["MOJOLEARN_QN_TILED_MULTI_ALL"]()), "removed (lane debt-block-per-n, 2026-10-21): QN_TILED_MULTI_OFF selected xtdz_multi_kernel (one block per gradient cell walking all n rows) and QN_TILED_MULTI_ALL is now the rule"
     var cd = C * d
     if cd < 1:
         return

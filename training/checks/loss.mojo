@@ -1523,6 +1523,7 @@ def identical_ce_forward_into(
     head is 2.1 GB per buffer at `N = 4096`. **Only L12 folds over `n_rows`**,
     and it folds `[N]` floats rather than `[N, V]`.
     """
+    comptime assert not is_defined["MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL"](), "removed (lane debt-block-per-n, 2026-10-21): the REDUCE_SERIAL sabotage folded the batch losses in one thread of one block, the forbidden serial shape"
     # DEVIATION 1495: contract section 8, on the DEVICE path. Measured
     # missing by loss_check clause (f) -- a planted NaN reached 40
     # recorded cells, first at `ce.max`. This is the FIRST statement in

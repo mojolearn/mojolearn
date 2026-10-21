@@ -464,6 +464,7 @@ def _column_variance(
     """numpy's `var(axis=0)` (ddof 0) of `m`, IN PLACE over `m`: the column
     mean (`column_mean_launch`), the centering (`shift_columns_kernel`),
     the pinned square, then the column mean of the squares."""
+    comptime assert not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_TSVD_FAST_COLVAR_OFF"]()), "removed (lane debt-block-per-n, 2026-10-21): IDN_DECOMP_MEAN_LAUNCH_OFF / TSVD_FAST_COLVAR_OFF chose a column mean with one block per column walking all n rows (or its STATS_TPB-chain twin); the row-tile order is the only one"
     var cells = n_rows * n_cols
     comptime if IDN_COLVAR_FUSED:
         # T2: the mean (xty_tiled), then the centered squares' mean in the
