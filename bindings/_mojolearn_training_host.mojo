@@ -92,6 +92,12 @@ from core.mojolearn_training_host_impl import (
 )
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.optimizer_public_host_pyapi import (
+    optimizer_public_accumulate_host_c, optimizer_public_clip_host_c, optimizer_public_io_host_c,
+    optimizer_public_step_host_c, optimizer_public_zero_host_c, optimizer_resident_close_host_binding,
+    optimizer_resident_download_host_binding, optimizer_resident_open_host_binding,
+    optimizer_resident_upload_host_binding,
+)
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
@@ -761,6 +767,15 @@ def build__mojolearn_training_host() -> PythonObject:
         module.def_function[training_numeric_mode_binding]("training_numeric_mode")
         module.def_function[training_vendor_binding]("training_vendor")
         module.def_function[optimizer_step_binding]("optimizer_step")
+        module.def_py_c_function(optimizer_public_step_host_c, "optimizer_public_step")
+        module.def_py_c_function(optimizer_public_io_host_c, "optimizer_public_io")
+        module.def_py_c_function(optimizer_public_clip_host_c, "optimizer_public_clip")
+        module.def_py_c_function(optimizer_public_accumulate_host_c, "optimizer_public_accumulate")
+        module.def_py_c_function(optimizer_public_zero_host_c, "optimizer_public_zero")
+        module.def_function[optimizer_resident_open_host_binding]("optimizer_resident_open")
+        module.def_function[optimizer_resident_close_host_binding]("optimizer_resident_close")
+        module.def_function[optimizer_resident_download_host_binding]("optimizer_resident_download")
+        module.def_function[optimizer_resident_upload_host_binding]("optimizer_resident_upload")
         module.def_function[ce_loss_binding]("ce_loss")
         module.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         module.def_function[mlp_relu_backward_binding]("mlp_relu_backward")

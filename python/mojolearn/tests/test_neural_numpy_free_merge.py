@@ -34,12 +34,19 @@ def test_ring_order_and_linear_alias():
 def test_accumulation_packs_strides_and_plain_buffers(monkeypatch):
     captured = []
     class Binding:
-        def accumulate(self, addresses, params):
-            n, count, tokens = params
-            captured.append(list((ctypes.c_float * (n * count)).from_address(addresses[1])))
-            output = (ctypes.c_float * n).from_address(addresses[0])
-            for i in range(n):
-                output[i] = i + 20  # Sentinel native result, no CPU gradient math.
+        def optimizer_public_accumulate(self, in_addrs, nbytes, out_addrs, count, tokens):
+            # in_addrs: microbatch-major, one address per tensor; nbytes per tensor
+            seen = []
+            for k, a in enumerate(in_addrs):
+                seen += list((ctypes.c_float * (nbytes[k % len(nbytes)] // 4)).from_address(a))
+            captured.append(seen)
+            at = 20
+            for a, b in zip(out_addrs, nbytes):
+                output = (ctypes.c_float * (b // 4)).from_address(a)
+                for i in range(b // 4):
+                    output[i] = at  # Sentinel native result, no CPU gradient math.
+                    at += 1
+            return at - 20
     monkeypatch.setattr(training, '_load', lambda mode: Binding())
     a = np.arange(12, dtype=np.float32).reshape(3, 4)[:, ::2]
     result = training.accumulate_grads([a, a + 2], tokens=None)
