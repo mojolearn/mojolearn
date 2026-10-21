@@ -9,7 +9,7 @@ from autograd.ops_api import ops_session
 from autograd.program_pyapi import ProgramInput, _integer, ops_program_fit_native_py
 from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
 from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
-from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, ops_load_state_py
+from autograd.model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
 from autograd.program_save_pyapi import ops_program_save_native_py
 from bindings.native_json import native_path
 from autograd.weight_frontend_pyapi import ops_weights_native_py

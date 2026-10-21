@@ -59,7 +59,7 @@ from autograd.import_resolve import onnx_resolve_py
 # the lowering onto session operations and the GraphIR-from-words handle (autograd/import_lower.mojo)
 from autograd.import_lower import onnx_import_py, onnx_from_words_py
 from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from autograd.model_checkpoint import (
+from autograd.model_checkpoint_pyapi import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
     ops_save_state_py, ops_load_program_py, ops_save_program_py,
 )
