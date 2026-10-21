@@ -253,21 +253,13 @@ def fast_bpe_trained_copy_into(
     left_address: Int,
     right_address: Int,
 ) raises:
-    """`bpe_trained_copy`'s work, the host binding's word for word: token bytes in rank order,
-    lengths, merges."""
+    """`bpe_trained_copy`'s work: token bytes in rank order, lengths, merges, as the host binding
+    writes them. `fast_vocab_from_merges` fills the arena in rank order (token k's bytes start
+    where token k - 1's end), so each array is one copy."""
     var arena = _u8_ptr(arena_address)
     var lengths = _i64_ptr(lengths_address)
-    var at = 0
-    for id in range(v.n_tokens()):
-        var m = v.length[id]
-        var src = v.offset[id]
-        for i in range(m):
-            arena[at + i] = v.arena[src + i]
-        at += m
-        lengths[id] = Int64(m)
+    memcpy(dest=arena, src=v.arena.unsafe_ptr(), count=len(v.arena))
+    memcpy(dest=lengths, src=v.length.unsafe_ptr().bitcast[Int64](), count=v.n_tokens())
     if nm > 0:
-        var left = _i64_ptr(left_address)
-        var right = _i64_ptr(right_address)
-        for k in range(nm):
-            left[k] = Int64(v.merge_left[k])
-            right[k] = Int64(v.merge_right[k])
+        memcpy(dest=_i64_ptr(left_address), src=v.merge_left.unsafe_ptr().bitcast[Int64](), count=nm)
+        memcpy(dest=_i64_ptr(right_address), src=v.merge_right.unsafe_ptr().bitcast[Int64](), count=nm)

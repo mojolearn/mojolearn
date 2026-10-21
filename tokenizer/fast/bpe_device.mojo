@@ -463,7 +463,7 @@ def bpe_apply_kernel(
 
 
 @always_inline
-def _rank(text: U8P, at: Int, cnt: Int, arena: U8P, toff: I64P, tlen: I64P, buckets: I64P, tmask: Int) -> Int:
+def _rank(text: U8P, at: Int, cnt: Int, arena: U8P, toff: I64P, tlen: I64P, buckets: I64P, tmask: Int) -> Int:  # device-helper: the encode kernel probes the rank table per piece
     """RankTable.rank on the device: the same FNV-1a hash, the same linear probe."""
     if cnt <= 0:
         return -1
