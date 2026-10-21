@@ -49,6 +49,11 @@ for b in $BOX_BUILDS; do case "$b" in
 esac; done
 wait
 find python/mojolearn -name "_mojolearn_native*.so" -exec ls -l {} \; | awk '{print $5, $9}' > $O/merged-files.txt; st "merged files: $(wc -l < $O/merged-files.txt)"
+# The owned host math helper: a source checkout has none until the tree's own recipe
+# builds it (packaging/portable_math/stage.py; the wheel ships it). Without it every
+# CPU-arm lane refuses with "libMojolearnMath.so: cannot open" (2026-10-21 AMD run).
+case "$(uname -s)" in Darwin) MATHLIB=python/mojolearn/.dylibs/libMojolearnMath.dylib ;; *) MATHLIB=python/mojolearn/.libs/libMojolearnMath.so ;; esac
+PYTHONPATH=packaging/portable_math pixi run -q python -c "import pathlib, stage; stage.build(pathlib.Path('$MATHLIB'))" > $O/mathlib.log 2>&1; st "MATHLIB rc=$? $(ls -l $MATHLIB 2>/dev/null | awk '{print $5}') bytes"
 export PYTHONPATH=$PWD/python
 ( cd / && MOJOLEARN_NUMERIC_MODE=identical $PY -m mojolearn verify > $O/verify-identical.log 2>&1; st "VERIFY identical rc=$? $(grep -m1 '^RESULT' $O/verify-identical.log | cut -c1-200)" )
 ( cd / && MOJOLEARN_NUMERIC_MODE=fast $PY -m mojolearn verify > $O/verify-fast.log 2>&1; st "VERIFY fast rc=$? $(grep -m1 '^RESULT' $O/verify-fast.log | cut -c1-200)" )
