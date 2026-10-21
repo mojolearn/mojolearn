@@ -2328,6 +2328,42 @@ def test_a_module_edit_confined_to_named_definitions_is_placed():
     assert "_M" not in runs, "constructing _M runs no changed code; only _M.neg does"
 
 
+def test_python_caller_closure_ignores_documentation_but_keeps_string_dispatch():
+    """Nested docstrings used to re-enter the stripped tree through source
+    spans and connect every host class to host_model. Real getattr strings
+    and direct calls must still propagate an edit."""
+    path = "python/mojolearn/_probe_fake_module.py"
+    text = '''
+def changed():
+    return 1
+
+class Documented:
+    def method(self):
+        """The changed function is documented here, never called."""
+        # changed is not executed here either.
+        return 2
+
+def direct():
+    return changed()
+
+def dispatched(module):
+    return getattr(module, "changed")()
+'''
+    saved = lane_select._read.cache.get(path)
+    lane_select._read.cache[path] = text
+    try:
+        closed, runs = lane_select._module_closure(
+            path, lane_select._strip_docstrings(ast.parse(text)), {"changed"})
+    finally:
+        if saved is None:
+            lane_select._read.cache.pop(path, None)
+        else:
+            lane_select._read.cache[path] = saved
+    assert "Documented" not in closed, closed
+    assert {"changed", "direct", "dispatched"} <= closed, closed
+    assert {"changed", "direct", "dispatched"} <= runs, runs
+
+
 def test_a_helper_added_to_a_module_every_lane_reaches_selects_its_callers():
     """The lane/algos-neighbors `_buffer.py` shape, on the real files: a new
     helper, and a real estimator (neighbors.NearestNeighbors) that calls it.
@@ -2440,12 +2476,15 @@ def test_a_binding_that_gained_imported_and_parametric_exports_is_read_as_additi
 
 def test_a_grown_host_binding_selects_the_lanes_that_run_it():
     """A host binding has no `binding_use` row of its own; before 2026-09-27 a
-    grown host binding selected NO lane. Replayed on the gp host binding."""
+    grown host binding selected NO lane. Replayed on the gp host builder:
+    since be1b6e817 the entry shim owns PyInit and calls this registration
+    function, so new exports belong in the builder's body."""
     path = "bindings/_mojolearn_gp_host.mojo"
     old = lane_select._read(path)
-    init = re.search(r"^def PyInit__mojolearn_gp_host\b", old, re.M)
+    init = re.search(r"^def build__mojolearn_gp_host\b", old, re.M)
+    assert init, "the gp host builder changed shape; update this replay"
     first = re.search(r"^(\s*)(\w+)\.def_function\[[^\n]*\n", old[init.start():], re.M)
-    assert init and first, "the gp host binding changed shape; update this replay"
+    assert first, "the gp host builder no longer registers exports; update this replay"
     at = init.start() + first.end()
     new = (old[:init.start()] + "def probe_export_binding(x: PythonObject) raises -> PythonObject:\n"
            "    return x\n\n\n" + old[init.start():at]

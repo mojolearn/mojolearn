@@ -4894,7 +4894,6 @@ def _module_closure(rel, tree, names, runs=None):
     changed code (all of them when None)."""
     if tree is None:
         return f"{rel} does not parse"
-    source = _read(rel)
     affected = set(names)
     classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
     changed = True
@@ -4905,7 +4904,15 @@ def _module_closure(rel, tree, names, runs=None):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 if node.name in affected:
                     continue
-                seg = ast.get_source_segment(source, node) or ast.dump(node)
+                # The caller supplies an AST with docstrings removed. Reading
+                # the original source span here brought nested docstrings and
+                # comments back: _HostBound's documentation names host_model,
+                # which made every host class appear to call an edited model
+                # route. The import-time ABI connection then widened an
+                # unrelated qr/helper edit to every lane. Read code from the
+                # stripped AST; ordinary string literals still count for
+                # getattr and table dispatch.
+                seg = ast.unparse(node)
                 if words.search(seg):
                     affected.add(node.name)
                     changed = True
@@ -4917,7 +4924,7 @@ def _module_closure(rel, tree, names, runs=None):
             if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__all__"
                                                     for t in node.targets):
                 continue
-            seg = ast.get_source_segment(source, node) or ""
+            seg = ast.unparse(node)
             if words.search(seg):
                 for sub in ast.walk(node):
                     if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Store) \
