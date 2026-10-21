@@ -48,14 +48,15 @@ Each ran 9 of 9 fixtures STABLE at `--repeats 2` on the Mac (Metal) build of int
 - `sequence-onnx-import`: mojolearn.import_model on an ONNX file: `onnx_import`, the Mojo ONNX reader
 - `sequence-program-save-load`: ops.Program.save and Session.load_program (the public `ops.Program` class)
 - `transformer-decode-load-state`: TransformerDecodeSession.load_state: `transformer_decode_session_load_state`
+- `x-decomp-rsvd-rank-deficient`: randomized_svd, PCA and TruncatedSVD (randomized) of a rank-deficient matrix: the live-column compaction (`x_decomp_order_small`, `x_decomp_dev_order_small`)
 
 ## Fault-injection arms added (tools/identity_lanes/coverage_sabotage.tsv)
 
-One source patch per changed kernel file that no arm reached, each a value fault in the changed definitions (a float one ulp off, an index permuted, a byte flipped), applied only to a scratch copy. `python3 tools/coverage_sabotage.py plan --arm <arm>` prints the build and the two identity_break runs, and `check` requires every named lane to read MOVED or REFUSED on the sabotaged build. RUN OWED: no arm has been built or run yet (lanes never compile); `apply-check` passes on this commit.
+One source patch per changed kernel file that no arm reached, each a value fault in the changed definitions (a float one ulp off, an index permuted, a byte flipped), applied only to a scratch copy. `python3 tools/coverage_sabotage.py plan --arm <arm>` prints the build and the two identity_break runs, and `check` requires every named lane to read MOVED or REFUSED on the sabotaged build. Every arm was built and run: see Arms proven below.
 
 | arm | patch | bindings | lanes |
 |---|---|---|---|
-| `coverage-core-array_helpers_impl` | `core/checks/sabotage/coverage_array_helpers_impl.patch` | build, build_core_host | `x-metrics-search`, `trees-adaboost-clf`, `trees-adaboost-reg` |
+| `coverage-core-array_helpers_impl` | `core/checks/sabotage/coverage_array_helpers_impl.patch` | build, build_core_host | `x-metrics-search`, `trees-adaboost-clf` |
 | `coverage-core-hotpath_impl` | `core/checks/sabotage/coverage_hotpath_impl.patch` | build, build_core_host | `x-metrics-splitters`, `cross-val`, `x-lasso-cv` |
 | `coverage-core-hotpath_impl_rows` | `core/checks/sabotage/coverage_hotpath_impl_rows.patch` | build, build_core_host | `x-metrics-splitters`, `sequence-mlp`, `x-prep-user-objects` |
 | `coverage-core-host_helpers_impl` | `core/checks/sabotage/coverage_host_helpers_impl.patch` | build_core_host, build_forest_host | `rf-clf`, `et-clf`, `sequence-autoarima` |
@@ -74,11 +75,11 @@ One source patch per changed kernel file that no arm reached, each a value fault
 | `coverage-core-shard_merge_device` | `core/checks/sabotage/coverage_shard_merge_device.patch` | build_ivf | `par-ivf` |
 | `coverage-dbscan-core_device_impl` | `dbscan/checks/sabotage/coverage_core_device_impl.patch` | build_estimators | `dbscan`, `dbscan-weighted`, `dbscan-brute-l1` |
 | `coverage-decomposition-linalg_door_impl` | `decomposition/checks/sabotage/coverage_linalg_door_impl.patch` | build_linalg | `safetensors-widen-f16` |
-| `coverage-decomposition-linalg_host_impl` | `decomposition/checks/sabotage/coverage_linalg_host_impl.patch` | build_linalg_host | `cholesky`, `par-cholesky`, `safetensors-widen-f16` |
+| `coverage-decomposition-linalg_host_impl` | `decomposition/checks/sabotage/coverage_linalg_host_impl.patch` | build_linalg_host | `cholesky`, `safetensors-widen-f16` |
 | `coverage-gaussian_process-gp_binding_entries` | `gaussian_process/checks/sabotage/coverage_gp_binding_entries.patch` | build_gp | `gp-lml-theta` |
 | `coverage-gaussian_process-gp_host_fit_entries` | `gaussian_process/checks/sabotage/coverage_gp_host_fit_entries.patch` | build_gp_host | `gp-lml-theta` |
 | `coverage-gbdt-gbdt_host_entries_impl` | `gbdt/checks/sabotage/coverage_gbdt_host_entries_impl.patch` | build_gbdt_host | `gbdt-adapter-clf`, `gbdt-adapter-score-weighted` |
-| `coverage-hdbscan-hdbscan_door_host_impl` | `hdbscan/checks/sabotage/coverage_hdbscan_door_host_impl.patch` | build_hdbscan_host | `hdbscan`, `hdbscan-leaf`, `par-hdbscan` |
+| `coverage-hdbscan-hdbscan_door_host_impl` | `hdbscan/checks/sabotage/coverage_hdbscan_door_host_impl.patch` | build_hdbscan_host | `hdbscan`, `hdbscan-leaf` |
 | `coverage-hdbscan-hdbscan_door_impl` | `hdbscan/checks/sabotage/coverage_hdbscan_door_impl.patch` | build_hdbscan | `hdbscan`, `hdbscan-leaf`, `par-hdbscan` |
 | `coverage-ivf-index_arrays_impl` | `ivf/checks/sabotage/coverage_index_arrays_impl.patch` | build_ivf_host, build_ivf_search_host | `par-ivf` |
 | `coverage-kernel_methods-km_host_impl` | `kernel_methods/checks/sabotage/coverage_km_host_impl.patch` | build_kernel_methods_host | `rbf-sampler` |
@@ -99,13 +100,81 @@ One source patch per changed kernel file that no arm reached, each a value fault
 | `coverage-x_cnn-binding_entries_impl` | `x_cnn/checks/sabotage/coverage_host_binding_entries_impl.patch` | build_x_cnn_host | `x-cnn-trainer`, `x-cnn-trainer-options`, `x-cnn-pool` |
 | `coverage-x_neighbors-kfeat_dev` | `x_neighbors/checks/sabotage/coverage_kfeat_dev.patch` | build_x_neighbors | `x-neighbors-poly-sketch`, `x-neighbors-skewed-chi2` |
 | `coverage-x_decomp-api` | `x_decomp/checks/sabotage/coverage_api.patch` | build_x_decomp, build_x_decomp_host | `x-decomp-robust-cov`, `x-decomp-als`, `x-decomp-lu` |
-| `coverage-x_decomp-select_ops` | `x_decomp/checks/sabotage/coverage_select_ops.patch` | build_x_decomp, build_x_decomp_host | `x-decomp-lstsq-rsvd` |
-| `coverage-x_decomp-select_dev` | `x_decomp/checks/sabotage/coverage_select_dev.patch` | build_x_decomp | `x-decomp-robust-cov`, `x-decomp-lstsq-rsvd`, `x-decomp-manifold` |
+| `coverage-x_decomp-select_ops` | `x_decomp/checks/sabotage/coverage_select_ops.patch` | build_x_decomp, build_x_decomp_host | `x-decomp-rsvd-rank-deficient` |
+| `coverage-x_decomp-select_dev` | `x_decomp/checks/sabotage/coverage_select_dev.patch` | build_x_decomp | `x-decomp-robust-cov`, `x-decomp-lstsq-rsvd`, `x-decomp-manifold`, `x-decomp-rsvd-rank-deficient` |
 | `coverage-x_decomp-resident` | `x_decomp/checks/sabotage/coverage_resident.patch` | build_x_decomp | `x-decomp-robust-cov`, `x-decomp-factor-analysis`, `x-decomp-manifold` |
 | `coverage-x_decomp-graph_host` | `x_decomp/checks/sabotage/coverage_graph_host.patch` | build_x_decomp_host | `x-decomp-manifold` |
 | `coverage-x_decomp-graph_device` | `x_decomp/checks/sabotage/coverage_graph_device.patch` | build_x_decomp | `x-decomp-manifold` |
 | `coverage-ivf-ivf_common` | `ivf/checks/sabotage/coverage_ivf_common.patch` | build_ivf_host, build_ivf_search_host | `ivf-short-fill` |
 | `coverage-sequence-seq_tensor` | `sequence/checks/sabotage/coverage_seq_tensor.patch` | build_x_sequence | `sequence-device-tensor` |
+
+## Arms proven (tools/identity_lanes/coverage_sabotage_proven.tsv)
+
+Run one at a time on the Mac (lane run-sabotage-arms, 2026-10-21) over the merged Metal (identical) and host builds of 51bf10f4f, whose kernel sources equal 79982adaa's. Per arm: the patch applied, the named per-binding builds rebuilt (a binding's own file wins over the merged one), the arm's lanes run (`identity_break.py --fixtures base --repeats 1`) on Metal and on the host column (`MOJOLEARN_VENDOR=cpu`) for the columns whose bindings were rebuilt, then the patch reverted and its builds removed and the lanes run again. A lane is caught when a column it runs on MOVED or REFUSED against the clean run of the same lanes; the sabotaged cells are also judged against `python/mojolearn/verify_reference/table.json` (OWED: a new lane with no reference yet, judged against the clean run only; IDENTICAL: a column the fault does not reach while the other column moved). Every REFUSED cell is the fault tripping one of the library's own checks.
+
+| arm | builds (rc, seconds) | verdict | lanes (column: result) | sabotaged cells against table.json | patch reverted | seconds |
+|---|---|---|---|---|---|---|
+| `coverage-core-array_helpers_impl` | build rc 0, 87s, build_core_host rc 0, 23s | CAUGHT | x-metrics-search (host MOVED Metal MOVED) trees-adaboost-clf (host MOVED Metal MOVED) | 4 DIVERGENT | STABLE, equal to clean | 147 |
+| `coverage-core-hotpath_impl` | build rc 0, 110s, build_core_host rc 0, 38s | CAUGHT | x-metrics-splitters (host MOVED Metal MOVED) cross-val (host MOVED Metal unmoved) x-lasso-cv (host MOVED Metal unmoved) | 4 DIVERGENT, 2 IDENTICAL | STABLE, equal to clean | 190 |
+| `coverage-core-hotpath_impl_rows` | build rc 0, 23s, build_core_host rc 0, 31s | CAUGHT | x-metrics-splitters (host REFUSED Metal MOVED) sequence-mlp (host MOVED Metal unmoved) x-prep-user-objects (host REFUSED Metal REFUSED) | 2 DIVERGENT, 1 IDENTICAL, 3 REFUSED | STABLE, equal to clean | 87 |
+| `coverage-core-host_helpers_impl` | build_core_host rc 0, 27s, build_forest_host rc 0, 10s | CAUGHT | rf-clf (host MOVED) et-clf (host MOVED) sequence-autoarima (host MOVED) | 3 DIVERGENT | STABLE, equal to clean | 52 |
+| `coverage-core-core_host_impl` | build_core_host rc 0, 38s | CAUGHT | elasticnet (host MOVED) spectral-precomputed (host MOVED) | 2 DIVERGENT | STABLE, equal to clean | 59 |
+| `coverage-core-cast_in` | build_x_sequence rc 0, 207s, build_x_sequence_host rc 0, 104s | CAUGHT | sequence-export-roundtrip (host MOVED Metal MOVED) | 2 OWED (no reference) | STABLE, equal to clean | 336 |
+| `coverage-core-label_encode` | build rc 0, 70s, build_core_host rc 0, 20s, build_x_sequence rc 0, 128s, build_x_sequence_host rc 0, 100s | CAUGHT | sequence-rnn (host MOVED Metal MOVED) sequence-tape-sequential (host MOVED Metal MOVED) sequence-export-roundtrip (host MOVED Metal MOVED) | 2 DIVERGENT, 4 OWED (no reference) | STABLE, equal to clean | 341 |
+| `coverage-core-estimators_impl` | build_estimators rc 0, 87s | CAUGHT | logistic (Metal MOVED) logistic-multiclass (Metal MOVED) | 2 DIVERGENT | STABLE, equal to clean | 100 |
+| `coverage-core-forest_host_groves_binding_impl` | build_rf_host rc 0, 14s, build_trees_host rc 0, 11s | CAUGHT | rf-clf-balanced-parallel (host MOVED) et-reg-bootstrap-parallel (host MOVED) | 2 DIVERGENT | STABLE, equal to clean | 39 |
+| `coverage-core-mojolearn_rf_host_impl` | build_rf_host rc 0, 13s | CAUGHT | rf-clf (host MOVED) rf-reg (host MOVED) | 2 DIVERGENT | STABLE, equal to clean | 25 |
+| `coverage-core-mojolearn_rf_impl` | build_rf rc 0, 53s | CAUGHT | rf-clf (Metal MOVED) rf-reg (Metal MOVED) | 2 DIVERGENT | STABLE, equal to clean | 65 |
+| `coverage-core-mojolearn_training_host_impl` | build_training_host rc 0, 15s | CAUGHT | mlp (host MOVED) | 1 DIVERGENT | STABLE, equal to clean | 32 |
+| `coverage-core-msel_host_impl` | build_core_host rc 0, 29s | CAUGHT | par-forest (host REFUSED) par-forest-reg (host REFUSED) par-forest-et-clf (host REFUSED) | 3 REFUSED | STABLE, equal to clean | 52 |
+| `coverage-core-py2mojo_cluster_est_impl` | build_estimators_host rc 0, 28s | CAUGHT | dbscan (host MOVED) dbscan-weighted (host MOVED) dbscan-brute-l1 (host MOVED) | 3 DIVERGENT | STABLE, equal to clean | 46 |
+| `coverage-core-resample_impl` | build_resample rc 0, 19s, build_resample_host rc 0, 9s | CAUGHT | resample-utils (host MOVED Metal MOVED) | 2 DIVERGENT | STABLE, equal to clean | 51 |
+| `coverage-core-sha256` | build_byte_lm rc 0, 111s, build_neural_host rc 0, 16s, build_tokenizer_host rc 0, 307s, build_training rc 0, 112s, build_training_host rc 0, 13s, build_x_sequence rc 0, 168s, build_x_sequence_host rc 0, 147s | CAUGHT | mlp (host MOVED Metal MOVED) byte-lm (host MOVED Metal MOVED) | 4 DIVERGENT | STABLE, equal to clean | 924 |
+| `coverage-core-shard_merge_device` | build_ivf rc 0, 64s | CAUGHT | par-ivf (Metal MOVED) | 1 DIVERGENT | STABLE, equal to clean | 88 |
+| `coverage-dbscan-core_device_impl` | build_estimators rc 0, 133s | CAUGHT | dbscan (Metal MOVED) dbscan-weighted (Metal MOVED) dbscan-brute-l1 (Metal MOVED) | 3 DIVERGENT | STABLE, equal to clean | 152 |
+| `coverage-decomposition-linalg_door_impl` | build_linalg rc 0, 68s | CAUGHT | safetensors-widen-f16 (Metal MOVED) | 1 OWED (no reference) | STABLE, equal to clean | 85 |
+| `coverage-decomposition-linalg_host_impl` | build_linalg_host rc 0, 15s | CAUGHT | cholesky (host MOVED) safetensors-widen-f16 (host MOVED) | 1 DIVERGENT, 1 OWED (no reference) | POST-REVERT NOT | 30 |
+| `coverage-gaussian_process-gp_binding_entries` | build_gp rc 0, 89s | CAUGHT | gp-lml-theta (Metal MOVED) | 1 OWED (no reference) | STABLE, equal to clean | 107 |
+| `coverage-gaussian_process-gp_host_fit_entries` | build_gp_host rc 0, 14s | CAUGHT | gp-lml-theta (host MOVED) | 1 OWED (no reference) | STABLE, equal to clean | 26 |
+| `coverage-gbdt-gbdt_host_entries_impl` | build_gbdt_host rc 0, 45s | CAUGHT | gbdt-adapter-clf (host MOVED) gbdt-adapter-score-weighted (host MOVED) | 2 DIVERGENT | STABLE, equal to clean | 60 |
+| `coverage-hdbscan-hdbscan_door_host_impl` | build_hdbscan_host rc 0, 14s | CAUGHT | hdbscan (host MOVED) hdbscan-leaf (host MOVED) | 2 DIVERGENT | POST-REVERT NOT | 31 |
+| `coverage-hdbscan-hdbscan_door_impl` | build_hdbscan rc 0, 109s | CAUGHT | hdbscan (Metal MOVED) hdbscan-leaf (Metal MOVED) par-hdbscan (Metal MOVED) | 3 DIVERGENT | STABLE, equal to clean | 132 |
+| `coverage-ivf-index_arrays_impl` | build_ivf_host rc 0, 12s, build_ivf_search_host rc 0, 9s | CAUGHT | par-ivf (host MOVED) | 1 DIVERGENT | STABLE, equal to clean | 38 |
+| `coverage-kernel_methods-km_host_impl` | build_kernel_methods_host rc 0, 10s | CAUGHT | rbf-sampler (host MOVED) | 1 DIVERGENT | STABLE, equal to clean | 26 |
+| `coverage-metrics-metrics_host_entries_impl` | build_metrics_host rc 0, 19s | CAUGHT | metrics-classification (host MOVED) | 1 DIVERGENT | STABLE, equal to clean | 34 |
+| `coverage-x_ann-abi` | build_x_ann rc 0, 77s, build_x_ann_host rc 0, 28s | CAUGHT | x-ann-cagra (host MOVED Metal MOVED) x-ann-cagra-filter (host MOVED Metal MOVED) | 4 DIVERGENT | STABLE, equal to clean | 157 |
+| `coverage-autograd-model_verify` | build_x_sequence rc 0, 316s, build_x_sequence_host rc 0, 225s | CAUGHT | sequence-tape-program (host MOVED Metal MOVED) sequence-tape-sequential (host MOVED Metal MOVED) cross-vendor-fold (host MOVED Metal MOVED) | 6 OWED (no reference) | STABLE, equal to clean | 595 |
+| `coverage-sequence-prophet_prep` | build_x_sequence rc 0, 279s, build_x_sequence_host rc 0, 194s | CAUGHT | sequence-prophet (host MOVED Metal MOVED) | 2 DIVERGENT | STABLE, equal to clean | 519 |
+| `coverage-sequence-ops_impl` | build_x_sequence rc 0, 210s, build_x_sequence_host rc 0, 146s | CAUGHT | sequence-lamb (host MOVED Metal unmoved) | 1 DIVERGENT, 1 IDENTICAL | STABLE, equal to clean | 391 |
+| `coverage-sequence-opt_resident` | build_x_sequence rc 0, 221s | CAUGHT | sequence-lamb (Metal MOVED) sequence-rmsprop (Metal MOVED) sequence-adagrad (Metal MOVED) | 3 DIVERGENT | STABLE, equal to clean | 239 |
+| `coverage-autograd-import_reader` | build_x_sequence rc 0, 231s, build_x_sequence_host rc 0, 177s | CAUGHT | sequence-onnx-import (host MOVED Metal MOVED) | 2 OWED (no reference) | STABLE, equal to clean | 449 |
+| `coverage-svm-host_svc_ovo_host` | build_svm_host rc 0, 13s | CAUGHT | x-neighbors-svc-multiclass (host MOVED) | 1 DIVERGENT | STABLE, equal to clean | 27 |
+| `coverage-svm-host_svc_proba` | build_svm_host rc 0, 13s | CAUGHT | svc (host MOVED) x-neighbors-svc-probability (host MOVED) x-neighbors-svc-multiclass (host MOVED) | 3 DIVERGENT | STABLE, equal to clean | 28 |
+| `coverage-svm-impl_svc_epilogue` | build_svm rc 0, 101s | CAUGHT | x-neighbors-svc-probability (Metal MOVED) | 1 DIVERGENT | STABLE, equal to clean | 135 |
+| `coverage-svm-impl_svc_ovo_layout` | build_svm rc 0, 87s | CAUGHT | x-neighbors-svc-multiclass (Metal MOVED) | 1 DIVERGENT | STABLE, equal to clean | 118 |
+| `coverage-tokenizer-ranks` | build_tokenizer_host rc 0, 589s, build_tokenizer_fast skipped | CAUGHT | bpe-vocabulary (host MOVED) tokenized-corpus (host REFUSED) | 1 DIVERGENT, 1 REFUSED | STABLE, equal to clean | 613 |
+| `coverage-tokenizer-tokenizer_host_shell_impl` | build_tokenizer_host rc 0, 325s | CAUGHT | tokenizer (host MOVED) bpe-vocabulary (host MOVED) tokenized-corpus (host REFUSED) | 2 DIVERGENT, 1 REFUSED | STABLE, equal to clean | 341 |
+| `coverage-x_cnn-device_entries_impl` | build_x_cnn rc 0, 106s | CAUGHT | x-cnn-gcn (Metal MOVED) x-cnn-sage (Metal MOVED) x-cnn-trainer (Metal MOVED) | 3 DIVERGENT | STABLE, equal to clean | 130 |
+| `coverage-x_cnn-binding_entries_impl` | build_x_cnn_host rc 0, 21s | CAUGHT | x-cnn-trainer (host MOVED) x-cnn-trainer-options (host MOVED) x-cnn-pool (host MOVED) | 3 DIVERGENT | STABLE, equal to clean | 36 |
+| `coverage-x_neighbors-kfeat_dev` | build_x_neighbors rc 0, 147s | CAUGHT | x-neighbors-poly-sketch (Metal MOVED) x-neighbors-skewed-chi2 (Metal MOVED) | 2 DIVERGENT | STABLE, equal to clean | 168 |
+| `coverage-x_decomp-api` | build_x_decomp rc 0, 145s, build_x_decomp_host rc 0, 43s | CAUGHT | x-decomp-robust-cov (host MOVED Metal unmoved) x-decomp-als (host MOVED Metal unmoved) x-decomp-lu (host MOVED Metal MOVED) | 4 DIVERGENT, 2 IDENTICAL | STABLE, equal to clean | 240 |
+| `coverage-x_decomp-select_ops` | build_x_decomp rc 0, 31s, build_x_decomp_host rc 0, 10s | CAUGHT | x-decomp-rsvd-rank-deficient (host MOVED Metal unmoved) | 2 OWED (no reference) | STABLE, equal to clean | 83 |
+| `coverage-x_decomp-select_dev` | build_x_decomp rc 0, 36s | CAUGHT | x-decomp-robust-cov (Metal MOVED) x-decomp-lstsq-rsvd (Metal MOVED) x-decomp-manifold (Metal MOVED) x-decomp-rsvd-rank-deficient (Metal MOVED) | 3 DIVERGENT, 1 OWED (no reference) | STABLE, equal to clean | 65 |
+| `coverage-x_decomp-resident` | build_x_decomp rc 0, 118s | CAUGHT | x-decomp-robust-cov (Metal MOVED) x-decomp-factor-analysis (Metal MOVED) x-decomp-manifold (Metal REFUSED) | 2 DIVERGENT, 1 REFUSED | STABLE, equal to clean | 149 |
+| `coverage-x_decomp-graph_host` | build_x_decomp_host rc 0, 28s | CAUGHT | x-decomp-manifold (host MOVED) | 1 DIVERGENT | STABLE, equal to clean | 50 |
+| `coverage-x_decomp-graph_device` | build_x_decomp rc 0, 133s | CAUGHT | x-decomp-manifold (Metal MOVED) | 1 DIVERGENT | STABLE, equal to clean | 153 |
+| `coverage-ivf-ivf_common` | build_ivf_host rc 0, 12s, build_ivf_search_host rc 0, 8s | CAUGHT | ivf-short-fill (host MOVED) | 1 OWED (no reference) | STABLE, equal to clean | 33 |
+| `coverage-sequence-seq_tensor` | build_x_sequence rc 0, 241s | CAUGHT | sequence-device-tensor (Metal REFUSED) | 1 REFUSED | STABLE, equal to clean | 257 |
+
+51 of 51 arms caught; 8331 arm seconds in all.
+
+Fixed during the run (no lane weakened; every arm whose patch or lanes gained something was rerun and caught; the arms that only stopped naming an unreachable lane keep their run):
+
+- `coverage-core-hotpath_impl_rows`: x-prep-user-objects did not move. The patch swapped fold labels 0 and 1 in both `assign_fold_i64` and `count_fold_hits_i64`, a consistent relabeling no output can show; the swap now stays in `assign_fold_i64` only, so TargetEncoder's `cv=<splitter>` check refuses. The patch also faults the new host `bincount2_i32`.
+- `coverage-x_decomp-select_ops`: x-decomp-lstsq-rsvd never reaches the live-column compaction (its sketches are no wider than the rank), so it did not move. New lane `x-decomp-rsvd-rank-deficient` (a rank-4 matrix with an 8-wide sketch; 9 of 9 fixtures STABLE, Metal equal to the host column) catches it, and `coverage-x_decomp-select_dev` names it too.
+- Lanes the arm's fault cannot reach, no longer named: par-cholesky and par-hdbscan on the host-binding arms (`coverage-decomposition-linalg_host_impl`, `coverage-hdbscan-hdbscan_door_host_impl`; both read N/A on the host column, which has no multi-device driver), trees-adaboost-reg on `coverage-core-array_helpers_impl` (AdaBoost.R2 predicts by the weighted median and calls none of the faulted helpers).
+- A real host-column bug: `StratifiedGroupKFold.split` refused on a CPU-only install because the GPU base binding's `bincount2_i32` and `strat_group_plan_i32` had no host twin. The core host binding has both now; x-metrics-splitters on the host column is IDENTICAL to the reference on 9 of 9 fixtures, and `coverage-core-hotpath_impl` and `coverage-core-hotpath_impl_rows` were rerun with the fix in the clean set.
+- `coverage-tokenizer-ranks` also lists `build_tokenizer_fast`: that is the FAST-tier binding, which the verifier refuses, so it was not built; the arm is caught through the host tokenizer.
 
 ## Owed
 
@@ -122,7 +191,7 @@ Sabotage arms still owed:
 
 - A registration is CHANGED when a Mojo definition its export reaches (lane_select's definition graph, by name through imports) differs from the base, moves excluded (the same text at the base under the same name in any file). A shared helper's change therefore marks every export that reaches it.
 - A lane REACHES an entry when the entry's name is in the lane's scoped closure: the lane function, its helpers and property probes (the harness's shared helpers excluded), the package definitions those name (resolved through imports, methods of reached classes by attribute name, import-time calls, module tables, `name + "_suffix"` composition), or the public method walk of tools/public_runtime_inventory.py. It is static: a reach is a call path, not a run. The new lanes were run; the rest rest on their recorded cells.
-- A row is ARMED when a definition in its export's closure reads a `MOJOLEARN_*SABOTAGE*` define or is edited by a `*/sabotage/*.patch`. `CPU gate HOST_SABOTAGE` is the arm the CPU identity gate builds and requires to move every covered part; family defines and seam patches are their checks' arms; coverage arms are this audit's (RUN OWED). Definitions with no value to fault are listed with the reason in tools/identity_lanes/coverage_sabotage_na.tsv.
+- A row is ARMED when a definition in its export's closure reads a `MOJOLEARN_*SABOTAGE*` define or is edited by a `*/sabotage/*.patch`. `CPU gate HOST_SABOTAGE` is the arm the CPU identity gate builds and requires to move every covered part; family defines and seam patches are their checks' arms; coverage arms are this audit's (run: Arms proven). Definitions with no value to fault are listed with the reason in tools/identity_lanes/coverage_sabotage_na.tsv.
 - `n/a` lanes: no Python caller in the package, the fast tier (the verifier refuses fast), a verifier or build probe, or a dead helper; each with its reason in the row.
 
 ## Public Python methods
