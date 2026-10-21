@@ -22,6 +22,7 @@ from sequence.recurrent import OptConfig
 from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, FitValidation, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
 from autograd.program import OpsProgram
+from autograd.program_arrays import initialize_program_arrays
 from autograd.rankn import ShapeN
 from sequence.ops import FP
 from autograd.rankn_api import rn_dims, rn_shape
@@ -268,6 +269,7 @@ def _arg_floats(p: PythonObject) raises -> List[Float32]:
 
 def ops_open_py[E: Exec & Movable & Deinitable, KIND: Int](var ex: E, record: PythonObject) raises -> PythonObject:
     """A new session; record = 1 records a graph for backward. Returns its id."""
+    initialize_program_arrays()
     return PythonObject(ops_session_open[E, KIND](ex^, Int(py=record) != 0))
 
 

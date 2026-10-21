@@ -103,6 +103,7 @@ from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from . import _portable_math as math
 from . import _numeric_profile
+from . import _native_samba_bridge
 from fractions import Fraction
 
 import array
@@ -801,12 +802,7 @@ class _Optimizer(NumericModeMixin):
         return self.total_norm_
 
     def __del__(self):
-        res, binding = getattr(self, "_res", None), getattr(self, "_res_binding", None)
-        if res is not None and binding is not None:
-            try:
-                binding.optimizer_resident_close(res)
-            except Exception:
-                pass
+        return _optimizer_finalize_native(self)
 
     # -- the parameters every algorithm shares --------------------------
     def _config(self):
@@ -2319,27 +2315,19 @@ class Generator(object):
     """
 
     def __init__(self, seed, numeric_mode=None):
-        seed = int(seed)
-        if seed < 0 or seed >= (1 << 64):
-            raise ValueError("mojolearn.Generator: seed must be in [0, 2^64)")
-        self.seed = seed
-        self.counter = 0
-        self.numeric_mode = numeric_mode
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_init", (self, seed, numeric_mode), _native_samba_bridge.CONTEXT)
 
     def state_dict(self):
         """Return the generator state as ``{'seed': int, 'counter': int}``."""
-        return {"seed": int(self.seed), "counter": int(self.counter)}
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_snapshot", (self,), _native_samba_bridge.CONTEXT)
 
     def load_state_dict(self, state):
         """Restore a state from `state_dict`.
 
-        The counter must fit in 32 bits unsigned, otherwise `ValueError`.
+        The next-stream counter may equal ``2**32`` to represent exhaustion;
+        larger or negative counters raise ``ValueError``.
         """
-        self.seed = int(state["seed"])
-        self.counter = int(state["counter"])
-        if self.counter < 0 or self.counter > 0xFFFFFFFF:
-            raise ValueError(
-                "mojolearn.Generator: counter must be a 32-bit unsigned")
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_restore", (self, state), _native_samba_bridge.CONTEXT)
 
     def next_stream(self):
         """Consume and return the next stream id.
@@ -2347,15 +2335,10 @@ class Generator(object):
         Use it for operations that draw several slices of one stream, such as dropout over
         microbatches. Raises `RuntimeError` when the 32-bit counter is exhausted.
         """
-        return self._next_stream()
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), _native_samba_bridge.CONTEXT)
 
     def _next_stream(self):
-        if self.counter > 0xFFFFFFFF:
-            raise RuntimeError(
-                "mojolearn.Generator: the stream counter is exhausted")
-        s = self.counter
-        self.counter += 1
-        return s
+        return _native_samba_bridge.RUNTIME.samba_native_call("generator_next", (self,), _native_samba_bridge.CONTEXT)
 
     @staticmethod
     def _shape(shape):
@@ -2384,14 +2367,7 @@ class Generator(object):
         high : float, default 1.0
             Upper bound; must be >= `low`.
         """
-        shape, n = self._shape(shape)
-        lo, hi = float(_round_f32(low)), float(_round_f32(high))
-        span = float(_round_f32(hi - lo))
-        if not (span >= 0.0):
-            raise ValueError("mojolearn.Generator.uniform: high must be >= low")
-        out = _rng_call(_load(self.numeric_mode), _RNG_UNIFORM, n, 0,
-                        self.seed, self._next_stream(), lo, span)
-        return out.reshape(shape)
+        return _native_samba_bridge.RUNTIME.generator_draw("uniform", (self, shape, low, high), _native_samba_bridge.CONTEXT)
 
     def normal(self, shape, mean=0.0, std=1.0):
         """Draw float32 normal values (Box-Muller).
@@ -2405,22 +2381,10 @@ class Generator(object):
         std : float, default 1.0
             Standard deviation; must be >= 0.
         """
-        shape, n = self._shape(shape)
-        sd = float(_round_f32(std))
-        if not (sd >= 0.0):
-            raise ValueError("mojolearn.Generator.normal: std must be >= 0")
-        out = _rng_call(_load(self.numeric_mode), _RNG_NORMAL, n, 0,
-                        self.seed, self._next_stream(),
-                        float(_round_f32(mean)), sd)
-        return out.reshape(shape)
+        return _native_samba_bridge.RUNTIME.generator_draw("normal", (self, shape, mean, std), _native_samba_bridge.CONTEXT)
 
-    # `a=None` means sqrt(5) and is not a behavior change (2026-09-20). The default used to read
-    # `a=math.sqrt(5.0)`, evaluated at class definition time; `math` here is `_portable_math`, whose sqrt
-    # dlopens .libs/libMojolearnMath.so, so `import mojolearn` failed on a fresh Linux box without that
-    # library. The sentinel defers the same native call to call time rather than replacing it with a
-    # literal: a literal would be a second answer to the question `_portable_math` answers, and proving
-    # it equal would mean proving the native sqrt correctly rounded on every platform. Deferring keeps
-    # bit-identity by construction.
+    # None defaults are evaluated by the native owner through the same
+    # portable-math ABI as before; no precomputed square-root literals.
     def kaiming_uniform(self, shape, fan_in, a=None):
         """Kaiming-uniform initialization, as `torch.nn.init.kaiming_uniform_`.
 
@@ -2436,31 +2400,19 @@ class Generator(object):
         a : float or None, default None
             Negative slope; None means sqrt(5).
         """
-        if a is None:
-            a = math.sqrt(5.0)
-        gain = math.sqrt(2.0 / (1.0 + float(a) * float(a)))
-        bound = gain * math.sqrt(3.0 / float(int(fan_in)))
-        return self.uniform(shape, -bound, bound)
+        return _native_samba_bridge.RUNTIME.generator_draw("kaiming_uniform", (self, shape, fan_in, a), _native_samba_bridge.CONTEXT)
 
     def xavier_uniform(self, shape, fan_in, fan_out, gain=1.0):
         """Xavier-uniform initialization with bound ``gain * sqrt(6 / (fan_in + fan_out))``."""
-        bound = float(gain) * math.sqrt(
-            6.0 / float(int(fan_in) + int(fan_out)))
-        return self.uniform(shape, -bound, bound)
+        return _native_samba_bridge.RUNTIME.generator_draw("xavier_uniform", (self, shape, fan_in, fan_out, gain), _native_samba_bridge.CONTEXT)
 
     def kaiming_normal(self, shape, fan_in, gain=None):
         """Kaiming-normal initialization with std ``gain / sqrt(fan_in)``; `gain` None means sqrt(2)."""
-        # `gain=None` means sqrt(2), deferred for the reason spelled out on
-        # kaiming_uniform above: the same native call, one frame later.
-        if gain is None:
-            gain = math.sqrt(2.0)
-        return self.normal(
-            shape, 0.0, float(gain) / math.sqrt(float(int(fan_in))))
+        return _native_samba_bridge.RUNTIME.generator_draw("kaiming_normal", (self, shape, fan_in, gain), _native_samba_bridge.CONTEXT)
 
     def xavier_normal(self, shape, fan_in, fan_out, gain=1.0):
         """Xavier-normal initialization with std ``gain * sqrt(2 / (fan_in + fan_out))``."""
-        return self.normal(shape, 0.0, float(gain) * math.sqrt(
-            2.0 / float(int(fan_in) + int(fan_out))))
+        return _native_samba_bridge.RUNTIME.generator_draw("xavier_normal", (self, shape, fan_in, fan_out, gain), _native_samba_bridge.CONTEXT)
 
     def dropout(self, x, p, offset=0, stream=None):
         """Inverted dropout of a float32 array.
@@ -2485,26 +2437,11 @@ class Generator(object):
         y : array of float32
         key : dict
         """
-        p = float(_round_f32(p))
-        if not (0.0 <= p < 1.0):
-            raise ValueError("mojolearn.Generator.dropout: p must be in [0, 1)")
-        x = _c32(x, "x", "Generator.dropout")
-        scale = float(_round_f32(1.0 / (1.0 - p)))
-        stream = self._next_stream() if stream is None else int(stream)
-        key = {"seed": self.seed, "stream": stream, "p": p, "scale": scale,
-               "offset": int(offset)}
-        y = _rng_call(_load(self.numeric_mode), _RNG_DROPOUT_FORWARD, x.size,
-                      key["offset"], self.seed, stream, p, scale,
-                      x.reshape(-1))
-        return y.reshape(x.shape), key
+        return _native_samba_bridge.RUNTIME.generator_draw("dropout", (self, x, p, offset, stream), _native_samba_bridge.CONTEXT)
 
     def dropout_backward(self, dy, key):
         """Gradient of `dropout`: apply the mask and scale recorded in `key` to `dy`."""
-        dy = _c32(dy, "dy", "Generator.dropout_backward")
-        dx = _rng_call(_load(self.numeric_mode), _RNG_DROPOUT_BACKWARD,
-                       dy.size, key["offset"], key["seed"], key["stream"],
-                       key["p"], key["scale"], dy.reshape(-1))
-        return dx.reshape(dy.shape)
+        return _native_samba_bridge.RUNTIME.generator_draw("dropout_backward", (self, dy, key), _native_samba_bridge.CONTEXT)
 
 
 # ===================================================================
@@ -3066,3 +3003,8 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     if wrote != output.size:
         raise RuntimeError("MLP sessions returned an invalid output count")
     return output
+
+
+# Import-time ABI connection only; finalization never invokes the selector.
+from .tokenizer import _binding as _connect_optimizer_lifecycle
+_optimizer_finalize_native = _connect_optimizer_lifecycle()._module.optimizer_finalize

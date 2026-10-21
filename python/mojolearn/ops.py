@@ -55,11 +55,14 @@ Example
 ...     probs = s.numpy(p)
 """
 import os
+from types import SimpleNamespace
 
 from ._optional_numpy import require_numpy
 np = require_numpy('mojolearn.ops')
 
 from . import _backend
+from ._distributed_program import DistributedProgram as _DistributedProgram
+from ._partitioned_program import PartitionedProgram as _PartitionedProgram
 
 __all__ = ["Session", "Program"]
 
@@ -216,38 +219,18 @@ class Session:
     """
 
     def __init__(self, record=False, numeric_mode=None):
-        self.record = bool(record)
-        self.numeric_mode = numeric_mode
-        self._b = _backend.binding("_mojolearn_x_sequence", numeric_mode)
-        self._id = int(self._b.ops_open(1 if self.record else 0))
-        # One argument block per session, written in place each call and read
-        # by address in Mojo (no list crosses into the binding). A binding
-        # built before the packed entry takes the list call.
-        self._packed = hasattr(self._b, "ops_op_packed")
-        self._args = np.zeros(_PACK_WORDS, dtype=np.int64)
-        self._argf = self._args[_PACK_F:].view(np.float32)
-        self._args_addr = self._args.ctypes.data
-        self._opt_kind = {}
+        return _SESSION_INITIALIZE(self, record, numeric_mode, _SESSION_CONNECTIONS, _backend, Program)
 
     # ------------------------------------------------------------ lifetime
     def close(self):
         """Free every tensor of the session and its device memory."""
-        sid, self._id = getattr(self, "_id", None), None
-        if sid is not None:
-            self._b.ops_close(sid)
+        return self._session_native(self, "close", ())
 
     def __enter__(self):
-        return self
+        return self._session_native(self, "enter", ())
 
     def __exit__(self, *exc):
-        self.close()
-        return False
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
+        return self._session_native(self, "exit", ())
 
     def _sid(self):
         if self._id is None:
@@ -258,20 +241,32 @@ class Session:
         """Drop every computed tensor (and the recorded graph); tensors made
         with :meth:`tensor` stay valid. Call it between independent passes to
         reuse their memory."""
-        self._b.ops_reset(self._sid())
+        return self._session_native(self, "reset", ())
 
     def free(self, h):
         """Release tensor ``h``; its memory is reused after :meth:`reset`."""
-        self._b.ops_free(self._sid(), _int(h, "handle", 1))
+        return self._session_native(self, "free", (h,))
+
+    def gradient_report(self, handles, *, values=True):
+        """Explain gradient availability and report nonfinite or zero values for tensors."""
+        return self._session_native(self, "gradient_report", (handles, values))
+
+    def execution_profile_begin(self):
+        """Begin executor allocation, transfer, synchronization and operation accounting."""
+        return self._session_native(self, "execution_profile_begin", ())
+
+    def execution_profile_end(self):
+        """Drain the executor and return counters for the active profiling interval."""
+        return self._session_native(self, "execution_profile_end", ())
 
     def profile_reset(self):
         """Clear the process-wide launch profile (recorded when the
         MOJOLEARN_AG_PROFILE environment variable is set)."""
-        self._b.ops_profile_reset()
+        return self._session_native(self, "profile_reset", ())
 
     def profile_report(self):
         """The process-wide launch profile as text: launches per operation."""
-        return str(self._b.ops_profile_report())  # glue: diagnostic launch-count text over profile rows, no data
+        return self._session_native(self, "profile_report", ())
 
     # ------------------------------------------------------------ data
     def tensor(self, x, requires_grad=False):
@@ -286,22 +281,7 @@ class Session:
         trainable input whose gradient :meth:`grad` returns after
         :meth:`backward`.
         """
-        from ._cast_in import as_input, describe, matrix_view
-        a = as_input(x)
-        if a.ndim > _MAX_RANK:
-            raise ValueError(f"x must have at most {_MAX_RANK} dimensions")
-        if a.size == 0:
-            raise ValueError("x must not be empty")
-        flag = 1 if requires_grad else 0
-        if a.ndim > 2:
-            # the same memory as its row-major (rows, last axis) matrix view,
-            # plus the full shape; it stays referenced until the binding has
-            # copied it
-            m = matrix_view(a, "x")
-            return int(self._b.ops_upload(self._sid(), describe(m, "x"), [flag, a.ndim] + list(a.shape)))
-        # `a` as it is (Mojo casts it to float32 on the executor); it stays
-        # referenced until the binding has copied it
-        return int(self._b.ops_upload(self._sid(), describe(a, "x"), [flag]))
+        return self._session_native(self, "tensor", (x, requires_grad))
 
     def ids(self, x):
         """Copy an array of integer ids to the device; returns its handle.
@@ -326,21 +306,7 @@ class Session:
         ...     model = s.capture(inputs=[tokens], outputs=[h])
         ...     rows = model.run(np.array([[2, 7, 1], [8, 2, 8]]))
         """
-        from ._cast_in import as_input, describe, matrix_view
-        a = as_input(x)
-        if a.dtype.kind not in "iu":
-            raise TypeError(f"ids must be integers, got dtype {a.dtype}")
-        if a.ndim > _MAX_RANK:
-            raise ValueError(f"ids must have at most {_MAX_RANK} dimensions")
-        if a.size == 0:
-            raise ValueError("ids must not be empty")
-        # flag word bit 1: an ids tensor (Mojo casts the integers to int32
-        # words on the executor); `a` stays referenced until the binding has
-        # copied it
-        if a.ndim > 2:
-            m = matrix_view(a, "ids")
-            return int(self._b.ops_upload(self._sid(), describe(m, "ids"), [2, a.ndim] + list(a.shape)))
-        return int(self._b.ops_upload(self._sid(), describe(a, "ids"), [2]))
+        return self._session_native(self, "ids", (x,))
 
     @staticmethod
     def _is_handle(v):
@@ -349,48 +315,31 @@ class Session:
     def shape(self, h):
         """The shape of tensor ``h`` as a tuple: ``(rows, cols)`` for a
         matrix, every dimension for a tensor of another rank."""
-        dims = self._b.ops_shape(self._sid(), _int(h, "handle", 1))
-        return tuple(int(d) for d in dims)  # glue: at most eight dimensions
+        return self._session_native(self, "shape", (h,))
 
     def numpy(self, h):
         """Tensor ``h``'s values as a new float32 array of its shape."""
-        out = np.empty(self.shape(h), dtype=np.float32)
-        self._b.ops_download(self._sid(), h, out.ctypes.data)
-        return out
+        return self._session_native(self, "numpy", (h,))
 
     def scalar(self, h):
         """The value of a ``(1, 1)`` tensor as a Python float, for branching
         in your code on a computed value."""
-        return float(self._b.ops_scalar(self._sid(), _int(h, "handle", 1)))
+        return self._session_native(self, "scalar", (h,))
 
     def full(self, shape, value):
         """A new tensor of ``shape`` (up to 8 dimensions) with every
         element ``value``."""
-        return self._op("full", (), _dims(shape, low=1), [float(value)])
+        return self._session_native(self, "full", (shape, value))
 
     def copy(self, x):
         """A copy of ``x`` that carries no gradient."""
-        return self._op("copy", (x,))
+        return self._session_native(self, "copy", (x,))
 
     def detach(self, x):
         """``x`` as a constant: later operations pass no gradient back to it."""
-        return self._op("detach", (x,))
+        return self._session_native(self, "detach", (x,))
 
     # ------------------------------------------------------------ the call
-    def _op(self, name, handles, ints=(), floats=()):
-        if self._packed and len(handles) <= _PACK_HANDLES and len(ints) <= _PACK_INTS and len(floats) <= _PACK_FLOATS:
-            a = self._args
-            a[0], a[1], a[2] = len(handles), len(ints), len(floats)
-            for k, h in enumerate(handles):  # glue: at most three input handles
-                a[_PACK_H + k] = _int(h, "handle", 1)
-            for k, v in enumerate(ints):  # glue: at most four validated integer arguments
-                a[_PACK_I + k] = v
-            for k, v in enumerate(floats):  # glue: at most one float argument
-                self._argf[k] = v
-            return int(self._b.ops_op_packed(self._sid(), _OP[name], self._args_addr))
-        hs = [_int(h, "handle", 1) for h in handles]  # glue: at most three input handles
-        return int(self._b.ops_op(self._sid(), _OP[name], hs, list(ints), list(floats)))
-
     # ------------------------------------------------------------ elementwise and products
     def matmul(self, a, b):
         """The matrix product of the last two axes, ``a @ b``.
@@ -399,61 +348,59 @@ class Session:
         ``(batch, heads, m, k)`` tensor times a ``(batch, heads, k, n)`` or
         a ``(k, n)`` tensor gives ``(batch, heads, m, n)``.
         """
-        return self._op("matmul", (a, b))
+        return self._session_native(self, "matmul", (a, b))
 
     def add(self, a, b):
         """``a + b`` with NumPy broadcasting: shapes are aligned on the
         right and an axis of length 1 stretches. For matrices, a ``(1, 1)``,
         ``(1, cols)`` or ``(rows, 1)`` operand broadcasts."""
-        return self._op("add", (a, b))
+        return self._session_native(self, "add", (a, b))
 
     def sub(self, a, b):
         """``a - b`` with the broadcasting of :meth:`add`."""
-        return self._op("sub", (a, b))
+        return self._session_native(self, "sub", (a, b))
 
     def mul(self, a, b):
         """``a * b`` elementwise with the broadcasting of :meth:`add`."""
-        return self._op("mul", (a, b))
+        return self._session_native(self, "mul", (a, b))
 
     def div(self, a, b):
         """``a / b`` elementwise with the broadcasting of :meth:`add`."""
-        return self._op("div", (a, b))
+        return self._session_native(self, "div", (a, b))
 
     def relu(self, x):
         """``max(x, 0)``."""
-        return self._op("relu", (x,))
+        return self._session_native(self, "relu", (x,))
 
     def sigmoid(self, x):
         """``1 / (1 + exp(-x))``."""
-        return self._op("sigmoid", (x,))
+        return self._session_native(self, "sigmoid", (x,))
 
     def tanh(self, x):
         """The hyperbolic tangent."""
-        return self._op("tanh", (x,))
+        return self._session_native(self, "tanh", (x,))
 
     def exp(self, x):
         """The natural exponential."""
-        return self._op("exp", (x,))
+        return self._session_native(self, "exp", (x,))
 
     def log(self, x):
         """The natural logarithm."""
-        return self._op("log", (x,))
+        return self._session_native(self, "log", (x,))
 
     def sqrt(self, x):
         """The square root."""
-        return self._op("sqrt", (x,))
+        return self._session_native(self, "sqrt", (x,))
 
     def scale(self, x, factor):
         """``factor * x``."""
-        return self._op("scale", (x,), (), [float(factor)])
+        return self._session_native(self, "scale", (x, factor))
 
     # ------------------------------------------------------------ shape and reductions
     def transpose(self, x, a=-2, b=-1):
         """``x`` with axes ``a`` and ``b`` swapped; the matrix transpose by
         default."""
-        if a == -2 and b == -1:
-            return self._op("transpose", (x,))
-        return self._op("permute", (x,), [1, _int(a, "a"), _int(b, "b")])
+        return self._session_native(self, "transpose", (x, a, b))
 
     def permute(self, x, axes):
         """``x`` with its axes reordered: output axis ``k`` is input axis
@@ -466,29 +413,26 @@ class Session:
         ...     s.shape(s.permute(x, (2, 0, 1)))
         (4, 2, 3)
         """
-        return self._op("permute", (x,), [0] + _axes(tuple(axes), "axes"))
+        return self._session_native(self, "permute", (x, axes))
 
     def reshape(self, x, shape):
         """``x``'s elements, row-major, in a new ``shape`` with the same
         number of elements; one dimension may be -1 and is inferred."""
-        dims = _dims(shape)
-        if len(dims) == 2 and -1 not in dims:
-            return self._op("reshape", (x,), [_int(dims[0], "rows", 1), _int(dims[1], "cols", 1)])
-        return self._op("reshape_n", (x,), [0] + dims)
+        return self._session_native(self, "reshape", (x, shape))
 
     def flatten(self, x, start=1, end=-1):
         """``x`` with axes ``start`` to ``end`` (inclusive) merged into
         one; by default every axis after the first."""
-        return self._op("reshape_n", (x,), [1, _int(start, "start"), _int(end, "end")])
+        return self._session_native(self, "flatten", (x, start, end))
 
     def squeeze(self, x, axis=None):
         """``x`` without its length-1 axes (all of them, or those listed in
         ``axis``)."""
-        return self._op("reshape_n", (x,), [2] + _axes(axis))
+        return self._session_native(self, "squeeze", (x, axis))
 
     def unsqueeze(self, x, axis):
         """``x`` with a new length-1 axis at position ``axis``."""
-        return self._op("reshape_n", (x,), [3, _int(axis, "axis")])
+        return self._session_native(self, "unsqueeze", (x, axis))
 
     def sum(self, x, axis=None, keepdims=None):
         """The sum over ``axis``.
@@ -500,39 +444,32 @@ class Session:
         matrix and removes it otherwise, so ``sum(x, axis=0)`` of an
         ``(n, k)`` matrix is ``(1, k)``.
         """
-        return self._op("sum_n", (x,), [_keepdims(keepdims)] + _axes(axis))
+        return self._session_native(self, "sum", (x, axis, keepdims))
 
     def mean(self, x, axis=None, keepdims=None):
         """The mean over ``axis``, with the axes and shapes of :meth:`sum`."""
-        return self._op("mean_n", (x,), [_keepdims(keepdims)] + _axes(axis))
+        return self._session_native(self, "mean", (x, axis, keepdims))
 
     def max(self, x, axis=None, keepdims=None):
         """The largest value over ``axis``, with the axes and shapes of
         :meth:`sum`. A NaN is larger than any number; among equal values the
         first position wins, and the gradient flows to that position only."""
-        return self._op("max", (x,), [_keepdims(keepdims)] + _axes(axis))
+        return self._session_native(self, "max", (x, axis, keepdims))
 
     def softmax(self, x, axis=-1):
         """The softmax along ``axis``; by default the last axis (each row
         of a matrix)."""
-        if axis == -1:
-            return self._op("softmax", (x,))
-        return self._op("softmax_n", (x,), [_int(axis, "axis")])
+        return self._session_native(self, "softmax", (x, axis))
 
     def log_softmax(self, x, axis=-1):
         """The log-softmax along ``axis``; by default the last axis."""
-        if axis == -1:
-            return self._op("log_softmax", (x,))
-        return self._op("log_softmax_n", (x,), [_int(axis, "axis")])
+        return self._session_native(self, "log_softmax", (x, axis))
 
     # ------------------------------------------------------------ joining, splitting, picking
     def concat(self, xs, axis=0):
         """The tensors ``xs`` joined along ``axis``; every other axis must
         match."""
-        hs = tuple(xs)
-        if not hs:
-            raise ValueError("concat needs at least one tensor")
-        return self._op("concat", hs, [_int(axis, "axis")])
+        return self._session_native(self, "concat", (xs, axis))
 
     def split(self, x, sizes_or_sections, axis=0):
         """``x`` cut along ``axis`` into a list of tensors.
@@ -542,17 +479,7 @@ class Session:
         ``x`` (no copy); in a recording session the gradients of the pieces
         flow back into their places in ``x``'s gradient.
         """
-        axis = _int(axis, "axis")
-        if isinstance(sizes_or_sections, (int, np.integer)) and not isinstance(sizes_or_sections, bool):
-            count = _int(sizes_or_sections, "sections", 1)
-            tail = [1, count]
-        else:
-            sizes = [_int(v, "sizes", 1) for v in sizes_or_sections]  # glue: the piece lengths
-            if not sizes:
-                raise ValueError("sizes must list at least one length")
-            count = len(sizes)
-            tail = [0] + sizes
-        return [self._op("narrow", (x,), [axis, k] + tail) for k in range(count)]  # glue: one view per piece
+        return self._session_native(self, "split", (x, sizes_or_sections, axis))
 
     def take(self, x, indices, axis=0):
         """The slices of ``x`` at ``indices`` along ``axis``.
@@ -564,23 +491,7 @@ class Session:
         gradient of ``x`` sums the gradients of every slice taken from each
         position, in ascending index position.
         """
-        from ._cast_in import as_input, describe
-        if self._is_handle(indices):
-            # an ids tensor: Mojo reads its int32 words on the device
-            return self._op("take", (x, indices), [_int(axis, "axis")])
-        a = as_input(indices)
-        if a.dtype.kind not in "iu":
-            raise TypeError(f"indices must be integers, got dtype {a.dtype}")
-        if a.size == 0:
-            raise ValueError("indices must not be empty")
-        if a.ndim > 2:
-            if not a.flags.c_contiguous:
-                raise ValueError("indices with more than two dimensions must be C-contiguous; "
-                                 "pass numpy.ascontiguousarray(indices)")
-            a = a.reshape(-1)
-        # `a` as it is (Mojo casts it to int32 on the executor, row-major);
-        # it stays referenced until the binding has copied it
-        return self._op("take", (x,), describe(a, "indices") + [_int(axis, "axis")])
+        return self._session_native(self, "take", (x, indices, axis))
 
     # ------------------------------------------------------------ convolution and pooling
     def conv2d(self, x, weight, bias=None, stride=1, padding=0, groups=1):
@@ -599,173 +510,165 @@ class Session:
 
             y = s.conv2d(x, w, stride=1, padding=1, groups=4)
         """
-        handles = (x, weight) if bias is None else (x, weight, bias)
-        return self._op("conv2d", handles, [_int(stride, "stride", 1), _int(padding, "padding", 0),
-                                            _int(groups, "groups", 1)])
+        return self._session_native(self, "conv2d", (x, weight, bias, stride, padding, groups))
 
     def max_pool2d(self, x, kernel_size, stride=None):
         """The largest value of each ``kernel_size`` window of an
         ``(N, C, H, W)`` tensor, windows ``stride`` apart (by default
         ``kernel_size``)."""
-        k = _int(kernel_size, "kernel_size", 1)
-        return self._op("max_pool2d", (x,), [k, k if stride is None else _int(stride, "stride", 1)])
+        return self._session_native(self, "max_pool2d", (x, kernel_size, stride))
 
     def avg_pool2d(self, x, kernel_size, stride=None):
         """The mean of each ``kernel_size`` window of an ``(N, C, H, W)``
         tensor, windows ``stride`` apart (by default ``kernel_size``)."""
-        k = _int(kernel_size, "kernel_size", 1)
-        return self._op("avg_pool2d", (x,), [k, k if stride is None else _int(stride, "stride", 1)])
+        return self._session_native(self, "avg_pool2d", (x, kernel_size, stride))
 
     # ------------------------------------------------------------ more elementwise math
     def erf(self, x):
         """The error function."""
-        return self._op("erf", (x,))
+        return self._session_native(self, "erf", (x,))
 
     def gelu(self, x, approximate="none"):
         """The Gaussian error linear unit ``x * Phi(x)``, with ``Phi`` the
         standard normal distribution function; ``approximate='tanh'`` uses
         the tanh approximation
         ``0.5 * x * (1 + tanh(sqrt(2 / pi) * (x + 0.044715 * x**3)))``."""
-        if approximate not in _GELU:
-            raise ValueError("approximate must be 'none' or 'tanh'")
-        return self._op("gelu", (x,), [_GELU[approximate]])
+        return self._session_native(self, "gelu", (x, approximate))
 
     def softplus(self, x):
         """``log(1 + exp(x))``."""
-        return self._op("softplus", (x,))
+        return self._session_native(self, "softplus", (x,))
 
     def silu(self, x):
         """``x * sigmoid(x)`` (also called swish)."""
-        return self._op("silu", (x,))
+        return self._session_native(self, "silu", (x,))
 
     def leaky_relu(self, x, alpha=0.01):
         """``x`` where ``x >= 0``, else ``alpha * x``."""
-        return self._op("leaky_relu", (x,), (), [float(alpha)])
+        return self._session_native(self, "leaky_relu", (x, alpha))
 
     def elu(self, x, alpha=1.0):
         """``x`` where ``x >= 0``, else ``alpha * (exp(x) - 1)``."""
-        return self._op("elu", (x,), (), [float(alpha)])
+        return self._session_native(self, "elu", (x, alpha))
 
     def hard_sigmoid(self, x, alpha=0.2, beta=0.5):
         """``alpha * x + beta`` clipped to ``[0, 1]``."""
-        return self._op("hard_sigmoid", (x,), (), [float(alpha), float(beta)])
+        return self._session_native(self, "hard_sigmoid", (x, alpha, beta))
 
     def hard_swish(self, x):
         """``x * hard_sigmoid(x, alpha=1/6, beta=0.5)``."""
-        return self._op("hard_swish", (x,))
+        return self._session_native(self, "hard_swish", (x,))
 
     def clip(self, x, min=None, max=None):
         """``x`` limited to ``[min, max]``; a bound left as None does not
         limit. A NaN stays NaN."""
-        low = float("-inf") if min is None else float(min)
-        high = float("inf") if max is None else float(max)
-        return self._op("clip", (x,), (), [low, high])
+        return self._session_native(self, "clip", (x, min, max))
 
     def abs(self, x):
         """The absolute value."""
-        return self._op("abs", (x,))
+        return self._session_native(self, "abs", (x,))
 
     def floor(self, x):
         """The largest integer not above ``x``. No gradient flows through it."""
-        return self._op("floor", (x,))
+        return self._session_native(self, "floor", (x,))
 
     def ceil(self, x):
         """The smallest integer not below ``x``. No gradient flows through it."""
-        return self._op("ceil", (x,))
+        return self._session_native(self, "ceil", (x,))
 
     def round(self, x):
         """``x`` rounded to the nearest integer, a half to the even one (as
         ``numpy.round``). No gradient flows through it."""
-        return self._op("round", (x,))
+        return self._session_native(self, "round", (x,))
 
     def sin(self, x):
         """The sine."""
-        return self._op("sin", (x,))
+        return self._session_native(self, "sin", (x,))
 
     def cos(self, x):
         """The cosine."""
-        return self._op("cos", (x,))
+        return self._session_native(self, "cos", (x,))
 
     def sign(self, x):
         """-1, 0 or 1 by the sign of ``x``. No gradient flows through it."""
-        return self._op("sign", (x,))
+        return self._session_native(self, "sign", (x,))
 
     def reciprocal(self, x):
         """``1 / x``."""
-        return self._op("reciprocal", (x,))
+        return self._session_native(self, "reciprocal", (x,))
 
     def pow(self, x, exponent):
         """``x ** exponent`` elementwise, ``exponent`` a tensor that
         broadcasts with ``x`` as in :meth:`add`. A negative ``x`` takes an
         integer exponent. For a number exponent use :meth:`pow_scalar`."""
-        return self._op("pow", (x, exponent))
+        return self._session_native(self, "pow", (x, exponent))
 
     def pow_scalar(self, x, exponent):
         """``x ** exponent`` for a number ``exponent``. A negative ``x``
         takes an integer exponent."""
         # a handle is an int too, so the number form is its own method
-        return self._op("pow", (x,), (), [float(exponent)])
+        return self._session_native(self, "pow_scalar", (x, exponent))
 
     def minimum(self, a, b):
         """The smaller of ``a`` and ``b`` elementwise, with the broadcasting
         of :meth:`add`. A NaN in either gives NaN; ``-0.0`` is below ``0.0``."""
-        return self._op("minimum", (a, b))
+        return self._session_native(self, "minimum", (a, b))
 
     def maximum(self, a, b):
         """The larger of ``a`` and ``b`` elementwise, with the broadcasting
         of :meth:`add`. A NaN in either gives NaN; ``0.0`` is above ``-0.0``."""
-        return self._op("maximum", (a, b))
+        return self._session_native(self, "maximum", (a, b))
 
     def where(self, condition, a, b):
         """``a`` where ``condition`` is nonzero, else ``b``; the three
         broadcast together as in NumPy. The gradient flows to ``a`` and
         ``b``."""
-        return self._op("where", (condition, a, b))
+        return self._session_native(self, "where", (condition, a, b))
 
     def _compare(self, a, b, kind):
         return self._op("compare", (a, b), [_COMPARE[kind]])
 
     def equal(self, a, b):
         """1.0 where ``a == b``, else 0.0, with the broadcasting of :meth:`add`."""
-        return self._compare(a, b, "eq")
+        return self._session_native(self, "equal", (a, b))
 
     def not_equal(self, a, b):
         """1.0 where ``a != b``, else 0.0."""
-        return self._compare(a, b, "ne")
+        return self._session_native(self, "not_equal", (a, b))
 
     def greater(self, a, b):
         """1.0 where ``a > b``, else 0.0."""
-        return self._compare(a, b, "gt")
+        return self._session_native(self, "greater", (a, b))
 
     def greater_equal(self, a, b):
         """1.0 where ``a >= b``, else 0.0."""
-        return self._compare(a, b, "ge")
+        return self._session_native(self, "greater_equal", (a, b))
 
     def less(self, a, b):
         """1.0 where ``a < b``, else 0.0."""
-        return self._compare(a, b, "lt")
+        return self._session_native(self, "less", (a, b))
 
     def less_equal(self, a, b):
         """1.0 where ``a <= b``, else 0.0."""
-        return self._compare(a, b, "le")
+        return self._session_native(self, "less_equal", (a, b))
 
     def logical_not(self, x):
         """1.0 where ``x`` is zero, else 0.0."""
-        return self._op("logical", (x,), [0])
+        return self._session_native(self, "logical_not", (x,))
 
     def logical_and(self, a, b):
         """1.0 where both ``a`` and ``b`` are nonzero, else 0.0."""
-        return self._op("logical", (a, b), [1])
+        return self._session_native(self, "logical_and", (a, b))
 
     def logical_or(self, a, b):
         """1.0 where ``a`` or ``b`` is nonzero, else 0.0."""
-        return self._op("logical", (a, b), [2])
+        return self._session_native(self, "logical_or", (a, b))
 
     def expand(self, x, shape):
         """``x`` broadcast to ``shape`` as NumPy broadcasts it (the result's
         shape is the broadcast of the two). The gradient sums back over the
         broadcast axes."""
-        return self._op("expand", (x,), _dims(shape, low=1))
+        return self._session_native(self, "expand", (x, shape))
 
     def argmax(self, x, axis=-1, keepdims=False, int32=False):
         """The position of the largest value along ``axis``. A NaN is larger
@@ -776,7 +679,7 @@ class Session:
         with ``s.numpy(h).view(np.int32)``. ``keepdims=True`` keeps the axis
         with length 1. No gradient flows through it.
         """
-        return self._op("argmax", (x,), [_int(axis, "axis"), 1 if keepdims else 0, 1 if not int32 else 0])
+        return self._session_native(self, "argmax", (x, axis, keepdims, int32))
 
     def pad(self, x, pads, value=0.0):
         """``x`` padded with ``value``.
@@ -785,22 +688,19 @@ class Session:
         axis's count before its first element, then every axis's count after
         its last one. A negative count removes elements instead.
         """
-        counts = [_int(p, "pads") for p in pads]  # glue: two integer arguments per axis
-        if not counts or len(counts) > 2 * _MAX_RANK:
-            raise ValueError(f"pads must list two counts for each of 1 to {_MAX_RANK} axes")
-        return self._op("pad", (x,), counts, [float(value)])
+        return self._session_native(self, "pad", (x, pads, value))
 
     def any(self, x, axis=None, keepdims=None):
         """1.0 where some element over ``axis`` is nonzero, else 0.0, with
         the axes and shapes of :meth:`sum`. A NaN counts as nonzero. No
         gradient flows through it."""
-        return self._op("any_all", (x,), [0, _keepdims(keepdims)] + _axes(axis))
+        return self._session_native(self, "any", (x, axis, keepdims))
 
     def all(self, x, axis=None, keepdims=None):
         """1.0 where every element over ``axis`` is nonzero, else 0.0, with
         the axes and shapes of :meth:`sum`. A NaN counts as nonzero. No
         gradient flows through it."""
-        return self._op("any_all", (x,), [1, _keepdims(keepdims)] + _axes(axis))
+        return self._session_native(self, "all", (x, axis, keepdims))
 
     def cumsum(self, x, axis, exclusive=False, reverse=False):
         """The running sum of ``x`` along ``axis``; the result has ``x``'s shape.
@@ -815,7 +715,7 @@ class Session:
         >>> s.numpy(h)[0]
         array([1., 2., 3., 4.], dtype=float32)
         """
-        return self._op("cumsum", (x,), [_int(axis, "axis"), 1 if exclusive else 0, 1 if reverse else 0])
+        return self._session_native(self, "cumsum", (x, axis, exclusive, reverse))
 
     def index(self, x, indices, axes=None):
         """``x`` picked at several index tensors at once, as ``x[i, j]`` with
@@ -836,15 +736,7 @@ class Session:
         >>> s.numpy(s.index(x, (i, j)))
         array([[ 1., 11.]], dtype=float32)
         """
-        indices = tuple(indices)
-        if not indices or len(indices) > _MAX_RANK:
-            raise ValueError(f"index takes 1 to {_MAX_RANK} index tensors")
-        if axes is None:
-            axes = range(len(indices))
-        axes = [_int(a, "axes") for a in axes]  # glue: at most eight axis arguments
-        if len(axes) != len(indices):
-            raise ValueError("index takes one axis for each index tensor")
-        return self._op("index", (x,) + indices, axes)
+        return self._session_native(self, "index", (x, indices, axes))
 
     # ------------------------------------------------------------ layers
     def linear(self, x, weight, bias=None, activation=None):
@@ -856,34 +748,39 @@ class Session:
         ``(1, outputs)`` tensor, ``activation`` one of None, ``'relu'``,
         ``'sigmoid'``, ``'tanh'`` or ``'softmax'``.
         """
-        if activation not in _ACTIVATION:
-            raise ValueError("activation must be None, 'relu', 'sigmoid', 'tanh' or 'softmax'")
-        handles = (x, weight) if bias is None else (x, weight, bias)
-        return self._op("linear", handles, [_ACTIVATION[activation]])
+        return self._session_native(self, "linear", (x, weight, bias, activation))
 
     def layer_norm(self, x, weight, bias, eps=1e-5):
         """Normalize along the last axis to zero mean and unit variance,
         then scale by ``weight`` and shift by ``bias`` (both ``(1, features)``,
         the last axis's length)."""
-        if not eps > 0:
-            raise ValueError("eps must be positive")
-        return self._op("layer_norm", (x, weight, bias), (), [float(eps)])
+        return self._session_native(self, "layer_norm", (x, weight, bias, eps))
 
     def dropout(self, x, p, seed=0, counter=0):
         """Zero each element with probability ``p`` and scale the rest by
         ``1 / (1 - p)``. The mask depends only on ``seed``, ``counter`` and
         the element position: use a new ``counter`` for every step."""
-        if not 0 <= p < 1:
-            raise ValueError("p must be in [0, 1)")
-        counter = _int(counter, "counter", 0)
-        return self._op("dropout", (x,), _seed_words(seed) + [counter], [float(p)])
+        return self._session_native(self, "dropout", (x, p, seed, counter))
+
+    def _transformer_softmax(self, x):
+        return self._session_native(self, "transformer_softmax", (x,))
+
+    def _transformer_linear(self, x, weight):
+        return self._session_native(self, "transformer_linear", (x, weight))
+
+    def rms_norm(self, x, weight, eps=1e-6):
+        """Normalize each last-axis row by its root mean square, then scale by weight."""
+        return self._session_native(self, "rms_norm", (x, weight, eps))
+
+    def rotary(self, x, head_dim, *, offset=0, theta=10000.0):
+        """Apply full-width rotary embeddings to sequence-by-concatenated-head features."""
+        return self._session_native(self, "rotary", (x, head_dim, offset, theta))
 
     # ------------------------------------------------------------ data steps
     def permutation(self, n, seed=0, epoch=0):
         """A random order of the rows ``0 .. n-1`` as an ``(n, 1)`` tensor,
         determined by ``seed`` and ``epoch``."""
-        n = _int(n, "n", 1)
-        return self._op("permutation", (), [n] + _seed_words(seed) + [_int(epoch, "epoch", 0)])
+        return self._session_native(self, "permutation", (n, seed, epoch))
 
     def gather_rows(self, x, indices, start=0, count=None):
         """The rows of ``x`` listed in ``indices[start:start + count]``.
@@ -891,8 +788,7 @@ class Session:
         ``indices`` is a :meth:`permutation` of at most ``x``'s row count.
         The result carries no gradient.
         """
-        count = 0 if count is None else _int(count, "count", 1)
-        return self._op("gather_rows", (x, indices), [_int(start, "start", 0), count])
+        return self._session_native(self, "gather_rows", (x, indices, start, count))
 
     def embedding(self, table, ids, padding_idx=None):
         """Rows of ``table`` picked by integer ``ids``: ``table[ids]``.
@@ -915,52 +811,31 @@ class Session:
         ...     s.backward(s.sum(x))
         ...     g = s.grad(w)
         """
-        from ._cast_in import as_input, describe
-        if self._is_handle(ids):
-            pad = -1 if padding_idx is None else _int(padding_idx, "padding_idx", 0)
-            # an ids tensor: Mojo reads its int32 words on the device
-            return self._op("embedding", (table, ids), [pad])
-        a = as_input(ids)
-        if a.dtype.kind not in "iu":
-            raise TypeError(f"ids must be integers, got dtype {a.dtype}")
-        if a.size == 0:
-            raise ValueError("ids must not be empty")
-        if a.ndim > 2:
-            # a C-contiguous array flattens to a view of the same memory
-            if not a.flags.c_contiguous:
-                raise ValueError("ids with more than two dimensions must be C-contiguous; "
-                                 "pass numpy.ascontiguousarray(ids)")
-            a = a.reshape(-1)
-        pad = -1 if padding_idx is None else _int(padding_idx, "padding_idx", 0)
-        # `a` as it is (Mojo casts it to int32 on the executor, row-major);
-        # it stays referenced until the binding has copied it
-        return self._op("embedding", (table,), describe(a, "ids") + [pad])
+        return self._session_native(self, "embedding", (table, ids, padding_idx))
 
     # ------------------------------------------------------------ losses (differentiable)
     def mse(self, prediction, target, reduction="mean"):
         """The squared error, averaged or summed: a ``(1, 1)`` tensor."""
-        return self._op("mse", (prediction, target), [_reduction(reduction)])
+        return self._session_native(self, "mse", (prediction, target, reduction))
 
     def mae(self, prediction, target, reduction="mean"):
         """The absolute error, averaged or summed."""
-        return self._op("mae", (prediction, target), [_reduction(reduction)])
+        return self._session_native(self, "mae", (prediction, target, reduction))
 
     def huber(self, prediction, target, delta=1.0, reduction="mean"):
         """The Huber loss with threshold ``delta``, averaged or summed."""
-        if not delta > 0:
-            raise ValueError("delta must be positive")
-        return self._op("huber", (prediction, target), [_reduction(reduction)], [float(delta)])
+        return self._session_native(self, "huber", (prediction, target, delta, reduction))
 
     def bce_with_logits(self, logits, target, reduction="mean"):
         """Binary cross-entropy of ``sigmoid(logits)`` against targets in
         ``[0, 1]``, computed stably from the logits."""
-        return self._op("bce_with_logits", (logits, target), [_reduction(reduction)])
+        return self._session_native(self, "bce_with_logits", (logits, target, reduction))
 
     def cross_entropy(self, logits, codes, reduction="mean"):
         """Softmax cross-entropy of ``(..., classes)`` logits against class
         codes (the class index as a float), one per position of the leading
         axes: ``(rows, 1)`` codes for ``(rows, classes)`` logits."""
-        return self._op("cross_entropy", (logits, codes), [_reduction(reduction)])
+        return self._session_native(self, "cross_entropy", (logits, codes, reduction))
 
     # ------------------------------------------------------------ metrics (values)
     def _metric(self, name, y_true, prediction):
@@ -972,18 +847,18 @@ class Session:
 
         ``y_true`` holds class codes ``(n, 1)``; ``prediction`` holds codes
         ``(n, 1)`` or scores ``(n, classes)`` (the first highest wins)."""
-        return self._metric("accuracy", y_true, prediction)
+        return self._session_native(self, "accuracy", (y_true, prediction))
 
     def log_loss(self, y_true, probability):
         """The mean negative log-likelihood of the class codes ``(n, 1)``
         under the probabilities ``(n, classes)`` (or ``(n, 1)``, the
         positive class), as a float."""
-        return self._metric("log_loss", y_true, probability)
+        return self._session_native(self, "log_loss", (y_true, probability))
 
     def roc_auc(self, y_true, scores):
         """The area under the ROC curve of binary labels ``(n, 1)`` (1
         positive) against scores ``(n, 1)``, as a float."""
-        return self._metric("roc_auc", y_true, scores)
+        return self._session_native(self, "roc_auc", (y_true, scores))
 
     # ------------------------------------------------------------ gradients
     def backward(self, loss, accumulate=False, create_graph=False):
@@ -1015,21 +890,12 @@ class Session:
         ...     s.backward(s.grad_tensor(x))
         ...     d2 = s.grad(x)
         """
-        loss = _int(loss, "loss", 1)
-        if create_graph:
-            if accumulate:
-                raise ValueError("accumulate=True cannot be combined with create_graph=True: "
-                                 "add the previous gradient tensor with add() instead")
-            self._b.ops_backward_graph(self._sid(), loss)
-            return
-        self._b.ops_backward(self._sid(), loss, 1 if accumulate else 0)
+        return self._session_native(self, "backward", (loss, accumulate, create_graph))
 
     def grad(self, h):
         """The gradient of tensor ``h`` from the last :meth:`backward`, as a
         float32 array of its shape."""
-        out = np.empty(self.shape(h), dtype=np.float32)
-        self._b.ops_grad(self._sid(), h, out.ctypes.data)
-        return out
+        return self._session_native(self, "grad", (h,))
 
     def grad_tensor(self, h):
         """The gradient of tensor ``h`` from the last
@@ -1041,7 +907,7 @@ class Session:
         get second derivatives. Raises if the last backward did not record
         its gradients.
         """
-        return int(self._b.ops_grad_handle(self._sid(), _int(h, "handle", 1)))
+        return self._session_native(self, "grad_tensor", (h,))
 
     def vjp(self, output, inputs, v, create_graph=False):
         """The vector-Jacobian products of ``output`` for the seed ``v``.
@@ -1075,10 +941,7 @@ class Session:
         ...     (jt_v,) = s.vjp(y, [x], s.full((3, 2), 1.0))
         ...     values = s.numpy(jt_v)
         """
-        hs = self._handles(inputs)
-        res = self._b.ops_vjp(self._sid(), _int(output, "output", 1), hs, _int(v, "v", 1),
-                              1 if create_graph else 0)
-        return [int(h) for h in res]  # glue: one result handle per input
+        return self._session_native(self, "vjp", (output, inputs, v, create_graph))
 
     def jvp(self, output, inputs, u):
         """The Jacobian-vector product of ``output`` along the directions ``u``.
@@ -1108,11 +971,7 @@ class Session:
         ...     y = s.tanh(x)
         ...     j_u = s.numpy(s.jvp(y, [x], [s.full((3, 2), 1.0)]))
         """
-        hs = self._handles(inputs)
-        us = self._handles(u)
-        if len(us) != len(hs):
-            raise ValueError("u must give one direction per input")
-        return int(self._b.ops_jvp(self._sid(), _int(output, "output", 1), hs, us))
+        return self._session_native(self, "jvp", (output, inputs, u))
 
     def hvp(self, loss, params, v):
         """The Hessian-vector products of a scalar ``loss`` along ``v``.
@@ -1146,12 +1005,7 @@ class Session:
         ...     (hv,) = s.hvp(loss, [w], [s.full((3, 1), 1.0)])
         ...     values = s.numpy(hv)
         """
-        hs = self._handles(params)
-        vs = self._handles(v)
-        if len(vs) != len(hs):
-            raise ValueError("v must give one direction per parameter")
-        res = self._b.ops_hvp(self._sid(), _int(loss, "loss", 1), hs, vs)
-        return [int(h) for h in res]  # glue: one result handle per parameter
+        return self._session_native(self, "hvp", (loss, params, v))
 
     @staticmethod
     def _handles(hs):
@@ -1201,13 +1055,9 @@ class Session:
         ...     model = s.capture(inputs=[x], outputs=[p])
         ...     probs = model.run(rng.standard_normal((16, 4), dtype=np.float32))
         """
-        ins = self._handles(inputs)
-        outs = self._handles(outputs)
-        # Mojo walks the session's operation log from the outputs
-        info = self._b.ops_capture(self._sid(), ins, outs)
-        return Program(self, info)
+        return self._session_native(self, "capture", (inputs, outputs))
 
-    def run(self, program, *arrays, dynamic_shapes=False):
+    def run(self, program, *arrays, dynamic_shapes=False, optimize=False):
         """Run ``program`` on new input arrays: one call that uploads them,
         runs every captured operation on the device and returns the outputs.
 
@@ -1224,30 +1074,22 @@ class Session:
         natively. A captured reshape should use ``-1`` for an inferred
         dimension when its element count can change.
         """
-        from ._cast_in import as_input, describe, matrix_view
-        if not isinstance(program, Program) or program._s is not self:
-            raise ValueError("program must be a Program of this session")
-        if dynamic_shapes:
-            return self._b.ops_program_dynamic(self._sid(), program._id, arrays)
-        if len(arrays) != len(program.input_shapes):
-            raise ValueError(f"this program takes {len(program.input_shapes)} input arrays, got {len(arrays)}")
-        keep, descs = [], []
-        for k, x in enumerate(arrays):  # glue: one descriptor per program input
-            a = as_input(x)
-            want = program.input_shapes[k]
-            have = a.shape if a.ndim > 1 else (a.size, 1)
-            if tuple(have) != want:
-                raise ValueError(f"input {k} must have the shape {want}, got {tuple(a.shape)}")
-            if program.input_kinds[k] == 1 and a.dtype.kind not in "iu":
-                raise TypeError(f"input {k} holds ids and must be an integer array, got dtype {a.dtype}")
-            m = matrix_view(a, "x") if a.ndim > 2 else a
-            keep.append(m)
-            descs.append(describe(m, "x"))
-        outs = [np.empty(sh, dtype=np.float32) for sh in program.output_shapes]  # glue: one destination per output
-        addrs = [o.ctypes.data for o in outs]  # glue: one destination address per program output
-        self._b.ops_program_run(self._sid(), program._id, descs, addrs)
-        del keep
-        return outs[0] if len(outs) == 1 else tuple(outs)
+        return self._program_execute(self._id, program._id, program._s._id,
+                                           arrays, dynamic_shapes, optimize, False)
+
+    def load_partitioned(self, path, devices=(0,)):
+        """Restore a complete partitioned program onto physical devices."""
+        return self._distributed_binding.ops_partitioned_load(
+            path, devices, _PartitionedProgram, self._distributed_binding)
+
+    def load_distributed(self, path, devices=(0,)):
+        """Restore a complete distributed program onto the given devices."""
+        return self._distributed_binding.ops_distributed_load(
+            path, devices, _DistributedProgram, self._distributed_binding)
+
+    def load_control(self, path):
+        """Load control components and shared parameters from one checkpoint."""
+        return self._session_native(self, "load_control", (path,))
 
     def load_program(self, path):
         """Load a :class:`Program` saved with :meth:`Program.save`.
@@ -1256,10 +1098,7 @@ class Session:
         not record. A program saved on one install loads on any other,
         a GPU install or the CPU-only install, and gives the same outputs.
         """
-        if self.record:
-            raise ValueError("programs run in an inference session (Session(record=False))")
-        info = self._b.ops_load_program(self._sid(), os.fspath(path))  # cpu-route: program file read on the host
-        return Program(self, info)
+        return self._session_native(self, "load_program", (path,))
 
     # ------------------------------------------------------------ checkpoints
     def save_state(self, path, params, optimizer=None, *, seed=0, epoch=0, step=0):
@@ -1297,14 +1136,7 @@ class Session:
         ...     opt = s.optimizer("adam", lr=1e-3)
         ...     s.save_state("state.ckpt", [w], optimizer=opt, seed=0, epoch=3, step=120)
         """
-        hs = [_int(h, "handle", 1) for h in params]  # glue: the parameter handles
-        if not hs:
-            raise ValueError("params must hold at least one tensor handle")
-        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
-        counters = _seed_words(seed) + [_int(epoch, "epoch", 0), _int(step, "step", 0)]
-        # Mojo reads each parameter's optimizer state (step count,
-        # bias-correction products, buffers) and writes the file
-        self._b.ops_save_state(self._sid(), os.fspath(path), hs, opt, counters)  # cpu-route: checkpoint file written on the host
+        return self._session_native(self, "save_state", (path, params, optimizer, seed, epoch, step))
 
     def load_state(self, path, optimizer=None, requires_grad=True):
         """Load a file written by :meth:`save_state`.
@@ -1338,14 +1170,7 @@ class Session:
         ...     state = s.load_state("state.ckpt", optimizer=opt)
         ...     (w,) = state["params"]
         """
-        path = os.fspath(path)
-        grad = 1 if (requires_grad and self.record) else 0
-        opt = 0 if optimizer is None else self._kind_of(optimizer)[0]
-        # Mojo uploads the parameters and restores the optimizer state
-        # through the session's load_optimizer_state
-        hs, _, lo, hi, epoch, step = self._b.ops_load_state(self._sid(), path, grad, opt)  # cpu-route: checkpoint file read on the host
-        hs = [int(h) for h in hs]  # glue: the new handles
-        return dict(params=hs, seed=(int(hi) << 32) | int(lo), epoch=int(epoch), step=int(step))
+        return self._session_native(self, "load_state", (path, optimizer, requires_grad))
     def load_weights(self, path, names, *, source=None):
         """Load named tensors from a safetensors checkpoint (or a PyTorch
         state_dict) into tensors of this session.
@@ -1395,37 +1220,7 @@ class Session:
         ...     x = s.tensor(rng.standard_normal((8, 4), dtype=np.float32))
         ...     probs = s.numpy(s.linear(x, w, b, activation="softmax"))
         """
-        from ._weight_import import LAYOUT_AS_IS, LAYOUT_TRANSPOSE, WeightSource
-        pairs = list(names)
-        if not pairs:
-            raise ValueError("names must hold at least one (handle, name) pair")
-        entries = []
-        for pair in pairs:  # glue: the (handle, name[, layout]) arguments
-            if not isinstance(pair, (tuple, list)) or len(pair) not in (2, 3):
-                raise ValueError("names takes (handle, name) or (handle, name, 'transpose') pairs")
-            layout = LAYOUT_AS_IS
-            if len(pair) == 3:
-                if pair[2] != "transpose":
-                    raise ValueError("the third item of a names entry must be 'transpose'")
-                layout = LAYOUT_TRANSPOSE
-            if not isinstance(pair[1], str):
-                raise TypeError("a tensor name must be a string")
-            entries.append((_int(pair[0], "handle", 1), pair[1], layout))
-        keys = [k for _, k, _ in entries]  # glue: the requested tensor names
-        sid = self._sid()
-        with WeightSource(path, source, what="load_weights") as src:
-            missing = src.missing(keys)
-            if missing:
-                held = src.names()
-                raise ValueError(f"load_weights: the source has no tensor {missing[0]!r}"
-                                 + (f" ({len(missing)} missing)" if len(missing) > 1 else "")
-                                 + f"; it holds {held[:6]}" + (" ..." if len(held) > 6 else ""))
-            recs = []
-            for h, key, layout in entries:  # glue: one record per source tensor
-                recs += src.record(key, h, 0, layout)
-            # Mojo checks every dtype and shape, then writes every tensor
-            self._b.ops_load_weights(sid, recs, keys)
-        return [h for h, _, _ in entries]  # glue: the handles, in the order given
+        return self._session_native(self, "load_weights", (path, names, source))
 
     def zero_grad(self):
         """Clear the gradient of every tensor made with ``requires_grad=True``.
@@ -1435,7 +1230,7 @@ class Session:
         before one :meth:`step`; a plain :meth:`backward` already replaces
         the previous gradients.
         """
-        self._b.ops_zero_grad(self._sid())
+        return self._session_native(self, "zero_grad", ())
 
     # ------------------------------------------------------------ optimizers
     def optimizer(self, kind="adam", lr=1e-3, *, momentum=0.0, nesterov=False, beta1=0.9, beta2=0.999,
@@ -1476,16 +1271,7 @@ class Session:
         >>> with ops.Session(record=True) as s:
         ...     opt = s.optimizer("sgd", lr=0.1, momentum=0.9, nesterov=True)
         """
-        if kind not in _OPTIMIZER:
-            raise ValueError(f"kind must be one of {sorted(_OPTIMIZER)}")
-        if schedule not in _SCHEDULE:
-            raise ValueError(f"schedule must be one of {sorted(_SCHEDULE)}")
-        ip = [_OPTIMIZER[kind], 1 if nesterov else 0, _SCHEDULE[schedule], _int(step_size, "step_size", 1)]
-        fp = [float(lr), float(momentum), float(beta1), float(beta2), float(eps), float(weight_decay),
-              float(gamma)]
-        opt = int(self._b.ops_optimizer(self._sid(), ip, fp))
-        self._opt_kind[opt] = kind
-        return opt
+        return self._session_native(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma))
 
     def _kind_of(self, optimizer):
         optimizer = _int(optimizer, "optimizer", 1)
@@ -1503,21 +1289,15 @@ class Session:
         Nothing is read back. Call :meth:`reset` before recording the next
         forward pass.
         """
-        optimizer, _ = self._kind_of(optimizer)
-        if isinstance(params, (int, np.integer)) and not isinstance(params, bool):
-            params = [params]
-        hs = [_int(p, "handle", 1) for p in params]  # glue: the step's parameter handles
-        self._b.ops_step(self._sid(), optimizer, hs)
+        return self._session_native(self, "step", (optimizer, params))
 
     def scheduler_step(self, optimizer):
         """Advance ``optimizer``'s learning-rate schedule by one epoch."""
-        optimizer, _ = self._kind_of(optimizer)
-        self._b.ops_scheduler_step(self._sid(), optimizer)
+        return self._session_native(self, "scheduler_step", (optimizer,))
 
     def learning_rate(self, optimizer):
         """``optimizer``'s current learning rate, as a float."""
-        optimizer, _ = self._kind_of(optimizer)
-        return float(self._b.ops_learning_rate(self._sid(), optimizer))
+        return self._session_native(self, "learning_rate", (optimizer,))
 
     def optimizer_state(self, optimizer, param):
         """The optimizer's state for one parameter, as a dict.
@@ -1530,16 +1310,7 @@ class Session:
         :meth:`reset`: read them with :meth:`numpy` to save a checkpoint,
         and restore it with :meth:`load_optimizer_state`.
         """
-        optimizer, kind = self._kind_of(optimizer)
-        w = self._b.ops_optimizer_state(self._sid(), optimizer, _int(param, "param", 1))
-        state = {"step": int(w[0])}
-        if kind in ("adam", "adamw"):
-            state["beta1_power"] = float(w[1])
-            state["beta2_power"] = float(w[2])
-        for name, h in zip(_STATE_NAMES[kind], w[4:7]):  # glue: three named state buffers
-            if name is not None and int(h) != 0:
-                state[name] = int(h)
-        return state
+        return self._session_native(self, "optimizer_state", (optimizer, param))
 
     def load_optimizer_state(self, optimizer, param, state):
         """Restore the state :meth:`optimizer_state` returned.
@@ -1549,18 +1320,7 @@ class Session:
         values are copied on the device; the next :meth:`step` continues
         exactly where the saved run stopped.
         """
-        optimizer, kind = self._kind_of(optimizer)
-        if "step" not in state:
-            raise KeyError("state needs 'step'")
-        names = _STATE_NAMES[kind]
-        hs = [_int(state[n], n, 1) if n is not None and n in state else 0 for n in names]  # glue: three named state buffers
-        fp = [1.0, 1.0, 1.0]
-        if kind in ("adam", "adamw"):
-            if "beta1_power" not in state or "beta2_power" not in state:
-                raise KeyError("an adam state needs 'beta1_power' and 'beta2_power'")
-            fp = [float(state["beta1_power"]), float(state["beta2_power"]), 1.0]
-        ip = [_int(state["step"], "step", 0)] + hs
-        self._b.ops_load_optimizer_state(self._sid(), optimizer, _int(param, "param", 1), ip, fp)
+        return self._session_native(self, "load_optimizer_state", (optimizer, param, state))
 
 
 class Program:
@@ -1601,18 +1361,53 @@ class Program:
     """
 
     def __init__(self, session, info):
-        self._s = session
-        self._id = int(info[0])
-        self.input_shapes = tuple(tuple(int(d) for d in sh) for sh in info[1])  # glue: at most eight dimensions per input
-        self.output_shapes = tuple(tuple(int(d) for d in sh) for sh in info[2])  # glue: at most eight dimensions per output
-        self.params = tuple(int(h) for h in info[3])  # glue: the parameter handles
-        # a binding built before the input kinds returns four entries: every input holds values
-        kinds = info[4] if len(info) > 4 else [0] * len(self.input_shapes)
-        self.input_kinds = tuple(int(k) for k in kinds)  # glue: one kind per program input
+        return session._session_native(session, "program_init", (self, info))
 
-    def run(self, *arrays, dynamic_shapes=False):
+    def run(self, *arrays, dynamic_shapes=False, optimize=False):
         """Run the program on new input arrays (see :meth:`Session.run`)."""
-        return self._s.run(self, *arrays, dynamic_shapes=dynamic_shapes)
+        return self._execute_native(self._s._id, self._id, self._s._id,
+                                             arrays, dynamic_shapes, optimize, False)
+
+    def inspect(self, *, optimize=False):
+        """Return the graph's operations, references, attributes and shapes."""
+        return self._inspect_native(self._s._id, self._id, optimize)
+
+    def profile(self, *arrays, dynamic_shapes=False, optimize=False):
+        """Run and return outputs with per-node timing and storage accounting."""
+        return self._execute_native(self._s._id, self._id, self._s._id,
+                                             arrays, dynamic_shapes, optimize, True)
+
+    def run_if(self, condition, otherwise, *arrays, optimize=False):
+        """Evaluate a scalar condition graph and execute its selected branch."""
+        return self._control_native(
+            self._s._id, self._id,
+            (condition._s._id, condition._id, otherwise._s._id, otherwise._id),
+            arrays, 0, optimize)
+
+    def run_dynamic(self, *arrays, optimize=False, profile=False):
+        """Replay on compatible input ranks and dimensions, deriving every output shape."""
+        return self._execute_native(self._s._id, self._id, self._s._id,
+                                    arrays, 2, optimize, profile)
+
+    def vjp_if(self, condition, otherwise, *arrays, seeds, parameters=None):
+        """Differentiate the selected branch against output seeds in one native call."""
+        return self._control_native(
+            self._s._id, self._id,
+            (condition._s._id, condition._id, otherwise._s._id, otherwise._id, seeds, parameters),
+            arrays, 0, False)
+
+    def vjp_while(self, *arrays, condition, max_iterations, seeds, parameters=None):
+        """Differentiate the executed loop iterations against final output seeds."""
+        return self._control_native(
+            self._s._id, self._id,
+            (condition._s._id, condition._id, self._s._id, 0, seeds, parameters),
+            arrays, max_iterations, False)
+
+    def while_loop(self, *arrays, condition, max_iterations, optimize=False):
+        """Apply this state graph while the scalar condition holds, up to a limit."""
+        return self._control_native(
+            self._s._id, self._id, (condition._s._id, condition._id, self._s._id, 0),
+            arrays, max_iterations, optimize)
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
@@ -1655,20 +1450,53 @@ class Program:
         >>> opt = session.optimizer("adam", lr=0.01)
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
-        kinds = {"output": 0, "mse": 1, "mae": 2, "huber": 3,
-                 "bce_with_logits": 4, "cross_entropy": 5}
-        if loss not in kinds:
-            raise ValueError(f"unknown loss {loss!r}")
-        if (loss == "output") != (targets is None):
-            raise ValueError("omit targets only when loss='output'")
-        lo, hi = _seed_words(seed)
-        params = self.params if parameters is None else self._s._handles(parameters)
-        ip = [_int(optimizer, "optimizer", 1), kinds[loss], _int(epochs, "epochs", 1),
-              _int(batch_size, "batch_size", 1), int(bool(shuffle)), lo, hi]
-        self.loss_curve_ = self._s._b.ops_program_fit(
-            self._s._sid(), self._id, arrays, targets, params, ip, [float(huber_delta)])
-        self.n_iter_ = int(epochs)
-        return self
+        return self._session_native(self._s, "fit", (self, None, None, arrays, targets,
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
+
+    def fit_if(self, condition, otherwise, *arrays, targets=None, optimizer,
+               parameters=None, loss="mse", epochs=10, batch_size=32,
+               shuffle=True, seed=0, huber_delta=1.0):
+        """Train the branch selected by a scalar predicate for each minibatch.
+
+        Components belong to one session and accept the same input ranks and
+        kinds. The predicate is discrete. Shared parameters have one optimizer
+        state; parameters absent from the selected branch are unchanged.
+        Returns this program with epoch losses and per-call branch counts.
+        """
+        return self._session_native(self._s, "fit_if", (self, condition, otherwise, arrays, targets,
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
+
+    def partition(self, devices=(0,), *, stages=2, tensor_shards=1,
+                  microbatches=2, optimizer, parameters=(), seed=0):
+        """Partition captured operations and model state across native workers.
+
+        ``stages`` and ``tensor_shards`` fix the logical graph; ``microbatches``
+        fixes the pipeline and gradient order. Physical devices may change
+        when restoring a checkpoint. Eligible matrix products split independent
+        output columns; stage-owned parameters and moments stay on one device.
+        """
+        return self._s._distributed_binding.ops_partitioned_open(
+            self._s._id, self._id, devices,
+            (stages, tensor_shards, microbatches, optimizer, parameters, seed),
+            _PartitionedProgram, self._s._distributed_binding)
+
+    def distribute(self, devices=(0,), *, logical_shards=2, optimizer,
+                   parameters=(), seed=0):
+        """Copy this program into native workers with sharded optimizer state.
+
+        Keep ``logical_shards`` unchanged when comparing physical topologies.
+        ``optimizer`` is a session optimizer handle; its state is copied too.
+        ``parameters`` lists trainable handles, or is empty to train every
+        floating-point parameter. ``seed`` controls native row permutations.
+        """
+        return self._s._distributed_binding.ops_distributed_open(
+            self._s._id, self._id, devices, (logical_shards, optimizer, parameters, seed),
+            _DistributedProgram, self._s._distributed_binding)
+
+    def save_control(self, path, *, condition, otherwise=None, max_iterations=None,
+                     optimizer=None, seed=0):
+        """Save control components, shared parameters and optional optimizer state."""
+        return self._session_native(self._s, "save_control", (self, path, condition, otherwise, max_iterations, optimizer, seed))
 
     def save(self, path):
         """Write the program and its parameters' current values to ``path``,
@@ -1680,12 +1508,63 @@ class Program:
         <path>`` runs the saved program on the same inputs and checks that
         every output has the same bits.
         """
-        self._s._b.ops_save_program(self._s._sid(), self._id, os.fspath(path))  # cpu-route: program file written on the host
-        from ._verify_model import record_program
-        record_program(self, path)
+        return self._session_native(self._s, "save_program", (self, path))
 
     def free(self):
         """Release the program (its parameters stay session tensors)."""
-        if self._id is not None and self._s._id is not None:
-            self._s._b.ops_program_free(self._s._sid(), self._id)
-        self._id = None
+        return self._session_native(self._s, "free_program", (self,))
+
+
+# Distribution setup: resolve installed extension modules and CPU proxy
+# attributes while importing this connector. Session construction and every
+# later operation use cached native entries; no backend Python is called.
+def _connect_session_mode(mode):
+    module = _backend.binding("_mojolearn_x_sequence", mode)
+    distributed = SimpleNamespace(
+        ops_distributed_open=getattr(module, "ops_distributed_open", None),
+        ops_distributed_load=getattr(module, "ops_distributed_load", None),
+        ops_distributed_fit=getattr(module, "ops_distributed_fit", None),
+        ops_distributed_run=getattr(module, "ops_distributed_run", None),
+        ops_distributed_state=getattr(module, "ops_distributed_state", None),
+        ops_distributed_residency=getattr(module, "ops_distributed_residency", None),
+        ops_distributed_save=getattr(module, "ops_distributed_save", None),
+        ops_distributed_close=getattr(module, "ops_distributed_close", None),
+        ops_distributed_enter=getattr(module, "ops_distributed_enter", None),
+        ops_distributed_exit=getattr(module, "ops_distributed_exit", None),
+        ops_partitioned_open=getattr(module, "ops_partitioned_open", None),
+        ops_partitioned_load=getattr(module, "ops_partitioned_load", None),
+        ops_partitioned_fit=getattr(module, "ops_partitioned_fit", None),
+        ops_partitioned_run=getattr(module, "ops_partitioned_run", None),
+        ops_partitioned_state=getattr(module, "ops_partitioned_state", None),
+        ops_partitioned_residency=getattr(module, "ops_partitioned_residency", None),
+        ops_partitioned_save=getattr(module, "ops_partitioned_save", None),
+        ops_partitioned_close=getattr(module, "ops_partitioned_close", None),
+        ops_partitioned_enter=getattr(module, "ops_partitioned_enter", None),
+        ops_partitioned_exit=getattr(module, "ops_partitioned_exit", None),
+        ops_partitioned_profile=getattr(module, "ops_partitioned_profile", None),
+    )
+    result = SimpleNamespace(
+        binding=module, initialize=module.ops_session_initialize,
+        numeric_mode=module.x_sequence_numeric_mode, open=module.ops_session_create,
+        call=module.ops_session_call, execute=module.ops_program_execute,
+        inspect=module.ops_program_inspect, control=module.ops_program_control,
+        fit=module.ops_program_fit_native, distributed=distributed)
+    result.initialize(None, None, None, None, None, None)
+    return result
+
+
+_SESSION_CONNECTIONS = {}
+# Both supported modes connect at import; a missing optional mode retains its
+# exact refusal for the native initializer. The default remains selectable.
+for _session_mode in ("identical", "fast"):
+    try:
+        _SESSION_CONNECTIONS[_session_mode] = _connect_session_mode(_session_mode)
+    except (ImportError, ValueError, AttributeError) as _session_error:
+        _SESSION_CONNECTIONS[_session_mode] = type(_session_error).__name__ + ": " + str(_session_error)
+
+_session_connected = _SESSION_CONNECTIONS["identical"]
+if isinstance(_session_connected, str):
+    _session_connected = _SESSION_CONNECTIONS["fast"]
+if isinstance(_session_connected, str):
+    raise ImportError(_session_connected)
+_SESSION_INITIALIZE = _session_connected.initialize

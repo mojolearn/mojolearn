@@ -59,3 +59,44 @@ _mojolearn_linalg.public_fast_to_bf16	experimental Apple BF16 candidate; install
 _mojolearn_linalg.public_fast_from_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 Session.profile_reset	diagnostic launch profile for development, not user API
 Session.profile_report	diagnostic launch profile for development, not user API
+Program.inspect	graph diagnostics; installed-release qualification pending
+Program.profile	graph diagnostics; installed-release qualification pending
+Program.run_if	native conditional execution; cross-vendor qualification pending
+Program.while_loop	native loop execution; cross-vendor qualification pending
+
+Program.distribute	native distributed captured programs: qualification pending
+Session.load_distributed	native distributed captured programs: qualification pending
+_distributed_program.DistributedProgram	native distributed captured programs: qualification pending
+
+# Native model/tensor/pipeline partitioning awaits installed-vendor qualification.
+Program.partition	native model/tensor/pipeline partitions: qualification pending
+Session.load_partitioned	native model/tensor/pipeline partitions: qualification pending
+_partitioned_program.PartitionedProgram	native model/tensor/pipeline partitions: qualification pending
+Program.run_dynamic	native variable-rank replay; cross-vendor qualification pending
+Program.vjp_if	native conditional differentiation; cross-vendor qualification pending
+Program.vjp_while	native loop differentiation; cross-vendor qualification pending
+Session.execution_profile_begin	native execution counters; installed-release qualification pending
+Session.execution_profile_end	native execution counters; installed-release qualification pending
+Program.save_control	control checkpoint; installed-release qualification pending
+Program.fit_if	conditional native training; installed-release qualification pending
+Session.load_control	control checkpoint; installed-release qualification pending
+Session.gradient_report	native gradient diagnostics; installed-release qualification pending
+# These existing replay entries now expose the unqualified optimization option.
+Program.run	opt-in graph rewrites; current installed-vendor qualification pending
+Session.run	opt-in graph rewrites; current installed-vendor qualification pending
+# Native generation policy and continuation source await current vendor qualification.
+CausalLM.generate	stopping and seeded sampling; current cross-vendor qualification pending
+CausalLM.stream	native bounded generation reads; current cross-vendor qualification pending
+CausalLM.generate_text	native text generation; current cross-vendor qualification pending
+CausalLM.stream_text	native text streaming; current cross-vendor qualification pending
+CausalLM.resume_generation	native generation continuation; current cross-vendor qualification pending
+causal_lm.GenerationStream	native generation stream state; current cross-vendor qualification pending
+cross_vendor.Worker	native callback-free worker and checkpoint policy; current qualification pending
+cross_vendor.Coordinator	native callback-free coordinator; current qualification pending
+cross_vendor.BatchFeed	native data admission; current qualification pending
+cross_vendor.LearningRateTable	native schedule admission; current qualification pending
+GenerationStream.read	native generation stream reads; current cross-vendor qualification pending
+GenerationStream.info	native generation stream metadata; current cross-vendor qualification pending
+GenerationStream.state_dict	native generation stream checkpoint; current cross-vendor qualification pending
+mojolearn.ops.Session.rms_norm
+mojolearn.ops.Session.rotary

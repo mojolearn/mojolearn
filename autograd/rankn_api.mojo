@@ -24,6 +24,7 @@ from autograd.rankn_fold import RankNFoldRules
 from autograd.rankn_bmm import RankNBmmRules
 from autograd.rankn_layout import RankNLayoutRules
 from autograd.rules_conv2d import Conv2dRules
+from autograd.transformer_primitives import TransformerPrimitiveRules, GRAPH_RMS_NORM, GRAPH_ROTARY, GRAPH_TRANSFORMER_LINEAR, GRAPH_TRANSFORMER_SOFTMAX
 
 comptime RN_TAG_FOLD_FIRST = 136
 comptime RN_TAG_FOLD_LAST = 151
@@ -44,6 +45,8 @@ struct RankNRules(BackwardRules):
     """NeuralRules plus every rank-N lane's custom rules, by tag block."""
 
     def supports(self, tag: Int) -> Bool:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
+            return True
         if tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             return RankNFoldRules().supports(tag)
         if tag >= RN_TAG_BMM_FIRST and tag <= RN_TAG_BMM_LAST:
@@ -55,6 +58,8 @@ struct RankNRules(BackwardRules):
         return NeuralRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
+            return TransformerPrimitiveRules().zeroed_destination(tag, saved, edge)
         if tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             return RankNFoldRules().zeroed_destination(tag, saved, edge)
         if tag >= RN_TAG_BMM_FIRST and tag <= RN_TAG_BMM_LAST:
@@ -66,6 +71,8 @@ struct RankNRules(BackwardRules):
         return NeuralRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
+            return False
         if tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             return RankNFoldRules().writes_total(tag, saved, edge)
         if tag >= RN_TAG_BMM_FIRST and tag <= RN_TAG_BMM_LAST:
@@ -80,7 +87,9 @@ struct RankNRules(BackwardRules):
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
     ) raises:
-        if tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
+            TransformerPrimitiveRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        elif tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             RankNFoldRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif tag >= RN_TAG_BMM_FIRST and tag <= RN_TAG_BMM_LAST:
             RankNBmmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
@@ -184,13 +193,13 @@ def rn_check_permutation(axes: List[Int], ndim: Int, what: String) raises -> Lis
     """`axes` normalized (negative axes count from the end), refused unless
     it lists every axis of a rank-`ndim` tensor once."""
     if len(axes) != ndim:
-        raise Error(what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
+        raise Error("ValueError: " + what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
     var seen = List[Bool](length=ndim, fill=False)
     var out = List[Int](capacity=ndim)
     for k in range(ndim):  # small-loop(ndim: tensor rank, at most 8): shape metadata, no data
         var a = rn_normalize_axis(axes[k], ndim)
         if seen[a]:
-            raise Error(what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
+            raise Error("ValueError: " + what + ": axes must list each of the tensor's " + String(ndim) + " axes once")
         seen[a] = True
         out.append(a)
     return out^

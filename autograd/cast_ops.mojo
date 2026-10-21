@@ -97,6 +97,14 @@ def op_cast_label_codes(t: Int, a: Args):
     # Each validation label searches the sorted training vocabulary. Integer
     # keys preserve int64 labels and float64 labels exactly on every vendor.
     var value = cast_w64_bits(cast_raw_bits(a.p0, a.i4 + t * a.i3, a.i1), a.i0, a.i1)
+    # Mixed signed/unsigned validation labels compare in the training
+    # vocabulary's integer domain, refusing only values outside that domain.
+    if a.i2 == 2 and a.i0 == 1 and (value >> 63) != 0:
+        a.p2.unsafe_store(t, bitcast[DType.float32](Int32(-1)))
+        return
+    if a.i2 == 1 and a.i0 == 0 and a.i1 == 8 and (value >> 63) != 0:
+        a.p2.unsafe_store(t, bitcast[DType.float32](Int32(-1)))
+        return
     var key = label_sort_key(value, a.i2)
     var lo = 0
     var hi = a.i8
@@ -133,8 +141,9 @@ def validation_codes[E: Exec](mut ex: E, src: CastIn, classes: CastIn, dst: FP) 
     classes.check("training classes")
     if src.cols != 1 or classes.cols != 1:
         raise Error("validation labels and training classes must be vectors")
-    var kind = label_kind_of(src.kind, src.itemsize, "validation labels")
-    if kind != label_kind_of(classes.kind, classes.itemsize, "training classes"):
+    var src_kind = label_kind_of(src.kind, src.itemsize, "validation labels")
+    var kind = label_kind_of(classes.kind, classes.itemsize, "training classes")
+    if (kind == 0) != (src_kind == 0):
         raise Error("validation labels must use the training labels' integer or floating kind")
     var raw = ex.alloc(src.words())
     var cls = ex.alloc(classes.words())
@@ -207,17 +216,21 @@ def upload_cast[E: Exec](mut ex: E, dst: FP, src: CastIn) raises:
         ex.upload(dst, FP(unsafe_from_address=src.addr), src.count())
         return
     var raw = ex.alloc(src.words())
-    upload_bytes(ex, raw, src.start(), src.nbytes())
-    var a = Args()
-    a.p0 = raw
-    a.p1 = dst
-    a.i0 = src.kind
-    a.i1 = src.itemsize
-    a.i2 = src.cols
-    a.i3 = src.s0
-    a.i4 = src.s1
-    a.i5 = src.origin()
-    ex.launch[OP_CAST_F32](a, src.count())
+    try:
+        upload_bytes(ex, raw, src.start(), src.nbytes())
+        var a = Args()
+        a.p0 = raw
+        a.p1 = dst
+        a.i0 = src.kind
+        a.i1 = src.itemsize
+        a.i2 = src.cols
+        a.i3 = src.s0
+        a.i4 = src.s1
+        a.i5 = src.origin()
+        ex.launch[OP_CAST_F32](a, src.count())
+    except error:
+        ex.free(raw)
+        raise error
     ex.free(raw)
 
 
@@ -233,17 +246,21 @@ def upload_cast_i32[E: Exec](mut ex: E, dst: FP, src: CastIn, what: String) rais
         ex.upload(dst, FP(unsafe_from_address=src.addr), src.count())
         return
     var raw = ex.alloc(src.words())
-    upload_bytes(ex, raw, src.start(), src.nbytes())
-    var a = Args()
-    a.p0 = raw
-    a.p1 = dst
-    a.i0 = src.kind
-    a.i1 = src.itemsize
-    a.i2 = src.cols
-    a.i3 = src.s0
-    a.i4 = src.s1
-    a.i5 = src.origin()
-    ex.launch[OP_CAST_I32](a, src.count())
+    try:
+        upload_bytes(ex, raw, src.start(), src.nbytes())
+        var a = Args()
+        a.p0 = raw
+        a.p1 = dst
+        a.i0 = src.kind
+        a.i1 = src.itemsize
+        a.i2 = src.cols
+        a.i3 = src.s0
+        a.i4 = src.s1
+        a.i5 = src.origin()
+        ex.launch[OP_CAST_I32](a, src.count())
+    except error:
+        ex.free(raw)
+        raise error
     ex.free(raw)
 
 

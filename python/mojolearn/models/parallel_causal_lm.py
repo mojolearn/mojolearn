@@ -30,8 +30,7 @@ right. Metal admits only device zero: its worker uses the ordinary GPU
 route, and no visibility mask or physical multi-device isolation is claimed.
 """
 from .. import _backend
-from .._parallel_pool import DevicePool, _cpu_refusal
-from .causal_lm import CausalLM
+from .causal_lm import CausalLM, _NATIVE as _CAUSAL_RUNTIME, _NATIVE_CONTEXT as _CAUSAL_CONTEXT
 
 __all__ = ['ParallelCausalLM']
 
@@ -41,81 +40,59 @@ def _admit_route(layer_devices=()):
 
     Called in the same two places the vendor check used to sit, and before a
     layer is built or a checkpoint is read."""
-    vendor = _backend.vendor()
-    if vendor == 'metal':
-        if not layer_devices or any(type(d) is not int or d != 0 for d in layer_devices):  # glue: validates the layer_devices argument
-            raise ValueError('Metal ParallelCausalLM requires every layer owner to be device 0')
-        return 'gpu'
-    if vendor in ('cuda', 'hip'):
-        return 'gpu'
-    if _backend._CPU_ONLY is not None:
-        return 'cpu'
-    raise NotImplementedError(
-        'ParallelCausalLM requires CUDA or HIP device isolation, or a CPU-only '
-        'install where one owner is one worker process')
+    return _native_parallel_causal("route", (layer_devices,))
 
 
 class _RemoteState:
     def __init__(self, layer, token):
-        self.layer = layer
-        self.token = token
+        return _native_parallel_causal("state_init", (self, layer, token))
 
     def snapshot(self):
-        if self.token is None:
-            raise ValueError('state released')
-        return self.layer.call('state', self.token)
+        return _native_parallel_causal("state_snapshot", (self,))
 
     def close(self):
-        if self.token is not None and not self.layer.model._closed:
-            self.layer.call('release', self.token)
-            self.token = None
+        return _native_parallel_causal("state_close", (self,))
 
     def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
+        return _native_parallel_causal("state_close_quiet", (self,))
 
 
 class _RemoteBlock:
     def __init__(self, model, index, weights, kwargs):
-        self.model, self.index = model, index
-        self.weight_format = self.call('block', (index, model.kind, weights, kwargs))
+        return _native_parallel_causal("block_init", (self, model, index, weights, kwargs))
 
     def call(self, operation, args):
-        return self.model._rpc(self.model.layer_devices[self.index], operation, args)
+        return _native_parallel_causal("block_call", (self, operation, args))
 
     def allocate_state(self, batch, capacity=None):
-        return _RemoteState(self, self.call('allocate', (self.index, batch, capacity, self.model.kind)))
+        return _native_parallel_causal("block_allocate", (self, batch, capacity))
 
     def _run(self, method, x, state):
-        if state is not None and (state.layer is not self or state.token is None):
-            raise ValueError('state belongs to another layer or has been released')
-        return self.call('run', (self.index, method, x, None if state is None else state.token))
+        return _native_parallel_causal("block_run", (self, method, x, state))
 
     def forward(self, x, state=None):
-        return self._run('forward', x, state)
+        return _native_parallel_causal("block_run", (self, "forward", x, state))
 
     def step(self, x, state):
-        return self._run('step', x, state)
+        return _native_parallel_causal("block_run", (self, "step", x, state))
 
 
 class _RemotePrimitives:
     def __init__(self, model):
-        self.model = model
+        return _native_parallel_causal("primitives_init", (self, model))
 
     def embedding(self, table, ids):
-        return self.model._rpc(self.model.layer_devices[0], 'embedding', ids)
+        return _native_parallel_causal("primitive", (self, "embedding", ids))
 
     def rms_norm(self, x, weight, eps):
-        return self.model._rpc(self.model.layer_devices[-1], 'norm', (x, eps))
+        return _native_parallel_causal("primitive", (self, "norm", (x, eps)))
 
     def linear(self, x, weight):
-        return self.model._rpc(self.model.layer_devices[-1], 'head', x)
+        return _native_parallel_causal("primitive", (self, "head", x))
 
     def linear_int15(self, x, planes):
         # the head under fixed15_v1 runs on the head's owner, as `linear` does
-        return self.model._rpc(self.model.layer_devices[-1], 'head_int15', x)
+        return _native_parallel_causal("primitive", (self, "head_int15", x))
 
 
 class ParallelCausalLM(CausalLM):
@@ -126,109 +103,49 @@ class ParallelCausalLM(CausalLM):
     explicitly or use a context manager. Calls and states must not be used
     concurrently. Output and state mathematics are the ordinary CausalLM path.
     """
+    # The inherited public methods enter the shared native owner; remote
+    # layer dispatch is cached as a compiled entry in _native_entries.
+
     def _generate_resident(self, ids, n_new, total, last_logits=None):
         # Blocks and decode handles belong to remote worker processes. The
         # parent's single-process resident loop cannot consume those handles;
-        # generate must use the existing per-layer RPC forward/step route.
-        return None
+        # The shared native generation loop drives the remote owners.
+        return _native_parallel_causal("resident", (self, ids, n_new, total, last_logits))
 
     def __init__(self, plan, weights, *, layer_devices, **kwargs):
-        self.layer_devices = tuple(layer_devices)
-        if (len(self.layer_devices) != plan.n_layers or
-                any(type(d) is not int or d < 0 for d in self.layer_devices)):  # glue: validates the layer_devices argument
-            raise ValueError('layer_devices requires one nonnegative device index per layer')
-        self.route = _admit_route(self.layer_devices)
-        self._closed = False
-        self._pools = {}
-        try:
-            devices = tuple(dict.fromkeys(self.layer_devices))
-            pool = DevicePool(devices)
-            self._pools = dict.fromkeys(devices, pool)
-            self._worker_index = {device: i for i, device in enumerate(devices)}  # glue: worker index per device
-            pool._start()
-            # EVERY WORKER LEARNS THE ROUTE BEFORE IT BUILDS ANYTHING, so no
-            # worker can silently take the GPU block classes on a host box.
-            for device in devices:  # glue: starts one worker per device
-                self._rpc(device, 'route', self.route)
-            super().__init__(plan, weights, device=self.route, **kwargs)
-            self._rpc(self.layer_devices[0], 'tensors', {'embed': self._embed})
-            self._rpc(self.layer_devices[-1], 'tensors', {'norm': self._norm, 'head': self._head,
-                                                          'head_int15': self._head_int15})
-            self._prims = _RemotePrimitives(self)
-        except BaseException:
-            self.close()
-            raise
+        return _native_parallel_causal("init", (self, plan, weights, layer_devices, kwargs), _CAUSAL_CONTEXT)
 
     @classmethod
     def load(cls, path, *, layer_devices, weight_format='float32', max_positions=None,
              numeric_profile=None):
-        from .. import _numeric_profile
-        from .config import HFConfig, plan_for
-        from .safetensors import Checkpoint
-        if numeric_profile is not None:  # None: the model's family decides (CausalLM.__init__)
-            numeric_profile = _numeric_profile.resolve(numeric_profile, 'mojolearn.models.ParallelCausalLM.load numeric_profile')
-        if weight_format not in ('float32', 'bfloat16', 'int8'):
-            raise ValueError('unsupported weight_format')
-        layer_devices = tuple(layer_devices)
-        if not layer_devices or any(type(d) is not int or d < 0 for d in layer_devices):  # glue: validates the layer_devices argument
-            raise ValueError('layer_devices requires one nonnegative device index per layer')
-        _admit_route(layer_devices)
-        plan = plan_for(HFConfig.from_json(path))
-        if len(layer_devices) != plan.n_layers:
-            raise ValueError('layer_devices requires one nonnegative device index per layer')
-        ckpt = Checkpoint.open(path)
-        try:
-            weights = cls._read_weights(ckpt, plan, weight_format)
-        finally:
-            ckpt.close()
-        return cls(plan, weights, layer_devices=layer_devices,
-                   weight_format=weight_format, max_positions=max_positions,
-                   numeric_profile=numeric_profile)
+        return _native_parallel_causal("load", (cls, path, layer_devices, (weight_format, max_positions, numeric_profile)), _CAUSAL_CONTEXT)
 
     def _make_blocks(self, cls, layers, kwargs):
-        return [_RemoteBlock(self, i, weights, kwargs) for i, weights in enumerate(layers)]  # glue: one remote block per model layer
+        return _native_parallel_causal("make_blocks", (self, layers, kwargs))
 
     def _rpc(self, device, operation, args):
-        if self._closed:
-            raise RuntimeError('ParallelCausalLM is closed')
-        pool = self._pools[device]
-        request = ('causal_lm_layer', operation, args)
-        # `_rpc` addresses ONE worker and so cannot go through `pool.map`,
-        # which is where the CPU admission normally sits. State it here rather
-        # than let the operation past that gate by the back door.
-        # The pool is never cooperative here and the device count is not part
-        # of the question, which is only whether `causal_lm_layer` is in
-        # `CPU_OPERATIONS`.
-        if _backend._CPU_ONLY is not None:
-            refusal = _cpu_refusal([request], False)
-            if refusal is not None:
-                raise refusal
-        return pool._call(pool._workers[self._worker_index[device]], request)
+        return _native_parallel_causal("rpc", (self, device, operation, args))
 
     def parameters(self):
-        out = {self.plan.embed_name: self._embed, self.plan.norm_name: self._norm}
-        if self.plan.head_name is not None:
-            out[self.plan.head_name] = self._head
-        for i, block in enumerate(self._blocks):  # glue: walks the model layers
-            names = {k: n for k, n, _ in self.plan.layer_weights(i)}  # glue: names the weights of one layer
-            for key, value in block.call('parameters', i).items():  # glue: walks the named weights of one layer
-                out.setdefault(names[key], value)
-        return out
+        return _native_parallel_causal("parameters", (self,))
 
     def close(self):
-        self._closed = True
-        for pool in set(getattr(self, '_pools', {}).values()):  # glue: closes the device worker pools
-            pool.close()
-        self._pools = {}
+        return _native_parallel_causal("close", (self,))
 
     def __enter__(self):
-        return self
+        return _native_parallel_causal("enter", (self,))
 
     def __exit__(self, *exc):
-        self.close()
+        return _native_parallel_causal("exit", (self,))
 
     def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
+        return _native_parallel_causal("close_quiet", (self,))
+
+
+# Connection metadata only; native owners perform every product operation.
+from .. import _native_process as _process_connection
+_native_parallel_causal = _CAUSAL_RUNTIME.parallel_causal_call
+_native_parallel_causal("initialize", (_CAUSAL_CONTEXT, {
+    "model": ParallelCausalLM, "block": _RemoteBlock,
+    "state": _RemoteState, "primitives": _RemotePrimitives,
+}, _native_parallel_causal))

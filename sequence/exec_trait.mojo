@@ -10,6 +10,7 @@ as an ascending host loop. The element body is the same function
 The trait lives here, apart from `HostExec`, so the GPU modules that take an
 `Exec` do not link the host executor (cpu-gpu-cleanup n-seq, 2026-10-02)."""
 from sequence.ops import FP, Args
+from sequence.execution_profile import ExecutionProfile
 
 
 trait Exec:
@@ -53,3 +54,9 @@ trait Exec:
         ...
 
 
+
+    def execution_profile_begin(mut self) raises:
+        ...
+
+    def execution_profile_end(mut self) raises -> ExecutionProfile:
+        ...

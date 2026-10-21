@@ -258,6 +258,13 @@ PASSES = [
                                         "        var ctx = DeviceContext(device_id=rank)\n"
                                         "        ctx.synchronize()\n    host_parallelize(_task, n)\n"),
       DEV: "from x_decomp.multi_gpu_drive import drive"}),
+    ("a generic captured-program GPU driver drains its native executor",
+     {"x_decomp/multi_gpu_exec.mojo": ("=", "from core.host_parallel import host_parallelize\n"
+                                       "def drive(workers, n: Int) raises:\n    def task(rank: Int):\n"
+                                       "        workers[rank].gradient()\n"
+                                       "        workers[rank].session.ex.sync()\n"
+                                       "    host_parallelize(task, n)\n"),
+      DEV: "from x_decomp.multi_gpu_exec import drive"}),
     ("download, then a trace-only fold",
      {DEV: "def _q2(ctx: DeviceContext, mut trace: IdentityTrace, d: DeviceBuffer[DType.float32], n: Int) raises:\n"
            "    var h = download_f32(ctx, d, n)\n    if trace.enabled:\n        var t = Float32(0.0)\n"

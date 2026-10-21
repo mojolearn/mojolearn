@@ -7,6 +7,11 @@ names over a `HostExec`, the same element bodies (`sequence/ops.mojo`)."""
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from std.python._cpython import PyObjectPtr
+from autograd.python_errors import graph_python_error
+from autograd.ops_frontend import ops_session_call_py
+from autograd.session_frontend import ops_session_initialize_py
+from autograd.session_lifetime import SessionLifetime, ops_session_create_py
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -16,7 +21,22 @@ from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
-from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py
+from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
+from autograd.program_control import ops_program_control_py
+from autograd.distributed_pyapi import (
+    distributed_object,
+    distributed_devices, distributed_open, distributed_load, distributed_fit_py,
+    distributed_run_py, distributed_state_py, distributed_residency_py,
+    distributed_save_py, distributed_close_py, distributed_enter_py,
+)
+from autograd.partition_pyapi import (
+    partition_open, partition_load, partition_fit_py, partition_run_py,
+    partition_state_py, partition_residency_py, partition_save_py,
+    partition_close_py, partition_enter_py, partition_profile_py,
+)
+from max.gpu.host import DeviceContext
+from sequence.launch_profile import launch_profile_level
+from autograd.program_control_grad import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
@@ -245,6 +265,10 @@ def ops_open_binding(record: PythonObject) raises -> PythonObject:
     return ops_open_py[DeviceExec, OPS_DEVICE](DeviceExec(), record)
 
 
+def ops_session_create_binding(record: PythonObject) raises -> PythonObject:
+    return ops_session_create_py[DeviceExec, OPS_DEVICE](DeviceExec(), record)
+
+
 def ops_close_binding(sid: PythonObject) raises -> PythonObject:
     return ops_close_py[DeviceExec, OPS_DEVICE](sid)
 
@@ -275,8 +299,228 @@ def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> Pyt
     return ops_program_info_py[DeviceExec, OPS_DEVICE](sid, pid)
 
 
+
+def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
+    options: PythonObject, cls: PythonObject, binding: PythonObject,
+) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    var handle = partition_open[DeviceExec, OPS_DEVICE](sid, pid, ids, options[0], options[1], options[2], options[3], options[4], options[5], executors^)
+    return distributed_object(cls, binding, handle)
+
+
+def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    var handle = partition_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+    return distributed_object(cls, binding, handle)
+
+
+
+def ops_partitioned_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
+    loss: PythonObject, epochs: PythonObject, batch: PythonObject, shuffle: PythonObject, delta: PythonObject,
+) raises -> PythonObject:
+    return partition_fit_py[DeviceExec, OPS_DEVICE](id, arrays, targets, loss, epochs, batch, shuffle, delta)
+
+
+def ops_partitioned_run_binding(id: PythonObject, arrays: PythonObject) raises -> PythonObject:
+    return partition_run_py[DeviceExec, OPS_DEVICE](id, arrays)
+
+
+def ops_partitioned_state_binding(id: PythonObject) raises -> PythonObject:
+    return partition_state_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_partitioned_residency_binding(id: PythonObject) raises -> PythonObject:
+    return partition_residency_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_partitioned_save_binding(id: PythonObject, path: PythonObject) raises -> PythonObject:
+    return partition_save_py[DeviceExec, OPS_DEVICE](id, path)
+
+
+def ops_partitioned_enter_binding(id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    return partition_enter_py[DeviceExec, OPS_DEVICE](id, owner)
+
+
+def ops_partitioned_exit_binding(id: PythonObject) raises -> PythonObject:
+    # __exit__ historically discards close's integer sentinel and returns None.
+    _ = partition_close_py[DeviceExec, OPS_DEVICE](id)
+    return PythonObject(None)
+
+
+def ops_partitioned_close_binding(id: PythonObject) raises -> PythonObject:
+    return partition_close_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_partitioned_profile_binding(id: PythonObject) raises -> PythonObject:
+    return partition_profile_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
+    options: PythonObject, cls: PythonObject, binding: PythonObject,
+) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    var handle = distributed_open[DeviceExec, OPS_DEVICE](sid, pid, ids, options[0], options[1], options[2], options[3], executors^)
+    return distributed_object(cls, binding, handle)
+
+
+def ops_distributed_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
+    var ids = distributed_devices(devices)
+    var executors = List[DeviceExec]()
+    if len(ids) > 1 and launch_profile_level() != 0:
+        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
+    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
+        var context = DeviceContext(device_id=ids[k])
+        executors.append(DeviceExec(context))
+    var handle = distributed_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
+    return distributed_object(cls, binding, handle)
+
+
+
+def ops_distributed_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
+    loss: PythonObject, epochs: PythonObject, batch: PythonObject, shuffle: PythonObject, delta: PythonObject,
+) raises -> PythonObject:
+    return distributed_fit_py[DeviceExec, OPS_DEVICE](id, arrays, targets, loss, epochs, batch, shuffle, delta)
+
+
+def ops_distributed_run_binding(id: PythonObject, arrays: PythonObject) raises -> PythonObject:
+    return distributed_run_py[DeviceExec, OPS_DEVICE](id, arrays)
+
+
+def ops_distributed_state_binding(id: PythonObject) raises -> PythonObject:
+    return distributed_state_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_distributed_residency_binding(id: PythonObject) raises -> PythonObject:
+    return distributed_residency_py[DeviceExec, OPS_DEVICE](id)
+
+
+def ops_distributed_save_binding(id: PythonObject, path: PythonObject) raises -> PythonObject:
+    return distributed_save_py[DeviceExec, OPS_DEVICE](id, path)
+
+
+def ops_distributed_enter_binding(id: PythonObject, owner: PythonObject) raises -> PythonObject:
+    return distributed_enter_py[DeviceExec, OPS_DEVICE](id, owner)
+
+
+def ops_distributed_exit_binding(id: PythonObject) raises -> PythonObject:
+    # __exit__ historically discards close's integer sentinel and returns None.
+    _ = distributed_close_py[DeviceExec, OPS_DEVICE](id)
+    return PythonObject(None)
+
+
+def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
+    return distributed_close_py[DeviceExec, OPS_DEVICE](id)
+
+
 def ops_program_dynamic_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject) raises -> PythonObject:
     return ops_program_dynamic_py[DeviceExec, OPS_DEVICE](sid, pid, arrays)
+
+
+def ops_session_call_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_session_call expects three arguments")
+        var result = ops_session_call_py[DeviceExec, OPS_DEVICE](args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_execute_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 7:
+            raise Error("TypeError: ops_program_execute expects 7 arguments")
+        var result = ops_program_execute_binding(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_inspect_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 3:
+            raise Error("TypeError: ops_program_inspect expects 3 arguments")
+        var result = ops_program_inspect_binding(args[0], args[1], args[2])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_session_initialize_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 6:
+            raise Error("TypeError: ops_session_initialize expects 6 arguments")
+        return ops_session_initialize_py(args[0], args[1], args[2], args[3], args[4], args[5]).steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_control_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 6:
+            raise Error("TypeError: ops_program_control expects 6 arguments")
+        var result = ops_program_control_binding(args[0], args[1], args[2], args[3], args[4], args[5])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_fit_native_c_binding(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=packed)
+        if len(args) != 5:
+            raise Error("TypeError: ops_program_fit_native expects 5 arguments")
+        var result = ops_program_fit_native_binding(args[0], args[1], args[2], args[3], args[4])
+        return result.steal_data()
+    except error:
+        return graph_python_error(error)
+
+
+def ops_program_execute_binding(sid: PythonObject, pid: PythonObject, owner_sid: PythonObject, arrays: PythonObject,
+                                dynamic_shapes: PythonObject, optimize: PythonObject, profile: PythonObject) raises -> PythonObject:
+    return ops_program_execute_py[DeviceExec, OPS_DEVICE](sid, pid, owner_sid, arrays, dynamic_shapes, optimize, profile)
+
+
+def ops_program_inspect_binding(sid: PythonObject, pid: PythonObject, optimize: PythonObject) raises -> PythonObject:
+    return ops_program_inspect_py[DeviceExec, OPS_DEVICE](sid, pid, optimize)
+
+
+def ops_program_control_binding(sid: PythonObject, pid: PythonObject, programs: PythonObject,
+                                arrays: PythonObject, limit: PythonObject, optimize: PythonObject) raises -> PythonObject:
+    if len(programs) == 6:
+        return ops_program_control_vjp_py[DeviceExec, OPS_DEVICE](sid, pid, programs, arrays, limit)
+    return ops_program_control_py[DeviceExec, OPS_DEVICE](sid, pid, programs[1], programs[3],
+                                               programs[0], programs[2], arrays, limit, optimize)
+
+
+def ops_program_fit_native_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject,
+                                   targets: PythonObject, options: PythonObject) raises -> PythonObject:
+    return ops_program_fit_native_py[DeviceExec, OPS_DEVICE](sid, pid, arrays, targets, options[0],
+                                                  options[1], options[2], options[3], options[4],
+                                                  options[5], options[6], options[7])
 
 
 def ops_program_fit_binding(sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -638,6 +882,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[model_import_params_binding]("model_import_params")
         m.def_function[ops_load_weights_binding]("ops_load_weights")
         # the operation session (autograd/ops_api.mojo)
+        _ = m.add_type[SessionLifetime[DeviceExec, OPS_DEVICE]]("_OpsSessionLifetime")
+        m.def_function[ops_session_create_binding]("ops_session_create")
         m.def_function[ops_open_binding]("ops_open")
         m.def_function[ops_close_binding]("ops_close")
         m.def_function[ops_upload_binding]("ops_upload")
@@ -668,7 +914,34 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[ops_program_info_binding]("ops_program_info")
         m.def_function[ops_program_run_binding]("ops_program_run")
         m.def_function[ops_program_dynamic_binding]("ops_program_dynamic")
+        m.def_py_c_function(ops_session_call_c_binding, "ops_session_call")
+        m.def_py_c_function(ops_session_initialize_c_binding, "ops_session_initialize")
+        m.def_py_c_function(ops_program_execute_c_binding, "ops_program_execute")
+        m.def_py_c_function(ops_program_inspect_c_binding, "ops_program_inspect")
+        m.def_py_c_function(ops_program_control_c_binding, "ops_program_control")
         m.def_function[ops_program_fit_binding]("ops_program_fit")
+        m.def_function[ops_partitioned_open_binding]("ops_partitioned_open")
+        m.def_function[ops_partitioned_load_binding]("ops_partitioned_load")
+        m.def_function[ops_partitioned_fit_binding]("ops_partitioned_fit")
+        m.def_function[ops_partitioned_run_binding]("ops_partitioned_run")
+        m.def_function[ops_partitioned_state_binding]("ops_partitioned_state")
+        m.def_function[ops_partitioned_residency_binding]("ops_partitioned_residency")
+        m.def_function[ops_partitioned_save_binding]("ops_partitioned_save")
+        m.def_function[ops_partitioned_close_binding]("ops_partitioned_close")
+        m.def_function[ops_partitioned_enter_binding]("ops_partitioned_enter")
+        m.def_function[ops_partitioned_exit_binding]("ops_partitioned_exit")
+        m.def_function[ops_partitioned_profile_binding]("ops_partitioned_profile")
+        m.def_function[ops_distributed_open_binding]("ops_distributed_open")
+        m.def_function[ops_distributed_load_binding]("ops_distributed_load")
+        m.def_function[ops_distributed_fit_binding]("ops_distributed_fit")
+        m.def_function[ops_distributed_run_binding]("ops_distributed_run")
+        m.def_function[ops_distributed_state_binding]("ops_distributed_state")
+        m.def_function[ops_distributed_residency_binding]("ops_distributed_residency")
+        m.def_function[ops_distributed_save_binding]("ops_distributed_save")
+        m.def_function[ops_distributed_close_binding]("ops_distributed_close")
+        m.def_function[ops_distributed_enter_binding]("ops_distributed_enter")
+        m.def_function[ops_distributed_exit_binding]("ops_distributed_exit")
+        m.def_py_c_function(ops_program_fit_native_c_binding, "ops_program_fit_native")
         m.def_function[ops_program_free_binding]("ops_program_free")
         m.def_function[ops_save_program_binding]("ops_save_program")
         m.def_function[ops_load_program_binding]("ops_load_program")

@@ -64,7 +64,7 @@ FAMILIES = (
             # the model-description trainer (autograd/model.mojo)
             "model_fit", "model_predict", "model_n_params", "model_labels",
             # the operation session (autograd/ops_api.mojo; mojolearn.ops)
-            "ops_open", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
+            "ops_open", "ops_session_create", "ops_close", "ops_upload", "ops_download", "ops_op", "ops_scalar",
             "ops_shape", "ops_free", "ops_reset", "ops_metric", "ops_backward", "ops_grad",
             "ops_profile_reset", "ops_profile_report", "ops_op_packed",
             # checkpoints (autograd/model_checkpoint.mojo)
@@ -77,6 +77,14 @@ FAMILIES = (
             # captured programs (OpsSession.capture / run_program)
             "ops_capture", "ops_program_info", "ops_program_run", "ops_program_free",
             "ops_save_program", "ops_load_program",
+            "ops_program_dynamic", "ops_program_fit", "ops_program_fit_native", "ops_session_call", "ops_session_initialize", "ops_program_execute",
+            "ops_program_inspect", "ops_program_control",
+            "ops_distributed_open", "ops_distributed_load", "ops_distributed_fit",
+            "ops_distributed_run", "ops_distributed_state", "ops_distributed_residency",
+            "ops_distributed_save", "ops_distributed_close", "ops_distributed_enter", "ops_distributed_exit",
+            "ops_partitioned_open", "ops_partitioned_load", "ops_partitioned_fit",
+            "ops_partitioned_run", "ops_partitioned_state", "ops_partitioned_residency",
+            "ops_partitioned_save", "ops_partitioned_close", "ops_partitioned_enter", "ops_partitioned_exit", "ops_partitioned_profile",
             # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
             "model_import_params", "ops_load_weights",
             # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)

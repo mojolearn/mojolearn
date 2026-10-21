@@ -60,6 +60,7 @@ PY
         python/mojolearn/tests/test_ops_higher.py \
         python/mojolearn/tests/test_ops_optimizer.py \
         python/mojolearn/tests/test_ops_program.py \
+        python/mojolearn/tests/test_ops_graph.py \
         python/mojolearn/tests/test_ops_rankn.py \
         python/mojolearn/tests/test_ops_session.py \
         python/mojolearn/tests/test_autograd_public.py \

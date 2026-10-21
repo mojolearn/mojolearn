@@ -75,12 +75,34 @@ spelling of the same arm.
 from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from std.python.bindings import PythonModuleBuilder
+from std.python._cpython import GILReleased, PyObjectPtr
+from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
 
 from bindings.hostptr import i32_ptr
+from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
+from bindings.causal_model_config import model_config_c
+from bindings.causal_checkpoint import checkpoint_c
+from bindings.causal_lm_construct import causal_model_c
+from bindings.neural_block_public import neural_block_c
+from bindings.neural_prefill_native import neural_prefill_c
+from bindings.samba_config_native import samba_config_c
+from bindings.samba_public_native import samba_public_c
+from bindings.native_transport import transport_c, transport_initialize
+from bindings.cross_vendor_native import cross_vendor_c
+from bindings.parallel_byte_native import parallel_byte_c
+from bindings.native_codec import codec_c
+from bindings.native_process_pool import process_c
+from bindings.parallel_mlp_native import parallel_mlp_c
+from bindings.parallel_neural_native import parallel_neural_c
+from bindings.parallel_causal_native import parallel_causal_c
+from bindings.optimizer_lifecycle import optimizer_finalize_binding
+from bindings.sequential_native import sequential_c
+from bindings.classical_native import classical_c
+from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
+from bindings.pca_native import pca_c
+from bindings.generator_draw_native import generator_draw_c
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -116,6 +138,15 @@ from tokenizer.train.bpe_train import (
     BPE_TRAINER_SABOTAGE,
     TrainedVocabulary,
     train_bpe,
+)
+from bindings.generation_buffers import generation_initialize_binding, GENERATION_BOUNDARY
+from bindings.causal_lm_public import (
+    GenerationHandle, causal_public_c, causal_lm_admit_binding, causal_lm_allocate_binding,
+    causal_lm_reset_binding, causal_lm_forward_binding, causal_lm_stream_binding,
+    causal_lm_read_binding, causal_lm_info_binding, causal_lm_generate_binding,
+    causal_lm_text_stream_binding, causal_lm_generate_text_binding, causal_lm_resident_binding,
+    causal_lm_snapshot_binding, causal_lm_resume_binding,
+    causal_lm_parameters_binding, causal_lm_blocks_binding,
 )
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
@@ -1326,12 +1357,485 @@ def vocab_decode_binding(
     return PythonObject(len(out))
 
 
+def vocab_encode_public_binding(
+    tokenizer: PythonObject, input_text: PythonObject, add_special: PythonObject,
+    allow_special: PythonObject, bytes_only: PythonObject,
+) raises -> PythonObject:
+    var text = input_text
+    var bi = Python.import_module("builtins")
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var is_text = Bool(py=bi.isinstance(text, bi.str))
+    if is_text and Bool(py=bytes_only):
+        raise Error("tokenizer: encode_bytes takes bytes; use encode for str")
+    if is_text:
+        if tokenizer.normalizer is not None and String(tokenizer.normalizer) == "NFC":
+            # CPython's Unicode normalization is a compiled native extension.
+            # Keep its existing Unicode version and semantics; no Python
+            # tokenizer method or normalization loop is invoked.
+            var normalize = Python.import_module("unicodedata").normalize
+            if bi.type(normalize) is not bi.type(bi.len):
+                raise Error("tokenizer: NFC normalization requires the native Unicode entry")
+            text = normalize("NFC", text)
+        text = text.encode("utf-8")
+    else:
+        text = bi.memoryview(text).tobytes()
+    var bytes = List[UInt8](capacity=len(text))
+    for i in range(len(text)):
+        bytes.append(UInt8(Int(py=text[i])))
+    var ids = owner[].tok.value().encode(bytes, Bool(py=allow_special))
+    var out = bi.list()
+    if Bool(py=add_special):
+        out.extend(tokenizer.bos_ids)
+    comptime if TOKENIZER_HOST_SABOTAGE:
+        for i in range(len(ids)):
+            out.append(ids[len(ids) - i - 1])
+    else:
+        for i in range(len(ids)):
+            out.append(ids[i])
+    if Bool(py=add_special):
+        out.extend(tokenizer.eos_ids)
+    return out
+
+
+def vocab_decode_public_binding(tokenizer: PythonObject, seq: PythonObject, bytes_only: PythonObject, errors: PythonObject) raises -> PythonObject:
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var bi = Python.import_module("builtins")
+    if Bool(py=bi.isinstance(seq, bi.str)) or Bool(py=bi.isinstance(seq, bi.bytes)) or Bool(py=bi.isinstance(seq, bi.bytearray)):
+        raise Error("tokenizer: ids must be an integer sequence")
+    var ids = _ids_from_seq(seq)
+    var out = List[UInt8]()
+    for k in range(len(ids)):
+        owner[].tok.value().append_decoded(out, ids[k], k)
+    var raw = bi.bytearray()
+    for i in range(len(out)):
+        raw.append(Int(out[i]))
+    if Bool(py=bytes_only):
+        return bi.bytes(raw)
+    return raw.decode("utf-8", errors)
+
+
+def vocab_fingerprint_binding(tokenizer: PythonObject) raises -> PythonObject:
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var h = g[].hash_type()
+    ref tok = owner[].tok.value()
+    for i in range(tok.ranks.n_tokens()):
+        h.update(PythonObject(String(tok.ranks.length[i]) + ":").encode("ascii"))
+        var bytes = g[].bi.bytearray()
+        for j in range(tok.ranks.length[i]):
+            bytes.append(Int(tok.ranks.arena[tok.ranks.offset[i] + j]))
+        h.update(bytes)
+    for i in range(len(tok.sp_id)):
+        h.update(PythonObject(String(tok.sp_id[i]) + ":" + String(tok.sp_length[i]) + ":").encode("ascii"))
+        var bytes = g[].bi.bytearray()
+        for j in range(tok.sp_length[i]):
+            bytes.append(Int(tok.sp_arena[tok.sp_offset[i] + j]))
+        h.update(bytes)
+    for value in [tokenizer.pattern, tokenizer.normalizer, tokenizer.unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]:
+        h.update(g[].bi.str(value).encode("utf-8"))
+        h.update(PythonObject("\n").encode("ascii"))
+    return h.hexdigest()
+
+
+def _vocab_pattern(pattern: PythonObject) raises -> Int:
+    var name = String(pattern)
+    if name == "gpt2":
+        return 0
+    if name == "llama3":
+        return 1
+    if name == "qwen2":
+        return 2
+    raise Error("tokenizer: unknown pattern " + name)
+
+
+def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: PythonObject) raises:
+    var bi = Python.import_module("builtins")
+    _ = _vocab_pattern(options[0])
+    if options[2] is not None and String(options[2]) != "NFC":
+        raise Error("tokenizer: normalizer must be null or NFC")
+    tokenizer.pattern = options[0]
+    tokenizer.normalizer = options[2]
+    tokenizer.source = options[6]
+    tokenizer.added = bi.dict() if options[1] is None else bi.dict(options[1])
+    tokenizer._added_by_id = bi.dict()
+    var keys = bi.list(tokenizer.added)
+    for i in range(len(keys)):
+        var content = keys[i]
+        var id = tokenizer.added[content]
+        if bi.type(content) is not bi.str or len(content) == 0 or bi.type(id) is not bi.int or Int(py=id) < 0:
+            raise Error("tokenizer: added token must map nonempty str to nonnegative int")
+        if Bool(py=tokenizer._added_by_id.__contains__(id)):
+            raise Error("tokenizer: added tokens share an id")
+        tokenizer._added_by_id[id] = content
+    var bos = bi.list()
+    var eos = bi.list()
+    var input = bi.list(options[3])
+    for i in range(len(input)):
+        bos.append(bi.int(input[i]))
+    input = bi.list(options[4])
+    for i in range(len(input)):
+        eos.append(bi.int(input[i]))
+    tokenizer.bos_ids = bi.tuple(bos)
+    tokenizer.eos_ids = bi.tuple(eos)
+    tokenizer._m = module
+
+
+def _vocab_finish(tokenizer: PythonObject, var tok: VocabTokenizer) raises:
+    var bi = Python.import_module("builtins")
+    var sp_arena = List[UInt8]()
+    var sp_lengths = List[Int]()
+    var sp_ids = List[Int]()
+    var keys = bi.list(tokenizer.added)
+    for i in range(len(keys)):
+        var text = keys[i].encode("utf-8")
+        sp_lengths.append(len(text))
+        sp_ids.append(Int(py=tokenizer.added[keys[i]]))
+        for j in range(len(text)):
+            sp_arena.append(UInt8(Int(py=text[j])))
+    tok.set_specials(sp_arena, sp_lengths, sp_ids)
+    tokenizer._n_ranks = PythonObject(tok.n_ranks())
+    tokenizer._n_vocab = PythonObject(tok.n_vocab())
+    tokenizer._max_token_bytes = PythonObject(tok.max_token_bytes())
+    var handle = VocabHandle()
+    handle.tok = tok^
+    tokenizer._handle = PythonObject(alloc=handle^)
+
+
+def _token_bytes(value: PythonObject) raises -> List[UInt8]:
+    var raw = PythonObject(None)
+    try:
+        raw = Python.import_module("builtins").memoryview(value).tobytes()
+    except error:
+        raise Error("TypeError: token/merge part must be bytes-like: " + String(error))
+    var out = List[UInt8](capacity=len(raw))
+    for i in range(len(raw)):
+        out.append(UInt8(Int(py=raw[i])))
+    return out^
+
+
+def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, merges: PythonObject,
+                             options: PythonObject, module: PythonObject) raises -> PythonObject:
+    _vocab_settle(tokenizer, options, module)
+    var bi = Python.import_module("builtins")
+    var entries = bi.list(tokens)
+    var arena = List[UInt8]()
+    var lengths = List[Int]()
+    for i in range(len(entries)):
+        var bytes = _token_bytes(entries[i])
+        lengths.append(len(bytes))
+        for j in range(len(bytes)):
+            arena.append(bytes[j])
+    var table = table_from_tokens(arena, lengths)
+    var checks = MergeCheck(len(entries))
+    var pairs = bi.list(merges)
+    for i in range(len(pairs)):
+        if len(pairs[i]) != 2:
+            raise Error("tokenizer: every merge must be a pair of bytes")
+        var left = _token_bytes(pairs[i][0])
+        var right = _token_bytes(pairs[i][1])
+        check_merge(table, left, right, "merge " + String(i), checks)
+    check_loose(table, checks, Bool(py=options[5]))
+    var tok = VocabTokenizer(table^, builtin_unicode_classes(), _vocab_pattern(options[0]))
+    _vocab_finish(tokenizer, tok^)
+    return PythonObject(None)
+
+
+def vocab_spelled_public_binding(cls: PythonObject, vocab: PythonObject, merges: PythonObject,
+                                options: PythonObject, module: PythonObject) raises -> PythonObject:
+    var tokenizer = Python.import_module("builtins").object.__new__(cls)
+    _vocab_settle(tokenizer, options, module)
+    var table = _table_from_spelled(vocab, merges, False, Bool(py=options[5]))
+    var tok = VocabTokenizer(table^, builtin_unicode_classes(), _vocab_pattern(options[0]))
+    _vocab_finish(tokenizer, tok^)
+    return tokenizer
+
+
+def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    if pre is None:
+        raise Error("tokenizer: pre_tokenizer is null; byte-level BPE requires a cut")
+    var kind = String(pre.get("type"))
+    if kind == "ByteLevel":
+        if Bool(py=pre.get("use_regex", PythonObject(True))):
+            return PythonObject("gpt2")
+        raise Error("tokenizer: ByteLevel use_regex false is not a known cut")
+    if kind == "Metaspace":
+        raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
+    if kind != "Sequence":
+        raise Error("tokenizer: pre_tokenizer type " + kind + " is not a known cut")
+    var found = PythonObject(None)
+    var steps = pre.get("pretokenizers", bi.list())
+    for i in range(len(steps)):
+        var step = steps[i]
+        var t = String(step.get("type"))
+        if t == "Split":
+            var pat = step.get("pattern", bi.dict())
+            if bi.type(pat) is not bi.dict or pat.get("Regex") is None:
+                raise Error("tokenizer: Split pattern requires a Regex")
+            var behavior = step.get("behavior")
+            if (behavior is not None and String(behavior) != "Isolated") or Bool(py=step.get("invert", PythonObject(False))):
+                raise Error("tokenizer: Split requires Isolated behavior without invert")
+            var name = patterns.get(pat["Regex"])
+            if name is None:
+                raise Error("tokenizer: pre_tokenizer regex " + String(pat["Regex"]) + " is not one of the known patterns; refused by name")
+            if found is not None and not Bool(py=found == name):
+                raise Error("tokenizer: two Split steps with different patterns")
+            found = name
+        elif t == "ByteLevel":
+            if Bool(py=step.get("use_regex", PythonObject(False))):
+                if found is not None and String(found) != "gpt2":
+                    raise Error("tokenizer: Split followed by ByteLevel use_regex true cuts twice")
+                found = PythonObject("gpt2")
+        elif t == "Metaspace":
+            raise Error("tokenizer: pre_tokenizer Metaspace is a SentencePiece family")
+        else:
+            raise Error("tokenizer: pre_tokenizer step " + t + " is not a known cut")
+    if found is None:
+        raise Error("tokenizer: pre_tokenizer Sequence names no cut")
+    return found
+
+
+def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: PythonObject,
+                             cfg: PythonObject, module: PythonObject, patterns: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    if bi.type(data) is not bi.dict:
+        raise Error("tokenizer: not a JSON object")
+    var model = data.get("model")
+    if model is None:
+        model = bi.dict()
+    if String(model.get("type")) != "BPE":
+        raise Error("tokenizer: model.type must be BPE; SentencePiece Unigram is unsupported")
+    if Bool(py=model.get("byte_fallback", PythonObject(False))):
+        raise Error("tokenizer: model.byte_fallback identifies SentencePiece-style BPE")
+    if Bool(py=model.get("continuing_subword_prefix")) or Bool(py=model.get("end_of_word_suffix")):
+        raise Error("tokenizer: continuing_subword_prefix / end_of_word_suffix is not byte-level BPE")
+    var dec = data.get("decoder")
+    if dec is not None and String(dec.get("type")) != "ByteLevel":
+        raise Error("tokenizer: decoder must be ByteLevel")
+    var norm = data.get("normalizer")
+    var normalizer = PythonObject(None)
+    if norm is not None:
+        var kind = String(norm.get("type"))
+        if kind == "NFC":
+            normalizer = PythonObject("NFC")
+        elif kind == "Sequence":
+            var steps = norm.get("normalizers", bi.list())
+            if len(steps) == 0:
+                raise Error("tokenizer: empty normalizer Sequence")
+            for i in range(len(steps)):
+                if String(steps[i].get("type")) != "NFC":
+                    raise Error("tokenizer: normalizer must be null or NFC")
+            normalizer = PythonObject("NFC")
+        else:
+            raise Error("tokenizer: normalizer '" + kind + "' must be null or NFC")
+    var pattern = _vocab_config_pattern(data.get("pre_tokenizer"), patterns)
+    var added = bi.dict()
+    var entries = data.get("added_tokens")
+    if entries is not None:
+        for i in range(len(entries)):
+            var content = entries[i].get("content")
+            var id = entries[i].get("id")
+            if bi.type(content) is not bi.str or bi.type(id) is not bi.int:
+                raise Error("tokenizer: added token lacks string content or int id")
+            added[content] = id
+    var vocab = model.get("vocab")
+    if bi.type(vocab) is not bi.dict:
+        raise Error("tokenizer: model.vocab is not an object")
+    var base = bi.dict(vocab)
+    var keys = bi.list(added)
+    for i in range(len(keys)):
+        base.pop(keys[i], PythonObject(None))
+    var merges = model.get("merges")
+    if merges is None:
+        merges = bi.list()
+    if bi.type(merges) is not bi.list:
+        raise Error("tokenizer: model.merges is not a list")
+    var bos = bi.list()
+    var eos = bi.list()
+    var post = data.get("post_processor")
+    if post is not None:
+        var kind = String(post.get("type"))
+        if kind == "TemplateProcessing":
+            var single = post.get("single", bi.list())
+            var specials = post.get("special_tokens", bi.dict())
+            var seen = False
+            for i in range(len(single)):
+                var item = single[i]
+                if Bool(py=item.__contains__("Sequence")):
+                    seen = True
+                elif Bool(py=item.__contains__("SpecialToken")):
+                    var name = item["SpecialToken"].get("id")
+                    var ids = specials.get(name, bi.dict()).get("ids")
+                    if ids is None or len(ids) == 0:
+                        raise Error("tokenizer: post_processor special token has no ids")
+                    for j in range(len(ids)):
+                        if seen:
+                            eos.append(bi.int(ids[j]))
+                        else:
+                            bos.append(bi.int(ids[j]))
+                else:
+                    raise Error("tokenizer: post_processor template must contain Sequence or SpecialToken")
+        elif kind != "ByteLevel":
+            raise Error("tokenizer: post_processor type " + kind + " is not honored")
+    if cfg is not None and bi.type(cfg) is bi.dict:
+        var flag = cfg.get("add_bos_token")
+        if bi.type(flag) is bi.bool and not Bool(py=flag):
+            bos.clear()
+        flag = cfg.get("add_eos_token")
+        if bi.type(flag) is bi.bool and not Bool(py=flag):
+            eos.clear()
+    var options = bi.list()
+    options.append(pattern)
+    options.append(added)
+    options.append(normalizer)
+    options.append(bos)
+    options.append(eos)
+    options.append(model.get("ignore_merges", PythonObject(False)))
+    var source = native_path(path)
+    if not Bool(py=source.startswith("/")):
+        source = Python.import_module("os").getcwd() + PythonObject("/") + source
+    options.append(source)
+    var tokenizer = vocab_spelled_public_binding(cls, base, merges, options, module)
+    tokenizer.bos_token_id = bos[0] if len(bos) != 0 else PythonObject(None)
+    tokenizer.eos_token_id = eos[len(eos) - 1] if len(eos) != 0 else PythonObject(None)
+    if cfg is not None and bi.type(cfg) is bi.dict:
+        for key in [String("bos_token"), String("eos_token")]:
+            var value = cfg.get(key)
+            if bi.type(value) is bi.dict:
+                value = value.get("content")
+            if bi.type(value) is bi.str and Bool(py=added.__contains__(value)):
+                bi.setattr(tokenizer, key + "_id", added[value])
+    return tokenizer
+
+
+def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, module: PythonObject,
+                                   patterns: PythonObject) raises -> PythonObject:
+    var text = native_path(path)
+    var filename = text
+    var directory = PythonObject(".")
+    if native_path_exists(text, True):
+        directory = text.rstrip("/")
+        filename = directory + PythonObject("/tokenizer.json")
+        if not native_path_exists(filename):
+            if native_path_exists(directory + PythonObject("/tokenizer.model")):
+                raise Error("tokenizer: tokenizer.model without tokenizer.json is a SentencePiece family")
+            raise Error("FileNotFoundError: directory holds no tokenizer.json")
+    else:
+        var pieces = text.rsplit("/", 1)
+        if len(pieces) == 2:
+            directory = pieces[0] if len(pieces[0]) != 0 else PythonObject("/")
+    if not native_path_exists(filename):
+        raise Error("FileNotFoundError: tokenizer.json does not exist")
+    var data = native_json_read(filename)
+    var cfg = PythonObject(None)
+    var config_path = directory + PythonObject("/tokenizer_config.json")
+    if native_path_exists(config_path):
+        cfg = native_json_read(config_path)
+    if not Bool(py=filename.startswith("/")):
+        filename = Python.import_module("os").getcwd() + PythonObject("/") + filename
+    return vocab_json_public_binding(cls, data, filename, cfg, module, patterns)
+
+
+def vocab_pattern_name_binding(regex: PythonObject, patterns: PythonObject) raises -> PythonObject:
+    return patterns.get(regex)
+
+
+def vocab_pretokenize_pattern_binding(data: PythonObject, pattern: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var raw = data.encode("utf-8") if bi.type(data) is bi.str else bi.memoryview(data).tobytes()
+    var bytes = _token_bytes(raw)
+    var offsets = pretokenize_pattern(bytes, builtin_unicode_classes(), _vocab_pattern(pattern))
+    var out = bi.list()
+    for i in range(len(offsets)):
+        out.append(offsets[i])
+    return out
+
+
+def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var raw = data.encode("utf-8") if Bool(py=bi.isinstance(data, bi.str)) else bi.memoryview(data).tobytes()
+    var bytes = List[UInt8](capacity=len(raw))
+    for i in range(len(raw)):
+        bytes.append(UInt8(Int(py=raw[i])))
+    var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
+    if not owner[].tok:
+        raise Error("tokenizer: vocabulary is not loaded")
+    var offsets = owner[].tok.value().pretokenize(bytes)
+    var out = bi.list()
+    for i in range(len(offsets) - 1):
+        out.append(raw[bi.slice(offsets[i], offsets[i + 1])])
+    return out
+
+
+def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    # Supported stdlib C binding API keeps public exception classes native.
+    # See std.python.bindings.raise_python_exception (Mojo 1.0).
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        comptime count = 5 if operation == 0 or operation == 1 or operation == 4 else (6 if operation == 2 else (4 if operation == 3 or operation == 5 else (1 if operation == 9 else 2)))
+        if len(args) != count:
+            raise Error("TypeError: tokenizer binding received incorrect argument count")
+        var result = PythonObject(None)
+        comptime if operation == 0:
+            result = vocab_init_public_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 1:
+            result = vocab_spelled_public_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 2:
+            result = vocab_json_public_binding(args[0], args[1], args[2], args[3], args[4], args[5])
+        elif operation == 3:
+            result = vocab_pretrained_public_binding(args[0], args[1], args[2], args[3])
+        elif operation == 4:
+            result = vocab_encode_public_binding(args[0], args[1], args[2], args[3], args[4])
+        elif operation == 5:
+            result = vocab_decode_public_binding(args[0], args[1], args[2], args[3])
+        elif operation == 6:
+            result = vocab_pretokenize_public_binding(args[0], args[1])
+        elif operation == 7:
+            result = vocab_pretokenize_pattern_binding(args[0], args[1])
+        elif operation == 8:
+            result = vocab_pattern_name_binding(args[0], args[1])
+        elif operation == 9:
+            result = native_json_parse(args[0])
+        return result.steal_data()
+    except error:
+        var message = String(error)
+        if message.startswith("TypeError:"):
+            return raise_python_exception(error, ExceptionType.TypeError)
+        if message.startswith("FileNotFoundError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+        return raise_python_exception(error, ExceptionType.ValueError)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_host.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_tokenizer_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_tokenizer_host")
+        transport_initialize()
+        module.def_py_c_function(transport_c, "native_transport_call")
+        module.def_py_c_function(cross_vendor_c, "cross_vendor_call")
+        module.def_py_c_function(parallel_byte_c, "parallel_byte_call")
+        module.def_py_c_function(codec_c, "native_codec_call")
+        module.def_py_c_function(process_c, "native_process_call")
+        module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
+        module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
+        module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
+        module.def_function[optimizer_finalize_binding]("optimizer_finalize")
+        module.def_py_c_function(sequential_c, "sequential_native_call")
+        module.def_py_c_function(classical_c, "classical_native_call")
+        module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
+        module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
+        module.def_py_c_function(pca_c, "pca_native_call")
+        module.def_py_c_function(generator_draw_c, "generator_draw")
+        module.def_py_c_function(samba_config_c, "samba_config_call")
+        module.def_py_c_function(samba_public_c, "samba_native_call")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")
         module.def_function[tokenizer_host_vendor_binding]("tokenizer_host_vendor")
         module.def_function[tokenizer_host_column_binding]("tokenizer_host_column")
@@ -1364,6 +1868,67 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[vocab_encode_binding]("vocab_encode")
         module.def_function[vocab_pretokenize_binding]("vocab_pretokenize")
         module.def_function[vocab_decode_binding]("vocab_decode")
+        module.def_py_c_function(_vocab_public_c[0], "vocab_init_public")
+        module.def_py_c_function(_vocab_public_c[1], "vocab_spelled_public")
+        module.def_py_c_function(_vocab_public_c[2], "vocab_json_public")
+        module.def_py_c_function(_vocab_public_c[3], "vocab_pretrained_public")
+        module.def_py_c_function(_vocab_public_c[4], "vocab_encode_public")
+        module.def_py_c_function(_vocab_public_c[5], "vocab_decode_public")
+        module.def_py_c_function(_vocab_public_c[6], "vocab_pretokenize_public")
+        module.def_py_c_function(_vocab_public_c[7], "vocab_pretokenize_pattern")
+        module.def_py_c_function(_vocab_public_c[8], "vocab_pattern_name")
+        module.def_py_c_function(_vocab_public_c[9], "native_json_parse")
+        module.def_py_c_function(model_config_c[0], "model_config_init")
+        module.def_py_c_function(model_config_c[1], "model_config_load")
+        module.def_py_c_function(model_config_c[2], "model_config_access")
+        module.def_py_c_function(model_config_c[3], "model_plan_init")
+        module.def_py_c_function(model_config_c[4], "model_layer_weights")
+        module.def_py_c_function(model_config_c[5], "model_checkpoint_names")
+        module.def_py_c_function(model_config_c[6], "model_plan_for")
+        module.def_py_c_function(checkpoint_c[0], "tensor_info_init")
+        module.def_py_c_function(checkpoint_c[1], "tensor_info_size")
+        module.def_py_c_function(checkpoint_c[2], "safetensors_init")
+        module.def_py_c_function(checkpoint_c[3], "safetensors_info")
+        module.def_py_c_function(checkpoint_c[4], "safetensors_map")
+        module.def_py_c_function(checkpoint_c[5], "safetensors_read")
+        module.def_py_c_function(checkpoint_c[6], "safetensors_close")
+        module.def_py_c_function(checkpoint_c[7], "checkpoint_init")
+        module.def_py_c_function(checkpoint_c[8], "checkpoint_open")
+        module.def_py_c_function(checkpoint_c[9], "checkpoint_file")
+        module.def_py_c_function(checkpoint_c[10], "checkpoint_index")
+        module.def_py_c_function(checkpoint_c[11], "checkpoint_access")
+        module.def_py_c_function(checkpoint_c[12], "checkpoint_read")
+        module.def_py_c_function(checkpoint_c[13], "checkpoint_close")
+        module.def_py_c_function(checkpoint_c[14], "checkpoint_enter")
+        module.def_py_c_function(checkpoint_c[15], "safetensors_names")
+        module.def_py_c_function(checkpoint_c[16], "safetensors_contains")
+        module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
+        module.def_py_c_function(neural_block_c[0], "neural_block_init")
+        module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
+        module.def_py_c_function(neural_block_c[2], "neural_block_forward")
+        module.def_py_c_function(neural_block_c[3], "neural_block_backward")
+        module.def_py_c_function(neural_prefill_c, "neural_prefill_call")
+        module.def_py_c_function(causal_model_c[0], "causal_model_init")
+        module.def_py_c_function(causal_model_c[1], "causal_model_load")
+        module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
+        module.def_function[generation_initialize_binding]("generation_initialize")
+        _ = module.add_type[GenerationHandle]("_GenerationHandle")
+        module.def_py_c_function(causal_public_c[0], "causal_lm_admit")
+        module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
+        module.def_py_c_function(causal_public_c[2], "causal_lm_reset")
+        module.def_py_c_function(causal_public_c[3], "causal_lm_forward")
+        module.def_py_c_function(causal_public_c[4], "causal_lm_stream")
+        module.def_py_c_function(causal_public_c[5], "causal_lm_read")
+        module.def_py_c_function(causal_public_c[6], "causal_lm_info")
+        module.def_py_c_function(causal_public_c[7], "causal_lm_generate")
+        module.def_py_c_function(causal_public_c[8], "causal_lm_text_stream")
+        module.def_py_c_function(causal_public_c[9], "causal_lm_generate_text")
+        module.def_py_c_function(causal_public_c[10], "causal_lm_resident")
+        module.def_py_c_function(causal_public_c[11], "causal_lm_snapshot")
+        module.def_py_c_function(causal_public_c[12], "causal_lm_resume")
+        module.def_py_c_function(causal_public_c[13], "causal_lm_parameters")
+        module.def_py_c_function(causal_public_c[14], "causal_lm_blocks")
+        module.def_py_c_function(causal_public_c[15], "causal_state_init")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))

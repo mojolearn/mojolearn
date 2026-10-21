@@ -1,0 +1,211 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Artifact admission negative controls; no compiler/product runtime involved."""
+import base64
+import csv
+import hashlib
+import importlib.util
+import io
+from pathlib import Path
+import tempfile
+import subprocess
+import shutil
+import tarfile
+import types
+import unittest
+import zipfile
+
+SPEC = importlib.util.spec_from_file_location("installed_native_audit", Path(__file__).with_name("qualify_native_runtime_installed.py"))
+q = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(q)
+
+
+def wheel(path, *, tamper=False, extra=False):
+    files = {"mojolearn/__init__.py": b"source\n", "mojolearn/host/example.so": b"native-bytes"}
+    rows = []
+    for name, raw in files.items():
+        sha = base64.urlsafe_b64encode(hashlib.sha256(raw).digest()).decode().rstrip("=")
+        rows.append((name, "sha256=" + sha, str(len(raw))))
+    record = "mojolearn_core-0.dist-info/RECORD"
+    out = io.StringIO();csv.writer(out).writerows(rows + [(record, "", "")])
+    if tamper:files["mojolearn/host/example.so"] = b"tampered"
+    if extra:files["mojolearn/unchecked.py"] = b"unrecorded"
+    with zipfile.ZipFile(path, "w") as archive:
+        for name, raw in files.items():archive.writestr(name, raw)
+        archive.writestr(record, out.getvalue())
+
+
+class InstalledNativeAudit(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+
+    def test_every_wheel_file_and_native_byte_is_checked(self):
+        path = self.root / "test.whl";wheel(path)
+        payload, records = q.wheel_inventory([path])
+        self.assertIn("mojolearn/host/example.so", payload)
+        self.assertEqual(records[0]["sha256"], q.digest(path))
+        wheel(path, tamper=True)
+        with self.assertRaisesRegex(ValueError, "RECORD mismatch"):
+            q.wheel_inventory([path])
+        wheel(path, extra=True)
+        with self.assertRaisesRegex(ValueError, "every wheel file"):
+            q.wheel_inventory([path])
+
+    def test_duplicate_split_ownership_refuses(self):
+        one, two = self.root / "one.whl", self.root / "two.whl"
+        wheel(one);wheel(two)
+        with self.assertRaisesRegex(ValueError, "two wheels own"):
+            q.wheel_inventory([one, two])
+
+    def modules(self):
+        prefix = self.root / "venv";site = prefix / "lib/python3.14/site-packages"
+        package = site / "mojolearn";package.mkdir(parents=True)
+        init = package / "__init__.py";init.write_text("source\n")
+        native = package / "host/example.so";native.parent.mkdir();native.write_bytes(b"native-bytes")
+        base = types.ModuleType("mojolearn");base.__file__ = str(init)
+        ext = types.ModuleType("_mojolearn_example");ext.__file__ = str(native)
+        base.runtime = ext  # Also inspect cached extensions absent from sys.modules.
+        payload = {str(p.relative_to(site)):dict(sha256=q.digest(p)) for p in [init, native]}
+        tests = self.root / "frozen-tests";tests.mkdir()
+        return prefix, payload, tests, {"mojolearn":base}
+
+    def test_only_installed_product_paths_and_hashes_are_admitted(self):
+        prefix, payload, tests, modules = self.modules()
+        found = q.installed_module_inventory(modules, prefix, payload, tests)
+        self.assertTrue(found["mojolearn/host/example.so"]["native"])
+        Path(modules["mojolearn"].runtime.__file__).write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "bytes differ"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+
+    def test_product_source_shadow_and_unshipped_native_module_refuse(self):
+        prefix, payload, tests, modules = self.modules()
+        source = self.root / "source.py";source.write_text("source\n")
+        modules["mojolearn"].__file__ = str(source)
+        with self.assertRaisesRegex(ValueError, "outside installed"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+        modules["mojolearn"].__file__ = str(prefix / "lib/python3.14/site-packages/mojolearn/__init__.py")
+        del payload["mojolearn/host/example.so"]
+        with self.assertRaisesRegex(ValueError, "absent from wheel"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+
+    def test_only_frozen_test_namespace_can_live_outside_install(self):
+        prefix, payload, tests, modules = self.modules()
+        helper = tests / "test_helper.py";helper.write_text("oracle\n")
+        test = types.ModuleType("mojolearn.tests.test_helper");test.__file__ = str(helper)
+        modules[test.__name__] = test
+        q.installed_module_inventory(modules, prefix, payload, tests)
+        test.__file__ = str(self.root / "unchecked-test.py")
+        with self.assertRaisesRegex(ValueError, "test namespace escaped"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+
+    def test_archived_freeze_uses_real_git_objects_and_refuses_changed_source(self):
+        repo = self.root / "repo";repo.mkdir()
+        source_file = repo / "python/mojolearn/__init__.py"
+        source_file.parent.mkdir(parents=True);source_file.write_text("source\n")
+        for args in (["init", "-q"], ["add", "."],
+                     ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"]):
+            subprocess.run(["git", "-C", str(repo)] + list(args), check=True, capture_output=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        frozen = self.root / "frozen";shutil.copytree(repo / "python", frozen / "python")
+        artifact = self.root / "witness.whl";witness = "mojolearn/identity_columns/COMMIT"
+        with zipfile.ZipFile(artifact, "w") as archive:archive.writestr(witness, commit + "\n")
+        payload = {witness:dict(wheel=str(artifact)),
+                   "mojolearn/__init__.py":dict(sha256=q.digest(source_file))}
+        self.assertEqual(len(q.source_match(frozen, commit, [artifact], payload, repo)), 1)
+        (frozen / "python/mojolearn/__init__.py").write_text("changed\n")
+        with self.assertRaisesRegex(ValueError, "wheel/source Python mismatch"):
+            q.source_match(frozen, commit, [artifact], payload, repo)
+
+    def test_original_failure_and_skip_are_kept_distinct(self):
+        path = self.root / "tests.xml"
+        path.write_text('<testsuites><testsuite><testcase name="ok"/><testcase name="bad"><failure>original numerical mismatch</failure></testcase><testcase name="missing"><skipped message="no physical GPU"/></testcase></testsuite></testsuites>')
+        report = q.junit_summary(path)
+        self.assertEqual((report["total"], report["passed"]), (3, 1))
+        self.assertIn("original numerical mismatch", report["failures"][0]["reason"])
+        self.assertEqual(report["skipped"][0]["reason"], "no physical GPU")
+
+    def archive_fixture(self, *, exclude_product=False):
+        repo = self.root / "archive-repo"; repo.mkdir()
+        files = {
+            ".gitattributes": "/bench/results/* export-ignore\n/bench/results/kept -export-ignore\n",
+            "bench/results/old/snapshot.mojo": "historical source\n",
+            "bench/results/kept/reference.mojo": "retained reference\n",
+            "autograd/runtime.mojo": "product source\n",
+            "pixi.toml": "toolchain\n",
+        }
+        if exclude_product:
+            files[".gitattributes"] += "/autograd/runtime.mojo export-ignore\n"
+        for rel, content in files.items():
+            path = repo / rel; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        for args in (["init", "-q"], ["add", "."],
+                     ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "archive fixture"]):
+            subprocess.run(["git", "-C", str(repo)] + list(args), check=True, capture_output=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        tree = subprocess.check_output(["git", "-C", str(repo), "ls-tree", "-r", "-z", commit])
+        committed = {row.split(b"\t", 1)[1].decode(): row.split(b"\t", 1)[0].split()[2].decode()
+                     for row in tree.split(b"\0") if row}
+        frozen = self.root / "archive-frozen"; frozen.mkdir()
+        archive = subprocess.check_output(["git", "-C", str(repo), "archive", commit])
+        with tarfile.open(fileobj=io.BytesIO(archive)) as stream:
+            stream.extractall(frozen, filter="data")
+        return repo, commit, committed, frozen
+
+    def test_archive_omissions_are_explicit_and_use_committed_parent_policy(self):
+        repo, commit, committed, frozen = self.archive_fixture()
+        # Uncommitted rules must not decide what the archived commit omitted.
+        (repo / ".gitattributes").write_text("/autograd/* export-ignore\n")
+        hashes, omitted = q.native_source_inventory(frozen, commit, committed, repo)
+        self.assertEqual(set(omitted), {"bench/results/old/snapshot.mojo"})
+        self.assertEqual(omitted["bench/results/old/snapshot.mojo"]["export_ignore_path"], "bench/results/old")
+        self.assertEqual(omitted["bench/results/old/snapshot.mojo"]["git_blob"], committed["bench/results/old/snapshot.mojo"])
+        self.assertEqual(hashes["autograd/runtime.mojo"], q.digest(frozen / "autograd/runtime.mojo"))
+        self.assertIn("bench/results/kept/reference.mojo", hashes)
+        (frozen / "bench/results/kept/reference.mojo").unlink()
+        with self.assertRaisesRegex(ValueError, "missing non-export-ignored native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
+
+    def test_missing_or_changed_product_source_is_never_an_archive_exemption(self):
+        repo, commit, committed, frozen = self.archive_fixture()
+        product = frozen / "autograd/runtime.mojo"
+        product.write_text("tampered product\n")
+        with self.assertRaisesRegex(ValueError, "uncommitted requested native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
+        product.unlink()
+        with self.assertRaisesRegex(ValueError, "missing requested native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
+
+    def test_export_ignored_product_source_still_refuses(self):
+        repo, commit, committed, frozen = self.archive_fixture(exclude_product=True)
+        self.assertFalse((frozen / "autograd/runtime.mojo").exists())
+        with self.assertRaisesRegex(ValueError, "missing requested native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
+
+    def test_fixture_device_matches_requested_vendor_and_cannot_inherit_cpu_override(self):
+        parent = dict(PATH="/bin", PYTHONPATH="/unchecked/source", PYTHONHOME="/unchecked/python",
+                      MOJOLEARN_GENERATION_DEVICE="cpu", MOJOLEARN_VENDOR="cpu",
+                      MOJOLEARN_UNCHECKED_BINARY="/stale/native.so")
+        for vendor, expected in (("cpu", "cpu"), ("metal", "gpu"), ("cuda", "gpu"), ("hip", "gpu")):
+            with self.subTest(vendor=vendor):
+                env = q.test_environment(parent, vendor, "identical")
+                self.assertEqual(env["MOJOLEARN_GENERATION_DEVICE"], expected)
+                self.assertEqual(env["MOJOLEARN_VENDOR"], vendor)
+                self.assertEqual(env["MOJOLEARN_NUMERIC_MODE"], "identical")
+                self.assertEqual(env["PATH"], "/bin")
+                self.assertNotIn("MOJOLEARN_UNCHECKED_BINARY", env)
+                self.assertNotIn("PYTHONPATH", env)
+                self.assertNotIn("PYTHONHOME", env)
+
+    def test_generation_fixture_device_is_observed_and_wrong_route_refuses(self):
+        module = types.ModuleType("frozen.test_generation_native")
+        module.__file__ = "/frozen/test_generation_native.py"
+        module.DEVICE = "gpu"
+        self.assertEqual(q.generation_test_devices({module.__name__: module}, "gpu"),
+                         {module.__name__: "gpu"})
+        module.DEVICE = "cpu"
+        with self.assertRaisesRegex(ValueError, "generation fixture selected a different device"):
+            q.generation_test_devices({module.__name__: module}, "gpu")
+
+
+if __name__ == "__main__":
+    unittest.main()

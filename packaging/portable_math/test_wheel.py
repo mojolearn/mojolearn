@@ -108,6 +108,58 @@ def test_numpy_remains_available_to_independent_verification(tmp_path, relative)
     assert not audit.numpy_errors(path, relative)
 
 
+NATIVE_VERIFIER_NAMES = (
+    "_verify_distributed_program", "_verify_generation", "_verify_graph",
+    "_verify_partitioned_program",
+)
+
+
+@pytest.mark.parametrize("name", NATIVE_VERIFIER_NAMES)
+def test_native_verifier_numpy_classification_is_exact(tmp_path, name):
+    source = HERE.parents[1] / "python/mojolearn" / (name + ".py")
+    relative = "mojolearn/" + name + ".py"
+    assert not audit.numpy_errors(source, relative)
+    # The same oracle import remains illegal if moved into an execution
+    # module or a similarly named new module; no prefix exemption is granted.
+    path = tmp_path / (name + "_runtime.py")
+    path.write_text("def predict(x):\n    import numpy as np\n    return np.asarray(x)\n")
+    assert audit.numpy_errors(path, "mojolearn/" + path.name)
+    assert audit.numpy_errors(path, "mojolearn/models/causal_lm.py")
+    assert audit.numpy_errors(path, "mojolearn/ops.py")
+
+
+def test_native_numpy_verifiers_are_lazy_and_have_no_product_callers():
+    import ast
+    package = HERE.parents[1] / "python/mojolearn"
+    names = set(NATIVE_VERIFIER_NAMES)
+    for name in names:
+        tree = ast.parse((package / (name + ".py")).read_bytes())
+        lazy = {id(node) for function in tree.body if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef))
+                for node in ast.walk(function)}
+        imports = [node for node in ast.walk(tree) if
+                   isinstance(node, ast.Import) and any(a.name.split(".")[0] == "numpy" for a in node.names)
+                   or isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "numpy"]
+        assert imports and all(id(node) in lazy for node in imports), name
+    callers = set()
+    for path in package.rglob("*.py"):
+        relative = path.relative_to(package)
+        if "tests" in relative.parts:
+            continue
+        tree = ast.parse(path.read_bytes())
+        for node in ast.walk(tree):
+            references = []
+            if isinstance(node, ast.Import):
+                references = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                references = [node.module or ""] + [alias.name for alias in node.names]
+            elif isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
+                if isinstance(node.func, ast.Name) and node.func.id == "__import__" or isinstance(node.func, ast.Attribute) and node.func.attr == "import_module":
+                    references = [str(node.args[0].value)]
+            if any(value.split(".")[-1] in names for value in references):
+                callers.add(relative.as_posix())
+    assert callers == {"__main__.py"}, callers
+
+
 @pytest.mark.parametrize('content', ['import scipy\n', 'import sklearn\n', 'from requests import get\n',
                                      'def f():\n    import requests\n'])
 def test_dependency_policy_rejects_a_package_the_wheel_does_not_provide(tmp_path, content):

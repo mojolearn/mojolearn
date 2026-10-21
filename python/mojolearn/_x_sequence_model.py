@@ -1,11 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A feed-forward model you assemble layer by layer and train on the GPU."""
-# Engineering note: `Sequential` is trained by the native autograd tape
-# (autograd/model.mojo). Python is the API shell only: it records the layers
-# and options as a flat integer program and a float table, checks the
-# arguments, and makes one call into Mojo per fit or prediction.
-# Initialisation, shuffling, batching, the forward and backward passes, the
-# optimizer and the loss curve all run in Mojo on the executor.
+# Native model descriptions and numerical execution retain the existing
+# Sequential ABI. Each public operation delegates one native call.
 import os
 
 from ._optional_numpy import require_numpy
@@ -143,10 +139,7 @@ class Sequential:
     """
 
     def __init__(self, numeric_mode=None, *, input_shape=None):
-        self.numeric_mode = numeric_mode
-        self.input_shape = None if input_shape is None else tuple(_shape_arg(input_shape, "input_shape"))
-        self._layers = []
-        self._options = None
+        return _SEQUENTIAL_ENTRY(self, "construct", (numeric_mode, input_shape), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ building
     def add(self, kind, *args, **kwargs):
@@ -176,115 +169,70 @@ class Sequential:
         >>> import mojolearn
         >>> model = mojolearn.Sequential().add("linear", 8).add("relu").add("linear", 1)
         """
-        if not isinstance(kind, str) or kind.lower() not in _LAYER:
-            raise ValueError(f"kind must be one of {sorted(_LAYER)}")
-        kind = kind.lower()
-        if kind == "linear":
-            return self._linear(*args, **kwargs)
-        if kind == "layer_norm":
-            return self._layer_norm(*args, **kwargs)
-        if kind == "dropout":
-            return self._dropout(*args, **kwargs)
-        if kind == "residual":
-            return self._residual(*args, **kwargs)
-        if kind == "reshape":
-            return self.reshape(*args, **kwargs)
-        if kind == "permute":
-            return self.permute(*args, **kwargs)
-        if kind == "conv2d":
-            return self.conv2d(*args, **kwargs)
-        if kind == "max_pool2d":
-            return self.max_pool2d(*args, **kwargs)
-        if kind == "avg_pool2d":
-            return self.avg_pool2d(*args, **kwargs)
-        if args or kwargs:
-            raise TypeError(f"{kind} takes no arguments")
-        self._append(_LAYER[kind])
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", (kind, args, kwargs), _SEQUENTIAL_CONTEXT)
 
     def _append(self, code, a0=0, a1=0, f=0.0, args=None):
         # one layer: (code, arg0, arg1, float argument, the six integer
         # arguments of a version-2 description record)
-        args = [a0, a1, 0, 0, 0, 0] if args is None else list(args)
-        self._layers.append((code, a0, a1, f, tuple(args)))
+        return _SEQUENTIAL_ENTRY(self, "append", (code, a0, a1, f, args), _SEQUENTIAL_CONTEXT)
 
     def _linear(self, units, bias=True):
-        if isinstance(units, bool) or not isinstance(units, (int, np.integer)) or units < 1:
-            raise ValueError("units must be a positive integer")
-        self._append(_LAYER["linear"], int(units), 1 if bias else 0)
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("linear", (units, bias), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def _layer_norm(self, eps=1e-5):
-        if not eps > 0:
-            raise ValueError("eps must be positive")
-        self._append(_LAYER["layer_norm"], f=float(eps))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("layer_norm", (eps,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def _dropout(self, p):
-        if not 0 <= p < 1:
-            raise ValueError("p must be in [0, 1)")
-        self._append(_LAYER["dropout"], f=float(p))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("dropout", (p,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def _residual(self, source=-1):
-        if isinstance(source, bool) or not isinstance(source, (int, np.integer)):
-            raise ValueError("source must be -1 or the index of an earlier layer")
-        self._append(_LAYER["residual"], int(source))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("residual", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def linear(self, units, bias=True):
         """Append a fully connected layer with ``units`` outputs."""
-        return self._linear(units, bias)
+        return _SEQUENTIAL_ENTRY(self, "add", ("linear", (units, bias), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def relu(self):
         """Append a ReLU activation."""
-        return self.add("relu")
+        return _SEQUENTIAL_ENTRY(self, "add", ("relu", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def sigmoid(self):
         """Append a logistic sigmoid activation."""
-        return self.add("sigmoid")
+        return _SEQUENTIAL_ENTRY(self, "add", ("sigmoid", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def tanh(self):
         """Append a hyperbolic tangent activation."""
-        return self.add("tanh")
+        return _SEQUENTIAL_ENTRY(self, "add", ("tanh", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def softmax(self):
         """Append a row-wise softmax."""
-        return self.add("softmax")
+        return _SEQUENTIAL_ENTRY(self, "add", ("softmax", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def layer_norm(self, eps=1e-5):
         """Append a layer normalization with a learned weight and bias."""
-        return self._layer_norm(eps)
+        return _SEQUENTIAL_ENTRY(self, "add", ("layer_norm", (eps,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def dropout(self, p):
         """Append dropout with drop probability ``p`` (active in fit only)."""
-        return self._dropout(p)
+        return _SEQUENTIAL_ENTRY(self, "add", ("dropout", (p,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def residual(self, source=-1):
         """Add the output of layer ``source`` (-1: the model input) to the current output."""
-        return self._residual(source)
+        return _SEQUENTIAL_ENTRY(self, "add", ("residual", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def reshape(self, shape):
         """Append a reshape of each sample to ``shape`` (up to 6
         dimensions, one of them -1 to infer it)."""
-        dims = _shape_arg(shape, "shape", allow_infer=True)
-        self._append(_LAYER["reshape"], args=dims + [0] * (_SPEC2_ARGS - len(dims)))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("reshape", (shape,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def permute(self, axes):
         """Append a reordering of each sample's axes: output axis ``k`` is
         input axis ``axes[k]`` (axes count from 0 within a sample)."""
-        values = tuple(axes)
-        if not 1 <= len(values) <= _SPEC2_ARGS:
-            raise ValueError(f"axes must list 1 to {_SPEC2_ARGS} axes")
-        order = [_positive(a, "axes", 0) for a in values]  # glue: at most six axes
-        self._append(_LAYER["permute"], args=order + [-1] * (_SPEC2_ARGS - len(order)))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("permute", (axes,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def flatten(self):
         """Append a flattening of each sample into one vector."""
-        self._append(_LAYER["flatten"])
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("flatten", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def conv2d(self, out_channels, kernel_size, stride=1, padding=0, bias=True, groups=1):
         """Append a 2-D convolution of ``(channels, height, width)``
@@ -299,31 +247,19 @@ class Sequential:
 
             model.conv2d(32, 3, padding=1, groups=32)
         """
-        oc = _positive(out_channels, "out_channels")
-        k = _positive(kernel_size, "kernel_size")
-        st = _positive(stride, "stride")
-        pad = _positive(padding, "padding", 0)
-        g = _positive(groups, "groups")
-        self._append(_LAYER["conv2d"], oc, k, args=[oc, k, st, pad, 1 if bias else 0, g])
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("conv2d", (out_channels, kernel_size, stride, padding, bias, groups), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def max_pool2d(self, kernel_size, stride=None):
         """Append a max pooling of ``(channels, height, width)`` samples
         over square ``kernel_size`` windows, ``stride`` apart (by default
         ``kernel_size``)."""
-        k = _positive(kernel_size, "kernel_size")
-        st = k if stride is None else _positive(stride, "stride")
-        self._append(_LAYER["max_pool2d"], k, st)
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("max_pool2d", (kernel_size, stride), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def avg_pool2d(self, kernel_size, stride=None):
         """Append an average pooling of ``(channels, height, width)``
         samples over square ``kernel_size`` windows, ``stride`` apart (by
         default ``kernel_size``)."""
-        k = _positive(kernel_size, "kernel_size")
-        st = k if stride is None else _positive(stride, "stride")
-        self._append(_LAYER["avg_pool2d"], k, st)
-        return self
+        return _SEQUENTIAL_ENTRY(self, "add", ("avg_pool2d", (kernel_size, stride), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     @property
     def layers(self):
@@ -331,9 +267,7 @@ class Sequential:
         and ``(kind, arguments, float_arg)`` for ``reshape``, ``permute``,
         ``flatten``, ``conv2d`` and the pools, with ``arguments`` the
         layer's six integer arguments."""
-        names = {v: k for k, v in _LAYER.items()}  # glue: inverts the layer name table
-        return [(names[c], args, f) if c in _SHAPE_LAYERS else (names[c], a0, a1, f)
-                for c, a0, a1, f, args in self._layers]  # glue: describes the recorded layers
+        return _SEQUENTIAL_ENTRY(self, "layers", (), _SEQUENTIAL_CONTEXT)
 
     def compile(self, loss="mse", optimizer="adam", lr=1e-3, *, momentum=0.9, nesterov=False,
                 beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, schedule="constant",
@@ -377,58 +311,21 @@ class Sequential:
         >>> model = mojolearn.Sequential().linear(8).relu().linear(1)
         >>> model = model.compile(loss="huber", optimizer="momentum", lr=0.01, nesterov=True)
         """
-        if loss not in _LOSS:
-            raise ValueError(f"loss must be one of {sorted(_LOSS)}")
-        if optimizer not in _OPT:
-            raise ValueError(f"optimizer must be one of {sorted(_OPT)}")
-        if schedule not in _SCHED:
-            raise ValueError(f"schedule must be one of {sorted(_SCHED)}")
-        mu = float(momentum) if optimizer == "momentum" else 0.0
-        if optimizer == "adam" or optimizer == "adamw":
-            f1, f2 = float(beta1), float(beta2)
-        else:
-            f1, f2 = mu, 0.0
-        flags = 1 if (optimizer == "momentum" and nesterov) else 0
-        self._options = dict(loss=loss, opt=_OPT[optimizer], flags=flags, lr=float(lr), f1=f1, f2=f2,
-                             eps=float(eps), weight_decay=float(weight_decay), sched=_SCHED[schedule],
-                             step_size=int(step_size), gamma=float(gamma), huber_delta=float(huber_delta),
-                             tol=float(tol), n_iter_no_change=int(n_iter_no_change))
-        return self
+        return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
     def _binding(self):
         return _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
 
     def _program(self, n_features, sample=None):
-        if sample is None:
-            prog = [_SPEC_VERSION, int(n_features), len(self._layers)]
-            for code, a0, a1, _, _ in self._layers:  # glue: one description record per layer
-                prog += [code, a0, a1, 0]
-            return prog
-        # version 2: the per-sample shape, padded with 1, then 8 words a layer
-        prog = [_SPEC2_VERSION, len(sample)] + list(sample) + [1] * (_SPEC2_DIMS - len(sample))
-        prog.append(len(self._layers))
-        for code, _, _, _, args in self._layers:  # glue: one description record per layer
-            prog += [code] + list(args) + [0]
-        return prog
+        return _SEQUENTIAL_ENTRY(self, "program", (n_features, sample), _SEQUENTIAL_CONTEXT)
 
     def _table(self):
-        return [f for _, _, _, f, _ in self._layers]  # glue: one float argument per layer
+        return _SEQUENTIAL_ENTRY(self, "table", (), _SEQUENTIAL_CONTEXT)
 
     def _sample_of(self, X):
         # the per-sample shape of a version-2 model (None: version 1)
-        uses_shape = self.input_shape is not None or X.ndim > 2 or any(
-            c in _SHAPE_LAYERS for c, _, _, _, _ in self._layers)  # glue: a layer-kind check
-        if not uses_shape:
-            return None
-        if self.input_shape is None:
-            if X.ndim - 1 > _SPEC2_DIMS - 1:
-                raise ValueError(f"a sample has at most {_SPEC2_DIMS - 1} dimensions")
-            return tuple(int(d) for d in X.shape[1:])  # glue: at most seven dimensions
-        if X.ndim > 2 and tuple(X.shape[1:]) != self.input_shape:
-            raise ValueError(f"X samples have shape {tuple(X.shape[1:])}, the model's input_shape is "
-                             f"{self.input_shape}")
-        return self.input_shape
+        return _SEQUENTIAL_ENTRY(self, "sample", (X,), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ training
     def fit(self, X, y, *, epochs=10, batch_size=None, shuffle=None, seed=0, resume=False,
@@ -484,111 +381,12 @@ class Sequential:
             The fitted model, with ``params_``, ``loss_curve_``, ``n_iter_``
             and ``n_features_in_`` set (and ``classes_`` for classifiers).
         """
-        if not self._layers:
-            raise ValueError("add at least one layer before fit")
-        if self._options is None:
-            raise ValueError("call compile before fit")
-        if restore_best_weights and validation_data is None:
-            raise ValueError("restore_best_weights requires validation_data")
-        if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or not 0 <= seed < 2 ** 64:
-            raise ValueError("seed must be an integer in [0, 2**64)")
-        resume = bool(resume)
-        if resume and getattr(self, "_fit_state", None) is None:
-            raise ValueError("resume=True continues an earlier fit: call fit (or from_checkpoint) first")
-        if batch_size is None:
-            batch_size = self._fit_batch if resume else 32
-        if shuffle is None:
-            shuffle = self._fit_shuffle if resume else True
-        if int(epochs) < 1 or int(batch_size) < 1:
-            raise ValueError("epochs and batch_size must be >= 1")
-        o = self._options
-        X, M, xd = _x_nd(X, "X")
-        n, d = M.shape
-        if resume and d != self.n_features_in_:
-            raise ValueError(f"X has {d} features, the model was fitted on {self.n_features_in_}")
-        sample = self._sample_of(X)
-        if resume and sample != getattr(self, "_sample_shape", None):
-            raise ValueError("resume=True takes inputs of the shape the model was fitted on")
-        # after load_state_dict the fit starts from the imported parameters
-        warm = not resume and getattr(self, "_imported", False)
-        if warm and (d != self.n_features_in_ or sample != getattr(self, "_sample_shape", None)):
-            raise ValueError(f"X has {d} values per sample and shape {sample}; the imported weights take "
-                             f"{self.n_features_in_} values per sample and shape {self._sample_shape}")
-        prog = self._program(d, sample)
-        table = self._table()
-        b = self._binding()
-        n_params, n_out = (int(v) for v in b.model_n_params(prog, table))  # glue: two counts returned by Mojo
-        Y, yd, target = self._targets(y, n, n_out, o["loss"])
-        if resume:
-            # the training state continues in place; Mojo checks it belongs
-            # to this model and optimizer
-            params, m, v, state, prev = self.params_, self._opt_m, self._opt_v, self._fit_state, self._curve
-            curve = np.zeros(self.n_iter_ + int(epochs), dtype=np.float32)
-        else:
-            params = self.params_ if warm else np.zeros(n_params, dtype=np.float32)
-            m = np.zeros(n_params, dtype=np.float32)
-            v = np.zeros(n_params, dtype=np.float32)
-            state = np.zeros(_FIT_STATE_WORDS, dtype=np.int64)
-            prev = None
-            curve = np.zeros(int(epochs), dtype=np.float32)
-        seed = int(seed)
-        ip = [n, _LOSS[o["loss"]], target, o["opt"], o["flags"], o["sched"], o["step_size"],
-              int(batch_size), int(epochs), int(bool(shuffle)), seed & 0xFFFFFFFF, seed >> 32,
-              o["n_iter_no_change"], 0 if (resume or warm) else 1, 1 if resume else 0]
-        fp = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0.0, o["tol"], o["gamma"],
-              o["huber_delta"]] + table
-        addrs = [xd, yd, params.ctypes.data, curve.ctypes.data, m.ctypes.data, v.ctypes.data,
-                 state.ctypes.data, 0 if prev is None else prev.ctypes.data]
-        if validation_data is not None:
-            if not isinstance(validation_data, (tuple, list)) or len(validation_data) != 2:
-                raise ValueError("validation_data must be (X, y)")
-            vx, vm, vxd = _x_nd(validation_data[0], "validation X")
-            vy = as_input(validation_data[1])
-            if self._sample_of(vx) != sample or vm.shape[1] != d:
-                raise ValueError("validation inputs must have the training sample shape")
-            if vy.ndim not in (1, 2) or vy.shape[0] != vm.shape[0]:
-                raise ValueError("validation targets must match the validation rows")
-            if target != _TARGET_DENSE and vy.ndim != 1:
-                raise ValueError("validation classification targets must be a vector")
-            classes_desc = None if target == _TARGET_DENSE else describe(self.classes_, "classes")
-            val_curve = np.empty(int(epochs), dtype=np.float32)
-            val_info = np.empty(2, dtype=np.int64)
-            addrs += [vxd, describe(vy, "validation y"), classes_desc,
-                      val_curve.ctypes.data, val_info.ctypes.data]
-            ip.append(int(bool(restore_best_weights)))
-        # X, Y and the state arrays stay referenced until the call returns
-        # (the descriptors and addresses point into them)
-        n_iter = int(b.model_fit(addrs, prog, ip, fp))
-        self.params_ = params
-        self.n_iter_ = n_iter
-        if validation_data is not None:
-            self.epochs_run_ = int(val_info[0])
-            self.best_epoch_ = int(val_info[1])
-            self.validation_loss_curve_ = val_curve[:self.epochs_run_].tolist()
-        self.loss_curve_ = curve[:n_iter].tolist()
-        self.n_features_in_ = d
-        self._sample_shape = sample
-        self.n_outputs_ = n_out
-        self._fit_loss = o["loss"]
-        self._target = target
-        self._fit_batch = int(batch_size)
-        self._fit_shuffle = bool(shuffle)
-        self._opt_m, self._opt_v, self._fit_state, self._curve = m, v, state, curve
-        self._imported = False
-        return self
+        return _SEQUENTIAL_ENTRY(self, "fit", (X, y, epochs, batch_size, shuffle, seed, resume, validation_data, restore_best_weights), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ weight import
     def _param_layers(self):
         # (layer index, has bias) of every layer that holds parameters
-        out = []
-        for i, (code, a0, a1, _, args) in enumerate(self._layers):  # glue: one entry per parameter layer
-            if code == _LAYER["linear"]:
-                out.append((i, a1 == 1))
-            elif code == _LAYER["layer_norm"]:
-                out.append((i, True))
-            elif code == _LAYER["conv2d"]:
-                out.append((i, args[4] == 1))
-        return out
+        return _SEQUENTIAL_ENTRY(self, "parameter_layers", (), _SEQUENTIAL_CONTEXT)
 
     def load_state_dict(self, state, *, source=None, names=None, prefix="", strict=True):
         """Load trained weights from PyTorch or a safetensors checkpoint.
@@ -650,57 +448,7 @@ class Sequential:
         >>> model = model.load_state_dict(state)
         >>> pred = model.predict(rng.random((16, 4), dtype=np.float32))
         """
-        from ._weight_import import LAYOUT_TORCH, SLOT_BIAS, SLOT_WEIGHT, WeightSource
-        if not self._layers:
-            raise ValueError("add at least one layer before load_state_dict")
-        if not isinstance(prefix, str):
-            raise TypeError("prefix must be a string")
-        if names is not None and not hasattr(names, "get"):
-            raise TypeError("names must be a dict of layer index to name")
-        layers = self._param_layers()
-        if not layers:
-            raise ValueError("the model has no layers with parameters")
-        entries = []  # (key, layer, slot)
-        for i, bias in layers:  # glue: one name per layer parameter
-            stem = prefix + str(i if names is None else names.get(i, i))
-            entries.append((stem + ".weight", i, SLOT_WEIGHT))
-            if bias:
-                entries.append((stem + ".bias", i, SLOT_BIAS))
-        keys = [k for k, _, _ in entries]  # glue: the requested tensor names
-        with WeightSource(state, source) as src:
-            missing = src.missing(keys)
-            if missing:
-                held = src.names()
-                raise ValueError(f"load_state_dict: the source has no tensor {missing[0]!r}"
-                                 + (f" ({len(missing)} missing)" if len(missing) > 1 else "")
-                                 + f"; it holds {held[:6]}" + (" ..." if len(held) > 6 else ""))
-            if strict:
-                unused = src.unused(keys)
-                if unused:
-                    raise ValueError(f"load_state_dict: the model does not use {unused[:6]}"
-                                     + (" ..." if len(unused) > 6 else "")
-                                     + "; pass strict=False to skip them")
-            sample, d = self._import_shape(src, layers, entries)
-            prog = self._program(d, sample)
-            table = self._table()
-            b = self._binding()
-            n_params, _ = (int(v) for v in b.model_n_params(prog, table))  # glue: two counts returned by Mojo
-            recs = []
-            for key, i, slot in entries:  # glue: one record per source tensor
-                recs += src.record(key, i, slot, LAYOUT_TORCH)
-            params = np.empty(n_params, dtype=np.float32)
-            # Mojo checks every dtype and shape, then writes every parameter
-            counts = b.model_import_params(prog, table, recs, keys, params.ctypes.data)
-            n_params, n_out, n_in = (int(v) for v in counts)  # glue: three counts returned by Mojo
-        self.params_ = params
-        self.n_features_in_ = n_in
-        self.n_outputs_ = n_out
-        self._sample_shape = sample
-        self.n_iter_ = 0
-        self.loss_curve_ = []
-        self._fit_state = None
-        self._imported = True
-        return self
+        return _SEQUENTIAL_ENTRY(self, "load_weights", (state, source, names, prefix, strict), _SEQUENTIAL_CONTEXT)
 
     def _import_shape(self, src, layers, entries):
         # the per-sample shape (None: a version-1 description) and the input
@@ -731,41 +479,7 @@ class Sequential:
 
     # ------------------------------------------------------------ checkpoints
     def _save(self, path, export):
-        if not hasattr(self, "params_"):
-            raise ValueError("call fit before saving the model")
-        if not hasattr(self, "_target"):
-            # weights from load_state_dict without a fit: no loss or training options to save
-            raise ValueError("call fit before saving the model")
-        if not export and getattr(self, "_fit_state", None) is None:
-            raise ValueError("this model holds no training state (it was loaded from an export); use export")
-        if getattr(self, "_sample_shape", None) is not None:
-            # the checkpoint format holds version-1 descriptions only
-            # (training/checkpoint.mojo); a shape-layer model is refused by name
-            raise ValueError("save_checkpoint and export take models of 2-D inputs without reshape, "
-                             "permute, flatten, conv2d or pooling layers")
-        o = self._options
-        classes = getattr(self, "classes_", None)
-        k = 0 if classes is None else int(classes.shape[0])
-        ip = [1 if export else 0, _LOSS[o["loss"]], self._target, o["opt"], o["flags"], o["sched"],
-              o["step_size"], o["n_iter_no_change"], self._fit_batch, int(self._fit_shuffle),
-              self.n_features_in_, self.n_outputs_, int(getattr(self, "_y_1d", False)),
-              0 if export else self.n_iter_, k]
-        fp = [o["lr"], o["f1"], o["f2"], o["eps"], o["weight_decay"], 0.0, o["tol"], o["gamma"],
-              o["huber_delta"]] + self._table()
-        if export:
-            addrs = [self.params_.ctypes.data, 0, 0, 0, 0]
-        else:
-            addrs = [self.params_.ctypes.data, self._opt_m.ctypes.data, self._opt_v.ctypes.data,
-                     self._fit_state.ctypes.data, self._curve.ctypes.data]
-        desc = None
-        if k:
-            # classes_ as it is (Mojo refuses a non-contiguous one)
-            desc = describe(classes, "classes")
-        prog = self._program(self.n_features_in_)
-        self._binding().model_save_checkpoint(os.fspath(path), addrs, prog, ip, fp, desc)  # cpu-route: checkpoint file written on the host
-        # this install's verification report beside the file (<path>.verify.json)
-        from ._verify_model import record_sequential
-        record_sequential(self, path)
+        return _SEQUENTIAL_ENTRY(self, "save", (path, export), _SEQUENTIAL_CONTEXT)
 
     def save_checkpoint(self, path):
         """Save the model and its full training state to ``path``.
@@ -800,7 +514,7 @@ class Sequential:
         >>> again = mojolearn.Sequential.from_checkpoint("model.ckpt")  # doctest: +SKIP
         >>> again = again.fit(X, y, epochs=2, resume=True)  # doctest: +SKIP
         """
-        self._save(path, export=False)
+        return _SEQUENTIAL_ENTRY(self, "save", (path, False), _SEQUENTIAL_CONTEXT)
 
     def export(self, path):
         """Save the trained model for inference only.
@@ -831,7 +545,7 @@ class Sequential:
         >>> served = mojolearn.Sequential.load("classifier.ckpt")  # doctest: +SKIP
         >>> proba = served.predict_proba(X)  # doctest: +SKIP
         """
-        self._save(path, export=True)
+        return _SEQUENTIAL_ENTRY(self, "save", (path, True), _SEQUENTIAL_CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, numeric_mode=None):
@@ -858,51 +572,7 @@ class Sequential:
             The file is not a complete model checkpoint (wrong format,
             truncated or damaged).
         """
-        model = cls(numeric_mode=numeric_mode)
-        b = model._binding()
-        path = os.fspath(path)
-        export, layers, ints, floats = b.model_checkpoint_info(path)  # cpu-route: checkpoint file read on the host
-        for c, a0, a1, f in layers:  # glue: one description record per layer
-            model._append(int(c), int(a0), int(a1), float(f))
-        model._sample_shape = None
-        (loss, target, opt, flags, sched, step_size, patience, batch, shuffle, d, n_out, y_1d,
-         n_run, k, class_kind, class_size, n_params) = (int(v) for v in ints)  # glue: counts returned by Mojo
-        lr, f1, f2, eps, wd, _, tol, gamma, huber = (float(v) for v in floats)  # glue: options returned by Mojo
-        loss_name = {v: name for name, v in _LOSS.items()}[loss]  # glue: inverts the loss name table
-        model._options = dict(loss=loss_name, opt=opt, flags=flags, lr=lr, f1=f1, f2=f2, eps=eps,
-                              weight_decay=wd, sched=sched, step_size=step_size, gamma=gamma,
-                              huber_delta=huber, tol=tol, n_iter_no_change=patience)
-        params = np.zeros(n_params, dtype=np.float32)
-        classes = None
-        if k:
-            classes = np.empty(k, dtype=np.dtype(_CLASS_DTYPE[(class_kind, class_size)]))
-        addrs = [params.ctypes.data, 0, 0, 0, 0, 0 if classes is None else classes.ctypes.data]
-        if not int(export):
-            m = np.zeros(n_params, dtype=np.float32)
-            v = np.zeros(n_params, dtype=np.float32)
-            state = np.zeros(_FIT_STATE_WORDS, dtype=np.int64)
-            curve = np.zeros(n_run, dtype=np.float32)
-            addrs[1:5] = [m.ctypes.data, v.ctypes.data, state.ctypes.data, curve.ctypes.data]
-        b.model_load_checkpoint(path, addrs)  # cpu-route: checkpoint file read on the host
-        model.params_ = params
-        model.n_features_in_ = d
-        model.n_outputs_ = n_out
-        model._fit_loss = loss_name
-        model._target = target
-        model._fit_batch = batch
-        model._fit_shuffle = bool(shuffle)
-        model._y_1d = bool(y_1d)
-        if classes is not None:
-            model.classes_ = classes
-        if int(export):
-            model.n_iter_ = 0
-            model.loss_curve_ = []
-            model._fit_state = None
-        else:
-            model.n_iter_ = n_run
-            model.loss_curve_ = curve[:n_run].tolist()
-            model._opt_m, model._opt_v, model._fit_state, model._curve = m, v, state, curve
-        return model
+        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode), _SEQUENTIAL_CONTEXT)
 
     @classmethod
     def load(cls, path, numeric_mode=None):
@@ -915,60 +585,14 @@ class Sequential:
         >>> import mojolearn
         >>> model = mojolearn.Sequential.load("classifier.ckpt")  # doctest: +SKIP
         """
-        return cls.from_checkpoint(path, numeric_mode=numeric_mode)
+        return _SEQUENTIAL_ENTRY(cls, "load_checkpoint", (path, numeric_mode), _SEQUENTIAL_CONTEXT)
 
     def _targets(self, y, n, n_out, loss):
-        if loss in ("cross_entropy", "bce_with_logits"):
-            y = as_input(y)
-            if y.ndim != 1 or len(y) != n:
-                raise ValueError(f"{loss} takes one label per row of X")
-            if y.dtype.kind not in "biuf":
-                raise ValueError(f"{loss} takes numeric labels")
-            # sorted classes (in y's own dtype) and int32 codes in Mojo, by
-            # the sequence binding itself (`model_labels`: the device sort on
-            # a GPU, its host twin on the CPU column), from y as it is
-            classes = np.empty(n, dtype=y.dtype)
-            codes = np.empty(n, dtype=np.int32)
-            k = int(self._binding().model_labels(describe(y, "y"), classes.ctypes.data,
-                                                 codes.ctypes.data))
-            self.classes_ = classes[:k]
-            if loss == "cross_entropy":
-                if k != n_out:
-                    raise ValueError(f"the labels have {k} classes but the model has {n_out} outputs")
-                return codes, describe(codes, "y"), _TARGET_CODES
-            if k != 2 or n_out != 1:
-                raise ValueError("bce_with_logits needs two classes and a model with one output")
-            return codes, describe(codes, "y"), _TARGET_CODE_VALUES
-        y = as_input(y)
-        if y.ndim not in (1, 2) or len(y) != n:
-            raise ValueError("y must be (n_samples,) or (n_samples, n_outputs)")
-        self._y_1d = y.ndim == 1
-        width = 1 if y.ndim == 1 else y.shape[1]
-        if width != n_out:
-            raise ValueError(f"y has {width} outputs but the model has {n_out}")
-        # y as it is; Mojo casts it to float32 on the executor
-        return y, describe(y, "y"), _TARGET_DENSE
+        return _SEQUENTIAL_ENTRY(self, "targets", (y, n, n_out, loss), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ prediction
     def _forward(self, X, transform, width=None):
-        if not hasattr(self, "params_"):
-            raise ValueError("call fit before predict")
-        sample = getattr(self, "_sample_shape", None)
-        if sample is None:
-            X, xd = _x_2d(X, "X")
-            M = X
-        else:
-            X, M, xd = _x_nd(X, "X")
-            if X.ndim > 2 and tuple(X.shape[1:]) != sample:
-                raise ValueError(f"X samples have shape {tuple(X.shape[1:])}, the model was fitted on {sample}")
-        if M.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {M.shape[1]} features, the model was fitted on {self.n_features_in_}")
-        width = self.n_outputs_ if width is None else width
-        out = np.zeros((M.shape[0], width), dtype=np.float32)
-        self._binding().model_predict([xd, self.params_.ctypes.data, out.ctypes.data],
-                                      self._program(self.n_features_in_, sample), self._table(),
-                                      [M.shape[0], _PREDICT_CHUNK, transform])
-        return out
+        return _SEQUENTIAL_ENTRY(self, "forward", (X, transform, width), _SEQUENTIAL_CONTEXT)
 
     def predict(self, X):
         """Predict with the fitted model.
@@ -987,22 +611,7 @@ class Sequential:
             ``bce_with_logits`` models, the predicted class labels
             (n_samples,).
         """
-        loss = getattr(self, "_fit_loss", None)
-        if loss == "cross_entropy" or loss == "bce_with_logits":
-            # class codes from the binding: the first-max-wins row argmax of
-            # the logits, or sigmoid p > 0.5 (a NaN takes class 0)
-            mode = _OUT_ARGMAX if loss == "cross_entropy" else _OUT_THRESHOLD
-            codes = self._forward(X, mode, width=1)
-            # the labels by one gather over classes_ in Mojo (`model_gather_labels`;
-            # classes_ is numeric: fit refuses non-numeric labels)
-            classes = self.classes_
-            labels = np.empty(codes.shape[0], dtype=classes.dtype)
-            self._binding().model_gather_labels(
-                [codes.ctypes.data, classes.ctypes.data, labels.ctypes.data],
-                [codes.shape[0], classes.shape[0], classes.dtype.itemsize])
-            return labels
-        out = self._forward(X, _OUT_RAW)
-        return out[:, 0].copy() if getattr(self, "_y_1d", False) else out
+        return _SEQUENTIAL_ENTRY(self, "predict", (X,), _SEQUENTIAL_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities of a ``cross_entropy`` or ``bce_with_logits`` model.
@@ -1018,10 +627,72 @@ class Sequential:
         ndarray of float32, shape (n_samples, n_classes)
             Each row sums to one; columns follow ``classes_``.
         """
-        loss = getattr(self, "_fit_loss", None)
-        if loss == "cross_entropy":
-            return self._forward(X, _OUT_SOFTMAX)
-        if loss == "bce_with_logits":
-            # [1 - p, p] written by the binding (`OP_PROBA2`)
-            return self._forward(X, _OUT_PROBA2, width=2)
-        raise ValueError("predict_proba needs a model fitted with cross_entropy or bce_with_logits")
+        return _SEQUENTIAL_ENTRY(self, "predict_proba", (X,), _SEQUENTIAL_CONTEXT)
+
+
+# Package-import ABI connection. No model operation calls this setup again.
+from .tokenizer import _binding as _sequential_tokenizer_binding
+_SEQUENTIAL_ENTRY = _sequential_tokenizer_binding()._module.sequential_native_call
+_SEQUENTIAL_NO_KEYWORDS = {}
+_SEQUENTIAL_CONTEXT = {
+    "integer": np.integer, "layer_codes": _LAYER, "loss_codes": _LOSS,
+    "optimizer_codes": _OPT, "schedule_codes": _SCHED,
+    "layer_names": ("", "linear", "relu", "sigmoid", "tanh", "softmax",
+                    "layer_norm", "dropout", "residual", "reshape", "permute",
+                    "flatten", "conv2d", "max_pool2d", "avg_pool2d"),
+}
+
+
+def _connect_sequential_bindings():
+    # ABI connection at module import only; no Sequential operation calls it.
+    from types import BuiltinFunctionType, ModuleType
+    from collections import OrderedDict, defaultdict
+    from pathlib import PosixPath, PurePosixPath
+    import mmap
+    import sys
+    from array import array
+    from ._array import Array
+    from ._version import __version__
+    selected = _backend.default_mode()
+    entries = {}
+    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: connect native modes at package import
+        try:
+            module = _backend.binding("_mojolearn_x_sequence", mode)
+            symbols = {}
+            for name in ("x_sequence_vendor", "x_sequence_numeric_mode", "model_n_params", "model_fit", "model_predict", "model_labels", "model_gather_labels", "model_import_params", "model_save_checkpoint", "model_load_checkpoint", "model_checkpoint_info", "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill"):  # glue: resolve existing compiled ABI symbols at import
+                entry = getattr(module, name)
+                if not isinstance(entry, BuiltinFunctionType):
+                    raise TypeError(f"Sequential requires a compiled {name}")
+                symbols[name] = entry
+            entries[mode] = symbols
+        except (ImportError, AttributeError, ValueError, RuntimeError) as error:
+            entries[mode] = type(error).__name__ + ": " + str(error)
+    class_dtypes = {key: np.dtype(value) for key, value in _CLASS_DTYPE.items()}  # glue: connect checkpoint dtype classes once at package import
+    numeric_dtypes = {("uifb"[kind], size): dtype for (kind, size), dtype in class_dtypes.items()}  # glue: connect native numeric dtype metadata once at package import
+    buffer_codes = {("b", 1): "b", ("i", 1): "b", ("i", 2): "h", ("i", 4): "i", ("i", 8): "q", ("u", 1): "B", ("u", 2): "H", ("u", 4): "I", ("u", 8): "Q", ("f", 2): "H", ("f", 4): "f", ("f", 8): "d"}
+    scalar_types = tuple(dtype.type for dtype in class_dtypes.values())  # glue: connect exact native scalar types once at package import
+    integer_types = (int,) + tuple(dtype.type for (kind, _), dtype in class_dtypes.items() if kind in (0, 1))  # glue: connect exact native integer types once at package import
+    array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "shape", "dtype", "order")}  # glue: retain native slot descriptors once at package import
+    return {
+        "sequential_class": Sequential, "module_type": ModuleType, "modules": sys.modules,
+        "mapping_types": (dict, OrderedDict, defaultdict), "scalar_types": scalar_types, "integer_types": integer_types,
+        "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
+        "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
+        "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "array_fields": array_fields,
+        "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "_opt_m", "_opt_v", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
+        "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
+        "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
+        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),
+        "bindings": entries, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
+        "ndarray": np.ndarray, "array_type": array, "array_class": Array,
+        "float_types": (float, np.floating), "int_types": (int, np.integer),
+        "bool_types": (bool, np.bool_), "int64_min": -(2 ** 63),
+        "int64_max": 2 ** 63 - 1, "uint64_max": 2 ** 64 - 1,
+        "float32": np.dtype("f4"), "float64": np.dtype("f8"),
+        "int32": np.dtype("i4"), "int64": np.dtype("i8"),
+        "uint64": np.dtype("u8"), "bool": np.dtype("?"),
+    }
+
+
+_SEQUENTIAL_CONTEXT.update(_connect_sequential_bindings())
+_SEQUENTIAL_ENTRY(None, "initialize", (), _SEQUENTIAL_CONTEXT)

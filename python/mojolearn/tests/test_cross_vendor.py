@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """mojolearn.cross_vendor on the host: the fold, the framing and the
-coordinator's refusals, with fake trainers (no GPU, no binding)."""
+coordinator's refusals, with independent test-only socket peers (no GPU)."""
 import array
 import hashlib
 import math
+import json
+import socket
+import struct
 import threading
 
 import pytest
@@ -87,30 +90,88 @@ class _Fake:
             self.param[0] += 1.0
 
 
-def _group(splits, steps=3, drift=None):
+def _wire(sock, header, payload=b""):
+    raw = json.dumps(dict(header, nbytes=len(payload))).encode()
+    sock.sendall(struct.pack(">I", len(raw)) + raw + payload)
+
+
+def _read_wire(sock):
+    def exact(count):
+        data = b""
+        while len(data) < count:
+            part = sock.recv(count - len(data))
+            if not part:
+                raise ConnectionError("test peer connection closed")
+            data += part
+        return data
+    header = json.loads(exact(struct.unpack(">I", exact(4))[0]))
+    return header, exact(header["nbytes"])
+
+
+def _oracle_peer(port, shards, name, chained, drift):
+    # Python is deliberately an independent test peer, never passed to Worker.
+    trainer = _Fake(drift_at=drift)
+    def digest():
+        state = trainer.state_dict()
+        return hashlib.sha256(b"".join(memoryview(state[k]).cast("B")
+                                      for k in ("parameters", "m", "v", "flags"))).hexdigest()
+    with socket.create_connection(("127.0.0.1", port), timeout=30) as sock:
+        _wire(sock, dict(protocol=cv.PROTOCOL, name=name, vendor="oracle",
+                         shards=shards, completed=0, state=digest(),
+                         n_total=len(trainer.param), chained=chained))
+        held, total = [], None
+        while True:
+            head, payload = _read_wire(sock)
+            if head["cmd"] == "step":
+                outputs = [trainer.shard_gradient(k) for k in shards]
+                held = [g.tobytes() for _, g in outputs]
+                _wire(sock, dict(step=head["step"], shards=shards,
+                                 losses=[loss for loss, _ in outputs]),
+                      b"" if chained else b"".join(held))
+            elif head["cmd"] == "fold":
+                parts = ([payload] if payload else []) + held
+                values = array.array("f", parts[0])
+                for part in parts[1:]:
+                    other = array.array("f", part)
+                    for index in range(len(values)):
+                        values[index] = values[index] + other[index]
+                total = values.tobytes()
+                _wire(sock, dict(step=head["step"]), total)
+            elif head["cmd"] == "apply":
+                total = payload or total
+                assert hashlib.sha256(total).hexdigest() == head["total_sha256"]
+                trainer.apply_gradient(array.array("f", total))
+                _wire(sock, dict(completed=trainer.step_, state=digest()))
+            elif head["cmd"] == "done":
+                return
+            elif head["cmd"] == "refuse":
+                raise cv.CrossVendorMismatch(head["reason"])
+            else:
+                raise AssertionError(head)
+
+
+def _group(splits, steps=3, drift=None, chained=False):
     coord = cv.Coordinator(host="127.0.0.1", port=0, workers=len(splits), logical_shards=4, steps=steps,
-                           accept_timeout=30, timeout=30)
+                           accept_timeout=30, timeout=30, chained=chained)
     out, errors = {}, []
-
-    def run_coord():
+    def collect(call):
         try:
-            out["rows"] = coord.run()
-        except BaseException as e:  # noqa: BLE001
-            errors.append(e)
-
-    t = threading.Thread(target=run_coord)
-    t.start()
+            call()
+        except BaseException as error:
+            errors.append(error)
+    def run_coord():
+        out["rows"] = coord.run()
+    thread = threading.Thread(target=lambda: collect(run_coord))
+    thread.start()
     assert coord.ready.wait(10)
-    workers = []
-    for i, shards in enumerate(splits):
-        w = cv.Worker(trainer=_Fake(drift_at=drift if i == 1 else None), shards=shards,
-                      batches=lambda step, k: k, address=("127.0.0.1", coord.bound_port), name=f"w{i}",
-                      connect_timeout=10, timeout=30)
-        workers.append(threading.Thread(target=lambda w=w: _safe(w, errors)))
-    for w in workers:
-        w.start()
-    for w in workers + [t]:
-        w.join()
+    workers = [threading.Thread(target=lambda index=i, ids=ids: collect(
+        lambda: _oracle_peer(coord.bound_port, ids, f"w{index}", chained,
+                             drift if index == 1 else None))) for i, ids in enumerate(splits)]
+    for worker in workers:
+        worker.start()
+    for worker in workers + [thread]:
+        worker.join(timeout=40)
+        assert not worker.is_alive()
     return out.get("rows"), errors
 
 
@@ -167,30 +228,7 @@ def test_ordered_fold_with_a_prefix_equals_the_flat_fold():
 
 
 def _chained_group(splits, steps=3, drift=None):
-    coord = cv.Coordinator(host="127.0.0.1", port=0, workers=len(splits), logical_shards=4, steps=steps,
-                           accept_timeout=30, timeout=30, chained=True)
-    out, errors = {}, []
-
-    def run_coord():
-        try:
-            out["rows"] = coord.run()
-        except BaseException as e:  # noqa: BLE001
-            errors.append(e)
-
-    t = threading.Thread(target=run_coord)
-    t.start()
-    assert coord.ready.wait(10)
-    workers = []
-    for i, shards in enumerate(splits):
-        w = cv.Worker(trainer=_Fake(drift_at=drift if i == 1 else None), shards=shards,
-                      batches=lambda step, k: k, address=("127.0.0.1", coord.bound_port), name=f"w{i}",
-                      connect_timeout=10, timeout=30, chained=True)
-        workers.append(threading.Thread(target=lambda w=w: _safe(w, errors)))
-    for w in workers:
-        w.start()
-    for w in workers + [t]:
-        w.join()
-    return out.get("rows"), errors
+    return _group(splits, steps, drift, chained=True)
 
 
 def test_chained_group_equals_the_gathered_group_and_one_process():

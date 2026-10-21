@@ -43,10 +43,15 @@ def layer_norm[E: Exec](
         raise Error("LayerNorm weight and bias must have shape (1, features)")
     if not (eps > 0):
         raise Error("LayerNorm epsilon must be positive")
+    # Layout views retain their source until a consuming kernel requests values.
+    # Materialize all operands through the tape so backward sees the same data.
+    var x_value = tape.value_of(ex, x)
+    var weight_value = tape.value_of(ex, weight)
+    var bias_value = tape.value_of(ex, bias)
     var output = tape.reserve(ex, m * d)
     var mean = tape.reserve(ex, m)
     var rstd = tape.reserve(ex, m)
-    layer_norm_fwd_core(ex, tape.value(x), tape.value(weight), tape.value(bias), output, mean, rstd, m, d, True, True, eps)
+    layer_norm_fwd_core(ex, x_value, weight_value, bias_value, output, mean, rstd, m, d, True, True, eps)
     var splits = min(max(8192 // d, 1), m // 1024) if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL else 0
     var split_rows = (m + splits - 1) // splits if splits > 1 else m
     comptime if LN_FOLD_BLOCK:

@@ -67,6 +67,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_di
 from autograd.tape import Tape, Tensor, IdsHandle
 from autograd.ops import RELU, SIGMOID, TANH, SOFTMAX, ADD, SUBTRACT, MULTIPLY, DIVIDE, AXIS_ALL, AXIS_ROWS, AXIS_COLS
 from autograd.layers import NeuralRules, layer_norm
+from autograd.transformer_primitives import graph_rms_norm, graph_rotary, graph_transformer_linear, graph_transformer_softmax
 from autograd.higher import backward_recorded, backward_scalar_recorded
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
 from autograd.data import permutation, gather_rows
@@ -76,6 +77,8 @@ from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.program import (
     OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, program_refuses_node, same_shape, shape_text,
 )
+from autograd.program_tools import ProgramTrace, program_op_name
+from std.time import perf_counter_ns
 from autograd.optim import OptimizerConfig, OptimizerState, optimizer_config_packed, optimizer_slots, step_lr
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
 # Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
@@ -144,6 +147,10 @@ comptime OPS_SOFTMAX = 17
 comptime OPS_LOG_SOFTMAX = 18
 comptime OPS_LINEAR = 19
 comptime OPS_LAYER_NORM = 20
+comptime OPS_RMS_NORM = 77
+comptime OPS_ROTARY = 78
+comptime OPS_TRANSFORMER_LINEAR = 79
+comptime OPS_TRANSFORMER_SOFTMAX = 80
 comptime OPS_DROPOUT = 21
 comptime OPS_GATHER_ROWS = 22
 comptime OPS_PERMUTATION = 23
@@ -316,6 +323,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var oplog: OpsLog
     var programs: List[OpsProgram]
     var prog_tape: Tape
+    var program_trace: ProgramTrace
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -340,13 +348,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.programs = List[OpsProgram]()
         self.prog_tape = Tape()
         self.prog_tape.no_grad()
+        self.program_trace = ProgramTrace()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
         var slot = (h & _SLOT_MASK) - 1
         var gen = h >> _SLOT_BITS
         if h <= 0 or slot < 0 or slot >= len(self.live) or not self.live[slot] or self.generation[slot] != gen:
-            raise Error("ops: handle " + String(h) + " is not a live tensor of this session")
+            raise Error("ValueError: ops: handle " + String(h) + " is not a live tensor of this session")
         return slot
 
     def _add(mut self, t: Tensor, owned: Int, wants_grad: Bool, index_rows: Int) raises -> Int:
@@ -626,10 +635,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if len(vs) != len(hs):
             raise Error("ops: " + what + " takes one direction per input")
         for i in range(len(hs)):  # driver-loop: over the call's input handles
-            var a = self.shape(hs[i])
-            var b = self.shape(vs[i])
-            if a[0] != b[0] or a[1] != b[1]:
-                raise Error("ops: each direction of " + what + " must have its input's shape")
+            if not same_shape(self.shape_nd(hs[i]), self.shape_nd(vs[i])):
+                raise Error("ValueError: ops: each direction of " + what + " must have its input's full shape")
 
     def _copy_constant(mut self, src: FP, rows: Int, cols: Int) raises -> Int:
         """A new constant session tensor holding a copy of `src`."""
@@ -640,14 +647,24 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.ex.launch[OP_COPY](a, rows * cols)
         return self._constant(dst, rows, cols, 0)
 
-    def _zeros(mut self, rows: Int, cols: Int) raises -> Int:
+    def _copy_constant_nd(mut self, src: FP, shape: ShapeN) raises -> Int:
+        # Derivative results retain their full rank, rather than publishing the
+        # tape's flattened matrix storage as the public tensor shape.
+        var dst = self.tape.reserve(self.ex, shape.count())
+        var a = Args()
+        a.p0 = src
+        a.p1 = dst
+        self.ex.launch[OP_COPY](a, shape.count())
+        return self._leaf(dst, shape)
+
+    def _zeros_nd(mut self, shape: ShapeN) raises -> Int:
         """A new constant session tensor of zeros."""
-        var dst = self.tape.reserve(self.ex, rows * cols)
+        var dst = self.tape.reserve(self.ex, shape.count())
         var a = Args()
         a.p0 = dst
         a.f0 = Float32(0)
-        self.ex.launch[OP_FILL](a, rows * cols)
-        return self._constant(dst, rows, cols, 0)
+        self.ex.launch[OP_FILL](a, shape.count())
+        return self._leaf(dst, shape)
 
     def _directional(mut self, gs: List[Tensor], vs: List[Int]) raises -> Tensor:
         """sum_i sum(gs[i] * vs[i]) as one recorded (1, 1) tensor, the
@@ -682,14 +699,15 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             raise Error("ops: backward needs a recording session (Session(record=True))")
         var t = self.tensor(h)
         var seed = self.tensor(seed_h)
-        var a = self.shape(h)
-        var b = self.shape(seed_h)
-        if a[0] != b[0] or a[1] != b[1]:
-            raise Error("ops: the seed must have the output's shape")
+        if not same_shape(self.shape_nd(h), self.shape_nd(seed_h)):
+            raise Error("ValueError: ops: the seed must have the output's full shape")
         if create_graph:
             backward_recorded(self.tape, self.ex, t, seed)
         else:
-            self.tape.backward_with_rules(self.ex, t, seed, NeuralRules(), False)
+            # First-order seeded and scalar backward accept the same supported
+            # rank-N and import operations. Recorded higher derivatives keep
+            # their existing explicit operation contract above.
+            self.tape.backward_with_rules(self.ex, t, seed, ImportRules(), False)
 
     def grad_handle(mut self, h: Int) raises -> Int:
         """The gradient of tensor `h` from the last recorded backward, as a
@@ -712,9 +730,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 var g = self.tape.grad_of(x)
                 res.append(self._add(g, 0, False, 0))
             else:
-                var s = self.shape(hs[i])
+                var shape = self.shape_nd(hs[i])
                 var gbuf = self.tape.gradient(x)
-                res.append(self._copy_constant(gbuf, s[0], s[1]))
+                res.append(self._copy_constant_nd(gbuf, shape))
         return res^
 
     def hvp(mut self, loss_h: Int, hs: List[Int], vs: List[Int]) raises -> List[Int]:
@@ -739,15 +757,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var res = List[Int](capacity=len(hs))
         if not self.tape.requires_grad(d):
             for i in range(len(hs)):  # driver-loop: over the call's input handles
-                var s = self.shape(hs[i])
-                res.append(self._zeros(s[0], s[1]))
+                res.append(self._zeros_nd(self.shape_nd(hs[i])))
             return res^
         self.tape.backward_scalar_with_rules(self.ex, d, NeuralRules(), False)
         for i in range(len(xs)):  # driver-loop: over the call's input handles
             var x = xs[i]
-            var s = self.shape(hs[i])
             var gbuf = self.tape.gradient(x)
-            res.append(self._copy_constant(gbuf, s[0], s[1]))
+            res.append(self._copy_constant_nd(gbuf, self.shape_nd(hs[i])))
         return res^
 
     def jvp(mut self, out_h: Int, hs: List[Int], us: List[Int]) raises -> Int:
@@ -763,15 +779,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var xs = self._wrt(hs, "jvp")
         self._same_shapes(hs, us, "jvp")
         var t = self.tensor(out_h)
-        var oshape = self.shape(out_h)
-        var rows = oshape[0]
-        var cols = oshape[1]
-        var wbuf = self.tape.reserve(self.ex, rows * cols)
+        var oshape = self.shape_nd(out_h)
+        var wbuf = self.tape.reserve(self.ex, oshape.count())
         var fa = Args()
         fa.p0 = wbuf
         fa.f0 = Float32(0)
-        self.ex.launch[OP_FILL](fa, rows * cols)
-        var w = self.tape.variable(self.ex, wbuf, rows, cols, True)
+        self.ex.launch[OP_FILL](fa, oshape.count())
+        var w = self.tape.variable_nd(self.ex, wbuf, oshape, True)
         backward_recorded(self.tape, self.ex, t, w)
         var gs = List[Tensor](capacity=len(xs))
         for i in range(len(xs)):  # driver-loop: over the call's input handles
@@ -779,10 +793,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             gs.append(self.tape.grad_of(x))
         var d = self._directional(gs, us)
         if not self.tape.requires_grad(d):
-            return self._zeros(rows, cols)
+            return self._zeros_nd(oshape)
         self.tape.backward_scalar_with_rules(self.ex, d, NeuralRules(), False)
         var jbuf = self.tape.gradient(w)
-        return self._copy_constant(jbuf, rows, cols)
+        return self._copy_constant_nd(jbuf, oshape)
 
     # ------------------------------------------------------------ optimizers
     def optimizer(mut self, ints: List[Int], fs: List[Float32]) raises -> Int:
@@ -836,7 +850,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def _opt_index(self, o: Int) raises -> Int:
         if o < 1 or o > len(self.opts):
-            raise Error("ops: " + String(o) + " is not an optimizer of this session")
+            raise Error("ValueError: ops: " + String(o) + " is not an optimizer of this session")
         return o - 1
 
     def learning_rate(self, o: Int) raises -> Float32:
@@ -1019,9 +1033,29 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.opt_states[si].mu_prod = fs[2]
 
     # ------------------------------------------------------------ operations
-    def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int) raises -> Int:
+    def _constant(mut self, values: FP, rows: Int, cols: Int, index_rows: Int, integer_words: Bool = False) raises -> Int:
         var t = self.tape.variable(self.ex, values, rows, cols, False)
-        return self._add(t, 0, False, index_rows)
+        var h = self._add(t, 0, False, index_rows)
+        self.int_words[self._slot(h)] = integer_words
+        return h
+
+    def _result_int_words(self, code: Int, hs: List[Int], ints: List[Int]) raises -> Bool:
+        # Dtype metadata follows value selection/layout, independently of
+        # storage aliases. These operations do not convert int32 words into
+        # floating-point values. Arithmetic outputs keep their existing float
+        # semantics; argmax explicitly chooses its result representation.
+        if code == OPS_ARGMAX:
+            return ints[2] == 0
+        if code == OPS_CONCAT:
+            for k in range(len(hs)):  # driver-loop: over concatenated value kinds
+                if self.int_words[self._slot(hs[k])]:
+                    return True
+            return False
+        if code == OPS_WHERE:
+            return self.int_words[self._slot(hs[1])] or self.int_words[self._slot(hs[2])]
+        if code == OPS_TRANSPOSE or code == OPS_RESHAPE or code == OPS_DETACH or code == OPS_COPY or code == OPS_EMBEDDING or code == OPS_RESHAPE_N or code == OPS_PERMUTE or code == OPS_NARROW or code == OPS_TAKE or code == OPS_EXPAND or code == OPS_PAD or code == OPS_INDEX:
+            return self.int_words[self._slot(hs[0])]
+        return False
 
     def op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
         """Run operation `code` on the tensors `hs` with integer and float
@@ -1041,6 +1075,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var ni = len(ints)
         var nf = len(fs)
         var t: Tensor
+        if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
+            # These primitive signatures have at most two handles. Their
+            # arity validation below rejects any additional operands.
+            if ((n > 0 and self.int_words[self._slot(hs[0])])
+                    or (n > 1 and self.int_words[self._slot(hs[1])])):
+                raise Error("ValueError: transformer primitives require floating-point tensors")
         if code == OPS_MATMUL or code == OPS_MATMUL_N:
             _need("matmul", n, 2, 0, ni, 0, nf)
             var ma = self.tape.ndim(x[0])
@@ -1121,6 +1161,18 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         elif code == OPS_LAYER_NORM:
             _need("layer_norm", n, 3, 0, ni, 1, nf)
             t = layer_norm(self.tape, self.ex, x[0], x[1], x[2], fs[0])
+        elif code == OPS_RMS_NORM:
+            _need("rms_norm", n, 2, 0, ni, 1, nf)
+            t = graph_rms_norm(self.tape, self.ex, x[0], x[1], fs[0])
+        elif code == OPS_TRANSFORMER_SOFTMAX:
+            _need("transformer_softmax", n, 1, 0, ni, 0, nf)
+            t = graph_transformer_softmax(self.tape, self.ex, x[0])
+        elif code == OPS_TRANSFORMER_LINEAR:
+            _need("transformer_linear", n, 2, 0, ni, 0, nf)
+            t = graph_transformer_linear(self.tape, self.ex, x[0], x[1])
+        elif code == OPS_ROTARY:
+            _need("rotary", n, 1, 2, ni, 1, nf)
+            t = graph_rotary(self.tape, self.ex, x[0], ints[0], ints[1], fs[0])
         elif code == OPS_DROPOUT:
             _need("dropout", n, 1, 3, ni, 1, nf)
             t = self.tape.dropout(self.ex, x[0], fs[0], _seed(ints[0], ints[1]), ints[2])
@@ -1150,7 +1202,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var g_src = self.tape.value_of(self.ex, x[0])
             var g_idx = self.tape.value_of(self.ex, x[1])
             gather_rows(self.ex, g_src, g_idx, g_start, g_count, g_cols, g_dst)
-            return self._constant(g_dst, g_count, g_cols, 0)
+            return self._constant(g_dst, g_count, g_cols, 0, self.int_words[gx])
         elif code == OPS_PERMUTATION:
             _need("permutation", n, 0, 4, ni, 0, nf)
             var p_rows = ints[0]
@@ -1256,7 +1308,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             ca.p1 = c_dst
             self.ex.launch[OP_COPY](ca, c_count)
             if c_shape.ndim == 2:
-                return self._constant(c_dst, c_rows, c_cols, 0)
+                return self._constant(c_dst, c_rows, c_cols, 0, self.int_words[cx])
             var c_t = self.tape.variable(self.ex, c_dst, c_rows, c_cols, False)
             t = rn_as_shape(self.tape, self.ex, c_t, c_shape)
         elif code == OPS_RESHAPE_N:
@@ -1364,7 +1416,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var ks = self.tape.shape_of(x[0])
             if ks.ndim != 2:
                 t = rn_as_shape(self.tape, self.ex, t, ks)
-        return self._add(t, 0, False, 0)
+        var result = self._add(t, 0, False, 0)
+        self.int_words[self._slot(result)] = self._result_int_words(code, hs, ints)
+        return result
 
     # ------------------------------------------------------------ the import family
     def _import_op(mut self, code: Int, x: List[Tensor], ints: List[Int], fs: List[Float32]) raises -> Tensor:
@@ -1472,7 +1526,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: the kind must be 0 (any) or 1 (all)")
             var tests = imp_unary(self.tape, self.ex, x[0], IMP_BOOL if ints[0] == 0 else IMP_NOT)
             var rest = List[Int]()
-            for k in range(1, ni):  # small-loop(ints: keepdims and at most 8 axes): argument parsing, no data
+            for k in range(1, ni):  # small-loop(ni: keepdims and at most 8 axes): argument parsing, no data
                 rest.append(ints[k])
             var m = self._reduce_n(tests, rest, False, True)
             if ints[0] == 1:
@@ -1487,7 +1541,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if n < 2 or ni != n - 1:
                 raise Error("ops: index takes a tensor, its index tensors and one axis for each")
             var idx = List[Tensor]()
-            for k in range(1, n):  # small-loop(x: the index tensors, at most 8): handle lists, no data
+            for k in range(1, n):  # small-loop(n: the index tensors, at most 8): handle lists, no data
                 idx.append(x[k])
             return imp_gather_nd(self.tape, self.ex, x[0], idx, ints)
         raise Error("ops: unknown operation code " + String(code))
@@ -1743,21 +1797,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if outputs[k] not in value_of:
                 need[outputs[k]] = 1
         # back from the outputs: keep the logged operations they depend on
-        var n = self.oplog.count()
-        var keep = List[Bool](length=n, fill=False)
-        var back = n - 1
+        var node_count = self.oplog.count()
+        var keep = List[Bool](length=node_count, fill=False)
+        var back = node_count - 1
         while back >= 0:  # driver-loop: over logged operations, last to first
             var r = self.oplog.res[back]
             if r in need:
                 _ = need.pop(r)
                 keep[back] = True
-                for j in range(self.oplog.h_at[back], self.oplog.h_at[back + 1]):  # small-loop(hs: an op's input handles): graph walk, no data
+                for j in range(self.oplog.h_at[back], self.oplog.h_at[back + 1]):  # driver-loop: over a logged operation input references
                     var h = self.oplog.hs[j]
                     if h not in value_of:
                         need[h] = 1
             back -= 1
         # forward: number the kept operations, in their order
-        for i in range(n):  # driver-loop: over logged operations
+        for i in range(node_count):  # driver-loop: over logged operations
             if not keep[i]:
                 continue
             var code = self.oplog.code[i]
@@ -1765,7 +1819,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 raise Error("ops: capture: embedding and take read the caller's index array, "
                             + "which a program cannot hold; pass the ids as a tensor (ids) instead")
             p.code.append(code)
-            for j in range(self.oplog.h_at[i], self.oplog.h_at[i + 1]):  # small-loop(hs: an op's input handles): description words, no data
+            for j in range(self.oplog.h_at[i], self.oplog.h_at[i + 1]):  # driver-loop: over logged operation input references
                 var h = self.oplog.hs[j]
                 if h in value_of:
                     p.args.append(value_of[h])
@@ -1773,9 +1827,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     var pr = self._capture_param(h, p)
                     value_of[h] = pr
                     p.args.append(pr)
-            for j in range(self.oplog.i_at[i], self.oplog.i_at[i + 1]):  # small-loop(ints: an op's integer arguments): description words, no data
+            for j in range(self.oplog.i_at[i], self.oplog.i_at[i + 1]):  # driver-loop: over logged operation integer arguments
                 p.ints.append(self.oplog.ints[j])
-            for j in range(self.oplog.f_at[i], self.oplog.f_at[i + 1]):  # small-loop(fs: an op's float arguments): description words, no data
+            for j in range(self.oplog.f_at[i], self.oplog.f_at[i + 1]):  # driver-loop: over logged operation float arguments
                 p.fs.append(self.oplog.fs[j])
             p.end_node()
             value_of[self.oplog.res[i]] = p.n_in + p.n_nodes() - 1
@@ -1811,20 +1865,71 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.programs[pi] = OpsProgram()
         self.programs[pi].live = False
 
-    def _leaf(mut self, buf: FP, sh: ShapeN) raises -> Int:
+    def _leaf(mut self, buf: FP, sh: ShapeN, integer_words: Bool = False) raises -> Int:
         """A temporary handle of a leaf over `buf` on the current tape."""
         var t: Tensor
         if sh.ndim == 2:
             t = self.tape.variable(self.ex, buf, sh.d[0], sh.d[1], False)
         else:
             t = self.tape.variable_nd(self.ex, buf, sh, False)
-        return self._add(t, 0, False, 0)
+        var h = self._add(t, 0, False, 0)
+        self.int_words[self._slot(h)] = integer_words
+        return h
 
     def _drop_temps(mut self, temps: List[Int]):
         for i in range(len(temps)):  # driver-loop: over a replay's temporary handles
             var slot = (temps[i] & _SLOT_MASK) - 1
             if slot >= 0 and slot < len(self.live) and self.live[slot]:
                 self._retire(slot)
+
+    def _program_op(mut self, node: Int, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32]) raises -> Int:
+        var start = 0
+        if self.program_trace.enabled:
+            start = Int(perf_counter_ns())
+            self.ex.sync()
+            self.program_trace.sync_ns += Int(perf_counter_ns()) - start
+            self.program_trace.sync_count += 1
+            start = Int(perf_counter_ns())
+        var h: Int
+        try:
+            h = self._op_run(code, hs, ints, fs)
+        except err:
+            var context = String("program node ") + String(node) + " (" + program_op_name(code) + ") inputs=["
+            for j in range(len(hs)):  # driver-loop: over failed node's input shapes
+                if j > 0:
+                    context += ", "
+                context += shape_text(self.shapes[self._slot(hs[j])])
+            var message = String(err)
+            var kind = String("")
+            var message_start = 0
+            if message.startswith("ValueError: "):
+                kind = "ValueError: "
+                message_start = 12
+            elif message.startswith("TypeError: "):
+                kind = "TypeError: "
+                message_start = 11
+            elif message.startswith("OverflowError: "):
+                kind = "OverflowError: "
+                message_start = 15
+            raise Error(kind + context + "]: " + String(message[byte=message_start:]))
+        if self.program_trace.enabled:
+            var issued = Int(perf_counter_ns())
+            self.ex.sync()
+            var waited = Int(perf_counter_ns()) - issued
+            self.program_trace.sync_count += 1
+            self.program_trace.sync_ns += waited
+            self.program_trace.nodes.append(node)
+            self.program_trace.codes.append(code)
+            self.program_trace.enqueue_ns.append(issued - start)
+            self.program_trace.wait_ns.append(waited)
+            var shape = self.shapes[self._slot(h)]
+            self.program_trace.shapes.append(shape_text(shape))
+            self.program_trace.output_bytes.append(shape.count() * 4)
+            var reserved = 0
+            for j in range(len(self.tape._capacities)):  # driver-loop: over scratch allocation slots, profiling only
+                reserved += self.tape._capacities[j] * 4
+            self.program_trace.peak_tape_bytes = max(self.program_trace.peak_tape_bytes, reserved)
+        return h
 
     def run_program(mut self, pid: Int, srcs: List[CastIn], dsts: List[FP]) raises:
         """Replay program pid on the caller's input arrays `srcs` and write
@@ -1886,13 +1991,14 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 upload_cast_i32(self.ex, buf, srcs[k], "ops: program input")
             else:
                 upload_cast(self.ex, buf, srcs[k])
-            var h = self._leaf(buf, sh)
+            var h = self._leaf(buf, sh, self.programs[pi].in_kinds[k] == PROGRAM_IN_IDS)
             temps.append(h)
             vals.append(h)
         var phs = List[Int]()
         for j in range(len(pbufs)):  # driver-loop: over program parameters
             var sh = self.programs[pi].param_shapes[j]
-            var h = self._leaf(FP(unsafe_from_address=pbufs[j]), sh)
+            var integer_words = self.int_words[self._slot(self.programs[pi].params[j])]
+            var h = self._leaf(FP(unsafe_from_address=pbufs[j]), sh, integer_words)
             temps.append(h)
             phs.append(h)
         var nn = self.programs[pi].n_nodes()
@@ -1917,7 +2023,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var fs = List[Float32](capacity=f1 - f0)
             for j in range(f0, f1):  # small-loop(fs: a node's float arguments): argument words, no data
                 fs.append(self.programs[pi].fs[j])
-            var h = self._op_run(code, hs, ints, fs)
+            var h = self._program_op(k, code, hs, ints, fs)
             temps.append(h)
             vals.append(h)
         for k in range(len(dsts)):  # driver-loop: over program outputs
@@ -1964,7 +2070,7 @@ def _keeps_shape(code: Int) -> Bool:
     return (code == OPS_RELU or code == OPS_SIGMOID or code == OPS_TANH or code == OPS_EXP
             or code == OPS_LOG or code == OPS_SQRT or code == OPS_SCALE or code == OPS_SOFTMAX
             or code == OPS_LOG_SOFTMAX or code == OPS_LAYER_NORM or code == OPS_DROPOUT
-            or code == OPS_DETACH)
+            or code == OPS_DETACH or code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_SOFTMAX)
 
 
 # ---------------------------------------------------------------- the session table

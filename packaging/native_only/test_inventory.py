@@ -85,6 +85,24 @@ def test_whole_operation_metadata_preserves_knn_oracle_limits():
         assert cases[name]["whole_operation"] is True
 
 
+def test_sequence_optimizer_engine_witness_does_not_admit_public_or_uncovered_owners():
+    data = manifest()
+    rows = {row["algorithm"]: row for row in data["inventory"]}
+    cases = {case["id"]: case for case in data["cases"]}
+    names = {"mojolearn." + name for name in ("Adagrad", "Adamax", "NAdam", "RMSprop", "Lion")}
+    for name in names:
+        assert rows[name]["status"] == "ready"
+        assert "CPython" in rows[name]["boundary_blocker"]
+    for name in ("sequence_optimizer_cpu", "sequence_optimizer_gpu"):
+        assert set(cases[name]["canonical_algorithms"]) == names
+        assert cases[name]["scope"] == "native-core"
+        assert cases[name]["whole_operation"] is True
+        assert "Public adapters/checkpoints, Adafactor and LAMB are not exercised" in cases[name]["coverage"]
+    for name in ("mojolearn.Adafactor", "mojolearn.LAMB"):
+        assert rows[name]["status"] != "ready"
+        assert not rows[name]["cases"]
+
+
 def test_model_inventory_matches_the_current_branch_exports():
     path = "python/mojolearn/models/__init__.py"
     actual = set(INVENTORY.explicit_exports(ROOT / path))
@@ -105,3 +123,20 @@ def test_svm_fit_prediction_witness_preserves_binary_and_backend_scope():
     for name in ("mojolearn.LinearSVC", "mojolearn.LinearSVR"):
         assert rows[name]["status"] != "ready"
         assert not rows[name]["cases"]
+
+
+def test_convolution_derivatives_map_only_the_actual_tape_operations():
+    data = manifest()
+    rows = {row["algorithm"]: row for row in data["inventory"]}
+    cases = {case["id"]: case for case in data["cases"]}
+    for name in ("autograd_conv_cpu", "autograd_conv_gpu"):
+        assert cases[name]["canonical_algorithms"] == ["mojolearn.ops.Session"]
+        assert cases[name]["scope"] == "native-core"
+        assert cases[name]["whole_operation"] is True
+        assert "independent analytic chain oracle" in cases[name]["coverage"]
+        assert name in rows["mojolearn.ops.Session"]["cases"]
+    assert "CPython" in rows["mojolearn.ops.Session"]["boundary_blocker"]
+    for name in ("mojolearn.Conv2d", "mojolearn.AvgPool2d"):
+        assert rows[name]["status"] != "ready"
+        assert not rows[name]["cases"]
+    assert rows["mojolearn.ops.Program"]["status"] == "blocked"

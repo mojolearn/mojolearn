@@ -28,6 +28,7 @@ from core.host_predict_threads import host_predict_chunk, host_predict_task_coun
 from sequence.dispatch import apply
 from sequence.ets_team import IDN_ETS_TEAM, ets_team_replay, ets_team_replay_applies
 from sequence.exec_trait import Exec
+from sequence.execution_profile import ExecutionProfile
 from sequence.launch_profile import launch_profile_level, launch_profile_record
 from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART, OP_AGF_LEVEL, agk_colsum_args
 from std.time import perf_counter_ns
@@ -199,6 +200,8 @@ def _host_apply[OP: Int](t: Int, a: Args):
 # owns its executor across binding calls; moving changes no value.
 struct HostExec(Exec, Movable):
     var bufs: List[FP]
+    var buf_sizes: List[Int]
+    var execution_profile: ExecutionProfile
     #: The task ceiling, read once per Exec (one entry call).
     var workers: Int
     #: The GEMM's [K, N] panel of B (`sequence/host_gemm.mojo`), reused
@@ -211,6 +214,8 @@ struct HostExec(Exec, Movable):
 
     def __init__(out self):
         self.bufs = List[FP]()
+        self.buf_sizes = List[Int]()
+        self.execution_profile = ExecutionProfile()
         self.workers = host_predict_task_count(1 << 30)
         self.panel = FP(unsafe_from_address=Int(alloc[Float32](1)))
         self.panel_cap = 1
@@ -227,6 +232,9 @@ struct HostExec(Exec, Movable):
         memset_zero(p, count)
         var q = FP(unsafe_from_address=Int(p))
         self.bufs.append(q)
+        self.buf_sizes.append(count)
+        self.execution_profile.allocation(Int(q), count * 4)
+        self.execution_profile.fill(count * 4)
         return q
 
     def free(mut self, p: FP) raises:
@@ -236,25 +244,49 @@ struct HostExec(Exec, Movable):
         for i in range(len(self.bufs)):  # small-loop(bufs: buffers this Exec allocated): address lookup, no data
             if Int(self.bufs[i]) == addr:
                 var q = self.bufs.pop(i)
+                _ = self.buf_sizes.pop(i)
+                self.execution_profile.release(addr)
                 q.free()
                 return
         raise Error("sequence: free names no buffer this host Exec allocated")
 
     def upload(mut self, dst: FP, src: FP, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_upload(dst, src, n)
+        self.execution_profile.copy_timed(0, started)
+
+    def _profiled_upload(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0:
             memcpy(dest=dst, src=src, count=n)
+            self.execution_profile.copied(3, n * 4)
 
     def download(mut self, dst: FP, src: FP, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_download(dst, src, n)
+        self.execution_profile.copy_timed(1, started)
+
+    def _profiled_download(mut self, dst: FP, src: FP, n: Int) raises:
         if n > 0 and Int(dst) != Int(src):
             memcpy(dest=dst, src=src, count=n)
+            self.execution_profile.copied(3, n * 4)
 
     def download_async(mut self, dst: FP, src: FP, n: Int) raises:
-        self.download(dst, src, n)
+        var started = self.execution_profile.clock()
+        self._profiled_download_async(dst, src, n)
+        self.execution_profile.copy_timed(1, started)
+
+    def _profiled_download_async(mut self, dst: FP, src: FP, n: Int) raises:
+        self._profiled_download(dst, src, n)
 
     def bind(mut self, src: FP, n: Int) raises -> FP:
         return src
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_launch[OP](a, n)
+        self.execution_profile.launched(OP, n, started)
+
+    def _profiled_launch[OP: Int](mut self, a: Args, n: Int) raises:
         # lane ag-pass2-kernels: the launch profile (MOJOLEARN_AG_PROFILE),
         # as DeviceExec.launch; the host runs each launch before it returns,
         # so level 2 needs no sync. Off, one Int test.
@@ -374,7 +406,7 @@ struct HostExec(Exec, Movable):
 
         host_parallelize(_chunk, tasks)
 
-    def _gemm(mut self, a: Args):
+    def _gemm(mut self, a: Args) raises:
         """OP_GEMM over `sequence/host_gemm.mojo`: row ranges on threads,
         each row's cells W columns at a time; every cell `op_gemm`'s bits."""
         var M = a.i0
@@ -384,9 +416,11 @@ struct HostExec(Exec, Movable):
         var ldb = a.i5
         if a.i6 != 1 and K > 0:
             if K * N > self.panel_cap:
+                self.execution_profile.release(Int(self.panel))
                 self.panel.free()
                 self.panel = FP(unsafe_from_address=Int(alloc[Float32](K * N)))
                 self.panel_cap = K * N
+                self.execution_profile.allocation(Int(self.panel), self.panel_cap * 4)
             host_gemm_pack(a, self.panel)
             bp = self.panel
             ldb = N
@@ -403,4 +437,21 @@ struct HostExec(Exec, Movable):
         host_parallelize(_rows, tasks)
 
     def sync(mut self) raises:
-        pass
+        var started = self.execution_profile.clock()
+        self.execution_profile.waited(started)
+
+    def execution_profile_begin(mut self) raises:
+        if self.execution_profile.enabled:
+            raise Error("ValueError: an execution profile is already active")
+        self.execution_profile = ExecutionProfile()
+        self.execution_profile.enabled = True
+        for i in range(len(self.bufs)):  # driver-loop: over retained executor allocations
+            self.execution_profile.allocation(Int(self.bufs[i]), self.buf_sizes[i] * 4, True)
+        self.execution_profile.allocation(Int(self.panel), self.panel_cap * 4, True)
+
+    def execution_profile_end(mut self) raises -> ExecutionProfile:
+        if not self.execution_profile.enabled:
+            raise Error("ValueError: no execution profile is active")
+        self.sync()
+        self.execution_profile.enabled = False
+        return self.execution_profile.copy()

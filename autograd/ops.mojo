@@ -629,8 +629,17 @@ def _unary_vjp_value(op: Int, g: Float32, x: Float32, y: Float32, scale: Float32
 @always_inline
 def op_ag_transpose(t: Int, a: Args):
     """p0 source (i0 rows x i1 cols), p1 destination (i1 x i0). Forward and
-    VJP are the same transpose. Thread t = destination element t."""
-    st(a.p1, t, ld(a.p0, (t % a.i0) * a.i1 + t // a.i0))
+    VJP share indexing. i2 selects a forward word copy; zero retains the
+    established VJP FTZ behavior. Thread t = destination element t."""
+    var source = (t % a.i0) * a.i1 + t // a.i0
+    if a.i2 == 1:
+        # Correctness repair (2026-10-20): layout materialization previously
+        # used ld/st and flushed subnormals even though identity views kept
+        # the original words. Forward movement now agrees with OP_COPY on
+        # every executor. Arithmetic/reduction and VJP FTZ stay unchanged.
+        a.p1.unsafe_store(t, a.p0.unsafe_load(source))
+    else:
+        st(a.p1, t, ld(a.p0, source))
 
 
 @always_inline

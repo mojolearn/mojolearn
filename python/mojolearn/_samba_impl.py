@@ -33,6 +33,7 @@ from . import _portable_math as math
 from ._training_impl import _round_f32
 
 from . import _backend
+from . import _native_neural_bridge
 from . import _numeric_profile
 from . import _ragged
 from . import _training_impl as T
@@ -100,57 +101,19 @@ class SambaConfig(object):
     def __init__(self, vocab, d_model, layers, n_heads=None, n_kv_heads=None,
                  head_dim=None, intermediate=None, tie_embeddings=True,
                  norm_eps=1e-5, dropout=0.0):
-        self.vocab = int(vocab)
-        self.d_model = int(d_model)
-        self.layers = tuple(str(k) for k in layers)  # glue: layer kind config names
-        self.n_heads = None if n_heads is None else int(n_heads)
-        self.n_kv_heads = (None if n_kv_heads is None else int(n_kv_heads))
-        self.head_dim = None if head_dim is None else int(head_dim)
-        self.intermediate = None if intermediate is None else int(intermediate)
-        self.tie_embeddings = bool(tie_embeddings)
-        self.norm_eps = float(_round_f32(norm_eps))
-        self.dropout = float(_round_f32(dropout))
-        if self.vocab < 2 or self.d_model < 1 or not self.layers:
-            raise ValueError("mojolearn.SambaConfig: vocab >= 2, d_model >= 1 "
-                             "and at least one layer are required")
-        for k in self.layers:  # glue: validates layer kind names
-            if k not in _LAYER_KINDS:
-                raise ValueError("mojolearn.SambaConfig: layer kind %r; the "
-                                 "kinds are %r" % (k, _LAYER_KINDS))
-        if "mamba3" in self.layers and self.d_model % (_M3_HEADDIM // _M3_EXPAND):
-            raise ValueError("mojolearn.SambaConfig: a mamba3 layer needs "
-                             "d_model to be a multiple of 32 (Mamba3Block)")
-        if "attention" in self.layers:
-            if self.n_heads is None or self.intermediate is None:
-                raise ValueError("mojolearn.SambaConfig: an attention layer "
-                                 "needs n_heads and intermediate")
-            if self.head_dim is None:
-                self.head_dim = self.d_model // self.n_heads
-            if self.n_kv_heads is None:
-                self.n_kv_heads = self.n_heads
-            if self.n_heads * self.head_dim != self.d_model:
-                raise ValueError("mojolearn.SambaConfig: d_model must equal "
-                                 "n_heads * head_dim")
-        if not (0.0 <= self.dropout < 1.0):
-            raise ValueError("mojolearn.SambaConfig: dropout must be in [0, 1)")
-        if not (self.norm_eps >= 0.0):
-            raise ValueError("mojolearn.SambaConfig: norm_eps must be >= 0")
+        return _native_neural_bridge.RUNTIME.samba_config_call(
+            "initialize", (self, (vocab, d_model, layers, n_heads, n_kv_heads,
+                                   head_dim, intermediate, tie_embeddings,
+                                   norm_eps, dropout)), _native_samba_bridge.CONTEXT)
 
     def to_dict(self):
         """The configuration as a plain dict (the inverse of `from_dict`)."""
-        return {"vocab": self.vocab, "d_model": self.d_model,
-                "layers": list(self.layers), "n_heads": self.n_heads,
-                "n_kv_heads": self.n_kv_heads, "head_dim": self.head_dim,
-                "intermediate": self.intermediate,
-                "tie_embeddings": self.tie_embeddings,
-                "norm_eps": self.norm_eps, "dropout": self.dropout}
+        return _native_neural_bridge.RUNTIME.samba_config_call("dict", (self,), _native_samba_bridge.CONTEXT)
 
     @classmethod
     def from_dict(cls, d):
         """Build a configuration from a dict made by `to_dict`."""
-        return cls(d["vocab"], d["d_model"], d["layers"], d["n_heads"],
-                   d["n_kv_heads"], d["head_dim"], d["intermediate"],
-                   d["tie_embeddings"], d["norm_eps"], d["dropout"])
+        return _native_neural_bridge.RUNTIME.samba_config_call("from_dict", (cls, d), _native_samba_bridge.CONTEXT)
 
     # -- the registry ---------------------------------------------------
     def block_shapes(self, kind):
@@ -166,31 +129,7 @@ class SambaConfig(object):
         list of (str, tuple)
             ``(name, shape)`` pairs in the block's weight order.
         """
-        dm = self.d_model
-        if kind == "mamba3":
-            di = _M3_EXPAND * dm
-            nh = di // _M3_HEADDIM
-            dip = 2 * di + 2 * _M3_NGROUPS * _M3_D_STATE + 3 * nh + _M3_NUM_ROPE_ANGLES
-            shapes = {
-                "block_norm.weight": (dm,), "in_proj.weight": (dip, dm),
-                "dt_bias": (nh,), "B_norm.weight": (_M3_D_STATE,),
-                "C_norm.weight": (_M3_D_STATE,), "B_bias": (nh, _M3_D_STATE),
-                "C_bias": (nh, _M3_D_STATE), "D": (nh,),
-                "out_proj.weight": (dm, di),
-            }
-            return [(n, shapes[n]) for n in Mamba3Block._W_NAMES]  # glue: weight names and shapes
-        qw = self.n_heads * self.head_dim
-        kw = self.n_kv_heads * self.head_dim
-        it = self.intermediate
-        shapes = {
-            "input_layernorm.weight": (dm,),
-            "post_attention_layernorm.weight": (dm,),
-            "q_proj.weight": (qw, dm), "k_proj.weight": (kw, dm),
-            "v_proj.weight": (kw, dm), "o_proj.weight": (dm, qw),
-            "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
-            "down_proj.weight": (dm, it),
-        }
-        return [(n, shapes[n]) for n in TransformerBlock._W_NAMES]  # glue: weight names and shapes
+        return _native_neural_bridge.RUNTIME.samba_config_call("block_shapes", (self, kind), _native_samba_bridge.CONTEXT)
 
     def registry(self):
         """Names and shapes of every parameter tensor of the stack, in order.
@@ -203,14 +142,7 @@ class SambaConfig(object):
         -------
         list of (str, tuple)
         """
-        out = [("embed.weight", (self.vocab, self.d_model))]
-        for i, kind in enumerate(self.layers):  # glue: registry of named tensors
-            out.extend(("layers.%d.%s" % (i, n), s)
-                       for n, s in self.block_shapes(kind))  # glue: registry of named tensors
-        out.append(("norm_f.weight", (self.d_model,)))
-        if not self.tie_embeddings:
-            out.append(("lm_head.weight", (self.vocab, self.d_model)))
-        return out
+        return _native_neural_bridge.RUNTIME.samba_config_call("registry", (self,), _native_samba_bridge.CONTEXT)
 
 
 def _init_tensor(gen, name, shape):
@@ -247,9 +179,8 @@ class SambaState(object):
     `SambaStack.step` update every piece in place."""
 
     def __init__(self, batch_size, max_tokens, layers):
-        self.batch_size = int(batch_size)
-        self.max_tokens = int(max_tokens)
-        self.layers = list(layers)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "state_construct", (self, batch_size, max_tokens, layers), _native_samba_bridge.CONTEXT)
 
 
 # Accumulation follows optimizer contract clause 9.2 (leaf size, T mod L, A divides P, A a power of
@@ -329,43 +260,7 @@ class SambaStack(object):
                  betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01,
                  lr_schedule=None, max_norm=None, accumulation_steps=1,
                  numeric_mode=None):
-        if not isinstance(config, SambaConfig):
-            raise TypeError("mojolearn.SambaStack: config must be a SambaConfig")
-        if (weights is None) == (generator is None):
-            raise ValueError("mojolearn.SambaStack: pass exactly one of "
-                             "weights= or generator=")
-        self.config = config
-        self.numeric_mode = numeric_mode
-        self.names = [n for n, _ in config.registry()]  # glue: registry of named tensors
-        self.shapes = {n: tuple(s) for n, s in config.registry()}  # glue: registry of named tensors
-        self.offsets = [0]
-        for n in self.names:  # glue: offsets over named tensors
-            self.offsets.append(self.offsets[-1] + int(math.prod(self.shapes[n])))  # glue: offsets over named tensors
-        self.n_total = self.offsets[-1]
-        self.flat = _buffers.zeros(self.n_total, '<f4')
-        self.arrays = {}
-        for j, n in enumerate(self.names):  # glue: views per named tensor
-            self.arrays[n] = _Array.from_buffer(_checks.flat_view(self.flat, 'f')[self.offsets[j]:self.offsets[j + 1]]).reshape(self.shapes[n])
-        self.generator = generator if generator is not None else T.Generator(0, numeric_mode)
-        if weights is not None:
-            self.load_weights(weights)
-        else:
-            for n in self.names:  # glue: copies each named tensor
-                _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(_init_tensor(self.generator, n, self.shapes[n]), 'f')
-        self.max_norm = None if max_norm is None else float(max_norm)
-        self.optimizer = T.AdamW([self.arrays[n] for n in self.names], lr=lr,  # glue: optimizer gets named tensors
-                                 betas=betas, eps=eps, weight_decay=weight_decay,
-                                 lr_schedule=lr_schedule,
-                                 accumulation_steps=accumulation_steps,
-                                 numeric_mode=numeric_mode)
-        # The block wrappers retain views of ``self.flat``; optimizer steps
-        # and checkpoint restores update that storage in place.  Constructing
-        # them again for every forward/backward only repeats Python shape and
-        # option validation, and also prevents TransformerBlock from reusing
-        # its per-instance runtime resources.  Keep one wrapper per registry
-        # block, just as SambaInference does.  No tensor is copied or cached.
-        self._blocks = [self._make_block(i) for i in range(len(config.layers))]  # glue: builds one block per layer
-        self.last_ = None
+        return _native_samba_bridge.RUNTIME.samba_native_call("construct", (self, (config, weights, generator, lr, betas, eps, weight_decay, lr_schedule, max_norm, accumulation_steps, numeric_mode)), _native_samba_bridge.CONTEXT)
 
     # -- weights ----------------------------------------------------------
     def load_weights(self, weights):
@@ -373,28 +268,11 @@ class SambaStack(object):
 
         The key set and every shape must match exactly; values must be float32.
         """
-        missing = [n for n in self.names if n not in weights]  # glue: checks weight dict names
-        extra = [n for n in weights if n not in self.shapes]  # glue: checks weight dict names
-        if missing or extra:
-            raise ValueError("mojolearn.SambaStack: weight dict mismatch; "
-                             "missing %r, unknown %r" % (missing, extra))
-        for n in self.names:  # glue: checks each named tensor
-            a = weights[n]
-            pb = _checks.probe(a)
-            if not _checks.is_native_f32(pb.format):
-                raise TypeError("mojolearn.SambaStack: %s has dtype %s; float32 only"
-                                % (n, pb.format))
-            if pb.shape != self.shapes[n]:
-                raise ValueError("mojolearn.SambaStack: %s has shape %r, want %r"
-                                 % (n, pb.shape, self.shapes[n]))
-            a = _buffers.as_f32_c(a, ndim=None, name=n)[0]
-            if not _buffers.all_finite(a):
-                raise ValueError("mojolearn.SambaStack: %s is not finite" % n)
-            _checks.flat_view(self.arrays[n], 'f')[:] = _checks.flat_view(a, 'f')
+        return _native_samba_bridge.RUNTIME.samba_native_call("load_weights", (self, weights), _native_samba_bridge.CONTEXT)
 
     def parameters(self):
         """The parameters as ``{name: array}``, views of the flat buffer in registry order."""
-        return {n: self.arrays[n] for n in self.names}  # glue: dict of named tensors
+        return _native_samba_bridge.RUNTIME.samba_native_call("parameters", (self,), _native_samba_bridge.CONTEXT)
 
     def _make_block(self, i):
         kind = self.config.layers[i]
@@ -670,21 +548,8 @@ class SambaStack(object):
         -------
         logits : mojolearn.Array, shape (B, L, vocab)
         """
-        if lengths is not None:
-            if state is not None:
-                raise ValueError("mojolearn.SambaStack.forward: lengths= applies to the "
-                                 "stateless forward only; pass state=None")
-            ids = self._ids(inputs, "inputs")
-            return _ragged.ragged_forward(self.forward, ids, None, lengths, "<i4",
-                                          "SambaStack.forward")[0]
-        if state is not None:
-            return self._forward_state(inputs, state, step=False)
-        resident = self._resident()
-        if resident is not None:
-            return self._forward_resident(resident, self._ids(inputs, "inputs"))
-        acts = self._forward(inputs)
-        b, l = acts["ids"].shape
-        return acts["logits"].reshape((b, l, self.config.vocab))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "forward", (self, inputs, state, lengths), _native_samba_bridge.CONTEXT)
 
     # -- decode (2026-09-15) --------------------------------------------------
     def allocate_state(self, batch_size, max_tokens):
@@ -702,16 +567,8 @@ class SambaStack(object):
         -------
         SambaState
         """
-        b, smax = int(batch_size), int(max_tokens)
-        if b < 1 or smax < 1:
-            raise ValueError("mojolearn.SambaStack.allocate_state: batch_size "
-                             "and max_tokens must be positive")
-        layers = []
-        for i, kind in enumerate(self.config.layers):  # glue: allocates state per layer
-            blk = self._block(i)
-            layers.append(blk.allocate_state(b) if kind == "mamba3"
-                          else blk.allocate_state(b, smax))
-        return SambaState(b, smax, layers)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "allocate_state", (self, batch_size, max_tokens), _native_samba_bridge.CONTEXT)
 
     def step(self, inputs, state):
         """Decode one token per row, updating `state` in place.
@@ -729,17 +586,8 @@ class SambaStack(object):
         -------
         logits : mojolearn.Array, shape (B, vocab)
         """
-        if state is None:
-            raise ValueError("mojolearn.SambaStack.step: state is required "
-                             "(allocate_state(B, max_tokens) makes the fresh one)")
-        pb = _checks.probe(inputs)
-        if not _checks.is_integer(pb.format) or len(pb.shape) not in (1, 2) \
-                or (len(pb.shape) == 2 and pb.shape[1] != 1):
-            raise ValueError("mojolearn.SambaStack.step: inputs must be (B,) or "
-                             "(B, 1) integer ids")
-        ids = _buffers.as_i32_c(inputs, ndim=None, name="inputs")[0].reshape((pb.shape[0], 1))
-        out = self._forward_state(ids, state, step=True)
-        return out.reshape((pb.shape[0], self.config.vocab))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "step", (self, inputs, state), _native_samba_bridge.CONTEXT)
 
     def _forward_state(self, inputs, state, step):
         c = self.config
@@ -767,9 +615,8 @@ class SambaStack(object):
 
     def loss(self, inputs, targets):
         """Mean cross-entropy of `targets` given `inputs`, both (B, L) ids; no dropout, no gradient."""
-        acts = self._forward(inputs)
-        y = self._ids(targets, "targets").reshape(-1)
-        return float(T.cross_entropy(acts["logits"], y, numeric_mode=self.numeric_mode))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "loss", (self, inputs, targets), _native_samba_bridge.CONTEXT)
 
     # -- backward -----------------------------------------------------------
     def _refuse_no_backward(self):
@@ -805,102 +652,9 @@ class SambaStack(object):
         grads : list of mojolearn.Array
             One gradient per parameter, in registry order.
         """
-        self._refuse_no_backward()
-        c = self.config
-        # The fused head (lane/py-lm): the head GEMM, the loss and the head
-        # backward in one call, the logits never crossing back and forth.
-        # Same kernels, operands and order as the three-call arm below,
-        # which stays as the reference for a binding without the entry.
-        # The Apple FAST tail (lane afn-samba): the final norm, the head, the
-        # loss and both backwards in one call, then the tied embedding
-        # gradient in one call. The per-op arms below are the reference.
-        afn = self._afn()
-        head_binding = T._load(self.numeric_mode)
-        fused = afn is None and callable(T._optional_samba_head(head_binding))
-        try:
-            chunked_capability = getattr(head_binding, "training_chunked_lm_head_enabled", None)
-        except (ImportError, AttributeError):
-            chunked_capability = None
-        chunked = afn is None and callable(chunked_capability) and chunked_capability()
-        acts = self._forward(inputs, dropout_stream, token_offset,
-                             head=not fused and not chunked and afn is None, norm=afn is None,
-                             retain_tapes=True)
-        try:
-            ids = acts["ids"]
-            b, l = ids.shape
-            y = self._ids(targets, "targets")
-            if y.shape != ids.shape:
-                raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
-            y = y.reshape(-1)
-            count = _count_targets(y)
-            items = count if num_items is None else int(num_items)
-            grads = {}
-            if afn is not None:
-                loss, dh, grads["norm_f.weight"], dw_head = self._afn_tail_train(
-                    afn, acts["h"].reshape((b * l, c.d_model)), y, items)
-                dh = dh.reshape((b, l, c.d_model))
-            else:
-                hn2 = acts["hn"].reshape((b * l, c.d_model))
-                # NI34's existing chunked profile defines an ordinary mean
-                # with no ignored targets. Other objective shapes retain the
-                # original sum/custom-divisor path; no rescaling in Python.
-                if chunked and count == b * l and items == count:
-                    out = T.chunked_lm_head_loss(hn2, self._head_weight(), y,
-                                                return_grad=True,
-                                                numeric_mode=self.numeric_mode)
-                else:
-                    out = T.samba_head_loss(hn2, self._head_weight(), y, items,
-                                            self.numeric_mode) if fused else None
-                if out is not None:
-                    loss, dhn, dw_head = out
-                else:
-                    logits = acts["logits"]
-                    if logits is None:
-                        logits = T.linear_forward(hn2, self._head_weight(), self.numeric_mode)
-                    loss, dlogits = T.cross_entropy(logits, y, reduction="sum",
-                                                    num_items=items, return_grad=True,
-                                                    numeric_mode=self.numeric_mode)
-                    dhn, dw_head = T.linear_backward(dlogits, hn2, self._head_weight(),
-                                                     self.numeric_mode)
-                dh, grads["norm_f.weight"] = T.rms_norm_backward(
-                    dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
-                    c.norm_eps, self.numeric_mode)
-            for i in reversed(range(len(c.layers))):  # glue: dispatches each layer backward
-                block = self._block(i)
-                tape = acts["tapes"][i]
-                if tape is None:
-                    g = block.backward(acts["xs"][i], dh)
-                else:
-                    try:
-                        g = block._backward_from_tape(tape, dh)
-                    finally:
-                        block._close_forward_tape(tape)
-                        acts["tapes"][i] = None
-                dh = g.pop("x")
-                for n, v in g.items():  # glue: renames gradient dict keys
-                    grads["layers.%d.%s" % (i, n)] = v
-            if acts["key"] is not None:
-                dh = self.generator.dropout_backward(dh, acts["key"])
-            if c.tie_embeddings and afn is not None:
-                d_emb = self._afn_embedding_backward_tied(
-                    afn, dh.reshape((b * l, c.d_model)), ids.reshape(-1), dw_head)
-            else:
-                d_emb = T.embedding_backward(dh.reshape((b * l, c.d_model)), ids.reshape(-1),
-                                             c.vocab, self.numeric_mode)
-                if c.tie_embeddings:
-                    # The tied gradient is ONE pair add, embedding first, no
-                    # alignment claim (tokens=None).
-                    d_emb = T.accumulate_grads([d_emb, dw_head], tokens=None,
-                                               numeric_mode=self.numeric_mode)
-            if not c.tie_embeddings:
-                grads["lm_head.weight"] = dw_head
-            grads["embed.weight"] = d_emb
-            return float(loss), [grads[n] for n in self.names]  # glue: orders gradients by name
-        finally:
-            for i, tape in enumerate(acts["tapes"]):  # glue: native tape owners
-                if tape is not None:
-                    self._block(i)._close_forward_tape(tape)
-                    acts["tapes"][i] = None
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "model_gradients", (self, inputs, targets, num_items,
+                                dropout_stream, token_offset), _native_samba_bridge.CONTEXT)
 
     def train_step(self, inputs, targets):
         """Run one optimizer step on a batch.
@@ -921,52 +675,8 @@ class SambaStack(object):
             ``loss``, ``lr``, ``step`` and ``total_norm`` (the gradient norm before
             clipping, or None when `max_norm` is None).
         """
-        ids = self._ids(inputs, "inputs")
-        y = self._ids(targets, "targets")
-        if y.shape != ids.shape:
-            raise ValueError("mojolearn.SambaStack: targets must match inputs' shape")
-        b, l = ids.shape
-        a = self.optimizer.accumulation_steps
-        tokens = b * l
-        if b % a != 0:
-            raise ValueError("mojolearn.SambaStack.train_step: batch rows B=%d "
-                             "are not divisible by accumulation_steps=%d" % (b, a))
-        if a > 1 and not T.accumulation_is_aligned(tokens, a, self.numeric_mode):
-            raise ValueError(
-                "mojolearn.SambaStack.train_step: MISALIGNED microbatch split, "
-                "T = %d tokens at A = %d does not satisfy optimizer contract "
-                "clause 9.2 (leaf size, T mod L, A divides P, A a power of "
-                "two); refused before any gradient is computed "
-                "(python/mojolearn/_samba_impl.py)" % (tokens, a))
-        if a == 1:
-            resident = self._resident()
-            if resident is not None:
-                out = self._train_step_resident(resident, ids, y)
-                if out is not None:
-                    return out
-        count = _count_targets(y)
-        stream = (self.generator.next_stream()
-                  if self.config.dropout > 0.0 else None)
-        rows = b // a
-        losses, parts = [], []
-        for k in range(a):  # glue: dispatches each microbatch binding call
-            sl = slice(k * rows, (k + 1) * rows)
-            loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,
-                                              dropout_stream=stream,
-                                              token_offset=k * rows * l)
-            losses.append(_Array.from_list([loss_k], '<f4'))
-            parts.append(g_k)
-        if a == 1:
-            loss = float(losses[0][0])
-            total = self.optimizer.step(parts[0], max_norm=self.max_norm)
-        else:
-            loss = float(T.accumulate_grads(losses, tokens=None,
-                                            numeric_mode=self.numeric_mode)[0])
-            total = self.optimizer.step_accumulated(parts, tokens,
-                                                    max_norm=self.max_norm)
-        self.last_ = {"loss": loss, "lr": self.optimizer.lr_,
-                      "step": self.optimizer.t, "total_norm": total}
-        return dict(self.last_)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "model_train_step", (self, inputs, targets), _native_samba_bridge.CONTEXT)
 
     # -- state ----------------------------------------------------------------
     def _experiment_profile(self):
@@ -984,31 +694,8 @@ class SambaStack(object):
         step, schedule, generator state and numeric mode, so `load_state_dict` resumes
         training exactly.
         """
-        o = self.optimizer
-        sched = None if o.lr_schedule is None else o.lr_schedule.config()
-        return {
-            "schema": _STATE_SCHEMA, "profile": PROFILE,
-            "experiment_profile": self._experiment_profile(),
-            "numeric_mode": _backend._CODE_MODE.get(
-                T._load(self.numeric_mode).training_numeric_mode(), "unknown"),
-            "config": self.config.to_dict(),
-            "registry": [{"name": n, "shape": list(self.shapes[n]),
-                          "offset": self.offsets[j],
-                          "size": self.offsets[j + 1] - self.offsets[j]}
-                         for j, n in enumerate(self.names)],  # glue: checkpoint registry of tensors
-            "parameters": self.flat.copy() if _copy_arrays else self.flat,
-            "exp_avg": o.exp_avg.copy() if _copy_arrays else o.exp_avg,
-            "exp_avg_sq": o.exp_avg_sq.copy() if _copy_arrays else o.exp_avg_sq,
-            "buf_initialized": (o.buf_initialized.copy() if _copy_arrays
-                                else o.buf_initialized), "t": int(o.t),
-            "optimizer": {"kind": "adamw", "lr": o.lr, "beta1": o.betas[0],
-                          "beta2": o.betas[1], "eps": o.eps,
-                          "weight_decay": o.weight_decay,
-                          "max_norm": self.max_norm,
-                          "accumulation_steps": o.accumulation_steps},
-            "schedule": sched,
-            "rng": self.generator.state_dict(),
-        }
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "snapshot", (self, _copy_arrays), _native_samba_bridge.CONTEXT)
 
     def load_state_dict(self, state):
         """Restore a state made by `state_dict`; returns self.
@@ -1016,38 +703,8 @@ class SambaStack(object):
         Raises `ValueError` when the schema, configuration, numeric profile or sizes do
         not match this stack.
         """
-        if state.get("schema") != _STATE_SCHEMA or state.get("profile") != PROFILE:
-            raise ValueError("mojolearn.SambaStack: state schema/profile mismatch")
-        if state.get("experiment_profile", "baseline") != self._experiment_profile():
-            raise ValueError("mojolearn.SambaStack: experiment numerical profile mismatch")
-        if state["config"] != self.config.to_dict():
-            raise ValueError("mojolearn.SambaStack: state config differs from this stack's")
-        # A state written under another numeric profile is refused by name; a
-        # state with no field is fp32_v1, which is what this stack computes.
-        _numeric_profile.check_saved(state, _numeric_profile.TRAINING_DEFAULT, "mojolearn.SambaStack state")
-        p = _buffers.as_f32_c(state['parameters'], ndim=1, name='parameters')[0]
-        if p.shape != (self.n_total,):
-            raise ValueError("mojolearn.SambaStack: parameters hold %d floats, "
-                             "the registry is %d" % (p.size, self.n_total))
-        _checks.flat_view(self.flat, 'f')[:] = _checks.flat_view(p, 'f')
-        self.optimizer.load_state_dict({
-            "t": state["t"], "exp_avg": state["exp_avg"],
-            "exp_avg_sq": state["exp_avg_sq"],
-            "buf_initialized": state["buf_initialized"]})
-        oc = state["optimizer"]
-        self.optimizer.lr = float(oc["lr"])
-        self.optimizer.betas = (float(oc["beta1"]), float(oc["beta2"]))
-        self.optimizer.eps = float(oc["eps"])
-        self.optimizer.weight_decay = float(oc["weight_decay"])
-        self.max_norm = None if oc["max_norm"] is None else float(oc["max_norm"])
-        if int(oc["accumulation_steps"]) != self.optimizer.accumulation_steps:
-            raise ValueError("mojolearn.SambaStack: accumulation_steps in the "
-                             "state differs from this stack's; the microbatch "
-                             "count is part of the run's numerical specification")
-        self.optimizer.lr_schedule = (None if state["schedule"] is None
-                                      else T._Schedule.from_config(state["schedule"]))
-        self.generator.load_state_dict(state["rng"])
-        return self
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "publish", (self, state), _native_samba_bridge.CONTEXT)
 
     # -- checkpoint (streamed arrays; legacy JSON remains readable) --------
     _ARRAYS = (("parameters", "<f4"), ("exp_avg", "<f4"),
@@ -1059,8 +716,8 @@ class SambaStack(object):
         The file is written atomically. Saving reads the live parameter and optimizer
         storage, so do not train or modify the stack while it saves.
         """
-        from ._samba_checkpoint import save
-        return save(path, self.state_dict(_copy_arrays=False))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "checkpoint_save", (self, path), _native_samba_bridge.CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, numeric_mode=None):
@@ -1078,50 +735,18 @@ class SambaStack(object):
 
         Raises `ValueError` when the checkpoint fails its integrity or schema checks.
         """
-        from ._samba_checkpoint import MAGIC, load
-        with Path(path).open("rb") as stream:
-            streamed = stream.read(len(MAGIC)) == MAGIC
-        if streamed:
-            payload = load(path)
-        else:
-            payload = cls._read_legacy_checkpoint(path)
-        if numeric_mode is None:
-            numeric_mode = payload["numeric_mode"]
-        config = SambaConfig.from_dict(payload["config"])
-        oc = payload["optimizer"]
-        sched = (None if payload["schedule"] is None
-                 else T._Schedule.from_config(payload["schedule"]))
-        weights = {}
-        flat = _checks.flat_view(payload["parameters"], 'f')
-        for entry in payload["registry"]:  # glue: views per checkpoint tensor
-            weights[entry["name"]] = _Array.from_buffer(flat[
-                entry["offset"]:entry["offset"] + entry["size"]]).reshape(entry["shape"])
-        stack = cls(config, weights=weights, lr=oc["lr"],
-                    betas=(oc["beta1"], oc["beta2"]), eps=oc["eps"],
-                    weight_decay=oc["weight_decay"], lr_schedule=sched,
-                    max_norm=oc["max_norm"],
-                    accumulation_steps=oc["accumulation_steps"],
-                    numeric_mode=numeric_mode)
-        return stack.load_state_dict(payload)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "checkpoint_load", (cls, path, numeric_mode), _native_samba_bridge.CONTEXT)
 
     @classmethod
     def _read_legacy_checkpoint(cls, path):
-        with Path(path).open("rb") as stream:
-            encoded = stream.read(_CHECKPOINT_LIMIT + 1)
-        if len(encoded) > _CHECKPOINT_LIMIT:
-            raise ValueError("mojolearn.SambaStack: checkpoint exceeds the size limit")
-        envelope = json.loads(encoded)
-        if (not isinstance(envelope, dict)
-                or set(envelope) != {"schema", "payload", "payload_sha256"}
-                or envelope["schema"] != _CHECKPOINT_SCHEMA):
-            raise ValueError("mojolearn.SambaStack: checkpoint schema mismatch")
-        payload = envelope["payload"]
-        if hashlib.sha256(_canonical(payload)).hexdigest() != envelope["payload_sha256"]:
-            raise ValueError("mojolearn.SambaStack: checkpoint integrity mismatch")
-        for key, dtype in cls._ARRAYS:  # glue: checks each checkpoint array
-            d = payload[key]
-            if d["dtype"] != dtype:
-                raise ValueError("mojolearn.SambaStack: checkpoint tensor dtype mismatch")
-            raw = bytes.fromhex(d["hex"])
-            payload[key] = _buffers.frombytes(raw, dtype, d["shape"])
-        return payload
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "checkpoint_read", (path,), _native_samba_bridge.CONTEXT)
+
+
+# Import-time native ABI connection; legacy public methods remain until their
+# complete supported operation has a native owner and whole-call audit.
+from . import _native_samba_bridge
+_native_samba_bridge.RUNTIME = _native_neural_bridge.RUNTIME
+_native_samba_bridge.CONTEXT = _native_samba_bridge.connect(
+    SambaConfig, SambaStack, T, _native_neural_bridge, SambaState)

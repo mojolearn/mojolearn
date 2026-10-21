@@ -7,10 +7,13 @@
 # permute's VJP (the upstream read through the inverse permutation into the
 # operand's gradient). One thread per destination word; every destination
 # word is written exactly once and no two threads write one word, so there
-# is no order to declare (the plan's order (C)): the words are the source's
-# words, through ld / st (ftz), the words OP_AG_TRANSPOSE stores. A permute
-# swapping the last two axes of a rank-2 tensor therefore stores exactly the
-# transpose's words.
+# is no order to declare (the plan's order (C)). Forward materialization
+# copies the source words exactly (i2=1), matching OP_AG_TRANSPOSE's forward
+# route. VJPs retain their established ld/st FTZ rule (i2=0).
+# Correctness repair 2026-10-20: forward ld/st previously flushed subnormals
+# while identity views did not. This intentionally changes those forward
+# words within the new version; CPU/Apple/NVIDIA/AMD must qualify together.
+# Arithmetic and reduction FTZ rules are unchanged.
 #
 # Shared by HostExec and DeviceExec through sequence/dispatch.mojo, so the
 # host column and every GPU run the same body. Codes OP_RNC_FIRST..OP_RNC_LAST
@@ -33,7 +36,8 @@ def op_rn_copy_strided(t: Int, a: Args):
     descriptor; i0 the source's base offset (elements), i1 the offset of a
     RN_DESC_VIEW record in p11 ([ndim, d0 .. d7] the destination shape,
     then [s0 .. s7] the source strides along those axes). Thread t =
-    destination word t."""
+    destination word t. i2=1 is an exact forward word copy; otherwise retain
+    the established VJP normalization."""
     var at = a.i1
     var nd = rn_word(a.p11, at)
     var rem = t
@@ -44,7 +48,10 @@ def op_rn_copy_strided(t: Int, a: Args):
         var c = rem % e
         rem = rem // e
         src += c * rn_word(a.p11, at + RN_DESC_SHAPE_WORDS + k)
-    st(a.p1, t, ld(a.p0, src))
+    if a.i2 == 1:
+        a.p1.unsafe_store(t, a.p0.unsafe_load(src))
+    else:
+        st(a.p1, t, ld(a.p0, src))
 
 
 @always_inline
@@ -56,6 +63,7 @@ def apply_rankn_core[OP: Int](t: Int, a: Args):
 # ---------------------------------------------------------------- drivers
 def rn_copy_strided[E: Exec](
     mut ex: E, dst: FP, src: FP, base: Int, desc: FP, desc_at: Int, n: Int,
+    preserve_words: Bool = False,
 ) raises:
     """dst (n words, dense) = src read at base + the strides of the
     RN_DESC_VIEW record at desc[desc_at]: one OP_RN_COPY_STRIDED launch."""
@@ -65,4 +73,5 @@ def rn_copy_strided[E: Exec](
     a.p11 = desc
     a.i0 = base
     a.i1 = desc_at
+    a.i2 = Int(preserve_words)
     ex.launch[OP_RN_COPY_STRIDED](a, n)

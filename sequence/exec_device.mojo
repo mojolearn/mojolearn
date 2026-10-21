@@ -37,6 +37,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
+from sequence.execution_profile import ExecutionProfile
 from sequence.launch_profile import launch_profile_level, launch_profile_record
 from sequence.launch_profile import launch_profile_record_drain, launch_profile_record_shape
 from sequence.gemm_tiled import seq_gemm_profile_route
@@ -523,6 +524,7 @@ struct DeviceExec(Exec, Movable):
     #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
     #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
     var profile: Int
+    var execution_profile: ExecutionProfile
     # TOMBSTONE: MOJOLEARN_IDN_MOE_RESIDENT (LOSER 4.64x moe synthetic) deleted 2026-10-11 by 978e7f43b; code recoverable at 978e7f43b^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MOE_RESIDENT.patch
 
@@ -546,6 +548,7 @@ struct DeviceExec(Exec, Movable):
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
         self.profile = launch_profile_level()
+        self.execution_profile = ExecutionProfile(True)
 
     def __init__(out self, ctx: DeviceContext) raises:
         """An executor on a caller's context (lane ag-transformer: the
@@ -572,6 +575,7 @@ struct DeviceExec(Exec, Movable):
         self.retired = List[DeviceBuffer[DType.float32]]()
         self.retired_pdev = List[Int]()
         self.profile = launch_profile_level()
+        self.execution_profile = ExecutionProfile(True)
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
@@ -585,6 +589,7 @@ struct DeviceExec(Exec, Movable):
             if self.base[i] == addr:
                 _ = self.base.pop(i)
                 _ = self.size.pop(i)
+                self.execution_profile.release(addr)
                 if self.pooled:
                     self.retired_pdev.append(self.pdev.pop(i))
                 else:
@@ -607,6 +612,9 @@ struct DeviceExec(Exec, Movable):
             self.base.append(Int(pp))
             self.size.append(count)
             self.pdev.append(i)
+            self.execution_profile.allocation(Int(pp), count * 4)
+            if zero:
+                self.execution_profile.fill(count * 4)
             return pp
         var buf = self.ctx.enqueue_create_buffer[DType.float32](count)
         if zero:
@@ -615,6 +623,9 @@ struct DeviceExec(Exec, Movable):
         self.base.append(Int(p))
         self.size.append(count)
         self.bufs.append(buf^)
+        self.execution_profile.allocation(Int(p), count * 4)
+        if zero:
+            self.execution_profile.fill(count * 4)
         return p
 
     def _sub(self, slot: Int, off: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
@@ -631,7 +642,7 @@ struct DeviceExec(Exec, Movable):
         # lane/owed-deletions-D2: the drained flag; code recoverable at b639a2bd2.
         # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_VAR_NODRAIN.patch
         try:
-            self.ctx.synchronize()
+            self._synchronize()
         except:
             pass
         try:
@@ -655,6 +666,11 @@ struct DeviceExec(Exec, Movable):
         raise Error("sequence: a copy names no buffer this device Exec allocated")
 
     def upload(mut self, dst: FP, src: FP, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_upload(dst, src, n)
+        self.execution_profile.copy_timed(0, started)
+
+    def _profiled_upload(mut self, dst: FP, src: FP, n: Int) raises:
         """The caller's floats are copied (memcpy, bit for bit) into a staging
         buffer at once, so `src` may change as soon as this returns; the
         device copy is queued behind the work already queued, and the staging
@@ -667,6 +683,7 @@ struct DeviceExec(Exec, Movable):
         var view = self._sub(found[0], found[1], n)
         if self.pooled:
             var hi = _pool_host(self.ctx, n)
+            self._profile_stage(hi, True)
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             var hp = pool[].host[hi].unsafe_ptr()
             comptime if SEQ_PIPE_UP:
@@ -679,20 +696,27 @@ struct DeviceExec(Exec, Movable):
                     while done < n:
                         var cnt = min(SEQ_PIPE_CH, n - done)
                         memcpy(dest=hpf + done, src=src + done, count=cnt)
+                        self.execution_profile.copied(3, cnt * 4)
                         var cv = self._sub(found[0], found[1] + done, cnt)
                         self.ctx.enqueue_copy(dst_buf=cv, src_ptr=hpf + done)
+                        self.execution_profile.copied(0, cnt * 4)
                         _ = cv^
                         done += cnt
                     self.pstaged.append(hi)
                     return
             _pcopy(hp, src, n)
+            self.execution_profile.copied(3, n * 4)
             self.ctx.enqueue_copy(dst_buf=view, src_ptr=hp)
+            self.execution_profile.copied(0, n * 4)
             self.pstaged.append(hi)
             _ = view^
             return
         var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        self.execution_profile.staging(n * 4)
         _pcopy(host.unsafe_ptr(), src, n)
+        self.execution_profile.copied(3, n * 4)
         self.ctx.enqueue_copy(dst_buf=view, src_ptr=host.unsafe_ptr())
+        self.execution_profile.copied(0, n * 4)
         _ = view^
         self.staged.append(host^)
 
@@ -703,33 +727,51 @@ struct DeviceExec(Exec, Movable):
         return p
 
     def download(mut self, dst: FP, src: FP, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_download(dst, src, n)
+        self.execution_profile.copy_timed(1, started)
+
+    def _profiled_download(mut self, dst: FP, src: FP, n: Int) raises:
         if n <= 0:
             return
         comptime if SEQ_PIPE_DOWN:
             if self.pooled and n >= 2 * SEQ_PIPE_CH:
-                self.download_async(dst, src, n)
+                self._profiled_download_async(dst, src, n)
                 self.sync()
                 return
         var found = self._find(src, n)
         var view = self._sub(found[0], found[1], n)
         if self.pooled:
             var hi = _pool_host(self.ctx, n)
+            self._profile_stage(hi, True)
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             var hp = pool[].host[hi].unsafe_ptr()
             self.ctx.enqueue_copy(dst_ptr=hp, src_buf=view)
+            self.execution_profile.copied(1, n * 4)
             self.sync()
             _pcopy(dst, hp, n)
+            self.execution_profile.copied(3, n * 4)
+            self._profile_stage(hi, False)
             _pool_release_host(hi)
             _ = view^
             return
         var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        self.execution_profile.staging(n * 4)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        self.execution_profile.copied(1, n * 4)
         self.sync()
         _pcopy(dst, host.unsafe_ptr(), n)
+        self.execution_profile.copied(3, n * 4)
         _ = view^
+        self.execution_profile.staging(-n * 4)
         _ = host^
 
     def download_async(mut self, dst: FP, src: FP, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_download_async(dst, src, n)
+        self.execution_profile.copy_timed(1, started)
+
+    def _profiled_download_async(mut self, dst: FP, src: FP, n: Int) raises:
         """The copy is queued now; `dst` is written at the next sync, so
         several downloads share one wait (apple2)."""
         if n <= 0:
@@ -744,24 +786,33 @@ struct DeviceExec(Exec, Movable):
                 return
         if self.pooled:
             var hi = _pool_host(self.ctx, n)
+            self._profile_stage(hi, True)
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             var hp = pool[].host[hi].unsafe_ptr()
             var pview = self._sub(found[0], found[1], n)
             self.ctx.enqueue_copy(dst_ptr=hp, src_buf=pview)
+            self.execution_profile.copied(1, n * 4)
             _ = pview^
             self.ppend_host.append(hi)
             self.pend_dst.append(Int(dst))
             self.pend_n.append(n)
             return
         var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        self.execution_profile.staging(n * 4)
         var view = self._sub(found[0], found[1], n)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        self.execution_profile.copied(1, n * 4)
         _ = view^
         self.pend_host.append(host^)
         self.pend_dst.append(Int(dst))
         self.pend_n.append(n)
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_launch[OP](a, n)
+        self.execution_profile.launched(OP, n, started)
+
+    def _profiled_launch[OP: Int](mut self, a: Args, n: Int) raises:
         # lane ag-pass2-kernels: the launch profile (MOJOLEARN_AG_PROFILE).
         # Off, one Int test. Level 2 drains the queue before and after the
         # launch so the host clock brackets this launch alone: a relative
@@ -783,7 +834,7 @@ struct DeviceExec(Exec, Movable):
             # lane ag-pass5-gemm: the drain line, one synchronize on the
             # now-empty queue (outside this launch's bracket)
             var t1 = Int(perf_counter_ns())
-            self.ctx.synchronize()
+            self._synchronize()
             launch_profile_record_drain(Int(perf_counter_ns()) - t1)
         launch_profile_record(OP, n, ns, self.profile)
         # lane ag-pass5-gemm: one row per (code, route, M, N, K) for the GEMMs
@@ -815,6 +866,7 @@ struct DeviceExec(Exec, Movable):
                 a.p0, a.p1, Int32(a.i0), Int32(a.i1), a.f0,
                 grid_dim=(n, 1, 1), block_dim=(AF_COL_LANES, 1, 1),
             )
+            self.execution_profile.kernel()
             return
         # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
         # recurrence of a layer, one block per batch row (n = B rows); the
@@ -825,6 +877,7 @@ struct DeviceExec(Exec, Movable):
                 _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), Int64(n),
                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
             )
+            self.execution_profile.kernel()
             return
         comptime if OP == OP_CELL_BWD_SCAN:
             self.ctx.enqueue_function[cell_bwd_scan_kernel](
@@ -832,12 +885,15 @@ struct DeviceExec(Exec, Movable):
                 _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5), Int64(n),
                 grid_dim=(n, 1, 1), block_dim=(scan_block(a.i0, a.i2), 1, 1),
             )
+            self.execution_profile.kernel()
             return
         # lane ag-pass6-fold (autograd/fold_kernels.mojo): the staged fold
         # leaves, four elements a thread, the transpose tile; the scalar
         # bodies' words. False: the route rule keeps seq_kernel below.
         comptime if ag_pass6_op[OP]():
             if ag_pass6_launch[OP](self.ctx, a, n):
+                # This helper returns True only after exactly one enqueue.
+                self.execution_profile.kernel()
                 return
         # The MoE products as tiled kernels with the items' chains (lane
         # neural-pass29, sequence/moe_tiled.mojo) when the entry grouped the
@@ -858,23 +914,28 @@ struct DeviceExec(Exec, Movable):
                 self.ctx.enqueue_function[moe_group_zero_all_kernel](
                     a.p7, Int32(2 * a.i3), grid_dim=((2 * a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
+                self.execution_profile.kernel()
                 self.ctx.enqueue_function[moe_group_count_all_kernel](
                     a.p2, a.p7, Int32(gp), grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
+                self.execution_profile.kernel()
                 self.ctx.enqueue_function[moe_group_offsets_all_kernel](
                     a.p7, a.p5, a.p6, a.p8, Int32(a.i3), Int32(a.i5), Int32(a.i7),
                     grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
                 )
+                self.execution_profile.kernel()
                 comptime if MOE_STABLE_PACK:
                     self.ctx.enqueue_function[moe_group_stable_all_kernel](
                         a.p2, a.p5, a.p4, Int32(gp), Int32(a.i3),
                         grid_dim=((a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
                     )
+                    self.execution_profile.kernel()
                 else:
                     self.ctx.enqueue_function[moe_group_scatter_all_kernel](
                         a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
                         grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
                     )
+                    self.execution_profile.kernel()
         comptime if MOE_REGTILE and OP == OP_MOE_ROUTE:
             if a.i1 <= MOE_RT:
                 var bt = MOE_RT // a.i1
@@ -882,10 +943,12 @@ struct DeviceExec(Exec, Movable):
                     a.p0, a.p1, a.p2, Int32(n), Int32(a.i0), Int32(a.i1),
                     grid_dim=((n + bt - 1) // bt, 1, 1), block_dim=(MOE_RT, 1, 1),
                 )
+                self.execution_profile.kernel()
                 self.ctx.enqueue_function[moe_route_tail_kernel](
                     a.p2, a.p3, a.p4, a.p5, Int32(n), Int32(a.i1), Int32(a.i2), Int32(a.i3),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         comptime if MOE_REGTILE and OP == OP_MOE_HIDDEN:
             if a.i4 > 0:
@@ -898,34 +961,42 @@ struct DeviceExec(Exec, Movable):
                         self.ctx.enqueue_function[moe_group_zero_kernel](
                             a.p7, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
                         )
+                        self.execution_profile.kernel()
                         self.ctx.enqueue_function[moe_group_count_kernel](
                             a.p2, a.p7, Int32(npairs),
                             grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                         )
+                        self.execution_profile.kernel()
                         self.ctx.enqueue_function[moe_group_offsets_kernel](
                             a.p7, a.p5, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
                         )
+                        self.execution_profile.kernel()
                         comptime if MOE_STABLE_PACK:
                             self.ctx.enqueue_function[moe_group_stable_all_kernel](
                                 a.p2, a.p5, a.p4, Int32(npairs), Int32(a.i3),
                                 grid_dim=((a.i3 + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                             )
+                            self.execution_profile.kernel()
                         else:
                             self.ctx.enqueue_function[moe_group_scatter_kernel](
                                 a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
                                 grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                             )
+                            self.execution_profile.kernel()
                 comptime if MOE_GROUPED_GEMM:
                     # lane gap-gemm-layers: each expert's gate|up product on
                     # identical_gemm_into (sequence/moe_grouped.mojo); h in
                     # slot order, read by the out op's grouped path below
                     if a.i6 == 1:
+                        self.execution_profile.opaque()
                         self.moe_poff = moe_grouped_offsets(self.ctx, a.p5, a.i3)
                         var xg = self._alloc(npairs * a.i0, False)
                         var gu = self._alloc(npairs * 2 * a.i1, False)
                         var wsb = self.ctx.enqueue_create_buffer[DType.float32](
                             moe_grouped_workspace(self.moe_poff, a.i3, a.i0, a.i1)
                         )
+                        self.execution_profile.allocation(Int(wsb.unsafe_ptr()), len(wsb) * 4)
+                        self.execution_profile.opaque()
                         moe_grouped_hidden(
                             self.ctx, a.p0, a.p1, a.p4, xg, gu, a.p3, wsb, self.moe_poff,
                             a.i0, a.i1, a.i2, a.i3, npairs,
@@ -941,12 +1012,14 @@ struct DeviceExec(Exec, Movable):
                             Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
                             grid_dim=(moe_mma_blocks(npairs, a.i3, a.i1, MM_BNH), 1, 1), block_dim=(MM_NT, 1, 1),
                         )
+                        self.execution_profile.kernel()
                         return
                 self.ctx.enqueue_function[moe_hidden_reg_kernel](
                     a.p0, a.p1, a.p4, a.p5, a.p3,
                     Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
                     grid_dim=(moe_reg_blocks(npairs, a.i3, a.i1), 1, 1), block_dim=(MOE_RT, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         comptime if MOE_REGTILE and OP == OP_MOE_OUT:
             if a.i4 > 0:
@@ -962,6 +1035,8 @@ struct DeviceExec(Exec, Movable):
                         var wsb = self.ctx.enqueue_create_buffer[DType.float32](
                             moe_grouped_workspace(self.moe_poff, a.i3, a.i0, a.i1)
                         )
+                        self.execution_profile.allocation(Int(wsb.unsafe_ptr()), len(wsb) * 4)
+                        self.execution_profile.opaque()
                         moe_grouped_out(
                             self.ctx, a.p0, a.p1, a.p3, a.p6, slot_of, a.p5, a.p4, wsb, self.moe_poff,
                             a.i0, a.i1, a.i2, a.i3, npairs, n // a.i0,
@@ -975,6 +1050,7 @@ struct DeviceExec(Exec, Movable):
                             Int32(a.i0), Int32(a.i1), Int32(a.i3),
                             grid_dim=(moe_mma_blocks(npairs, a.i3, a.i0, MM_BNO), 1, 1), block_dim=(MM_NT, 1, 1),
                         )
+                        self.execution_profile.kernel()
                         mma_done = True
                 if not mma_done:
                     self.ctx.enqueue_function[moe_out_reg_kernel](
@@ -982,10 +1058,12 @@ struct DeviceExec(Exec, Movable):
                         Int32(a.i0), Int32(a.i1), Int32(a.i3),
                         grid_dim=(moe_reg_blocks(npairs, a.i3, a.i0), 1, 1), block_dim=(MOE_RT, 1, 1),
                     )
+                    self.execution_profile.kernel()
                 self.ctx.enqueue_function[moe_combine_kernel](
                     a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         comptime if OP == OP_MOE_HIDDEN:
             if a.i4 > 0 and _moe_tiled_on():
@@ -994,6 +1072,7 @@ struct DeviceExec(Exec, Movable):
                     Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i5),
                     grid_dim=(a.i4, 1, 1), block_dim=(MOE_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         comptime if OP == OP_MOE_OUT:
             if a.i4 > 0 and _moe_tiled_on():
@@ -1002,10 +1081,12 @@ struct DeviceExec(Exec, Movable):
                     Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i5),
                     grid_dim=(a.i4, 1, 1), block_dim=(MOE_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 self.ctx.enqueue_function[moe_combine_kernel](
                     a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         # lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_VAR): the threadgroup VAR
         # kernels without the env read of `_var_block_on` on the fit path
@@ -1015,6 +1096,7 @@ struct DeviceExec(Exec, Movable):
                     a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         comptime if TSA2_VAR and OP == OP_VAR_FORECAST:
             if (a.i1 + a.i3) * a.i0 <= VAR_SMEM:
@@ -1022,6 +1104,7 @@ struct DeviceExec(Exec, Movable):
                     a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         # lane ag-pass6-gemm (BIT VERSION, sequence/gemm_split.mojo): the
         # products the shape rule selects take the split-K order on every GPU
@@ -1042,6 +1125,7 @@ struct DeviceExec(Exec, Movable):
                     a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         comptime if OP == OP_VAR_FORECAST:
             if (a.i1 + a.i3) * a.i0 <= VAR_SMEM and _var_block_on():
@@ -1049,6 +1133,7 @@ struct DeviceExec(Exec, Movable):
                     a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
                     grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         # lane ag-pass6-rows (pass-6 idea I, MOJOLEARN_IDN_AUC_BLOCK_SORT): the
         # AUC sort's in-block stages, one threadgroup of i2 / 2 threads per
@@ -1059,6 +1144,7 @@ struct DeviceExec(Exec, Movable):
                 a.p0, a.p1, Int32(a.i0), Int32(a.i1), Int32(a.i2),
                 grid_dim=(n, 1, 1), block_dim=(a.i2 // 2, 1, 1),
             )
+            self.execution_profile.kernel()
             return
         # THETA_SPEC: FAST + Apple, and the IDENTICAL twin by default (off: -D MOJOLEARN_IDN_NM_SPEC_OFF)
         # (sequence/theta_spec.mojo); ETS_SPEC: that define's no-season ETS (sequence/ets_spec.mojo).
@@ -1105,6 +1191,7 @@ struct DeviceExec(Exec, Movable):
                     grid_dim=((n * COOP_W + TPB - 1) // TPB, 1, 1),
                     block_dim=(TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         # lane ag-pass4-gemm: OP_GEMM, the tape's OP_AGK_GEMM_EPI and the hand
         # MLP's OP_GEMM_EPI take the shape-aware route (sequence/gemm_tiled.mojo
@@ -1135,6 +1222,7 @@ struct DeviceExec(Exec, Movable):
                     grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
                     block_dim=(GT_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         # lane ag-pass2-kernels: the tape's GEMM with epilogue on the same
         # tile as OP_GEMM (same chain, then op_gemm_epi's follower on the
@@ -1152,6 +1240,7 @@ struct DeviceExec(Exec, Movable):
                     grid_dim=(seq_gemm_tiled_blocks(a.i0, a.i1), 1, 1),
                     block_dim=(GT_TPB, 1, 1),
                 )
+                self.execution_profile.kernel()
                 return
         comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
             # Tried 2026-10-08: MOJOLEARN_C58_FORECAST4 (four series per thread, tasks = ceil(n/4)), NV/AMD 2.1-3.2x
@@ -1165,6 +1254,7 @@ struct DeviceExec(Exec, Movable):
                 grid_dim=((n + TPB - 1) // TPB, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
+            self.execution_profile.kernel()
         comptime if OP == OP_AGK_GEMM_EPI:
             # the GEMM ran off the tile (one-thread launch, Apple): its
             # column sums are the hand path's own OP_COLSUM_DIV launch
@@ -1214,6 +1304,7 @@ struct DeviceExec(Exec, Movable):
             grid_dim=((n + TPB - 1) // TPB, 1, 1),
             block_dim=(TPB, 1, 1),
         )
+        self.execution_profile.kernel()
         comptime if OP == OP_AGK_GEMM_EPI:
             # off the tile: the column sums are the hand path's OP_COLSUM_DIV
             if a.i11 != 0:
@@ -1249,6 +1340,7 @@ struct DeviceExec(Exec, Movable):
             grid_dim=(blocks, 1, 1),
             block_dim=(GT_TPB, 1, 1),
         )
+        self.execution_profile.kernel()
 
     def _gemm_micro(mut self, a: Args, ek: Int, colsum: Int, blocks: Int) raises:
         """seq_gemm_micro_kernel[ek] (lane ag-pass6-gemm, idea A)."""
@@ -1279,6 +1371,7 @@ struct DeviceExec(Exec, Movable):
             grid_dim=(blocks, 1, 1),
             block_dim=(GT_TPB, 1, 1),
         )
+        self.execution_profile.kernel()
 
     def _gemm_split[OP: Int](mut self, a: Args) raises:
         """OP_GEMM, OP_GEMM_EPI or OP_AGK_GEMM_EPI in the split-K order (lane
@@ -1317,6 +1410,7 @@ struct DeviceExec(Exec, Movable):
             grid_dim=(seq_gemm_split_blocks(a.i0, a.i1, a.i2, a.i11), 1, 1),
             block_dim=(GT_TPB, 1, 1),
         )
+        self.execution_profile.kernel()
 
     def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int, wf: IP, woff: Int, nonce: Int32) raises:
         """`team_kernel[OP]` (lane neural-pass143): one block of tpb threads
@@ -1332,8 +1426,14 @@ struct DeviceExec(Exec, Movable):
             grid_dim=(nblocks, 1, 1),
             block_dim=(tpb, 1, 1),
         )
+        self.execution_profile.kernel()
 
     def copy(mut self, dst: FP, src: FP, n: Int) raises:
+        var started = self.execution_profile.clock()
+        self._profiled_copy(dst, src, n)
+        self.execution_profile.copy_timed(2, started)
+
+    def _profiled_copy(mut self, dst: FP, src: FP, n: Int) raises:
         """A device-to-device copy of n words between this executor's
         buffers, queued (no wait)."""
         if n <= 0:
@@ -1343,11 +1443,14 @@ struct DeviceExec(Exec, Movable):
         var vd = self._sub(fd[0], fd[1], n)
         var vs = self._sub(fs[0], fs[1], n)
         self.ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
+        self.execution_profile.copied(2, n * 4)
         _ = vd^
         _ = vs^
 
     def sync(mut self) raises:
-        self.ctx.synchronize()
+        var staged_bytes = self._profile_staged_bytes()
+        self._synchronize()
+        self.execution_profile.drained()
         self.staged.clear()
         # lane ag-fusion: the queue is drained, so freed buffers can go
         self.retired.clear()
@@ -1361,14 +1464,17 @@ struct DeviceExec(Exec, Movable):
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             for i in range(len(self.pend_dst)):
                 _pcopy(FP(unsafe_from_address=self.pend_dst[i]), pool[].host[self.ppend_host[i]].unsafe_ptr(), self.pend_n[i])
+                self.execution_profile.copied(3, self.pend_n[i] * 4)
                 _pool_release_host(self.ppend_host[i])
             self.ppend_host.clear()
         else:
             for i in range(len(self.pend_dst)):
                 _pcopy(FP(unsafe_from_address=self.pend_dst[i]), self.pend_host[i].unsafe_ptr(), self.pend_n[i])
+                self.execution_profile.copied(3, self.pend_n[i] * 4)
         self.pend_host.clear()
         self.pend_dst.clear()
         self.pend_n.clear()
+        self.execution_profile.staging(-staged_bytes)
         comptime if SEQ_PIPE_DOWN:
             if len(self.pipe_n) > 0:
                 self._pipe_down()
@@ -1388,6 +1494,8 @@ struct DeviceExec(Exec, Movable):
         # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RAW_DOWN.patch
         var h0 = _pool_host(self.ctx, SEQ_PIPE_CH)
         var h1 = _pool_host(self.ctx, SEQ_PIPE_CH)
+        self._profile_stage(h0, True)
+        self._profile_stage(h1, True)
         var pool = X_SEQUENCE_POOL.get_or_create_ptr()
         var st0 = FP(unsafe_from_address=Int(pool[].host[h0].unsafe_ptr()))
         var st1 = FP(unsafe_from_address=Int(pool[].host[h1].unsafe_ptr()))
@@ -1404,12 +1512,14 @@ struct DeviceExec(Exec, Movable):
                 var f = self._find(FP(unsafe_from_address=self.pipe_src[j] + done * 4), cnt)
                 var v = self._sub(f[0], f[1], cnt)
                 self.ctx.enqueue_copy(dst_ptr=st0 if half == 0 else st1, src_buf=v)
+                self.execution_profile.copied(1, cnt * 4)
                 _ = v^
                 if have_prev:
                     # overlaps the DMA just queued, into the other half
                     memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
                            count=prev_cnt)
-                self.ctx.synchronize()
+                    self.execution_profile.copied(3, prev_cnt * 4)
+                self._synchronize()
                 have_prev = True
                 prev_dst = self.pipe_dst[j] + done * 4
                 prev_cnt = cnt
@@ -1418,8 +1528,68 @@ struct DeviceExec(Exec, Movable):
                 done += cnt
         if have_prev:
             memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
+            self.execution_profile.copied(3, prev_cnt * 4)
+        self._profile_stage(h0, False)
+        self._profile_stage(h1, False)
         _pool_release_host(h0)
         _pool_release_host(h1)
         self.pipe_dst.clear()
         self.pipe_src.clear()
         self.pipe_n.clear()
+
+    def _synchronize(mut self) raises:
+        var started = self.execution_profile.clock()
+        self.ctx.synchronize()
+        self.execution_profile.waited(started)
+
+    def _profile_stage(mut self, index: Int, acquire: Bool) raises:
+        if self.execution_profile.enabled:
+            var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+            self.execution_profile.staging(pool[].host_n[index] * (4 if acquire else -4))
+
+    def _profile_staged_bytes(self) raises -> Int:
+        if not self.execution_profile.enabled:
+            return 0
+        var size = 0
+        for i in range(len(self.staged)):  # driver-loop: over upload staging owners
+            size += len(self.staged[i]) * 4
+        for i in range(len(self.pend_host)):  # driver-loop: over download staging owners
+            size += len(self.pend_host[i]) * 4
+        if self.pooled:
+            var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+            for i in range(len(self.pstaged)):  # driver-loop: over pooled upload stages
+                size += pool[].host_n[self.pstaged[i]] * 4
+            for i in range(len(self.ppend_host)):  # driver-loop: over pooled download stages
+                size += pool[].host_n[self.ppend_host[i]] * 4
+        return size
+
+    def execution_profile_begin(mut self) raises:
+        if self.execution_profile.enabled:
+            raise Error("ValueError: an execution profile is already active")
+        self.execution_profile = ExecutionProfile(True)
+        self.execution_profile.enabled = True
+        for i in range(len(self.bufs)):  # driver-loop: over owned executor allocations
+            self.execution_profile.allocation(Int(self.bufs[i].unsafe_ptr()), len(self.bufs[i]) * 4, True)
+        for i in range(len(self.retired)):  # driver-loop: over in-flight released allocations
+            var size = len(self.retired[i]) * 4
+            self.execution_profile.retired_bytes += size
+            self.execution_profile.retained_bytes += size
+        if self.pooled:
+            var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+            for i in range(len(self.pdev)):  # driver-loop: over leased device allocations
+                var j = self.pdev[i]
+                self.execution_profile.allocation(Int(pool[].dev[j].unsafe_ptr()), pool[].dev_n[j] * 4, True)
+            for i in range(len(self.retired_pdev)):  # driver-loop: over in-flight released pool leases
+                var size = pool[].dev_n[self.retired_pdev[i]] * 4
+                self.execution_profile.retired_bytes += size
+                self.execution_profile.retained_bytes += size
+        self.execution_profile.peak_retained_bytes = self.execution_profile.retained_bytes
+        var staged_bytes = self._profile_staged_bytes()
+        self.execution_profile.staging(staged_bytes, True)
+
+    def execution_profile_end(mut self) raises -> ExecutionProfile:
+        if not self.execution_profile.enabled:
+            raise Error("ValueError: no execution profile is active")
+        self.sync()
+        self.execution_profile.enabled = False
+        return self.execution_profile.copy()

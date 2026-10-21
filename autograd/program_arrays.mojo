@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: Apache-2.0
+# Native ABI allocation preserving the existing ndarray return contract.
+# NumPy's ndarray C type wraps a native bytearray owner without numerical
+# conversion, copying or a Python helper. Cache classes during Session setup,
+# outside any graph run/fit. No ndarray.ctypes (a Python helper) is invoked.
+from std.ffi import _Global
+from std.python import Python, PythonObject
+from autograd.rankn import ShapeN
+
+
+struct _ProgramArrays(Defaultable, Movable):
+    var ready: Bool
+    var builtins: PythonObject
+    var ndarray: PythonObject
+    var integer_type: PythonObject
+    var mmap_type: PythonObject
+
+    def __init__(out self):
+        self.ready = False
+        self.builtins = PythonObject(None)
+        self.ndarray = PythonObject(None)
+        self.integer_type = PythonObject(None)
+        self.mmap_type = PythonObject(None)
+
+
+comptime _PROGRAM_ARRAYS = _Global[
+    StorageType=_ProgramArrays, name="MojolearnProgramArraysV1", init_fn=_ProgramArrays.__init__,
+]
+
+
+def initialize_program_arrays() raises:
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if not state[].ready:
+        state[].builtins = Python.import_module("builtins")
+        var numpy = Python.import_module("numpy")
+        state[].ndarray = numpy.ndarray
+        state[].integer_type = numpy.integer
+        state[].mmap_type = Python.import_module("mmap").mmap
+        state[].ready = True
+
+
+def output_array(shape: ShapeN, dtype: String = "float32") raises -> PythonObject:
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    if not state[].ready:
+        raise Error("program array boundary must be initialized during session setup")
+    var dims = Python.list()
+    for k in range(shape.ndim):  # small-loop(shape.ndim: tensor rank): shape metadata, never array elements
+        dims.append(PythonObject(shape.d[k]))
+    var storage = state[].builtins.bytearray(shape.count() * 4)
+    # The C ndarray constructor retains storage as .base. Native executor
+    # writes every value; no Python ndarray constructor/helper is involved.
+    return state[].ndarray(dims, dtype=PythonObject(dtype), buffer=storage)
+
+
+def is_integer_input(value: PythonObject) raises -> Bool:
+    # ndarray exposes __index__ too, but an array is never a tensor handle
+    # or an integer option. Match the public int/np.integer contract exactly.
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    var b = state[].builtins
+    return not Bool(py=b.isinstance(value, b.bool)) and (
+        Bool(py=b.isinstance(value, b.int)) or Bool(py=b.isinstance(value, state[].integer_type)))
+
+
+def uint64_input(value: PythonObject, name: String) raises -> UInt64:
+    if not is_integer_input(value):
+        raise Error("TypeError: " + name + " must be an integer")
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    var b = state[].builtins
+    var number = b.int(value)
+    var high = number.__rshift__(32)
+    if Bool(py=number.__lt__(0)) or Bool(py=high.__gt__(4294967295)):
+        raise Error("ValueError: " + name + " must be in [0, 2**64)")
+    # Mojo's Python UInt64 conversion currently uses signed ssize_t.
+    # Each limb fits signed Int; combine them only after native conversion.
+    return (UInt64(Int(py=high)) << 32) | UInt64(Int(py=number.__and__(4294967295)))
+
+
+def mapped_byte_array(path: PythonObject) raises -> PythonObject:
+    # mmap is a native CPython buffer owner. The ndarray C type keeps the
+    # mapping alive, so no Python safetensors reader or ndarray helper runs.
+    var state = _PROGRAM_ARRAYS.get_or_create_ptr()
+    var file = state[].builtins.open(path, "rb")
+    var mapping = PythonObject(None)
+    try:
+        mapping = state[].mmap_type(file.fileno(), 0, access=1)
+    finally:
+        file.close()
+    var dims = Python.list()
+    dims.append(len(mapping))
+    return state[].ndarray(dims, dtype="uint8", buffer=mapping)

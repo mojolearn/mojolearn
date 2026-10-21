@@ -219,6 +219,9 @@ struct SmallMlpRules[K: SmallMlpKernels](BackwardRules):
             self.k.cells(upstream, _fp(self.dx[layer][]), gradients[1], self.batch, n, 3)
 
 
+from sequence.execution_profile import ExecutionProfile
+
+
 struct SmallMlpRecordExec(Exec, Movable):
     """The executor the small MLP's tape records on. The graph holds only
     caller storage and its rules launch on the trainer's context, so the
@@ -250,6 +253,12 @@ struct SmallMlpRecordExec(Exec, Movable):
         raise Error(_RECORD_ONLY)
 
     def sync(mut self) raises:
+        raise Error(_RECORD_ONLY)
+
+    def execution_profile_begin(mut self) raises:
+        raise Error(_RECORD_ONLY)
+
+    def execution_profile_end(mut self) raises -> ExecutionProfile:
         raise Error(_RECORD_ONLY)
 
 

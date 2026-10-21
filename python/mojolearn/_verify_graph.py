@@ -1,0 +1,1825 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Test-only installed-package qualification for captured graph execution.
+
+Python makes fixtures, independent oracles and reports. Product graph, control
+flow, input conversion and profiling execute through native binding calls.
+"""
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import re
+from pathlib import Path
+import sys
+import tempfile
+
+FORMAT = "mojolearn-graph-verification/1"
+EXPECTED_CASES = (
+    "native_inputs", "dynamic_shapes_and_recovery", "lazy_conditional",
+    "bounded_while", "shape_growing_while", "exact_duplicate_elimination",
+    "training_after_optimization", "node_diagnostics_and_profile",
+    "saved_component_roundtrip", "native_session_boundary", "native_checkpoint_boundary", "native_weight_boundary",
+    "variable_rank_replay",
+    "executed_control_vjp", "executor_accounting", "control_checkpoint", "gradient_diagnostics",
+    "structural_view_optimization", "structural_control_and_derivatives", "optimizer_validation_preservation",
+    "conditional_training", "conditional_training_refusals", "conditional_training_resume",
+    "broadcast_relu_words_and_cost", "broadcast_relu_validation", "broadcast_relu_control_and_training",
+    "integer_loop_state_refusal",
+    "attention_shared_projection_vjp", "conditional_tied_normalization_checkpoint",
+    "higher_rank_derivatives",
+    "transformer_program_composition",
+)
+OUTPUT_COUNTS = dict(zip(EXPECTED_CASES, (4, 1, 1, 4, 1, 4, 4, 1, 1, 3, 2, 4, 6, 21, 2, 9, 4, 8, 6, 2, 8, 2, 11, 6, 2, 9, 5, 8, 20, 7, 13)))
+
+
+_AUDITS = []
+
+
+def _transformer_graph(s, x, weights, heads, kv_heads, head_dim, *, gradient=False):
+    """Testing-only source-derived Llama block capture; never a product driver."""
+    import numpy as np
+    batch, length, width = x.shape
+    if heads * head_dim != width or heads % kv_heads:
+        raise ValueError("invalid declared Transformer head dimensions")
+    handles = {name: s.tensor(np.asarray(value, dtype=np.float32), requires_grad=gradient)
+               for name, value in weights.items()}
+    h = s.tensor(x, requires_grad=gradient)
+    normalized = s.rms_norm(h, handles["input_layernorm.weight"], eps=1e-6)
+    def projection(value, name):
+        return s._transformer_linear(value, handles[name + ".weight"])
+    q = s.rotary(projection(normalized, "q_proj"), head_dim)
+    k = s.rotary(projection(normalized, "k_proj"), head_dim)
+    v = projection(normalized, "v_proj")
+    q = s.permute(s.reshape(q, (batch, length, heads, head_dim)), (0, 2, 1, 3))
+    k = s.permute(s.reshape(k, (batch, length, kv_heads, head_dim)), (0, 2, 1, 3))
+    v = s.permute(s.reshape(v, (batch, length, kv_heads, head_dim)), (0, 2, 1, 3))
+    if kv_heads != heads:
+        copies = heads // kv_heads
+        def repeat_heads(value):
+            value = s.reshape(value, (batch, kv_heads, 1, length, head_dim))
+            return s.reshape(s.expand(value, (batch, kv_heads, copies, length, head_dim)),
+                             (batch, heads, length, head_dim))
+        k, v = repeat_heads(k), repeat_heads(v)
+    # Standard K layout followed by QK's transpose, not an inserted identity.
+    k_t = s.transpose(k, -1, -2)
+    scores = s.matmul(q, k_t)
+    # Native scalar sqrt/reciprocal reproduce the block's pinned scale.
+    scale = s.reciprocal(s.sqrt(s.full((1,), float(head_dim))))
+    scores = s.mul(scores, scale)
+    mask = np.where(np.arange(length)[None, :] <= np.arange(length)[:, None],
+                    np.float32(0), np.float32(-np.finfo(np.float32).max)).astype(np.float32)
+    scores = s.add(scores, s.tensor(mask.reshape(1, 1, length, length)))
+    # The specialized block pins ascending-key softmax; ordinary graph
+    # softmax has the separate fold32 denominator contract.
+    probabilities = s._transformer_softmax(scores)
+    context = s.matmul(probabilities, v)
+    context = s.reshape(s.permute(context, (0, 2, 1, 3)), (batch, length, width))
+    residual = s.add(h, projection(context, "o_proj"))
+    normalized = s.rms_norm(residual, handles["post_attention_layernorm.weight"], eps=1e-6)
+    gated = s.mul(s.silu(projection(normalized, "gate_proj")), projection(normalized, "up_proj"))
+    result = s.add(residual, projection(gated, "down_proj"))
+    return h, result, handles
+
+
+def _transformer_reference64(x, weights, heads, kv_heads, head_dim):
+    """Independent double-precision whole-block oracle, only for verification."""
+    import numpy as np
+    x = np.asarray(x, dtype=np.float64)
+    w = {name: np.asarray(value, dtype=np.float64) for name, value in weights.items()}
+    batch, length, width = x.shape
+    def norm(value, name):
+        return value / np.sqrt(np.mean(value * value, axis=-1, keepdims=True) + 1e-6) * w[name]
+    def project(value, name):
+        return value @ w[name + ".weight"].T
+    def rotary(value, count):
+        z = value.reshape(batch, length, count, head_dim)
+        angle = np.arange(length)[:, None] / (10000.0 ** (np.arange(head_dim // 2) * 2.0 / head_dim))
+        c = np.concatenate([np.cos(angle)] * 2, axis=-1)[None, :, None, :]
+        si = np.concatenate([np.sin(angle)] * 2, axis=-1)[None, :, None, :]
+        rotation = np.concatenate((-z[..., head_dim // 2:], z[..., :head_dim // 2]), axis=-1)
+        return (z * c + rotation * si).transpose(0, 2, 1, 3)
+    n = norm(x, "input_layernorm.weight")
+    q, k = rotary(project(n, "q_proj"), heads), rotary(project(n, "k_proj"), kv_heads)
+    v = project(n, "v_proj").reshape(batch, length, kv_heads, head_dim).transpose(0, 2, 1, 3)
+    k, v = np.repeat(k, heads // kv_heads, axis=1), np.repeat(v, heads // kv_heads, axis=1)
+    scores = (q @ k.swapaxes(-1, -2)) / np.sqrt(head_dim)
+    scores += np.where(np.arange(length)[None, :] <= np.arange(length)[:, None], 0., -np.finfo(np.float32).max)
+    e = np.exp(scores - scores.max(axis=-1, keepdims=True))
+    p = e / e.sum(axis=-1, keepdims=True)
+    context = (p @ v).transpose(0, 2, 1, 3).reshape(batch, length, width)
+    residual = x + project(context, "o_proj")
+    n = norm(residual, "post_attention_layernorm.weight")
+    gate = project(n, "gate_proj")
+    gated = gate / (1 + np.exp(-gate)) * project(n, "up_proj")
+    return residual + project(gated, "down_proj")
+
+
+def _transformer_weights(rng, width, hidden, kv_width):
+    import numpy as np
+    shapes = {"input_layernorm.weight": (width,), "post_attention_layernorm.weight": (width,),
+              "q_proj.weight": (width, width), "k_proj.weight": (kv_width, width),
+              "v_proj.weight": (kv_width, width), "o_proj.weight": (width, width),
+              "gate_proj.weight": (hidden, width), "up_proj.weight": (hidden, width),
+              "down_proj.weight": (width, hidden)}
+    return {name: np.asarray(rng.normal(0, .12, shape) + (1 if "layernorm" in name else 0), dtype=np.float32)
+            for name, shape in shapes.items()}
+
+
+def transformer_program_composition():
+    import numpy as np
+    from . import ops, TransformerBlock
+    rng = np.random.default_rng(718)
+    x = np.asarray(rng.normal(0, .7, (1, 5, 8)), np.float32)
+    weights = _transformer_weights(rng, 8, 12, 8)
+    seed = np.asarray(rng.normal(0, .3, x.shape), np.float32)
+    oracle = _transformer_reference64(x, weights, 2, 2, 4)
+    block = TransformerBlock(weights, n_heads=2, n_kv_heads=2, head_dim=4, numeric_mode="identical")
+    specialized = _invoke(block.forward, x)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="graph-transformer-") as directory, ops.Session() as s:
+        h, result, _ = _transformer_graph(s, x, weights, 2, 2, 4)
+        p = s.capture(h, result)
+        baseline, optimized = _invoke(p.run, x), _invoke(p.run, x, optimize=True)
+        _equal(baseline, specialized)
+        _equal(optimized, baseline)
+        np.testing.assert_allclose(baseline, oracle, rtol=3e-5, atol=2e-6)
+        counts = {r["name"]: r["rewrites"] for r in _invoke(p.inspect, optimize=True)["pass_report"]["passes"]}
+        assert counts["permutation_composition"] > 0 and counts["dead_intermediates"] > 0
+        checkpoint = Path(directory) / "transformer.mjl"
+        _invoke(p.save, checkpoint)
+        restored = _invoke(s.load_program, checkpoint)
+        output = _invoke(restored.run, x, optimize=True)
+        _equal(output, baseline)
+        outputs.extend((baseline, optimized, output))
+    with ops.Session(record=True) as s:
+        h, result, handles = _transformer_graph(s, x, weights, 2, 2, 4, gradient=True)
+        loss = s.sum(s.mul(result, s.tensor(seed)))
+        _invoke(s.backward, loss)
+        gradients = {"x": _invoke(s.grad, h), **{name: _invoke(s.grad, handle) for name, handle in handles.items()}}
+        operands = {"x": x, **weights}
+        for name, value in operands.items():
+            # Each parameter family and input gets an independent directional
+            # finite difference; no mirrored native VJP implementation.
+            direction = rng.normal(0, 1, value.shape)
+            direction /= max(np.linalg.norm(direction), 1.)
+            epsilon = 1e-5
+            plus, minus = value.astype(np.float64) + epsilon * direction, value.astype(np.float64) - epsilon * direction
+            wp, wm = dict(weights), dict(weights)
+            xp, xm = x, x
+            if name == "x":
+                xp, xm = plus, minus
+            else:
+                wp[name], wm[name] = plus, minus
+            expected = np.sum((_transformer_reference64(xp, wp, 2, 2, 4) -
+                               _transformer_reference64(xm, wm, 2, 2, 4)) * seed) / (2 * epsilon)
+            gradient = np.asarray(gradients[name], dtype=np.float64)
+            assert gradient.shape == (value.shape if value.ndim != 1 else (value.size, 1))
+            got = np.sum(gradient.reshape(value.shape) * direction)
+            np.testing.assert_allclose(got, expected, rtol=3e-3, atol=2e-5)
+            outputs.append(gradients[name])
+    return outputs
+
+
+def _invoke(operation, *args, **kwargs):
+    from ._verify_native_runtime import audit_native_call
+    audit = audit_native_call(operation, *args, **kwargs)
+    _AUDITS.append(audit.report())
+    if audit.exception is not None:
+        if audit.frames or audit.forbidden_native or audit.unobserved_threads or audit.wrapper_work:
+            audit.assert_native()
+        raise audit.exception
+    return audit.assert_native()
+
+
+def _equal(actual, expected):
+    import numpy as np
+    a, b = np.asarray(actual), np.asarray(expected)
+    assert a.shape == b.shape, (a.shape, b.shape)
+    assert a.dtype == b.dtype, (a.dtype, b.dtype)
+    assert a.tobytes() == b.tobytes(), "output words differ"
+
+
+def _refuses(call, text, error_type=Exception):
+    try:
+        call()
+    except Exception as error:
+        assert isinstance(error, error_type), (error_type.__name__, type(error).__name__)
+        assert text in str(error), (text, str(error))
+        if _AUDITS and _AUDITS[-1]["exception"] is not None:
+            _AUDITS[-1]["expected_refusal"] = True
+        return
+    raise AssertionError("invalid operation unexpectedly succeeded: " + text)
+
+
+def native_inputs():
+    import numpy as np
+    from . import ops
+    x = np.arange(12, dtype=np.float32).reshape(4, 3)
+    with ops.Session() as s:
+        h = s.tensor(x)
+        p = s.capture(h, s.scale(h, 2.0))
+        outputs = []
+        for a in (x, x.astype(np.float64), x[:, ::-1], x.tolist()):
+            out = _invoke(p.run, a)
+            _equal(out, np.asarray(a, dtype=np.float32) * np.float32(2))
+            outputs.append(out)
+        _refuses(lambda: _invoke(p.run, x, x), "input arrays")
+        _refuses(lambda: _invoke(p.run, [[1.0], [2.0, 3.0]]), "rectangular")
+        _refuses(lambda: _invoke(p.run, x.astype(">f4")), "native byte order")
+        integer = s.ids(np.array([[1, 2]], dtype=np.int64))
+        id_program = s.capture(integer, s.embedding(s.tensor(np.ones((4, 2), np.float32)), integer))
+        _refuses(lambda: _invoke(id_program.run, np.ones((1, 2), np.float32)), "integer", TypeError)
+        _equal(_invoke(p.run, x), outputs[0])
+        return outputs
+
+
+def dynamic_shapes_and_recovery():
+    import numpy as np
+    from . import ops
+    w = np.array([[1, 0], [0, 1], [1, -1]], dtype=np.float32)
+    with ops.Session() as s:
+        x = s.tensor(np.ones((2, 4, 3), dtype=np.float32))
+        p = s.capture(x, s.matmul(x, s.tensor(w)))
+        a = np.arange(18, dtype=np.float32).reshape(3, 2, 3)
+        out = _invoke(p.run, a, dynamic_shapes=True)
+        _equal(out, a @ w)
+        _refuses(lambda: _invoke(p.run, a), "shape", ValueError)
+        _refuses(lambda: _invoke(p.run, np.ones((2, 3), np.float32), dynamic_shapes=True), "rank")
+        _refuses(lambda: _invoke(p.run, np.ones((3, 2, 5), np.float32), dynamic_shapes=True), "program node 0")
+        _equal(_invoke(p.run, a, dynamic_shapes=True), out)
+        return [out]
+
+
+def variable_rank_replay():
+    import numpy as np
+    from . import ops
+    w = np.array([[1, 0], [0, 1], [1, -1]], np.float32)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-ranks-") as d, ops.Session() as s:
+        x = s.tensor(np.zeros((2, 2, 3), np.float32))
+        product = s.matmul(x, s.tensor(w))
+        p = s.capture(x, product)
+        reduced = s.capture(x, s.sum(product, axis=-1, keepdims=True))
+        path = Path(d) / "rank-program.mjl"
+        _invoke(p.save, path)
+        loaded = _invoke(s.load_program, path)
+        for shape in ((2, 3), (2, 2, 3), (2, 1, 2, 3), (1, 1, 1, 1, 1, 1, 2, 3)):
+            a = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
+            out = _invoke(p.run_dynamic, a)
+            _equal(out, a @ w)
+            _equal(_invoke(loaded.run_dynamic, a), out)
+            outputs.append(out)
+        for shape in ((2, 3), (2, 1, 2, 3)):
+            a = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
+            out = _invoke(reduced.run_dynamic, a)
+            _equal(out, np.sum(a @ w, axis=-1, keepdims=True))
+            outputs.append(out)
+        _refuses(lambda: _invoke(p.run_dynamic, np.ones((2, 5), np.float32)), "program node 0")
+        _refuses(lambda: _invoke(p.run_dynamic, np.ones((1,) * 9, np.float32)), "rank", ValueError)
+        _equal(_invoke(p.run_dynamic, np.arange(6, dtype=np.float32).reshape(2, 3)), outputs[0])
+    return outputs
+
+
+def executed_control_vjp():
+    import numpy as np
+    from . import ops
+    outputs = []
+    seed = np.array([[0.5]], np.float32)
+
+    # Independent scalar-double oracle, including the stopping decision.
+    # Perturbations stay away from predicate boundaries in all five fixtures.
+    def oracle(x, w, loop, maximum):
+        if loop:
+            iterations = 0
+            while x < 8 and iterations < maximum:
+                x *= w
+                iterations += 1
+            return 0.5 * x
+        return 0.5 * (x * w if x > 0 else x * x)
+
+    with tempfile.TemporaryDirectory(prefix="mojolearn-control-vjp-") as d, ops.Session() as s:
+        x = s.tensor([[1.25]])
+        w = s.tensor([[2.0]])
+        condition = s.capture(x, s.greater(x, s.full((1, 1), 0)))
+        loop_condition = s.capture(x, s.less(x, s.full((1, 1), 8)))
+        body = s.capture(x, s.mul(x, w))
+        otherwise = s.capture(x, s.mul(x, x))
+        for initial, loop, maximum in ((1.25, False, 0), (-1.25, False, 0),
+                                       (1.25, True, 8), (9.0, True, 8), (1.25, True, 2)):
+            a = np.array([[initial]], np.float32)
+            if loop:
+                report = _invoke(body.vjp_while, a, condition=loop_condition,
+                                 max_iterations=maximum, seeds=seed, parameters=[w])
+            else:
+                report = _invoke(body.vjp_if, condition, otherwise, a, seeds=seed, parameters=[w])
+            value, dx, dw = report["outputs"], report["input_gradients"][0], report["parameter_gradients"][w]
+            expected = oracle(initial, 2.0, loop, maximum)
+            _equal(value, np.array([[expected * 2]], np.float32))
+            epsilon = 1e-5
+            expected_dx = (oracle(initial + epsilon, 2.0, loop, maximum) -
+                           oracle(initial - epsilon, 2.0, loop, maximum)) / (2 * epsilon)
+            expected_dw = (oracle(initial, 2.0 + epsilon, loop, maximum) -
+                           oracle(initial, 2.0 - epsilon, loop, maximum)) / (2 * epsilon)
+            np.testing.assert_allclose(dx, [[expected_dx]], rtol=1e-6, atol=1e-7)
+            np.testing.assert_allclose(dw, [[expected_dw]], rtol=1e-6, atol=1e-7)
+            outputs.extend((value, dx, dw))
+            if loop:
+                assert report["iterations"] == (0 if initial == 9 else min(3, maximum))
+                assert report["stopped"] is (initial == 9 or maximum >= 3)
+        zero = _invoke(body.vjp_while, [[1.25]], condition=loop_condition,
+                       max_iterations=0, seeds=seed, parameters=[w])
+        assert zero["iterations"] == 0 and zero["stopped"] is False
+        _equal(zero["input_gradients"][0], seed)
+        _equal(zero["parameter_gradients"][w], np.zeros((1, 1), np.float32))
+        _refuses(lambda: _invoke(body.vjp_if, condition, otherwise, [[1.25]],
+                                seeds=np.ones((2, 1), np.float32)), "seed must have", ValueError)
+        _refuses(lambda: _invoke(body.vjp_if, condition, otherwise, [[1.25]],
+                                seeds=seed, parameters=[w, w]), "twice", ValueError)
+        dead = s.tensor([[3.0]])
+        dead_branch = s.capture(x, s.mul(x, dead))
+        s.free(dead)
+        lazy = _invoke(body.vjp_if, condition, dead_branch, [[1.25]], seeds=seed)
+        _equal(lazy["outputs"], outputs[0])
+        for name, program in (("body", body), ("condition", condition),
+                              ("loop", loop_condition), ("otherwise", otherwise)):
+            _invoke(program.save, Path(d) / (name + ".mjl"))
+        with ops.Session() as restored:
+            rb = _invoke(restored.load_program, Path(d) / "body.mjl")
+            rc = _invoke(restored.load_program, Path(d) / "condition.mjl")
+            rl = _invoke(restored.load_program, Path(d) / "loop.mjl")
+            ro = _invoke(restored.load_program, Path(d) / "otherwise.mjl")
+            rw, = rb.params
+            branch = _invoke(rb.vjp_if, rc, ro, [[1.25]], seeds=seed, parameters=[rw])
+            loop = _invoke(rb.vjp_while, [[1.25]], condition=rl, max_iterations=8,
+                           seeds=seed, parameters=[rw])
+            for report, offset in ((branch, 0), (loop, 6)):
+                _equal(report["outputs"], outputs[offset])
+                _equal(report["input_gradients"][0], outputs[offset + 1])
+                _equal(report["parameter_gradients"][rw], outputs[offset + 2])
+        multi = s.capture(x, [s.mul(x, w), s.mul(x, x)])
+        both = _invoke(multi.vjp_if, condition, multi, [[1.25]],
+                       seeds=(seed, np.array([[0.25]], np.float32)), parameters=[w])
+        _equal(both["input_gradients"][0], np.array([[1.625]], np.float32))
+        _equal(both["parameter_gradients"][w], np.array([[0.625]], np.float32))
+        outputs.extend((*both["outputs"], both["input_gradients"][0], both["parameter_gradients"][w]))
+        growing = s.capture(x, s.concat([x, x], axis=0))
+        growing_condition = s.capture(x, s.less(s.sum(x), s.full((1, 1), 4)))
+        grown = _invoke(growing.vjp_while, [[1.25]], condition=growing_condition,
+                        max_iterations=3, seeds=np.ones((4, 1), np.float32), parameters=[])
+        assert grown["iterations"] == 2 and grown["stopped"] is True
+        _equal(grown["outputs"], np.full((4, 1), 1.25, np.float32))
+        _equal(grown["input_gradients"][0], np.array([[4]], np.float32))
+        outputs.extend((grown["outputs"], grown["input_gradients"][0]))
+        integer_body = s.capture(x, s.argmax(x, keepdims=True, int32=True))
+        _refuses(lambda: _invoke(integer_body.vjp_while, [[1.25]], condition=loop_condition,
+                                max_iterations=1, seeds=seed), "outputs must hold floating", ValueError)
+        rank_changing = s.capture(x, s.reshape(x, (1, 1, 1)))
+        _refuses(lambda: _invoke(rank_changing.vjp_while, [[1.25]], condition=loop_condition,
+                                max_iterations=1, seeds=np.ones((1, 1, 1), np.float32)),
+                 "preserve each state tensor's rank", ValueError)
+        integer_x = s.ids(np.array([[0]], np.int32))
+        integer_identity = s.capture(integer_x, integer_x)
+        _refuses(lambda: _invoke(integer_identity.vjp_while, np.array([[0]], np.int32),
+                                condition=integer_identity, max_iterations=1, seeds=seed),
+                 "inputs must hold floating", ValueError)
+        _equal(_invoke(body.vjp_if, condition, otherwise, [[1.25]], seeds=seed)["outputs"], outputs[0])
+    return outputs
+
+
+def lazy_conditional():
+    import numpy as np
+    from . import ops
+    a = np.ones((2, 3), np.float32)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        condition = s.capture(x, s.greater(s.sum(x), s.full((1, 1), 0)))
+        body = s.capture(x, s.scale(x, 2))
+        weight = s.tensor(np.ones((3, 2), np.float32))
+        other = s.capture(x, s.matmul(x, weight))
+        s.free(weight)
+        out = _invoke(body.run_if, condition, other, a)
+        _equal(out, a * np.float32(2))
+        # The freed parameter proves the unselected branch was not replayed
+        # or eagerly validated. Selecting it must fail, then recovery works.
+        _refuses(lambda: _invoke(body.run_if, condition, other, -a), "freed")
+        _equal(_invoke(body.run_if, condition, other, a), out)
+        return [out]
+
+
+def bounded_while():
+    import numpy as np
+    from . import ops
+    a = np.array([[0]], np.float32)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        condition = s.capture(x, s.less(x, s.full((1, 1), 3)))
+        body = s.capture(x, s.add(x, s.full((1, 1), 1)))
+        done = _invoke(body.while_loop, a, condition=condition, max_iterations=10)
+        assert done["iterations"] == 3 and done["stopped"] is True
+        _equal(done["outputs"], np.array([[3]], np.float32))
+        bound = _invoke(body.while_loop, a, condition=condition, max_iterations=2)
+        assert bound["iterations"] == 2 and bound["stopped"] is False
+        _equal(bound["outputs"], np.array([[2]], np.float32))
+        zero = _invoke(body.while_loop, a, condition=condition, max_iterations=0)
+        assert zero["iterations"] == 0 and zero["stopped"] is False
+        _equal(zero["outputs"], a)
+        stopped = _invoke(body.while_loop, np.array([[5]], np.float32), condition=condition, max_iterations=0)
+        assert stopped["iterations"] == 0 and stopped["stopped"] is True
+        nonfinite = s.capture(x, x)
+        _refuses(lambda: _invoke(body.while_loop, np.array([[np.nan]], np.float32), condition=nonfinite,
+                                        max_iterations=3), "finite")
+        _refuses(lambda: _invoke(body.while_loop, a, condition=condition, max_iterations=-1), "must be >= 0")
+        _refuses(lambda: _invoke(body.while_loop, a, condition=condition, max_iterations=1.5), "integer")
+        _equal(_invoke(body.while_loop, a, condition=condition, max_iterations=3)["outputs"], done["outputs"])
+        return [done["outputs"], bound["outputs"], zero["outputs"], stopped["outputs"]]
+
+
+def shape_growing_while():
+    import numpy as np
+    from . import ops
+    a = np.ones((1, 1), np.float32)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        condition = s.capture(x, s.less(s.sum(x), s.full((1, 1), 4)))
+        body = s.capture(x, s.concat([x, x], axis=0))
+        out = _invoke(body.while_loop, a, condition=condition, max_iterations=5)
+        assert out["iterations"] == 2 and out["stopped"] is True
+        _equal(out["outputs"], np.ones((4, 1), np.float32))
+        invalid = s.capture(x, s.reshape(x, (1, 1, 1)))
+        _refuses(lambda: _invoke(invalid.while_loop, a, condition=condition, max_iterations=1), "preserve")
+        _equal(_invoke(body.while_loop, a, condition=condition, max_iterations=5)["outputs"], out["outputs"])
+        return [out["outputs"]]
+
+
+def exact_duplicate_elimination():
+    import numpy as np
+    from . import ops
+    a = np.array([[-0.0, 1, -2], [3, -4, 0.0]], np.float32)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        u, v = s.relu(x), s.relu(x)
+        p = s.capture(x, s.add(u, v))
+        before = _invoke(p.inspect, )
+        candidate = _invoke(p.inspect, optimize=True)
+        assert len(before["nodes"]) == 3 and candidate["nodes_removed"] == 1
+        eager, reduced = _invoke(p.run, a), _invoke(p.run, a, optimize=True)
+        _equal(eager, reduced)
+        assert _invoke(p.inspect, ) == before, "optimization must not mutate the captured program"
+        plus, minus = s.scale(x, 0.0), s.scale(x, -0.0)
+        zeros = s.capture(x, [plus, minus])
+        assert _invoke(zeros.inspect, optimize=True)["nodes_removed"] == 0
+        zo = _invoke(zeros.run, a, optimize=True)
+        _equal(zo[0], a * np.float32(0))
+        _equal(zo[1], a * np.float32(-0.0))
+        d = s.capture(x, [s.dropout(x, 0.25, seed=3), s.dropout(x, 0.25, seed=3)])
+        assert _invoke(d.inspect, optimize=True)["nodes_removed"] == 0
+        return [eager, reduced, *zo]
+
+
+def training_after_optimization():
+    import numpy as np
+    from . import ops
+    a = np.arange(12, dtype=np.float32).reshape(4, 3) / np.float32(8)
+    target = np.ones((4, 1), np.float32)
+    states = []
+    for optimize_first in (False, True):
+        with ops.Session() as s:
+            x = s.tensor(a)
+            w = s.tensor(np.zeros((3, 1), np.float32))
+            layout = s.transpose(s.transpose(x))
+            p = s.capture(x, s.add(s.matmul(layout, w), s.matmul(layout, w)))
+            _invoke(p.run, a, optimize=optimize_first)
+            opt = s.optimizer("adam", lr=0.01)
+            _invoke(p.fit, a, targets=target, optimizer=opt, epochs=3, batch_size=2, shuffle=False, seed=2**63 + 9)
+            state = s.optimizer_state(opt, w)
+            assert state["step"] == 6
+            states.append([s.numpy(w), np.asarray(p.loss_curve_, np.float32),
+                           s.numpy(state["exp_avg"]), s.numpy(state["exp_avg_sq"])])
+    for a, b in zip(*states):
+        _equal(a, b)
+    return states[0]
+
+
+def conditional_training():
+    import numpy as np
+    from . import ops
+    a = np.array([[1], [-2], [3], [-4]], np.float32)
+    target = np.ones_like(a)
+    # Independent scalar SGD oracle: all values and the step size are dyadic,
+    # and each batch has one row, so no reduction implementation is shared.
+    expected = [np.float32(0.25), np.float32(0.5), np.float32(-0.5)]
+    curve = []
+    for _ in range(2):
+        total = np.float32(0)
+        for row in a[:, 0]:
+            index = 1 if row > 0 else 2
+            error = np.float32(np.float32(row * expected[0]) + expected[index] - np.float32(1))
+            total = np.float32(total + np.float32(error * error))
+            derivative = np.float32(np.float32(2) * error)
+            expected[0] = np.float32(expected[0] - np.float32(np.float32(0.0625) * np.float32(derivative * row)))
+            expected[index] = np.float32(expected[index] - np.float32(np.float32(0.0625) * derivative))
+        curve.append(np.float32(total * np.float32(0.25)))
+    with ops.Session() as s:
+        x = s.tensor(a)
+        w, positive, negative = (s.tensor([[value]]) for value in (0.25, 0.5, -0.5))
+        condition = s.capture(x, s.greater(s.sum(x), s.full((1, 1), 0)))
+        body = s.capture(x, s.add(s.matmul(x, w), positive))
+        other = s.capture(x, s.add(s.matmul(x, w), negative))
+        optimizer = s.optimizer("sgd", lr=0.0625)
+        result = _invoke(body.fit_if, condition, other, a, targets=target, optimizer=optimizer,
+                         epochs=2, batch_size=1, shuffle=False)
+        assert result is body and body.n_iter_ == 2
+        assert body.branch_counts_ == {"true": 4, "false": 4}
+        outputs = [s.numpy(handle) for handle in (w, positive, negative)]
+        for actual, value in zip(outputs, expected):
+            _equal(actual, np.array([[value]], np.float32))
+        np.testing.assert_allclose(body.loss_curve_, np.array(curve, np.float32), rtol=1e-6, atol=0)
+        outputs.append(body.loss_curve_)
+        for handle, step in ((w, 8), (positive, 4), (negative, 4)):
+            assert s.optimizer_state(optimizer, handle)["step"] == step
+
+        # An inactive branch must not decay its parameter or advance moments.
+        adaptive = s.optimizer("adamw", lr=0.01, weight_decay=0.1)
+        _invoke(body.fit_if, condition, other, a, targets=target, optimizer=adaptive,
+                epochs=1, batch_size=1, shuffle=False)
+        state = s.optimizer_state(adaptive, negative)
+        before = [s.numpy(negative), s.numpy(state["exp_avg"]), s.numpy(state["exp_avg_sq"])]
+        step = state["step"]
+        _invoke(body.fit_if, condition, other, a[:1], targets=target[:1], optimizer=adaptive,
+                epochs=1, batch_size=1, shuffle=False)
+        state = s.optimizer_state(adaptive, negative)
+        after = [s.numpy(negative), s.numpy(state["exp_avg"]), s.numpy(state["exp_avg_sq"])]
+        assert state["step"] == step and body.branch_counts_ == {"true": 1, "false": 0}
+        for actual, value in zip(after, before):
+            _equal(actual, value)
+        outputs.extend(after)
+        # Selecting only a parameter from the inactive branch is a valid
+        # zero-update batch, not an attempt to backpropagate a constant loss.
+        frozen = s.numpy(positive)
+        _invoke(body.fit_if, condition, other, a[1:2], targets=target[1:2], optimizer=adaptive,
+                parameters=[positive], epochs=1, batch_size=1, shuffle=False)
+        _equal(s.numpy(positive), frozen)
+        outputs.append(body.loss_curve_)
+        return outputs
+
+
+def conditional_training_refusals():
+    import numpy as np
+    from . import ops
+    a = np.ones((3, 1), np.float32)
+    with ops.Session() as s, ops.Session() as foreign:
+        x, w = s.tensor(np.ones((2, 1), np.float32)), s.tensor([[0.25]])
+        product = s.matmul(x, w)
+        body = s.capture(x, product)
+        other = s.capture(x, s.reshape(product, (2, 1)))
+        condition = s.capture(x, s.greater(s.sum(x), s.full((1, 1), 0)))
+        optimizer = s.optimizer("sgd", lr=0.0625)
+        options = dict(targets=a, optimizer=optimizer, epochs=1, batch_size=3, shuffle=False)
+        # Otherwise cannot reshape three rows to two; it must remain unexecuted.
+        _invoke(body.fit_if, condition, other, a, **options)
+        assert body.branch_counts_ == {"true": 1, "false": 0}
+        _refuses(lambda: _invoke(body.fit_if, condition, other, -a, **options), "program node")
+        nonscalar = s.capture(x, x)
+        _refuses(lambda: _invoke(body.fit_if, nonscalar, other, a, **options), "one scalar", ValueError)
+        nonfinite = s.capture(x, s.scale(s.sum(x), float("inf")))
+        _refuses(lambda: _invoke(body.fit_if, nonfinite, other, a, **options), "finite", ValueError)
+        threshold = s.tensor([[1]])
+        predicate_parameter = s.capture(x, threshold)
+        _refuses(lambda: _invoke(body.fit_if, predicate_parameter, other, a,
+                                parameters=[threshold], **options), "predicate-only", ValueError)
+        fx = foreign.tensor([[1]])
+        foreign_condition = foreign.capture(fx, fx)
+        _refuses(lambda: _invoke(body.fit_if, foreign_condition, other, a, **options), "same session", ValueError)
+        _invoke(body.fit_if, condition, other, a, **options)
+        recovered = body.loss_curve_
+        # The selected branch can contain no trainable parameters at all.
+        constant = s.capture(x, x)
+        before = s.numpy(w)
+        step = s.optimizer_state(optimizer, w)["step"]
+        _invoke(body.fit_if, condition, constant, -a, **options)
+        _equal(s.numpy(w), before)
+        assert s.optimizer_state(optimizer, w)["step"] == step
+        _equal(body.loss_curve_, np.array([4], np.float32))
+        return [recovered, body.loss_curve_]
+
+
+def conditional_training_resume():
+    import struct
+    import numpy as np
+    from . import ops
+    a = np.array([[1, 2], [-1, -2], [3, 1], [-3, -1], [2, 4], [-2, -4]], np.float32)
+    target = np.ones((len(a), 1), np.float32)
+    seed = 2**63 + 19
+
+    def components(session):
+        x = session.tensor(a)
+        w = session.tensor([[0.125], [-0.25]])
+        positive, negative = session.tensor([[0.25]]), session.tensor([[-0.25]])
+        predicate = session.capture(x, session.greater(session.sum(x), session.full((1, 1), 0)))
+        t = session.dropout(x, 0.25, seed=13, counter=5)
+        f = session.dropout(x, 0.5, seed=19, counter=7)
+        body = session.capture(x, session.add(session.matmul(t, w), positive))
+        other = session.capture(x, session.add(session.matmul(f, w), negative))
+        optimizer = session.optimizer("adamw", lr=0.01, weight_decay=0.1,
+                                      schedule="step", step_size=1, gamma=0.5)
+        return body, predicate, other, optimizer, (w, positive, negative)
+
+    def state(session, optimizer, params):
+        arrays = [session.numpy(param) for param in params]
+        scalars = []
+        for param in params:
+            values = session.optimizer_state(optimizer, param)
+            arrays.extend((session.numpy(values["exp_avg"]), session.numpy(values["exp_avg_sq"])))
+            scalars.append((values["step"], values["beta1_power"], values["beta2_power"]))
+        return arrays, scalars
+
+    with tempfile.TemporaryDirectory(prefix="mojolearn-conditional-resume-") as d, ops.Session() as whole, ops.Session() as first:
+        wb, wc, wo, wopt, wp = components(whole)
+        fb, fc, fo, fopt, fp = components(first)
+        options = dict(targets=target, batch_size=1, shuffle=True, seed=seed)
+        _invoke(wb.fit_if, wc, wo, a, optimizer=wopt, epochs=3, **options)
+        _invoke(fb.fit_if, fc, fo, a, optimizer=fopt, epochs=1, **options)
+        first_curve = np.array(fb.loss_curve_, copy=True)
+        saved, saved_scalars = state(first, fopt, fp)
+        path = Path(d) / "training.mjl"
+        _invoke(fb.save_control, path, condition=fc, otherwise=fo, optimizer=fopt, seed=seed)
+        _refuses(lambda: _invoke(fb.save_control, Path(d) / "bad.mjl", condition=fc, otherwise=fo,
+                                optimizer=999999, seed=seed), "not an optimizer", ValueError)
+        with ops.Session() as resumed:
+            bundle = _invoke(resumed.load_control, path)
+            rb, rc, ro, optimizer = (bundle[name] for name in ("body", "condition", "otherwise", "optimizer"))
+            assert bundle["seed"] == seed and optimizer is not None
+            shared = set(rb.params) & set(ro.params)
+            assert len(shared) == 1
+            params = (next(iter(shared)), next(p for p in rb.params if p not in shared),
+                      next(p for p in ro.params if p not in shared))
+            loaded, loaded_scalars = state(resumed, optimizer, params)
+            assert loaded_scalars == saved_scalars
+            for actual, expected in zip(loaded, saved):
+                _equal(actual, expected)
+            assert resumed.learning_rate(optimizer) == first.learning_rate(fopt)
+            _invoke(rb.fit_if, rc, ro, a, optimizer=optimizer, epochs=2,
+                    targets=target, batch_size=1, shuffle=True, seed=bundle["seed"])
+            actual, actual_scalars = state(resumed, optimizer, params)
+            expected, expected_scalars = state(whole, wopt, wp)
+            assert actual_scalars == expected_scalars
+            assert resumed.learning_rate(optimizer) == whole.learning_rate(wopt)
+            for value, reference in zip(actual, expected):
+                _equal(value, reference)
+            curve = np.concatenate((first_curve, rb.loss_curve_))
+            _equal(curve, wb.loss_curve_)
+            output = _invoke(rb.run_if, rc, ro, a)
+            _equal(output, _invoke(wb.run_if, wc, wo, a))
+            # Recompute the outer file hash so a corrupt step reaches the
+            # semantic state parser, and then prove a valid load still works.
+            raw = bytearray(path.read_bytes())
+            extension = sum(struct.unpack_from("<4I", raw, 12))
+            ni, _ = struct.unpack_from("<2I", raw, extension)
+            struct.pack_into("<q", raw, extension + 8 + (ni - 1) * 8, -1)
+            digest = 0xCBF29CE484222325
+            for byte in raw[:-8]:
+                digest = ((digest ^ byte) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+            struct.pack_into("<Q", raw, len(raw) - 8, digest)
+            damaged = Path(d) / "negative-step.mjl"
+            damaged.write_bytes(raw)
+            _refuses(lambda: _invoke(resumed.load_control, damaged), "invalid parameter step", ValueError)
+            fresh = _invoke(resumed.load_control, path)
+            assert fresh["seed"] == seed and fresh["optimizer"] != optimizer
+            return [*actual, curve, output]
+
+
+def structural_view_optimization():
+    import numpy as np
+    from . import ops
+    # Quiet NaNs with distinct payload/sign, signed zeros, infinities and
+    # subnormals must survive layout-only rewrites without arithmetic.
+    words = np.array([0, 0x80000000, 0x7FC00123, 0xFFC00456, 0x7F800000,
+                      0xFF800000, 1, 0x80000001] * 3, np.uint32)
+    a = words.view(np.float32).reshape(2, 3, 4)
+    outputs = []
+    with ops.Session() as s:
+        x = s.tensor(a)
+        first = s.permute(x, (2, 0, 1))
+        second = s.permute(first, (1, 2, 0))
+        _equal(_invoke(s.numpy, x), a)
+        _equal(_invoke(s.numpy, first), a.transpose(2, 0, 1))
+        _equal(_invoke(s.numpy, second), a)
+        permuted = s.capture(x, second)
+        report = _invoke(permuted.inspect, optimize=True)
+        assert report["nodes_removed"] == 1 and len(report["nodes"]) == 1
+        assert report["nodes"][0]["integers"] == [0, 0, 1, 2]
+        assert report["nodes"][0]["source_node"] == 1
+        passes = {row["name"]: row for row in report["pass_report"]["passes"]}
+        assert passes["permutation_composition"]["rewrites"] == 1
+        assert passes["dead_intermediates"]["nodes_before"] == 2
+        assert passes["dead_intermediates"]["nodes_after"] == 1
+        assert report["pass_report"]["storage_reuse"] is False
+        result = _invoke(permuted.run, a, optimize=True)
+        _equal(result, a)
+        _equal(result, _invoke(permuted.run, a))
+        outputs.append(result)
+
+        middle = s.reshape(second, (4, 6))
+        final = s.reshape(middle, (2, 3, 4))
+        reshaped = s.capture(x, final)
+        before = _invoke(reshaped.inspect)
+        optimized = _invoke(reshaped.inspect, optimize=True)
+        assert optimized["nodes_removed"] == 2
+        result = _invoke(reshaped.run, a, optimize=True)
+        _equal(result, a)
+        outputs.append(result)
+        assert _invoke(reshaped.inspect) == before
+
+        # The inner permutation is also an output. Dead-node pruning must
+        # retain it, and repeated/aliased outputs still have independent ABI buffers.
+        aliases = s.capture(x, [first, final, x, final])
+        alias_report = _invoke(aliases.inspect, optimize=True)
+        assert alias_report["nodes_removed"] == 1
+        alias_values = _invoke(aliases.run, a, optimize=True)
+        for actual, expected in zip(alias_values, (a.transpose(2, 0, 1), a, a, a)):
+            _equal(actual, expected)
+        expected_last = len(alias_report["nodes"])
+        for ref in alias_report["outputs"]:
+            assert alias_report["pass_report"]["liveness"][ref]["last_use"] == expected_last
+        saved_last = alias_values[-1].copy()
+        alias_values[1].flat[0] = 9
+        _equal(alias_values[-1], saved_last)
+        # Return the immutable expected snapshots, not the deliberately changed output.
+        outputs.extend((alias_values[0], result, alias_values[2], alias_values[-1]))
+
+        first_swap = s.transpose(x)
+        second_swap = s.transpose(first_swap)
+        _equal(_invoke(s.numpy, first_swap), a.swapaxes(-2, -1))
+        _equal(_invoke(s.numpy, second_swap), a)
+        swapped = s.capture(x, second_swap)
+        assert _invoke(swapped.inspect, optimize=True)["nodes_removed"] == 1
+        for fixture in (a.reshape(6, 4), a):
+            value = _invoke(swapped.run_dynamic, fixture, optimize=True)
+            _equal(value, fixture)
+            _equal(value, _invoke(swapped.run_dynamic, fixture))
+            outputs.append(value)
+    return outputs
+
+
+def structural_control_and_derivatives():
+    import numpy as np
+    from . import ops
+    a = np.arange(6, dtype=np.float32).reshape(2, 3) / np.float32(8)
+    wv = np.array([[0.5], [-0.25], [1.0]], np.float32)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-pass-checkpoint-") as d, ops.Session() as s:
+        x, w = s.tensor(a), s.tensor(wv)
+        layout = s.reshape(s.reshape(s.transpose(s.transpose(x)), (3, 2)), (2, 3))
+        p = s.capture(x, s.sum(s.matmul(layout, w)))
+        condition = s.capture(x, s.full((1, 1), 1))
+        original = _invoke(p.inspect)
+        dead = s.tensor(np.ones((3, 1), np.float32))
+        other = s.capture(x, s.sum(s.matmul(x, dead)))
+        s.free(dead)
+        result = _invoke(p.run_if, condition, other, a, optimize=True)
+        _equal(result, _invoke(p.run, a))
+        vjp = _invoke(p.vjp_if, condition, p, a, seeds=np.ones((1, 1), np.float32), parameters=[w])
+        dx, dw = vjp["input_gradients"][0], vjp["parameter_gradients"][w]
+        _equal(dx, np.broadcast_to(wv.T, a.shape).copy())
+        _equal(dw, a.sum(axis=0).reshape(3, 1))
+        # The derivative of optimized inference agrees with the unchanged
+        # native tape. Binary-exact fixture/step avoid a loose error allowance.
+        delta = np.float32(1 / 128)
+        finite_dx = np.empty_like(a)
+        for index in np.ndindex(a.shape):
+            plus, minus = a.copy(), a.copy()
+            plus[index] += delta
+            minus[index] -= delta
+            high = _invoke(p.run, plus, optimize=True)
+            low = _invoke(p.run, minus, optimize=True)
+            finite_dx[index] = (high.item() - low.item()) / (2 * delta)
+        _equal(finite_dx, dx)
+        outputs.extend((result, dx, dw))
+        assert _invoke(p.inspect) == original
+
+        body = s.capture(x, s.add(s.transpose(s.transpose(x)), s.full((1, 1), 1)))
+        loop_condition = s.capture(x, s.less(s.sum(x), s.full((1, 1), 20)))
+        loop = _invoke(body.while_loop, np.ones((2, 3), np.float32),
+                       condition=loop_condition, max_iterations=5, optimize=True)
+        assert loop["iterations"] == 3 and loop["stopped"] is True
+        _equal(loop["outputs"], np.full((2, 3), 4, np.float32))
+        outputs.append(loop["outputs"])
+
+        plain, control = Path(d) / "program.mjl", Path(d) / "control.mjl"
+        _invoke(p.save, plain)
+        _invoke(p.save_control, control, condition=condition, otherwise=p)
+        with ops.Session() as restored:
+            rp = _invoke(restored.load_program, plain)
+            loaded = _invoke(restored.load_control, control)
+            assert _invoke(rp.inspect)["nodes"] == original["nodes"]
+            replay = _invoke(rp.run, a, optimize=True)
+            branch = _invoke(loaded["body"].run_if, loaded["condition"], loaded["otherwise"], a, optimize=True)
+            _equal(replay, result)
+            _equal(branch, result)
+            outputs.extend((replay, branch))
+    return outputs
+
+
+def optimizer_validation_preservation():
+    import numpy as np
+    from . import ops
+    a = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        p = s.capture(x, s.permute(s.permute(x, (2, 0, 1)), (1, 2, 0)))
+        r = s.capture(x, s.reshape(s.reshape(x, (4, 6)), (2, 3, 4)))
+        for optimize in (False, True):
+            _refuses(lambda: _invoke(p.run_dynamic, a.reshape(6, 4), optimize=optimize), "permute")
+            _refuses(lambda: _invoke(r.run_dynamic, np.ones((2, 3, 5), np.float32), optimize=optimize), "reshape")
+        z = s.tensor(np.ones((1, 2, 3), np.float32))
+        squeezed = s.squeeze(z, axis=0)
+        rank_guard = s.capture(z, s.transpose(s.transpose(squeezed)))
+        for optimize in (False, True):
+            _refuses(lambda: _invoke(rank_guard.run_dynamic, np.ones((1, 6), np.float32), optimize=optimize),
+                     "at least 2")
+        # A copy/detach between views is a semantic boundary, not a rewrite target.
+        copied = s.capture(x, s.transpose(s.copy(s.transpose(x))))
+        detached = s.capture(x, s.transpose(s.detach(s.transpose(x))))
+        for barrier in (copied, detached):
+            assert _invoke(barrier.inspect, optimize=True)["nodes_removed"] == 0
+            _equal(_invoke(barrier.run, a, optimize=True), a)
+        # Imported operation names retain their actual numeric opcode mapping.
+        diagnostics = s.capture(x, [s.abs(x), s.cumsum(x, axis=1)])
+        assert [n["op"] for n in _invoke(diagnostics.inspect)["nodes"]] == ["abs", "cumsum"]
+        left, right = _invoke(p.run, a, optimize=True), _invoke(r.run, a, optimize=True)
+        _equal(left, a)
+        _equal(right, a)
+        return [left, right]
+
+
+
+def _hoist_count(report):
+    return next(row["rewrites"] for row in report["pass_report"]["passes"]
+                if row["name"] == "broadcast_relu_hoist")
+
+
+def broadcast_relu_words_and_cost():
+    import numpy as np
+    from . import ops
+    words = np.array([0, 0x80000000, 1, 0x80000001, 0x007FFFFF, 0x807FFFFF,
+                      0x00800000, 0x80800000, 0x7F800000, 0xFF800000,
+                      0x7FC00123, 0xFFC00456, 0x7F800123, 0xFF800456,
+                      0x3F000000, 0xBF000000], np.uint32)
+    a = words.view(np.float32).reshape(1, 16)
+    # Independent integer-word oracle: ReLU after FTZ returns the original
+    # positive normal/infinity word, and positive zero for everything else.
+    expected_words = np.where((words >= 0x00800000) & (words <= 0x7F800000), words, 0).astype(np.uint32)
+    expected = np.broadcast_to(expected_words.view(np.float32), (3, 16)).copy()
+    outputs = []
+    with ops.Session() as s:
+        x, parameter = s.tensor(a), s.tensor(a)
+        expanded = s.expand(parameter, (3, 16))
+        activated = s.relu(expanded)
+        p = s.capture(x, activated)
+        original = _invoke(p.inspect)
+        report = _invoke(p.inspect, optimize=True)
+        assert [n["op"] for n in original["nodes"]] == ["expand", "relu"]
+        assert [n["op"] for n in report["nodes"]] == ["relu", "expand"]
+        assert [n["source_node"] for n in report["nodes"]] == [1, 0]
+        assert _hoist_count(report) == 1 and report["nodes_removed"] == 0
+        assert report["pass_report"]["rewritten_relu_elements_before"] == 48
+        assert report["pass_report"]["rewritten_relu_elements_after"] == 16
+        plain = _invoke(p.profile, a)
+        optimized = _invoke(p.profile, a, optimize=True)
+        _equal(plain["outputs"], expected)
+        _equal(optimized["outputs"], expected)
+        assert [n["op"] for n in optimized["profile"]["nodes"]] == ["relu", "expand"]
+        assert [n["output_bytes"] for n in plain["profile"]["nodes"]] == [192, 192]
+        assert [n["output_bytes"] for n in optimized["profile"]["nodes"]] == [64, 192]
+        assert _invoke(p.inspect) == original
+        outputs.append(optimized["outputs"])
+
+        shaped = s.reshape(x, (1, 16))
+        explicit = s.capture(x, s.relu(s.expand(shaped, (3, 16))))
+        assert _hoist_count(_invoke(explicit.inspect, optimize=True)) == 1
+        result = _invoke(explicit.run_dynamic, a.reshape(2, 2, 4), optimize=True)
+        _equal(result, expected)
+        _equal(result, _invoke(explicit.run_dynamic, a.reshape(2, 2, 4)))
+        outputs.append(result)
+
+        # An observable expand or second consumer makes the rewrite illegal.
+        observable = s.capture(x, [expanded, activated])
+        second_user = s.capture(x, [activated, s.abs(expanded)])
+        for model in (observable, second_user):
+            assert _hoist_count(_invoke(model.inspect, optimize=True)) == 0
+            before = _invoke(model.run, a)
+            after = _invoke(model.run, a, optimize=True)
+            for actual, wanted in zip(after, before):
+                _equal(actual, wanted)
+                outputs.append(actual)
+        # A no-op expand has no elementwise work to save.
+        same = s.capture(x, s.relu(s.expand(parameter, (1, 16))))
+        assert _hoist_count(_invoke(same.inspect, optimize=True)) == 0
+    return outputs
+
+
+def broadcast_relu_validation():
+    import numpy as np
+    from . import ops
+    a = np.array([[-1, 0.5, 2]], np.float32)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        ambiguous = s.capture(x, s.relu(s.expand(x, (4, 3))))
+        assert _hoist_count(_invoke(ambiguous.inspect, optimize=True)) == 0
+        varying = a.reshape(1, 1, 3)
+        output = _invoke(ambiguous.run_dynamic, varying, optimize=True)
+        _equal(output, _invoke(ambiguous.run_dynamic, varying))
+        _equal(output, np.broadcast_to(np.array([0, 0.5, 2], np.float32), (1, 4, 3)).copy())
+        explicit = s.capture(x, s.relu(s.expand(s.reshape(x, (1, 3)), (4, 3))))
+        assert _hoist_count(_invoke(explicit.inspect, optimize=True)) == 1
+        for optimize in (False, True):
+            _refuses(lambda: _invoke(ambiguous.run_dynamic, np.ones((2, 3), np.float32), optimize=optimize), "broadcast")
+            _refuses(lambda: _invoke(explicit.run_dynamic, np.ones((1, 4), np.float32), optimize=optimize), "reshape")
+        recovered = _invoke(explicit.run_dynamic, a.reshape(3), optimize=True)
+        _equal(recovered, _invoke(explicit.run, a))
+        # Inferred reshape shapes remain ambiguous even if this capture
+        # happened to have a compatible size. Do not specialize to that size.
+        inferred = s.capture(x, s.relu(s.expand(s.reshape(x, (1, -1)), (4, 3))))
+        assert _hoist_count(_invoke(inferred.inspect, optimize=True)) == 0
+        _refuses(lambda: _invoke(inferred.run_dynamic, np.ones((1, 2), np.float32), optimize=True), "broadcast")
+        return [output, recovered]
+
+
+def broadcast_relu_control_and_training():
+    import numpy as np
+    from . import ops
+    a = np.array([[-0.5, 0.25, 0.75]], np.float32)
+    expected = np.broadcast_to(np.array([[0, 0.25, 0.75]], np.float32), (4, 3)).copy()
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-broadcast-pass-") as d, ops.Session() as s:
+        x = s.tensor(a)
+        expanded = s.relu(s.expand(s.reshape(x, (1, 3)), (4, 3)))
+        p = s.capture(x, s.sum(expanded))
+        body = s.capture(x, expanded)
+        condition = s.capture(x, s.full((1, 1), 1))
+        assert _hoist_count(_invoke(p.inspect, optimize=True)) == 1
+        original = _invoke(p.inspect)
+        dead = s.tensor(np.ones((3, 1), np.float32))
+        other = s.capture(x, s.sum(s.matmul(x, dead)))
+        s.free(dead)
+        result = _invoke(p.run_if, condition, other, a, optimize=True)
+        _equal(result, np.array([[4]], np.float32))
+        _equal(result, _invoke(p.run, a))
+        vjp = _invoke(p.vjp_if, condition, p, a, seeds=np.ones((1, 1), np.float32))
+        dx = vjp["input_gradients"][0]
+        _equal(dx, np.array([[0, 4, 4]], np.float32))
+        delta = np.float32(1 / 128)
+        finite = np.empty_like(a)
+        for index in np.ndindex(a.shape):
+            plus, minus = a.copy(), a.copy()
+            plus[index] += delta
+            minus[index] -= delta
+            high = _invoke(p.run, plus, optimize=True)
+            low = _invoke(p.run, minus, optimize=True)
+            finite[index] = (high.item() - low.item()) / (2 * delta)
+        _equal(finite, dx)
+        loop = _invoke(body.while_loop, a, condition=condition, max_iterations=1, optimize=True)
+        assert loop["iterations"] == 1 and loop["stopped"] is False
+        _equal(loop["outputs"], expected)
+        outputs.extend((result, dx, loop["outputs"]))
+        assert _invoke(p.inspect) == original
+        plain, control = Path(d) / "program.mjl", Path(d) / "control.mjl"
+        _invoke(p.save, plain)
+        _invoke(p.save_control, control, condition=condition, otherwise=p)
+        with ops.Session() as restored:
+            rp = _invoke(restored.load_program, plain)
+            loaded = _invoke(restored.load_control, control)
+            assert _invoke(rp.inspect)["nodes"] == original["nodes"]
+            for value in (_invoke(rp.run, a, optimize=True),
+                          _invoke(loaded["body"].run_if, loaded["condition"], loaded["otherwise"], a, optimize=True)):
+                _equal(value, result)
+                outputs.append(value)
+
+    trained = []
+    data = np.zeros((4, 3), np.float32)
+    for optimize_first in (False, True):
+        with ops.Session() as s:
+            x, w = s.tensor(data), s.tensor(a)
+            p = s.capture(x, s.add(x, s.relu(s.expand(w, (4, 3)))))
+            assert _hoist_count(_invoke(p.inspect, optimize=True)) == 1
+            original = _invoke(p.inspect)
+            _invoke(p.run, data, optimize=optimize_first)
+            opt = s.optimizer("adam", lr=0.03125)
+            _invoke(p.fit, data, targets=data, optimizer=opt, parameters=[w],
+                    epochs=2, batch_size=4, shuffle=False)
+            state = _invoke(s.optimizer_state, opt, w)
+            assert state["step"] == 2 and _invoke(p.inspect) == original
+            trained.append([_invoke(s.numpy, w), np.asarray(p.loss_curve_, np.float32),
+                            _invoke(s.numpy, state["exp_avg"]), _invoke(s.numpy, state["exp_avg_sq"])])
+    for actual, expected in zip(*trained):
+        _equal(actual, expected)
+    outputs.extend(trained[0])
+    return outputs
+
+
+
+def integer_loop_state_refusal():
+    import numpy as np
+    from . import ops
+    a = np.array([[1, 3]], np.float32)
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-loop-kinds-") as d, ops.Session() as s:
+        x = s.tensor(a)
+        condition = s.capture(x, s.full((1, 1), 1))
+        good = s.capture(x, s.scale(x, 1))
+        integer = s.argmax(x, axis=1, keepdims=True, int32=True)
+        ids = s.ids(np.array([[1, 2]], np.int32))
+        wrapped = [integer, ids, s.reshape(integer, (1, 1)), s.copy(integer),
+                   s.detach(integer), s.permute(integer, (1, 0)),
+                   s.expand(integer, (2, 1)), s.concat([integer, integer], axis=1),
+                   s.split(ids, 2, axis=1)[0],
+                   s.where(s.full((1, 1), 1), integer, integer)]
+        for value in wrapped:
+            body = s.capture(x, value)
+            seed = np.ones(s.shape(value), np.float32)
+            for optimize in (False, True):
+                _refuses(lambda: _invoke(body.while_loop, a, condition=condition,
+                                        max_iterations=1, optimize=optimize),
+                         "state outputs must hold floating-point values", ValueError)
+            _refuses(lambda: _invoke(body.vjp_while, a, condition=condition,
+                                    max_iterations=1, seeds=seed),
+                     "state outputs must hold floating-point values", ValueError)
+            _equal(_invoke(good.run, a), a)
+
+        # A wrapped body that is never executed must not taint initial state.
+        unexecuted = s.capture(x, s.copy(integer))
+        zero = _invoke(unexecuted.while_loop, a, condition=condition, max_iterations=0)
+        _equal(zero["outputs"], a)
+        assert zero["iterations"] == 0
+        zero_vjp = _invoke(unexecuted.vjp_while, a, condition=condition, max_iterations=0,
+                           seeds=np.ones_like(a))
+        _equal(zero_vjp["input_gradients"][0], np.ones_like(a))
+
+        floating = s.capture(x, s.argmax(x, axis=1, keepdims=True))
+        result = _invoke(floating.while_loop, a, condition=condition, max_iterations=1)
+        differentiated = _invoke(floating.vjp_while, a, condition=condition, max_iterations=1,
+                                 seeds=np.ones((1, 1), np.float32))
+        _equal(result["outputs"], np.ones((1, 1), np.float32))
+        _equal(differentiated["outputs"], result["outputs"])
+        _equal(differentiated["input_gradients"][0], np.zeros_like(a))
+        outputs.extend((result["outputs"], differentiated["input_gradients"][0]))
+
+        # Kind propagation preserves supported integer value paths: eager
+        # argmax -> reshape/copy -> embedding, and integer captured inputs.
+        table_values = np.arange(8, dtype=np.float32).reshape(4, 2)
+        table = s.tensor(table_values)
+        copied = s.copy(s.reshape(integer, (1, 1)))
+        embedded = s.embedding(table, copied)
+        eager = _invoke(s.numpy, embedded)
+        _equal(eager, table_values[[1]])
+        p = s.capture(copied, embedded)
+        assert p.input_kinds == (1,)
+        values = np.array([[2]], np.int32)
+        replay = _invoke(p.run, values)
+        _equal(replay, table_values[[2]])
+        _refuses(lambda: _invoke(p.run, values.astype(np.float32)), "integer", TypeError)
+        outputs.extend((eager, replay))
+        path, control_path = Path(d) / "integer-input.mjl", Path(d) / "integer-state.mjl"
+        _invoke(p.save, path)
+        invalid_state = s.capture(x, ids)
+        _invoke(invalid_state.save_control, control_path, condition=condition, max_iterations=1)
+        with ops.Session() as restored:
+            loaded = _invoke(restored.load_program, path)
+            assert loaded.input_kinds == (1,)
+            replay = _invoke(loaded.run, values)
+            _equal(replay, table_values[[2]])
+            outputs.append(replay)
+            control = _invoke(restored.load_control, control_path)
+            _refuses(lambda: _invoke(control["body"].while_loop, a,
+                                    condition=control["condition"], max_iterations=1),
+                     "state outputs must hold floating-point values", ValueError)
+    return outputs
+
+
+def node_diagnostics_and_profile():
+    import numpy as np
+    from . import ops
+    a = np.ones((2, 3), np.float32)
+    with ops.Session() as s:
+        x = s.tensor(a)
+        w = s.tensor(np.ones((3, 2), np.float32))
+        p = s.capture(x, s.relu(s.matmul(x, w)))
+        report = _invoke(p.profile, a)
+        out, profile = report["outputs"], report["profile"]
+        _equal(out, a @ np.ones((3, 2), np.float32))
+        assert profile["executed_nodes"] == len(profile["nodes"]) == 2
+        assert profile["input_logical_bytes"] == a.nbytes
+        assert profile["output_bytes"] == out.nbytes
+        assert profile["parameter_bytes"] == 24
+        assert profile["node_sync_count"] == 4
+        assert profile["peak_tape_reserved_bytes"] >= out.nbytes
+        executor = profile["executor"]
+        assert executor["complete"] and executor["operations"]
+        assert executor["sync_calls"] >= profile["node_sync_count"] + 1
+        assert executor["retired_bytes"] == executor["staging_bytes"] == 0
+        assert executor["peak_retained_bytes"] >= executor["retained_bytes"]
+        _invoke(s.execution_profile_begin)
+        _refuses(lambda: _invoke(p.profile, a), "already active", ValueError)
+        _invoke(s.execution_profile_end)
+        _refuses(lambda: _invoke(p.profile, np.ones((2, 5), np.float32), dynamic_shapes=True),
+                 "program node 0 (matmul)")
+        _equal(_invoke(p.profile, a)["outputs"], out)
+        for row in profile["nodes"]:
+            assert row["enqueue_ns"] >= 0 and row["wait_ns"] >= 0
+        _refuses(lambda: _invoke(p.run, np.ones((2, 5), np.float32), dynamic_shapes=True),
+                 "program node 0 (matmul) inputs=[(2, 5), (3, 2)]")
+        _equal(_invoke(p.run, a), out)
+        return [out]
+
+
+def gradient_diagnostics():
+    import numpy as np
+    from . import ops
+    a = np.array([[0, -2], [3, -4]], np.float32)
+    with ops.Session(record=True) as s:
+        x = s.tensor(a, requires_grad=True)
+        unrelated = s.tensor([[7]], requires_grad=True)
+        constant = s.tensor([[5]])
+        square = s.mul(x, x)
+        loss = s.sum(square)
+        before = _invoke(s.gradient_report, [x, square, constant], values=False)
+        assert all(row["value"] is None and not row["available"] for row in before)
+        assert before[0]["requires_grad"] and before[1]["parents"]
+        assert not before[2]["requires_grad"]
+        _invoke(s.backward, loss)
+        expected = _invoke(s.grad, x)
+        rows = _invoke(s.gradient_report, [x, square, unrelated, constant])
+        assert rows[0]["shape"] == (2, 2) and rows[0]["available"]
+        assert rows[0]["gradient"] == {"has_nan": False, "has_infinity": False,
+                                       "has_zero": True, "all_zero": False, "squared_l2_float32": 116.0}
+        assert rows[0]["value"]["squared_l2_float32"] == 29.0
+        assert rows[1]["gradient"]["squared_l2_float32"] == 4.0
+        assert rows[2]["gradient"]["all_zero"] and rows[2]["gradient"]["squared_l2_float32"] == 0.0
+        assert not rows[3]["available"] and "does not require" in rows[3]["reason"]
+        after = _invoke(s.grad, x)
+        _equal(after, expected)
+        _invoke(s.backward, loss, accumulate=True)
+        twice = _invoke(s.grad, x)
+        _equal(twice, expected * np.float32(2))
+        poisoned = s.tensor(np.array([[np.nan, np.inf, -np.inf, 0]], np.float32), requires_grad=True)
+        poison_loss = s.sum(s.mul(poisoned, poisoned))
+        _invoke(s.backward, poison_loss)
+        poison = _invoke(s.gradient_report, poisoned)[0]
+        assert poison["gradient"]["has_nan"] and poison["gradient"]["has_infinity"]
+        assert poison["gradient"]["has_zero"] and not poison["gradient"]["all_zero"]
+        assert poison["value"]["has_nan"] and poison["value"]["has_infinity"]
+        flags = np.array([[poison["gradient"]["has_nan"], poison["gradient"]["has_infinity"],
+                           poison["gradient"]["has_zero"], poison["gradient"]["all_zero"]]], np.float32)
+        s.free(constant)
+        _refuses(lambda: _invoke(s.gradient_report, [x, constant]), "not a live", ValueError)
+        assert _invoke(s.gradient_report, x, values=False)[0]["available"]
+    return [expected, after, twice, flags]
+
+
+def control_checkpoint():
+    import struct
+    import numpy as np
+    from . import ops
+    outputs = []
+    seed = np.array([[0.5]], np.float32)
+    with tempfile.TemporaryDirectory(prefix="mojolearn-control-checkpoint-") as d, ops.Session() as s:
+        root = Path(d)
+        x, w = s.tensor([[1.25]]), s.tensor([[2.0]])
+        condition = s.capture(x, s.less(x, w))
+        body = s.capture(x, s.mul(x, w))
+        other = s.capture(x, s.add(x, w))
+        branch_file, loop_file = root / "conditional.mjl", root / "loop.mjl"
+        _invoke(body.save_control, branch_file, condition=condition, otherwise=other)
+        _invoke(body.save_control, loop_file, condition=condition, max_iterations=3)
+        assert sorted(path.name for path in root.iterdir()) == ["conditional.mjl", "loop.mjl"]
+        _refuses(lambda: _invoke(body.save_control, root / "bad.mjl", condition=condition,
+                                otherwise=other, max_iterations=2), "does not take", ValueError)
+        _refuses(lambda: _invoke(body.save_control, root / "bad.mjl", condition=condition,
+                                max_iterations=-1), "must be >=", ValueError)
+        with ops.Session() as restored:
+            branch = _invoke(restored.load_control, branch_file)
+            loop = _invoke(restored.load_control, loop_file)
+            rb, rc, ro = branch["body"], branch["condition"], branch["otherwise"]
+            rw, = rb.params
+            assert rc.params == ro.params == (rw,), "shared parameters must restore to one handle"
+            assert branch["kind"] == "if" and branch["max_iterations"] is None
+            assert loop["kind"] == "while" and loop["max_iterations"] == 3 and loop["otherwise"] is None
+            assert loop["body"].params == loop["condition"].params
+            result = _invoke(rb.vjp_if, rc, ro, [[1.25]], seeds=seed, parameters=[rw])
+            _equal(result["outputs"], np.array([[2.5]], np.float32))
+            _equal(result["input_gradients"][0], np.array([[1]], np.float32))
+            _equal(result["parameter_gradients"][rw], np.array([[0.625]], np.float32))
+            outputs.extend((result["outputs"], result["input_gradients"][0], result["parameter_gradients"][rw]))
+            lw, = loop["body"].params
+            result = _invoke(loop["body"].vjp_while, [[1.25]], condition=loop["condition"],
+                             max_iterations=loop["max_iterations"], seeds=seed, parameters=[lw])
+            assert result["iterations"] == 1 and result["stopped"]
+            outputs.extend((result["outputs"], result["input_gradients"][0], result["parameter_gradients"][lw]))
+            for a, b in zip(outputs[:3], outputs[3:]):
+                _equal(a, b)
+            _invoke(restored.load_weights, {"w": np.array([[4]], np.float32)}, [(rw, "w")])
+            selected = _invoke(rb.run_if, rc, ro, [[3]])
+            _equal(selected, np.array([[12]], np.float32))
+            _invoke(restored.load_weights, {"w": np.array([[1]], np.float32)}, [(rw, "w")])
+            alternate = _invoke(rb.run_if, rc, ro, [[3]])
+            _equal(alternate, np.array([[4]], np.float32))
+            outputs.extend((selected, alternate))
+            # Deliberately damage the control record while retaining a valid
+            # outer container hash: these exercise semantic parser refusals.
+            original = branch_file.read_bytes()
+            extension = sum(struct.unpack_from("<4I", original, 12))
+            ni, _ = struct.unpack_from("<2I", original, extension)
+            ints = list(struct.unpack_from("<" + "q" * ni, original, extension + 8))
+            cursor = 4
+            for _ in range(ints[3]):
+                cursor += ints[cursor] + 2  # rank, dimensions, dtype kind
+            first_reference = cursor + 3  # component lengths precede refs
+            for tag, index, bad_value, reason in (("kind", 1, 7, "invalid kind"),
+                                                  ("reference", first_reference, ints[3], "out of range")):
+                raw = bytearray(original)
+                struct.pack_into("<q", raw, extension + 8 + index * 8, bad_value)
+                digest = 0xCBF29CE484222325
+                for byte in raw[:-8]:
+                    digest = ((digest ^ byte) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+                struct.pack_into("<Q", raw, len(raw) - 8, digest)
+                damaged = root / (tag + ".mjl")
+                damaged.write_bytes(raw)
+                _refuses(lambda: _invoke(restored.load_control, damaged), reason, ValueError)
+            truncated = root / "truncated.mjl"
+            truncated.write_bytes(original[:-9])
+            _refuses(lambda: _invoke(restored.load_control, truncated), "CKPT_")
+            _equal(_invoke(rb.run_if, rc, ro, [[3]]), alternate)
+        empty = s.capture(x, x)
+        _invoke(empty.save_control, root / "empty.mjl", condition=empty, max_iterations=0)
+        with ops.Session() as restored:
+            bundle = _invoke(restored.load_control, root / "empty.mjl")
+            assert bundle["body"].params == bundle["condition"].params == ()
+            value = _invoke(bundle["body"].while_loop, [[1]], condition=bundle["condition"],
+                            max_iterations=bundle["max_iterations"])["outputs"]
+            _equal(value, np.array([[1]], np.float32))
+            outputs.append(value)
+        _invoke(body.save, root / "ordinary.mjl")
+        _refuses(lambda: _invoke(s.load_control, root / "ordinary.mjl"), "not a control-flow", ValueError)
+    return outputs
+
+
+def executor_accounting():
+    import numpy as np
+    from . import ops
+    a = np.array([[1, -2], [3, -4]], np.float32)
+    with ops.Session(record=True) as s:
+        _refuses(lambda: _invoke(s.execution_profile_end), "no execution profile", ValueError)
+        _invoke(s.execution_profile_begin)
+        _refuses(lambda: _invoke(s.execution_profile_begin), "already active", ValueError)
+        x = _invoke(s.tensor, a, requires_grad=True)
+        y = _invoke(s.sum, _invoke(s.mul, x, x))
+        _invoke(s.backward, y)
+        gradient = _invoke(s.grad, x)
+        value = _invoke(s.numpy, y)
+        _equal(gradient, a * np.float32(2))
+        _equal(value, np.array([[30]], np.float32))
+        _invoke(s.free, x)
+        _invoke(s.reset)  # Session retirement returns owned storage at this boundary.
+        report = _invoke(s.execution_profile_end)
+        assert report["format"] == "mojolearn-execution-profile/1" and report["complete"]
+        assert report["allocations"] > 0 and report["allocated_bytes"] >= a.nbytes
+        assert report["freed_bytes"] >= a.nbytes and report["frees"] >= 1
+        assert report["retained_bytes"] == report["live_bytes"]
+        assert report["peak_retained_bytes"] >= report["retained_bytes"]
+        assert report["retired_bytes"] == report["staging_bytes"] == 0
+        assert report["sync_calls"] > 0 and report["sync_ns"] >= 0
+        assert report["operations"] and all(row["calls"] > 0 for row in report["operations"])
+        assert all(row["host_call_ns"] >= 0 for row in report["operations"])
+        assert report["upload_host_ns"] >= 0 and report["download_host_ns"] >= 0
+        if report["device"]:
+            assert report["kernel_enqueues"] > 0
+            assert report["upload_bytes"] >= a.nbytes
+            assert report["download_bytes"] >= value.nbytes + gradient.nbytes
+            assert report["peak_staging_bytes"] > 0
+        else:
+            assert report["kernel_enqueues"] == report["upload_bytes"] == report["download_bytes"] == 0
+            assert report["host_copy_bytes"] >= a.nbytes + value.nbytes + gradient.nbytes
+        _refuses(lambda: _invoke(s.execution_profile_end), "no execution profile", ValueError)
+        _invoke(s.execution_profile_begin)
+        _refuses(lambda: _invoke(s.numpy, x), "not a live", ValueError)
+        empty = _invoke(s.execution_profile_end)
+        assert empty["allocations"] == empty["frees"] == 0 and empty["operations"] == []
+        assert empty["retained_bytes"] == report["retained_bytes"]
+    return [value, gradient]
+
+
+def saved_component_roundtrip():
+    import numpy as np
+    from . import ops
+    a = np.array([[0]], np.float32)
+    with tempfile.TemporaryDirectory(prefix="mojolearn-graph-") as d:
+        with ops.Session() as s:
+            x = s.tensor(a)
+            condition = s.capture(x, s.less(x, s.full((1, 1), 3)))
+            body = s.capture(x, s.add(x, s.full((1, 1), 1)))
+            _invoke(condition.save, Path(d) / "condition.mjl")
+            _invoke(body.save, Path(d) / "body.mjl")
+            for name in ("condition", "body"):
+                path = Path(d) / (name + ".mjl")
+                report = json.loads(Path(str(path) + ".verify.json").read_text())
+                assert report["format"] == "mojolearn-model-verify/1"
+                assert report["model"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+                assert report["model"]["bytes"] == path.stat().st_size
+                assert report["inputs"][0]["shape"] == [1, 1]
+                assert report["outputs"][0]["shape"] == [1, 1]
+                from ._verify_model import verify, compare
+                assert compare(verify(str(path), expect=report), report)[0] == "MATCH"
+        with ops.Session() as s:
+            condition = _invoke(s.load_program, Path(d) / "condition.mjl")
+            body = _invoke(s.load_program, Path(d) / "body.mjl")
+            out = _invoke(body.while_loop, a, condition=condition, max_iterations=4)
+            assert out["iterations"] == 3 and out["stopped"] is True
+            _equal(out["outputs"], np.array([[3]], np.float32))
+            return [out["outputs"]]
+
+
+def native_session_boundary():
+    import numpy as np
+    import operator
+    from . import ops
+    a = np.arange(6, dtype=np.float32).reshape(2, 3)
+    _refuses(lambda: _invoke(ops.Session, numeric_mode="invalid"), "numeric_mode", ValueError)
+    held = [_invoke(ops.Session)]
+    import weakref
+    released_session = weakref.ref(held[0])
+    released_sid = held[0]._id
+    released_tensor = held[0].tensor([[1.0]])
+    native_shape = held[0]._b.ops_shape
+    _invoke(operator.delitem, held, 0)
+    assert released_session() is None, "native setup must not retain a Session reference"
+    _refuses(lambda: _invoke(native_shape, released_sid, released_tensor), "session")
+    with tempfile.TemporaryDirectory(prefix="mojolearn-session-lifetime-") as d:
+        with ops.Session() as source:
+            x = source.tensor([[2.0]])
+            program = source.capture(x, source.scale(x, 3))
+            program.save(Path(d) / "program.mjl")
+        loaded_session = _invoke(ops.Session)
+        loaded = _invoke(loaded_session.load_program, Path(d) / "program.mjl")
+        owner_ref, program_ref = weakref.ref(loaded_session), weakref.ref(loaded)
+        loaded_sid = loaded_session._id
+        loaded_tensor = loaded_session.tensor([[1]])
+        native_loaded_shape = loaded_session._b.ops_shape
+        del loaded_session
+        assert owner_ref() is not None, "a live Program must retain its owning Session"
+        _equal(_invoke(loaded.run, [[2]]), np.array([[6]], np.float32))
+        programs = [loaded]
+        del loaded
+        _invoke(operator.delitem, programs, 0)
+        assert program_ref() is None and owner_ref() is None, "native load must not leak Program or Session references"
+        _refuses(lambda: _invoke(native_loaded_shape, loaded_sid, loaded_tensor), "session")
+    with _invoke(ops.Session, numeric_mode=" IDENTICAL ") as s:
+        assert _invoke(s.__enter__) is s
+        x = _invoke(s.tensor, a.tolist())
+        y = _invoke(s.scale, x, 2.0)
+        pieces = _invoke(s.split, y, [1, 2], axis=1)
+        joined = _invoke(s.concat, pieces, axis=1)
+        out = _invoke(s.numpy, joined)
+        _equal(out, a * np.float32(2))
+        assert _invoke(s.shape, joined) == (2, 3)
+        p = _invoke(s.capture, x, joined)
+        _equal(_invoke(p.run, a), out)
+        _refuses(lambda: _invoke(s.reshape, x, (True, 3)), "integer", TypeError)
+        _refuses(lambda: _invoke(s.ids, a), "integer", TypeError)
+        _refuses(lambda: _invoke(s.tensor, np.zeros((1,) * 9, np.float32)), "rank", ValueError)
+        _refuses(lambda: _invoke(s.tensor, np.zeros((2, 3, 4), np.float32).transpose(2, 1, 0)), "C-contiguous", ValueError)
+        table = _invoke(s.tensor, a)
+        ids = np.array([1, 0], np.int64)
+        _equal(_invoke(s.numpy, _invoke(s.embedding, table, ids)), a[ids])
+        _equal(_invoke(s.numpy, _invoke(s.take, table, ids, axis=0)), a[ids])
+        _refuses(lambda: _invoke(s.gelu, x, approximate="bad"), "approximate", ValueError)
+    with _invoke(ops.Session, record=True) as s:
+        x = _invoke(s.tensor, [[2.0]], requires_grad=True)
+        loss = _invoke(s.mul, x, x)
+        _invoke(s.backward, loss, create_graph=True)
+        first = _invoke(s.grad, x)
+        _equal(first, np.array([[4]], np.float32))
+        gradient = _invoke(s.grad_tensor, x)
+        _invoke(s.backward, gradient)
+        second = _invoke(s.grad, x)
+        _equal(second, np.array([[2]], np.float32))
+        opt = _invoke(s.optimizer, "sgd", lr=0.25)
+        _refuses(lambda: _invoke(s.step, opt + 1, x), "optimizer", ValueError)
+        _invoke(s.step, opt, x)
+        _equal(_invoke(s.numpy, x), np.array([[1.5]], np.float32))
+        state = _invoke(s.optimizer_state, opt, x)
+        assert state["step"] == 1
+        _invoke(s.load_optimizer_state, opt, x, state)
+        _invoke(s.zero_grad)
+        _invoke(s.reset)
+        _invoke(s.free, x)
+        assert _invoke(s.__exit__, None, None, None) is False
+        _invoke(s.close)
+    return [out, first, second]
+
+
+def native_checkpoint_boundary():
+    import numpy as np
+    from . import ops
+    with tempfile.TemporaryDirectory(prefix="mojolearn-state-") as d:
+        path = Path(d) / "state.ckpt"
+        with ops.Session(record=True) as s:
+            x = s.tensor([[2.0]], requires_grad=True)
+            opt = s.optimizer("sgd", lr=0.25, momentum=0.5)
+            s.backward(s.mul(x, x))
+            s.step(opt, x)
+            saved = s.numpy(x)
+            _equal(saved, np.array([[1]], np.float32))
+            _refuses(lambda: _invoke(s.save_state, path, [x], seed=-1), "seed must be in", ValueError)
+            _refuses(lambda: _invoke(s.save_state, path, [x], seed=2**64), "seed must be in", ValueError)
+            _refuses(lambda: _invoke(s.save_state, path, [x], seed=True), "seed must be an integer", TypeError)
+            _invoke(s.save_state, path, [x], optimizer=opt, seed=2**63 + 1, epoch=3, step=1)
+            s.reset()
+            s.backward(s.mul(x, x))
+            s.step(opt, x)
+            expected = s.numpy(x)
+        with ops.Session(record=True) as s:
+            opt = s.optimizer("sgd", lr=0.25, momentum=0.5)
+            state = _invoke(s.load_state, path, optimizer=opt)
+            assert state["seed"] == 2**63 + 1 and state["epoch"] == 3 and state["step"] == 1
+            x, = state["params"]
+            _equal(s.numpy(x), saved)
+            s.backward(s.mul(x, x))
+            s.step(opt, x)
+            restored = s.numpy(x)
+            _equal(restored, expected)
+            _equal(restored, np.array([[0]], np.float32))
+    return [saved, restored]
+
+
+def native_weight_boundary():
+    import numpy as np
+    import struct
+    from . import ops
+    weights = np.arange(6, dtype=np.float16).reshape(3, 2)
+    bias = np.array([0.5, -0.5], np.float64)
+    with ops.Session() as s:
+        w = s.tensor(np.zeros((2, 3), np.float32))
+        b = s.tensor(np.zeros((1, 2), np.float32))
+        mapping = {"weight": weights, "bias": bias}
+        assert _invoke(s.load_weights, mapping, [(w, "weight", "transpose"), (b, "bias")]) == [w, b]
+        first, second = s.numpy(w), s.numpy(b)
+        _equal(first, weights.T.astype(np.float32))
+        _equal(second, bias.astype(np.float32).reshape(1, 2))
+        bad = {"weight": weights + np.float16(10), "bias": np.zeros(7, np.float32)}
+        _refuses(lambda: _invoke(s.load_weights, bad, [(w, "weight", "transpose"), (b, "bias")]), "shape")
+        _equal(s.numpy(w), first)
+        _refuses(lambda: _invoke(s.load_weights, mapping, [(w, "missing")]), "no tensor", ValueError)
+        with tempfile.TemporaryDirectory(prefix="mojolearn-weights-") as d:
+            root = Path(d)
+            _refuses(lambda: _invoke(s.load_weights, root / "missing.safetensors", [(w, "weight")]),
+                     "does not exist", FileNotFoundError)
+            _refuses(lambda: _invoke(s.load_weights, root, [(w, "weight")]),
+                     "checkpoint directory", FileNotFoundError)
+            for filename, name, array, dtype in (("a.safetensors", "weight", weights, "F16"),
+                                                   ("b.safetensors", "bias", bias, "F64")):
+                header = json.dumps({name: {"dtype": dtype, "shape": list(array.shape),
+                                           "data_offsets": [0, array.nbytes]}}).encode()
+                (root / filename).write_bytes(struct.pack("<Q", len(header)) + header + array.tobytes())
+            (root / "model.safetensors.index.json").write_text(json.dumps({"weight_map": {
+                "weight": "a.safetensors", "bias": "b.safetensors"}}))
+            _invoke(s.load_weights, root, [(w, "weight", "transpose"), (b, "bias")])
+            third, fourth = s.numpy(w), s.numpy(b)
+            _equal(third, first)
+            _equal(fourth, second)
+    return [first, second, third, fourth]
+
+
+def _composition_oracle(oracle, values, seed):
+    """Testing-only float64 central differences; no native gradients are reused."""
+    import numpy as np
+    args = [np.asarray(value, dtype=np.float64).copy() for value in values]
+    direction = np.asarray(seed, dtype=np.float64)
+    expected = np.asarray(oracle(*args), dtype=np.float64)
+    assert expected.shape == direction.shape
+    gradients = []
+    delta = 1e-5
+    for argument in args:
+        derivative = np.empty_like(argument)
+        for index in np.ndindex(argument.shape):
+            original = argument[index]
+            argument[index] = original + delta
+            high = np.sum(oracle(*args) * direction, dtype=np.float64)
+            argument[index] = original - delta
+            low = np.sum(oracle(*args) * direction, dtype=np.float64)
+            argument[index] = original
+            derivative[index] = (high - low) / (2 * delta)
+        gradients.append(derivative)
+    return expected, gradients
+
+
+def _composition_gradient(actual, expected):
+    import numpy as np
+    # The oracle differentiates a double-precision mathematical composition;
+    # native execution uses FP32 elementary functions and reductions. Inputs
+    # avoid kinks, predicate boundaries and nearly singular normalizations.
+    assert np.shape(actual) == np.shape(expected), (np.shape(actual), np.shape(expected))
+    np.testing.assert_allclose(actual, expected, rtol=2e-4, atol=3e-6)
+
+
+def _composition_negative_control(expected):
+    import numpy as np
+    # A lost shared-parameter contribution must not fit the oracle tolerance.
+    try:
+        _composition_gradient(np.asarray(expected) * 0.5, expected)
+    except AssertionError:
+        return
+    raise AssertionError("composition oracle admitted a deliberately halved gradient")
+
+
+def higher_rank_derivatives():
+    import numpy as np
+    from . import ops
+    value = np.arange(12, dtype=np.float32).reshape(2, 3, 2) / np.float32(16)
+    direction = np.arange(1, 13, dtype=np.float32).reshape(2, 3, 2) / np.float32(8)
+    first = np.exp(value.astype(np.float64))
+    second = first * direction
+    _composition_negative_control(second)
+    with ops.Session(record=True) as s:
+        x = _invoke(s.tensor, value, requires_grad=True)
+        alias = _invoke(s.reshape, x, (6, 2))
+        loss = _invoke(s.sum, _invoke(s.exp, alias))
+        _invoke(s.backward, loss, create_graph=True)
+        gx, ga = _invoke(s.grad_tensor, x), _invoke(s.grad_tensor, alias)
+        dx, da = _invoke(s.numpy, gx), _invoke(s.numpy, ga)
+        _composition_gradient(dx, first)
+        _composition_gradient(da, first.reshape(6, 2))
+        assert _invoke(s.shape, x) == value.shape
+        assert _invoke(s.shape, alias) == (6, 2)
+        v = _invoke(s.tensor, direction)
+        _invoke(s.backward, _invoke(s.sum, _invoke(s.mul, gx, v)))
+        twice = _invoke(s.grad, x)
+        _composition_gradient(twice, second)
+        hv, = _invoke(s.hvp, loss, [x], [v])
+        hessian = _invoke(s.numpy, hv)
+        _composition_gradient(hessian, second)
+        output = _invoke(s.reshape, _invoke(s.exp, x), (2, 1, 3, 2))
+        ju = _invoke(s.jvp, output, [x], [v])
+        forward = _invoke(s.numpy, ju)
+        _composition_gradient(forward, second.reshape(2, 1, 3, 2))
+        wrong = _invoke(s.tensor, direction.reshape(6, 2))
+        _refuses(lambda: _invoke(s.hvp, loss, [x], [wrong]), "full shape", ValueError)
+        _refuses(lambda: _invoke(s.jvp, output, [x], [wrong]), "full shape", ValueError)
+        linear = _invoke(s.sum, _invoke(s.scale, x, 2))
+        hz, = _invoke(s.hvp, linear, [x], [v])
+        zero = _invoke(s.numpy, hz)
+        _composition_gradient(zero, np.zeros(value.shape))
+        unused = _invoke(s.tensor, np.ones((2, 1, 3, 2), np.float32), requires_grad=True)
+        u = _invoke(s.tensor, np.ones((2, 1, 3, 2), np.float32))
+        _, hu = _invoke(s.hvp, loss, [x, unused], [v, u])
+        unconnected = _invoke(s.numpy, hu)
+        _composition_gradient(unconnected, np.zeros((2, 1, 3, 2)))
+    return [dx, da, twice, hessian, forward, zero, unconnected]
+
+
+def attention_shared_projection_vjp():
+    import numpy as np
+    from . import ops
+    a = np.array([[[0.25, -0.5], [0.75, 0.125], [-0.25, 0.5]],
+                  [[-0.375, 0.25], [0.5, -0.125], [0.125, 0.625]]], np.float32)
+    weight = np.array([[0.5, -0.25], [0.375, 0.625]], np.float32)
+    bias = np.array([[[0.125, -0.0625]]], np.float32)
+    seed = np.arange(1, 13, dtype=np.float32).reshape(3, 4) / np.float32(16)
+
+    def oracle(x, w, b):
+        q = x @ w
+        logits = (q @ np.swapaxes(q, -1, -2)) * 0.5
+        probability = np.exp(logits - logits.max(axis=-1, keepdims=True))
+        probability /= probability.sum(axis=-1, keepdims=True)
+        return np.transpose(probability @ q + q + b, (1, 0, 2)).reshape(3, 4)
+
+    expected, gradients = _composition_oracle(oracle, [a, weight, bias], seed)
+    _composition_negative_control(gradients[1])
+
+    def compose(s, x, w, b):
+        projected = _invoke(s.matmul, x, w)
+        keys = _invoke(s.transpose, projected)
+        scores = _invoke(s.matmul, projected, keys)
+        attention = _invoke(s.softmax, _invoke(s.scale, scores, 0.5))
+        value = _invoke(s.matmul, attention, projected)
+        residual = _invoke(s.add, _invoke(s.add, value, projected), b)
+        return _invoke(s.reshape, _invoke(s.permute, residual, (1, 0, 2)), (3, 4))
+
+    with ops.Session(record=True) as s:
+        x = _invoke(s.tensor, a, requires_grad=True)
+        w = _invoke(s.tensor, weight, requires_grad=True)
+        b = _invoke(s.tensor, bias, requires_grad=True)
+        result = compose(s, x, w, b)
+        value = _invoke(s.numpy, result)
+        np.testing.assert_allclose(value, expected, rtol=2e-5, atol=2e-6)
+        wrong_rank = _invoke(s.tensor, seed.reshape(1, 3, 4))
+        _refuses(lambda: _invoke(s.vjp, result, [x, w, b], wrong_rank), "full shape", ValueError)
+        seed_handle = _invoke(s.tensor, seed)
+        handles = _invoke(s.vjp, result, [x, w, b], seed_handle)
+        actual = [_invoke(s.numpy, handle) for handle in handles]
+        for found, wanted in zip(actual, gradients, strict=True):
+            _composition_gradient(found, wanted)
+        outputs = [value, *actual]
+
+    with ops.Session() as s:
+        x, w, b = (_invoke(s.tensor, value) for value in (a, weight, bias))
+        result = compose(s, x, w, b)
+        body = _invoke(s.capture, x, result)
+        condition = _invoke(s.capture, x, _invoke(s.full, (1, 1), 1.0))
+        differentiated = _invoke(body.vjp_if, condition, body, a, seeds=seed, parameters=[w, b])
+        replay = [differentiated["outputs"], differentiated["input_gradients"][0],
+                  differentiated["parameter_gradients"][w], differentiated["parameter_gradients"][b]]
+        for eager, captured in zip(outputs, replay, strict=True):
+            _equal(eager, captured)
+        outputs.extend(replay)
+    return outputs
+
+
+def conditional_tied_normalization_checkpoint():
+    import numpy as np
+    from . import ops
+    a = np.array([[0.8, -0.3, 0.4], [0.1, 0.7, -0.2]], np.float32)
+    weight = np.array([[0.3, -0.2, 0.4, 0.1], [-0.1, 0.5, 0.2, -0.4],
+                       [0.2, 0.3, -0.3, 0.6]], np.float32)
+    gamma = np.array([[1.1, 0.8, 1.2, 0.9]], np.float32)
+    beta = np.array([[0.05, -0.1, 0.15, -0.05]], np.float32)
+    seed = np.array([[0.5, -0.25], [0.125, 0.75], [-0.375, 0.25]], np.float32)
+    epsilon = 1 / 1024
+
+    def oracle(x, w, g, b):
+        hidden = x @ w
+        if x.sum() > 0:
+            centered = hidden - hidden.mean(axis=-1, keepdims=True)
+            hidden = np.tanh(centered / np.sqrt(np.mean(centered * centered, axis=-1, keepdims=True)
+                                                + epsilon) * g + b)
+        return (hidden @ w.T + x).T
+
+    outputs = []
+    with tempfile.TemporaryDirectory(prefix="mojolearn-composition-") as directory, ops.Session() as s:
+        x, w, g, b = (_invoke(s.tensor, value) for value in (a, weight, gamma, beta))
+        projected = _invoke(s.matmul, x, w)
+        normalized = _invoke(s.layer_norm, projected, g, b, eps=epsilon)
+        decoded = _invoke(s.matmul, _invoke(s.tanh, normalized), _invoke(s.transpose, w))
+        body = _invoke(s.capture, x, _invoke(s.transpose, _invoke(s.add, decoded, x)))
+        other_value = _invoke(s.matmul, projected, _invoke(s.transpose, w))
+        other = _invoke(s.capture, x, _invoke(s.transpose, _invoke(s.add, other_value, x)))
+        condition = _invoke(s.capture, x, _invoke(s.greater, _invoke(s.sum, x), _invoke(s.full, (1, 1), 0.0)))
+        assert set(body.params).intersection(other.params) == {w}
+        for data in (a, -a):
+            expected, gradients = _composition_oracle(oracle, [data, weight, gamma, beta], seed)
+            _composition_negative_control(gradients[1])
+            differentiated = _invoke(body.vjp_if, condition, other, data, seeds=seed, parameters=[w, g, b])
+            actual = [differentiated["input_gradients"][0],
+                      *(differentiated["parameter_gradients"][handle] for handle in (w, g, b))]
+            np.testing.assert_allclose(differentiated["outputs"], expected, rtol=2e-5, atol=2e-6)
+            for found, wanted in zip(actual, gradients, strict=True):
+                _composition_gradient(found, wanted)
+            if data.sum() < 0:
+                _equal(actual[2], np.zeros_like(gamma))
+                _equal(actual[3], np.zeros_like(beta))
+            outputs.extend((differentiated["outputs"], *actual))
+        path = Path(directory) / "tied-normalization.mjl"
+        _invoke(body.save_control, path, condition=condition, otherwise=other)
+        with ops.Session() as restored:
+            bundle = _invoke(restored.load_control, path)
+            rb, rc, ro = bundle["body"], bundle["condition"], bundle["otherwise"]
+            mapping = dict(zip(body.params, rb.params, strict=True))
+            rw, rg, rbeta = (mapping[handle] for handle in (w, g, b))
+            assert set(rb.params).intersection(ro.params) == {rw}
+            for index, data in enumerate((a, -a)):
+                report = _invoke(rb.vjp_if, rc, ro, data, seeds=seed, parameters=[rw, rg, rbeta])
+                replay = [report["outputs"], report["input_gradients"][0],
+                          *(report["parameter_gradients"][handle] for handle in (rw, rg, rbeta))]
+                for before, after in zip(outputs[index * 5:(index + 1) * 5], replay, strict=True):
+                    _equal(before, after)
+                outputs.extend(replay)
+    return outputs
+
+
+def _digest(a):
+    import numpy as np
+    x = np.ascontiguousarray(a)
+    return {"shape": list(x.shape), "dtype": x.dtype.str,
+            "sha256": hashlib.sha256(x.tobytes()).hexdigest()}
+
+
+def compare_reports(actual, expected):
+    errors = []
+    for label, report in (("actual", actual), ("expected", expected)):
+        if report.get("format") != FORMAT or report.get("expected_cases") != list(EXPECTED_CASES):
+            errors.append(label + ": schema or coverage differs")
+        if report.get("backend", {}).get("numeric_mode") != 1:
+            errors.append(label + ": native identical mode is unproven")
+        rows = report.get("cases", {})
+        if set(rows) != set(EXPECTED_CASES):
+            errors.append(label + ": missing or unexpected cases")
+        for name in EXPECTED_CASES:
+            row = rows.get(name, {})
+            if row.get("status") != "passed" or len(row.get("outputs", [])) != OUTPUT_COUNTS[name]:
+                errors.append(label + ": incomplete " + name)
+            for output in row.get("outputs", []):
+                if (not re.fullmatch(r"[0-9a-f]{64}", str(output.get("sha256", "")))
+                        or output.get("dtype") != "<f4"
+                        or not isinstance(output.get("shape"), list)
+                        or not output["shape"]
+                        or not all(isinstance(d, int) and d > 0 for d in output["shape"])):
+                    errors.append(label + ": malformed output evidence " + name)
+            audits = row.get("native_calls", [])
+            if not audits or any(a.get("python_frames") or a.get("forbidden_native_calls")
+                                 or a.get("wrapper_work") or a.get("unobserved_existing_threads")
+                                 or not (a.get("passed") or a.get("expected_refusal")) for a in audits):
+                errors.append(label + ": native execution unproven " + name)
+    if errors:
+        return errors
+    for name in EXPECTED_CASES:
+        if actual["cases"][name]["outputs"] != expected["cases"][name]["outputs"]:
+            errors.append("output words differ: " + name)
+    return errors
+
+
+def comparator_self_test(report):
+    assert not compare_reports(report, report)
+    corrupt = copy.deepcopy(report)
+    first = EXPECTED_CASES[0]
+    corrupt["cases"][first]["outputs"][0]["sha256"] = "0" * 64
+    assert compare_reports(report, corrupt), "one changed digest must fail"
+    missing = copy.deepcopy(report)
+    del missing["cases"][first]
+    assert compare_reports(report, missing), "missing evidence must fail"
+    failed = copy.deepcopy(report)
+    failed["cases"][first]["status"] = "failed"
+    assert compare_reports(report, failed), "failed execution must fail comparison"
+    fast = copy.deepcopy(report)
+    fast["backend"]["numeric_mode"] = 0
+    assert compare_reports(report, fast), "wrong numeric mode must fail comparison"
+    return {"same_report": "passed", "changed_digest": "rejected", "missing_case": "rejected",
+            "failed_case": "rejected", "wrong_mode": "rejected"}
+
+
+def run_checks(vendor, require_installed=False):
+    from . import _backend
+    import mojolearn
+    report = {"format": FORMAT, "expected_cases": list(EXPECTED_CASES), "cases": {}, "backend": {}}
+    try:
+        b = _backend.binding("_mojolearn_x_sequence", "identical")
+        report["backend"] = {"vendor": str(b.x_sequence_vendor()), "numeric_mode": int(b.x_sequence_numeric_mode()),
+                             "binding_file": str(getattr(b, "__file__", "")), "binding_type": type(b).__name__,
+                             "package_file": str(Path(mojolearn.__file__).resolve()), "python": sys.executable}
+        assert report["backend"]["vendor"] == vendor, report["backend"]
+        assert report["backend"]["numeric_mode"] == 1, report["backend"]
+        for entry in ("ops_program_execute", "ops_program_control", "ops_program_inspect"):
+            assert hasattr(b, entry), "missing native entry " + entry
+        if require_installed:
+            package_path = Path(mojolearn.__file__).resolve()
+            assert "site-packages" in package_path.parts or "dist-packages" in package_path.parts, package_path
+            assert package_path.is_relative_to(Path(sys.prefix).resolve()), (package_path, sys.prefix)
+    except Exception as error:
+        for name in EXPECTED_CASES:
+            report["cases"][name] = {"status": "cannot_run", "error": str(error), "outputs": []}
+        return report
+    for name in EXPECTED_CASES:
+        _AUDITS.clear()
+        try:
+            values = globals()[name]()
+            report["cases"][name] = {"status": "passed", "outputs": [_digest(a) for a in values],
+                                      "native_calls": list(_AUDITS)}
+        except Exception as error:
+            report["cases"][name] = {"status": "failed", "error": str(error), "outputs": [],
+                                      "native_calls": list(_AUDITS)}
+    if all(row["status"] == "passed" for row in report["cases"].values()):
+        report["comparator_controls"] = comparator_self_test(report)
+    return report
+
+
+def cmd_verify_graph(args):
+    report = run_checks(args.vendor, args.require_installed)
+    rc = 0 if all(row["status"] == "passed" for row in report["cases"].values()) else 4
+    if args.expect:
+        try:
+            expected = json.loads(Path(args.expect).read_text())
+            errors = compare_reports(report, expected)
+        except Exception as error:
+            errors = ["reference could not be read: " + str(error)]
+        report["comparison"] = {"expected": args.expect, "errors": errors, "matched": not errors}
+        if errors and rc == 0:
+            rc = 1
+    report["exit_code"] = rc
+    if args.out:
+        Path(args.out).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        counts = {status: sum(row["status"] == status for row in report["cases"].values())
+                  for status in ("passed", "failed", "cannot_run")}
+        print("GRAPH", report["backend"].get("vendor", "unknown"), counts, "exit", rc)
+    return rc
+
+
+def add_parser(sub):
+    p = sub.add_parser("verify-graph", help="qualify this install's native captured graph execution")
+    p.add_argument("--vendor", required=True, choices=("cpu", "metal", "cuda", "hip"))
+    p.add_argument("--require-installed", action="store_true")
+    p.add_argument("--expect", help="compare all output bits with another vendor's report")
+    p.add_argument("--out", help="retain the complete report at this path")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_verify_graph)

@@ -2891,10 +2891,13 @@ class OursProgramRun(Ours):
     words equal the eager composition's (REFUSED otherwise). With the A/B operation `program_eager` a round is
     the eager composition instead (one call per operation, the same weights), reset first."""
 
-    def __init__(self, lane, shape, data, eager=False):
+    def __init__(self, lane, shape, data, eager=False, optimize=False):
         import importlib
         import numpy as np
+        if type(optimize) is not bool or (eager and optimize):
+            raise ValueError("REFUSED: graph optimize requires a boolean and captured execution")
         self.np, self.lane, self.shape, self.eager = np, lane, shape, bool(eager)
+        self.optimize = optimize
         ml = _ours_module()
         self.ml = ml
         try:
@@ -2915,7 +2918,7 @@ class OursProgramRun(Ours):
         eager_words = self.s.numpy(prob)
         self.program = self.s.capture(inputs=[x], outputs=[prob])
         self.s.reset()
-        first = self.program.run(self.X)
+        first = self.program.run(self.X, optimize=self.optimize)
         if not np.array_equal(first.view(np.uint32), eager_words.view(np.uint32)):
             raise RuntimeError("REFUSED: program-run: Program.run's output words differ from the eager session's")
         self._x = x
@@ -2931,6 +2934,13 @@ class OursProgramRun(Ours):
                                  "the clock")
         self.record = program_record("mojolearn", ops.Program, shape, batch_size=int(self.X.shape[0]),
                                      layers=program_layers(d_in, hidden, classes))
+        self.neural_ab_runtime = {
+            "operation": "program_eager" if eager else "program_optimize",
+            "optimize_requested": self.optimize,
+            "execution_argument": self.optimize,
+            "inspection": self.program.inspect(optimize=self.optimize),
+            "scope": "complete saved Program forward; training is unaffected",
+        }
 
     def _forward(self, x):
         s, (w1, b1, w2, b2) = self.s, self.ws
@@ -2944,7 +2954,7 @@ class OursProgramRun(Ours):
             self._x = s.tensor(self.X)
             self.out = s.numpy(self._forward(self._x))
         else:
-            self.out = self.program.run(self.X)
+            self.out = self.program.run(self.X, optimize=self.optimize)
 # The inference lanes (2026-10-19, lane ag-inference-board): device memory, CausalLM generate, Sequential predict
 # ---------------------------------------------------------------------------
 
@@ -5041,9 +5051,11 @@ def hf_layer_call(layer, x, cos, sin, position_ids, **extra):
 
 def build_runner(lane, arm, shape, data, ab_config=None):
     operation = _neural_ab_operation(ab_config)
+    if "optimize" in (ab_config or {}).get("runtime", {}) and operation != "program_optimize":
+        raise ValueError("REFUSED: runtime.optimize requires program_optimize")
     supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
                  "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp",
-                 "program_eager")
+                 "program_eager", "program_optimize")
     if operation not in supported:
         raise RuntimeError("REFUSED: no actual public workload implementation for neural A/B operation " + str(operation))
     if arm in OUR_ARMS:
@@ -5065,11 +5077,17 @@ def build_runner(lane, arm, shape, data, ab_config=None):
                 raise RuntimeError("REFUSED: ops-session-step has no experimental operation")
             return OursOpsStep(lane, shape, data)
         if lane in PROGRAM_LANES:
-            if operation not in ("model_default", "program_eager"):
-                raise RuntimeError("REFUSED: program-run's operations are model_default and program_eager")
-            return OursProgramRun(lane, shape, data, eager=operation == "program_eager")
-        if operation == "program_eager":
-            raise RuntimeError("REFUSED: program_eager requires program-run")
+            if operation not in ("model_default", "program_eager", "program_optimize"):
+                raise RuntimeError("REFUSED: unsupported program-run operation")
+            if operation == "program_optimize":
+                if type(runtime.get("optimize")) is not bool:
+                    raise ValueError("REFUSED: program_optimize requires explicit runtime.optimize boolean")
+            elif "optimize" in runtime:
+                raise ValueError("REFUSED: runtime.optimize requires program_optimize")
+            return OursProgramRun(lane, shape, data, eager=operation == "program_eager",
+                                  optimize=runtime.get("optimize", False))
+        if operation in ("program_eager", "program_optimize"):
+            raise RuntimeError("REFUSED: graph operations require program-run")
         if operation == "residual_dropout_forward_vjp":
             return OursResidualDropout(lane, shape, data, runtime)
         if operation == "mlp_inference_sessions":

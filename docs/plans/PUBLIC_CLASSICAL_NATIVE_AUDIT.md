@@ -1,0 +1,113 @@
+# Internal public classical runtime audit
+
+This is completion evidence and an implementation plan, not public API documentation or a native-runtime qualification.
+
+The CPU matrix on 2026-10-20 exercised actual public constructors, fits, and consumed predictions/transforms for KMeans, LinearRegression, Ridge, LogisticRegression, PCA, ExtraTreesClassifier, and ExtraTreesRegressor. All five CPU-supported fits and seven consumed-output operations completed, with expected shapes and finite outputs. Every one still ran package Python. The seven constructors did too. The two ExtraTrees fits correctly refused GPU-only training; their three output operations were dependency-blocked, not silently skipped or claimed covered.
+
+The run exited 1: 24 planned operations, 19 runtime violations, two expected route refusals, three dependent operations blocked, and zero native passes. Numerical success does not erase the runtime violations. Tiny deterministic inputs are smoke coverage only; this is neither timing nor an exhaustive option matrix.
+
+| Estimator | Fit Python calls | Consumed public output Python calls |
+|---|---:|---:|
+| KMeans | 288 | predict 171; transform 172 |
+| LinearRegression | 2,007 | predict 208 |
+| Ridge | 504 | predict 208 |
+| LogisticRegression | 548 | predict 276; predict_proba 366 |
+| PCA | 296 | transform 215 |
+
+Counts include transitive Python frames, including standard-library functions reached by the package. The audit also records forbidden NumPy C calls; in this matrix these were `ndarray.__dlpack_device__` metadata calls, not evidence of NumPy numerical kernels. The Python orchestration failures are independently established by the traced package frames and wrapper bytecode.
+
+The common paths are `_mode.py` public guards/output handling, `_sk_validate.py` validation, `_buffer.py` buffer setup/release, `_array.py` shape/allocation work, and `_backend.py` runtime module selection/loading. LinearRegression.fit additionally executes `_expansion_decomp._M` orchestration (254 scalar metadata accesses and 102 address accesses in this call). A shared numerical kernel passing a standalone test therefore does not qualify these public operations.
+
+The next bounded repair is a native public owner for LinearRegression/Ridge covering construction, admission, weighted/unweighted fit, prediction, and the other existing public operations. Preserve the existing TSQR, normal-equation, and weighted Ridge routes and numeric-mode semantics; connect verified compiled targets once at package setup; retain CPU/GPU execution. Reuse strict native buffer admission patterns, not Python helpers from a native callback. LinearRegression's CPU decomposition walk needs its own native orchestration rather than a generic wrapper rewrite. KMeans, LogisticRegression, PCA, and ExtraTrees remain separate public-runtime debt.
+
+A targeted Metal ExtraTrees follow-up completed all seven operations with expected output shapes and finite values, and all seven failed the runtime contract. Classifier fit/predict/predict_proba reached 917/553/363 Python calls; regressor fit/predict reached 776/429. Both constructors also executed Python. There were no operation errors or skipped operations. The GPU slot was released when this probe returned.
+
+Reproduction uses `tools/audit_public_classical_native.py` with the retained stage50 validation overlay. Complete evidence is under `~/mojolearn-evidence/finish-generation-public-classical-20261020/`: `cpu.json`, `cpu.log`, `import-cpu.log`, `metal-extratrees.json`, and `metal-extratrees.log`. The JSON retains all traced frames, wrapper violations, output digests, source hashes, and loaded native module paths/hashes (47 CPU; 135 Metal). It embeds the overlay's full reuse provenance. The exact Metal controller source was retained before execution as `audit-public-classical-metal-controller.py`.
+
+The package source is `f9109326489a5d6681e744b32e1c7d01330f31e5`; reused classical numerical binaries originate at `a8255828597a3bd19ac7bb5f657a38d09b8c732f` (release 0.8.55). New tokenizer/sequence families are separately recorded in the overlay. This is source-validation evidence, not an installed-wheel result, and does not qualify current changed cast/label closures against the retained classical binaries. No native compilation occurred in this lane.
+
+The first repair slice is the private `classical_native_call` owner for Ridge fit and linear prediction. It retains the weighted/single-feature kernel, Gram trust refusal/fallback, resident and ordinary eig paths, pair-statistics flag, and exact intercept finish. Its float32 preparation stays at the existing host-buffer boundary before selected numerical kernels upload; no fitted arithmetic moves to a CPU route. Nineteen cases compare the old driver and independent float64 weighted ridge equations, check buffer layouts/dtypes, poison Python preparation, and audit refusals. Parent stage54 compiled the tokenizer owner and passed all 19 cases on CPU and Metal. Evidence is `~/mojolearn-evidence/core-completion-20261020/stage54-native-{cpu,metal}-summary.json` and the adjacent full logs. This is a private-owner source-overlay result; public activation, installed-wheel coverage, and NVIDIA/AMD qualification remain pending.
+
+The next source slice owns LinearRegression's existing TSQR orchestration with native matrix descriptors. It retains the centered factor entry, weighted mean and square-root order, small-R power-of-two equilibration, SVD ordering and rank thresholds, orthogonalization/Householder branch, residual execution, normal-equation shape/compiled-flag route, and intercept finish. Host/device operations call the same verified native entries; the Python `_M`/`_Kit` classes are not called. A native allocation ledger releases resident temporaries on normal and exceptional exit. Temporaries currently remain owned until the solve ends, so peak workspace and end-to-end timing still require measurement; removing Python is not a speedup claim. Twenty-two additional source cases cover full/deficient/zero rank, weighted/no-intercept and one-feature fits, differing column units, the non-TSQR route, input layouts and poisoned Python driver helpers. They compare retained-driver bits and independent float64 least-squares predictions. This slice has only static validation until the parent freezes and compiles it.
+
+Public wrappers remain unchanged while construction/parameters, score, archive operations, and inherited public metadata are completed. KMeans, LogisticRegression, PCA, and ExtraTrees public runtime remains untouched debt. The separately established Modular PythonObject lifetime issue also prevents persistent-owner lifetime qualification.
+
+A separate private source slice adds constructor/parameter metadata, fitted-state queries, native vendor/mode readback, and the complete predict-to-R2 operation. Scoring reproduces the existing 12-stage grouped-sum program and its binary64 finish, including the historical process-default metrics mode and `MOJOLEARN_ARENA_RANGES` selection. Twenty-five additional source cases compare parameter/reset behavior, mode/vendor readback, strict protocol refusals, legacy score bits and independent score values with both range settings. No public wrappers are activated by this slice. Remaining public activation work includes archive compatibility, `NotFittedError`, scikit-learn tags and supported named-column input validation; exact native buffer admission passing is not evidence that every previous public input interface has been preserved.
+
+Exact Torch Tensor identity alone also does not establish a native boundary: an active `TorchFunctionMode` or `TorchDispatchMode` can invoke Python from an otherwise native Tensor method. The shared `native_torch_admission.mojo` repair reads only verified C entries (`_len_torch_function_stack`, `_len_torch_dispatch_stack`, `_get_dispatch_mode`, `_dispatch_tls_is_dispatch_key_included`) and refuses active function, dispatch, infrastructure or pre-dispatch modes before any Tensor descriptor or conversion. It does not disable or mutate modes. Native base Tensor descriptors also bypass Python callables stored as instance method shadows. The inspection used installed Torch 2.14.1; its actual helper implementations and C declarations are content-hashed in `torch-mode-guard-static.json`, with API/type results in `torch-mode-api*.json` and `torch-tensor-descriptors.json` under the classical evidence directory. No product path imports Torch to discover this state.
+
+Thirteen new source cases cover real poison function/dispatch modes for private Ridge fit/predict, public Sequential weights and public Session weights, ordinary Tensor/Parameter positive controls, instance method shadows, and Samba's existing ndarray success/Tensor refusal boundary. Samba does not currently admit Torch inputs, so no new Samba Tensor support is claimed. These source changes affect tokenizer and sequence frontends; compilation and runtime qualification are pending the parent's frozen build. A framework version missing required native metadata must refuse before conversion rather than invoke a Python helper.
+
+The next private archive slice implements deterministic ZIP_STORED/NPY writing in Mojo, retaining sorted member order, ZIP epoch timestamps, permissions, exact coefficient/intercept/alpha bytes, seekable prefixes, and caller-owned file lifetime. Native CRC32, Unicode encoding and raw binary file descriptors are connected once. Seventeen source tests compare the entire output with the existing public writer, independently read it with NumPy and the existing loader, poison Python serializer/file instance methods, and reject custom paths or Python-backed buffered files before callbacks. This is source-only until the parent's frozen compile/runtime checks. Reading archives and the remaining public activation compatibility work are still pending; this slice does not replace public wrappers.
+
+Parent stage58 passed all 67 private OLS/Ridge/metadata cases on both CPU and Metal, including the supported square non-TSQR solve and the explicitly audited CPU refusal for the retained wide minimum-norm fixture. It also passed all 13 real Torch mode cases on each backend with no skips. Evidence: `~/mojolearn-evidence/core-completion-20261020/stage58-classical-corrected-{cpu,metal}-summary.json` and `stage58-torch-modes-{cpu,metal}-summary.json` with adjacent full logs. These results retain the source-overlay/private-boundary limitation.
+
+A separate archive-reader source slice adds native ZIP directory/ZIP64/member bounds and CRC validation, NPY v1/v2/v3 decoding, exact model schema validation, and fresh model construction without Python constructors. Stored, deflate, BZIP2, LZMA and available stdlib Zstandard compression use verified native byte codecs. Every `.npy` member is decoded, including extra members, with last-entry-wins duplicate behavior. The combined archive source suite now has 55 cases: whole-file writer parity plus independent standard archives, consumed prediction parity, schema/corruption refusals, prefixes, extra C/F metadata, and Python-helper poison controls. Compilation and runtime checks remain pending. Public archive methods, host-model subclass admission, existing exception taxonomy, and the broader metadata/input compatibility requirements are not activated or declared complete by this private source slice.
+
+Public output compatibility is a distinct boundary: the incumbent wrapper returns regressor predictions as float64 even though kernels and internal scoring consume float32. A private `predict_public` operation now widens the completed native prediction buffer in compiled Mojo. Six source cases explicitly compare output dtype and float64 bits with the old public method while asserting that the internal prediction remains float32 and R2 bits remain unchanged under poisoned Python conversion helpers. This operation is not yet activated on the public class or runtime-qualified.
+
+The next private compatibility slice preserves `NotFittedError` before public prediction/scoring, including its ValueError/AttributeError inheritance and its optional relationship with an already imported standard scikit-learn exception class. Class selection, bridge caching and exception creation run natively; borrowed CPython exception references retain the existing supported C-API ownership discipline. Modified sklearn exception classes with Python construction/subclass hooks are refused before those hooks. Twelve source cases compare legacy error messages/types, repeated class identity, the one-call pickle protocol bridges, and hook poison controls. This does not qualify the separately blocked Modular object-lifetime behavior. Compilation/runtime checks and public activation remain pending.
+
+The next private input slice reads ordinary pandas DataFrame/Series storage through exact class admission, stored dictionaries and verified native descriptors. It preserves numeric and nullable blocks without missing values, numeric object columns, fragmented/reordered blocks, Series targets/weights and common-dtype promotion before float32 conversion. It does not invoke pandas conversion functions, Python metadata properties or arbitrary extension hooks. Thirty-four source cases retain old public fit/predict/score oracles, independent numeric predictions and midpoint promotion cases, with poisoned conversions and custom-storage negative controls. Compilation and strict runtime qualification remain pending. The pandas3.0.6 legacy census is retained at `~/mojolearn-evidence/finish-generation-public-classical-20261020/pandas-legacy-support-probe-v2.{json,log}`: 14 supported operations and four expected string/missing-value refusals across both estimators. The earlier census's post-fit `feature_names_in_` lookup incorrectly labelled successful fits as refused; its original artifact is retained. Actual legacy `before_fit` materializes the frame before column capture, so those fits do not publish feature names. That discrepancy with the existing documentation remains explicit.
+
+Public activation prerequisites for this estimator family are concrete and separate from adding algorithms:
+
+- Qualify the pending archive reader repair, public float64 output, exception and pandas slices; retain current CPU/Metal evidence and obtain the required vendor/installed-package evidence.
+- Replace the family's constructor/fit/predict/score/parameter/readback/archive and inherited fitted-state/tag wrappers with one compiled call, including inherited attribute access and the optional sklearn tag representation.
+- Preserve HostLinearRegression/HostRidge's explicitly selected CPU inference, saved-state metadata and model hash; these standard subclasses are supported interfaces, not arbitrary callback debt.
+- Complete ordinary input validation/shape and error-class compatibility, and resolve the documented feature-name discrepancy deliberately. Custom Python protocols must be refused before hooks.
+- Keep the confirmed Modular PythonObject ownership blocker separate from numerical/native-execution passes; no public lifetime qualification or broad framework completion claim follows from these private slices.
+
+The optional sklearn tag prerequisite now has a private source implementation: import-time connection records the installed standard tag dataclasses' native member descriptors and immutable defaults; Mojo constructs fresh nested records using those slots, without dataclass constructors or Python property calls. Four source tests compare the legacy tag tree, poison constructors, prove per-call independence, and refuse replaced descriptors/finalizers. The connection metadata was checked against sklearn1.9.1; native compilation/runtime checks and public wrapper migration remain pending.
+
+The explicit HostLinearRegression/HostRidge prerequisite now has a separate private source slice. It connects the existing CPU estimator ABI once, verifies CPU/identical readback for inference, preserves the original process-default score helper selection, and hashes the coefficient bytes with native SHA-256. Saving retains Host* estimator names, and loading accepts the declared class ancestry as the old loader did. Ten source cases cover ordinary/Host* archives, consumed predictions and scores, complete saved bytes, hashes, native vendor/mode readback, missing/empty/strided coefficient storage and fast-mode refusals, poisoning old Python binding/serializer helpers. Setup-only connection to retained CPU entries passed; native compilation/runtime and public wrapper activation remain pending. The general `host_model` router for all estimator families is still outside this private linear-owner slice and remains explicit runtime debt.
+
+Torch compatibility review found no declared Torch version floor for ordinary Tensor/state-dict inputs (`python/pyproject.toml` supports Python >=3.10 and has no Torch runtime dependency). Retained Torch 2.13.0 passed the unchanged stage58 native mode suite on CPU: 11 original cases and the two positive cases after repairing a test-module-dependent reference dtype. Original controller/shape failures remain in `torch213-native-modes*.log`; the two-case supplement and XML retain the corrected evidence. Torch 2.14.1 remains the parent-qualified CPU/Metal result.
+
+An actual isolated Torch 2.1.2/Python 3.11 probe establishes its distinct C-API family: only `_TensorBase`, the two native mode stack lengths, and the native PreDispatch TLS query; no separate infrastructure-mode enum/getter. [The upstream 2.1 native TLS definition](https://raw.githubusercontent.com/pytorch/pytorch/v2.1.0/c10/core/impl/TorchDispatchModeTLS.h) stores all dispatch modes in one stack, while [the 2.5 definition](https://raw.githubusercontent.com/pytorch/pytorch/v2.5.0/c10/core/impl/TorchDispatchModeTLS.h) has separate infrastructure slots. The source guard now accepts the actual native TensorBase alias and uses the verified 2.1 full-stack contract, still checking both mode stacks and PreDispatch before Tensor methods. Missing infrastructure metadata in an unknown/newer API family remains an explicit refusal. This source compatibility repair still requires the parent's new tokenizer/sequence build and actual 2.1 product tests; the upstream API probe alone is not product qualification. Full downloaded primary sources and hashes are retained in `~/mojolearn-evidence/finish-generation-public-classical-20261020/torch-api-source/manifest.json`, with `torch21-native-api.json` and the isolated test environment.
+
+### Bounded closing handoff: linear native owner (2026-10-20)
+
+Public activation remains disabled. The optional public installer is a
+qualification tool: its real-class tests temporarily install the native
+attribute descriptor and one-call methods. This does not establish that all
+inherited validation or all supported inputs have completed migration.
+
+The closing source batch wires the native descriptor entries, fixed parameter
+names, exact Host context selection and layout admission. It also preserves
+native `(n, 1)` target arrays through the existing fit owners, with native
+DataConversionWarning handling. The latter has 30 collected cases for six
+filter actions, recording, strided/binary64 targets, independent flat-target
+oracles, native default output, filter mutation and poisoned Python hooks.
+These cases are source-ready, not a compilation or runtime pass. The previous
+integer rounding repair is qualified in stage64: both pandas and raw native
+buffers retain the old integer → binary64 → binary32 contract. The host error
+oracle now checks both public exception bases; the independently cached legacy
+and native bridge subclasses need not be the same class object.
+
+The native warning implementation preserves the old warning module/location
+(`_mode._guard_cpu_training`'s final call), category, message and native recording
+record fields. It never invokes Python warning formatting or callbacks. Its
+suppression registry is private to the connected native owner. Interoperability
+with warnings already emitted by the legacy Python owner or CPython's shared
+registries, direct private filter-version invalidation, unusual native stderr
+encoders, and context-aware warning concurrency are **not qualified**. These
+remain public-activation gates; this implementation is not a replacement claim
+for arbitrary Python warning machinery. Custom Python warning hooks are refused.
+
+Remaining public linear gates are the closing batch's compile/runtime evidence,
+whole first-call audits on the temporary real-class installation, the unresolved
+inherited input/feature-name validation inventory, and complete vendor closure
+qualification. Generic `host_model` routing and other classical families are not
+covered. The separately established Modular PythonObject lifetime defect remains
+an upstream blocker; no refcount compensation or compiler workaround is used.
+
+Retained lane evidence is under
+`~/mojolearn-evidence/finish-generation-public-classical-20261020/`:
+`integer-cast-probe-r2.{json,log}` (five cases, exit 0),
+`host-error-identity-probe.{json,log}` (two cases, exit 0),
+`warning-legacy-caller-probe.{json,log}`,
+`warning-connection-check.log` (two setup modes), and `warning-collect.log`
+(30 collected, exit 0). Original failed probes and pushes remain retained.
+Central stage63/64 compile, CPU and Metal results live in the root
+`core-completion-20261020` evidence directory. No lane Mojo compilation occurred.

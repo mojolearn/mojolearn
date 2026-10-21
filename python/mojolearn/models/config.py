@@ -36,7 +36,9 @@ index; the plan maps each block-dict key (the block classes' own names) to
 the checkpoint name, and for phi3's fused `qkv_proj` / `gate_up_proj` to a
 row slice of it (a slice copies bytes, no arithmetic).
 """
-import json
+from ..tokenizer import _binding
+
+_NATIVE = _binding()._module
 from .. import _portable_math as math
 import os
 
@@ -83,45 +85,31 @@ class HFConfig:
     `[]` and `path`."""
 
     def __init__(self, data, path=None):
-        if not isinstance(data, dict):
-            raise TypeError("mojolearn.models.HFConfig: the config must be a JSON object")
-        self._d = dict(data)
-        self.path = path
+        return _NATIVE.model_config_init(self, data, path)
 
     @classmethod
     def from_json(cls, path):
         """`path` is `config.json` or the directory holding it."""
-        path = os.fspath(path)
-        if os.path.isdir(path):
-            path = os.path.join(path, "config.json")
-        with open(path, "r", encoding="utf-8") as fh:
-            try:
-                data = json.load(fh)
-            except ValueError as exc:
-                raise ValueError(f"mojolearn.models.HFConfig: {path} is not JSON: {exc}") from None
-        return cls(data, path)
+        return _NATIVE.model_config_load(cls, path)
 
     @property
     def model_type(self):
-        mt = self._d.get("model_type")
-        if not isinstance(mt, str):
-            raise UnsupportedModel(f"mojolearn.models: the config at {self.path!r} has no string model_type")
-        return mt
+        return _NATIVE.model_config_access(self, 0, None, None, UnsupportedModel)
 
     def get(self, key, default=None):
-        return self._d.get(key, default)
+        return _NATIVE.model_config_access(self, 1, key, default, UnsupportedModel)
 
     def __getitem__(self, key):
-        return self._d[key]
+        return _NATIVE.model_config_access(self, 2, key, None, UnsupportedModel)
 
     def __contains__(self, key):
-        return key in self._d
+        return _NATIVE.model_config_access(self, 3, key, None, UnsupportedModel)
 
     def keys(self):
-        return self._d.keys()
+        return _NATIVE.model_config_access(self, 4, None, None, UnsupportedModel)
 
     def to_dict(self):
-        return dict(self._d)
+        return _NATIVE.model_config_access(self, 5, None, None, UnsupportedModel)
 
     def __repr__(self):
         return f"HFConfig(model_type={self._d.get('model_type')!r}, path={self.path!r})"
@@ -140,25 +128,13 @@ class ModelPlan:
     matrix row)."""
 
     def __init__(self, **kw):
-        self.__dict__.update(kw)
+        return _NATIVE.model_plan_init(self, kw)
 
     def layer_weights(self, i):
-        out = []
-        for key, template, rows in self._layer_map:  # glue: walks the layer weight name templates
-            out.append((key, template.format(i=i), rows))
-        return out
+        return _NATIVE.model_layer_weights(self, i)
 
     def checkpoint_names(self):
-        names = [self.embed_name]
-        if self.norm_name is not None:      # None: no final norm (the byte-LM format)
-            names.append(self.norm_name)
-        if self.head_name is not None:
-            names.append(self.head_name)
-        for i in range(self.n_layers):  # glue: names the checkpoint weights per layer
-            for _, name, _ in self.layer_weights(i):  # glue: names the checkpoint weights of one layer
-                if name not in names:
-                    names.append(name)
-        return names
+        return _NATIVE.model_checkpoint_names(self)
 
     def __repr__(self):
         return (f"ModelPlan({self.model_type!r}, kind={self.kind!r}, layers={self.n_layers}, "
@@ -523,21 +499,13 @@ BYTE_LM_ROW = (_plan_byte_lm, "bytelevel-bpe (GPT-2 pattern)", "byte-LM format: 
 def plan_for(config):
     """The `ModelPlan` of an `HFConfig` (or a dict), or an `UnsupportedModel`
     that names the unsupported model type or field."""
-    if isinstance(config, dict):
-        config = HFConfig(config)
-    if config.get("model_type") is None and config.get("format") == BYTE_LM_FORMAT:
-        # the byte-LM format names no model_type; it is its own row
-        mt, row = BYTE_LM_MODEL_TYPE, BYTE_LM_ROW
-        fields = _plan_byte_lm(config, mt)
-        layer_map = fields.pop("layer_map")
-        return ModelPlan(model_type=mt, config=config, family=row, _layer_map=layer_map, **fields)
-    mt = config.model_type
-    row = FAMILIES.get(mt)
-    if row is None:
-        raise UnsupportedModel(
-            f"mojolearn.models: model_type {mt!r} is not in the option matrix; known: {sorted(FAMILIES)}")
-    fn, _, _ = row
-    fields = fn(config, mt)
-    layer_map = fields.pop("layer_map")
-    plan = ModelPlan(model_type=mt, config=config, family=row, _layer_map=layer_map, **fields)
-    return plan
+    return _NATIVE.model_plan_for(config, _NATIVE_CONTEXT)
+
+# Static connection metadata; native planning never calls registry functions.
+_NATIVE_CONTEXT = {
+    "config_class": HFConfig, "plan_class": ModelPlan, "unsupported_class": UnsupportedModel,
+    "families": FAMILIES, "defaults": INTERFACE_DEFAULTS, "llama_layer": _LLAMA_LAYER,
+    "qkv_bias": _QKV_BIAS_LAYER, "qk_norm": _QK_NORM_LAYER, "mamba1_layer": _MAMBA1_LAYER,
+    "mamba2_layer": _MAMBA2_LAYER, "byte_row": BYTE_LM_ROW, "byte_layer": _BYTE_LM_LAYER,
+    "byte_fixed": _BYTE_LM_FIXED,
+}
