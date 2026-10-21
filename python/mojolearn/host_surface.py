@@ -2287,6 +2287,8 @@ FAMILIES = (
             "cholesky/host/chol_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
             "gaussian_process/unnorm.mojo",
+            "gaussian_process/host/gp_host_entries.mojo",
+            "gaussian_process/host/gp_host_fit_entries.mojo",
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
