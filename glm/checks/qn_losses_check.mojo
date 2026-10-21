@@ -611,16 +611,11 @@ def _host_evaluate(
             g[k] = ftz(st + g[k])
         g[d] = ftz(host_qnt_sum(dz, n) * (Float32(1.0) / Float32(n)))
         return ftz(loss_h + reg_h)
+    # the gradient is the tile order with QN_TILED off too (`linear_bwd`'s
+    # `qntm_tiled_into`, lane debt-block-per-n 2026-10-21)
+    var xt0 = host_qnt_xty(xh, dz, n, d)
     for k in range(d):
-        var red = List[Float32]()
-        for t in range(STATS_TPB):
-            var acc = Float32(0.0)
-            var r = t
-            while r < n:
-                acc = identical_mul_add(xh[r * d + k], dz[r], acc)
-                r += STATS_TPB
-            red.append(acc)
-        var s = ftz(alpha * _tree(red))
+        var s = ftz(alpha * xt0[k])
         g[k] = ftz(s + g[k])
     var ratio = Float32(1.0) / Float32(n)
     g[d] = ftz(_host_sum_terms(dz, n) * ratio)

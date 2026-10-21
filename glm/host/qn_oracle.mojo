@@ -610,29 +610,20 @@ struct HostGLM(Movable):
                     # `qn_tile_sum_classes`' tile order (lane cgr5-owed2)
                     g[cd + cc] = ftz(host_qnt_sum_strided(self.z, n, C, cc) * ratio)
             return
-        comptime if HOST_QN_TILED:
-            var xt = host_qnt_xty(self.x, self.z, n, self.d)
-            for j in range(self.d):
-                var st = ftz(alpha * xt[j])
-                if set_zero:
-                    g[j] = st
-                else:
-                    g[j] = ftz(st + g[j])
-            if self.fit_intercept:
-                var s0t = host_qnt_sum(self.z, n)
-                g[self.d] = ftz(s0t * (Float32(1.0) / Float32(n)))
-            return
-        var xtdz = host_xty(self.x, self.z, n, self.d)
+        # the tile order with QN_TILED on (the device's tiled objective) and
+        # off (`linear_bwd`'s `qntm_tiled_into`, lane debt-block-per-n
+        # 2026-10-21; the STATS_TPB-chain `host_xty` order is retired here)
+        var xt = host_qnt_xty(self.x, self.z, n, self.d)
         for j in range(self.d):
-            var s = ftz(alpha * xtdz[j])
+            var st = ftz(alpha * xt[j])
             if set_zero:
-                g[j] = s
+                g[j] = st
             else:
-                g[j] = ftz(s + g[j])
+                g[j] = ftz(st + g[j])
         if self.fit_intercept:
             # the device's `qn_tile_sum` mean (lane/apple-fast-purity2)
-            var s0 = host_qnt_sum(self.z, n)
-            g[self.d] = ftz(s0 * (Float32(1.0) / Float32(n)))
+            var s0t = host_qnt_sum(self.z, n)
+            g[self.d] = ftz(s0t * (Float32(1.0) / Float32(n)))
 
     def loss_grad(mut self, w: List[Float32], mut g: List[Float32], init_grad_zero: Bool) -> Float32:
         self.linear_fwd(w)

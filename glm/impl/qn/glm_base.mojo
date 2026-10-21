@@ -183,7 +183,7 @@ from checks.numerics import ftz, identical_mul_add
 from checks.rtf_seam import rtf_mul_add
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
-from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape
+from glm.impl.qn.qn_tiled_rule import qn_tiled_multi_shape, qntm_chunk_cells, qntm_ws_floats
 
 
 @fieldwise_init
@@ -1613,41 +1613,106 @@ def qntm_partial_kernel(
     d_in: Int32,
     c_in: Int32,
     tiles_in: Int32,
+    b0_in: Int32,
+    cnt_in: Int32,
 ):
-    """Pass 1: thread `(k, b)`, `b = c + C*j` fastest, the `X^T dZ` cell `b`
-    over tile `k`'s rows ascending. Stores `part[b * tiles + k]`."""
+    """Pass 1: thread `(k, bl)`, `bl` fastest, the `X^T dZ` cell `b = b0 +
+    bl` (`b = c + C*j`) over tile `k`'s rows ascending. Stores
+    `part[bl * tiles + k]`. The cells `[b0, b0 + cnt)` are one chunk of
+    `qntm_tiled_into`; a chunk never changes a cell's chain."""
     var n = Int(n_in)
     var D = Int(d_in)
     var C = Int(c_in)
     var tiles = Int(tiles_in)
-    var cd = C * D
+    var cnt = Int(cnt_in)
     var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var k = gid // cd
-    var b = gid - k * cd
+    var k = gid // cnt
+    var bl = gid - k * cnt
     if k >= tiles:
         return
+    var b = Int(b0_in) + bl
     var c = b % C
     var j = b // C
     var r0 = k * QNT_ROWS
     var r1 = min(n, r0 + QNT_ROWS)
     var acc = strided_mul_add[1](x, D, j, dz, C, c, r1, r0)
-    part.unsafe_store(b * tiles + k, acc)
+    part.unsafe_store(bl * tiles + k, acc)
 
 
 def qntm_fold_kernel(
     out_v: MutPointer[Float32, MutAnyOrigin],
     part: MutPointer[Float32, MutAnyOrigin],
     tiles_in: Int32,
+    b0_in: Int32,
 ):
-    """Pass 2: block `b`, STATS_TPB lanes, the pinned fold of cell `b`'s
-    tile partials into `out_v[b]` (the cuBLAS epilogue follows as before)."""
+    """Pass 2: block `bl`, STATS_TPB lanes, the pinned fold of cell `b0 +
+    bl`'s tile partials into `out_v[b0 + bl]` (the cuBLAS epilogue follows
+    as before)."""
     var tiles = Int(tiles_in)
-    var b = Int(block_idx.x)
+    var bl = Int(block_idx.x)
     var tid = Int(thread_idx.x)
-    var acc = strided_ftz_sum[STATS_TPB](part, 1, b * tiles, tiles, tid, Float32(0.0))
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, bl * tiles, tiles, tid, Float32(0.0))
     var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
     if tid == 0:
-        out_v.unsafe_store(b, s0)
+        out_v.unsafe_store(Int(b0_in) + bl, s0)
+
+
+def qntm_tiled_into(
+    ctx: DeviceContext,
+    mut xtdz: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut dz: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    d: Int,
+    C: Int,
+) raises:
+    """`xtdz[c + C*j] = X^T dZ` in the tile order (`qntm_partial_kernel`,
+    then `qntm_fold_kernel` per cell), for any `C >= 1`: the order of the
+    host column's `host_qnt_xty` (C == 1) and its tiled multinomial
+    gradient (C > 1). The cells run in chunks of `qntm_chunk_cells` so the
+    partials fit `ws` (`qntm_ws_floats` floats); every chunk is the same
+    chains and fold, so the bits do not depend on the chunking.
+    Asynchronous. Lane debt-block-per-n (2026-10-21): this replaced
+    `xtdz_multi_kernel` / `xty_kernel`, one block per cell walking all n
+    rows, wherever the gradient took them."""
+    var cd = C * d
+    if cd < 1:
+        return
+    var tiles = qnt_tiles(n_rows)
+    var chunk = qntm_chunk_cells(n_rows, cd)
+    var n_chunks = (cd + chunk - 1) // chunk
+    for ci in range(n_chunks):  # driver-loop: over workspace-bounded chunks of gradient cells
+        var b0 = ci * chunk
+        var cnt = min(chunk, cd - b0)
+        var threads = tiles * cnt
+        if threads >= 1:
+            ctx.enqueue_function[qntm_partial_kernel](
+                ws.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
+                Int32(n_rows), Int32(d), Int32(C), Int32(tiles),
+                Int32(b0), Int32(cnt),
+                grid_dim=((threads + QNT_TPB - 1) // QNT_TPB, 1, 1),
+                block_dim=(QNT_TPB, 1, 1),
+            )
+        ctx.enqueue_function[qntm_fold_kernel](
+            xtdz.unsafe_ptr(), ws.unsafe_ptr(), Int32(tiles), Int32(b0),
+            grid_dim=(cnt, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
+
+
+def qn_grad_tiles_needed(d: Int, c: Int) -> Bool:
+    """True when `linear_bwd` can reach `qntm_tiled_into` for this shape:
+    every IDENTICAL gradient, and every FAST one that no FAST Apple form
+    (`fast_xtdz`, the row-coalesced `xtdz_coalesced`) serves. Sizes the
+    workspace."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return True
+    if qn_coalesced_applies(d, c):
+        return False
+    comptime if QN_FAST_XTDZ:
+        if fast_xtdz_applies(d, c):
+            return False
+    return True
 
 
 def linear_fwd(
@@ -1716,7 +1781,7 @@ def linear_bwd(
 ) raises:
     """`linearBwd(handle, G, X, dZ, setZero)`, `glm_base.cuh:63-94`. The
     `C > 1` arm (DEVIATION 706) is the same three steps with the class
-    stride: `xtdz_multi_kernel` (one block per `(c, j)` cell), the same
+    stride: `X^T dZ` in the tile order (`qntm_tiled_into`), the same
     cuBLAS epilogue over `C*D` cells, `qn_tile_sum_classes` for the bias."""
     var d = dims.D
     # `alpha = 1.0 / X.m`: a double narrowed to T. `beta = setZero ? 0 : 1`.
@@ -1732,34 +1797,21 @@ def linear_bwd(
         var cd = dims.C * d
         var fast_done = False
         if tiled_multi:
-            var tiles_m = qnt_tiles(n_rows)
-            var threads_m = tiles_m * cd
-            ctx.enqueue_function[qntm_partial_kernel](
-                xtdz_ws.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
-                Int32(n_rows), Int32(d), Int32(dims.C), Int32(tiles_m),
-                grid_dim=((threads_m + QNT_TPB - 1) // QNT_TPB, 1, 1),
-                block_dim=(QNT_TPB, 1, 1),
-            )
-            ctx.enqueue_function[qntm_fold_kernel](
-                xtdz.unsafe_ptr(), xtdz_ws.unsafe_ptr(), Int32(tiles_m),
-                grid_dim=(cd, 1, 1), block_dim=(STATS_TPB, 1, 1),
-            )
+            qntm_tiled_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         comptime if QN_FAST_XTDZ:
             if not distributed and not fast_done and fast_xtdz_applies(d, dims.C) and not qn_coalesced_applies(d, dims.C):
                 fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
                 fast_done = True
-        # Apple IDENTICAL: the same chains and fold, row-coalesced
-        # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
+        # FAST on Apple: the row-coalesced chains (`core/xtdz_coalesced.mojo`);
+        # IDENTICAL took the tile order above.
         if not distributed and not fast_done and qn_coalesced_applies(d, dims.C):
             xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         if not distributed and not fast_done:
-            ctx.enqueue_function[xtdz_multi_kernel](
-                xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
-                Int32(n_rows), Int32(d), Int32(dims.C),
-                grid_dim=(cd, 1, 1), block_dim=(STATS_TPB, 1, 1),
-            )
+            # lane debt-block-per-n: the tile order, not one block per cell
+            # walking all n rows (`xtdz_multi_kernel`)
+            qntm_tiled_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
         ctx.enqueue_function[gemm_epilogue_kernel](
             g.unsafe_ptr(), xtdz.unsafe_ptr(), Int32(cd), alpha,
             Int32(0) if set_zero else Int32(1),
@@ -1776,19 +1828,23 @@ def linear_bwd(
             )
         return
     var fast_done1 = False
+    # lane debt-block-per-n (2026-10-21): IDENTICAL's C == 1 gradient here
+    # (reached only with QN_TILED off) is the tile order on every vendor, the
+    # host column's `host_qnt_xty`; the STATS_TPB-chain forms
+    # (`xtdz_coalesced`, `xty_kernel`) are FAST's or gone.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        if not distributed:
+            qntm_tiled_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
+            fast_done1 = True
     comptime if QN_FAST_XTDZ:
-        if not distributed and fast_xtdz_applies(d, 1) and not qn_coalesced_applies(d, 1):
+        if not distributed and not fast_done1 and fast_xtdz_applies(d, 1) and not qn_coalesced_applies(d, 1):
             fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
             fast_done1 = True
-    if not distributed and qn_coalesced_applies(d, 1):
+    if not distributed and not fast_done1 and qn_coalesced_applies(d, 1):
         xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
         fast_done1 = True
     if not distributed and not fast_done1:
-        ctx.enqueue_function[xty_kernel](
-            xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
-            Int32(n_rows), Int32(d),
-            grid_dim=(d, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+        qntm_tiled_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
     ctx.enqueue_function[gemm_epilogue_kernel](
         g.unsafe_ptr(), xtdz.unsafe_ptr(), Int32(d), alpha,
         Int32(0) if set_zero else Int32(1),
@@ -1914,9 +1970,10 @@ struct GLMWithData(Movable):
         ws_floats = max(ws_floats, qnt_tiles(n_rows))
         # qn_tile_sum_classes' partials (the C > 1 bias mean)
         ws_floats = max(ws_floats, dims.C * qnt_tiles(n_rows))
-        # lane fam2-linear: the tiled C > 1 gradient's tile partials
-        if qn_tiled_multi_applies(n_rows, dims.D, dims.C):
-            ws_floats = max(ws_floats, qnt_tiles(n_rows) * dims.C * dims.D)
+        # the tiled gradient's tile partials (`qntm_tiled_into`: the C > 1
+        # tile order, and every gradient no FAST Apple form serves)
+        if qn_tiled_multi_applies(n_rows, dims.D, dims.C) or qn_grad_tiles_needed(dims.D, dims.C):
+            ws_floats = max(ws_floats, qntm_ws_floats(n_rows, dims.C * dims.D))
         comptime if QN_FAST_FUSED:
             # lane/apple-fast-linsvr: the fused pass's tile partials live here
             if qn_fused_applies(dims.D, dims.C):
