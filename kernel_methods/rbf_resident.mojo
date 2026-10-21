@@ -30,8 +30,6 @@ infinity in X raises main's transform message after that wait (the outputs
 are then never handed out).
 """
 from std.ffi import _Global
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -349,39 +347,25 @@ def rbf_sampler_fit_transform_resident(
     return SIMD[DType.float32, 2](sigma, scale)
 
 
-def rbf_sampler_fit_transform_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`RBFSampler.fit_transform(X)` under KM_FAST_RBF_RESIDENT. Returns 0.
+def rbf_sampler_fit_transform_into(
+    d: Int, q: Int, gamma: Float64, seed_word: Int, m: Int,
+    wa: Int, ba: Int, sa: Int, xa: Int, za: Int,
+) raises:
+    """`RBFSampler.fit_transform(X)` under KM_FAST_RBF_RESIDENT, typed. The
+    Python door is `kernel_methods/rbf_resident_pyapi.mojo`.
 
-    `addrs`: 0 weights_out (d*q f32), 1 offset_out (q f32), 2 scalars_out
-    (2 f64: sigma, scale), 3 x (m*d f32, read), 4 out (m*q f32).
-    `params`: 0 d, 1 q, 2 gamma, 3 seed, 4 m."""
-    if len(addrs) != 5:
-        raise Error("rbf_sampler_fit_transform: addrs must contain 5 addresses, got " + String(len(addrs)))
-    if len(params) != 5:
-        raise Error("rbf_sampler_fit_transform: params must contain 5 values, got " + String(len(params)))
-    var wa = Int(py=addrs[0])
-    var ba = Int(py=addrs[1])
-    var sa = Int(py=addrs[2])
-    var xa = Int(py=addrs[3])
-    var za = Int(py=addrs[4])
+    wa weights_out (d*q f32), ba offset_out (q f32), sa scalars_out (2 f64:
+    sigma, scale), xa x (m*d f32, read), za out (m*q f32)."""
     if sa == 0:
         raise Error("rbf_sampler_fit_transform: null scalars address")
-    var d = Int(py=params[0])
-    var q = Int(py=params[1])
-    var gamma = Float32(Float64(py=params[2]))
-    var seed = UInt64(Int(py=params[3]))
-    var m = Int(py=params[4])
-    var r = SIMD[DType.float32, 2](0, 0)
-    with GILReleased(Python()):
-        r = rbf_sampler_fit_transform_resident(d, q, gamma, seed, xa, m, wa, ba, za)
+    var r = rbf_sampler_fit_transform_resident(d, q, Float32(gamma), UInt64(seed_word), xa, m, wa, ba, za)
     var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=sa)
     sp.unsafe_store(0, Float64(r[0]))
     sp.unsafe_store(1, Float64(r[1]))
-    return PythonObject(0)
 
 
-def rbf_staged_binding() raises -> PythonObject:
+def rbf_staged() -> Int:
     """1 when KM_FAST_RBF_STAGED is compiled in (the quality pair's reach)."""
     comptime if KM_FAST_RBF_STAGED:
-        return PythonObject(1)
-    return PythonObject(0)
+        return 1
+    return 0

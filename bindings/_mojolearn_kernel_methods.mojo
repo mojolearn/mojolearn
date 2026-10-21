@@ -65,7 +65,8 @@ from svm.impl.svm_parameter import KernelParams
 
 from svm.impl.scale_gamma_device import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from kernel_methods.estimator import _family_ctx as _sg_family_ctx
-from kernel_methods.rbf_resident import KM_FAST_RBF_RESIDENT, rbf_sampler_fit_transform_binding, rbf_staged_binding
+from kernel_methods.rbf_resident import KM_FAST_RBF_RESIDENT
+from kernel_methods.rbf_resident_pyapi import rbf_sampler_fit_transform_binding, rbf_staged_binding
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
