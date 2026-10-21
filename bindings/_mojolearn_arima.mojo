@@ -83,7 +83,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from arima.impl.fast_scalar_df import ARIMA_K3_DF_ON
 from arima.impl.fast_eval_df import product_df_count
-from arima.k3_df_probe import arima_k3_df_probe_binding
+from bindings.arima_k3_df_probe import arima_k3_df_probe_binding
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
