@@ -1,113 +1,101 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Python door of the public optimizers on the CPU binding
-(`_mojolearn_training_host`; lane neural-optimizers, 2026-10-21): the GPU
-door's entries and words (bindings/optimizer_public_pyapi.mojo) over
-training/host/optimizer_public_host.mojo. Each entry unpacks its argument
-words, calls ONE typed kernel entry and writes the typed result into the
-caller's result buffer (or returns one integer)."""
+(`_mojolearn_training_host`; lane neural-optimizers, 2026-10-21; lane
+optimizers-thin-glue): the GPU door's entries (bindings/optimizer_public_pyapi.mojo)
+over training/host/optimizer_public_host.mojo, through the shared door
+bindings/optimizer_public_door.mojo (`HostOptKernels`)."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 
-from bindings.optimizer_public_words import int_words, optimizer_python_error, step_request
+from bindings.optimizer_public_door import (
+    OptKernels, entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
+    entry_step,
+)
 from training.host.optimizer_public_host import (
     host_close, host_download, host_open, host_upload, public_accumulate_host, public_clip_host,
     public_step_host,
 )
-from training.optimizer_public_common import F64P, zero_tensors
+from training.optimizer_public_common import PublicStep, PublicStepOut
 
 
-def optimizer_public_step_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_step(words, floats, p_addrs, p_bytes, g_addrs,
-    g_bytes, out_addr) on the host. Returns 0."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 7:
-            raise Error("TypeError: optimizer_public_step expects seven arguments")
-        var req = step_request(args[0], args[1], args[2], args[3], args[4], args[5])
-        var out = F64P(unsafe_from_address=Int(py=args[6]))
+struct HostOptKernels(OptKernels):
+    """The CPU binding's kernel entries, each with the GIL released. A CPU
+    install has no device: the io query answers 0 and every transfer is
+    refused."""
+
+    @staticmethod
+    def step(req: PublicStep) raises -> PublicStepOut:
+        var out = PublicStepOut(0, -1, False, False, Float32(0.0), Float32(0.0), Float32(0.0), -1, False)
         with GILReleased(Python()):
-            public_step_host(req).write(out)
-        return PythonObject(0).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            out = public_step_host(req)
+        return out
 
-
-def optimizer_public_io_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_io(words, addrs, nbytes, out_addr): a CPU install has
-    no device; the query answers 0 and every transfer is refused."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 4:
-            raise Error("TypeError: optimizer_public_io expects four arguments")
-        var w = int_words(args[0])
-        var out = F64P(unsafe_from_address=Int(py=args[3]))
-        if len(w) != 10:
-            raise Error("TypeError: optimizer_public_io takes 10 words")
-        if w[0] != 0:
+    @staticmethod
+    def io(req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
+        if op_code != 0:
             raise Error("RuntimeError: mojolearn optimizer: this build has no device-resident parameter "
                         "entries (a CPU-only install)")
-        out[0] = Float64(w[5])
-        out[1] = 0.0
-        return PythonObject(0).steal_data()
-    except error:
-        return optimizer_python_error(error)
+        return (req.handle, 0)
 
-
-def optimizer_public_clip_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_clip(addrs, nbytes, max_norm, out_addr) on the host.
-    Returns 0."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 4:
-            raise Error("TypeError: optimizer_public_clip expects four arguments")
-        var addrs = int_words(args[0])
-        var nbytes = int_words(args[1])
-        var max_norm = Float32(Float64(py=args[2]))
-        var out = F64P(unsafe_from_address=Int(py=args[3]))
+    @staticmethod
+    def clip(addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
+        var r = (Float32(0.0), Float32(0.0))
         with GILReleased(Python()):
-            var r = public_clip_host(addrs, nbytes, max_norm)
-            out[0] = Float64(r[0])
-            out[1] = Float64(r[1])
-        return PythonObject(0).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            r = public_clip_host(addrs, nbytes, max_norm)
+        return r
 
-
-def optimizer_public_accumulate_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_accumulate(in_addrs, nbytes, out_addrs, a, tokens) on
-    the host. Returns N."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 5:
-            raise Error("TypeError: optimizer_public_accumulate expects five arguments")
-        var in_addrs = int_words(args[0])
-        var nbytes = int_words(args[1])
-        var out_addrs = int_words(args[2])
-        var a = Int(py=args[3])
-        var tokens = Int(py=args[4])
+    @staticmethod
+    def accumulate(
+        in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int
+    ) raises -> Int:
         var n = 0
         with GILReleased(Python()):
-            n = public_accumulate_host(in_addrs, nbytes, out_addrs, a, tokens)
-        return PythonObject(n).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            n = public_accumulate_host(in_addrs, nbytes, out_addrs, a_count, tokens)
+        return n
+
+    @staticmethod
+    def download(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
+        return host_download(handle, m_addr, v_addr, n)
+
+    @staticmethod
+    def upload(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
+        return host_upload(handle, m_addr, v_addr, n)
 
 
-def optimizer_public_zero_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_zero(addrs, nbytes): `zero_grad`. Returns the tensor
-    count."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 2:
-            raise Error("TypeError: optimizer_public_zero expects two arguments")
-        var addrs = int_words(args[0])
-        var nbytes = int_words(args[1])
-        with GILReleased(Python()):
-            zero_tensors(addrs, nbytes)
-        return PythonObject(len(addrs)).steal_data()
-    except error:
-        return optimizer_python_error(error)
+def optimizer_door_step_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_step(opt, grads, max_norm, op, tokens) on the host."""
+    return entry_step[HostOptKernels](py_self, packed)
+
+
+def optimizer_door_io_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_io(opt, op, tensors, name, tensor) on the host."""
+    return entry_io[HostOptKernels](py_self, packed)
+
+
+def optimizer_door_state_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_state(opt, which) on the host."""
+    return entry_state[HostOptKernels](py_self, packed)
+
+
+def optimizer_door_state_set_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_state_set(opt, which, value) on the host."""
+    return entry_state_set[HostOptKernels](py_self, packed)
+
+
+def optimizer_door_load_state_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_load_state(opt, t, ea, c1, es, c2, bi, c3) on the host."""
+    return entry_load_state[HostOptKernels](py_self, packed)
+
+
+def optimizer_door_clip_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs) on the host."""
+    return entry_clip[HostOptKernels](py_self, packed)
+
+
+def optimizer_door_accumulate_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_accumulate(microbatch_grads, tokens) on the host."""
+    return entry_accumulate[HostOptKernels](py_self, packed)
 
 
 def optimizer_resident_open_host_binding(n_total: PythonObject) raises -> PythonObject:

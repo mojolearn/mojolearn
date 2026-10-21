@@ -264,39 +264,6 @@ def _is_buffer(x):
     return True
 
 
-def _as_seq(x, name, where):
-    """A list of arrays from either one array or an iterable of them, the way
-    `torch.nn.utils.clip_grad_norm_` accepts either. DEVIATION 2402: "an
-    array" means ANY object supporting the buffer protocol -- a NumPy
-    array, an `array.array`, a `mojolearn.Array` -- judged by
-    `_buffer.view` and not by `isinstance(x, np.ndarray)`."""
-    if _is_buffer(x):
-        return [x]
-    try:
-        out = list(x)
-    except TypeError:
-        raise TypeError(
-            "mojolearn.%s: %s must be a float32 array (a numpy array, an "
-            "array.array or a mojolearn.Array -- anything supporting the "
-            "buffer protocol) or an iterable of them, got %s"
-            % (where, name, type(x).__name__)
-        )
-    if not out:
-        raise ValueError(
-            "mojolearn.%s: %s is empty; there is nothing to do and an empty "
-            "parameter registry is refused rather than answered "
-            "(training/estimator.mojo)" % (where, name)
-        )
-    for i, a in enumerate(out):  # glue: checks each parameter tensor
-        if not _is_buffer(a):
-            raise TypeError(
-                "mojolearn.%s: %s[%d] is %s, not an array (it does not "
-                "support the buffer protocol)"
-                % (where, name, i, type(a).__name__)
-            )
-    return out
-
-
 def _check_dtype(arrays, name, where, *, inplace):
     """float32 or REFUSED BY NAME. Never cast. Returns the `Probe` of every
     array, in order, for the callers that size and address them.
@@ -351,42 +318,29 @@ def _check_dtype(arrays, name, where, *, inplace):
     return probes
 
 
-def _nbytes(probes):
-    """The byte count of every tensor, read off its buffer (no arithmetic)."""
-    return [pb.nbytes for pb in probes]  # glue: one buffer size per tensor
-
-
-def _addrs(arrays, writable=True):
-    """The address of every tensor's buffer, for the native call."""
-    if writable:
-        return [addr(a, name="tensor") for a in arrays]  # glue: one address per tensor
-    return [addr_ro(a, name="tensor") for a in arrays]  # glue: one address per tensor
-
-
 # ===================================================================
 # THE OPTIMIZERS
 # ===================================================================
-# Each public method checks its arguments here and makes ONE native call
-# (lane neural-optimizers, 2026-10-21): the parameter traversal (the flat
-# registry buffer, the write-back), the learning rate of a built-in
-# schedule, the optimizer state's allocation, the choice of route (state on
-# the device or on the host, the device sign flip, the device-parameter
-# step) and the update itself are training/optimizer_public.mojo (the GPU
-# binding) and training/host/optimizer_public_host.mojo (a CPU-only install)
-# over the existing native step; the registry's offsets are
-# training/optimizer_public_common.mojo through the core binding. The
-# native call writes its typed results into a result buffer and this glue
-# assigns them.
+# Each public method checks its plain Python arguments here and makes ONE
+# native call with the optimizer object and the caller's arguments as they
+# are (lane optimizers-thin-glue, 2026-10-21): the door
+# (bindings/optimizer_public_door.mojo) reads the parameter and gradient
+# tensors through the buffer protocol, refuses wrong dtypes, layouts,
+# counts and shapes by name, resolves the built-in schedule's words and the
+# optimizer state's host mirrors, calls the one kernel entry
+# (training/optimizer_public.mojo on the GPU binding,
+# training/host/optimizer_public_host.mojo on a CPU-only install) and
+# assigns its result on the optimizer. A caller's OWN schedule object (one
+# with `lr_at` and no `_lr_spec`) is the one Python call a step makes: the
+# door calls `lr_schedule.lr_at(t + 1)` and its exception reaches the caller
+# unchanged.
 
-#: `optimizer_public_step`'s result words (training/optimizer_public_common.mojo `PublicStepOut.write`)
-_STEP_OUT = (0.0,) * 10
-#: `optimizer_public_step`'s gradient modes
-_GRADS_HOST, _GRADS_DEVICE, _GRADS_RESIDENT = 0, 1, 2
-#: `optimizer_public_io`'s operations (training/optimizer_public.mojo)
+#: `optimizer_door_step`'s operations (bindings/optimizer_public_door.mojo)
+_OP_STEP, _OP_STEP_DEVICE, _OP_STEP_ACCUMULATED = 0, 1, 2
+#: `optimizer_door_state`'s readings
+_STATE_DICT, _STATE_EXP_AVG, _STATE_EXP_AVG_SQ = 0, 1, 2
+#: `optimizer_door_io`'s operations (training/optimizer_public.mojo)
 _IO_QUERY, _IO_PARAMS_UP, _IO_PARAMS_DOWN, _IO_GRADS_UP, _IO_GRADS_DOWN, _IO_PARAM_DEVICE = 0, 1, 2, 3, 4, 5
-#: the optimizer's `resident=` argument as the native word
-_RESIDENT_WORD = {None: -1, False: 0, True: 1}
-_NO_SCHEDULE = ([-1, 0, 0, 0], [0.0, 0.0, 0.0, 0.0])
 
 
 class _Optimizer(NumericModeMixin):
@@ -419,7 +373,6 @@ class _Optimizer(NumericModeMixin):
         self._resident_wanted = resident
         # A trainer runs only under a numeric profile whose TRAINING gates have passed.
         _numeric_profile.require_training("mojolearn.%s" % where)
-        self.params = _as_seq(params, "params", where)
         #: A schedule object with `lr_at(t)` (t ONE-BASED), or None. When set,
         #: each step's learning rate is the schedule's value at that step and
         #: `lr` is overwritten with it.
@@ -440,26 +393,16 @@ class _Optimizer(NumericModeMixin):
                 "(python/mojolearn/_training_impl.py)" % (where, accumulation_steps)
             )
         self.accumulation_steps = a
-        probes = _check_dtype(self.params, "params", where, inplace=True)
-        #: `offsets[j] .. offsets[j + 1]` is tensor j of the flat registry,
-        #: J + 1 int32, filled natively.
-        self.offsets = zeros((len(self.params) + 1,), "<i4")
-        flags = array.array("q", (0,))
-        self.n_total = int(_buffers._native("optimizer_registry")(  # cpu-route: the parameter registry offsets are host metadata built once with the optimizer
-            _nbytes(probes), addr(self.offsets, name="offsets"), flags.buffer_info()[0]))
-        #: The host mirrors of `exp_avg` (Adam's first moment, SGD's momentum
-        #: buffer) and `exp_avg_sq`, allocated on first need; the state
-        #: itself is the native slot's from the first step on.
-        self._m = None
-        self._v = None
-        self._pristine = True
-        if flags[0]:
-            # MOJOLEARN_OPT_LAZY_MOMENTS=0: the eager pair (the A/B)
-            self._host_moments()
-            self._pristine = False
-        #: SGD's per-tensor `buf_initialized` flag, contract 7.3b: CARRIED
-        #: STATE that belongs in a checkpoint beside `exp_avg`.
-        self.buf_initialized = zeros((len(self.params),), "<i4")
+        # ONE native call (the tier-free core binding: an optimizer is built
+        # before its numeric mode is known): `params` as the tensor list,
+        # refused by name unless float32, non-empty, C-contiguous and
+        # writable; `offsets` (J + 1 int32, `offsets[j] .. offsets[j + 1]` is
+        # tensor j of the flat registry); `n_total`; SGD's per-tensor
+        # `buf_initialized` flag (contract 7.3b, CARRIED STATE that belongs in
+        # a checkpoint beside `exp_avg`); and the host mirrors `_m` / `_v` of
+        # `exp_avg` and `exp_avg_sq`, allocated on first need (with the
+        # optimizer under MOJOLEARN_OPT_LAZY_MOMENTS=0, the A/B).
+        _buffers._native("optimizer_door_init")(self, params)  # cpu-route: the parameter registry offsets are host metadata built once with the optimizer
         #: ONE-BASED. The first step of a run is `t = 1`.
         self.t = 0
         self.packed_ = None
@@ -470,58 +413,26 @@ class _Optimizer(NumericModeMixin):
         self.clip_coef_ = None
 
     # -- the state: a native slot, mirrored on the host on access -----------
-    def _host_moments(self):
-        """The host mirrors, allocated (zero filled) on first need."""
-        if self._m is None:
-            self._m = zeros((self.n_total,), "<f4")
-        if self._v is None:
-            self._v = zeros((self.n_total,), "<f4")
-        return self._m, self._v
-
-    def _download(self):
-        """The slot's state into the mirrors: one native call, when they are stale."""
-        if self._res is not None and not self._host_fresh:
-            m, v = self._host_moments()
-            self._res_binding.optimizer_resident_download(
-                self._res, addr(m, name="exp_avg"),
-                addr(v, name="exp_avg_sq"), int(self.n_total))
-            self._host_fresh = True
-
-    def _upload_one(self, m, v):
-        """An assigned moment into the slot (one native call; 0 leaves the other)."""
-        if self._res is not None:
-            self._res_binding.optimizer_resident_upload(
-                self._res, 0 if m is None else addr(m, name="exp_avg"),
-                0 if v is None else addr(v, name="exp_avg_sq"), int(self.n_total))
-
     @property
     def exp_avg(self):
         """Adam's first moment (SGD's momentum buffer), a `mojolearn.Array`
         of `n_total` floats. Reading it copies the optimizer state into the
         returned array, so read it once per use, not per element; assign to
         `exp_avg` to change the state."""
-        self._download()
-        self._pristine = False
-        return self._host_moments()[0]
+        return self._binding().optimizer_door_state(self, _STATE_EXP_AVG)
 
     @exp_avg.setter
     def exp_avg(self, value):
-        self._m = value
-        self._pristine = False
-        self._upload_one(value, None)
+        self._binding().optimizer_door_state_set(self, _STATE_EXP_AVG, value)
 
     @property
     def exp_avg_sq(self):
         """Adam's second moment; see `exp_avg`."""
-        self._download()
-        self._pristine = False
-        return self._host_moments()[1]
+        return self._binding().optimizer_door_state(self, _STATE_EXP_AVG_SQ)
 
     @exp_avg_sq.setter
     def exp_avg_sq(self, value):
-        self._v = value
-        self._pristine = False
-        self._upload_one(None, value)
+        self._binding().optimizer_door_state_set(self, _STATE_EXP_AVG_SQ, value)
 
     @property
     def resident_(self):
@@ -531,27 +442,6 @@ class _Optimizer(NumericModeMixin):
     def _binding(self):
         return _load(getattr(self, "numeric_mode", None))
 
-    def _state_words(self):
-        """The state slot's words of a native call: handle, resident,
-        pristine, and the mirrors' addresses (0 when absent)."""
-        return [
-            -1 if self._res is None else int(self._res),
-            _RESIDENT_WORD.get(self._resident_wanted, 1),
-            1 if self._pristine else 0,
-            0 if self._m is None else addr(self._m, name="exp_avg"),
-            0 if self._v is None else addr(self._v, name="exp_avg_sq"),
-        ]
-
-    def _keep_slot(self, handle, binding, on_host):
-        """Record a slot the native call opened, with the extension module
-        that owns it (the module its entries belong to: on a CPU-only install
-        `binding` is the host binding's stand-in), which the native finalizer
-        closes it through."""
-        if self._res is None and handle >= 0:
-            self._res = int(handle)
-            self._res_binding = binding.optimizer_resident_close.__self__
-            self._res_host = bool(on_host)
-
     # -- lane fam2-neural (2026-10-04): parameters and gradients resident ----
     # After `params_to_device()` the parameters live in the optimizer's
     # device slot: `step(grads)` then uploads the gradient only, and
@@ -560,24 +450,8 @@ class _Optimizer(NumericModeMixin):
     # until `params_to_host()` writes them back. The step is the same device
     # call on the same buffers: the same bits.
     def _io(self, op, tensors=None, name="params", tensor=0):
-        """One `optimizer_public_io` call; returns its result word."""
-        binding = self._binding()
-        addrs, nbytes = [], []
-        if tensors is not None:
-            seq = _as_seq(tensors, name, self._where)
-            probes = _check_dtype(seq, name, self._where, inplace=True)
-            if len(seq) != len(self.params):
-                raise ValueError(
-                    "mojolearn.%s: %s does not match the optimizer's registry "
-                    "(%d tensors, %d floats)" % (self._where, name, len(self.params), self.n_total))
-            addrs, nbytes = _addrs(seq), _nbytes(probes)
-        out = array.array("d", (0.0, 0.0))
-        binding.optimizer_public_io(
-            [op, int(tensor), len(self.params), int(self.n_total),
-             addr_ro(self.offsets, name="offsets")] + self._state_words(),
-            addrs, nbytes, out.buffer_info()[0])
-        self._keep_slot(int(out[0]), binding, False)
-        return out[1]
+        """One `optimizer_door_io` call; returns its result word."""
+        return self._binding().optimizer_door_io(self, op, tensors, name, tensor)
 
     def params_resident_available(self):
         """Whether `params_to_device` works on this build."""
@@ -628,16 +502,10 @@ class _Optimizer(NumericModeMixin):
         gradient already in the handle (`grads_to_device`) is used and, with
         `max_norm`, clipped there; nothing crosses the bus but the three
         info words. Returns what `step` returns."""
-        if not getattr(self, "_p_dev", False):
-            raise RuntimeError("mojolearn.%s.step_device: call params_to_device() first" % self._where)
-        return self._step(grads, max_norm, "step_device", device=True)
+        return self._binding().optimizer_door_step(self, grads, max_norm, _OP_STEP_DEVICE, None)
 
     def __del__(self):
         return _optimizer_finalize_native(self)
-
-    # -- the parameters every algorithm shares --------------------------
-    def _config(self):
-        raise NotImplementedError
 
     def state_dict(self):
         """Everything a resumed run needs, and nothing that is not state.
@@ -648,15 +516,7 @@ class _Optimizer(NumericModeMixin):
         momentum buffer it should have continued, which is the failure the
         optimizer contract's clause (d) control 2 is built to catch.
         """
-        self._download()
-        self._pristine = False
-        m, v = self._host_moments()
-        return {
-            "t": int(self.t),
-            "exp_avg": m.copy(),
-            "exp_avg_sq": v.copy(),
-            "buf_initialized": self.buf_initialized.copy(),
-        }
+        return self._binding().optimizer_door_state(self, _STATE_DICT)
 
     # DEVIATION 2404: arrays go through _buffer.as_f32_c / as_i32_c and are copied (the NumPy spelling
     # aliased a caller's float32 C-order array).
@@ -675,154 +535,14 @@ class _Optimizer(NumericModeMixin):
         es, c2 = as_f32_c(state["exp_avg_sq"], ndim=1, name="exp_avg_sq")
         bi, c3 = as_i32_c(state["buf_initialized"], ndim=1,
                           name="buf_initialized")
-        ea = ea if c1 else ea.copy()
-        es = es if c2 else es.copy()
-        for name, a in (("exp_avg", ea), ("exp_avg_sq", es)):  # glue: checks the two state arrays
-            if a.size != self.n_total:
-                raise ValueError(
-                    "mojolearn.%s.load_state_dict: %s holds %d floats, this "
-                    "optimizer's registry is %d"
-                    % (self._where, name, a.size, self.n_total)
-                )
-        self._m, self._v = ea, es
-        self._pristine = False
-        self._upload_one(ea, es)
-        self._host_fresh = True
-        self.buf_initialized = bi if c3 else bi.copy()
-        self.t = t
+        self._binding().optimizer_door_load_state(self, t, ea, c1, es, c2, bi, c3)
 
     def zero_grad(self, grads):
         """`torch.optim.Optimizer.zero_grad`, over arrays the caller owns.
         Present so that a training loop written against torch reads the same;
         it writes `+0.0` and nothing else -- all-zero bytes into each buffer,
         which must be C-contiguous and writable."""
-        gs = _as_seq(grads, "grads", self._where)
-        probes = _check_dtype(gs, "grads", self._where, inplace=True)
-        self._binding().optimizer_public_zero(_addrs(gs), _nbytes(probes))
-
-    def _schedule_words(self):
-        """The built-in schedule as its native words, or None for a caller's
-        own schedule object (its `lr_at` is then called here)."""
-        s = self.lr_schedule
-        if s is None:
-            return _NO_SCHEDULE
-        spec = getattr(s, "_lr_spec", None)
-        return None if spec is None else spec()
-
-    def _step(self, grads, max_norm, where, device=False, microbatches=None, tokens=-1):
-        """The glue of `step`, `step_device` and `step_accumulated`: the
-        argument checks, then ONE `optimizer_public_step` call, then the
-        assignments of what it returns."""
-        if max_norm is not None and not (float(max_norm) > 0.0):
-            raise ValueError(
-                "mojolearn.%s.%s: max_norm must be > 0 or None, got %r; "
-                "None is how 'no clipping' is spelled "
-                "(python/mojolearn/_training_impl.py)"
-                % (self._where, where, max_norm)
-            )
-        p_dev = bool(getattr(self, "_p_dev", False))
-        p_addrs, p_bytes, g_addrs, g_bytes = [], [], [], []
-        g_mode, a_count = _GRADS_HOST, 1
-        keep = None
-        if microbatches is not None:
-            a_count = len(microbatches)
-            for i, part in enumerate(microbatches):  # glue: checks each microbatch argument
-                gs = _as_seq(part, "microbatch_grads[%d]" % i, self._where)
-                probes = _check_dtype(gs, "microbatch_grads[%d]" % i, self._where,
-                                      inplace=a_count == 1)
-                self._check_grads(gs, probes, where)
-                if a_count > 1:
-                    # read-only inputs: strided buffers are made contiguous
-                    gs = [_buffers.as_f32_c(g, ndim=None, name="microbatch")[0] for g in gs]  # glue: converts each microbatch tensor buffer
-                    g_addrs += _addrs(gs, writable=False)
-                    keep = (keep or []) + gs
-                else:
-                    g_addrs += _addrs(gs)
-                g_bytes += _nbytes(probes)
-        elif p_dev and grads is not None and (_is_dev(grads) or (
-                isinstance(grads, (list, tuple)) and len(grads) > 0 and _is_dev(grads[0]))):
-            gs = [grads] if _is_dev(grads) else list(grads)
-            if len(gs) != len(self.params):
-                raise ValueError("mojolearn.%s.%s: %d gradients for %d parameter tensors"
-                                 % (self._where, where, len(gs), len(self.params)))
-            for j, g in enumerate(gs):  # glue: checks each argument is a device array
-                if not _is_dev(g):
-                    raise ValueError("mojolearn.%s.%s: grads[%d] must be a device array"
-                                     % (self._where, where, j))
-            g_mode = _GRADS_DEVICE
-            g_addrs = [g.h for g in gs]  # glue: one device handle per tensor
-            g_bytes = [g.size for g in gs]  # glue: one device array size per tensor
-        elif p_dev and grads is None:
-            g_mode = _GRADS_RESIDENT
-        else:
-            gs = _as_seq(grads, "grads", self._where)
-            probes = _check_dtype(gs, "grads", self._where, inplace=True)
-            if p_dev and len(gs) != len(self.params):
-                raise ValueError(
-                    "mojolearn.%s: grads does not match the optimizer's registry "
-                    "(%d tensors, %d floats)" % (self._where, len(self.params), self.n_total))
-            if not p_dev:
-                self._check_grads(gs, probes, where)
-            g_addrs, g_bytes = _addrs(gs), _nbytes(probes)
-        if not p_dev:
-            # Re-read every parameter buffer's layout on EVERY step: a caller
-            # can reshape or resize their own array between steps.
-            pprobes = _check_dtype(self.params, "params", self._where, inplace=True)
-            p_addrs, p_bytes = _addrs(self.params), _nbytes(pprobes)
-        sched = self._schedule_words()
-        if sched is None:
-            # a caller's own schedule object: its value for this step
-            self.lr = float(self.lr_schedule.lr_at(self.t + 1))  # glue: the caller's schedule object, one-based next step
-            sched = _NO_SCHEDULE
-        if self._resident_wanted is False:
-            # `resident=False`: the state lives in these host arrays (no slot)
-            self._host_moments()
-        cfg = self._config()
-        binding = self._binding()
-        out = array.array("d", _STEP_OUT)
-        binding.optimizer_public_step(
-            [len(self.params), int(self.t), int(self._KIND), int(cfg["nesterov"]),
-             1 if getattr(self, "maximize", False) else 0] + sched[0][:4]
-            + [int(self.n_total), addr_ro(self.offsets, name="offsets"),
-               addr(self.buf_initialized, name="buf_initialized"), g_mode, a_count, int(tokens)]
-            + self._state_words()
-            + [1 if p_dev else 0, 1 if getattr(self, "_g_dev", False) else 0, 1 if device else 0],
-            [float(cfg["lr"]), float(cfg["beta1"]), float(cfg["beta2"]), float(cfg["eps"]),
-             float(cfg["weight_decay"]), float(cfg["momentum"]), float(cfg["dampening"]),
-             0.0 if max_norm is None else float(max_norm)] + sched[1][:4],
-            p_addrs, p_bytes, g_addrs, g_bytes, out.buffer_info()[0])
-        del keep
-        # the assignments of the native result (`PublicStepOut`)
-        self.t = int(out[0])
-        self._keep_slot(int(out[1]), binding, not out[2])
-        self._host_fresh = self._res is None
-        if out[3]:
-            self.total_norm_, self.clip_coef_ = out[4], out[5]
-        else:
-            self.total_norm_, self.clip_coef_ = None, None
-        #: The learning rate the step just used, as a float32 value.
-        self.lr_ = out[6]
-        if sched is not _NO_SCHEDULE:
-            self.lr = out[6]
-        if out[7] >= 0:
-            self.packed_ = bool(out[7])
-        self._g_dev = bool(out[8])
-        return self.total_norm_
-
-    def _check_grads(self, gs, probes, where):
-        """`grads` matches `params` in count and shape."""
-        if len(gs) != len(self.params):
-            raise ValueError(
-                "mojolearn.%s.%s: %d gradients for %d parameter tensors"
-                % (self._where, where, len(gs), len(self.params))
-            )
-        for j, (p, gp) in enumerate(zip(self.params, probes)):  # glue: checks each parameter tensor shape
-            pp = probe(p)
-            if pp.shape != gp.shape:
-                raise ValueError(
-                    "mojolearn.%s.%s: grads[%d] has shape %r, params[%d] "
-                    "has %r" % (self._where, where, j, gp.shape, j, pp.shape)
-                )
+        self._binding().optimizer_door_zero(self, grads)
 
     def step(self, grads, max_norm=None):
         """One step. `grads` matches `params` in count, shape and order.
@@ -841,7 +561,7 @@ class _Optimizer(NumericModeMixin):
         Returns the pre-clip total gradient norm as a float when the clip
         ran, and None when it did not.
         """
-        return self._step(grads, max_norm, "step")
+        return self._binding().optimizer_door_step(self, grads, max_norm, _OP_STEP, None)
 
     def step_accumulated(self, microbatch_grads, tokens, max_norm=None):
         """One step from `A = self.accumulation_steps` microbatch gradient
@@ -849,19 +569,8 @@ class _Optimizer(NumericModeMixin):
         ascending microbatch index, then `step`. `tokens` is the FULL step's
         token count T; a split that clause 9.2 does not admit is refused by
         name (no gradient is combined). Returns what `step` returns."""
-        parts = list(microbatch_grads)
-        if len(parts) != self.accumulation_steps:
-            raise ValueError(
-                "mojolearn.%s.step_accumulated: %d microbatch gradient lists "
-                "for accumulation_steps=%d; the count is part of the run's "
-                "numerical specification (optimizer contract clause 9.2) "
-                "(python/mojolearn/_training_impl.py)"
-                % (self._where, len(parts), self.accumulation_steps)
-            )
-        t_tokens = -1 if tokens is None else int(tokens)
-        if len(parts) > 1 and tokens is not None and t_tokens < 1:
-            raise ValueError("mojolearn.accumulate_grads: tokens must be >= 1")
-        return self._step(None, max_norm, "step_accumulated", microbatches=parts, tokens=t_tokens)
+        return self._binding().optimizer_door_step(
+            self, microbatch_grads, max_norm, _OP_STEP_ACCUMULATED, tokens)
 
 
 # Optimizer contract 7.3 (momentum 7.3, dampening 7.3a, nesterov 7.3c). `params` order is the
@@ -1290,46 +999,14 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
     >>> g1 = np.ones((64, 8), dtype=np.float32); g2 = np.ones(8, dtype=np.float32)
     >>> total = mojolearn.clip_grad_norm_([g1, g2], max_norm=1.0)
     """
-    _refuse_unknown(kwargs, "clip_grad_norm_")
-    if float(norm_type) != 2.0:
-        raise NotImplementedError(
-            "mojolearn.clip_grad_norm_: norm_type=%r is REFUSED BY NAME. The "
-            "profile has ONE norm, the two-level L2 of optimizer contract "
-            "3.1; an L-inf or L1 clip is a different reduction with its own "
-            "clause, its own fixture and its own sabotage, and none of them "
-            "exist (python/mojolearn/_training_impl.py)" % (norm_type,)
-        )
-    if not error_if_nonfinite:
-        raise NotImplementedError(
-            "mojolearn.clip_grad_norm_: error_if_nonfinite=False is REFUSED "
-            "BY NAME. The profile ALWAYS refuses a non-finite total norm "
-            "(optimizer contract 8a, refuse_nonfinite_scalar in "
-            "training/checks/optimizer_oracle.mojo) and there is no build in "
-            "which it does not, so accepting False would be accepting a "
-            "promise this surface cannot keep. Skipping a step whose gradient "
-            "norm is non-finite is a useful thing to do and the contract says "
-            "where it belongs: OUTSIDE the pinned region, as an explicit "
-            "recorded branch in your own loop "
-            "(python/mojolearn/_training_impl.py)"
-        )
-    gs = _as_seq(grads, "grads", "clip_grad_norm_")
-    probes = _check_dtype(gs, "grads", "clip_grad_norm_", inplace=True)
-    mn = float(max_norm)
-    if not (mn > 0.0):
-        raise ValueError(
-            "mojolearn.clip_grad_norm_: max_norm must be > 0, got %r; "
-            "reaching this function IS the clip running, and 'no clipping' is "
-            "spelled by not calling it (training/estimator.mojo)" % (max_norm,)
-        )
-
-    # One native call (lane neural-optimizers): the registry, the route
-    # (the tensors straight from their own memory, or the packed buffer under
-    # MOJOLEARN_CLIP_PACKED=1 or several optimizer devices; the same device
-    # buffer, offsets and clip, so the same bits) and the in-place scale are
-    # training/optimizer_public.mojo `public_clip`.
-    out = array.array("d", (0.0, 0.0))
-    _load(numeric_mode).optimizer_public_clip(_addrs(gs), _nbytes(probes), mn, out.buffer_info()[0])
-    return out[0]
+    # One native call (lane optimizers-thin-glue): the keyword, norm_type,
+    # error_if_nonfinite and max_norm refusals, the tensors read through the
+    # buffer protocol, and the clip (training/optimizer_public.mojo
+    # `public_clip`: the registry, the route -- the tensors straight from
+    # their own memory, or the packed buffer under MOJOLEARN_CLIP_PACKED=1 or
+    # several optimizer devices; the same device buffer, offsets and clip, so
+    # the same bits -- and the in-place scale).
+    return _load(numeric_mode).optimizer_door_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs)
 
 
 # ===================================================================
@@ -1659,22 +1336,18 @@ class _LrTable(object):
             raise ValueError("mojolearn schedule: step t is ONE-BASED, got %d" % t)
         _lr_status(st)
 
+    #: whose refusal messages `lr_at` / `lr_values` raise (bindings/lr_table_helpers.mojo)
+    _LR_STYLE = 0
+
     def lr_at(self, t):
         """The float32 learning rate of ONE-BASED step `t`, as a float."""
-        t = int(t)
-        out = array.array("f", (0.0,))
-        st, _ = _lr_fill(self._lr_spec(), t, out)
-        if st:
-            self._lr_refuse(st, t)
-        return out[0]
+        ip, fp = self._lr_spec()
+        return _lr_native("lr_schedule_at")(ip, fp, t, self._LR_STYLE)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
 
     def lr_values(self, n):
         """lr_at(1) .. lr_at(n) as an array('f'), in one native call."""
-        out = array.array("f", bytes(4 * max(int(n), 0)))  # glue: the result array of n float32 words
-        st, i = _lr_fill(self._lr_spec(), 1, out)
-        if st:
-            self._lr_refuse(st, 1 + i)  # glue: the failing step's number for the message
-        return out
+        ip, fp = self._lr_spec()
+        return _lr_native("lr_schedule_series")(ip, fp, n, self._LR_STYLE)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
 
     def bits_at(self, t):
         """`lr_at(t)` as its float32 bit pattern, for fixtures."""
@@ -1919,38 +1592,12 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
     array or list of arrays
         The combined gradient, in the structure of one entry.
     """
-    parts = list(microbatch_grads)
-    if not parts:
-        raise ValueError("mojolearn.accumulate_grads: no microbatches")
-    single = _is_buffer(parts[0])
-    seqs = [_as_seq(p, "microbatch_grads[%d]" % i, "accumulate_grads")
-            for i, p in enumerate(parts)]  # glue: wraps each microbatch argument
-    probes = [_check_dtype(sq, "microbatch_grads[%d]" % i, "accumulate_grads", inplace=False)
-              for i, sq in enumerate(seqs)]  # glue: probes each microbatch argument
-    for i, sq in enumerate(seqs):  # glue: checks microbatch tensor shapes
-        if len(sq) != len(seqs[0]):
-            raise ValueError(
-                "mojolearn.accumulate_grads: microbatch %d has %d tensors, "
-                "microbatch 0 has %d" % (i, len(sq), len(seqs[0])))
-        for j, (a, b) in enumerate(zip(probes[i], probes[0])):  # glue: checks microbatch tensor shapes
-            if a.shape != b.shape:
-                raise ValueError(
-                    "mojolearn.accumulate_grads: microbatch %d tensor %d has "
-                    "shape %r, microbatch 0 has %r" % (i, j, a.shape, b.shape))
-    t_tokens = -1 if tokens is None else int(tokens)
-    if tokens is not None and t_tokens < 1:
-        raise ValueError("mojolearn.accumulate_grads: tokens must be >= 1")
-    # Inputs are read-only: strided buffers are made contiguous, without the
-    # writable/contiguous restriction of in-place optimizer parameters.
-    contiguous = [[_buffers.as_f32_c(a, ndim=None, name='microbatch')[0] for a in sq]  # glue: converts each microbatch tensor buffer
-                  for sq in seqs]  # glue: converts each microbatch tensor buffer
-    result = [empty(pb.shape, "<f4") for pb in probes[0]]  # glue: allocates each result tensor
-    # One native call: the [A, N] stack, the clause 9.2 tree and the result
-    # tensors (training/optimizer_public.mojo `public_accumulate`).
-    _load(numeric_mode).optimizer_public_accumulate(
-        [addr_ro(a, name="microbatch") for sq in contiguous for a in sq],  # glue: one address per microbatch tensor
-        _nbytes(probes[0]), _addrs(result), len(seqs), t_tokens)
-    return result[0] if single else result
+    # One native call (lane optimizers-thin-glue): the microbatches read
+    # through the buffer protocol and checked by name, strided buffers made
+    # contiguous, the [A, N] stack, the clause 9.2 tree and the result arrays
+    # (bindings/optimizer_public_door.mojo, training/optimizer_public.mojo
+    # `public_accumulate`).
+    return _load(numeric_mode).optimizer_door_accumulate(microbatch_grads, tokens)
 
 
 # ===================================================================

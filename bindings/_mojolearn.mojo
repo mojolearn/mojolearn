@@ -114,9 +114,9 @@ from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
     lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding, lr_schedule_exact_binding,
     lr_onecycle_exact_binding, lr_pow_values_binding, lr_schedule_exact_block_binding,
-    lr_onecycle_exact_block_binding, lr_schedule_fill_binding,
+    lr_onecycle_exact_block_binding, lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
 )
-from bindings.optimizer_registry_pyapi import optimizer_registry_binding
+from bindings.optimizer_public_door import entry_init
 from bindings.array_helpers import (
     nsum_f64_binding,
     row_means_f64_binding,
@@ -1946,7 +1946,9 @@ def build__mojolearn() -> PythonObject:
         m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
         m.def_function[lr_onecycle_exact_block_binding]("lr_onecycle_exact_block")
         m.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
-        m.def_function[optimizer_registry_binding]("optimizer_registry")
+        m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
+        m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
+        m.def_py_c_function(entry_init, "optimizer_door_init")
         m.def_function[class_ratio_f64_binding]("class_ratio_f64")
         m.def_function[shard_topk_merge_f32_binding]("shard_topk_merge_f32")
         m.def_function[gather_i64_binding]("gather_i64")

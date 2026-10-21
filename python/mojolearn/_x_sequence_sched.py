@@ -49,6 +49,9 @@ def _q(x, name):
 # table with its float32 decision and exact route, the gamma^e enclosures of
 # StepLR / ExponentialLR), the same values as before.
 class _Sched(_LrTable):
+    #: the sequence schedules' refusal messages (bindings/lr_table_helpers.mojo)
+    _LR_STYLE = 1
+
     def _lr_refuse(self, st, t):
         if st == _LR_ONE_BASED:
             raise ValueError("schedule step t is ONE-BASED")
@@ -192,6 +195,9 @@ class OneCycleLR(_Sched):
     >>> sched = mojolearn.OneCycleLR(max_lr=0.01, total_steps=1000)
     >>> lrs = sched.lrs(1000)
     """
+
+    #: OneCycleLR's refusal messages, with its step past total_steps + 1
+    _LR_STYLE = 2
 
     def __init__(self, max_lr, total_steps, pct_start=0.3, anneal_strategy="cos", div_factor=25.0,
                  final_div_factor=1e4, three_phase=False):
