@@ -105,7 +105,8 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var setting = context["environment"].get(PythonObject("MOJOLEARN_ARENA_RANGES").encode("ascii"), PythonObject("1").encode("ascii"))
     if bi.type(setting) is not bi.bytes:
         raise Error("TypeError: arena environment setting must be native bytes")
-    var ranges = String(setting.decode()).strip() != "0"
+    var setting_text = String(setting.decode())
+    var ranges = String(setting_text.strip()) != "0"
     if ranges and metrics.get("x_metrics_run_ranges") is not None:
         _ = metrics["x_metrics_run_ranges"](address, words_address,
             Python.tuple(program.size, stages, 1, 2), Int(inputs.unsafe_ptr()), outputs_address)
