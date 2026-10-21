@@ -1,0 +1,405 @@
+{
+  "schema": "mojolearn.selected-installed-public-native-evidence.v1",
+  "package_source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+  "record_date": "2026-10-20 America/New_York (runs finish 2026-10-21 UTC)",
+  "wheel": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/macos-installed-stage58-assembly-retry/wheels/mojolearn-0.8.55-py3-none-macosx_11_0_arm64.whl",
+    "sha256": "55fe777eb72aa1c104f3e384820d38bbda43e8a90c2175decdc03db0b4ceb3c2",
+    "bytes": 104270735
+  },
+  "assembly_receipt": {
+    "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/macos-installed-stage58-assembly-retry/assembly-receipt.json",
+    "sha256": "e97aa122b77f085c0f4d48f0845737e64eecfd6459649d5de8394df2c0883b69",
+    "bytes": 192692
+  },
+  "native_scope": {
+    "extension_files": 108,
+    "fresh_changed_bindings": {
+      "host/_mojolearn_tokenizer_host.so": {
+        "raw_input": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/validation-stage58/source/python/mojolearn/host/_mojolearn_tokenizer_host.so",
+          "resolved": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-72f11f70dd6774ab25a776cf745fdb6b7b6f0478/tokenizer-host/_mojolearn_tokenizer_host.so",
+          "sha256": "5fdb3863d7b879987b9b955a160e106582644dcae44b78f07883123eab356257",
+          "bytes": 6231968,
+          "origin": "qualified changed binding"
+        },
+        "staged_sha256": "7c3d7d3e644ba9b9b53558f7b1334983add72269a10c2dc449f59e34fc39b880",
+        "wheel_sha256": "7c3d7d3e644ba9b9b53558f7b1334983add72269a10c2dc449f59e34fc39b880"
+      },
+      "host/_mojolearn_x_sequence_host.so": {
+        "raw_input": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/validation-stage58/source/python/mojolearn/host/_mojolearn_x_sequence_host.so",
+          "resolved": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-cc0591cc453fbf0d17f2feffe4e17a290160f7ed/sequence-host/_mojolearn_x_sequence_host.so",
+          "sha256": "40754153decf9611b2a7b51c1abd5b38305ebbe7e70a2df5d171e33763c1e195",
+          "bytes": 7297280,
+          "origin": "qualified changed binding"
+        },
+        "staged_sha256": "19386228db8f49877a86c24474e2005e4bc86f1eacbc219e08a2dacb01f444c6",
+        "wheel_sha256": "19386228db8f49877a86c24474e2005e4bc86f1eacbc219e08a2dacb01f444c6"
+      },
+      "identical/_mojolearn_x_sequence.so": {
+        "raw_input": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/validation-stage58/source/python/mojolearn/identical/_mojolearn_x_sequence.so",
+          "resolved": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-cc0591cc453fbf0d17f2feffe4e17a290160f7ed/metal-sequence/_mojolearn_x_sequence.so",
+          "sha256": "f7548b7d8906269deea638526522bdfe64f6af5fcf9511fadf25cd634ea4a491",
+          "bytes": 11129544,
+          "origin": "qualified changed binding"
+        },
+        "staged_sha256": "3388e8cbd4aca5b61ca59f4dbc45c7a1d68da04a470b2f4fa3a22ba193945f86",
+        "wheel_sha256": "3388e8cbd4aca5b61ca59f4dbc45c7a1d68da04a470b2f4fa3a22ba193945f86"
+      }
+    },
+    "retained_release_extension_files": 105,
+    "retained_release": "0.8.55",
+    "bundled_runtime_libraries": 5,
+    "total_native_files": 113,
+    "all_wheel_native_hashes_equal_staged_inputs": true,
+    "shipped_python_unchanged_from_frozen_package": true,
+    "native_reuse_limit": "Tokenizer stage58 and sequence HOST/Metal stage57 are the changed bindings. Other native families are retained0.8.55. Passing selected installed operations does not establish current-source equivalence for retained families."
+  },
+  "runs": {
+    "metal": {
+      "scope": "Metal default for eight families; all23 generation cases explicitly CPU because original test device default was not overridden.",
+      "status": "selected-tests-passed",
+      "controller_exit": 0,
+      "pytest_exit": 0,
+      "tests": {
+        "total": 179,
+        "passed": 179,
+        "failures": [],
+        "skipped": []
+      },
+      "families": {
+        "test_samba_step_native.py": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_samba_inference_native.py": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_samba_checkpoint_native.py": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_samba_native_admission.py": {
+          "total": 27,
+          "passed": 27,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_sequential_native_execution.py": {
+          "total": 21,
+          "passed": 21,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_sequential_native_checkpoint.py": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_sequential_native_admission.py": {
+          "total": 18,
+          "passed": 18,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_generator_draw_native.py": {
+          "total": 31,
+          "passed": 31,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_generation_native.py": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "vendor": "metal",
+      "numeric_mode": "identical",
+      "controller_sha256": "4890a2908bb491610524e145a43938decb198c756a1526a17207ace10add8358",
+      "test_device_overrides": {},
+      "observed_generation_test_devices": {},
+      "observed_native_file_count": 66,
+      "artifacts": {
+        "receipt.json": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-metal/receipt.json",
+          "sha256": "a7b4a03489bf95544bb277393ed6032b8a47b9f3b5ea411007a0af0a70f2a742",
+          "bytes": 424235
+        },
+        "installed-modules.json": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-metal/installed-modules.json",
+          "sha256": "cf7375a0df6fdcfc6a80c5d18fad609fe806a4d1174d62755bf1b224f52b66b9",
+          "bytes": 65004
+        },
+        "tests.xml": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-metal/tests.xml",
+          "sha256": "50c90fbef1d2b69d3ebdf75128b3eac3bb0db26b9e3ce8e857f9fdff7d569de3",
+          "bytes": 28925
+        },
+        "tests.log": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-metal/tests.log",
+          "sha256": "664d2b8a8ed84867d2af95f8caf4e2c0920d5cef2f90bdf47b1f426e2f4a1e23",
+          "bytes": 271
+        },
+        "pip-freeze.log": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-metal/pip-freeze.log",
+          "sha256": "d69598fdf802232e7c6386e9eed96f4b7e07c38fd7f3acc3efa790b8c8f7ceef",
+          "bytes": 365
+        }
+      }
+    },
+    "cpu": {
+      "scope": "CPU run; two GPU device-parameter owner cases skipped. Completeness gate remains incomplete.",
+      "status": "failed-or-incomplete",
+      "controller_exit": 1,
+      "pytest_exit": 0,
+      "tests": {
+        "total": 179,
+        "passed": 177,
+        "failures": [],
+        "skipped": [
+          {
+            "name": "test_native_step_preserves_device_parameter_owner[None]",
+            "reason": "native optimizer device-parameter entry is unavailable"
+          },
+          {
+            "name": "test_native_step_preserves_device_parameter_owner[0.3]",
+            "reason": "native optimizer device-parameter entry is unavailable"
+          }
+        ]
+      },
+      "families": {
+        "test_samba_step_native.py": {
+          "total": 12,
+          "passed": 10,
+          "failed": 0,
+          "skipped": 2
+        },
+        "test_samba_inference_native.py": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_samba_checkpoint_native.py": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_samba_native_admission.py": {
+          "total": 27,
+          "passed": 27,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_sequential_native_execution.py": {
+          "total": 21,
+          "passed": 21,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_sequential_native_checkpoint.py": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_sequential_native_admission.py": {
+          "total": 18,
+          "passed": 18,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_generator_draw_native.py": {
+          "total": 31,
+          "passed": 31,
+          "failed": 0,
+          "skipped": 0
+        },
+        "test_generation_native.py": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "vendor": "cpu",
+      "numeric_mode": "identical",
+      "controller_sha256": "4890a2908bb491610524e145a43938decb198c756a1526a17207ace10add8358",
+      "test_device_overrides": {},
+      "observed_generation_test_devices": {},
+      "observed_native_file_count": 9,
+      "artifacts": {
+        "receipt.json": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-cpu/receipt.json",
+          "sha256": "a47c3de06df1760368f398f16b8fa94939f837b345f72386a9d376ce83343150",
+          "bytes": 424339
+        },
+        "installed-modules.json": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-cpu/installed-modules.json",
+          "sha256": "6f2b4be2c4750cb1e18b526a840792e04b202118f4cd0bb986bbf9ad3bf6dbd3",
+          "bytes": 44871
+        },
+        "tests.xml": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-cpu/tests.xml",
+          "sha256": "c27bb09e4f62576f06f94cdcb32b116d6dccb703f7a9965b9e692c6b62a957fd",
+          "bytes": 29561
+        },
+        "tests.log": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-cpu/tests.log",
+          "sha256": "88de3833a1ed22ff2d963c15d040f58ea8f57d8c51155071b955229634e3f5e2",
+          "bytes": 784
+        },
+        "pip-freeze.log": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-archive-repair-cpu/pip-freeze.log",
+          "sha256": "30709b44bb492be74bf2d8460118d317b703d2a8f375a5f5f4a3706bc3781cf8",
+          "bytes": 363
+        }
+      }
+    },
+    "generation-device-metal": {
+      "scope": "Explicit GPU generation-only follow-up; Metal backend read back, fixture DEVICE=gpu recorded. No unrelated tests repeated.",
+      "status": "selected-tests-passed",
+      "controller_exit": 0,
+      "pytest_exit": 0,
+      "tests": {
+        "total": 23,
+        "passed": 23,
+        "failures": [],
+        "skipped": []
+      },
+      "families": {
+        "test_generation_native.py": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "vendor": "metal",
+      "numeric_mode": "identical",
+      "controller_sha256": "f25ae8c5839d7a7d9ba581ef89ceda95425ed824214c3cf27fb6084f1ef2401a",
+      "test_device_overrides": {
+        "MOJOLEARN_GENERATION_DEVICE": "gpu"
+      },
+      "observed_generation_test_devices": {
+        "frozen-tests.test_generation_native": "gpu"
+      },
+      "observed_native_file_count": 66,
+      "artifacts": {
+        "receipt.json": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-generation-device-metal/receipt.json",
+          "sha256": "6221fe657c61d8f593f60a5b692e34f24b2bab25cdc7be3a4b3570ab8821a6c8",
+          "bytes": 423860
+        },
+        "installed-modules.json": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-generation-device-metal/installed-modules.json",
+          "sha256": "7545e8f47572d780a77e25cc5802d14feee846a3a28310ff4a43b2deeade1c92",
+          "bytes": 62295
+        },
+        "tests.xml": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-generation-device-metal/tests.xml",
+          "sha256": "00f2b163a2c2eab42e638fc10bde6a0c14613f2df7faf1155d22ee8a33521568",
+          "bytes": 3435
+        },
+        "tests.log": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-generation-device-metal/tests.log",
+          "sha256": "36aebdafff10df710440ae29e462204b6a717f76a83dcf7fcaacac4f3bc2a724",
+          "bytes": 99
+        },
+        "pip-freeze.log": {
+          "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-generation-device-metal/pip-freeze.log",
+          "sha256": "2149eb19d456b3752770582a429958a5e8449b50020e8e4f874a41937023992a",
+          "bytes": 368
+        }
+      }
+    }
+  },
+  "unique_selected_cases": 179,
+  "case_accounting": "Do not sum the overlapping179 +179 +23 runs. Nine selected test files; explicitGPU generation reruns only those23 cases.",
+  "source_inventory": {
+    "verified_retained_native_sources": 2940,
+    "explicit_archive_omissions": 6,
+    "omission_scope": "Six historical bench/results/multi_gpu snapshots excluded by pinned git archive ancestor export-ignore policy. No missing product source exemption.",
+    "receipt": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/installed-stage58-source-inventory-repaired.json",
+      "sha256": "00585ae5482fec376e07f26e861637a5fa18cfa164ed4631879635acff7440b8",
+      "bytes": 323713
+    }
+  },
+  "original_failures": {
+    "packaging_classification": {
+      "receipt": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/macos-installed-stage58-assembly/assembly-receipt.json",
+        "sha256": "385d24db38a0c83164428113694206e084af895adf1ffd0a9cd6408d502e9be3",
+        "bytes": 73397
+      },
+      "log": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/macos-installed-stage58-assembly/pack-wheel.log",
+        "sha256": "5d61b08bbb38b371482ea03bdbebd5c7a40dabc3931a03b0051d7af45435687d",
+        "bytes": 134241
+      },
+      "repair_commit": "e0e8261a9f4581d4e051f0b23e12ca2623b38fb2",
+      "cause": "Four verification-only lazy NumPy controllers omitted from exact wheel audit names; product NumPy policy unchanged."
+    },
+    "prepytest_archive_inventory": {
+      "receipt": {
+        "path": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/installed-public-stage58-retry-metal/receipt.json",
+        "sha256": "70d976e665f9dd81823e52012b67b7bb81d579a6ded0254fb8566ccb599016be",
+        "bytes": 92066
+      },
+      "error": "FileNotFoundError: [Errno 2] No such file or directory: '/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-72f11f70dd6774ab25a776cf745fdb6b7b6f0478/source/bench/results/multi_gpu/2026-09-14/forest-grove-pool-h100/out/order-check.mojo'",
+      "repair_commit": "9170650cf8b5b92994e33a4c1c16a82eb0746836",
+      "cause": "Tracked historical source files intentionally absent from git archive were incorrectly required as native build inputs."
+    }
+  },
+  "coverage_gap_repair": {
+    "kind": "test device route, not a numerical failure",
+    "commit": "69b751b0ada678abf2e0d2a9d69e38a03ce02d55",
+    "description": "MOJOLEARN_GENERATION_DEVICE explicitly cpu for CPU, gpu for metal/cuda/hip; read back fixture globals and record selected device. Original mixed-route receipt retained.",
+    "review": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/installed-stage58-test-device-review.json",
+      "sha256": "2198a9a7950d1d5db9d0741206982f49b4fe9ecdb1c22836ef4e40dc7d16fec5",
+      "bytes": 855
+    },
+    "regression_log": {
+      "path": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/installed-native-audit-device-routing.log",
+      "sha256": "f14230be1b00a9422b39f239317275167c0f55514bab6b1aaaf81593e268e421",
+      "bytes": 114
+    },
+    "unit_tests_passed": 12,
+    "vendor_subtests_passed": 4
+  },
+  "cpu_exclusions": {
+    "count": 2,
+    "reason": "Device-resident parameter entry is compiled only for identical GPU columns. CPU capability probe returns unavailable.",
+    "source_locations": [
+      "training/estimator.mojo:715",
+      "bindings/_mojolearn_training.mojo:1836",
+      "python/mojolearn/_training_impl.py:638",
+      "python/mojolearn/tests/test_samba_step_native.py:158"
+    ],
+    "gate_unchanged": true
+  },
+  "whole_release_qualified": false,
+  "current_source_qualified": false,
+  "native_source_reuse_qualified": false,
+  "coverage_complete": false,
+  "nvidia_installed_qualified": false,
+  "amd_installed_qualified_by_these_runs": false,
+  "physical_multi_gpu_qualified": false,
+  "performance_measured": false,
+  "upstream_pythonobject_lifetime_blocker_resolved": false
+}
