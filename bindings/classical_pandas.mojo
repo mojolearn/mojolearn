@@ -4,7 +4,8 @@
 # A caller imports pandas; runtime admission only reads its loaded modules.
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from core.cast_in import cast_in_kind, cast_f32_bits, cast_w64_bits, f64_to_f32_bits
+from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
+from bindings.classical_cast import classical_f32_bits
 from bindings.sequential_inputs import _promote
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_admission import _one_of, sequential_admit_value
@@ -238,7 +239,7 @@ def native_pandas_f32(value: PythonObject, context: PythonObject) raises -> Pyth
                     bits = _pd_object_bits(item, context)
                 else:
                     var raw = _pd_raw(data, row * row_stride + col * col_stride)
-                    bits = f64_to_f32_bits(bitcast[DType.uint64](_pd_double(raw, kind, size))) if double_round else cast_f32_bits(raw, kind, size)
+                    bits = f64_to_f32_bits(bitcast[DType.uint64](_pd_double(raw, kind, size))) if double_round else classical_f32_bits(raw, kind, size)
                 if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
                     raise Error("Input contains NaN or infinity")
                 output[row * cols + dest] = bitcast[DType.float32](bits)

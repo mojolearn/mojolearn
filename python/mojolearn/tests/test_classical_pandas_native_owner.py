@@ -143,7 +143,9 @@ def test_native_pandas_does_not_enter_standard_python_conversion_or_metadata(mon
 def test_native_pandas_preserves_promotion_before_float32_at_double_rounding_boundaries(case):
     # An integer one unit above a float32 midpoint rounds upward directly,
     # but its intervening float64 representation lands on the even midpoint.
-    # This distinguishes pandas common-dtype promotion from a per-block cast.
+    # pandas common-dtype promotion is followed by the established classical
+    # Array.astype integer -> binary64 -> binary32 conversion. Both boundaries
+    # matter; a homogeneous integer frame still takes that latter conversion.
     value = 2**62 + 2**38 + 1
     first = np.array([value, -value, value - 2, -value + 2], dtype="i8")
     if case == "integer":
@@ -154,7 +156,9 @@ def test_native_pandas_preserves_promotion_before_float32_at_double_rounding_bou
         x = pd.DataFrame({"a": first, "b": np.zeros(4, "u8")})
     else:
         x = pd.DataFrame({"a": first.astype(object)})
-    canonical = np.asarray(x).astype("f4")
+    materialized = np.asarray(x)
+    direct = materialized.astype("f4")
+    canonical = materialized.astype("f8").astype("f4")
     model = Ridge(fit_intercept=False)
     model.coef_ = np.zeros(canonical.shape[1], dtype="f4")
     model.coef_[0] = 1
@@ -164,10 +168,9 @@ def test_native_pandas_preserves_promotion_before_float32_at_double_rounding_bou
     actual = clean(audit_native_call(predict, model, x))
     np.testing.assert_array_equal(bits(actual), bits(expected))
     np.testing.assert_array_equal(bits(actual), canonical[:, 0].view("u4"))
+    assert canonical[0, 0] == np.float32(np.float64(value))
     if case == "integer":
-        assert canonical[0, 0] > np.float32(np.float64(value))
-    else:
-        assert canonical[0, 0] == np.float32(np.float64(value))
+        assert direct[0, 0] > canonical[0, 0]
 
 
 @pytest.mark.parametrize("kind", ["subclass", "object_hook", "array_subclass", "nullable_mask", "manager", "field_key"])

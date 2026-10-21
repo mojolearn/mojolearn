@@ -33,6 +33,26 @@ def bits(value):
     return np.asarray(value, dtype=np.float32).view(np.uint32)
 
 
+@pytest.mark.parametrize("layout", ["ndarray", "strided", "memoryview", "list"])
+def test_integer_prediction_preserves_binary64_intermediate(layout):
+    value = 2**62 + 2**38 + 1
+    original = np.array([value, -value, value - 2, -value + 2], dtype="i8")[:, None]
+    source = {"ndarray": lambda: original, "strided": lambda: original[::-1],
+              "memoryview": lambda: memoryview(original),
+              "list": lambda: original.tolist()}[layout]()
+    canonical = np.asarray(source).astype("f8").astype("f4")[:, 0]
+    model = Ridge(fit_intercept=False)
+    model.coef_ = np.ones(1, dtype="f4")
+    model.intercept_ = 0.0
+    model.n_features_in_ = 1
+    old = np.asarray(model.predict(source), dtype="f4")
+    np.testing.assert_array_equal(old.view("u4"), canonical.view("u4"))
+    actual = clean(audit_native_call(native_predict, model, source))
+    np.testing.assert_array_equal(bits(actual), old.view("u4"))
+    direct = np.asarray(source).astype("f4")[:, 0]
+    assert np.any(direct.view("u4") != canonical.view("u4"))
+
+
 @pytest.mark.parametrize("cols,intercept,weights", [
     (3, True, None), (3, False, None), (1, True, None), (1, False, None),
     (3, True, "vector"), (3, False, "vector"), (3, True, "scalar"), (1, True, "vector"),
