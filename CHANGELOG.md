@@ -21,6 +21,13 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 - A new release check runs 37 standalone native programs, covering the estimators, preprocessing, the tokenizer, `Sequential`
   and the optimizers, with no Python interpreter present. Its first runs corrected the KDE, IVF and UMAP check programs.
 - Release uploads read the stored R2 credential file before reporting missing keys.
+- `parallel_classical.apply_kernel_method` returns the same float64 array as the estimator's own `predict` and
+  `transform`; it returned a float32 array with the same values before.
+- Native kernels import no Python and the binding shells hold no compute: every Python door now lives in a
+  `*_pyapi.mojo` or `bindings/` shell that only converts arguments and calls one typed Mojo entry. Two checks run on
+  every push: no Python in kernels, no compute in shells.
+- IVF-flat search pads a query whose probed lists hold fewer than `k` vectors with distance `inf` and id `-1` after
+  the real neighbours instead of raising.
 
 ## 0.8.55 (published 2026-10-20)
 
