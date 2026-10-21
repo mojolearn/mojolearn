@@ -46,6 +46,9 @@ FAMILIES = (
             "x-logistic-cv-w",
             "x-lasso-lars-pos",
             "x-lasso-cv-pos",
+            # lane verify-coverage-owed (2026-10-21): the per-row Mojo glue
+            # (py2mojo_rows) behind outliers_ and predict_proba
+            "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -119,6 +122,12 @@ TRAINING_LANE_NAMES = {
     "x-logistic-cv-w": "LogisticRegressionCV (sample_weight, class_weight)",
     "x-lasso-lars-pos": "LassoLars (positive)",
     "x-lasso-cv-pos": "LassoCV (positive)",
+    "x-huber-outliers": "HuberRegressor (outliers_)",
+    "x-sgd-clf-proba": "SGDClassifier (predict_proba)",
+    "x-logistic-cv-proba": "LogisticRegressionCV (predict_proba)",
 }
 PUBLIC_PENDING_LANES = {
+    "x-huber-outliers": "no reference",
+    "x-sgd-clf-proba": "no reference",
+    "x-logistic-cv-proba": "no reference",
     }
