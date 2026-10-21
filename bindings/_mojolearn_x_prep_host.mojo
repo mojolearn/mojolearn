@@ -14,6 +14,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.common import X_PREP_HOST_SABOTAGE
 from x_prep.host.program import run_program_host
 from x_prep.user_host import F32P, F64P, I32P, ii_rows, ii_gather, ii_scatter, ii_conv
+from x_prep.ii_checks_impl import check_gather_columns
 from x_prep.folds import kfold_folds, strat_folds
 from x_prep.py2mojo import PY2MOJO_PREP
 from x_prep.label_fast import IDN_LABEL
@@ -98,9 +99,7 @@ def ii_gather_binding(x_addr: PythonObject, rows_addr: PythonObject, cols_addr: 
     if xa == 0 or ra == 0 or ca == 0 or oa == 0 or (j >= 0 and ya == 0) or dk <= 0 or m < 0 or nc < 0 or j >= dk:
         raise Error("x_prep ii_gather: invalid buffers or shape")
     var cp = I32P(unsafe_from_address=ca)
-    for c in range(nc):
-        if Int(cp[c]) < 0 or Int(cp[c]) >= dk:
-            raise Error("x_prep ii_gather: a column is out of range")
+    check_gather_columns(cp, nc, dk)
     ii_gather(F32P(unsafe_from_address=xa), dk, I32P(unsafe_from_address=ra), m, cp, nc, j,
               F32P(unsafe_from_address=oa), F32P(unsafe_from_address=ya if j >= 0 else oa))
     return PythonObject(m)

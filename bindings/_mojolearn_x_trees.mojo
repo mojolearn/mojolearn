@@ -35,7 +35,7 @@ def _shap_forest(forest: PythonObject) raises -> List[Int]:
     if len(forest) != 5:
         raise Error("x_trees tree_shap: forest must hold 5 addresses")
     var out = List[Int]()
-    for i in range(5):
+    for i in range(5):  # small-loop(the five forest address words)
         out.append(Int(py=forest[i]))
     return out^
 

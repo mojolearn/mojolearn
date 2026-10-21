@@ -35,6 +35,23 @@ from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
 from x_cnn.host.ops_host_pyapi import csr_build_host_binding
 from x_cnn.host.ops_host_pyapi import gcn_loops_host_binding
 # lane fam2-neural (2026-10-04): the device epoch's element functions, looped
+# The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
+# out of this shell; `out_f32` (the CPU column's output seam) lives there too.
+from x_cnn.host.binding_entries_impl import (
+    out_f32,
+    _at,
+    pool_counts as _pool_counts,
+    check_labels_below,
+    csr_checked,
+    argmax_rows_into,
+    gather_rows_f32,
+    epoch_rows_fill as _epoch_rows_fill,
+    adam_rows,
+    widen_f32_into,
+    widen_f32_list_into,
+    sgd_hyper_rows,
+    fit_epoch_r_into,
+)
 from x_cnn.ops import idn2_flags, epoch_key, epoch_rows_prm, epoch_rows_at, adam_hyper_base, adam_hyper_at, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
 
 
@@ -54,20 +71,9 @@ def ip(addr: PythonObject) raises -> IP:
     return IP(unsafe_from_address=a)
 
 
-@always_inline
-def out_f32(p: FP, n: Int):
-    """THE CPU COLUMN'S OUTPUT SEAM for the address-out entries: every
-    float32 word such an entry returns is in p[0:n] when this runs. In
-    production it does nothing. The end-to-end sabotage arm
-    (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
-    bit here, and in `copy_f32` for the entries that still copy a result."""
-    _ = p
-    _ = n
-
-
 def _ints(params: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for k in range(Int(py=len(params))):
+    for k in range(Int(py=len(params))):  # small-loop(the caller's int parameter words)
         out.append(Int(py=params[k]))
     return out^
 
@@ -229,11 +235,6 @@ def _pool_prm(params: PythonObject) raises -> List[Int32]:
     return pool_params(_ints(params))
 
 
-def _pool_counts(prm: List[Int32]) -> Tuple[Int, Int]:
-    var nc = Int(prm[PP_N]) * Int(prm[PP_C])
-    return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
-
-
 def pool_shape_binding(params: PythonObject) raises -> PythonObject:
     var prm = _pool_prm(params)
     return Python.tuple(Int(prm[PP_OH]), Int(prm[PP_OW]))
@@ -378,9 +379,7 @@ def softmax_xent_binding(
         raise Error("x_cnn softmax: positive rows and classes required")
     var pl = fp(logits_addr)
     var py_ = ip(labels_addr)
-    for i in range(n):
-        if Int(py_[i]) >= k:
-            raise Error("x_cnn softmax: a label is not a class index")
+    check_labels_below(py_, n, k)
     var pg = fp(grad_addr)
     var pp = fp(proba_addr)
     var loss = Float32(0)
@@ -399,13 +398,13 @@ def sgd_binding(w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject
     var nh = Int(py=len(hyper))
     if nh < 3 or nh > 6:
         raise Error("x_cnn sgd: hyper is [lr, momentum, weight_decay(, dampening, nesterov, first)]")
-    for k in range(6):
+    for k in range(6):  # small-loop(the six sgd hyper words)
         h.append(Float32(Float64(py=hyper[k])) if k < nh else Float32(0))
     if _is_list(w_addr):
         # lane/cnn-apple2: the list form (one handle per parameter), the
         # per-parameter entry in the caller's order
         var cnt = _list_counts(w_addr, g_addr, v_addr, params)
-        for j in range(len(cnt)):
+        for j in range(len(cnt)):  # driver-loop: over the model's parameters
             var qw = fp(w_addr[j])
             var qg = fp(g_addr[j])
             var qv = fp(v_addr[j])
@@ -487,7 +486,7 @@ def dropout2d_binding(x_addr: PythonObject, y_addr: PythonObject, mask_addr: Pyt
     if N <= 0 or C <= 0 or HW <= 0:
         raise Error("x_cnn dropout2d: positive N, C and H*W required")
     var prm = List[Int32]()
-    for k in range(7):
+    for k in range(7):  # small-loop(the seven dropout parameter words)
         var v = Int(py=params[k])
         if v < 0:
             raise Error("x_cnn dropout2d: negative parameter")
@@ -521,21 +520,7 @@ def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int3
 
 
 def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
-    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
-        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
-    var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
-    if Int(csr[0]) != 0 or Int(csr[n]) != nnz:
-        raise Error("x_cnn spmm: rowptr must start at 0 and end at nnz")
-    for r in range(n):
-        if csr[r + 1] < csr[r]:
-            raise Error("x_cnn spmm: rowptr must be non-decreasing")
-    for e in range(nnz):
-        var c = Int(csr[n + 1 + e])
-        var rr = Int(csr[n + 1 + nnz + e])
-        if c < 0 or c >= n or rr < 0 or rr >= n:
-            raise Error("x_cnn spmm: a column or row index is out of range")
-    var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
-    return (csr^, prm^)
+    return csr_checked(Int(py=csr_addr), n, F, nnz, mode)
 
 
 def spmm_binding(vals_addr: PythonObject, h_addr: PythonObject, out_addr: PythonObject, csr_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -569,7 +554,7 @@ def gcn_norm_binding(w_addr: PythonObject, vals_addr: PythonObject, csr_addr: Py
 
 def _pad_prm(params: PythonObject) raises -> List[Int32]:
     var out = List[Int32]()
-    for k in range(9):
+    for k in range(9):  # small-loop(the nine pad parameter words)
         var v = Int(py=params[k])
         if v < 0:
             raise Error("x_cnn pad: negative parameter")
@@ -616,7 +601,7 @@ def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_add
     1 avg backward (in g, out dx), 2 max forward (in x, out y, idx written),
     3 max backward (in g, out dx, idx read)."""
     var prm = List[Int32]()
-    for k in range(6):
+    for k in range(6):  # small-loop(the six adaptive pool shape words)
         var v = Int(py=params[k])
         if v <= 0:
             raise Error("x_cnn adaptive pool: positive N, C, H, W, OH, OW required")
@@ -638,8 +623,8 @@ def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_add
         var y = adaptive_pool_impl(src, idx, prm, kind, idx_out)
         copy_f32(y.unsafe_ptr(), po, n_write)
         if kind == 2:
-            for k in range(nout):
-                pi.unsafe_store(k, idx_out[k])
+            memcpy(dest=pi, src=idx_out.unsafe_ptr(), count=nout)
+            _ = len(idx_out)
     return PythonObject(n_write)
 
 
@@ -680,12 +665,12 @@ def adam_binding(w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObje
     if Int(py=len(hyper)) != 9:
         raise Error("x_cnn adam: hyper has 9 entries")
     var h = List[Float32]()
-    for k in range(9):
+    for k in range(9):  # small-loop(the nine adam hyper words)
         h.append(Float32(Float64(py=hyper[k])))
     if _is_list(w_addr):
         # lane/cnn-apple2: the list form (one handle per parameter)
         var cnt = _list_counts(w_addr, g_addr, mv_addr, params)
-        for j in range(len(cnt)):
+        for j in range(len(cnt)):  # driver-loop: over the model's parameters
             var qw = fp(w_addr[j])
             var qg = fp(g_addr[j])
             var qm = fp(mv_addr[j])
@@ -755,11 +740,7 @@ def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonOb
     if n > 0 and k > 0:
         var src = FP(unsafe_from_address=Int(py=h))
         var dst = IP(unsafe_from_address=Int(py=dst_addr))
-        var prm = List[Int32](length=1, fill=Int32(k))
-        var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        for i in range(n):
-            argmax_row_at(i, src, src, src, src, dst, pp)
-        _ = prm^
+        argmax_rows_into(src, dst, n, k)
     return PythonObject(n)
 
 
@@ -802,7 +783,7 @@ def _list_counts(a: PythonObject, b: PythonObject, c: PythonObject, params: Pyth
     if Int(py=len(a)) != k or Int(py=len(b)) != k or Int(py=len(c)) != k:
         raise Error("x_cnn optimizer: one handle per parameter in each list and one count each")
     var out = List[Int]()
-    for j in range(k):
+    for j in range(k):  # small-loop(one count word per parameter)
         var nj = Int(py=params[j])
         if nj <= 0:
             raise Error("x_cnn: a positive element count is required")
@@ -818,19 +799,17 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
         if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
             raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
         var rq = i32_ptr(Int(py=rows_addr))
-        for t in range(2):
+        for t in range(2):  # small-loop(the two arrays of the pair form)
             var d2 = f32_ptr(Int(py=dst[t]))
             var s2 = f32_ptr(Int(py=src[t]))
             var rw = Int(py=params[1 + t])
-            for r in range(n):
-                memcpy(dest=d2 + r * rw, src=s2 + Int(rq[r]) * rw, count=rw)
+            gather_rows_f32(d2, s2, rq, n, rw)
         return PythonObject(n)
     var row = Int(py=params[1])
     var d = f32_ptr(Int(py=dst))
     var sr = f32_ptr(Int(py=src))
     var rp = i32_ptr(Int(py=rows_addr))
-    for r in range(n):
-        memcpy(dest=d + r * row, src=sr + Int(rp[r]) * row, count=row)
+    gather_rows_f32(d, sr, rp, n, row)
     return PythonObject(n)
 
 
@@ -844,11 +823,6 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
 # seam (`out_f32`) its entry ran. The bits cannot move.
 
 
-@always_inline
-def _at(a: Int) -> FP:
-    return FP(unsafe_from_address=a)
-
-
 def _epoch_plan(
     obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
     mut pools: List[List[Bool]],
@@ -859,7 +833,7 @@ def _epoch_plan(
     var c = List[List[Int32]]()
     var p = List[List[Int32]]()
     var o = List[Bool]()
-    for j in range(nb):
+    for j in range(nb):  # driver-loop: over the network's blocks
         var t = _block_prms(obj[j][0], obj[j][1])
         c.append(t[0].copy())
         p.append(t[1].copy())
@@ -883,7 +857,7 @@ def fit_epoch_r_binding(
     var blocks = spec["blocks"]
     var nb = Int(py=len(blocks))
     var bh = List[List[Int]]()
-    for j in range(nb):
+    for j in range(nb):  # driver-loop: over the network's blocks
         var h = _ints(blocks[j])
         if len(h) != 9:
             raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
@@ -909,88 +883,16 @@ def fit_epoch_r_binding(
     var rows = i32_ptr(Int(py=rows_addr))
     var hyp = f64_ptr(Int(py=hyper_addr))
     var losses = f64_ptr(Int(py=losses_addr))
-    var noidx = List[Int32](length=1, fill=Int32(0))
-    var pnoidx = noidx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var xd = f32_ptr(a[0])
     var yd = f32_ptr(a[1])
     var xs = f32_ptr(data[0])
     var ys = f32_ptr(data[1])
     var yl = IP(unsafe_from_address=a[1])
     with GILReleased(Python()):
-        for st in range(steps):
-            var s0 = st * batch
-            var m = min(batch, n - s0)
-            var q = 0 if m == batch else 1
-            # the two row gathers (x_cnn_res_gather: the batch, then its labels)
-            for r in range(m):
-                memcpy(dest=xd + r * row, src=xs + Int(rows[s0 + r]) * row, count=row)
-            for r in range(m):
-                memcpy(dest=yd + r, src=ys + Int(rows[s0 + r]), count=1)
-            var src = a[0]
-            for j in range(nb):
-                var cprm = cs[q][j].copy()
-                var pprm = ps[q][j].copy()
-                var pool = pools[q][j]
-                var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
-                var no = _pool_counts(pprm)[1] if pool else ny
-                var pi = IP(unsafe_from_address=bh[j][5]) if pool else pnoidx
-                conv_block_forward_into(
-                    _at(src), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][4]), pi, cprm, pprm, pool, True,
-                    _at(bh[j][7]), _at(bh[j][8]),
-                )
-                out_f32(_at(bh[j][4]), no)
-                src = bh[j][4]
-            linear_forward_into(_at(src), _at(head[0]), _at(head[1]), _at(a[2]), m, flat, k)
-            out_f32(_at(a[2]), m * k)
-            for i in range(m):
-                if Int(yl[i]) >= k:
-                    raise Error("x_cnn softmax: a label is not a class index")
-            var loss = softmax_xent_into(_at(a[2]), yl, _at(a[3]), _at(a[4]), m, k)
-            out_f32(_at(a[3]), m * k)
-            out_f32(_at(a[4]), m * k)
-            losses[st] = Float64(loss)
-            var glast = bh[nb - 1][6] if nb > 0 else a[5]
-            linear_backward_into(_at(src), _at(head[0]), _at(a[3]), _at(glast), _at(head[2]), _at(head[3]), m, flat, k)
-            out_f32(_at(glast), m * flat)
-            out_f32(_at(head[2]), k * flat)
-            out_f32(_at(head[3]), k)
-            for jj in range(nb):
-                var j = nb - 1 - jj
-                var cprm = cs[q][j].copy()
-                var pprm = ps[q][j].copy()
-                var pool = pools[q][j]
-                var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
-                var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
-                var nx = N * C * Int(cprm[CP_H]) * Int(cprm[CP_W])
-                var bsrc = bh[j - 1][4] if j > 0 else a[0]
-                var dx = bh[j - 1][6] if j > 0 else 0
-                var need_dx = dx != 0
-                var pi = IP(unsafe_from_address=bh[j][5]) if pool else pnoidx
-                var pdb = _at(bh[j][3])
-                var pdx = _at(dx) if need_dx else pdb
-                conv_block_backward_into(
-                    _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), pi, pdx, _at(bh[j][2]), pdb, cprm,
-                    pprm, pool, need_dx, True, _at(bh[j][7]), _at(bh[j][8]),
-                )
-                if need_dx:
-                    out_f32(pdx, nx)
-                out_f32(_at(bh[j][2]), OC * ckk)
-                out_f32(pdb, OC)
-            var h = List[Float32]()
-            for e in range(nh):
-                h.append(Float32(hyp[st * nh + e]))
-            # one optimizer entry per parameter, in the parameters' order
-            for j in range(len(cnt)):
-                var nj = cnt[j]
-                if adam:
-                    adam_into(_at(hp[j]), _at(hg[j]), _at(hb[j]), h, nj)
-                    out_f32(_at(hp[j]), nj)
-                    out_f32(_at(hb[j]), 2 * nj)
-                else:
-                    sgd_into(_at(hp[j]), _at(hg[j]), _at(hb[j]), h, nj)
-                    out_f32(_at(hp[j]), nj)
-                    out_f32(_at(hb[j]), nj)
-    _ = noidx^
+        fit_epoch_r_into(
+            n, batch, adam, nh, nb, steps, flat, k, row, bh, head, a, cnt, hp, hg, hb, cs, ps, pools,
+            rows, hyp, losses, xd, yd, xs, ys, yl,
+        )
     return PythonObject(steps)
 
 
@@ -1018,15 +920,6 @@ def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
     return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
 
 
-def _epoch_rows_fill(dst: IP, n: Int, shuffle: Bool, key: UInt64):
-    var prm = epoch_rows_prm(n, 0, shuffle, key)
-    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var none = FP(unsafe_from_address=Int(dst))
-    for i in range(n):
-        epoch_rows_at(i, none, none, none, none, dst, pp)
-    _ = prm^
-
-
 def epoch_rows_binding(dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     var n = Int(py=params[0])
     if n < 1 or n >= 2147483647:
@@ -1040,20 +933,10 @@ def _adam_rows(fparams: PythonObject, step0: Int, nsteps: Int) raises -> List[Fl
     """`adam_hyper_at`'s rows of steps step0 .. step0 + nsteps - 1."""
     if Int(py=len(fparams)) != 6:
         raise Error("x_cnn adam hyper: fparams is [lr, beta1, beta2, eps, weight_decay, decoupled]")
-    var base = adam_hyper_base(
+    return adam_rows(
         Float64(py=fparams[0]), Float64(py=fparams[1]), Float64(py=fparams[2]), Float64(py=fparams[3]),
-        Float64(py=fparams[4]), Float64(py=fparams[5]),
+        Float64(py=fparams[4]), Float64(py=fparams[5]), step0, nsteps,
     )
-    var out = List[Float32](length=nsteps * AH_ROW + 1, fill=Float32(0))
-    var prm: List[Int32] = [Int32(step0)]
-    var pb = base.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var po = out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    for t in range(nsteps):
-        adam_hyper_at(t, pb, po, po, po, pp, pp)
-    _ = base^
-    _ = prm^
-    return out^
 
 
 def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: PythonObject) raises -> PythonObject:
@@ -1063,8 +946,7 @@ def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: 
         raise Error("x_cnn adam hyper: step0 >= 1, nsteps >= 0")
     var rows = _adam_rows(fparams, step0, nsteps)
     var dst = f64_ptr(Int(py=dst_addr))
-    for e in range(nsteps * AH_ROW):
-        dst[e] = Float64(rows[e])
+    widen_f32_into(dst, rows, nsteps * AH_ROW)
     return PythonObject(nsteps)
 
 
@@ -1088,15 +970,14 @@ def fit_epoch_d_binding(
     var hyp = List[Float64](length=steps * nh, fill=Float64(0))
     if adam:
         var r32 = _adam_rows(fparams, done + 1, steps)
-        for e in range(steps * nh):
-            hyp[e] = Float64(r32[e])
+        widen_f32_list_into(hyp, r32, steps * nh)
     else:
         if Int(py=len(fparams)) != 6:
             raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
-        for st in range(steps):
-            for e in range(5):
-                hyp[st * 6 + e] = Float64(Float32(Float64(py=fparams[e])))
-            hyp[st * 6 + 5] = Float64(1) if done + st == 0 else Float64(0)
+        var f5 = List[Float64]()
+        for e in range(5):  # small-loop(the five sgd hyper words)
+            f5.append(Float64(py=fparams[e]))
+        sgd_hyper_rows(hyp, f5, steps, done)
     var out = fit_epoch_r_binding(
         spec, PythonObject(Int(rows.unsafe_ptr())), PythonObject(Int(hyp.unsafe_ptr())), losses_addr, params,
     )

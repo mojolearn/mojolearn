@@ -179,14 +179,14 @@ def _exog_array(exog, batch_size, n_rows, y_ndim, name):
     n_exog)`, `y`'s shape with a regressor axis last, which is statsmodels'
     `(n_obs, k_exog)` with the batch in front. cuML's is `(n_obs, n_exog *
     batch_size)` in Fortran order; the Mojo boundary
-    (`bindings/arima_exog_layout.mojo`) permutes to that layout. Two shorter
+    (`arima/exog_layout.mojo`) permutes to that layout. Two shorter
     spellings are accepted because they are unambiguous:
 
         y 1-D (one series)   exog (n_rows,) one regressor, or (n_rows, n_exog)
         y 2-D                exog (batch_size, n_rows), one regressor
 
     A non-finite value is NOT checked here: it is refused by name, with the
-    series, row and regressor, in `bindings/arima_exog_layout.mojo`
+    series, row and regressor, in `arima/exog_layout.mojo`
     (DEVIATION 997), which every binding reaches."""
     try:
         pb = probe(exog)

@@ -6,6 +6,7 @@ helpers they call are in `xtrees/api_kernels.mojo`), shared by the GPU binding
 (`bindings/_mojolearn_x_trees_host.mojo`): one spelling, two registrations.
 Every buffer is a caller-owned address; `params` is a Python list of ints and
 floats. Nothing is retained."""
+from bindings.py_lists import py_list_i64
 from gbdt.trees_identical_switches import T30_ADABOOST
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -101,7 +102,7 @@ def tree_shap_cache_create_args(forest: PythonObject, params: PythonObject) rais
         if len(forest) != 5:
             raise Error("TreeSHAP cache requires five forest addresses")
         var out = List[Int]()
-        for i in range(5):
+        for i in range(5):  # small-loop(the five forest address words)
             out.append(Int(py=forest[i]))
         var d = _i(params, 0)
         var trees = _i(params, 1)
@@ -144,7 +145,7 @@ def forest_auxiliary_binding(forest: PythonObject, x: PythonObject, leaf: Python
     if len(forest) != 5:
         raise Error("forest auxiliary requires five model addresses")
     var addresses = List[Int]()
-    for i in range(5):
+    for i in range(5):  # small-loop(the five forest address words)
         addresses.append(Int(py=forest[i]))
     var n = _count(_i(params, 0), "x_trees_forest_auxiliary")
     var d = _i(params, 1)
@@ -340,10 +341,7 @@ def exact_sum_f32_binding(x: PythonObject, params: PythonObject) raises -> Pytho
         ok = exact_sum_f32(f32_ptr(Int(py=x)), n, limbs)
     if not ok:
         return PythonObject(None)
-    var out = Python.list()
-    for i in range(EXACT_SUM_LIMBS):
-        out.append(PythonObject(Int(limbs[i])))
-    return out
+    return py_list_i64(limbs)
 
 
 def margin2_binding(acc: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -491,7 +489,7 @@ def gradients_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """params = [n, kind (0 l2, 1 binary logloss, 2 multiclass softmax)] or,
-    for kind 2, [n, 2, k] with every buffer class-major (k * n)."""
+    with kind 2, [n, 2, k] with every buffer class-major (k * n)."""
     if len(params) != 2 and len(params) != 3:
         raise Error("x_trees_gradients: params must hold 2 values (3 for multiclass), got " + String(len(params)))
     var n = _count(_i(params, 0), "x_trees_gradients")
@@ -882,7 +880,7 @@ def stack_w64_binding(cols: PythonObject, dst: PythonObject, params: PythonObjec
     _need(params, 1, "x_trees_stack_w64")
     var n = _count(_i(params, 0), "x_trees_stack_w64")
     var addrs = List[Int]()
-    for j in range(len(cols)):
+    for j in range(len(cols)):  # small-loop(one address word per column)
         var a = Int(py=cols[j])
         if a == 0:
             raise Error("x_trees_stack_w64: null column address")
@@ -1235,7 +1233,7 @@ def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: Python
 def _agn_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
     _need(params, n, who)
     var out = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(params words)
         out.append(_i(params, i))
     return out^
 
@@ -1257,7 +1255,7 @@ def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject)
 
 
 def _kshap_check(p: List[Int], who: String) raises:
-    for i in range(9):
+    for i in range(9):  # small-loop(the nine params words)
         if p[i] < 0:
             raise Error(who + ": negative count")
     if p[1] < 1 or p[2] < 1 or p[4] < p[3]:

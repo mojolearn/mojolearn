@@ -89,67 +89,22 @@ from x_cnn.device import cnn_ctx
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch; record in docs/TOMBSTONES.md.
 from autograd.rules_cnn import cnn_backward_autograd
 from core.device_zero import enqueue_fill
-from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import memcpy
+# The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
+# out of this shell.
+from x_cnn.device_entries_impl import (
+    _device_int_check,
+    csr_checked_device,
+    fit_epoch_r_device,
+    fit_epoch_d_device,
+    sgd_base_rows,
+    widen_f32_into,
+)
 
 
 # ------------------------------------------------ cpu3-bindings: input checks on the device
-# The host entries' label and CSR refusals, as one bulk upload, one check
-# launch and two flag words read back (the host walks they replace read
-# every label, rowptr entry and edge on the CPU). Same predicates, same
-# messages in the same priority; every writer of a flag stores the same 1.
-comptime _CHK_TPB = 256
-
-
-def _label_bad_kernel(labels: IP, n: Int32, k: Int32, flag: IP):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        if labels.unsafe_load(i) >= k:
-            flag.unsafe_store(0, Int32(1))
-
-
-def _csr_bad_kernel(csr: IP, n: Int32, nnz: Int32, flag: IP):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        if csr.unsafe_load(i + 1) < csr.unsafe_load(i):
-            flag.unsafe_store(0, Int32(1))
-    if i < Int(nnz):
-        var c = csr.unsafe_load(Int(n) + 1 + i)
-        var r = csr.unsafe_load(Int(n) + 1 + Int(nnz) + i)
-        if c < Int32(0) or c >= n or r < Int32(0) or r >= n:
-            flag.unsafe_store(1, Int32(1))
-
-
-def _device_int_check(src: IP, words: Int, n: Int, m: Int, csr: Bool) raises -> Tuple[Int32, Int32]:
-    """`words` int32 of the caller's `src` checked on the device: the
-    label check (`m` = classes) or the CSR check (`m` = nnz). Returns the
-    two flag words."""
-    var ctx = cnn_ctx()
-    var d = ctx.enqueue_create_buffer[DType.int32](max(words, 1))
-    if words > 0:
-        ctx.enqueue_copy(dst_buf=d, src_ptr=src)
-    var flag = ctx.enqueue_create_buffer[DType.int32](2)
-    enqueue_fill(ctx, flag, Int32(0))
-    var span = max(n, m) if csr else n
-    if span > 0:
-        if csr:
-            ctx.enqueue_function[_csr_bad_kernel](
-                d.unsafe_ptr(), Int32(n), Int32(m), flag.unsafe_ptr(),
-                grid_dim=((span + _CHK_TPB - 1) // _CHK_TPB, 1, 1), block_dim=(_CHK_TPB, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[_label_bad_kernel](
-                d.unsafe_ptr(), Int32(n), Int32(m), flag.unsafe_ptr(),
-                grid_dim=((span + _CHK_TPB - 1) // _CHK_TPB, 1, 1), block_dim=(_CHK_TPB, 1, 1),
-            )
-    var host = ctx.enqueue_create_host_buffer[DType.int32](2)
-    ctx.enqueue_copy(dst_buf=host, src_buf=flag)
-    ctx.synchronize()
-    var f0 = host.unsafe_ptr().unsafe_load(0)
-    var f1 = host.unsafe_ptr().unsafe_load(1)
-    _ = d^
-    _ = flag^
-    _ = host^
-    return (f0, f1)
+# `_device_int_check` and its two kernels are x_cnn/device_entries_impl.mojo's
+# (lane thin-trees-metrics, 2026-10-21).
 
 
 def _fp(addr: PythonObject) raises -> FP:
@@ -164,7 +119,7 @@ def _ip(addr: PythonObject) raises -> IP:
 
 def _ints(params: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for k in range(Int(py=len(params))):
+    for k in range(Int(py=len(params))):  # small-loop(the caller's int parameter words)
         out.append(Int(py=params[k]))
     return out^
 
@@ -508,7 +463,7 @@ def sgd_binding[resident: Bool = False](w_addr: PythonObject, g_addr: PythonObje
     var nh = Int(py=len(hyper))
     if nh < 3 or nh > 6:
         raise Error("x_cnn sgd: hyper is [lr, momentum, weight_decay(, dampening, nesterov, first)]")
-    for k in range(6):
+    for k in range(6):  # small-loop(the six sgd hyper words)
         h.append(Float32(Float64(py=hyper[k])) if k < nh else Float32(0))
     comptime if resident:
         if _is_list(w_addr):
@@ -580,7 +535,7 @@ def dropout2d_binding(x_addr: PythonObject, y_addr: PythonObject, mask_addr: Pyt
     if N <= 0 or C <= 0 or HW <= 0:
         raise Error("x_cnn dropout2d: positive N, C and H*W required")
     var prm = List[Int32]()
-    for k in range(7):
+    for k in range(7):  # small-loop(the seven dropout parameter words)
         var v = Int(py=params[k])
         if v < 0:
             raise Error("x_cnn dropout2d: negative parameter")
@@ -611,20 +566,7 @@ def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int3
 
 
 def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
-    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
-        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
-    var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
-    if Int(csr[0]) != 0 or Int(csr[n]) != nnz:
-        raise Error("x_cnn spmm: rowptr must start at 0 and end at nnz")
-    var bad = _device_int_check(
-        csr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), len(csr), n, nnz, True
-    )
-    if bad[0] != Int32(0):
-        raise Error("x_cnn spmm: rowptr must be non-decreasing")
-    if bad[1] != Int32(0):
-        raise Error("x_cnn spmm: a column or row index is out of range")
-    var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
-    return (csr^, prm^)
+    return csr_checked_device(Int(py=csr_addr), n, F, nnz, mode)
 
 
 def spmm_binding(vals_addr: PythonObject, h_addr: PythonObject, out_addr: PythonObject, csr_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -657,7 +599,7 @@ def gcn_norm_binding(w_addr: PythonObject, vals_addr: PythonObject, csr_addr: Py
 
 def _pad_prm(params: PythonObject) raises -> List[Int32]:
     var out = List[Int32]()
-    for k in range(9):
+    for k in range(9):  # small-loop(the nine pad parameter words)
         var v = Int(py=params[k])
         if v < 0:
             raise Error("x_cnn pad: negative parameter")
@@ -699,7 +641,7 @@ def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_add
     1 avg backward (in g, out dx), 2 max forward (in x, out y, idx written),
     3 max backward (in g, out dx, idx read)."""
     var prm = List[Int32]()
-    for k in range(6):
+    for k in range(6):  # small-loop(the six adaptive pool shape words)
         var v = Int(py=params[k])
         if v <= 0:
             raise Error("x_cnn adaptive pool: positive N, C, H, W, OH, OW required")
@@ -721,8 +663,8 @@ def adaptive_pool_binding(in_addr: PythonObject, out_addr: PythonObject, idx_add
         var y = adaptive_pool_impl(src, idx, prm, kind, idx_out)
         copy_f32(y.unsafe_ptr(), po, n_write)
         if kind == 2:
-            for k in range(nout):
-                pi.unsafe_store(k, idx_out[k])
+            memcpy(dest=pi, src=idx_out.unsafe_ptr(), count=nout)
+            _ = len(idx_out)
     return PythonObject(n_write)
 
 
@@ -764,7 +706,7 @@ def adam_binding[resident: Bool = False](w_addr: PythonObject, g_addr: PythonObj
     if Int(py=len(hyper)) != 9:
         raise Error("x_cnn adam: hyper has 9 entries")
     var h = List[Float32]()
-    for k in range(9):
+    for k in range(9):  # small-loop(the nine adam hyper words)
         h.append(Float32(Float64(py=hyper[k])))
     comptime if resident:
         if _is_list(w_addr):
@@ -1045,7 +987,7 @@ def dropout2d_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonOb
     if N <= 0 or C <= 0 or HW <= 0:
         raise Error("x_cnn dropout2d: positive N, C and H*W required")
     var prm = List[Int32]()
-    for k in range(7):
+    for k in range(7):  # small-loop(the seven dropout parameter words)
         var v = Int(py=params[k])
         if v < 0:
             raise Error("x_cnn dropout2d: negative parameter")
@@ -1157,7 +1099,7 @@ def adaptive_pool_m_binding(addrs: PythonObject, dev: PythonObject, params: Pyth
     """addrs = [in, out, idx (int32)]; params = [N, C, H, W, OH, OW, kind]
     as `x_cnn_adaptive_pool`'s. The average kinds (0, 1) never touch idx."""
     var prm = List[Int32]()
-    for k in range(6):
+    for k in range(6):  # small-loop(the six adaptive pool shape words)
         var v = Int(py=params[k])
         if v <= 0:
             raise Error("x_cnn adaptive pool: positive N, C, H, W, OH, OW required")
@@ -1270,26 +1212,6 @@ def chan_copy_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonOb
 # kernel, operand or order changes: the bits cannot move.
 
 
-@always_inline
-def _at(a: Int) -> FP:
-    return FP(unsafe_from_address=a)
-
-
-@always_inline
-def _at_i(a: Int) -> IP:
-    return IP(unsafe_from_address=a)
-
-
-def _tape_words() raises -> Int:
-    """Two resident words for the tape step: [the unit seed 1.0, the loss's
-    recorded value (never read)]."""
-    var w = res_alloc(2)
-    var one: List[Float32] = [Float32(1), Float32(0)]
-    res_upload(w, one.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 2)
-    _ = one^
-    return w
-
-
 def _epoch_plan(
     obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
     mut pools: List[List[Bool]],
@@ -1355,34 +1277,9 @@ def fit_epoch_r_binding(
     var hyp = f64_ptr(Int(py=hyper_addr))
     var losses = f64_ptr(Int(py=losses_addr))
     with GILReleased(Python()):
-        var tw = _tape_words()
-        for st in range(steps):  # small-loop(steps: optimizer steps of one epoch): orchestration that launches device work per step
-            var s0 = st * batch
-            var m = min(batch, n - s0)
-            var q = 0 if m == batch else 1
-            res_gather_pair(a[0], data[0], data[2], a[1], data[1], 1, rows + s0, m)
-            var src = a[0]
-            for j in range(nb):
-                conv_block_forward_into[True](
-                    _at(src), _at(bh[j][0]), _at(bh[j][1]), cs[q][j], ps[q][j], pools[q][j], _at(bh[j][4]),
-                    _at_i(bh[j][5]), bh[j][7], bh[j][8],
-                )
-                src = bh[j][4]
-            linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
-            var loss = softmax_xent_into[True](_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]))
-            losses[st] = Float64(loss)
-            # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
-            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
-            cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
-            var h = List[Float32]()
-            for e in range(nh):  # small-loop(nh: optimizer scalars of one step, six or nine): builds one launch parameter list, not data
-                h.append(Float32(hyp[st * nh + e]))
-            if adam:
-                opt_many_resident[True](t[0], t[1], t[2], t[3], h)
-            else:
-                opt_many_resident[False](t[0], t[1], t[2], t[3], h)
-        res_free(tw)
+        fit_epoch_r_device(
+            n, batch, adam, nh, nb, steps, flat, k, bh, head, a, data, t, cs, ps, pools, rows, hyp, losses,
+        )
     return PythonObject(steps)
 
 
@@ -1451,8 +1348,7 @@ def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: 
     with GILReleased(Python()):
         adam_hyper_download(base, step0, nsteps, po)
     var dst = f64_ptr(Int(py=dst_addr))
-    for e in range(nsteps * AH_ROW):  # small-loop(nsteps: optimizer steps, AH_ROW scalars each): widens per step optimizer scalars, not row data
-        dst[e] = Float64(out[e])
+    widen_f32_into(dst, out, nsteps * AH_ROW)
     _ = base^
     _ = out^
     return PythonObject(nsteps)
@@ -1506,47 +1402,16 @@ def fit_epoch_d_binding(
     else:
         if Int(py=len(fparams)) != 6:
             raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
-        for r in range(2):
-            for e in range(5):
-                base.append(Float32(Float64(py=fparams[e])))
-            base.append(Float32(1) if r == 0 else Float32(0))
+        var f5 = List[Float64]()
+        for e in range(5):  # small-loop(the five sgd hyper words)
+            f5.append(Float64(py=fparams[e]))
+        sgd_base_rows(base, f5)
     var l32 = List[Float32](length=steps, fill=Float32(0))
     with GILReleased(Python()):
-        var hbuf = res_alloc(steps * AH_ROW if adam else 12)
-        var lbuf = res_alloc(steps)
-        var tw = _tape_words()
-        if adam:
-            adam_hyper_resident(base, done + 1, steps, hbuf)
-        else:
-            res_upload(hbuf, base.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 12)
-        for st in range(steps):
-            var s0 = st * batch
-            var m = min(batch, n - s0)
-            var q = 0 if m == batch else 1
-            res_gather_pair_perm(a[0], data[0], data[2], a[1], data[1], 1, n, s0, m, shuffle, key)
-            var src = a[0]
-            for j in range(nb):
-                conv_block_forward_into[True](
-                    _at(src), _at(bh[j][0]), _at(bh[j][1]), cs[q][j], ps[q][j], pools[q][j], _at(bh[j][4]),
-                    _at_i(bh[j][5]), bh[j][7], bh[j][8],
-                )
-                src = bh[j][4]
-            linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
-            softmax_xent_res_loss(_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]), lbuf, st)
-            # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
-            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
-            cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
-            if adam:
-                opt_many_resident_h[True](t[0], t[1], t[2], t[3], hbuf + 4 * AH_ROW * st)
-            else:
-                opt_many_resident_h[False](t[0], t[1], t[2], t[3], hbuf + (0 if done + st == 0 else 24))
-        res_download(lbuf, l32.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), steps)
-        res_free(hbuf)
-        res_free(lbuf)
-        res_free(tw)
-    for st in range(steps):  # small-loop(steps: optimizer steps of one epoch): widens one loss scalar per step, not row data
-        losses[st] = Float64(l32[st])
+        fit_epoch_d_device(
+            n, batch, adam, done, nb, steps, flat, k, shuffle, key, bh, head, a, data, t, cs, ps, pools, base, l32,
+        )
+    widen_f32_into(losses, l32, steps)
     _ = base^
     _ = l32^
     return PythonObject(steps)

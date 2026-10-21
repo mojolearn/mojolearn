@@ -85,7 +85,7 @@ def test_binding_registers_the_gpu_names():
     # live in bindings/gp_host_predict.mojo since lane/inference-neighbors-density
     # moved them there (the gp host binding imports and registers them), so the
     # host side of the contract is that module and the binding read together.
-    host = src + _read("bindings/gp_host_predict.mojo")
+    host = src + _read("bindings/gp_host_predict.mojo") + _read("gaussian_process/host/gp_host_entries.mojo")
     for sentence in ("addrs must contain 9 addresses", "params must contain 5 values",
                      "addrs must contain 12 addresses", "params must contain 7 values",
                      "params must contain 6 values (n, nrhs, info,"):

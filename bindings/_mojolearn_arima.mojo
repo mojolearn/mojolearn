@@ -45,7 +45,7 @@ or two layers down and is raised there by name, which is what keeps it
 reachable from every caller and not only from Python:
 
     n_exog < 0 or > 17   `arima/impl/tsa/arima_common.mojo::validate_order`
-    non-finite exog      `bindings/arima_exog_layout.mojo`, naming the
+    non-finite exog      `arima/exog_layout.mojo`, naming the
                          series, row and regressor (DEVIATION 997)
     method css, css-ml   `arima/estimator.mojo::_refuse_method`
     rd > 8               `validate_order`, cuML's block-per-series Kalman
@@ -269,8 +269,8 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 def arima_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself, 0 FAST, 1
-    IDENTICAL. The same shape as `gbdt_numeric_mode` and
-    for the same reason, the wrapper reads it once and refuses to run if the
+    IDENTICAL. The same shape as `gbdt_numeric_mode`, and
+    with the same reason: the wrapper reads it once and refuses to run if the
     binary it loaded disagrees with the mode the package asked for. A
     wrong-arm measurement that is correctly labelled by accident is the
     failure this prevents."""

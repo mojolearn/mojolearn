@@ -72,7 +72,7 @@ Jones transform, `obs_intercept_kernel` and the `has_exog` arms of the loop
 kernel (`batched_kalman.mojo`, DEVIATION 995's fold), and
 `prepare_future_data`'s one-difference arm (`arima_helpers.mojo`). The
 regressors arrive in the filter's layout, `[bid*n_exog*n + i*n + t]`
-(`bindings/arima_exog_layout.mojo`).
+(`arima/exog_layout.mojo`).
 
 `arima_forecast_ptr_host` and `arima_predict_ptr_host`
 (`arima/estimator.mojo:409-545`, `batched_arima.mojo:287-348`) are mirrored

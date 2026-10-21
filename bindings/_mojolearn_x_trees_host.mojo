@@ -47,7 +47,7 @@ def _shap_forest(forest: PythonObject) raises -> List[Int]:
     if len(forest) != 5:
         raise Error("x_trees tree_shap: forest must hold 5 addresses")
     var out = List[Int]()
-    for i in range(5):
+    for i in range(5):  # small-loop(the five forest address words)
         out.append(Int(py=forest[i]))
     return out^
 
@@ -56,7 +56,7 @@ def _shap_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
     if len(params) != n:
         raise Error(who + ": params must hold " + String(n) + " values")
     var out = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(params words)
         var v = Int(py=params[i])
         if v < 0:
             raise Error(who + ": negative count")
@@ -103,7 +103,7 @@ def _dart_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
     if len(params) != n:
         raise Error(who + ": params must hold " + String(n) + " values")
     var out = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(params words)
         out.append(Int(py=params[i]))
     return out^
 
@@ -123,7 +123,7 @@ def dart_step_binding(handle: PythonObject, coef: PythonObject, thr: PythonObjec
     cpu4-forest); params = [t, drop_seed, iteration, skip_thr]."""
     var p = _dart_ints(params, 4, "x_trees_dart_step")
     var outs = List[Int]()
-    for i in range(len(targets)):
+    for i in range(len(targets)):  # small-loop(target address words)
         outs.append(Int(py=targets[i]))
     dart_step(Int(py=handle), Int(py=coef), Int(py=thr), Int(py=flags), Int(py=bad), outs, p[0], p[1], p[2], p[3])
     return PythonObject(p[0])
@@ -160,7 +160,7 @@ def _dart_addr_list(v: PythonObject, nt: Int, who: String) raises -> List[Int]:
     if len(v) != nt:
         raise Error(who + ": one address per tree")
     var out = List[Int]()
-    for j in range(nt):  # glue: T tree addresses
+    for j in range(nt):  # small-loop(one address word per tree)
         out.append(Int(py=v[j]))
     return out^
 
@@ -182,11 +182,11 @@ def dart_predict_binding(x: PythonObject, forest: PythonObject, sizes: PythonObj
         raise Error("x_trees_dart_predict: one coefficient per tree")
     var sz = List[Int]()
     var cf = List[Float64]()
-    for j in range(nt):  # glue: T tree sizes and coefficients
+    for j in range(nt):  # small-loop(one size and one coefficient word per tree)
         sz.append(Int(py=sizes[j]))
         cf.append(Float64(py=coefs[j]))
     var iv = List[Float64]()
-    for c in range(len(inits)):  # glue: k class starts
+    for c in range(len(inits)):  # small-loop(one start word per class)
         iv.append(Float64(py=inits[c]))
     dart_predict(Int(py=x), _dart_addr_list(forest[0], nt, "x_trees_dart_predict"),
                  _dart_addr_list(forest[1], nt, "x_trees_dart_predict"),
@@ -199,7 +199,7 @@ def tree_shap_cache_create_binding(forest: PythonObject, tscale: PythonObject,
                                    cover: PythonObject, params: PythonObject) raises -> PythonObject:
     var a = tree_shap_cache_create_args(forest, params)
     var addresses = List[Int]()
-    for i in range(5):
+    for i in range(5):  # small-loop(the five forest address words)
         addresses.append(a[i])
     return PythonObject(shap_cpu.shap_cache_create(addresses, Int(py=tscale), Int(py=cover), a[5], a[6], a[7], a[8]))
 

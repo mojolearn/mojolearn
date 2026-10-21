@@ -35,6 +35,7 @@ from bindings.ivf_host_search import (
     ivf_flat_search_binding,
 )
 from bindings.ivf_index_arrays import ivf_build_extents, ivf_write_index_arrays
+from ivf.index_arrays_impl import ivf_store_ids_counts
 from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build, host_ivf_build_and_search
 
 
@@ -122,10 +123,7 @@ def ivf_flat_build_and_search_binding(
             x, n, dim, n_lists, queries, m, k, n_probes, kmeans_n_iters, metric, seed,
         )
         copy_f32(r.distances.unsafe_ptr(), dp, m * k)
-        for i in range(m * k):
-            ip.unsafe_store(i, Int32(Int(r.indices[i])))
-        for i in range(m):
-            cp.unsafe_store(i, r.n_candidates[i])
+        ivf_store_ids_counts(ip, cp, r.indices, r.n_candidates, m, k)
     return PythonObject(0)
 
 
