@@ -3,6 +3,7 @@
 # Checkpoint files use native mmap ownership; no Python safetensors reader,
 # NumPy conversion, tensor conversion or package callback executes here.
 from std.python import Python, PythonObject
+from bindings.native_torch_admission import native_torch_metadata
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
 from autograd.program_arrays import mapped_byte_array
@@ -129,14 +130,15 @@ def _record(name: PythonObject, target: Int, layout: Int, value: PythonObject, c
         if end - begin != n * size or Int(py=value[2]) + end > len(view):
             raise Error("ValueError: safetensors tensor extent disagrees with shape or file length: " + String(name))
     elif String(b.type(value).__module__).startswith("torch"):
-        var dt = _dtype(String(value.dtype))
+        var metadata = native_torch_metadata(value)
+        var dt = _dtype(String(metadata[0]))
         dtype = dt[0]
         size = dt[1]
-        if String(value.device.type) != "cpu":
+        if String(metadata[1]) != "cpu":
             raise Error("ValueError: load_weights requires CPU source tensors")
-        addr = Int(py=value.data_ptr())
-        dims = value.shape
-        strides = value.stride()
+        addr = Int(py=metadata[4])
+        dims = metadata[2]
+        strides = metadata[3]
         unit = 2
     elif Bool(py=b.hasattr(value, "dtype")) and Bool(py=b.hasattr(value, "strides")):
         if not Bool(py=value.dtype.isnative):

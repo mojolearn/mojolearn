@@ -7,6 +7,7 @@ from core.cast_in import cast_in_kind, cast_f32_bits
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
+from bindings.native_torch_admission import native_torch_numpy
 
 
 def classical_array(rows: Int, cols: Int, context: PythonObject, wide: Bool = False) raises -> PythonObject:
@@ -19,11 +20,7 @@ def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: P
     var b = Python.import_module("builtins")
     var prepared = source
     if _ordinary_torch(b.type(source), context):
-        if String(source.device.type) != "cpu":
-            raise Error("TypeError: " + name + " must be a host buffer; copy device tensors to CPU explicitly")
-        # Exact standard Tensor/Parameter methods are C entry points. User
-        # tensor subclasses were refused by the admission check above.
-        prepared = source.detach().numpy()
+        prepared = native_torch_numpy(source)
     var value = sequential_input(prepared, context)
     var nd = Int(py=value.ndim)
     if nd != ndim:
