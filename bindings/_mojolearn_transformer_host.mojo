@@ -88,6 +88,9 @@ from transformer.block_options import (
 
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_host_binding_impl import (
+    _backward_run,
+    _session_forward_tape_run,
+    _session_backward_tape_run,
     _write,
     _opt_read,
     _host_weights_from,
@@ -147,7 +150,7 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error(what + ": null buffer address at slot " + String(i))
@@ -167,12 +170,12 @@ def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raise
             + " with the block options tail, got " + String(got)
         )
     var a = List[Int]()
-    for i in range(got):
+    for i in range(got):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if i < n and i != gate_slot and address == 0:
             raise Error(what + ": null buffer address at slot " + String(i))
         a.append(address)
-    while len(a) < n + BLOCK_OPTION_ADDRS:
+    while len(a) < n + BLOCK_OPTION_ADDRS:  # small-loop(BLOCK_OPTION_ADDRS: pads the absent option tail with zero addresses): argument words, not data
         a.append(0)
     return a^
 
@@ -186,7 +189,7 @@ def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]
             + " with the block options tail, got " + String(got)
         )
     var p = List[Int]()
-    for i in range(got):
+    for i in range(got):  # small-loop(params: fixed scalar list of this entry): argument words, not data
         p.append(Int(py=params[i]))
     return p^
 
@@ -202,12 +205,12 @@ def transformer_forward_fresh_binding(
     var p = _params_tail(params, 8, what)
     var opts = BlockOptions.from_params(p, 8)
     var a = List[Int]()
-    for i in range(10):
+    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(a0[i])
     a.append(0)
     a.append(0)
     a.append(a0[10])
-    for i in range(BLOCK_OPTION_ADDRS):
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(a0[11 + i])
     var b = p[0]
     var l = p[1]
@@ -317,19 +320,7 @@ def transformer_backward_binding(
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("transformer backward: B, L and d_model must be positive")
     with GILReleased(Python()):
-        var qw = nh * hd
-        var kw = nkv * hd
-        var w = transformer_host_weights(
-            dm, nh, nkv, hd, it, l,
-            read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
-            read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-            read_f32(a[7], it * dm), read_f32(a[8], it * dm), read_f32(a[9], dm * it),
-        )
-        var x = read_f32(a[0], b * l * dm)
-        var d_out = read_f32(a[10], b * l * dm)
-        var grads = transformer_host_backward(w, x, d_out, b, l, window)
-        for i in range(10):
-            _write(a[11 + i], grads[i])
+        _backward_run(a, b, l, dm, nh, nkv, hd, it, window)
     return PythonObject(0)
 
 
@@ -392,26 +383,14 @@ def transformer_session_forward_tape_binding(session: PythonObject,addrs: Python
         raise Error("transformer tape: IDENTICAL and ten scalars required")
     var a = _addrs(addrs,11,String("transformer tape"))
     var p = List[Int]()
-    for i in range(10):
+    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
         p.append(Int(py=params[i]))
     if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
         raise Error("transformer tape: invalid shape/window/activation budget/cost")
     owner[].busy = True
     try:
         with GILReleased(Python()):
-            owner[].invalidate_tape()
-            var dm=p[2]
-            var qw=p[3]*p[5]
-            var kw=p[4]*p[5]
-            var it=p[6]
-            var w = transformer_host_weights(dm,p[3],p[4],p[5],it,p[1],
-                read_f32(a[1],dm),read_f32(a[2],dm),read_f32(a[3],qw*dm),
-                read_f32(a[4],kw*dm),read_f32(a[5],kw*dm),read_f32(a[6],dm*qw),
-                read_f32(a[7],it*dm),read_f32(a[8],it*dm),read_f32(a[9],dm*it))
-            var x=read_f32(a[0],p[0]*p[1]*dm)
-            owner[].tape = HostAttentionTape(w^,x^,p[0],p[1],p[7],owner[].generation)
-            _write(a[10],owner[].tape.value().stages.value().residual2_out)
-            owner[].tape.value().seal(p[8],p[9])
+            _session_forward_tape_run(Int(owner), a, p)
     except error:
         owner[].invalidate_tape()
         owner[].busy = False
@@ -440,12 +419,7 @@ def transformer_session_backward_tape_binding(session: PythonObject,addrs: Pytho
     owner[].busy = True
     try:
         with GILReleased(Python()):
-            ref tape = owner[].tape.value()
-            var dy=read_f32(a[0],tape.b*tape.l*tape.weights.dims.d_model)
-            var gradients=tape.backward(dy,generation)
-            for i in range(10):
-                _write(a[i+1],gradients[i])
-            owner[].invalidate_tape()
+            _session_backward_tape_run(Int(owner), a, generation)
     except error:
         owner[].invalidate_tape()
         owner[].busy = False
