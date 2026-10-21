@@ -6,7 +6,8 @@ so a Python-free caller reaches the same source; no Python here). The
 address and parameter contracts are that file's."""
 from std.memory import memcpy
 
-from bindings.hostptr import f32_ptr, i32_ptr
+from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from ivf.impl.neighbors.ivf_common import postprocess_distances
 from x_ann.switches import ANN3_HOST_PASSES
 
 
@@ -28,6 +29,22 @@ def ivf_store_search_result(
     for i in range(m):
         cp.unsafe_store(i, n_candidates[i])
 
+
+
+def ivf_store_ids_counts(
+    ip: MutPointer[Int32, MutUntrackedOrigin],
+    cp: MutPointer[Int32, MutUntrackedOrigin],
+    indices: List[UInt32],
+    n_candidates: List[Int32],
+    m: Int,
+    k: Int,
+):
+    """ORIGINAL row ids as int32 and the candidate count per query (the
+    host build-and-search door's tail after its distance copy)."""
+    for i in range(m * k):
+        ip.unsafe_store(i, Int32(Int(indices[i])))
+    for i in range(m):
+        cp.unsafe_store(i, n_candidates[i])
 
 def ivf_store_index_arrays(
     cp: MutPointer[Float32, MutUntrackedOrigin],
@@ -204,3 +221,13 @@ def ivf_shard_plan_host(
             var o = Int(off.unsafe_load(j))
             soff.unsafe_store(p * L1 + j, Int32(max(0, min(o, hi) - lo)))
     return 0
+
+
+def ivf_finalize_distances_host(address: Int, n: Int, metric: Int) raises:
+    """`postprocess_distances` applied in place to `n` float32 at
+    `address` (`bindings/ivf_host_search.mojo::ivf_finalize_distances`)."""
+    var distances = read_f32(address, n)
+    postprocess_distances(distances, metric)
+    var dst = f32_ptr(address)
+    for i in range(n):
+        dst.unsafe_store(i, distances[i])

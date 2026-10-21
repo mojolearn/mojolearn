@@ -142,8 +142,8 @@ def _ivf_run(
             var a = ip.unsafe_load(0)
             ip.unsafe_store(0, ip.unsafe_load(1))
             ip.unsafe_store(1, a)
-    for i in range(m):
-        cp.unsafe_store(i, r.n_candidates[i])
+    memcpy(dest=cp, src=r.n_candidates.unsafe_ptr(), count=m)
+    _ = len(r.n_candidates)
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
 

@@ -37,7 +37,7 @@ from bindings.ivf_index_arrays import (
     ivf_write_search_result,
 )
 from ivf.host.ivf_host import IvfHostIndex, host_ivf_extend, host_ivf_search
-from ivf.impl.neighbors.ivf_common import postprocess_distances
+from ivf.host.ivf_index_arrays_impl import ivf_finalize_distances_host
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
 
@@ -102,11 +102,7 @@ def ivf_finalize_distances_binding(
     var n = Int(py=count)
     if n < 0:
         raise Error("distance count must be nonnegative")
-    var distances = read_f32(Int(py=address), n)
-    postprocess_distances(distances, Int(py=metric))
-    var dst = f32_ptr(Int(py=address))
-    for i in range(n):
-        dst.unsafe_store(i, distances[i])
+    ivf_finalize_distances_host(Int(py=address), n, Int(py=metric))
     return PythonObject(0)
 
 
