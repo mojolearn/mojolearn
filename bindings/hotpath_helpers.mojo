@@ -49,6 +49,7 @@ from metrics.checks.pinned_sum import canonicalize_nan
 from core.hotpath_impl_rows import (
     adam_hyper_f64,
     assign_fold_i64,
+    bincount2_i32,
     bincount_i64,
     compact_notnan_f32,
     count_fold_hits_i64,
@@ -523,6 +524,31 @@ def bincount_i64_binding(
     var r: Int
     with GILReleased(Python()):
         r = bincount_i64(s, c, count, kk, cp, acc)
+    return PythonObject(r)
+
+
+def bincount2_i32_host_binding(
+    a_addr: PythonObject, b_addr: PythonObject, dims: PythonObject, counts_addr: PythonObject,
+) raises -> PythonObject:
+    """dims = [n, ka, kb]: int64 counts[b * ka + a] over the n rows of two
+    int32 code columns, on the host (the core host binding's
+    `bincount2_i32`, the GPU base binding's twin). Raises when a code is
+    outside [0, ka) x [0, kb)."""
+    if len(dims) != 3:
+        raise Error("bincount2_i32: dims [n, ka, kb]")
+    var count = Int(py=dims[0])
+    var ka = Int(py=dims[1])
+    var kb = Int(py=dims[2])
+    var ca = Int(py=counts_addr)
+    if ca == 0:
+        raise Error("bincount2_i32: null counts address")
+    var a = Int(py=a_addr)
+    var b = Int(py=b_addr)
+    if count > 0 and (a == 0 or b == 0):
+        raise Error("bincount2_i32: null code address")
+    var r: Int
+    with GILReleased(Python()):
+        r = bincount2_i32(a, b, count, ka, kb, ca)
     return PythonObject(r)
 
 
