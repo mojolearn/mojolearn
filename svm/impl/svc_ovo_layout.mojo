@@ -32,8 +32,6 @@ from +0.0, rounded once to float32: one thread per feature, the chain in
 
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -236,22 +234,6 @@ struct OvoPairs(Copyable, Movable):
     var m: List[Int]
 
 
-def ovo_pairs_from_python(sup_addrs: PythonObject, dual_addrs: PythonObject, meta: PythonObject) raises -> OvoPairs:
-    var p = Int(py=meta[2])
-    if len(sup_addrs) != p or len(dual_addrs) != p or len(meta) != 3 + 3 * p:
-        raise Error("svc_ovo_layout: one support and one dual address per pair, meta [k, n, P, (i, j, m) * P]")
-    var out = OvoPairs(List[Int](), List[Int](), List[Int](), List[Int](), List[Int]())
-    for q in range(p):  # small-loop(p: OvO class pairs): reads one pair's addresses and sizes, plan entries only
-        out.sup.append(Int(py=sup_addrs[q]))
-        out.dual.append(Int(py=dual_addrs[q]))
-        out.ci.append(Int(py=meta[3 + 3 * q]))
-        out.cj.append(Int(py=meta[4 + 3 * q]))
-        out.m.append(Int(py=meta[5 + 3 * q]))
-        if out.m[q] < 0 or (out.m[q] > 0 and (out.sup[q] == 0 or out.dual[q] == 0)):
-            raise Error("svc_ovo_layout: a pair's support or dual buffer is null")
-    return out^
-
-
 def ovo_layout_device(
     ctx: DeviceContext, pairs: OvoPairs, k: Int, n_bound: Int, cap: Int,
     support_addr: Int, nsup_addr: Int, dual_addr: Int,
@@ -356,66 +338,24 @@ def ovo_check_result(n_sv: Int) raises:
         raise Error("svc_ovo_layout: more support vectors than the output holds")
 
 
-def svc_ovo_layout_device_binding(
-    ctx: DeviceContext, sup_addrs: PythonObject, dual_addrs: PythonObject, meta: PythonObject,
-    out_addrs: PythonObject,
-) raises -> PythonObject:
-    """`svc_ovo_layout(sup_addrs, dual_addrs, meta, out_addrs)`: meta
-    [k, n_bound, P, (i, j, n_support) per pair]; out_addrs [support (int32,
-    cap), n_support (int32, k), dual_coef (float32, (k - 1) * cap), cap].
-    Returns n_sv (dual_coef_ written with row stride n_sv)."""
-    var pairs = ovo_pairs_from_python(sup_addrs, dual_addrs, meta)
-    var k = Int(py=meta[0])
-    var n_bound = Int(py=meta[1])
-    if len(out_addrs) != 4:
-        raise Error("svc_ovo_layout: out_addrs [support, n_support, dual_coef, cap]")
-    var sa = Int(py=out_addrs[0])
-    var na = Int(py=out_addrs[1])
-    var da = Int(py=out_addrs[2])
-    var cap = Int(py=out_addrs[3])
-    if k < 2 or n_bound < 0 or sa == 0 or na == 0 or da == 0:
-        raise Error("svc_ovo_layout: needs two classes and three output buffers")
-    var n_sv = 0
-    with GILReleased(Python()):
-        n_sv = ovo_layout_device(ctx, pairs, k, n_bound, cap, sa, na, da)
-    ovo_check_result(n_sv)
-    return PythonObject(n_sv)
-
-
-def svc_dual_gemv_device_binding(
-    ctx: DeviceContext, dual_addr: PythonObject, sv_addr: PythonObject, dims: PythonObject,
-    out_addr: PythonObject,
-) raises -> PythonObject:
-    """`svc_dual_gemv(dual, sv, [n_sv, d(, negate)], out)`: coef_ = dual @ sv
-    (one row), float32 out of d, negated (exact) when `negate` (the OvO
-    pair rows in scikit-learn's orientation; lane pyglue-numeric: Python
-    negated them). Returns d."""
-    var n_sv = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var neg = Int(py=dims[2]) if len(dims) > 2 else 0
-    var oa = Int(py=out_addr)
-    if n_sv < 0 or d < 0 or oa == 0:
-        raise Error("svc_dual_gemv: bad dims or null output")
-    if d == 0:
-        return PythonObject(0)
-    var dl = Int(py=dual_addr)
-    var sl = Int(py=sv_addr)
-    with GILReleased(Python()):
-        var d_dual = ctx.enqueue_create_buffer[DType.float32](max(1, n_sv))
-        var d_sv = ctx.enqueue_create_buffer[DType.float32](max(1, n_sv * d))
-        if n_sv > 0:
-            ctx.enqueue_copy(dst_buf=d_dual.create_sub_buffer[DType.float32](0, n_sv),
-                             src_ptr=_F32P(unsafe_from_address=dl))
-            ctx.enqueue_copy(dst_buf=d_sv.create_sub_buffer[DType.float32](0, n_sv * d),
-                             src_ptr=_F32P(unsafe_from_address=sl))
-        var d_out = ctx.enqueue_create_buffer[DType.float32](d)
-        ctx.enqueue_function[gemv_kernel](
-            d_dual.unsafe_ptr(), d_sv.unsafe_ptr(), Int32(n_sv), Int32(d), Int32(neg), d_out.unsafe_ptr(),
-            grid_dim=_blocks(d), block_dim=OVO_TPB,
-        )
-        ctx.enqueue_copy(dst_ptr=_F32P(unsafe_from_address=oa), src_buf=d_out)
-        ctx.synchronize()
-        _ = d_dual^
-        _ = d_sv^
-        _ = d_out^
-    return PythonObject(d)
+def ovo_dual_gemv_device(ctx: DeviceContext, dl: Int, sl: Int, n_sv: Int, d: Int, neg: Int, oa: Int) raises:
+    """coef_ = dual @ sv (one row) on the device: `n_sv` float32 duals at
+    `dl`, the (n_sv, d) float32 support vectors at `sl`, d float32 written
+    at `oa`, negated (exact) when `neg` != 0."""
+    var d_dual = ctx.enqueue_create_buffer[DType.float32](max(1, n_sv))
+    var d_sv = ctx.enqueue_create_buffer[DType.float32](max(1, n_sv * d))
+    if n_sv > 0:
+        ctx.enqueue_copy(dst_buf=d_dual.create_sub_buffer[DType.float32](0, n_sv),
+                         src_ptr=_F32P(unsafe_from_address=dl))
+        ctx.enqueue_copy(dst_buf=d_sv.create_sub_buffer[DType.float32](0, n_sv * d),
+                         src_ptr=_F32P(unsafe_from_address=sl))
+    var d_out = ctx.enqueue_create_buffer[DType.float32](d)
+    ctx.enqueue_function[gemv_kernel](
+        d_dual.unsafe_ptr(), d_sv.unsafe_ptr(), Int32(n_sv), Int32(d), Int32(neg), d_out.unsafe_ptr(),
+        grid_dim=_blocks(d), block_dim=OVO_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=_F32P(unsafe_from_address=oa), src_buf=d_out)
+    ctx.synchronize()
+    _ = d_dual^
+    _ = d_sv^
+    _ = d_out^

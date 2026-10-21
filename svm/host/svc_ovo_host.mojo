@@ -3,17 +3,14 @@
 """SVC's one-vs-one attribute layout and `coef_`, THE HOST COLUMN
 (lane/apple-fast-py2mojo-linear): `svm/impl/svc_ovo_layout.mojo`'s rules as
 plain loops for the CPU binding, the same words (integer placement, and the
-same ascending binary64 chain per feature for `coef_`)."""
-
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
+same ascending binary64 chain per feature for `coef_`). The Python entry points
+are in `svm/host/svc_ovo_host_pyapi.mojo`."""
 
 from svm.impl.svc_ovo_layout import (
     OvoPairs,
     dual_gemv_column,
     ovo_check_result,
     ovo_dual_row,
-    ovo_pairs_from_python,
     ovo_side,
 )
 
@@ -65,49 +62,11 @@ def ovo_layout_host(
     return n_sv
 
 
-def svc_ovo_layout_host_binding(
-    sup_addrs: PythonObject, dual_addrs: PythonObject, meta: PythonObject, out_addrs: PythonObject,
-) raises -> PythonObject:
-    """The CPU binding's `svc_ovo_layout`, the GPU binding's contract."""
-    var pairs = ovo_pairs_from_python(sup_addrs, dual_addrs, meta)
-    var k = Int(py=meta[0])
-    var n_bound = Int(py=meta[1])
-    if len(out_addrs) != 4:
-        raise Error("svc_ovo_layout: out_addrs [support, n_support, dual_coef, cap]")
-    var sa = Int(py=out_addrs[0])
-    var na = Int(py=out_addrs[1])
-    var da = Int(py=out_addrs[2])
-    var cap = Int(py=out_addrs[3])
-    if k < 2 or n_bound < 0 or sa == 0 or na == 0 or da == 0:
-        raise Error("svc_ovo_layout: needs two classes and three output buffers")
-    var n_sv = 0
-    with GILReleased(Python()):
-        n_sv = ovo_layout_host(pairs, k, n_bound, cap, sa, na, da)
-    ovo_check_result(n_sv)
-    return PythonObject(n_sv)
-
-
-def svc_dual_gemv_host_binding(
-    dual_addr: PythonObject, sv_addr: PythonObject, dims: PythonObject, out_addr: PythonObject,
-) raises -> PythonObject:
-    """The CPU binding's `svc_dual_gemv` (dims [n_sv, d(, negate)])."""
-    var n_sv = Int(py=dims[0])
-    var d = Int(py=dims[1])
-    var neg = Int(py=dims[2]) if len(dims) > 2 else 0
-    var oa = Int(py=out_addr)
-    if n_sv < 0 or d < 0 or oa == 0:
-        raise Error("svc_dual_gemv: bad dims or null output")
-    if d == 0:
-        return PythonObject(0)
-    var dl = Int(py=dual_addr)
-    var sl = Int(py=sv_addr)
-    if n_sv > 0 and (dl == 0 or sl == 0):
-        raise Error("svc_dual_gemv: null input")
+def ovo_dual_gemv_host(dl: Int, sl: Int, n_sv: Int, d: Int, neg: Int, oa: Int):
+    """The host column's coef_ = dual @ sv (one row), the device's chain."""
     var dst = _F32P(unsafe_from_address=oa)
-    with GILReleased(Python()):
-        var dp = _F32P(unsafe_from_address=dl if n_sv > 0 else oa)
-        var sp = _F32P(unsafe_from_address=sl if n_sv > 0 else oa)
-        for j in range(d):
-            var v = dual_gemv_column(dp, sp, n_sv, d, j)
-            dst[j] = -v if neg != 0 else v
-    return PythonObject(d)
+    var dp = _F32P(unsafe_from_address=dl if n_sv > 0 else oa)
+    var sp = _F32P(unsafe_from_address=sl if n_sv > 0 else oa)
+    for j in range(d):
+        var v = dual_gemv_column(dp, sp, n_sv, d, j)
+        dst[j] = -v if neg != 0 else v
