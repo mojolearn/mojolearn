@@ -90,24 +90,26 @@ def test_predict_matches_the_logits_of_the_next_step():
     assert np.asarray(model.train_step(x, y)['logits']).tobytes() == predicted
 
 
-@pytest.mark.parametrize('operation', ['train_step', 'apply_gradients'])
-def test_failed_update_is_transactional(operation):
+def test_failed_step_is_transactional():
     model = trainer()
     model.train_step(*batch())
     x, y = overflowing(model)
     before = state_bytes(model)
-    with pytest.raises((ValueError, RuntimeError)):
-        if operation == 'train_step':
-            model.train_step(x, y, return_input_grad=True)
-        else:
-            huge = [np.full(shape, 3e38, np.float32) for shape in impl._SHAPES]
-            model.apply_gradients(huge)
-            model.apply_gradients(huge)
-            model.apply_gradients([np.full(shape, np.float32(3.4e38), np.float32) for shape in impl._SHAPES])
-            raise RuntimeError('three huge updates did not overflow')
-    if operation == 'train_step':
-        assert state_bytes(model) == before
-        assert model.step_ == 1
+    with pytest.raises(RuntimeError):
+        model.train_step(x, y, return_input_grad=True)
+    assert state_bytes(model) == before
+    assert model.step_ == 1
+
+
+def test_failed_update_is_transactional():
+    # lr * weight_decay far above 1 sends every nonzero parameter past
+    # float32's range in one decoupled decay: the update is refused whole.
+    model = SmallMLPTrainer(*weights(), data_schedule={'dataset': 'overflow'}, lr=3e38, weight_decay=.5)
+    before = state_bytes(model)
+    with pytest.raises(ValueError, match='finite'):
+        model.apply_gradients([np.full(shape, .5, np.float32) for shape in impl._SHAPES])
+    assert state_bytes(model) == before
+    assert model.step_ == 0
 
 
 def test_state_snapshots_and_load_are_isolated():
@@ -239,6 +241,8 @@ def test_checkpoint_refuses_corruption_wrong_schema_and_oversize(tmp_path):
         SmallMLPTrainer.from_checkpoint(tmp_path / 'missing.json')
 
 
+@pytest.mark.skipif(_backend.default_mode() != 'identical',
+                    reason='fast promises quality, not the same bits across routes')
 def test_per_operation_route_has_the_fused_bits(monkeypatch):
     x, y = batch(9)
     results = []
