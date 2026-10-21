@@ -129,7 +129,7 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
 def _attribute_context(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var host = py_get(context, "classical_host_context")
-    if host is not None and (py_type(model) is host["ridge_class"] or py_type(model) is host["linear_class"]):
+    if host is not None and py_contains(host["classical_kinds"], py_type(model)):
         return host
     return context
 

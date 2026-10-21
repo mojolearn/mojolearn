@@ -4,7 +4,8 @@
 # entries; this module never calls the Python _M/_Kit driver.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_host_weights, classical_word
+from bindings.classical_arrays import classical_array, classical_word
+from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
 from bindings.classical_ridge import classical_means, classical_center
 from bindings.classical_tsqr import classical_tsqr_solve
 from bindings.sequential_arrays import sequential_address
@@ -61,15 +62,16 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
                       context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     var intercept = Bool(py=fields["fit_intercept"])
-    var x = classical_host_f32(args[0], 2, "X", context)
-    var y = classical_host_f32(args[1], 1, "y", context, column_target=True)
+    var est = classical_estimator_name(model)
+    var x = classical_check_x(args[0], est, context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    if Int(py=y.size) != rows:
-        raise Error("mojolearn LinearRegression X and y lengths differ")
+    var y = classical_check_y(args[1], rows, est, context)
     if rows < 2:
-        raise Error("Found array with " + String(rows) + " sample(s) while a minimum of 2 is required.")
-    var weights = classical_host_weights(args[2], rows, context)
+        # The solver needs two rows; scikit-learn's wording for one sample.
+        raise Error(est + " cannot be fit on n_samples=" + String(rows) + ": Found array with " + String(rows)
+                    + " sample(s) (shape=(" + String(rows) + ", " + String(cols) + ")) while a minimum of 2 is required.")
+    var weights = classical_check_weights_input(args[2], rows, context)
     var fast_normal = False
     if py_get(entries, "ols_normal_eq_default") is not None:
         fast_normal = Bool(py=entries["ols_normal_eq_default"]())

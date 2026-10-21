@@ -5,9 +5,10 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy
 from core.classical_ridge_impl import classical_widen_f32_f64
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_host_weights, classical_word
+from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
 from bindings.sequential_arrays import sequential_address
 from bindings.sequential_description import sequential_fields
+from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_check_width, classical_estimator_name
 
 
 def classical_means(x: PythonObject, rows: Int, cols: Int, entries: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -27,27 +28,43 @@ def classical_center(x: PythonObject, mean: PythonObject, rows: Int, cols: Int,
     return out
 
 
+def classical_ridge_parameters(fields: PythonObject) raises:
+    # Checked when fit runs, after the inputs, as the constructor stores them.
+    var b = Python.import_module("builtins")
+    var alpha = fields["alpha"]
+    var negative = False
+    try:
+        negative = Bool(py=alpha < PythonObject(0.0))
+    except error:
+        raise Error("TypeError: " + String(error))
+    if negative:
+        raise Error("alpha must be non-negative, got " + String(py_call(b.str, alpha)))
+    var solver = fields["solver"]
+    var name = String(solver) if py_type(solver) is b.str else String("")
+    var shown = String(py_call(b.repr, solver))
+    if name != "auto" and name != "eig" and name != "svd" and name != "cd":
+        raise Error("TypeError: solver " + shown + " is not supported")
+    if name == "svd" or name == "cd":
+        raise Error("NotImplementedError: mojolearn Ridge: solver=" + shown + " is not implemented "
+                    + "(ridgeSVD is raft::linalg::svdQR -> cuSOLVER gesvd; 'cd' is cuml/solvers/cd.pyx); "
+                    + "solver='eig' (cuML's 'auto') is the implemented arm. See glm/NOT_IMPLEMENTED.tsv")
+    if Bool(py=fields["normalize"]):
+        raise Error("NotImplementedError: mojolearn Ridge: normalize is not implemented "
+                    + "(preprocess.cuh:76-108, the meanvar arm of preProcessData; glm/NOT_IMPLEMENTED.tsv)")
+
+
 def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var fields = sequential_fields(model)
-    var alpha = Float64(py=fields["alpha"])
-    if alpha < 0:
-        raise Error("alpha must be non-negative")
-    var solver = String(fields["solver"])
-    if solver != "auto" and solver != "eig" and solver != "svd" and solver != "cd":
-        raise Error("TypeError: solver is not supported")
-    if solver == "svd" or solver == "cd":
-        raise Error("NotImplementedError: Ridge implements solver='eig' (and auto); svd and cd are not implemented")
-    if Bool(py=fields["normalize"]):
-        raise Error("NotImplementedError: Ridge normalize is not implemented")
-    var intercept = Bool(py=fields["fit_intercept"])
-    var x = classical_host_f32(args[0], 2, "X", context)
-    var y = classical_host_f32(args[1], 1, "y", context, column_target=True)
+    var est = classical_estimator_name(model)
+    var x = classical_check_x(args[0], est, context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    if Int(py=y.size) != rows:
-        raise Error("mojolearn Ridge X and y lengths differ")
-    var weights = classical_host_weights(args[2], rows, context)
+    var y = classical_check_y(args[1], rows, est, context)
+    classical_ridge_parameters(fields)
+    var alpha = Float64(py=fields["alpha"])
+    var intercept = Bool(py=fields["fit_intercept"])
+    var weights = classical_check_weights_input(args[2], rows, context)
     var coef = classical_array(cols, 0, context)
     var mean = classical_array(cols, 0, context)
     var ymean = Float64(0.0)
@@ -155,11 +172,10 @@ def classical_linear_predict(model: PythonObject, value: PythonObject, entries: 
     var fields = sequential_fields(model)
     if py_get(fields, "coef_") is None:
         raise Error("ValueError: call fit before predict")
-    var x = classical_host_f32(value, 2, "X", context)
+    var x = classical_check_x(value, classical_estimator_name(model), context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    if cols != Int(py=fields["n_features_in_"]):
-        raise Error("feature count differs from fit")
+    classical_check_width(cols, Int(py=fields["n_features_in_"]), classical_estimator_name(model))
     var coef = classical_host_f32(fields["coef_"], 1, "coef_", context)
     if Int(py=coef.size) != cols:
         raise Error("coef_ length differs from fitted feature count")

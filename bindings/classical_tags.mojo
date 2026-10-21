@@ -5,9 +5,84 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 
 
+def _tag_record_plan(cls: PythonObject, records: PythonObject, context: PythonObject) raises -> PythonObject:
+    # One record type's slots: (name, member descriptor, nested record index
+    # or -1, immutable value). The explicit values are the ones the regressor
+    # tags always carry: estimator_type "regressor", a required target, and
+    # the nested target/input/regressor records; every other field keeps its
+    # declared dataclass default. No dataclass constructor runs.
+    var b = Python.import_module("builtins")
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: sklearn tags require standard classes without metaclass hooks")
+    var class_fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
+    var declared = py_get(class_fields, "__dataclass_fields__")
+    if declared is None or py_type(declared) is not b.dict:
+        raise Error("TypeError: sklearn tag records must be standard dataclasses")
+    var missing = py_get(py_call(b.object.__getattribute__, Python.import_module("dataclasses"), "__dict__"), "MISSING")
+    var names = py_call(b.list, declared.keys())
+    var slots = Python.list()
+    for j in range(len(names)):  # driver-loop: over the record type's declared tag fields
+        var name = names[j]
+        if py_type(name) is not b.str:
+            raise Error("TypeError: sklearn tag field names must be native strings")
+        var descriptor = py_get(class_fields, name)
+        if py_type(descriptor) is not context["native_member_descriptor"]:
+            raise Error("TypeError: sklearn tag fields must be native member descriptors")
+        var nested = -1
+        var value = PythonObject(None)
+        var field = String(name)
+        if cls is records[3] and field == "target_tags":
+            nested = 0
+        elif cls is records[3] and field == "input_tags":
+            nested = 1
+        elif cls is records[3] and field == "regressor_tags":
+            nested = 2
+        elif cls is records[3] and field == "estimator_type":
+            value = PythonObject("regressor")
+        elif cls is records[0] and field == "required":
+            value = PythonObject(True)
+        else:
+            value = declared[name].default
+            if value is missing:
+                raise Error("TypeError: sklearn tag field has no immutable default: " + field)
+            if value is not None and py_type(value) is not b.bool and py_type(value) is not b.str:
+                raise Error("TypeError: sklearn tag defaults must be immutable native metadata")
+        py_call(slots.append, Python.tuple(name, descriptor, nested, value))
+    return Python.tuple(cls, py_call(b.tuple, slots))
+
+
+def classical_tag_plan(context: PythonObject) raises -> PythonObject:
+    """The sklearn tag record layout, read from the loaded sklearn module the
+    first time sklearn asks for tags, then kept on the connected context."""
+    var plan = context["classical_tag_plan"]
+    if plan is not None:
+        return plan
+    var b = Python.import_module("builtins")
+    var module = py_get(Python.import_module("sys").modules, "sklearn.utils._tags")
+    if module is None:
+        try:
+            module = Python.import_module("sklearn.utils._tags")
+        except error:
+            raise Error("ImportError: " + String(error))
+    var fields = py_call(b.object.__getattribute__, module, "__dict__")
+    var records = Python.list()
+    var classes = Python.tuple("TargetTags", "InputTags", "RegressorTags", "Tags")
+    for k in range(len(classes)):  # small-loop(the four sklearn tag record type names)
+        var cls = py_get(fields, classes[k])
+        if cls is None:
+            raise Error("ImportError: sklearn.utils lacks " + String(classes[k]))
+        py_call(records.append, cls)
+    var built = Python.list()
+    for k in range(len(records)):  # small-loop(the four sklearn tag record types)
+        py_call(built.append, _tag_record_plan(records[k], records, context))
+    plan = py_call(b.tuple, built)
+    py_setitem(context, "classical_tag_plan", plan)
+    return plan
+
+
 def classical_tags(context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var plan = context["classical_tag_plan"]
+    var plan = classical_tag_plan(context)
     if py_type(plan) is b.str:
         raise Error("ImportError: " + String(plan))
     if py_type(plan) is not b.tuple:

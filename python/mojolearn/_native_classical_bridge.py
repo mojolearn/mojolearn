@@ -6,36 +6,6 @@ _ERROR_CONTEXT = None
 _ERROR_BRIDGES = {}
 
 
-def _connect_tags():
-    # glue: connect optional sklearn's native record layout once at ABI setup
-    from types import MemberDescriptorType
-    try:
-        from sklearn.utils import Tags, TargetTags, InputTags, RegressorTags  # glue: connect optional sklearn tag record descriptors at import only
-    except ImportError as error:
-        return str(error)
-    target, inputs, regression = TargetTags(required=True), InputTags(), RegressorTags()
-    tags = Tags(estimator_type="regressor", target_tags=target,
-                input_tags=inputs, regressor_tags=regression)
-    records = (target, inputs, regression, tags)
-    plan = []
-    for record in records:  # glue: capture native field descriptors at connection
-        cls = type(record)
-        if type(cls) is not type or cls.__mro__ != (cls, object):
-            raise TypeError("sklearn tags require standard native record metadata")
-        slots = []
-        for name in cls.__dataclass_fields__:  # glue: one metadata tuple per declared record field
-            descriptor = vars(cls).get(name)
-            if type(descriptor) is not MemberDescriptorType:
-                raise TypeError("sklearn tag fields must be native member descriptors")
-            value = descriptor.__get__(record)
-            nested = next((index for index, candidate in enumerate(records[:3]) if value is candidate), -1)  # glue: connect nested native tag record indices
-            if nested < 0 and value is not None and type(value) not in (bool, str):
-                raise TypeError("sklearn tag defaults must be immutable native metadata")
-            slots.append((name, descriptor, nested, None if nested >= 0 else value))
-        plan.append((cls, tuple(slots)))
-    return tuple(plan)
-
-
 def _restore_not_fitted(message):
     return _ERROR_ENTRY(None, "restore_not_fitted", (message,), _ERROR_CONTEXT)
 
@@ -87,6 +57,7 @@ def connect(ridge_class, linear_class=None):
     import _codecs
     import io
     import os
+    import sys
     import zlib
     import numpy as np
     from . import _backend
@@ -109,7 +80,10 @@ def connect(ridge_class, linear_class=None):
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
                    active_not_fitted_class=NotFittedError)
-    context.update(classical_tag_plan=_connect_tags(), native_member_descriptor=MemberDescriptorType)
+    # The sklearn tag record layout is read natively from the loaded sklearn
+    # module the first time sklearn asks for tags (bindings/classical_tags.mojo),
+    # so connecting never imports the optional sklearn dependency.
+    context.update(classical_tag_plan=None, native_member_descriptor=MemberDescriptorType)
     context.update(connect_warnings())
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
     archive_methods = []
@@ -234,6 +208,10 @@ def connect(ridge_class, linear_class=None):
             metric_bindings[mode] = metric_entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metric_bindings[mode] = type(error).__name__ + ": " + str(error)
+    kinds = {ridge_class: True}
+    if linear_class is not None:
+        kinds[linear_class] = False
+    context.update(classical_kinds=kinds, classical_getframe=sys._getframe)
     context.update(ridge_class=ridge_class, linear_class=linear_class, classical_bindings=connected,
                    classical_metrics=metric_bindings, environment=os.environ._data,
                    ridge_name=ridge_class.__name__, linear_name="LinearRegression" if linear_class is None else linear_class.__name__,
@@ -244,3 +222,95 @@ def connect(ridge_class, linear_class=None):
                                      "_mojolearn_fitted", "_mojolearn_fitting"))
     _ERROR_ENTRY, _ERROR_CONTEXT = _binding()._module.classical_native_call, context
     return _ERROR_ENTRY, context
+
+
+def _layout(cls, attribute_descriptor):
+    # glue: class-definition metadata the native attribute lookup reads; only
+    # native descriptors and plain functions (whose binding is C) are bound.
+    from types import (FunctionType, GetSetDescriptorType, MemberDescriptorType,
+                       MethodDescriptorType, WrapperDescriptorType)
+    mro = type.__dict__["__mro__"].__get__(cls)
+    dictionaries = tuple(type.__dict__["__dict__"].__get__(base) for base in mro)  # glue: read class metadata once
+    if type(cls) is not type or any(type(base) is not type for base in mro):  # glue: ordinary class layout admission
+        raise TypeError("native classical models require ordinary Python classes")
+    fields_descriptor = next((fields["__dict__"] for fields in dictionaries if "__dict__" in fields), None)  # glue: the instance dictionary member
+    if type(fields_descriptor) is not GetSetDescriptorType:
+        raise TypeError("native classical models require a native instance dictionary")
+    names = {}
+    for fields in dictionaries:  # glue: class lookup precedence
+        for name, value in fields.items():  # glue: class attribute metadata
+            names.setdefault(name, value)
+    bindings = {}
+    native = (GetSetDescriptorType, MemberDescriptorType, MethodDescriptorType, WrapperDescriptorType)
+    for name, value in names.items():  # glue: bindable descriptor origin
+        if type(value) in native or value is attribute_descriptor or type(value) is FunctionType:
+            bindings[name] = (value, value.__get__)
+        elif type(value) in (classmethod, staticmethod) and type(value.__func__) is FunctionType:
+            bindings[name] = (value, value.__get__)
+    return {"mro": mro, "fields_descriptor": fields_descriptor,
+            "fields_get": fields_descriptor.__get__, "bindings": bindings}
+
+
+def _unavailable(error):
+    message = f"mojolearn LinearRegression and Ridge are unavailable: {error}"
+
+    def unavailable(*args):
+        raise ImportError(message)
+    return unavailable, {"classical_unavailable": message}
+
+
+def connect_public(ridge_class, linear_class):
+    """Connect the compiled owner of the public LinearRegression and Ridge
+    classes once, at import; returns its entry and context."""
+    from types import BuiltinFunctionType, MethodType
+    try:
+        entry, context = connect(ridge_class, linear_class)
+        from .tokenizer import _binding
+        module = _binding()._module
+        attribute_entry = module.classical_attribute_call
+        descriptor_entry = module.classical_attribute_descriptor
+    except ImportError as error:
+        return _unavailable(error)
+    if not isinstance(entry, BuiltinFunctionType) or not isinstance(attribute_entry, BuiltinFunctionType) \
+            or not isinstance(descriptor_entry, BuiltinFunctionType):
+        raise TypeError("public classical methods require compiled ABI entries")
+    descriptor = descriptor_entry(MethodType(attribute_entry, context))
+    context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
+                   classical_public_installed=True)
+    for cls in (ridge_class, linear_class):  # glue: the two public classes
+        cls.__getattribute__ = descriptor
+        context["classical_public_layouts"][cls] = _layout(cls, descriptor)
+    return entry, context
+
+
+def register_subclass(cls, context):
+    """Connect a subclass of LinearRegression or Ridge when it is defined."""
+    if context is None or "classical_attribute_descriptor" not in context:
+        return
+    host = context.get("classical_host_context")
+    target = context
+    if host is not None and any(issubclass(cls, base) for base in host["classical_kinds"]):  # glue: the two host classes
+        target = host
+    target["classical_kinds"][cls] = issubclass(cls, context["ridge_class"])
+    try:
+        context["classical_public_layouts"][cls] = _layout(cls, context["classical_attribute_descriptor"])
+    except TypeError:
+        # A class the native lookup cannot admit is refused when it is used.
+        target["classical_kinds"].pop(cls, None)
+
+
+def connect_host_public(host_ridge_class, host_linear_class, context):
+    """Connect the explicit CPU host classes beside the public ones."""
+    if "classical_attribute_descriptor" not in context:
+        return
+    entry, host_context = connect_host(host_ridge_class, host_linear_class)
+    for cls in (host_ridge_class, host_linear_class):  # glue: the two host classes
+        context["classical_kinds"].pop(cls, None)
+    host_context.update(classical_public_layouts=context["classical_public_layouts"],
+                        classical_public_installed=True,
+                        classical_attribute_descriptor=context["classical_attribute_descriptor"],
+                        classical_host_estimators={"Ridge": host_ridge_class,
+                                                   "LinearRegression": host_linear_class})
+    for cls in (host_ridge_class, host_linear_class):  # glue: the two host classes
+        context["classical_public_layouts"][cls] = _layout(cls, context["classical_attribute_descriptor"])
+    context["classical_host_context"] = host_context

@@ -53,7 +53,8 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var target = classical_host_f32(args[1], 1, "y", context)
     var rows = Int(py=prediction.size)
     if Int(py=target.size) != rows:
-        raise Error("mojolearn score: y_true and y_pred have different shapes")
+        raise Error("mojolearn score: y_true and y_pred have different shapes (" + String(Int(py=target.size))
+                    + ", 1) and (" + String(rows) + ", 1)")
     # Preserve the current score contract: predict uses the estimator's mode,
     # while _r2_sums_of(..., None) uses the process-default metrics binding.
     var mode = context["backend_fields"]["_DEFAULT_MODE"]

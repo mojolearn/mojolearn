@@ -56,7 +56,8 @@ def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool)
         var parts = py_call(key.partition, "__")
         var name = parts[0]
         if not py_contains(values, name):
-            raise Error("Invalid parameter '" + String(name) + "' for estimator; valid parameters are " + String(py_call(bi.str, classical_parameter_names(ridge))))
+            raise Error("Invalid parameter " + String(py_call(bi.repr, name)) + " for estimator " + String(py_type(model).__name__)
+                        + ". Valid parameters are: " + String(py_call(bi.repr, py_call(bi.sorted, classical_parameter_names(ridge)))) + ".")
         if String(parts[1]) != "":
             # This family has scalar parameters, so no supported nested native
             # estimator exists to dispatch. Never invoke a Python set_params.

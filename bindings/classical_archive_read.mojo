@@ -445,11 +445,37 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
 
 def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, context: PythonObject) raises -> PythonObject:
     var arrays = classical_archive_read(path, context)
+    return classical_archive_build(cls, arrays, path, ridge, context)
+
+
+def classical_host_model(path: PythonObject, context: PythonObject) raises -> PythonObject:
+    """host_model(path) for a saved LinearRegression or Ridge: the explicit
+    host class named by the file's estimator, loaded from one archive read."""
+    var arrays = classical_archive_read(path, context)
+    var estimator = _archive_string(arrays, "estimator", context)
+    var cls = py_get(context["classical_host_estimators"], estimator)
+    if cls is None:
+        raise Error("mojolearn: " + String(py_call(Python.import_module("builtins").repr, path)) + " was saved by "
+                    + String(estimator) + ", which mojolearn-linear-1 does not hold")
+    var model = classical_archive_build(cls, arrays, path, Bool(py=context["classical_kinds"][cls]), context)
+    py_setitem(sequential_fields(model), "estimator", estimator)
+    return model
+
+
+def classical_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonObject, ridge: Bool,
+                            context: PythonObject) raises -> PythonObject:
     if String(_archive_string(arrays, "format", context)) != "mojolearn-linear-1":
         raise Error("model archive format does not match mojolearn-linear-1")
     var saved_as = _archive_string(arrays, "estimator", context)
-    if not py_contains(context["ridge_saved_names" if ridge else "linear_saved_names"], saved_as):
-        raise Error("model archive was saved by a different estimator")
+    # The file's estimator must be cls or one of its bases, so an explicit
+    # host class or subclass loads the plain class's file.
+    var ancestry = py_call(Python.import_module("builtins").type.__dict__["__mro__"].__get__, cls)
+    var known = False
+    for k in range(len(ancestry)):  # driver-loop: over the loading class's ancestry names
+        known = known or Bool(py=ancestry[k].__name__ == saved_as)
+    if not known:
+        raise Error("mojolearn: " + String(py_call(Python.import_module("builtins").repr, path)) + " was saved by "
+                    + String(saved_as) + ", not " + String(cls.__name__))
     var meta = _archive_exact(arrays, "meta", "<i8", context)
     if Int(py=meta.size) != 2:
         raise Error("model meta must hold two fields")

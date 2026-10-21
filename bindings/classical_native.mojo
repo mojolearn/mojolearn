@@ -7,13 +7,13 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_description import sequential_fields
-from bindings.classical_ridge import classical_ridge_fit, classical_linear_predict, classical_linear_predict_public
+from bindings.classical_ridge import classical_ridge_fit, classical_ridge_parameters, classical_linear_predict, classical_linear_predict_public
 from bindings.classical_ols import classical_ols_fit
 from bindings.classical_score import classical_linear_score
 from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_names
 from bindings.classical_attributes import classical_check_layout, classical_getattribute
 from bindings.classical_archive import classical_archive_save
-from bindings.classical_archive_read import classical_archive_load
+from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
@@ -29,11 +29,37 @@ def _classical_error_class(args_ptr: PyObjectPtr, key: String) raises -> PyObjec
     var host = py_get(context, "classical_host_context")
     if host is not None:
         var model = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0))
-        var cls = py_type(model)
-        if cls is host["ridge_class"] or cls is py_get(host, "linear_class"):
+        var b = Python.import_module("builtins")
+        var cls = model if py_type(model) is b.type else py_type(model)
+        if py_contains(host["classical_kinds"], cls):
             root = causal_borrowed_item(root, "classical_host_context")
     # The active call owns its root/host dictionaries and the returned class.
     return causal_borrowed_item(root, key)
+
+
+def classical_caller_outside(context: PythonObject) raises -> Bool:
+    """True when the Python frame that called the public method belongs to
+    code outside the package (the rule of _mode._caller_outside). Frame and
+    globals metadata are read through native descriptors only."""
+    var b = Python.import_module("builtins")
+    var frame = PythonObject(None)
+    try:
+        # Depth 0 is the public method's own one-call frame.
+        frame = py_call(context["classical_getframe"], 1)
+    except:
+        return True
+    var globs = frame.f_globals
+    if py_type(globs) is not b.dict:
+        return True
+    if py_get(globs, "__mojolearn_user_boundary__") is PythonObject(True):
+        return True
+    if py_get(globs, "__mojolearn_internal__") is PythonObject(True):
+        return False
+    var name = py_get(globs, "__name__")
+    if py_type(name) is not b.str:
+        return True
+    var module = String(name)
+    return module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -44,10 +70,10 @@ def classical_entries(model: PythonObject, context: PythonObject) raises -> Pyth
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
     if py_type(mode) is not Python.import_module("builtins").str:
-        raise Error("TypeError: numeric_mode must be identical, fast or None")
+        raise Error("numeric_mode must be fast, identical or None")
     mode = mode.strip().lower()
     if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("numeric_mode must be identical, fast or None")
+        raise Error("numeric_mode must be fast, identical or None")
     var entries = context["classical_bindings"][mode]
     if py_type(entries) is Python.import_module("builtins").str:
         raise Error("ImportError: " + String(entries))
@@ -72,16 +98,27 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "reduce_not_fitted":
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
+        if operation == "host_model":
+            var host_context = py_get(context, "classical_host_context")
+            if host_context is None:
+                raise Error("RuntimeError: the explicit host linear models are not connected")
+            classical_admit_value(args, host_context)
+            var hosted = classical_host_model(args[0], host_context)
+            return hosted.steal_data()
         var loading = operation == "load"
         var class_operation = loading or operation == "param_names"
         var cls = model if class_operation else py_type(model)
         var host = py_get(context, "classical_host_context")
-        if host is not None and (cls is host["ridge_class"] or cls is py_get(host, "linear_class")):
+        if host is not None and py_contains(host["classical_kinds"], cls):
             context = host
-        var ridge = cls is context["ridge_class"]
-        var linear = cls is py_get(context, "linear_class")
-        if not ridge and not linear:
-            raise Error("TypeError: the private classical owner requires an exact Ridge or LinearRegression instance")
+        # classical_kinds maps each connected class (Ridge, LinearRegression,
+        # their explicit host classes and subclasses) to True for the Ridge
+        # family and False for LinearRegression.
+        var kind = py_get(context["classical_kinds"], cls)
+        if kind is None:
+            raise Error("TypeError: the native classical owner requires a connected Ridge or LinearRegression class")
+        var ridge = Bool(py=kind)
+        var linear = not ridge
         if operation == "param_names":
             var names = py_call(b.list, classical_parameter_names(ridge))
             return names.steal_data()
@@ -104,6 +141,11 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "initialize":
             result = classical_initialize(model, args, ridge)
             return result.steal_data()
+        if operation == "validate_params":
+            if not ridge:
+                raise Error("TypeError: validate_params requires Ridge")
+            classical_ridge_parameters(sequential_fields(model))
+            return PythonObject(None).steal_data()
         if operation == "get_params":
             result = classical_get_params(model, ridge)
             return result.steal_data()
@@ -138,7 +180,13 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         elif operation == "predict":
             result = classical_linear_predict(model, args[0], entries, context)
         elif operation == "predict_public":
-            result = classical_linear_predict_public(model, args[0], entries, context)
+            # A caller outside the package gets scikit-learn's float64
+            # regression output; mojolearn's own code (and its identity
+            # harness) keeps the float32 prediction the kernels produce.
+            if classical_caller_outside(context):
+                result = classical_linear_predict_public(model, args[0], entries, context)
+            else:
+                result = classical_linear_predict(model, args[0], entries, context)
         elif operation == "score" or operation == "score_public":
             result = classical_linear_score(model, args, entries, context)
         elif operation == "numeric_mode_used":

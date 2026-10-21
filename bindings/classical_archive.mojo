@@ -185,7 +185,7 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     meta_ptr[1] = 1 if Bool(py=fields["fit_intercept"]) else 0
     var values = Python.dict()
     py_setitem(values, "format", "mojolearn-linear-1")
-    py_setitem(values, "estimator", context["ridge_name" if ridge else "linear_name"])
+    py_setitem(values, "estimator", py_type(model).__name__)
     py_setitem(values, "numeric_mode", mode)
     py_setitem(values, "coef", fields["coef_"])
     py_setitem(values, "intercept", bias)

@@ -335,6 +335,9 @@ def _caller_outside(frame):
     # (_verify_all._load_by_path). It marks itself `__mojolearn_internal__` and
     # must see the native results the identity records hash, not the widened
     # public ones, or the harness and the verifier hash different bytes.
+    # The native runtime audit stands in for a user's code.
+    if globs.get("__mojolearn_user_boundary__") is True:
+        return True
     if globs.get("__mojolearn_internal__") is True:
         return False
     return mod != _PKG and not mod.startswith(_PKG_DOT) and not mod.startswith("mojolearn_verify_all_")
@@ -417,6 +420,8 @@ class PublicOutputsMixin:
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
+        if getattr(cls, "_mojolearn_native_public", False):
+            return  # one-call native methods: no Python wrappers
         install_public_outputs(cls)
 
     def __getattribute__(self, name):
@@ -434,6 +439,8 @@ class SklearnTagsMixin(PublicOutputsMixin):
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
+        if getattr(cls, "_mojolearn_native_public", False):
+            return  # the native owner tracks fits and validates inputs itself
         install_fit_tracking(cls)
 
     def __sklearn_tags__(self):
@@ -600,6 +607,8 @@ class NumericModeMixin(ParamsMixin):
         `None` over the subclass's real answer.
         """
         super().__init_subclass__(**kw)
+        if getattr(cls, "_mojolearn_native_public", False):
+            return  # the constructor takes numeric_mode itself
         # Guard even passive fits (e.g. k-NN/KDE storing samples). Inherited
         # fit methods retain their guard, including explicit host subclasses
         # used on a machine that also has a GPU. `_fit_with_tree_start` is

@@ -57,7 +57,7 @@ binding.
 import hashlib
 import os
 
-from . import _backend, _serialize
+from . import _backend, _native_classical_bridge, _serialize
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
 from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
@@ -81,8 +81,8 @@ from .kernel_methods import (
     _RBF_SAMPLER_FORMAT,
 )
 from .linear_model import (
-    LinearRegression, LogisticRegression, Ridge, _LINEAR_FORMAT,
-    _LOGISTIC_FORMAT,
+    _CLASSICAL, LinearRegression, LogisticRegression, Ridge, _LINEAR_FORMAT,
+    _LOGISTIC_FORMAT, _native_classical,
 )
 from .neighbors import (
     KNeighborsClassifier, KNeighborsRegressor, NearestNeighbors, RadiusNeighbors,
@@ -177,9 +177,27 @@ class _HostBound:
 class HostLinearRegression(_HostBound, LinearRegression):
     _HOST_ARRAYS = ("coef_",)
 
+    def vendor_used(self):
+        """The backend this model runs on: always ``'cpu'``."""
+        return _native_classical(self, "vendor_used", (), _CLASSICAL)
+
+    def model_sha256(self):
+        """SHA-256 over the saved coefficient bytes, for a report to name the
+        model it predicted with."""
+        return _native_classical(self, "model_sha256", (), _CLASSICAL)
+
 
 class HostRidge(_HostBound, Ridge):
     _HOST_ARRAYS = ("coef_",)
+
+    def vendor_used(self):
+        """The backend this model runs on: always ``'cpu'``."""
+        return _native_classical(self, "vendor_used", (), _CLASSICAL)
+
+    def model_sha256(self):
+        """SHA-256 over the saved coefficient bytes, for a report to name the
+        model it predicted with."""
+        return _native_classical(self, "model_sha256", (), _CLASSICAL)
 
 
 class HostLogisticRegression(_HostBound, LogisticRegression):
@@ -595,6 +613,10 @@ def _merge_expansion_doors():
 _merge_expansion_doors()
 CLASSICAL_FORMATS = tuple(_FORMATS)
 
+# The explicit host classes run through the same compiled owner as
+# LinearRegression and Ridge, with their CPU identical binding.
+_native_classical_bridge.connect_host_public(HostRidge, HostLinearRegression, _CLASSICAL)
+
 
 def host_model(path):
     """The host model for a saved classical file, by its `format` and
@@ -607,6 +629,9 @@ def host_model(path):
         # only accepted archives take the routing fast path.
         _serialize.read_npz(path, CLASSICAL_FORMATS)
         raise AssertionError("read_npz accepted a format rejected by the router")
+    if fmt == _LINEAR_FORMAT:
+        # The saved LinearRegression or Ridge loads natively, from one read.
+        return _native_classical(None, "host_model", (path,), _CLASSICAL)
     estimator = _serialize.scalar_str(arrays, "estimator")
     cls = _FORMATS[fmt].get(estimator)
     if cls is None:

@@ -13,6 +13,10 @@ import sys
 import threading
 from collections import Counter
 
+#: The audited call stands in for a user's: the public methods answer this
+#: module as they answer code outside the package (`_mode._caller_outside`).
+__mojolearn_user_boundary__ = True
+
 
 _FORBIDDEN_NATIVE_MODULES = ("numpy", "scipy", "sklearn")
 
