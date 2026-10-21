@@ -23,6 +23,10 @@ def reference(x, y):
     # np.asarray is the exact previous public admission, used only in this
     # independent testing controller. Numerical execution calls the raw ABI.
     x, y = np.asarray(x), np.asarray(y)
+    # The old public preparation materialized noncontiguous standard buffers;
+    # an overlapping broadcast view cannot be passed directly to raw CastIn.
+    if not (x.flags.c_contiguous or x.flags.f_contiguous):
+        x = np.ascontiguousarray(x)
     classes, codes = np.unique(y, return_inverse=True)
     codes = codes.astype("i4")
     count = 3 * len(classes) + len(classes)
@@ -162,5 +166,66 @@ def test_native_buffer_compatibility_retains_existing_refusals(kind):
     out = Sequential().linear(1).compile()
     trace = audit_native_call(out.fit, x, np.zeros(6, "f4"), epochs=1)
     assert isinstance(trace.exception, expected), trace.report()
+    for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+        assert not trace.report()[key], trace.report()
+
+
+def test_native_half_labels_preserve_every_non_nan_encoding():
+    # Exhaust every binary16 encoding, including signed zeros, subnormals and
+    # infinities. np.unique is the independent label/codes oracle.
+    labels = np.arange(65536, dtype="u2").view("f2")
+    labels = labels[~np.isnan(labels)]
+    classes, expected = np.unique(labels, return_inverse=True)
+    out = Sequential().linear(len(classes))
+    codes, _, _ = audit_native_call(out._targets, labels, len(labels), len(classes),
+                                    "cross_entropy").assert_native()
+    assert out.classes_.dtype == np.dtype("f2")
+    assert out.classes_.tobytes() == classes.tobytes()
+    assert codes.tobytes() == expected.astype("i4").tobytes()
+
+
+def test_native_uint64_label_order_preserves_both_halves_and_extremes():
+    labels = np.array([2**64 - 1, 0, 2**63, 2**63 - 1, 1, 2**63 + 1,
+                       2**64 - 1, 0, 2**63], "u8")
+    classes, expected = np.unique(labels, return_inverse=True)
+    out = Sequential().linear(len(classes))
+    codes, _, _ = audit_native_call(out._targets, labels, len(labels), len(classes),
+                                    "cross_entropy").assert_native()
+    assert out.classes_.tobytes() == classes.tobytes()
+    assert codes.tobytes() == expected.astype("i4").tobytes()
+
+
+@pytest.mark.parametrize("train_dtype,validation_dtype", [
+    ("f2", "f2"), ("f2", "f4"), ("f4", "f2"),
+    ("u8", "u8"), ("u8", "i8"), ("i8", "u8"),
+])
+def test_native_label_new_dtypes_preserve_validation_codes(train_dtype, validation_dtype):
+    x = np.arange(18, dtype="f4").reshape(6, 3) / 17
+    y = np.array([2, 7, 2, 7, 7, 2], train_dtype)
+    vy = y[::-1].astype(validation_dtype)
+    reference_model = Sequential().linear(2).compile(loss="cross_entropy", optimizer="sgd", lr=0.03)
+    audit_native_call(reference_model.fit, x, y.astype("i8"), epochs=2, batch_size=4, seed=123,
+                      validation_data=(x, vy.astype("i8"))).assert_native()
+    model = Sequential().linear(2).compile(loss="cross_entropy", optimizer="sgd", lr=0.03)
+    audit_native_call(model.fit, x, y, epochs=2, batch_size=4, seed=123,
+                      validation_data=(x, vy)).assert_native()
+    assert model.params_.tobytes() == reference_model.params_.tobytes()
+    assert np.asarray(model.validation_loss_curve_, "f4").tobytes() == np.asarray(
+        reference_model.validation_loss_curve_, "f4").tobytes()
+    assert model.classes_.dtype == np.dtype(train_dtype)
+
+
+@pytest.mark.parametrize("train_dtype,unknown", [
+    ("u8", np.array([-1, 7, 2, 7, 7, 2], "i8")),
+    ("i8", np.array([2**64 - 1, 7, 2, 7, 7, 2], "u8")),
+    ("f2", np.array([np.nan, 7, 2, 7, 7, 2], "f2")),
+])
+def test_native_validation_refuses_out_of_domain_label_without_wrapping(train_dtype, unknown):
+    x = np.arange(18, dtype="f4").reshape(6, 3) / 17
+    y = np.array([2, 7, 2, 7, 7, 2], train_dtype)
+    model = Sequential().linear(2).compile(loss="cross_entropy", optimizer="sgd", lr=0.03)
+    trace = audit_native_call(model.fit, x, y, epochs=1, validation_data=(x, unknown))
+    assert isinstance(trace.exception, ValueError), trace.report()
+    assert "unknown class or NaN" in str(trace.exception)
     for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
         assert not trace.report()[key], trace.report()

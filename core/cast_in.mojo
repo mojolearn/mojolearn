@@ -25,9 +25,9 @@ column) gives the same bits:
     NaN 0x7FC00000); integers by round-to-nearest-even from their exact
     value (`numpy.astype(float32)`'s result); bool to 0.0 or 1.0.
   * to a 64-bit label word (`cast_w64_bits`, the label sort's input): float
-    -> float64 bits (float32 widened exactly), signed -> sign-extended
-    int64, unsigned and bool -> zero-extended (uint64 is refused for labels:
-    its upper half does not fit the int64 key; float16 labels are refused).
+    -> float64 bits (float16/float32 widened exactly), signed -> sign-extended
+    int64, unsigned and bool -> zero-extended. Full uint64 values use an
+    unsigned ordering key rather than narrowing into signed int64.
   * back from a 64-bit label word to the caller's item (`narrow_w64`): the
     exact inverse of `cast_w64_bits` for every value it produced.
 
@@ -413,6 +413,8 @@ def cast_w64_bits(raw: UInt64, kind: Int, itemsize: Int) -> UInt64:
     if kind == CAST_KIND_FLOAT:
         if itemsize == 8:
             return raw
+        if itemsize == 2:
+            return f32_to_f64_bits(UInt64(f16_to_f32_bits(raw)))
         return f32_to_f64_bits(raw)
     if kind == CAST_KIND_BOOL:
         return UInt64(1) if raw != 0 else UInt64(0)
@@ -425,19 +427,33 @@ def cast_w64_bits(raw: UInt64, kind: Int, itemsize: Int) -> UInt64:
 def narrow_w64(w: UInt64, kind: Int, itemsize: Int) -> UInt64:
     """The caller's item (its low itemsize bytes) of a label word
     `cast_w64_bits` produced."""
-    if kind == CAST_KIND_FLOAT and itemsize == 4:
-        return UInt64(f64_to_f32_bits(w))
+    if kind == CAST_KIND_FLOAT:
+        if itemsize == 4:
+            return UInt64(f64_to_f32_bits(w))
+        if itemsize == 2:
+            # The input is the exact widening of a binary16 source label,
+            # so this inverse needs no rounding and no native half arithmetic.
+            # NaN labels are refused before emission; infinities retain sign.
+            var f = UInt64(f64_to_f32_bits(w))
+            var sign = (f >> 16) & UInt64(0x8000)
+            var exponent = Int((f >> 23) & UInt64(0xFF))
+            var fraction = f & UInt64(0x7FFFFF)
+            if exponent == 255:
+                return sign | UInt64(0x7C00) | (fraction >> 13)
+            if exponent == 0:
+                return sign
+            if exponent >= 113:
+                return sign | (UInt64(exponent - 112) << 10) | (fraction >> 13)
+            return sign | ((fraction | UInt64(0x800000)) >> UInt64(126 - exponent))
     if itemsize == 8:
         return w
     return w & ((UInt64(1) << UInt64(itemsize * 8)) - 1)
 
 
 def label_kind_of(kind: Int, itemsize: Int, what: String) raises -> Int:
-    """The label sort's kind (core/label_encode.mojo: 0 float64, 1 int64)."""
+    """The label sort's kind: 0 float64, 1 int64, 2 uint64."""
     if kind == CAST_KIND_FLOAT:
-        if itemsize == 2:
-            raise Error(what + ": float16 labels are not supported; pass float32 labels")
         return 0
     if kind == CAST_KIND_UNSIGNED and itemsize == 8:
-        raise Error(what + ": uint64 labels are not supported; pass int64 labels")
+        return 2
     return 1
