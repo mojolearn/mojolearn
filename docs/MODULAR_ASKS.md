@@ -73,3 +73,37 @@ eight workers completed in 794.290 seconds. Its crash log is retained with
 the experiment; a minimized compiler-crash reproducer remains pending.
 The empty merged canonical comparison (zero files on both sides) proves
 neither numerical equality nor a compile-time speedup.
+
+## PythonObject attribute assignment and calls retain one extra reference (2026-10-21, lane finish-leftovers)
+
+**What we see.** In a Mojo Python extension built with the supported `std.python` API, four ordinary operations leave one
+extra reference on the value after every intentional Python reference is dropped and garbage is collected, so the value is
+never freed: direct attribute assignment `owner.value = value`, builtin calls `type(value)` and `list(value)`, and the
+builtin method call `owner.append(value)`. The controls `no_op` and `return owner.value` balance (0 extra, collected).
+Receiver counts are unchanged. A Python-only control passes all six cases. The source suggests two transfer sites:
+`PythonObject.__setattr__` passes an owned value through `steal_data()` to `PyObject_SetAttrString` (which does not steal),
+and `PythonObject.__call__` adds `Py_NewRef` around a transferred argument before `PyTuple_SetItem` (which does steal)
+(`mojo/stdlib/std/python/object.mojo` at tag `mojo/v1.0.0`, lines 455-467 and 1270-1297).
+
+**Reproducer.** `experiments/python_object_ownership/` (`_mojo_python_ownership.mojo`, `probe.py`, `README.md`,
+`result-20261020.json`); imports only `std.python`, `std.python.bindings` and `abort`, never mojolearn.
+`pixi run mojo build --emit shared-lib _mojo_python_ownership.mojo -o _mojo_python_ownership.so && python probe.py`:
+build exit 0, probe exit 1 with the four failures. Retained source, binary, logs and hashes:
+`~/mojolearn-evidence/core-completion-20261020/stdlib-ownership/`.
+
+**Version.** Mojo 1.0.0 (`ed45d567`), macOS 26.5.2 arm64; reproduced under CPython 3.14.7 and 3.12 with the same binary.
+
+**Impact.** Every native owner that stores Python objects on a Python instance or passes them to Python calls leaks them.
+`python/mojolearn/tests/test_model_native_lifetime.py` fails for the llama, mamba and mamba2 `CausalLM` families (the caller's
+owner and layer list each keep one extra reference after the state is deleted). Object lifetime is one of the conditions
+that keep these public installers inactive: the native LinearRegression/Ridge/HostLinearRegression/HostRidge installer
+(`python/mojolearn/_native_classical_public.py` `_install`, run only in temporary test scopes) and the native PCA owner
+connection (`python/mojolearn/_native_pca_bridge.py` `connect`). Both stay inactive; their other compatibility checks are
+listed in `docs/plans/CORE_COMPLETION_HANDOFF_20261020.md`, "Deferred work" item 1.
+
+**The ask.** A supported release in which `PythonObject` attribute assignment and ordinary calls (including builtin types
+and methods) balance their owned references, with the six operation controls above, and the matching error paths, covered
+upstream. The unchanged probe must exit 0, then the project lifetime tests must pass.
+
+**Meanwhile.** We wait: no toolchain or standard-library patch, no compensating reference operations in product code, no
+Python runtime substitute. Numerical and native-call audits stay valid for their boundaries but do not qualify lifetime.
