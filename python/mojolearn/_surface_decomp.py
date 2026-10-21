@@ -23,7 +23,9 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("x-decomp-ipca", "x-decomp-grp", "x-decomp-srp", "x-decomp-nmf", "x-decomp-fastica", "x-decomp-factor-analysis", "x-decomp-spectral-rbf", "x-decomp-lu", "x-decomp-lstsq-rsvd", "x-decomp-pls", "x-decomp-dict-learning", "x-decomp-sparse-pca", "x-decomp-lda", "x-decomp-manifold", "x-decomp-robust-cov", "x-decomp-als", "x-decomp-pca-randomized", "x-decomp-umap-options",
                         # lane eigh-wide-fixtures (2026-10-13): eigh at n = 72 and 128
-                        "x-decomp-eigh-wide-linalg", "x-decomp-eigh-wide-fastica", "x-decomp-eigh-wide-rotation", "x-decomp-eigh-wide-factor-analysis", "x-decomp-eigh-wide-mincovdet", "x-decomp-eigh-wide-kpca"),
+                        "x-decomp-eigh-wide-linalg", "x-decomp-eigh-wide-fastica", "x-decomp-eigh-wide-rotation", "x-decomp-eigh-wide-factor-analysis", "x-decomp-eigh-wide-mincovdet", "x-decomp-eigh-wide-kpca",
+                        # lane run-sabotage-arms (2026-10-21): a sketch wider than the rank
+                        "x-decomp-rsvd-rank-deficient"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
@@ -55,7 +57,7 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-decomp-umap-options": "UMAP options", "x-decomp-pca-randomized": "PCA/TruncatedSVD randomized", "x-decomp-als": "AlternatingLeastSquares", "x-decomp-robust-cov": "MinCovDet", "x-decomp-manifold": "Isomap", "x-decomp-lda": "LatentDirichletAllocation", "x-decomp-sparse-pca": "SparsePCA", "x-decomp-dict-learning": "DictionaryLearning", "x-decomp-pls": "PLSRegression", "x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
+TRAINING_LANE_NAMES = {"x-decomp-rsvd-rank-deficient": "randomized SVD of a rank-deficient matrix", "x-decomp-umap-options": "UMAP options", "x-decomp-pca-randomized": "PCA/TruncatedSVD randomized", "x-decomp-als": "AlternatingLeastSquares", "x-decomp-robust-cov": "MinCovDet", "x-decomp-manifold": "Isomap", "x-decomp-lda": "LatentDirichletAllocation", "x-decomp-sparse-pca": "SparsePCA", "x-decomp-dict-learning": "DictionaryLearning", "x-decomp-pls": "PLSRegression", "x-decomp-lstsq-rsvd": "lstsq", "x-decomp-lu": "lu_factor", "x-decomp-spectral-rbf": "SpectralEmbedding", "x-decomp-factor-analysis": "FactorAnalysis", "x-decomp-fastica": "FastICA", "x-decomp-nmf": "NMF", "x-decomp-ipca": "IncrementalPCA", "x-decomp-grp": "GaussianRandomProjection",
                        "x-decomp-srp": "SparseRandomProjection",
                        "x-decomp-eigh-wide-linalg": "linalg.eigh at n >= 64",
                        "x-decomp-eigh-wide-fastica": "FastICA at 64 or more components",
@@ -63,4 +65,4 @@ TRAINING_LANE_NAMES = {"x-decomp-umap-options": "UMAP options", "x-decomp-pca-ra
                        "x-decomp-eigh-wide-factor-analysis": "FactorAnalysis with fewer rows than features at 64 or more features",
                        "x-decomp-eigh-wide-mincovdet": "MinCovDet at 64 or more features",
                        "x-decomp-eigh-wide-kpca": "KernelPCA dense solver at 64 or more samples"}
-PUBLIC_PENDING_LANES = {}
+PUBLIC_PENDING_LANES = {"x-decomp-rsvd-rank-deficient": "no reference"}

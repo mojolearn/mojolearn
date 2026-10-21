@@ -776,7 +776,8 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        # lane verify-coverage-owed (2026-10-21)
                        "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
                        "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
-                       "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba"})
+                       "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba",
+                       "x-decomp-rsvd-rank-deficient"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -810,7 +811,27 @@ NEW_LANE_PURPOSE = {
     "x-huber-outliers": "HuberRegressor.outliers_ (`py2mojo_rows` ROWS_HUBER_OUT)",
     "x-sgd-clf-proba": "SGDClassifier.predict_proba (`py2mojo_rows` ROWS_SGD_PROBA)",
     "x-logistic-cv-proba": "LogisticRegressionCV.predict_proba (`py2mojo_rows` ROWS_LRCV_PROBA)",
+    "x-decomp-rsvd-rank-deficient": "randomized_svd, PCA and TruncatedSVD (randomized) of a rank-deficient matrix: "
+                                    "the live-column compaction (`x_decomp_order_small`, `x_decomp_dev_order_small`)",
 }
+
+
+#: What the arms' run changed (lane run-sabotage-arms, 2026-10-21), rendered under Arms proven.
+_PROVEN_FIXES = [
+    'Fixed during the run (no lane weakened; every arm whose patch or lanes gained something was rerun and caught; the arms that only stopped naming an unreachable lane keep their run):',
+    '', "- `coverage-core-hotpath_impl_rows`: x-prep-user-objects did not move. The patch swapped fold labels 0 and 1 in both `assign_fold_i64` and `count_fold_hits_i64`, a consistent relabeling no output can show; the swap now stays in `assign_fold_i64` only, so TargetEncoder's `cv=<splitter>` check refuses. The patch also faults the new host `bincount2_i32`.", '- `coverage-x_decomp-select_ops`: x-decomp-lstsq-rsvd never reaches the live-column compaction (its sketches are no wider than the rank), so it did not move. New lane `x-decomp-rsvd-rank-deficient` (a rank-4 matrix with an 8-wide sketch; 9 of 9 fixtures STABLE, Metal equal to the host column) catches it, and `coverage-x_decomp-select_dev` names it too.', "- Lanes the arm's fault cannot reach, no longer named: par-cholesky and par-hdbscan on the host-binding arms (`coverage-decomposition-linalg_host_impl`, `coverage-hdbscan-hdbscan_door_host_impl`; both read N/A on the host column, which has no multi-device driver), trees-adaboost-reg on `coverage-core-array_helpers_impl` (AdaBoost.R2 predicts by the weighted median and calls none of the faulted helpers).", "- A real host-column bug: `StratifiedGroupKFold.split` refused on a CPU-only install because the GPU base binding's `bincount2_i32` and `strat_group_plan_i32` had no host twin. The core host binding has both now; x-metrics-splitters on the host column is IDENTICAL to the reference on 9 of 9 fixtures, and `coverage-core-hotpath_impl` and `coverage-core-hotpath_impl_rows` were rerun with the fix in the clean set.", '- `coverage-tokenizer-ranks` also lists `build_tokenizer_fast`: that is the FAST-tier binding, which the verifier refuses, so it was not built; the arm is caught through the host tokenizer.',
+    '',
+]
+
+def _proven_arms():
+    """The rows of tools/identity_lanes/coverage_sabotage_proven.tsv (the arms' run), or []."""
+    path = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage_proven.tsv")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return [line.rstrip("\n").split("\t") for line in fh
+                    if line.strip() and not line.startswith("#")]
+    except OSError:
+        return []
 
 _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "the CPU column routes _mojolearn_byte_lm through _byte_lm_trainer_host "
@@ -1101,13 +1122,15 @@ def render_markdown(audit, path):
     for lane in sorted(NEW_LANES):
         w(f"- `{lane}`: {NEW_LANE_PURPOSE[lane]}")
     w("")
+    proven = _proven_arms()
     w("## Fault-injection arms added (tools/identity_lanes/coverage_sabotage.tsv)")
     w("")
     w("One source patch per changed kernel file that no arm reached, each a value fault in the changed "
       "definitions (a float one ulp off, an index permuted, a byte flipped), applied only to a scratch copy. "
       "`python3 tools/coverage_sabotage.py plan --arm <arm>` prints the build and the two identity_break runs, "
-      "and `check` requires every named lane to read MOVED or REFUSED on the sabotaged build. RUN OWED: no arm "
-      "has been built or run yet (lanes never compile); `apply-check` passes on this commit.")
+      "and `check` requires every named lane to read MOVED or REFUSED on the sabotaged build. "
+      + ("Every arm was built and run: see Arms proven below." if proven else
+         "RUN OWED: no arm has been built or run yet (lanes never compile); `apply-check` passes on this commit."))
     w("")
     try:
         import coverage_sabotage
@@ -1122,6 +1145,31 @@ def render_markdown(audit, path):
     else:
         w("(none yet)")
     w("")
+    if proven:
+        w("## Arms proven (tools/identity_lanes/coverage_sabotage_proven.tsv)")
+        w("")
+        w("Run one at a time on the Mac (lane run-sabotage-arms, 2026-10-21) over the merged Metal (identical) "
+          "and host builds of 51bf10f4f, whose kernel sources equal 79982adaa's. Per arm: the patch applied, the "
+          "named per-binding builds rebuilt (a binding's own file wins over the merged one), the arm's lanes run "
+          "(`identity_break.py --fixtures base --repeats 1`) on Metal and on the host column "
+          "(`MOJOLEARN_VENDOR=cpu`) for the columns whose bindings were rebuilt, then the patch reverted and its "
+          "builds removed and the lanes run again. A lane is caught when a column it runs on MOVED or REFUSED "
+          "against the clean run of the same lanes; the sabotaged cells are also judged against "
+          "`python/mojolearn/verify_reference/table.json` (OWED: a new lane with no reference yet, judged "
+          "against the clean run only; IDENTICAL: a column the fault does not reach while the other column "
+          "moved). Every REFUSED cell is the fault tripping one of the library's own checks.")
+        w("")
+        w("| arm | builds (rc, seconds) | verdict | lanes (column: result) | sabotaged cells against table.json "
+          "| patch reverted | seconds |")
+        w("|---|---|---|---|---|---|---|")
+        for row in proven:
+            w("| `" + row[0] + "` | " + " | ".join(row[1:]) + " |")
+        w("")
+        caught = sum(1 for row in proven if row[2] == "CAUGHT")
+        w(f"{caught} of {len(proven)} arms caught; {sum(int(row[6]) for row in proven)} arm seconds in all.")
+        w("")
+        for line in _PROVEN_FIXES:
+            w(line)
     w("## Owed")
     w("")
     owed = [(r, t) for r, t, _ in tri if t[0] == "owed"]
@@ -1162,7 +1210,7 @@ def render_markdown(audit, path):
     w("- A row is ARMED when a definition in its export's closure reads a `MOJOLEARN_*SABOTAGE*` define or is "
       "edited by a `*/sabotage/*.patch`. `CPU gate HOST_SABOTAGE` is the arm the CPU identity gate builds and "
       "requires to move every covered part; family defines and seam patches are their checks' arms; coverage arms "
-      "are this audit's (RUN OWED). Definitions with no value to fault are listed with the reason in "
+      "are this audit's (" + ("run: Arms proven" if proven else "RUN OWED") + "). Definitions with no value to fault are listed with the reason in "
       "tools/identity_lanes/coverage_sabotage_na.tsv.")
     w("- `n/a` lanes: no Python caller in the package, the fast tier (the verifier refuses fast), a verifier or "
       "build probe, or a dead helper; each with its reason in the row.")

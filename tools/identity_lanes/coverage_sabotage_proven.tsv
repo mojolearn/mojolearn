@@ -1,0 +1,59 @@
+# The coverage sabotage arms, run on the Mac (lane run-sabotage-arms, 2026-10-21).
+# tools/verify_coverage_audit.py renders this as the doc's "Arms proven" table.
+# Clean set: the merged Metal (identical) and host builds of 51bf10f4f (kernel sources equal to 79982adaa);
+# per arm: the patch applied, the named per-binding builds rebuilt (each own .so wins over the merged file),
+# the arm's lanes run with tools/identity_break.py --fixtures base --repeats 1 on Metal and on the host
+# column (MOJOLEARN_VENDOR=cpu) for the columns whose bindings were rebuilt, then the patch reverted, the
+# own .so removed, and the lanes run again. A lane is caught when one column it runs on moved or refused.
+# TAB separated: arm, builds, verdict, lanes, reference, reverted, seconds
+coverage-core-array_helpers_impl	build rc 0, 87s, build_core_host rc 0, 23s	CAUGHT	x-metrics-search (host MOVED Metal MOVED) trees-adaboost-clf (host MOVED Metal MOVED)	4 DIVERGENT	STABLE, equal to clean	147
+coverage-core-hotpath_impl	build rc 0, 110s, build_core_host rc 0, 38s	CAUGHT	x-metrics-splitters (host MOVED Metal MOVED) cross-val (host MOVED Metal unmoved) x-lasso-cv (host MOVED Metal unmoved)	4 DIVERGENT, 2 IDENTICAL	STABLE, equal to clean	190
+coverage-core-hotpath_impl_rows	build rc 0, 23s, build_core_host rc 0, 31s	CAUGHT	x-metrics-splitters (host REFUSED Metal MOVED) sequence-mlp (host MOVED Metal unmoved) x-prep-user-objects (host REFUSED Metal REFUSED)	2 DIVERGENT, 1 IDENTICAL, 3 REFUSED	STABLE, equal to clean	87
+coverage-core-host_helpers_impl	build_core_host rc 0, 27s, build_forest_host rc 0, 10s	CAUGHT	rf-clf (host MOVED) et-clf (host MOVED) sequence-autoarima (host MOVED)	3 DIVERGENT	STABLE, equal to clean	52
+coverage-core-core_host_impl	build_core_host rc 0, 38s	CAUGHT	elasticnet (host MOVED) spectral-precomputed (host MOVED)	2 DIVERGENT	STABLE, equal to clean	59
+coverage-core-cast_in	build_x_sequence rc 0, 207s, build_x_sequence_host rc 0, 104s	CAUGHT	sequence-export-roundtrip (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, equal to clean	336
+coverage-core-label_encode	build rc 0, 70s, build_core_host rc 0, 20s, build_x_sequence rc 0, 128s, build_x_sequence_host rc 0, 100s	CAUGHT	sequence-rnn (host MOVED Metal MOVED) sequence-tape-sequential (host MOVED Metal MOVED) sequence-export-roundtrip (host MOVED Metal MOVED)	2 DIVERGENT, 4 OWED (no reference)	STABLE, equal to clean	341
+coverage-core-estimators_impl	build_estimators rc 0, 87s	CAUGHT	logistic (Metal MOVED) logistic-multiclass (Metal MOVED)	2 DIVERGENT	STABLE, equal to clean	100
+coverage-core-forest_host_groves_binding_impl	build_rf_host rc 0, 14s, build_trees_host rc 0, 11s	CAUGHT	rf-clf-balanced-parallel (host MOVED) et-reg-bootstrap-parallel (host MOVED)	2 DIVERGENT	STABLE, equal to clean	39
+coverage-core-mojolearn_rf_host_impl	build_rf_host rc 0, 13s	CAUGHT	rf-clf (host MOVED) rf-reg (host MOVED)	2 DIVERGENT	STABLE, equal to clean	25
+coverage-core-mojolearn_rf_impl	build_rf rc 0, 53s	CAUGHT	rf-clf (Metal MOVED) rf-reg (Metal MOVED)	2 DIVERGENT	STABLE, equal to clean	65
+coverage-core-mojolearn_training_host_impl	build_training_host rc 0, 15s	CAUGHT	mlp (host MOVED)	1 DIVERGENT	STABLE, equal to clean	32
+coverage-core-msel_host_impl	build_core_host rc 0, 29s	CAUGHT	par-forest (host REFUSED) par-forest-reg (host REFUSED) par-forest-et-clf (host REFUSED)	3 REFUSED	STABLE, equal to clean	52
+coverage-core-py2mojo_cluster_est_impl	build_estimators_host rc 0, 28s	CAUGHT	dbscan (host MOVED) dbscan-weighted (host MOVED) dbscan-brute-l1 (host MOVED)	3 DIVERGENT	STABLE, equal to clean	46
+coverage-core-resample_impl	build_resample rc 0, 19s, build_resample_host rc 0, 9s	CAUGHT	resample-utils (host MOVED Metal MOVED)	2 DIVERGENT	STABLE, equal to clean	51
+coverage-core-sha256	build_byte_lm rc 0, 111s, build_neural_host rc 0, 16s, build_tokenizer_host rc 0, 307s, build_training rc 0, 112s, build_training_host rc 0, 13s, build_x_sequence rc 0, 168s, build_x_sequence_host rc 0, 147s	CAUGHT	mlp (host MOVED Metal MOVED) byte-lm (host MOVED Metal MOVED)	4 DIVERGENT	STABLE, equal to clean	924
+coverage-core-shard_merge_device	build_ivf rc 0, 64s	CAUGHT	par-ivf (Metal MOVED)	1 DIVERGENT	STABLE, equal to clean	88
+coverage-dbscan-core_device_impl	build_estimators rc 0, 133s	CAUGHT	dbscan (Metal MOVED) dbscan-weighted (Metal MOVED) dbscan-brute-l1 (Metal MOVED)	3 DIVERGENT	STABLE, equal to clean	152
+coverage-decomposition-linalg_door_impl	build_linalg rc 0, 68s	CAUGHT	safetensors-widen-f16 (Metal MOVED)	1 OWED (no reference)	STABLE, equal to clean	85
+coverage-decomposition-linalg_host_impl	build_linalg_host rc 0, 15s	CAUGHT	cholesky (host MOVED) safetensors-widen-f16 (host MOVED)	1 DIVERGENT, 1 OWED (no reference)	POST-REVERT NOT	30
+coverage-gaussian_process-gp_binding_entries	build_gp rc 0, 89s	CAUGHT	gp-lml-theta (Metal MOVED)	1 OWED (no reference)	STABLE, equal to clean	107
+coverage-gaussian_process-gp_host_fit_entries	build_gp_host rc 0, 14s	CAUGHT	gp-lml-theta (host MOVED)	1 OWED (no reference)	STABLE, equal to clean	26
+coverage-gbdt-gbdt_host_entries_impl	build_gbdt_host rc 0, 45s	CAUGHT	gbdt-adapter-clf (host MOVED) gbdt-adapter-score-weighted (host MOVED)	2 DIVERGENT	STABLE, equal to clean	60
+coverage-hdbscan-hdbscan_door_host_impl	build_hdbscan_host rc 0, 14s	CAUGHT	hdbscan (host MOVED) hdbscan-leaf (host MOVED)	2 DIVERGENT	POST-REVERT NOT	31
+coverage-hdbscan-hdbscan_door_impl	build_hdbscan rc 0, 109s	CAUGHT	hdbscan (Metal MOVED) hdbscan-leaf (Metal MOVED) par-hdbscan (Metal MOVED)	3 DIVERGENT	STABLE, equal to clean	132
+coverage-ivf-index_arrays_impl	build_ivf_host rc 0, 12s, build_ivf_search_host rc 0, 9s	CAUGHT	par-ivf (host MOVED)	1 DIVERGENT	STABLE, equal to clean	38
+coverage-kernel_methods-km_host_impl	build_kernel_methods_host rc 0, 10s	CAUGHT	rbf-sampler (host MOVED)	1 DIVERGENT	STABLE, equal to clean	26
+coverage-metrics-metrics_host_entries_impl	build_metrics_host rc 0, 19s	CAUGHT	metrics-classification (host MOVED)	1 DIVERGENT	STABLE, equal to clean	34
+coverage-x_ann-abi	build_x_ann rc 0, 77s, build_x_ann_host rc 0, 28s	CAUGHT	x-ann-cagra (host MOVED Metal MOVED) x-ann-cagra-filter (host MOVED Metal MOVED)	4 DIVERGENT	STABLE, equal to clean	157
+coverage-autograd-model_verify	build_x_sequence rc 0, 316s, build_x_sequence_host rc 0, 225s	CAUGHT	sequence-tape-program (host MOVED Metal MOVED) sequence-tape-sequential (host MOVED Metal MOVED) cross-vendor-fold (host MOVED Metal MOVED)	6 OWED (no reference)	STABLE, equal to clean	595
+coverage-sequence-prophet_prep	build_x_sequence rc 0, 279s, build_x_sequence_host rc 0, 194s	CAUGHT	sequence-prophet (host MOVED Metal MOVED)	2 DIVERGENT	STABLE, equal to clean	519
+coverage-sequence-ops_impl	build_x_sequence rc 0, 210s, build_x_sequence_host rc 0, 146s	CAUGHT	sequence-lamb (host MOVED Metal unmoved)	1 DIVERGENT, 1 IDENTICAL	STABLE, equal to clean	391
+coverage-sequence-opt_resident	build_x_sequence rc 0, 221s	CAUGHT	sequence-lamb (Metal MOVED) sequence-rmsprop (Metal MOVED) sequence-adagrad (Metal MOVED)	3 DIVERGENT	STABLE, equal to clean	239
+coverage-autograd-import_reader	build_x_sequence rc 0, 231s, build_x_sequence_host rc 0, 177s	CAUGHT	sequence-onnx-import (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, equal to clean	449
+coverage-svm-host_svc_ovo_host	build_svm_host rc 0, 13s	CAUGHT	x-neighbors-svc-multiclass (host MOVED)	1 DIVERGENT	STABLE, equal to clean	27
+coverage-svm-host_svc_proba	build_svm_host rc 0, 13s	CAUGHT	svc (host MOVED) x-neighbors-svc-probability (host MOVED) x-neighbors-svc-multiclass (host MOVED)	3 DIVERGENT	STABLE, equal to clean	28
+coverage-svm-impl_svc_epilogue	build_svm rc 0, 101s	CAUGHT	x-neighbors-svc-probability (Metal MOVED)	1 DIVERGENT	STABLE, equal to clean	135
+coverage-svm-impl_svc_ovo_layout	build_svm rc 0, 87s	CAUGHT	x-neighbors-svc-multiclass (Metal MOVED)	1 DIVERGENT	STABLE, equal to clean	118
+coverage-tokenizer-ranks	build_tokenizer_host rc 0, 589s, build_tokenizer_fast skipped	CAUGHT	bpe-vocabulary (host MOVED) tokenized-corpus (host REFUSED)	1 DIVERGENT, 1 REFUSED	STABLE, equal to clean	613
+coverage-tokenizer-tokenizer_host_shell_impl	build_tokenizer_host rc 0, 325s	CAUGHT	tokenizer (host MOVED) bpe-vocabulary (host MOVED) tokenized-corpus (host REFUSED)	2 DIVERGENT, 1 REFUSED	STABLE, equal to clean	341
+coverage-x_cnn-device_entries_impl	build_x_cnn rc 0, 106s	CAUGHT	x-cnn-gcn (Metal MOVED) x-cnn-sage (Metal MOVED) x-cnn-trainer (Metal MOVED)	3 DIVERGENT	STABLE, equal to clean	130
+coverage-x_cnn-binding_entries_impl	build_x_cnn_host rc 0, 21s	CAUGHT	x-cnn-trainer (host MOVED) x-cnn-trainer-options (host MOVED) x-cnn-pool (host MOVED)	3 DIVERGENT	STABLE, equal to clean	36
+coverage-x_neighbors-kfeat_dev	build_x_neighbors rc 0, 147s	CAUGHT	x-neighbors-poly-sketch (Metal MOVED) x-neighbors-skewed-chi2 (Metal MOVED)	2 DIVERGENT	STABLE, equal to clean	168
+coverage-x_decomp-api	build_x_decomp rc 0, 145s, build_x_decomp_host rc 0, 43s	CAUGHT	x-decomp-robust-cov (host MOVED Metal unmoved) x-decomp-als (host MOVED Metal unmoved) x-decomp-lu (host MOVED Metal MOVED)	4 DIVERGENT, 2 IDENTICAL	STABLE, equal to clean	240
+coverage-x_decomp-select_ops	build_x_decomp rc 0, 31s, build_x_decomp_host rc 0, 10s	CAUGHT	x-decomp-rsvd-rank-deficient (host MOVED Metal unmoved)	2 OWED (no reference)	STABLE, equal to clean	83
+coverage-x_decomp-select_dev	build_x_decomp rc 0, 36s	CAUGHT	x-decomp-robust-cov (Metal MOVED) x-decomp-lstsq-rsvd (Metal MOVED) x-decomp-manifold (Metal MOVED) x-decomp-rsvd-rank-deficient (Metal MOVED)	3 DIVERGENT, 1 OWED (no reference)	STABLE, equal to clean	65
+coverage-x_decomp-resident	build_x_decomp rc 0, 118s	CAUGHT	x-decomp-robust-cov (Metal MOVED) x-decomp-factor-analysis (Metal MOVED) x-decomp-manifold (Metal REFUSED)	2 DIVERGENT, 1 REFUSED	STABLE, equal to clean	149
+coverage-x_decomp-graph_host	build_x_decomp_host rc 0, 28s	CAUGHT	x-decomp-manifold (host MOVED)	1 DIVERGENT	STABLE, equal to clean	50
+coverage-x_decomp-graph_device	build_x_decomp rc 0, 133s	CAUGHT	x-decomp-manifold (Metal MOVED)	1 DIVERGENT	STABLE, equal to clean	153
+coverage-ivf-ivf_common	build_ivf_host rc 0, 12s, build_ivf_search_host rc 0, 8s	CAUGHT	ivf-short-fill (host MOVED)	1 OWED (no reference)	STABLE, equal to clean	33
+coverage-sequence-seq_tensor	build_x_sequence rc 0, 241s	CAUGHT	sequence-device-tensor (Metal REFUSED)	1 REFUSED	STABLE, equal to clean	257

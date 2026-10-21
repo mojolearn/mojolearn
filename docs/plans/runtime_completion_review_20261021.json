@@ -1,0 +1,953 @@
+{
+  "schema": "mojolearn.runtime-completion-review.v1",
+  "reviewed_at": "2026-10-21T18:32:32.152073-04:00",
+  "source_commit": "6174c30adce225c2b1c32f471f6e7949446aa706",
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318",
+  "purpose": "A concrete remaining-work review, not a completed migration or release qualification.",
+  "contract": "A public method is one binding call that hands over buffers and returns the result; nothing else runs in Python. No transitive calls back into Python from native product code.",
+  "census": {
+    "methods": 996,
+    "native_shape": 81,
+    "native_call_rows": 73,
+    "no_op_rows": 8,
+    "orchestrated": 396,
+    "python": 519,
+    "non_native_rows": 915,
+    "distinct_non_native_definition_locations": 695,
+    "non_native_rows_with_unresolved_callees": 820,
+    "additional_method_rows_outside_census": 1906,
+    "additional_unique_definition_locations": 827,
+    "additional_rows_are_not_established_violations": true,
+    "census_is_not_runtime_proof": true,
+    "workstream_counts": {
+      "M5_neighbors_clustering": 120,
+      "M2_linear_decomposition": 193,
+      "M3_ensemble": 132,
+      "M6_remaining_families": 131,
+      "M4_neural_sequence": 135,
+      "M1_shared_preparation_metrics": 204
+    },
+    "remaining_methods_file": "docs/plans/runtime_completion_remaining_20261021.tsv"
+  },
+  "classical_test_snapshot": {
+    "log": "/Users/andrewhendel/mojolearn-evidence/fix-host-linear-tsqr/t5.log",
+    "passed": 204,
+    "failed": 34,
+    "warnings": 21,
+    "duration_seconds": 89.15,
+    "complete_source_binary_receipt_available": false,
+    "failure_groups": {
+      "native buffer admission": 24,
+      "eager NumPy import": 1,
+      "host export manifest": 3,
+      "missing retained evidence paths": 3,
+      "sabotage source lookup": 1,
+      "reference and coverage metadata": 2
+    },
+    "failures": [
+      {
+        "test": "test_native_host_load_cpu_predict_score_hash_and_save_match_existing_contract[ordinary-Ridge-HostRidge]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_host_native_owner.py:69: ",
+          "mojolearn/tests/test_classical_host_native_owner.py:62: in saved",
+          "mojolearn/linear_model.py:881: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_native_host_load_cpu_predict_score_hash_and_save_match_existing_contract[ordinary-LinearRegression-HostLinearRegression]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_host_native_owner.py:69: ",
+          "mojolearn/tests/test_classical_host_native_owner.py:62: in saved",
+          "mojolearn/linear_model.py:601: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_native_host_preserves_saved_fast_mode_refusal_at_inference[Ridge-HostRidge]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_host_native_owner.py:120: ",
+          "mojolearn/tests/test_classical_host_native_owner.py:62: in saved",
+          "mojolearn/linear_model.py:881: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_native_host_preserves_saved_fast_mode_refusal_at_inference[LinearRegression-HostLinearRegression]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_host_native_owner.py:120: ",
+          "mojolearn/tests/test_classical_host_native_owner.py:62: in saved",
+          "mojolearn/linear_model.py:601: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_numpy_free_methods_return_the_numpy_bits[LinearRegression]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_numpy_free.py:231: ",
+          "mojolearn/linear_model.py:542: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_numpy_free_methods_return_the_numpy_bits[Ridge]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_numpy_free.py:231: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_numpy_loaded_after_import_returns_ndarrays",
+        "errors": [
+          "E       AssertionError: Traceback (most recent call last):",
+          "E           File \"<string>\", line 5, in <module>",
+          "E             assert \"numpy\" not in sys.modules, \"importing mojolearn loaded NumPy\"",
+          "E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^",
+          "E         AssertionError: importing mojolearn loaded NumPy",
+          "E",
+          "E       assert 1 == 0",
+          "E        +  where 1 = CompletedProcess(args=['/Users/andrewhendel/mojolearn-evidence/briefs-2026-10-20/cert-gate-venv/bin/python', '-c', '\\n...ng mojolearn loaded NumPy\"\\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\\nAssertionError: importing mojolearn loaded NumPy\\n').returncode"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_numpy_free.py:297: AssertionError"
+        ],
+        "group": "eager NumPy import"
+      },
+      {
+        "test": "test_integer_prediction_preserves_binary64_intermediate[ndarray]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:48: ",
+          "mojolearn/linear_model.py:844: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_integer_prediction_preserves_binary64_intermediate[strided]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:48: ",
+          "mojolearn/linear_model.py:844: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_integer_prediction_preserves_binary64_intermediate[memoryview]",
+        "errors": [
+          "E       TypeError: Sequential requires a memoryview over a native buffer owner"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:48: ",
+          "mojolearn/linear_model.py:844: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_integer_prediction_preserves_binary64_intermediate[list]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:48: ",
+          "mojolearn/linear_model.py:844: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[3-True-None]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[3-False-None]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[1-True-None]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[1-False-None]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[3-True-vector]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[3-False-vector]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[3-True-scalar]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_preserves_existing_driver_and_independent_solution[1-True-vector]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:67: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_input_preparation_and_poisoned_python_helpers[fortran]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:99: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_input_preparation_and_poisoned_python_helpers[strided]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:99: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_input_preparation_and_poisoned_python_helpers[list]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:99: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_input_preparation_and_poisoned_python_helpers[memoryview]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:99: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_input_preparation_and_poisoned_python_helpers[float64]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:99: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_ridge_native_owner_input_preparation_and_poisoned_python_helpers[float16]",
+        "errors": [
+          "E       TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_classical_native_owner.py:99: ",
+          "mojolearn/linear_model.py:823: TypeError"
+        ],
+        "group": "native buffer admission",
+        "finding": "Supported input rejected in retained run; all 24 share sequential_admission type/owner refusal; exact source/binary/import provenance is absent from the run log, so the underlying cause remains unproven."
+      },
+      {
+        "test": "test_binding_exports_exactly_the_manifest[core]",
+        "errors": [
+          "E       AssertionError: core: binding exports ['lr_schedule_fill'] the manifest does not list; manifest lists [] the binding does not export",
+          "E       assert ['adam_hyper_...ows_f32', ...] == ['adam_hyper_...ows_f32', ...]",
+          "E",
+          "E         At index 62 diff: 'lr_schedule_fill' != 'lr_schedule_values'",
+          "E         Left contains one more item: 'weighted_pick_i32'",
+          "E         Use -v to get more diff"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:110: AssertionError"
+        ],
+        "group": "host export manifest"
+      },
+      {
+        "test": "test_binding_exports_exactly_the_manifest[training]",
+        "errors": [
+          "E       AssertionError: training: binding exports ['optimizer_resident_close', 'optimizer_resident_download', 'optimizer_resident_open', 'optimizer_resident_upload'] the manifest does not list; manifest lists [] the binding does not export",
+          "E       assert ['accumulate'...ad_norm', ...] == ['accumulate'...ad_norm', ...]",
+          "E",
+          "E         At index 18 diff: 'optimizer_resident_close' != 'optimizer_step'",
+          "E         Left contains 4 more items, first extra item: 'training_host_sabotage'",
+          "E         Use -v to get more diff"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:110: AssertionError"
+        ],
+        "group": "host export manifest"
+      },
+      {
+        "test": "test_binding_exports_exactly_the_manifest[x_sequence]",
+        "errors": [
+          "E       AssertionError: x_sequence: binding exports ['model_gather_labels', 'moe_backward', 'seq_adafactor_step', 'seq_lamb_step', 'seq_optimizer_close', 'seq_optimizer_export', 'seq_optimizer_import', 'seq_optimizer_init', 'seq_optimizer_state', 'seq_optimizer_step'] the manifest does not list; manifest lists ['ops_program_control', 'ops_program_execute', 'ops_program_fit_native', 'ops_program_inspect', 'ops_session_call', 'ops_session_initialize'] the binding does not export",
+          "E       assert ['adafactor_s... 'garch', ...] == ['adafactor_s... 'garch', ...]",
+          "E",
+          "E         At index 12 diff: 'model_gather_labels' != 'model_import_params'",
+          "E         Left contains 4 more items, first extra item: 'x_sequence_host_sabotage'",
+          "E         Use -v to get more diff"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:110: AssertionError"
+        ],
+        "group": "host export manifest"
+      },
+      {
+        "test": "test_recordings_and_columns_exist",
+        "errors": [
+          "E           AssertionError: the manifest names bench/results/classical_host/2026-09-13-apple-m4, which is not in the evidence root",
+          "E           assert False",
+          "E            +  where False = exists()",
+          "E            +    where exists = (PosixPath('/Users/andrewhendel/mojolearn-wt/fix-host-linear-tsqr') / 'bench/results/classical_host/2026-09-13-apple-m4').exists"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:316: AssertionError"
+        ],
+        "group": "missing retained evidence paths",
+        "finding": "Evidence-root configuration issue is plausible and directly testable: all named paths exist in the main checkout, while the run used a separate worktree. Verify required bytes/hashes before supplying MOJOLEARN_TEST_EVIDENCE_ROOT."
+      },
+      {
+        "test": "test_training_gpu_columns_exist",
+        "errors": [
+          "E       AssertionError: the manifest names training GPU columns not in the tree: ['bench/results/identity_break/2026-10-14_0844-pypi/apple-m4.json', 'bench/results/identity_break/2026-10-14_0844-pypi/nvidia-l40s-sm_89.json', 'bench/results/identity_break/2026-10-14_0844-pypi/amd-mi325x-gfx942.json']",
+          "E       assert ['bench/resul...-gfx942.json'] == []",
+          "E",
+          "E         Left contains 3 more items, first extra item: 'bench/results/identity_break/2026-10-14_0844-pypi/apple-m4.json'",
+          "E         Use -v to get more diff"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:324: AssertionError"
+        ],
+        "group": "missing retained evidence paths",
+        "finding": "Evidence-root configuration issue is plausible and directly testable: all named paths exist in the main checkout, while the run used a separate worktree. Verify required bytes/hashes before supplying MOJOLEARN_TEST_EVIDENCE_ROOT."
+      },
+      {
+        "test": "test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm",
+        "errors": [
+          "E               AssertionError: MOJOLEARN_TOKENIZER_HOST_SABOTAGE is read by no tokenizer source",
+          "E               assert None",
+          "E                +  where None = <function search at 0x1039bfcc0>(('is_defined\\\\s*\\\\[\\\\s*\"%s\"\\\\s*\\\\]' % 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE'), '# SPDX-License-Identifier: Apache-2.0\\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zen...  heap.push(table.vals[id], table.keys[id], id)\\n        changed.clear()\\n        merge_no += 1\\n\\n    return vocab^\\n')",
+          "E                +    where <function search at 0x1039bfcc0> = re.search",
+          "E                +    and   'MOJOLEARN_TOKENIZER_HOST_SABOTAGE' = <function escape at 0x1039fa1f0>('MOJOLEARN_TOKENIZER_HOST_SABOTAGE')",
+          "E                +      where <function escape at 0x1039fa1f0> = re.escape"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:538: AssertionError"
+        ],
+        "group": "sabotage source lookup",
+        "finding": "Current tokenizer sabotage define is in tokenizer/impl/tokenizer_host_shell_impl.mojo; test searches an outdated source set."
+      },
+      {
+        "test": "test_gbdt_ctr_models_cover_every_fixture",
+        "errors": [
+          "E       AssertionError: /Users/andrewhendel/mojolearn-wt/fix-host-linear-tsqr/bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models lacks ['gbdt-categorical-ctr-tables.base.npz', 'gbdt-categorical-ctr-tables.ties.npz', 'gbdt-categorical-ctr-tables.hashed.npz', 'gbdt-categorical-ctr-tables.wide.npz', 'gbdt-categorical-ctr-tables.denormal.npz', 'gbdt-categorical-ctr-tables.denormal_ftz.npz', 'gbdt-categorical-ctr-tables.dupes.npz', 'gbdt-categorical-ctr-tables.odd.npz', 'gbdt-categorical-ctr-tables.negative.npz', 'gbdt-tensor-ctr-tables.base.npz', 'gbdt-tensor-ctr-tables.ties.npz', 'gbdt-tensor-ctr-tables.hashed.npz', 'gbdt-tensor-ctr-tables.wide.npz', 'gbdt-tensor-ctr-tables.denormal.npz', 'gbdt-tensor-ctr-tables.denormal_ftz.npz', 'gbdt-tensor-ctr-tables.dupes.npz', 'gbdt-tensor-ctr-tables.odd.npz', 'gbdt-tensor-ctr-tables.negative.npz']",
+          "E       assert ['gbdt-catego...ftz.npz', ...] == []",
+          "E",
+          "E         Left contains 18 more items, first extra item: 'gbdt-categorical-ctr-tables.base.npz'",
+          "E         Use -v to get more diff"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:556: AssertionError"
+        ],
+        "group": "missing retained evidence paths",
+        "finding": "Evidence-root configuration issue is plausible and directly testable: all named paths exist in the main checkout, while the run used a separate worktree. Verify required bytes/hashes before supplying MOJOLEARN_TEST_EVIDENCE_ROOT."
+      },
+      {
+        "test": "test_saved_model_inference_owed_names_real_lanes_and_remaining_debt",
+        "errors": [
+          "E           AssertionError: nystroem-poly",
+          "E           assert 0 == 9",
+          "E            +  where 0 = len([])",
+          "E            +    where [] = list(<map object at 0x331521e80>)",
+          "E            +      where <map object at 0x331521e80> = glob('*/expected.json')",
+          "E            +        where glob = PosixPath('/Users/andrewhendel/mojolearn-wt/fix-host-linear-tsqr/bench/results/classical_host/2026-09-18-apple-kernel-variants/saved-models/nystroem-poly/nystroem-poly').glob"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:790: AssertionError"
+        ],
+        "group": "reference and coverage metadata"
+      },
+      {
+        "test": "test_public_reference_lanes_are_derived_and_every_pending_reason_is_true",
+        "errors": [
+          "E       AssertionError: a lane whose comparison is blocked is in the comparable set: ['cross-vendor-fold']",
+          "E       assert not ({'agglomerative', 'arima', 'arima-011', 'arima-exog', 'arima-exog-seasonal', 'arima-seasonal-c', ...} & {'cross-vendor-fold', 'et-clf-weighted', 'et-reg-weighted', 'gbdt-pair-logit-pointwise', 'gbdt-yeti-rank-pointwise', 'gp-lml-theta', ...})",
+          "E        +  where {'agglomerative', 'arima', 'arima-011', 'arima-exog', 'arima-exog-seasonal', 'arima-seasonal-c', ...} = set(['kernel-ridge-poly', 'kernel-ridge-sigmoid', 'kernel-ridge-laplacian', 'nystroem-poly', 'nystroem-sigmoid', 'nystroem-laplacian', ...])"
+        ],
+        "source_frames": [
+          "mojolearn/tests/test_host_surface.py:933: AssertionError"
+        ],
+        "group": "reference and coverage metadata"
+      }
+    ]
+  },
+  "fault_injection": {
+    "declared_arms": 54,
+    "patches_apply": 54,
+    "apply_check_exit": 0,
+    "recorded_detection_and_restoration_arms": 51,
+    "recorded_branch": "lane/run-sabotage-arms",
+    "recorded_commit": "62e93bd37",
+    "recorded_scope": "base fixture, one repeat; eligible CPU/Metal columns on retained frozen sources; not all vendors/options",
+    "source_integration_pending_at_review": true,
+    "unrecorded_arms": [
+      "coverage-core-py2mojo_rows",
+      "coverage-sequence-opt_public",
+      "coverage-training-optimizer_public"
+    ],
+    "checker_false_passes_reproduced": 4,
+    "evidence": [
+      "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-results-review.json",
+      "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-metadata-review.json",
+      "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-checker-negative-controls.json"
+    ]
+  },
+  "priority_order": [
+    "R0",
+    "R1",
+    "V0",
+    "V1",
+    "V2",
+    "S0",
+    "S1",
+    "M1_shared_preparation_metrics",
+    "M2_linear_decomposition",
+    "M3_ensemble",
+    "M4_neural_sequence",
+    "M5_neighbors_clustering",
+    "M6_remaining_families",
+    "Q0"
+  ],
+  "tasks": [
+    {
+      "id": "R0",
+      "priority": "P0",
+      "title": "Use the owner runtime contract and correct the census interpretation",
+      "source_paths": [
+        "AGENTS.md",
+        "tools/public_runtime_inventory.py",
+        "tools/tests/test_public_runtime_inventory.py",
+        "python/mojolearn/_verify_native_runtime.py"
+      ],
+      "actions": [
+        "Include public constructors, lifecycle/state/checkpoint methods, backward, metadata descriptors and inherited/dynamically installed wrappers in the coverage inventory.",
+        "Walk runtime binding selectors and conversion helpers; do not certify a call by its _native prefix or getter name. Distinguish unresolved from proven native.",
+        "Classify the 1,906 additional inherited/public/lifecycle method rows separately; they are outside the 996-row census, not 1,906 established violations.",
+        "Add negative tests for native-to-Python callbacks, descriptor/input hooks and first-call setup; retain cold and warm whole-operation runtime traces."
+      ],
+      "done_when": [
+        "An operation is certified only after its full public call path reaches one compiled entry with no package Python implementation work or callbacks.",
+        "The static counter is reported separately from executed runtime qualification; eight no-op fit rows are not counted as eight migrated native algorithms."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "tools/public_runtime_inventory.py:66",
+        "tools/public_runtime_inventory.py:77",
+        "tools/public_runtime_inventory.py:983",
+        "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/methods-outside-census.json"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "R1",
+      "priority": "P0",
+      "title": "Remove Python callbacks and runtime binding selection from already migrated surfaces",
+      "source_paths": [
+        "python/mojolearn/_native_classical_bridge.py",
+        "bindings/classical_attributes.mojo",
+        "python/mojolearn/_training_impl.py",
+        "python/mojolearn/tests/test_classical_numpy_free.py"
+      ],
+      "actions": [
+        "Replace the Python _connect_numpy callback stored in classical_connect_numpy with supported native admission/context construction; preserve NumPy-first, NumPy-later and no-NumPy behavior.",
+        "Make optimizer entry selection native or import-time-connected. SGD/Adam/AdamW.step currently execute self._binding -> _load; clip_grad_norm_ and accumulate_grads execute _load as well.",
+        "Audit optimizer constructors, state methods and schedules, which are not all measured by the operation census.",
+        "Wrap late-NumPy first construction/fit/predict and subsequent calls in audit_native_call; the current late-NumPy test checks values and types but does not assert the runtime contract."
+      ],
+      "done_when": [
+        "All three NumPy import orders preserve supported inputs/outputs and bits, with zero forbidden Python frames/callbacks on first and subsequent operations.",
+        "Standalone optimizer operations, construction and state round trips pass whole-operation native audits without per-call Python binding resolution."
+      ],
+      "depends_on": [
+        "R0"
+      ],
+      "evidence": [
+        "python/mojolearn/_native_classical_bridge.py:124",
+        "python/mojolearn/_native_classical_bridge.py:193",
+        "bindings/classical_attributes.mojo:130",
+        "python/mojolearn/_training_impl.py:442",
+        "python/mojolearn/_training_impl.py:547"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "V0",
+      "priority": "P0",
+      "title": "Qualify one consistent source/binary/test set before interpreting the retained 34 failures",
+      "source_paths": [
+        "tools/qualify_native_runtime_installed.py",
+        "python/mojolearn/tests/test_classical_host_native_owner.py",
+        "python/mojolearn/tests/test_classical_native_owner.py",
+        "python/mojolearn/tests/test_classical_numpy_free.py"
+      ],
+      "actions": [
+        "Reuse the running integration build at 3837ab3f0; first record all build exits, actual package/module paths, per-binding hashes, compiler flags/versions and test-source hashes.",
+        "The retained t5.log has 204 passes and 34 failures but no complete run receipt tying its loaded native binaries to its Python/test source. Do not call these 34 independent current-source algorithm bugs or dismiss them as stale.",
+        "Use the retained 34 pytest node IDs for focused reruns after the underlying fixes; preserve the original failing log and results. Broaden only for affected closures.",
+        "Keep CPU, Apple fast and Apple identical results separate; a successful build is not a passing runtime suite."
+      ],
+      "done_when": [
+        "Every reused or rerun result has an explicit frozen source and loaded-binary provenance record.",
+        "Each of the 34 original cases is linked to a passing replacement result or remains explicitly failing/pending. No skips are converted to passes."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "/Users/andrewhendel/mojolearn-evidence/fix-host-linear-tsqr/t5.log",
+        "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/classical-failures.json"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "V1",
+      "priority": "P0",
+      "title": "Repair the shared supported-buffer admission failure (24 cases)",
+      "source_paths": [
+        "bindings/sequential_admission.mojo",
+        "bindings/classical_attributes.mojo",
+        "python/mojolearn/_native_classical_bridge.py",
+        "python/mojolearn/_x_sequence_model.py"
+      ],
+      "actions": [
+        "Trace the ndarray/scalar/native buffer-owner type identities supplied to sequential_admit_value by the classical owner.",
+        "_numpy_context currently copies the cached Sequential context; verify that a context initialized before NumPy is refreshed natively with the actual loaded NumPy types.",
+        "Preserve ndarray, strided, Fortran, float16/float64, list and memoryview inputs, integer prediction behavior and weighted/unweighted Ridge on CPU and GPU.",
+        "Do not weaken poisoned-subclass/protocol refusal or delete supported inputs to pass the tests."
+      ],
+      "done_when": [
+        "All 24 retained admission failures pass on a coherent build, with expected output bits and callback-poison controls still passing."
+      ],
+      "depends_on": [
+        "V0",
+        "R1"
+      ],
+      "evidence": [
+        "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/classical-failures.json"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "V2",
+      "priority": "P0",
+      "title": "Close NumPy import and host-surface test failures without hiding evidence",
+      "source_paths": [
+        "python/mojolearn/tests/test_classical_numpy_free.py",
+        "python/mojolearn/tests/test_host_surface.py",
+        "python/mojolearn/host_surface.py",
+        "python/mojolearn/_surface_sequence.py"
+      ],
+      "actions": [
+        "1 import-order case: identify which module loads NumPy eagerly, preserve optional-NumPy behavior, and rerun first/no/late-NumPy cases with native tracing.",
+        "3 export-manifest cases: reconcile lr_schedule_fill, optimizer_resident_* and sequence optimizer/label exports. Extend the source scanner to recognize def_py_c_function registrations; six ops entries exist but its def_function-only regex misses them. Do not remove valid exports.",
+        "3 evidence-path cases: verify and use the retained main checkout via MOJOLEARN_TEST_EVIDENCE_ROOT. All five named historical directories/JSON paths exist there; verify the expected model bytes/hashes rather than rerunning old campaigns.",
+        "1 sabotage-source case: derive the tokenizer source closure or include tokenizer/impl/tokenizer_host_shell_impl.mojo, where the actual sabotage define now lives.",
+        "2 reference cases: reconcile nystroem-poly fixture accounting and cross-vendor-fold comparability with admitted reference evidence; a pending reference must stay pending."
+      ],
+      "done_when": [
+        "The remaining 10 original failures pass with correct manifests, actual retained bytes and honest reference status."
+      ],
+      "depends_on": [
+        "V0"
+      ],
+      "evidence": [
+        "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/classical-failures.json"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "S0",
+      "priority": "P0",
+      "title": "Harden fault-injection acceptance before relying on its verdict",
+      "source_paths": [
+        "tools/coverage_sabotage.py"
+      ],
+      "actions": [
+        "Require stable clean cells and complete requested lane/fixture coverage. Missing faulted cells are incomplete, not a successful arm.",
+        "Require matching vendor/mode/workload and source/build provenance, or recorded accepted closure equivalence for reused sources. Different commit text alone can be benign; unrelated changes without equivalence proof cannot establish a fault.",
+        "Accept REFUSED only with evidence of the intended fault reaching a named product check; a missing binary, import error or other infrastructure failure cannot count.",
+        "Require the post-revert execution to match the clean result and retain original failures.",
+        "Add meaningful negative tests for the four saved false-pass probes, plus a valid caught arm and valid unchanged-closure reuse."
+      ],
+      "done_when": [
+        "The checker rejects all four saved false-pass cases and admits a valid, completely retained clean/faulted/restored comparison."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-checker-negative-controls.json"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "S1",
+      "priority": "P1",
+      "title": "Integrate and reconcile the 51 existing fault runs; execute only the three missing arms",
+      "source_paths": [
+        "tools/identity_lanes/coverage_sabotage.tsv",
+        "tools/identity_lanes/coverage_sabotage_proven.tsv",
+        "docs/plans/VERIFY_COVERAGE_20261021.md"
+      ],
+      "actions": [
+        "Review lane/run-sabotage-arms at 62e93bd37 and retain/link its raw .sabrun/out records. Independent signature inspection found clean/faulted/post-revert records detecting every current-manifest lane for 51 arms.",
+        "Scope that evidence to one base fixture, one repeat, CPU/Metal on the recorded frozen source; it is not full-vendor or all-option validation.",
+        "Reconcile four summary omissions against raw records: trees-adaboost-reg, par-cholesky, par-hdbscan and x-decomp-lstsq-rsvd. Raw detection exists; do not rerun solely to repair the summary.",
+        "Record closure equivalence for coverage-core-cast_in: its clean and faulted/reverted commit IDs differ, but the git diff changes only another fault patch and the arm manifest, not product code.",
+        "Run coverage-core-py2mojo_rows, coverage-sequence-opt_public and coverage-training-optimizer_public on the appropriate clean frozen build; these three have no complete retained record sets.",
+        "Map saved build logs, actual loaded own/merged binding hashes and refusal reasons to each verdict before admission. Reuse valid evidence; rerun only genuinely missing or invalidated cells."
+      ],
+      "done_when": [
+        "All 54 declared arms have accepted scoped evidence, restored clean results, retained provenance and explicit remaining vendor/fixture limitations."
+      ],
+      "depends_on": [
+        "S0",
+        "V0"
+      ],
+      "evidence": [
+        "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-results-review.json",
+        "/Users/andrewhendel/mojolearn-evidence/runtime-completion-review-20261021-182318/fault-metadata-review.json",
+        "/Users/andrewhendel/mojolearn-wt/run-sabotage-arms/.sabrun"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "M1_shared_preparation_metrics",
+      "priority": "P1",
+      "title": "Move shared admission, conversion, allocation and metric/preprocessing orchestration into native owners",
+      "source_paths": [
+        "python/mojolearn/_mode.py",
+        "python/mojolearn/_sk_validate.py",
+        "python/mojolearn/_buffer.py",
+        "python/mojolearn/_array.py",
+        "python/mojolearn/_expansion_prep.py",
+        "python/mojolearn/metrics.py"
+      ],
+      "actions": [
+        "Migrate the 204 non-native census rows for preprocessing, metrics; the companion TSV names every class, method, definition and current verdict.",
+        "Group inherited methods and shared callees into native owners. The 915 rows map to 695 distinct definition locations and many more shared helper calls; they are not 915 independent algorithm rewrites.",
+        "Keep existing numerical kernels, supported interfaces, model state and error semantics. Move preparation, route choice, buffers, loops and consumed-result processing into compiled execution.",
+        "Audit omitted constructors, state/checkpoint operations and descriptors with these classes. A one-call wrapper is insufficient if its native callee calls Python.",
+        "Close each slice with runtime traces, independent correctness tests and same-version identity evidence for its affected closures; refresh the debt inventory without exceptions that excuse runtime work."
+      ],
+      "done_when": [
+        "Every listed row is migrated and qualified or explicitly classified as a non-operation with reviewed evidence; no feature removal or Python fallback.",
+        "Both cold and repeated calls have no package Python implementation work or transitive callbacks, including input/output hooks."
+      ],
+      "depends_on": [
+        "R0",
+        "R1",
+        "V0"
+      ],
+      "evidence": [],
+      "status": "open"
+    },
+    {
+      "id": "M2_linear_decomposition",
+      "priority": "P1",
+      "title": "Finish linear and decomposition public surfaces",
+      "source_paths": [
+        "python/mojolearn/linear_model.py",
+        "python/mojolearn/_expansion_linear.py",
+        "python/mojolearn/decomposition.py",
+        "python/mojolearn/_expansion_decomp.py"
+      ],
+      "actions": [
+        "Migrate the 193 non-native census rows for linear_model, decomposition; the companion TSV names every class, method, definition and current verdict.",
+        "Group inherited methods and shared callees into native owners. The 915 rows map to 695 distinct definition locations and many more shared helper calls; they are not 915 independent algorithm rewrites.",
+        "Keep existing numerical kernels, supported interfaces, model state and error semantics. Move preparation, route choice, buffers, loops and consumed-result processing into compiled execution.",
+        "Audit omitted constructors, state/checkpoint operations and descriptors with these classes. A one-call wrapper is insufficient if its native callee calls Python.",
+        "Close each slice with runtime traces, independent correctness tests and same-version identity evidence for its affected closures; refresh the debt inventory without exceptions that excuse runtime work."
+      ],
+      "done_when": [
+        "Every listed row is migrated and qualified or explicitly classified as a non-operation with reviewed evidence; no feature removal or Python fallback.",
+        "Both cold and repeated calls have no package Python implementation work or transitive callbacks, including input/output hooks."
+      ],
+      "depends_on": [
+        "R0",
+        "R1",
+        "V0"
+      ],
+      "evidence": [],
+      "status": "open"
+    },
+    {
+      "id": "M3_ensemble",
+      "priority": "P1",
+      "title": "Move forest, boosting and ensemble wrapper execution into native owners",
+      "source_paths": [
+        "python/mojolearn/randomforest.py",
+        "python/mojolearn/extratrees.py",
+        "python/mojolearn/ensemble.py",
+        "python/mojolearn/_forest_protocol.py"
+      ],
+      "actions": [
+        "Migrate the 132 non-native census rows for ensemble; the companion TSV names every class, method, definition and current verdict.",
+        "Group inherited methods and shared callees into native owners. The 915 rows map to 695 distinct definition locations and many more shared helper calls; they are not 915 independent algorithm rewrites.",
+        "Keep existing numerical kernels, supported interfaces, model state and error semantics. Move preparation, route choice, buffers, loops and consumed-result processing into compiled execution.",
+        "Audit omitted constructors, state/checkpoint operations and descriptors with these classes. A one-call wrapper is insufficient if its native callee calls Python.",
+        "Close each slice with runtime traces, independent correctness tests and same-version identity evidence for its affected closures; refresh the debt inventory without exceptions that excuse runtime work."
+      ],
+      "done_when": [
+        "Every listed row is migrated and qualified or explicitly classified as a non-operation with reviewed evidence; no feature removal or Python fallback.",
+        "Both cold and repeated calls have no package Python implementation work or transitive callbacks, including input/output hooks."
+      ],
+      "depends_on": [
+        "R0",
+        "R1",
+        "V0"
+      ],
+      "evidence": [],
+      "status": "open"
+    },
+    {
+      "id": "M4_neural_sequence",
+      "priority": "P1",
+      "title": "Finish neural, sequence and byte-LM public boundaries",
+      "source_paths": [
+        "python/mojolearn/_training_impl.py",
+        "python/mojolearn/_byte_lm_impl.py",
+        "python/mojolearn/_byte_lm_host.py",
+        "python/mojolearn/_transformer_impl.py",
+        "python/mojolearn/_mamba_impl.py",
+        "python/mojolearn/_expansion_cnn.py",
+        "python/mojolearn/_expansion_sequence.py"
+      ],
+      "actions": [
+        "Migrate the 135 non-native census rows for sequence, neural_network, training, language_model, ops; the companion TSV names every class, method, definition and current verdict.",
+        "Group inherited methods and shared callees into native owners. The 915 rows map to 695 distinct definition locations and many more shared helper calls; they are not 915 independent algorithm rewrites.",
+        "Keep existing numerical kernels, supported interfaces, model state and error semantics. Move preparation, route choice, buffers, loops and consumed-result processing into compiled execution.",
+        "Audit omitted constructors, state/checkpoint operations and descriptors with these classes. A one-call wrapper is insufficient if its native callee calls Python.",
+        "Close each slice with runtime traces, independent correctness tests and same-version identity evidence for its affected closures; refresh the debt inventory without exceptions that excuse runtime work."
+      ],
+      "done_when": [
+        "Every listed row is migrated and qualified or explicitly classified as a non-operation with reviewed evidence; no feature removal or Python fallback.",
+        "Both cold and repeated calls have no package Python implementation work or transitive callbacks, including input/output hooks."
+      ],
+      "depends_on": [
+        "R0",
+        "R1",
+        "V0"
+      ],
+      "evidence": [],
+      "status": "open"
+    },
+    {
+      "id": "M5_neighbors_clustering",
+      "priority": "P1",
+      "title": "Move neighbor/index and clustering public orchestration into native owners",
+      "source_paths": [
+        "python/mojolearn/neighbors.py",
+        "python/mojolearn/cluster.py",
+        "python/mojolearn/density.py",
+        "python/mojolearn/_ivf_impl.py"
+      ],
+      "actions": [
+        "Migrate the 120 non-native census rows for neighbors, cluster; the companion TSV names every class, method, definition and current verdict.",
+        "Group inherited methods and shared callees into native owners. The 915 rows map to 695 distinct definition locations and many more shared helper calls; they are not 915 independent algorithm rewrites.",
+        "Keep existing numerical kernels, supported interfaces, model state and error semantics. Move preparation, route choice, buffers, loops and consumed-result processing into compiled execution.",
+        "Audit omitted constructors, state/checkpoint operations and descriptors with these classes. A one-call wrapper is insufficient if its native callee calls Python.",
+        "Close each slice with runtime traces, independent correctness tests and same-version identity evidence for its affected closures; refresh the debt inventory without exceptions that excuse runtime work."
+      ],
+      "done_when": [
+        "Every listed row is migrated and qualified or explicitly classified as a non-operation with reviewed evidence; no feature removal or Python fallback.",
+        "Both cold and repeated calls have no package Python implementation work or transitive callbacks, including input/output hooks."
+      ],
+      "depends_on": [
+        "R0",
+        "R1",
+        "V0"
+      ],
+      "evidence": [],
+      "status": "open"
+    },
+    {
+      "id": "M6_remaining_families",
+      "priority": "P1",
+      "title": "Finish solver, model-selection and remaining estimator families",
+      "source_paths": [
+        "python/mojolearn/model_selection.py",
+        "python/mojolearn/_svm_impl.py",
+        "python/mojolearn/kernel_methods.py",
+        "python/mojolearn/_gp_impl.py",
+        "python/mojolearn/_gpc_impl.py",
+        "python/mojolearn/mixture.py"
+      ],
+      "actions": [
+        "Migrate the 131 non-native census rows for model_selection, svm, manifold, linalg, kernel_methods, gaussian_process, mixture, resample; the companion TSV names every class, method, definition and current verdict.",
+        "Group inherited methods and shared callees into native owners. The 915 rows map to 695 distinct definition locations and many more shared helper calls; they are not 915 independent algorithm rewrites.",
+        "Keep existing numerical kernels, supported interfaces, model state and error semantics. Move preparation, route choice, buffers, loops and consumed-result processing into compiled execution.",
+        "Audit omitted constructors, state/checkpoint operations and descriptors with these classes. A one-call wrapper is insufficient if its native callee calls Python.",
+        "Close each slice with runtime traces, independent correctness tests and same-version identity evidence for its affected closures; refresh the debt inventory without exceptions that excuse runtime work."
+      ],
+      "done_when": [
+        "Every listed row is migrated and qualified or explicitly classified as a non-operation with reviewed evidence; no feature removal or Python fallback.",
+        "Both cold and repeated calls have no package Python implementation work or transitive callbacks, including input/output hooks."
+      ],
+      "depends_on": [
+        "R0",
+        "R1",
+        "V0"
+      ],
+      "evidence": [],
+      "status": "open"
+    },
+    {
+      "id": "Q0",
+      "priority": "P1",
+      "title": "Close integrated release correctness after the affected migrations",
+      "source_paths": [
+        "tools/box_merged_verify.sh",
+        "tools/qualify_native_runtime_installed.py",
+        "python/mojolearn/verify_reference/table.json",
+        "docs/plans/BOX_JOBS_20261021.md"
+      ],
+      "actions": [
+        "Finish the existing integrated build; it last recorded host success and Apple fast in progress. Do not start duplicate compilation.",
+        "Resolve logistic-multiclass and hf-checkpoint reference mismatches by comparing same-version qualified source and retained outputs, not by accepting a separate Apple reference or blindly replacing hashes.",
+        "Qualify changed closures on CPU and supported Apple/NVIDIA/AMD modes. Include neural-training verification explicitly; the routine verifier excludes neural training.",
+        "Complete installed-wheel whole-operation native audits, lifecycle/leak checks and affected physical multi-device paths. Single-device process execution cannot certify multi-GPU behavior.",
+        "Keep the GitHub no-Python smoke as a bounded regression check alongside Python correctness tests; it does not require a separate Python-free product or a second measurement campaign.",
+        "Do not claim speedup or promote optimizer defaults without the required retained full-workload performance evidence."
+      ],
+      "done_when": [
+        "Current installed release candidate has no unaccounted failures/skips/owed cases in its declared supported scope, and same-version identical hashes match Apple, NVIDIA and AMD.",
+        "Build, runtime, correctness, identity, fault-detection and performance claims are separately supported; static green checks alone cannot close this task."
+      ],
+      "depends_on": [
+        "V1",
+        "V2",
+        "S1",
+        "M1_shared_preparation_metrics",
+        "M2_linear_decomposition",
+        "M3_ensemble",
+        "M4_neural_sequence",
+        "M5_neighbors_clustering",
+        "M6_remaining_families"
+      ],
+      "evidence": [],
+      "status": "open"
+    }
+  ],
+  "not_inferred": [
+    "915 independent bugs or algorithm rewrites",
+    "81 dynamically certified native methods",
+    "34 independent current-source algorithm regressions",
+    "zero coverage GAP means all tests were executed",
+    "a green shrinking-baseline check means zero runtime Python",
+    "all 54 fault-injection arms remain unrun"
+  ]
+}

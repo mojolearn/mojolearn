@@ -160,6 +160,8 @@ from bindings.hotpath_helpers import (
     weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
     strat_group_assign_i32_binding,
+    strat_group_plan_i32_binding,
+    bincount2_i32_host_binding,
 )
 from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
@@ -1170,6 +1172,12 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[weighted_draw_rows_i32_binding]("weighted_draw_rows_i32")
         module.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
         module.def_function[strat_group_assign_i32_binding]("strat_group_assign_i32")
+        # StratifiedGroupKFold's group x class table and group plan (the GPU
+        # base binding's bincount2_i32 / strat_group_plan_i32): a CPU-only
+        # install refused StratifiedGroupKFold.split without them (lane
+        # run-sabotage-arms, 2026-10-21: x-metrics-splitters on the host column)
+        module.def_function[bincount2_i32_host_binding]("bincount2_i32")
+        module.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         module.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
         module.def_function[check_lengths_i64_binding]("check_lengths_i64")
         module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
