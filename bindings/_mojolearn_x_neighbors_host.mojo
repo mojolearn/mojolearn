@@ -22,7 +22,7 @@ from x_neighbors.ocsvm_host import ocsvm_alpha_init_binding
 from x_neighbors.ocsvm_init import XN_OCSVM_DEV_INIT, XN_UNIT_DEV
 from x_neighbors.ocsvm_host import unit_ff_binding
 from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
-from x_neighbors.kapprox_host import kpca_resident_binding
+from x_neighbors.kapprox_host import kpca_resident
 from x_neighbors.iter_host import lp_fast_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
 from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR, kfeat_pcs_draw_idn_host_binding, kfeat_schi2_fit_idn_host_binding
@@ -57,6 +57,11 @@ def eigh_binding(a: PythonObject, i: PythonObject, f: PythonObject) raises -> Py
     with GILReleased(Python()):
         sweeps = op_eigh(x, n, w, v)
     return PythonObject(sweeps)
+
+
+def kpca_resident_binding() raises -> PythonObject:
+    """1 when KernelPCA.fit takes the resident kit route."""
+    return PythonObject(kpca_resident())
 
 
 def x_neighbors_numeric_mode_binding() raises -> PythonObject:

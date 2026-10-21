@@ -19,7 +19,7 @@ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kerne
 from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
-from x_neighbors.kapprox_dev import kpca_resident_binding
+from x_neighbors.kapprox_dev import kpca_resident
 from x_neighbors.iter_device import lp_fast_resident_binding
 from x_neighbors.nan_cells_device import nc_fit_lean_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
@@ -71,6 +71,11 @@ def eigh_binding(a: PythonObject, i: PythonObject, f: PythonObject) raises -> Py
     with GILReleased(Python()):
         sweeps = op_eigh(x, n, w, v)
     return PythonObject(sweeps)
+
+
+def kpca_resident_binding() raises -> PythonObject:
+    """1 when KernelPCA.fit takes the resident kit route."""
+    return PythonObject(kpca_resident())
 
 
 def x_neighbors_numeric_mode_binding() raises -> PythonObject:
