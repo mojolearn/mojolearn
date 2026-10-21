@@ -6,14 +6,14 @@ bindings/_mojolearn_x_linear_host.mojo, through x_linear/dispatch_host.mojo
 
 lane debt-host-call (2026-10-21): these functions moved here verbatim out of
 x_linear/huber.mojo, which the device binding imports, because their row passes
-run on the host thread pool (`par_rows`, x_linear/rows_host.mojo) and no
-GPU-reachable module runs host threads (the x_linear/isotonic_host.mojo
+run on the host thread pool (`par_rows`, x_linear/ops.mojo) and no
+GPU-reachable module calls host threads (the x_linear/isotonic_host.mojo
 precedent). The device binding runs this fit on its grid driver
 (x_linear/device.mojo `fit_device`, `huber_fit_grid` in x_linear/huber_grid.mojo); the statements here are unchanged,
 so the host column's bits are unchanged.
 """
 from x_linear.tops import FOLD_BLOCK
-from x_linear.rows_host import par_rows
+from x_linear.ops import par_rows
 from x_linear.ops import (
     FP,
     IP,

@@ -6,15 +6,15 @@ bindings/_mojolearn_x_linear_host.mojo, through x_linear/dispatch_host.mojo
 
 lane debt-host-call (2026-10-21): these functions moved here verbatim out of
 x_linear/logcv.mojo, which the device binding imports, because their row passes
-run on the host thread pool (`par_rows`, x_linear/rows_host.mojo) and no
-GPU-reachable module runs host threads (the x_linear/isotonic_host.mojo
+run on the host thread pool (`par_rows`, x_linear/ops.mojo) and no
+GPU-reachable module calls host threads (the x_linear/isotonic_host.mojo
 precedent). The device binding runs this fit on its grid driver
 (x_linear/device.mojo `fit_device`, `logcv_fit_grid` in x_linear/logcv_grid.mojo); the statements here are unchanged,
 so the host column's bits are unchanged.
 """
 from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.tops import FOLD_BLOCK
-from x_linear.rows_host import par_rows
+from x_linear.ops import par_rows
 from x_linear.ops import FP, IP, axpy_acc, fa, fexp, fill, flog, fm, fmax, fs, ld, ldi, row_dots, st
 from x_linear.lbfgs import Objective
 from x_linear.team import Team

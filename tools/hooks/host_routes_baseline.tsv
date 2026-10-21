@@ -28,6 +28,8 @@ host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _ba
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 # why: CROSS-LANE (training/LM): ce_serial_fold over the n_rows per-row losses in one block (the LM loss value's pinned order); a multi-block fold changes the loss bits on every vendor and the host column together
 one-block-n	serial-gpu	UNOWNED	owed	training/checks/loss.mojo	0	ctx.enqueue_function[ce_serial_fold_kernel](
+host-threads	host-threads	PR#86	debt	x_linear/ops.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	PR#86	debt	x_linear/ops.mojo	0	host_parallelize(group, groups)
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order
 block-per-n	serial-gpu	UNOWNED	owed2	x_prep/select_fast.mojo	0	ctx.enqueue_function[sel_fcls_score_kernel](
 # why: OWED (block-per-n, rule added by lane cgr5-owed2): one block per output column / class / feature walking all n rows; needs a row-tile then fold order (glm qn_tile_sum_classes' shape) with the host column in the same order

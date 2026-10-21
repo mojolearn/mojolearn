@@ -6,10 +6,10 @@ bindings/_mojolearn_x_linear_host.mojo).
 lane debt-host-call (2026-10-21): `fit_dispatch` moved here verbatim out of
 x_linear/dispatch.mojo, which the device binding imports. The fits it runs
 keep their row passes on the host thread pool (`par_rows`,
-x_linear/rows_host.mojo) and live in the `*_host.mojo` modules of x_linear/;
+x_linear/ops.mojo) and live in the `*_host.mojo` modules of x_linear/;
 the device binding never called `fit_dispatch` (every device fit runs on its
 grid driver, x_linear/device.mojo `fit_device`), so no GPU-reachable module
-imports host threads any more.
+calls the host thread pool any more.
 """
 from x_linear.ops import FP, IP
 from x_linear.team import Team
