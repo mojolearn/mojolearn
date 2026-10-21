@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.generator_state_native import generator_fields, generator_next
 from bindings.causal_checkpoint import checkpoint_array
 from bindings.causal_lm_construct import _model_f32
@@ -202,15 +203,15 @@ def generator_draw_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
     except error:
         var message = String(error)
         if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("ImportError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         if message.startswith("OSError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_OSError"))
+            return raise_python_exception(error_without_class(error, "OSError"), ExceptionType("PyExc_OSError"))
         if message.startswith("ZeroDivisionError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_ZeroDivisionError"))
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         if message.startswith("Exception:"):
-            return raise_python_exception(error, ExceptionType("PyExc_Exception"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "Exception"), ExceptionType("PyExc_Exception"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

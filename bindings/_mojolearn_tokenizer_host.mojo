@@ -78,6 +78,7 @@ from std.python import Python, PythonObject
 from bindings.sha256_door import sha256_hexdigest
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from std.sys.compile import is_defined
 
 from core.hostptr import i32_ptr
@@ -1404,10 +1405,10 @@ def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
     except error:
         var message = String(error)
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("FileNotFoundError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "FileNotFoundError"), ExceptionType("PyExc_FileNotFoundError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tokenizer_host.mojo

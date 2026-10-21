@@ -5,6 +5,7 @@ from core.causal_checkpoint_impl import checkpoint_widen_halves
 from std.memory import bitcast
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from gemm.f16_widen import f16_bits_to_f32
 
@@ -354,9 +355,9 @@ def checkpoint_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) ab
     except error:
         var message = String(error)
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("FileNotFoundError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+            return raise_python_exception(error_without_class(error, "FileNotFoundError"), ExceptionType("PyExc_FileNotFoundError"))
         if message.startswith("KeyError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_KeyError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "KeyError"), ExceptionType("PyExc_KeyError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

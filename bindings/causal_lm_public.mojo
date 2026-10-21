@@ -10,6 +10,7 @@ arithmetic and uses no interpreter callback; targets are checked at admission.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from std.memory import memcpy
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,
@@ -1192,7 +1193,7 @@ def causal_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
     except error:
         var message = String(error)
         if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

@@ -6,6 +6,7 @@ from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.native_transport import (
     transport_initialize, transport_send, transport_receive, _transport_exact,
     transport_listen, transport_accept, transport_close, transport_clock, transport_sleep, transport_connect,
@@ -222,12 +223,12 @@ def cross_vendor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             try:
                 ref cpy = Python().cpython()
                 var context = cpy.PyTuple_GetItem(args_ptr, 2)
-                return causal_set_exception(error, causal_borrowed_item(context, "mismatch"))
+                return causal_set_exception(error_without_class(error, "CrossVendorMismatch"), causal_borrowed_item(context, "mismatch"))
             except nested:
                 return raise_python_exception(nested, ExceptionType("PyExc_RuntimeError"))
         if operation == "send" or operation == "receive" or operation == "receive_exact":
             return raise_python_exception(error, ExceptionType("PyExc_ConnectionError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
 
 
 def cross_vendor_coordinator_init(args: PythonObject) raises -> PythonObject:

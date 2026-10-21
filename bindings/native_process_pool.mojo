@@ -9,6 +9,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.native_transport import (
     TRANSPORT_BOUNDARY, transport_initialize, transport_listen, transport_accept,
     transport_connect, transport_send, transport_receive, transport_close,
@@ -445,7 +446,7 @@ def process_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectP
         return result.steal_data()
     except error:
         if String(error).startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

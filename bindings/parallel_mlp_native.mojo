@@ -10,6 +10,7 @@ from std.python import Python, PythonObject
 from core.parallel_mlp_native_impl import mlp_check_finite, mlp_check_optimizer_state, mlp_targets_into
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
@@ -576,9 +577,9 @@ def parallel_mlp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         return result.steal_data()
     except error:
         if String(error).startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if String(error).startswith("ImportError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

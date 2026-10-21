@@ -9,6 +9,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from std.memory import bitcast, memcpy
 from std.math import isfinite
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
@@ -827,9 +828,9 @@ def parallel_byte_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
     except error:
         var message = String(error)
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

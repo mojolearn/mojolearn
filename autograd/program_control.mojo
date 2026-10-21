@@ -225,7 +225,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
         var message = String(err)
         var context = "program control flow after " + String(iterations) + " iterations: "
         if message.startswith("ValueError: "):
-            raise Error("ValueError: " + context + message[byte=11:])
+            raise Error("ValueError: " + context + message[byte=12:])
         raise Error(context + message)
     s[]._drop_temps(temps)
     swap(held, s[].tape)

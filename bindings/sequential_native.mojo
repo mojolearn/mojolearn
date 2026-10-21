@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 
 
 from bindings.sequential_description import sequential_fields, sequential_append, sequential_add, sequential_compile, sequential_program, sequential_table, sequential_layers, sequential_sample, _shape
@@ -66,11 +67,11 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         return result.steal_data()
     except error:
         if String(error).startswith("FileNotFoundError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+            return raise_python_exception(error_without_class(error, "FileNotFoundError"), ExceptionType("PyExc_FileNotFoundError"))
         if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if String(error).startswith("ImportError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         if String(error).startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

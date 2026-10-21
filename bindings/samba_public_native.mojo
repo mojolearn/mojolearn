@@ -3,6 +3,7 @@
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.samba_state_native import samba_snapshot, samba_validate_state, samba_from_state, samba_publish, samba_apply_gradients_from_state
 from bindings.samba_training_native import samba_gradients, samba_gradients_from_state
 from bindings.generator_state_native import generator_init, generator_snapshot, generator_restore, generator_next
@@ -88,13 +89,13 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
     except error:
         var message = String(error)
         if message.startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("FileNotFoundError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+            return raise_python_exception(error_without_class(error, "FileNotFoundError"), ExceptionType("PyExc_FileNotFoundError"))
         if message.startswith("OSError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_OSError"))
+            return raise_python_exception(error_without_class(error, "OSError"), ExceptionType("PyExc_OSError"))
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

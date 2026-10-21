@@ -4,6 +4,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_copy, generation_array, generation_address, py_ints
 from bindings.causal_lm_construct import causal_model_prepare, causal_model_read_weights_binding, _model_block, _model_bindings, _model_profile, _model_quantize15
 from bindings.causal_lm_public import causal_model_embedding, causal_model_head, causal_lm_parameters_binding, _native_function
@@ -537,19 +538,19 @@ def parallel_causal_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             return nil.steal_data()
         var message = String(error)
         if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("FileNotFoundError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+            return raise_python_exception(error_without_class(error, "FileNotFoundError"), ExceptionType("PyExc_FileNotFoundError"))
         if message.startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if message.startswith("UnsupportedModel:"):
             try:
                 ref cpy = Python().cpython()
                 var context = cpy.PyTuple_GetItem(args_ptr, 2)
                 var config = causal_borrowed_item(context, "config_context")
-                return causal_set_exception(error, causal_borrowed_item(config, "unsupported_class"))
+                return causal_set_exception(error_without_class(error, "UnsupportedModel"), causal_borrowed_item(config, "unsupported_class"))
             except nested:
                 return raise_python_exception(nested)
-        return raise_python_exception(error, ExceptionType.ValueError)
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

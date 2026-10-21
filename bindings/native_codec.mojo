@@ -10,6 +10,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from std.math import isfinite
 
 
@@ -361,4 +362,4 @@ def codec_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr
             raise Error("codec: unknown operation " + operation)
         return result.steal_data()
     except error:
-        return raise_python_exception(error, ExceptionType.ValueError)
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

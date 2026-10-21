@@ -5,6 +5,7 @@ from std.python import Python, PythonObject
 from core.parallel_neural_native_impl import samba_ids_into
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy
 from bindings.parallel_byte_native import _parallel_int, _parallel_view
 from bindings.parallel_mlp_native import (
@@ -385,13 +386,13 @@ def parallel_neural_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
     except error:
         var message = String(error)
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("ImportError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         if message.startswith("OverflowError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_OverflowError"))
+            return raise_python_exception(error_without_class(error, "OverflowError"), ExceptionType("PyExc_OverflowError"))
         if message.startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

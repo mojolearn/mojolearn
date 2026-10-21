@@ -7,6 +7,7 @@ profile, layout, shape admission, packing and layer construction live here.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
 from std.memory import memcpy, bitcast
@@ -619,18 +620,18 @@ def causal_model_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
     except error:
         var message = String(error)
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("FileNotFoundError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+            return raise_python_exception(error_without_class(error, "FileNotFoundError"), ExceptionType("PyExc_FileNotFoundError"))
         if message.startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if message.startswith("UnsupportedModel:"):
             try:
                 ref cpy = Python().cpython()
                 var context = cpy.PyTuple_GetItem(args_ptr, 4 if operation == 0 else 3)
                 var config = causal_borrowed_item(context, "config_context")
                 var cls = causal_borrowed_item(config, "unsupported_class")
-                return causal_set_exception(error, cls)
+                return causal_set_exception(error_without_class(error, "UnsupportedModel"), cls)
             except nested:
                 return raise_python_exception(nested)
-        return raise_python_exception(error, ExceptionType.ValueError)
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

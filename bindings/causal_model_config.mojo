@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.native_json import native_json_read, native_path, native_path_exists
 
@@ -368,11 +369,11 @@ def model_config_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
     except error:
         var message = String(error)
         if message.startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("FileNotFoundError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+            return raise_python_exception(error_without_class(error, "FileNotFoundError"), ExceptionType("PyExc_FileNotFoundError"))
         if message.startswith("KeyError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_KeyError"))
+            return raise_python_exception(error_without_class(error, "KeyError"), ExceptionType("PyExc_KeyError"))
         comptime if operation == 6 or operation == 2:
             try:
                 ref cpy = Python().cpython()
@@ -385,4 +386,4 @@ def model_config_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             except nested:
                 return raise_python_exception(nested)
         else:
-            return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

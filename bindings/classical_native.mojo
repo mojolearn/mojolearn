@@ -4,6 +4,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.native_error_class import error_without_class
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_description import sequential_fields
 from bindings.classical_ridge import classical_ridge_fit, classical_linear_predict, classical_linear_predict_public
@@ -162,13 +163,13 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             except nested:
                 return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
-            return raise_python_exception(error, ExceptionType.TypeError)
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if String(error).startswith("NotImplementedError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
+            return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("ImportError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_ImportError"))
+            return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         if String(error).startswith("AttributeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_AttributeError"))
+            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):
-            return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
-        return raise_python_exception(error, ExceptionType.ValueError)
+            return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
