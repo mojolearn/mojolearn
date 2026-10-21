@@ -118,6 +118,14 @@ def test_defaultdict_factory_is_refused_before_missing_config_lookup():
     assert calls == []
 
 
+@pytest.mark.parametrize("factory", [None, list, np.int64])
+def test_defaultdict_native_factories_preserve_config_loading(factory):
+    config = SambaConfig(13, 8, ["attention"], n_heads=2, intermediate=11)
+    restored = audit_native_call(SambaConfig.from_dict, defaultdict(factory, config.to_dict())).assert_native()
+    assert restored.to_dict() == config.to_dict()
+    assert restored.registry() == config.registry()
+
+
 def test_registered_record_key_refused_before_replaced_hash(monkeypatch):
     model, _ = _model()
     key = SambaConfig(13, 8, ["attention"], n_heads=2, intermediate=11)
