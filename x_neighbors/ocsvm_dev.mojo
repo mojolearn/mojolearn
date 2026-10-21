@@ -41,7 +41,6 @@ from x_neighbors.items import (
     ocsvm_rho_part_item, ocsvm_rho_level_item, ocsvm_rho_level_items, ocsvm_rho_levels_done,
 )
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, _down_i, BLOCK, kernel_kernel
-from std.python import PythonObject
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -388,7 +387,6 @@ def ocsvm_step_kernel(
         sf.unsafe_store(1, a[1])
 
 
-
 def ocsvm_sel_j2_kernel(
     q: FP, alpha: FP, g: FP, st: IP, sf: FP, p1v: FP, p1i: IP,
     p2v: FP, p2i: IP, p2g: FP, p3v: FP, p3i: IP, n_: Int64, nb_: Int64, max_iter_: Int64,
@@ -653,28 +651,6 @@ def op_ocsvm_x(
         _ = ctx^
 
 
-def ocsvm_resident_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    """xn_ocsvm_x: addresses (x, cv, alpha, info, iters), ints (n, d, kind,
-    degree, max_iter), floats (gamma, coef0, eps)."""
-    var a = List[Int]()
-    for k in range(5):
-        var v = Int(py=a_[k])
-        if v == 0:
-            raise Error("x_neighbors: null buffer address")
-        a.append(v)
-    var iv = List[Int]()
-    for k in range(5):
-        var v = Int(py=i_[k])
-        if v < 0:
-            raise Error("x_neighbors: a negative size was passed")
-        iv.append(v)
-    var gamma = Float32(Float64(py=f_[0]))
-    var coef0 = Float32(Float64(py=f_[1]))
-    var eps = Float32(Float64(py=f_[2]))
-    op_ocsvm_x(a[0], a[1], a[2], a[3], a[4], iv[0], iv[1], iv[2], gamma, coef0, iv[3], eps, iv[4])
-    return PythonObject(None)
-
-
 def oci_part_kernel(cv: FP, ph: FP, pl: FP, n_: Int64):
     var n = Int(n_)
     var t = _tid()
@@ -732,22 +708,6 @@ def op_ocsvm_alpha_init(cv: Int, alpha: Int, n: Int, nu_hi: Float32, nu_lo: Floa
     _ = ctx^
 
 
-def ocsvm_alpha_init_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    """x_neighbors_ocsvm_alpha_init: addresses (cv, alpha), ints (n,),
-    floats (nu,). nu is read as binary64 and split into a float-float pair
-    (a scalar of the call)."""
-    var cv = Int(py=a_[0])
-    var alpha = Int(py=a_[1])
-    var n = Int(py=i_[0])
-    if n < 0:
-        raise Error("x_neighbors: a negative size was passed")
-    if n > 0 and (cv == 0 or alpha == 0):
-        raise Error("x_neighbors: null buffer address")
-    var nu = Float64(py=f_[0])
-    op_ocsvm_alpha_init(cv, alpha, n, oci_nu_hi(nu), oci_nu_lo(nu))
-    return PythonObject(None)
-
-
 def unit_ff_kernel(v: FP, oh: FP, ol: FP, res: FP, info: IP, n_: Int64):
     var n = Int(n_)
     var t = _tid()
@@ -797,20 +757,6 @@ def op_unit_ff(v: Int, res: Int, info: Int, n: Int) raises:
     _ = d_oh^
     _ = d_ol^
     _ = ctx^
-
-
-def unit_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    """x_neighbors_unit_ff: addresses (v, res, info), ints (n,)."""
-    var v = Int(py=a_[0])
-    var res = Int(py=a_[1])
-    var info = Int(py=a_[2])
-    var n = Int(py=i_[0])
-    if n < 0:
-        raise Error("x_neighbors: a negative size was passed")
-    if info == 0 or (n > 0 and (v == 0 or res == 0)):
-        raise Error("x_neighbors: null buffer address")
-    op_unit_ff(v, res, info, n)
-    return PythonObject(None)
 
 
 def _ocsvm_solve(

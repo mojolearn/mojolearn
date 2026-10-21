@@ -10,7 +10,6 @@ from x_neighbors.ocsvm_init import (
     XN_OCSVM_DEV_INIT, oci_chunks, oci_part_item, oci_scan_item, oci_alpha_item, oci_nu_hi, oci_nu_lo,
     XN_UNIT_DEV, unit_ff_item,
 )
-from std.python import PythonObject
 
 
 def op_ocsvm_alpha_init(cv: Int, alpha: Int, n: Int, nu_hi: Float32, nu_lo: Float32) raises:
@@ -35,21 +34,6 @@ def op_ocsvm_alpha_init(cv: Int, alpha: Int, n: Int, nu_hi: Float32, nu_lo: Floa
         oci_alpha_item(i, p_cv, oh, ol, p_alpha, n)
     _ = s_p^
     _ = s_o^
-
-
-def ocsvm_alpha_init_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    """x_neighbors_ocsvm_alpha_init (host column): addresses (cv, alpha),
-    ints (n,), floats (nu,)."""
-    var cv = Int(py=a_[0])
-    var alpha = Int(py=a_[1])
-    var n = Int(py=i_[0])
-    if n < 0:
-        raise Error("x_neighbors: a negative size was passed")
-    if n > 0 and (cv == 0 or alpha == 0):
-        raise Error("x_neighbors: null buffer address")
-    var nu = Float64(py=f_[0])
-    op_ocsvm_alpha_init(cv, alpha, n, oci_nu_hi(nu), oci_nu_lo(nu))
-    return PythonObject(None)
 
 
 def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, max_iter: Int) raises:
@@ -92,17 +76,3 @@ def op_unit_ff(v: Int, res: Int, info: Int, n: Int) raises:
         unit_ff_item(i, p_v, oh, ol, p_res, pinfo, n)
     _ = s_p^
     _ = s_o^
-
-
-def unit_ff_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    """x_neighbors_unit_ff (host column): addresses (v, res, info), ints (n,)."""
-    var v = Int(py=a_[0])
-    var res = Int(py=a_[1])
-    var info = Int(py=a_[2])
-    var n = Int(py=i_[0])
-    if n < 0:
-        raise Error("x_neighbors: a negative size was passed")
-    if info == 0 or (n > 0 and (v == 0 or res == 0)):
-        raise Error("x_neighbors: null buffer address")
-    op_unit_ff(v, res, info, n)
-    return PythonObject(None)

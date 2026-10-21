@@ -31,8 +31,6 @@ Python line did, in its order, so the outputs keep their bits:
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from max.gpu.host import DeviceContext
 
 from checks.numerics import portable_sqrtf
@@ -220,20 +218,24 @@ struct RowsCall(Copyable, Movable):
         return self.n * (2 if self.k == 1 else self.k)
 
 
-def rows_call_from_python(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
-                          params: PythonObject) raises -> RowsCall:
-    var md = Int(py=mode)
+def rows_param_count(md: Int) raises -> Int:
+    """How many params a `py2mojo_rows` call of mode `md` carries: n, k (and,
+    for HUBER_OUT, the pred address and thr)."""
     if md < ROWS_LOG or md > ROWS_SQRT_F32:
         raise Error("py2mojo_rows: unknown mode")
-    var want = 4 if md == ROWS_HUBER_OUT else 2
-    if len(params) != want:
-        raise Error("py2mojo_rows: params must contain n, k (and, for HUBER_OUT, the pred address and thr)")
+    return 4 if md == ROWS_HUBER_OUT else 2
+
+
+def rows_call(md: Int, n: Int, k: Int, src: Int, dst: Int, src2_in: Int, thr: Float64) raises -> RowsCall:
+    """The checked call. `src2_in` and `thr` are read for HUBER_OUT only.
+    The Python door is `core/py2mojo_rows_pyapi.mojo`."""
+    _ = rows_param_count(md)
     var src2 = 0
     var scal = UInt64(0)
     if md == ROWS_HUBER_OUT:
-        src2 = Int(py=params[2])
-        scal = bitcast[DType.uint64](Float64(py=params[3]))
-    var call = RowsCall(md, Int(py=params[0]), Int(py=params[1]), Int(py=src_addr), Int(py=dst_addr), src2, scal)
+        src2 = src2_in
+        scal = bitcast[DType.uint64](thr)
+    var call = RowsCall(md, n, k, src, dst, src2, scal)
     if call.n < 0 or call.k < 1:
         raise Error("py2mojo_rows: n >= 0 and k >= 1 required")
     if call.n > 0 and (call.src == 0 or call.dst == 0 or (md == ROWS_HUBER_OUT and call.src2 == 0)):
@@ -281,17 +283,6 @@ def rows_device(ctx: DeviceContext, call: RowsCall) raises:
     _ = d_d8^
 
 
-def py2mojo_rows_device_binding(
-    ctx: DeviceContext, mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """The GPU bindings' `py2mojo_rows`; returns n."""
-    var call = rows_call_from_python(mode, src_addr, dst_addr, params)
-    with GILReleased(Python()):
-        rows_device(ctx, call)
-    return PythonObject(call.n)
-
-
 def rows_host(call: RowsCall):
     var s32 = _F32P(unsafe_from_address=call.src)
     var s64 = _U64P(unsafe_from_address=call.src)
@@ -301,14 +292,3 @@ def rows_host(call: RowsCall):
     var d8 = _U8P(unsafe_from_address=call.dst)
     for i in range(call.n):
         rows_one(call.mode, s32, s64, call.k, i, d32, d64, s2, call.scal, d8)
-
-
-def py2mojo_rows_host_binding(
-    mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """The CPU bindings' `py2mojo_rows` (the same per-row words); returns n."""
-    var call = rows_call_from_python(mode, src_addr, dst_addr, params)
-    if call.n > 0:
-        with GILReleased(Python()):
-            rows_host(call)
-    return PythonObject(call.n)

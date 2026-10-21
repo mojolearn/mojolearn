@@ -10,7 +10,6 @@ that path, so IDENTICAL runs main's code. The chi2 samplers' device ops
 (`-D MOJOLEARN_SPARSE_RP_DEVICE`) were DROPPED-quality; their code is on
 lane/apple-fast-kapprox @ 10d5a7970.
 """
-from std.python import PythonObject
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -32,8 +31,9 @@ comptime XN_KPCA_RESIDENT = (
 )
 
 
-def kpca_resident_binding() raises -> PythonObject:
-    """1 when KernelPCA.fit takes the resident kit route."""
+def kpca_resident() -> Int:
+    """1 when KernelPCA.fit takes the resident kit route. The binding
+    (`bindings/_mojolearn_x_neighbors.mojo`) hands it to Python."""
     comptime if XN_KPCA_RESIDENT:
-        return PythonObject(1)
-    return PythonObject(0)
+        return 1
+    return 0

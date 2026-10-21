@@ -14,7 +14,8 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_cluster.entries import run_entry
 from x_cluster.host.host_ops import HostOps, X_CLUSTER_HOST_SABOTAGE
-from x_cluster.out import ClusterOut, py_floats, py_ints
+from x_cluster.out import ClusterOut
+from x_cluster.out_pyapi import cluster_out_to_py, py_floats, py_ints
 from x_cluster.tree_cut import PY2MOJO_CLUSTER
 
 
@@ -33,7 +34,7 @@ def call_binding(
     with GILReleased(Python()):
         var ops = HostOps()
         res = run_entry(ops, w, x, a, ints, floats)
-    return res.to_py()
+    return cluster_out_to_py(res)
 
 
 def x_cluster_host_numeric_mode_binding() raises -> PythonObject:

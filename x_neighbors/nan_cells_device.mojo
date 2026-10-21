@@ -21,7 +21,6 @@ are integer adds of per-(row block, column) counts: exact in any order.
 A cell is missing when its exponent is all ones and its mantissa is not
 zero (a NaN), tested on the bits so no fast-math can fold `v != v`."""
 from std.atomic import Atomic, Ordering
-from std.python import PythonObject
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
@@ -263,12 +262,12 @@ def nan_fit_counts_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](colmiss + d, c)
 
 
-def nc_fit_lean_binding() raises -> PythonObject:
+def nc_fit_lean() -> Int:
     """1 when this binary's fit-time count op ignores the cell list (the
     Python layer then passes a one-slot one)."""
     comptime if NC_FIT_LEAN:
-        return PythonObject(1)
-    return PythonObject(0)
+        return 1
+    return 0
 
 
 def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, colmiss_only: Int = 0) raises:

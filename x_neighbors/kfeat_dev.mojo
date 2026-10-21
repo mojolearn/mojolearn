@@ -50,8 +50,6 @@ the first transform's single call (section at the end of this file).
 """
 from std.ffi import _Global
 from std.memory import bitcast
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -72,7 +70,7 @@ comptime XN_FAST_ACHI2_DEVSCAN = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN
 comptime XN_FAST_SCHI2_MOJO_MT = _KFEAT_FAST_APPLE and not is_defined["MOJOLEARN_XN_FAST_SCHI2_MOJO_MT_OFF"]()
 # SCHI2_LAZYW: DEFAULT (rollback _OFF; needs SCHI2_MOJO_MT, i.e. not its _OFF):
 # skewed-chi2 taxi 1.8 -> 0.4 ms, istella 2.1 -> 0.9 ms, w2-w3kf-xn-q PASS
-# (M3, ea6b2035e). See `kfeat_schi2_draw_binding`.
+# (M3, ea6b2035e). See `kfeat_schi2_draw`.
 comptime XN_FAST_SCHI2_LAZYW = XN_FAST_SCHI2_MOJO_MT and not is_defined["MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF"]()
 comptime XN_KFEAT_ANY = XN_FAST_ACHI2_DEVSCAN or XN_FAST_SCHI2_MOJO_MT
 
@@ -95,7 +93,7 @@ struct _KfeatStage(Defaultable, Movable):
 comptime KFEAT_STAGE = _Global[StorageType=_KfeatStage, name="MojoXNeighborsKfeatStageFast", init_fn=_KfeatStage.__init__]
 
 
-def kfeat_flags_binding() raises -> PythonObject:
+def kfeat_flags() -> Int:
     """bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, bit 4 SCHI2_LAZYW (0 on
     every other build)."""
     var f = 0
@@ -105,7 +103,7 @@ def kfeat_flags_binding() raises -> PythonObject:
         f |= 2
     comptime if XN_FAST_SCHI2_LAZYW:
         f |= 4
-    return PythonObject(f)
+    return f
 
 
 # lane apple-fast-w3-kfeat: ACHI2_DEVSCAN's size gate. The device scan only
@@ -136,44 +134,42 @@ comptime XN_ACHI2_DEVSCAN_MIN = (1 << 22) if is_defined[
 ]() else 1
 
 
-def kfeat_first_negative_binding(xaddr: PythonObject, n: PythonObject) raises -> PythonObject:
+def kfeat_first_negative(xaddr: Int, cnt: Int) raises -> Int:
     """The first flat index i < n with X[i] < 0 by bits (sign set, magnitude
     nonzero), or -1: one upload into a pooled buffer, one scan, one wait.
     -2 below XN_ACHI2_DEVSCAN_MIN entries: not scanned, the caller takes
     main's host minimum."""
-    var cnt = Int(py=n)
     if cnt <= 0:
-        return PythonObject(-1)
+        return -1
     if cnt < XN_ACHI2_DEVSCAN_MIN:
-        return PythonObject(-2)
+        return -2
     if cnt > 2147483647:
         raise Error("x_neighbors_kfeat_first_negative: more than 2^31 - 1 entries")
-    var src = FP(unsafe_from_address=Int(py=xaddr))
+    var src = FP(unsafe_from_address=xaddr)
     var best = NONFINITE_NONE
-    with GILReleased(Python()):
-        var ctx = xn_ctx()
-        var st = KFEAT_STAGE.get_or_create_ptr()
-        if not st[].part:
-            st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS)
-            st[].host = ctx.enqueue_create_host_buffer[DType.int32](SCAN_BLOCKS)
-        var blocks = _scan_blocks(cnt)
-        var buf = pool_take["MojoXNeighborsKfeatScan"](ctx, cnt)
-        ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
-        ctx.enqueue_function[negative_partial_kernel](
-            st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
-            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
-        )
-        var psub = st[].part.value().create_sub_buffer[DType.int32](0, blocks)
-        ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
-        ctx.synchronize()
-        _ = psub^
-        var hp = st[].host.value().unsafe_ptr()
-        for i in range(blocks):  # small-loop(blocks: at most SCAN_BLOCKS = 512 block partials, independent of the input): integer min of the scan's per-block answers, as core/device_scan _fold_partials
-            var v = hp[i]
-            if v < best:
-                best = v
-        pool_give["MojoXNeighborsKfeatScan"](buf^)
-    return PythonObject(-1 if best == NONFINITE_NONE else Int(best))
+    var ctx = xn_ctx()
+    var st = KFEAT_STAGE.get_or_create_ptr()
+    if not st[].part:
+        st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS)
+        st[].host = ctx.enqueue_create_host_buffer[DType.int32](SCAN_BLOCKS)
+    var blocks = _scan_blocks(cnt)
+    var buf = pool_take["MojoXNeighborsKfeatScan"](ctx, cnt)
+    ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
+    ctx.enqueue_function[negative_partial_kernel](
+        st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
+        grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var psub = st[].part.value().create_sub_buffer[DType.int32](0, blocks)
+    ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(), src_buf=psub)
+    ctx.synchronize()
+    _ = psub^
+    var hp = st[].host.value().unsafe_ptr()
+    for i in range(blocks):  # small-loop(blocks: at most SCAN_BLOCKS = 512 block partials, independent of the input): integer min of the scan's per-block answers, as core/device_scan _fold_partials
+        var v = hp[i]
+        if v < best:
+            best = v
+    pool_give["MojoXNeighborsKfeatScan"](buf^)
+    return -1 if best == NONFINITE_NONE else Int(best)
 
 
 struct _MT19937(Movable):
@@ -237,39 +233,35 @@ def _schi2_draw(seed: UInt32, count: Int, nc: Int, hz: FP, op: FP):
         op[c] = Float32(0.0 + two_pi * mt.random())
 
 
-def kfeat_schi2_fit_binding(p: PythonObject, w_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
+def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) raises:
     """p = [seed & 2^32-1, d, n_components]: `random_weights_` (d x nc, into
     the float32 array at w_out) and `random_offset_` (nc, at off_out), the
     words main's SkewedChi2Sampler.fit makes from `_LegacyRandomState(seed)`
-    (module docstring). Returns 0."""
-    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
-    var d = Int(py=p[1])
-    var nc = Int(py=p[2])
+    (module docstring)."""
+    var seed = UInt32(seed_word & 0xFFFFFFFF)
     if d <= 0 or nc <= 0:
         raise Error("x_neighbors_kfeat_schi2_fit: n_features and n_components must be positive")
     var count = d * nc
-    var wp = FP(unsafe_from_address=Int(py=w_out))
-    var op = FP(unsafe_from_address=Int(py=off_out))
-    with GILReleased(Python()):
-        var ctx = xn_ctx()
-        var st = KFEAT_STAGE.get_or_create_ptr()
-        if st[].z_cap < count:
-            st[].z = ctx.enqueue_create_host_buffer[DType.float32](count)
-            st[].z_cap = count
-        var hz = st[].z.value().unsafe_ptr()
-        _schi2_draw(seed, count, nc, FP(unsafe_from_address=Int(hz)), op)
-        var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
-        var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
-        ctx.enqueue_copy(dst_buf=dz, src_ptr=hz)
-        ctx.enqueue_function[skew_weights_kernel](
-            dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
-            grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
-        )
-        ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
-        ctx.synchronize()
-        pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
-        pool_give["MojoXNeighborsKfeatSkewW"](dw^)
-    return PythonObject(0)
+    var wp = FP(unsafe_from_address=w_out)
+    var op = FP(unsafe_from_address=off_out)
+    var ctx = xn_ctx()
+    var st = KFEAT_STAGE.get_or_create_ptr()
+    if st[].z_cap < count:
+        st[].z = ctx.enqueue_create_host_buffer[DType.float32](count)
+        st[].z_cap = count
+    var hz = st[].z.value().unsafe_ptr()
+    _schi2_draw(seed, count, nc, FP(unsafe_from_address=Int(hz)), op)
+    var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
+    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
+    ctx.enqueue_copy(dst_buf=dz, src_ptr=hz)
+    ctx.enqueue_function[skew_weights_kernel](
+        dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
+    ctx.synchronize()
+    pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
+    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
 
 
 # ---------------------------------------------------------------- SCHI2_LAZYW
@@ -295,56 +287,49 @@ def kfeat_schi2_fit_binding(p: PythonObject, w_out: PythonObject, off_out: Pytho
 # Fit + transform go from three waits to one.
 
 
-def kfeat_schi2_draw_binding(p: PythonObject, z_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
+def kfeat_schi2_draw(seed_word: Int, d: Int, nc: Int, z_out: Int, off_out: Int) raises:
     """p = [seed & 2^32-1, d, n_components]: z (d * nc float32 at z_out, the
     words main hands `skew_weights_kernel`) and `random_offset_` (nc at
     off_out). Host only: the draw is sklearn's sequential stream."""
-    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
-    var d = Int(py=p[1])
-    var nc = Int(py=p[2])
+    var seed = UInt32(seed_word & 0xFFFFFFFF)
     if d <= 0 or nc <= 0:
         raise Error("x_neighbors_kfeat_schi2_draw: n_features and n_components must be positive")
-    var zp = FP(unsafe_from_address=Int(py=z_out))
-    var op = FP(unsafe_from_address=Int(py=off_out))
-    with GILReleased(Python()):
-        _schi2_draw(seed, d * nc, nc, zp, op)
-    return PythonObject(0)
+    var zp = FP(unsafe_from_address=z_out)
+    var op = FP(unsafe_from_address=off_out)
+    _schi2_draw(seed, d * nc, nc, zp, op)
 
 
-def kfeat_schi2_weights_binding(z_addr: PythonObject, w_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     """`random_weights_` (n floats at w_addr) from z (n floats at z_addr):
-    main's `skew_weights_kernel`, one wait. Returns 0."""
-    var count = Int(py=n)
+    main's `skew_weights_kernel`, one wait."""
     if count <= 0:
         raise Error("x_neighbors_kfeat_schi2_weights: empty weights")
-    var zp = FP(unsafe_from_address=Int(py=z_addr))
-    var wp = FP(unsafe_from_address=Int(py=w_addr))
-    with GILReleased(Python()):
-        var ctx = xn_ctx()
-        var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
-        var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
-        ctx.enqueue_copy(dst_buf=dz, src_ptr=zp)
-        ctx.enqueue_function[skew_weights_kernel](
-            dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
-            grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
-        )
-        ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
-        ctx.synchronize()
-        pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
-        pool_give["MojoXNeighborsKfeatSkewW"](dw^)
-    return PythonObject(0)
+    var zp = FP(unsafe_from_address=z_addr)
+    var wp = FP(unsafe_from_address=w_addr)
+    var ctx = xn_ctx()
+    var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
+    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
+    ctx.enqueue_copy(dst_buf=dz, src_ptr=zp)
+    ctx.enqueue_function[skew_weights_kernel](
+        dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
+    ctx.synchronize()
+    pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
+    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
 
 
-def kfeat_schi2_transform_binding(p: PythonObject, a: PythonObject, f: PythonObject) raises -> PythonObject:
+def kfeat_schi2_transform(
+    n: Int, d: Int, nc: Int, pending_word: Int,
+    x_addr: Int, wz_addr: Int, w_out: Int, off_addr: Int, out_addr: Int, skewedness: Float64,
+) raises:
     """SkewedChi2Sampler.transform under SCHI2_LAZYW. p = [n, d, nc, pending];
     a = [x (n*d), wz, w_out, off (nc), out (n*nc)]; f = [skewedness as
     float32]. pending = 1: wz is z, the weights are made here and written
     to w_out; 0: wz is `random_weights_` (w_out unused). The caller has
-    made main's `X.min() <= -skewedness` refusal. Returns 0."""
-    var n = Int(py=p[0])
-    var d = Int(py=p[1])
-    var nc = Int(py=p[2])
-    var pending = Int(py=p[3]) != 0
+    made main's `X.min() <= -skewedness` refusal."""
+    var pending = pending_word != 0
     if n <= 0 or d <= 0 or nc <= 0:
         raise Error("x_neighbors_kfeat_schi2_transform: need positive n, d, n_components")
     var nx = n * d
@@ -352,56 +337,54 @@ def kfeat_schi2_transform_binding(p: PythonObject, a: PythonObject, f: PythonObj
     var nz = n * nc
     if nx > 2147483647 or nz > 2147483647:
         raise Error("x_neighbors_kfeat_schi2_transform: more than 2^31 - 1 cells")
-    var xp = FP(unsafe_from_address=Int(py=a[0]))
-    var wzp = FP(unsafe_from_address=Int(py=a[1]))
-    var wop = FP(unsafe_from_address=Int(py=a[2]))
-    var offp = FP(unsafe_from_address=Int(py=a[3]))
-    var outp = FP(unsafe_from_address=Int(py=a[4]))
-    var skew = Float32(Float64(py=f[0]))
-    with GILReleased(Python()):
-        var ctx = xn_ctx()
-        var dx = pool_take["MojoXNeighborsKfeatSkewTX"](ctx, nx)
-        var dl = pool_take["MojoXNeighborsKfeatSkewTL"](ctx, nx)
-        var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, nw)
-        var doff = pool_take["MojoXNeighborsKfeatSkewTO"](ctx, nc)
-        var dres = pool_take["MojoXNeighborsKfeatSkewTR"](ctx, nz)
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=xp)
-        # main's `_unary(X, _U_LOG, 1.0, skewedness)`: log(1 * x + skewedness)
-        ctx.enqueue_function[unary_kernel](
-            dx.unsafe_ptr(), dl.unsafe_ptr(), Int64(nx), Int64(U_LOG), Float32(1.0), skew,
-            grid_dim=_grid(nx), block_dim=(BLOCK if nx > 1 else 1),
+    var xp = FP(unsafe_from_address=x_addr)
+    var wzp = FP(unsafe_from_address=wz_addr)
+    var wop = FP(unsafe_from_address=w_out)
+    var offp = FP(unsafe_from_address=off_addr)
+    var outp = FP(unsafe_from_address=out_addr)
+    var skew = Float32(skewedness)
+    var ctx = xn_ctx()
+    var dx = pool_take["MojoXNeighborsKfeatSkewTX"](ctx, nx)
+    var dl = pool_take["MojoXNeighborsKfeatSkewTL"](ctx, nx)
+    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, nw)
+    var doff = pool_take["MojoXNeighborsKfeatSkewTO"](ctx, nc)
+    var dres = pool_take["MojoXNeighborsKfeatSkewTR"](ctx, nz)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=xp)
+    # main's `_unary(X, _U_LOG, 1.0, skewedness)`: log(1 * x + skewedness)
+    ctx.enqueue_function[unary_kernel](
+        dx.unsafe_ptr(), dl.unsafe_ptr(), Int64(nx), Int64(U_LOG), Float32(1.0), skew,
+        grid_dim=_grid(nx), block_dim=(BLOCK if nx > 1 else 1),
+    )
+    if pending:
+        var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, nw)
+        ctx.enqueue_copy(dst_buf=dz, src_ptr=wzp)
+        ctx.enqueue_function[skew_weights_kernel](
+            dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(nw),
+            grid_dim=_grid(nw), block_dim=(BLOCK if nw > 1 else 1),
         )
-        if pending:
-            var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, nw)
-            ctx.enqueue_copy(dst_buf=dz, src_ptr=wzp)
-            ctx.enqueue_function[skew_weights_kernel](
-                dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(nw),
-                grid_dim=_grid(nw), block_dim=(BLOCK if nw > 1 else 1),
-            )
-            ctx.enqueue_copy(dst_ptr=wop, src_buf=dw)
-            ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
-            ctx.enqueue_function[skew_transform_kernel](
-                dl.unsafe_ptr(), dw.unsafe_ptr(), doff.unsafe_ptr(), dres.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
-                grid_dim=_grid(nz), block_dim=(BLOCK if nz > 1 else 1),
-            )
-            ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
-            ctx.synchronize()
-            pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
-        else:
-            ctx.enqueue_copy(dst_buf=dw, src_ptr=wzp)
-            ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
-            ctx.enqueue_function[skew_transform_kernel](
-                dl.unsafe_ptr(), dw.unsafe_ptr(), doff.unsafe_ptr(), dres.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
-                grid_dim=_grid(nz), block_dim=(BLOCK if nz > 1 else 1),
-            )
-            ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
-            ctx.synchronize()
-        pool_give["MojoXNeighborsKfeatSkewTX"](dx^)
-        pool_give["MojoXNeighborsKfeatSkewTL"](dl^)
-        pool_give["MojoXNeighborsKfeatSkewW"](dw^)
-        pool_give["MojoXNeighborsKfeatSkewTO"](doff^)
-        pool_give["MojoXNeighborsKfeatSkewTR"](dres^)
-    return PythonObject(0)
+        ctx.enqueue_copy(dst_ptr=wop, src_buf=dw)
+        ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
+        ctx.enqueue_function[skew_transform_kernel](
+            dl.unsafe_ptr(), dw.unsafe_ptr(), doff.unsafe_ptr(), dres.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
+            grid_dim=_grid(nz), block_dim=(BLOCK if nz > 1 else 1),
+        )
+        ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
+        ctx.synchronize()
+        pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
+    else:
+        ctx.enqueue_copy(dst_buf=dw, src_ptr=wzp)
+        ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
+        ctx.enqueue_function[skew_transform_kernel](
+            dl.unsafe_ptr(), dw.unsafe_ptr(), doff.unsafe_ptr(), dres.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
+            grid_dim=_grid(nz), block_dim=(BLOCK if nz > 1 else 1),
+        )
+        ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
+        ctx.synchronize()
+    pool_give["MojoXNeighborsKfeatSkewTX"](dx^)
+    pool_give["MojoXNeighborsKfeatSkewTL"](dl^)
+    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+    pool_give["MojoXNeighborsKfeatSkewTO"](doff^)
+    pool_give["MojoXNeighborsKfeatSkewTR"](dres^)
 
 
 # ------------------------------------------------------- IDENTICAL sketch draws
@@ -429,67 +412,58 @@ def kfeat_pcs_draw_idn_kernel(idx: IP, sgn: IP, seed: UInt32, nc_: Int64, total_
         kfeat_pcs_draw_item(t, seed, Int(nc_), idx, sgn)
 
 
-def kfeat_schi2_fit_idn_binding(p: PythonObject, w_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
+def kfeat_schi2_fit_idn(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) raises:
     """p = [seed & 2^32-1, d, n_components]: `random_weights_` (d x nc
     float32 at w_out) and `random_offset_` (nc at off_out). The draws, then
-    main's `skew_weights_kernel` on z, both on the device; one wait.
-    Returns 0."""
-    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
-    var d = Int(py=p[1])
-    var nc = Int(py=p[2])
+    main's `skew_weights_kernel` on z, both on the device; one wait."""
+    var seed = UInt32(seed_word & 0xFFFFFFFF)
     if d <= 0 or nc <= 0:
         raise Error("x_neighbors_kfeat_schi2_fit_idn: n_features and n_components must be positive")
     if d * nc > 2147483647:
         raise Error("x_neighbors_kfeat_schi2_fit_idn: more than 2^31 - 1 draws")
     var count = d * nc
-    var wp = FP(unsafe_from_address=Int(py=w_out))
-    var op = FP(unsafe_from_address=Int(py=off_out))
-    with GILReleased(Python()):
-        var ctx = xn_ctx()
-        var dz = ctx.enqueue_create_buffer[DType.float32](count)
-        var dw = ctx.enqueue_create_buffer[DType.float32](count)
-        var doff = ctx.enqueue_create_buffer[DType.float32](nc)
-        ctx.enqueue_function[kfeat_schi2_draw_idn_kernel](
-            dz.unsafe_ptr(), doff.unsafe_ptr(), seed, Int64(count), Int64(nc),
-            grid_dim=_grid(count + nc), block_dim=BLOCK,
-        )
-        ctx.enqueue_function[skew_weights_kernel](
-            dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
-            grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
-        )
-        ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
-        ctx.enqueue_copy(dst_ptr=op, src_buf=doff)
-        ctx.synchronize()
-        _ = dz^
-        _ = dw^
-        _ = doff^
-    return PythonObject(0)
+    var wp = FP(unsafe_from_address=w_out)
+    var op = FP(unsafe_from_address=off_out)
+    var ctx = xn_ctx()
+    var dz = ctx.enqueue_create_buffer[DType.float32](count)
+    var dw = ctx.enqueue_create_buffer[DType.float32](count)
+    var doff = ctx.enqueue_create_buffer[DType.float32](nc)
+    ctx.enqueue_function[kfeat_schi2_draw_idn_kernel](
+        dz.unsafe_ptr(), doff.unsafe_ptr(), seed, Int64(count), Int64(nc),
+        grid_dim=_grid(count + nc), block_dim=BLOCK,
+    )
+    ctx.enqueue_function[skew_weights_kernel](
+        dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
+    ctx.enqueue_copy(dst_ptr=op, src_buf=doff)
+    ctx.synchronize()
+    _ = dz^
+    _ = dw^
+    _ = doff^
 
 
-def kfeat_pcs_draw_idn_binding(p: PythonObject, idx_out: PythonObject, sgn_out: PythonObject) raises -> PythonObject:
+def kfeat_pcs_draw_idn(seed_word: Int, nc: Int, total: Int, idx_out: Int, sgn_out: Int) raises:
     """p = [seed & 2^32-1, n_components, degree * n_features]: `indexHash_`
     and `bitHash_` (int32, flat) at idx_out / sgn_out, drawn on the device;
-    one wait. Returns 0."""
-    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
-    var nc = Int(py=p[1])
-    var total = Int(py=p[2])
+    one wait."""
+    var seed = UInt32(seed_word & 0xFFFFFFFF)
     if nc <= 0 or total <= 0:
         raise Error("x_neighbors_kfeat_pcs_draw_idn: sizes must be positive")
     if total > 2147483647:
         raise Error("x_neighbors_kfeat_pcs_draw_idn: more than 2^31 - 1 draws")
-    var ip = IP(unsafe_from_address=Int(py=idx_out))
-    var sp = IP(unsafe_from_address=Int(py=sgn_out))
-    with GILReleased(Python()):
-        var ctx = xn_ctx()
-        var didx = ctx.enqueue_create_buffer[DType.int32](total)
-        var dsgn = ctx.enqueue_create_buffer[DType.int32](total)
-        ctx.enqueue_function[kfeat_pcs_draw_idn_kernel](
-            didx.unsafe_ptr(), dsgn.unsafe_ptr(), seed, Int64(nc), Int64(total),
-            grid_dim=_grid(total), block_dim=BLOCK,
-        )
-        ctx.enqueue_copy(dst_ptr=ip, src_buf=didx)
-        ctx.enqueue_copy(dst_ptr=sp, src_buf=dsgn)
-        ctx.synchronize()
-        _ = didx^
-        _ = dsgn^
-    return PythonObject(0)
+    var ip = IP(unsafe_from_address=idx_out)
+    var sp = IP(unsafe_from_address=sgn_out)
+    var ctx = xn_ctx()
+    var didx = ctx.enqueue_create_buffer[DType.int32](total)
+    var dsgn = ctx.enqueue_create_buffer[DType.int32](total)
+    ctx.enqueue_function[kfeat_pcs_draw_idn_kernel](
+        didx.unsafe_ptr(), dsgn.unsafe_ptr(), seed, Int64(nc), Int64(total),
+        grid_dim=_grid(total), block_dim=BLOCK,
+    )
+    ctx.enqueue_copy(dst_ptr=ip, src_buf=didx)
+    ctx.enqueue_copy(dst_ptr=sp, src_buf=dsgn)
+    ctx.synchronize()
+    _ = didx^
+    _ = dsgn^

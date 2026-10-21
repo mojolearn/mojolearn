@@ -12,7 +12,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from core.py2mojo_rows import py2mojo_rows_device_binding
+from core.py2mojo_rows_pyapi import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 from x_linear.spearman_device import spearman_sign_device
 from x_linear.device import linear_ctx as _p2m_ctx

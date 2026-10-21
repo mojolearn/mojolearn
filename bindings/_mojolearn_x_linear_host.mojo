@@ -9,7 +9,7 @@ from x_linear.enetcv_blocks import fb_host_words
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from core.py2mojo_rows import py2mojo_rows_host_binding
+from core.py2mojo_rows_pyapi import py2mojo_rows_host_binding
 from svm.host.scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE

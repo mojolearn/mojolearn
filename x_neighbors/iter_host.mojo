@@ -13,7 +13,6 @@ from gemm.host.gemm_oracle import gemm_oracle
 from gemm.contract import OP_TN as _SVGP_OP_TN
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from std.python import PythonObject
 
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
@@ -643,7 +642,7 @@ def op_lp_iterate_knn(
     _ = hs^
 
 
-def lp_fast_resident_binding() raises -> PythonObject:
+def lp_fast_resident() -> Int:
     """The host column never takes the resident kNN-graph loop by default
     (LP_FAST_RESIDENT is FAST + Apple; the Python loop runs here)."""
-    return PythonObject(0)
+    return 0

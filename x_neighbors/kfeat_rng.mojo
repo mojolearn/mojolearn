@@ -42,7 +42,6 @@ Nothing here imports a GPU module, so the CPU-only host binding compiles it
 `kfeat_dev.mojo`).
 """
 
-from std.python import PythonObject
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 from x_neighbors.items import FP, IP, skew_weights_item
@@ -133,38 +132,3 @@ def op_kfeat_schi2_fit_idn_host(seed: UInt32, d: Int, nc: Int, w: FP, off: FP):
 def op_kfeat_pcs_draw_idn_host(seed: UInt32, nc: Int, total: Int, idx: IP, sgn: IP):
     for t in range(total):
         kfeat_pcs_draw_item(t, seed, nc, idx, sgn)
-
-
-def _kfeat_args(p: PythonObject, what: String) raises -> Tuple[UInt32, Int, Int]:
-    var seed = UInt32(Int(py=p[0]) & 0xFFFFFFFF)
-    var a = Int(py=p[1])
-    var b = Int(py=p[2])
-    if a <= 0 or b <= 0:
-        raise Error("x_neighbors_" + what + ": sizes must be positive")
-    if a * b > 2147483647:
-        raise Error("x_neighbors_" + what + ": more than 2^31 - 1 draws")
-    return (seed, a, b)
-
-
-def kfeat_schi2_fit_idn_host_binding(p: PythonObject, w_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
-    """p = [seed & 2^32-1, d, n_components]: `random_weights_` (d x nc float32
-    at w_out) and `random_offset_` (nc at off_out). Returns 0."""
-    var a = _kfeat_args(p, "kfeat_schi2_fit_idn")
-    var w = FP(unsafe_from_address=Int(py=w_out))
-    var off = FP(unsafe_from_address=Int(py=off_out))
-    if Int(w) == 0 or Int(off) == 0:
-        raise Error("x_neighbors_kfeat_schi2_fit_idn: null buffer address")
-    op_kfeat_schi2_fit_idn_host(a[0], a[1], a[2], w, off)
-    return PythonObject(0)
-
-
-def kfeat_pcs_draw_idn_host_binding(p: PythonObject, idx_out: PythonObject, sgn_out: PythonObject) raises -> PythonObject:
-    """p = [seed & 2^32-1, n_components, degree * n_features]: `indexHash_`
-    and `bitHash_` (int32, flat) at idx_out / sgn_out. Returns 0."""
-    var a = _kfeat_args(p, "kfeat_pcs_draw_idn")
-    var idx = IP(unsafe_from_address=Int(py=idx_out))
-    var sgn = IP(unsafe_from_address=Int(py=sgn_out))
-    if Int(idx) == 0 or Int(sgn) == 0:
-        raise Error("x_neighbors_kfeat_pcs_draw_idn: null buffer address")
-    op_kfeat_pcs_draw_idn_host(a[0], a[1], a[2], idx, sgn)
-    return PythonObject(0)
