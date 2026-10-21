@@ -1,0 +1,73 @@
+{
+  "source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+  "tokenizer_freeze": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+  "sequence_freeze": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-cc0591cc453fbf0d17f2feffe4e17a290160f7ed",
+  "reuse_proof": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/validation-stage58/closure-reuse.json",
+  "source_overlay_includes_other_retained_binaries": true,
+  "public_classical_activated": false,
+  "whole_library_native_qualified": false,
+  "installed_wheel_qualified": false,
+  "results": [
+    {
+      "scope": "classical-corrected",
+      "vendor": "cpu",
+      "passed": 67,
+      "failed": 0,
+      "skipped": 0,
+      "source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+      "report": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stage58-classical-corrected-cpu-summary.json"
+    },
+    {
+      "scope": "classical-corrected",
+      "vendor": "metal",
+      "passed": 67,
+      "failed": 0,
+      "skipped": 0,
+      "source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+      "report": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stage58-classical-corrected-metal-summary.json"
+    },
+    {
+      "scope": "torch-modes",
+      "vendor": "cpu",
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+      "report": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stage58-torch-modes-cpu-summary.json"
+    },
+    {
+      "scope": "torch-modes",
+      "vendor": "metal",
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+      "report": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stage58-torch-modes-metal-summary.json"
+    },
+    {
+      "scope": "public-regressions",
+      "vendor": "cpu",
+      "passed": 112,
+      "failed": 0,
+      "skipped": 10,
+      "source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+      "report": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stage58-public-regressions-cpu-summary.json"
+    },
+    {
+      "scope": "public-regressions",
+      "vendor": "metal",
+      "passed": 122,
+      "failed": 0,
+      "skipped": 0,
+      "source_commit": "72f11f70dd6774ab25a776cf745fdb6b7b6f0478",
+      "report": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/stage58-public-regressions-metal-summary.json"
+    }
+  ],
+  "retention": {
+    "key": "measurements/core-completion/2026-10-20/native-runtime/stages51-58-artifacts.tgz",
+    "sha256": "b656dfb06605a34af012bcfac737d3a430642927c25b86e698f3ae35796a529c",
+    "bytes": 49091078,
+    "full_get_verified": true
+  },
+  "known_graph_blocker": "The retained native session lifetime check still exposes the separately reproduced Modular PythonObject ownership issue; these selected checks do not resolve it."
+}
