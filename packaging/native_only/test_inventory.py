@@ -101,3 +101,9 @@ def test_sequence_optimizer_engine_witness_does_not_admit_public_or_uncovered_ow
     for name in ("mojolearn.Adafactor", "mojolearn.LAMB"):
         assert rows[name]["status"] != "ready"
         assert not rows[name]["cases"]
+
+
+def test_model_inventory_matches_the_current_branch_exports():
+    path = "python/mojolearn/models/__init__.py"
+    actual = set(INVENTORY.explicit_exports(ROOT / path))
+    assert set(manifest()["inventory_sources"][path]) == actual
