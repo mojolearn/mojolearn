@@ -501,9 +501,10 @@ up)
         [ "${MOJOLEARN_DEVPOD_VIA_CENTRAL:-0}" = 1 ] || [ "${MOJOLEARN_DEVPOD_OWN_NVIDIA:-0}" = 1 ] \
             || die "lanes do not rent NVIDIA pods: use the shared pods (tools/nvidia_central.sh sync/submit; the pods come up with tools/nvidia_central.sh up). MOJOLEARN_DEVPOD_OWN_NVIDIA=1 only with explicit approval"
         _live=$(curl -s -m 20 -H "Content-Type: application/json" -H "Authorization: Bearer $(cat "$HOME/.mojolearn_runpod_key" 2>/dev/null)" https://api.runpod.io/graphql \
-            -d '{"query":"query { myself { pods { id } } }"}' | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["data"]["myself"]["pods"]))' 2>/dev/null)
+            -d '{"query":"query { myself { pods { id name } } }"}' | python3 -c 'import sys,json; print(sum(1 for p in json.load(sys.stdin)["data"]["myself"]["pods"] if str(p.get("name","")).startswith("mojolearn-")))' 2>/dev/null)
+        # The cap counts mojolearn's own pods (named mojolearn-*): the account is shared with other projects' fleets.
         [ -n "$_live" ] || die "could not count live RunPod pods; refusing to rent (cap $MAX_RUNPOD_PODS)"
-        [ "$_live" -lt "$MAX_RUNPOD_PODS" ] || die "$_live RunPod pods are live and the cap is $MAX_RUNPOD_PODS (MOJOLEARN_DEVPOD_MAX_PODS); share a pod or bring one down"
+        [ "$_live" -lt "$MAX_RUNPOD_PODS" ] || die "$_live mojolearn RunPod pods are live and the cap is $MAX_RUNPOD_PODS (MOJOLEARN_DEVPOD_MAX_PODS); share a pod or bring one down"
     fi
     if [ "$VENDOR" = amd ] && [ -f "$HD/state.env" ] && [ "${MOJOLEARN_DEVPOD_NO_HOST:-0}" != 1 ]; then
         mkdir -p "$HD/slots"
