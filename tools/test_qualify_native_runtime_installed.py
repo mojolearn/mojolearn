@@ -7,6 +7,8 @@ import importlib.util
 import io
 from pathlib import Path
 import tempfile
+import subprocess
+import shutil
 import types
 import unittest
 import zipfile
@@ -94,6 +96,24 @@ class InstalledNativeAudit(unittest.TestCase):
         test.__file__ = str(self.root / "unchecked-test.py")
         with self.assertRaisesRegex(ValueError, "test namespace escaped"):
             q.installed_module_inventory(modules, prefix, payload, tests)
+
+    def test_archived_freeze_uses_real_git_objects_and_refuses_changed_source(self):
+        repo = self.root / "repo";repo.mkdir()
+        source_file = repo / "python/mojolearn/__init__.py"
+        source_file.parent.mkdir(parents=True);source_file.write_text("source\n")
+        for args in (["init", "-q"], ["add", "."],
+                     ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "fixture"]):
+            subprocess.run(["git", "-C", str(repo)] + list(args), check=True, capture_output=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        frozen = self.root / "frozen";shutil.copytree(repo / "python", frozen / "python")
+        artifact = self.root / "witness.whl";witness = "mojolearn/identity_columns/COMMIT"
+        with zipfile.ZipFile(artifact, "w") as archive:archive.writestr(witness, commit + "\n")
+        payload = {witness:dict(wheel=str(artifact)),
+                   "mojolearn/__init__.py":dict(sha256=q.digest(source_file))}
+        self.assertEqual(len(q.source_match(frozen, commit, [artifact], payload, repo)), 1)
+        (frozen / "python/mojolearn/__init__.py").write_text("changed\n")
+        with self.assertRaisesRegex(ValueError, "wheel/source Python mismatch"):
+            q.source_match(frozen, commit, [artifact], payload, repo)
 
     def test_original_failure_and_skip_are_kept_distinct(self):
         path = self.root / "tests.xml"

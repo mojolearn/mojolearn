@@ -82,9 +82,10 @@ def wheel_inventory(wheels):
     return payload, records
 
 
-def source_match(source, commit, wheels, payload):
-    require(subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"],
-                                    text=True).strip() == commit, "source checkout is not requested freeze")
+def source_match(source, commit, wheels, payload, git_root=None):
+    git_root = Path(git_root or source)
+    subprocess.run(["git", "-C", str(git_root), "cat-file", "-e", commit + "^{commit}"],
+                   check=True, capture_output=True)
     witness = "mojolearn/identity_columns/COMMIT"
     require(witness in payload, "wheel source witness missing")
     with zipfile.ZipFile(payload[witness]["wheel"]) as archive:
@@ -94,7 +95,7 @@ def source_match(source, commit, wheels, payload):
         path = source / "python" / member
         if member.startswith("mojolearn/") and member.endswith(".py") and path.is_file():
             require(digest(path) == row["sha256"], "wheel/source Python mismatch: " + member)
-            blob = subprocess.check_output(["git", "-C", str(source), "show", commit + ":python/" + member])
+            blob = subprocess.check_output(["git", "-C", str(git_root), "show", commit + ":python/" + member])
             require(hashlib.sha256(blob).hexdigest() == row["sha256"], "uncommitted package source: " + member)
             matched[member] = row["sha256"]
     return matched
@@ -196,6 +197,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--git-root", type=Path, help="authoritative object database for an archived frozen source tree")
     parser.add_argument("--wheel", type=Path, action="append", default=[])
     parser.add_argument("--installed-site", type=Path)
     parser.add_argument("--native-overlay", type=Path)
@@ -209,6 +211,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
     source, out = args.source_root.resolve(), args.out.resolve()
+    git_root = (args.git_root or source).resolve()
     require(not out.exists() and not out.is_relative_to(source), "output must be new and outside source")
     require(bool(args.wheel) != bool(args.installed_site), "supply wheels OR installed-site for Linux assembly")
     require(args.numeric_mode != "fast" or args.vendor == "metal", "fast is Apple only")
@@ -239,7 +242,7 @@ def main():
                                                sha256=digest(out / "wheels/qualification-inputs.json"))
             wheels = [Path(row["path"]) for row in manifest["wheels"]]
         payload, report["wheels"] = wheel_inventory(wheels)
-        report["package_source_hashes"] = source_match(source, args.source_commit, wheels, payload)
+        report["package_source_hashes"] = source_match(source, args.source_commit, wheels, payload, git_root)
         report["native_assets"] = {name:row for name,row in payload.items()
                                     if name.startswith("mojolearn/") and name.endswith((".so", ".dylib"))}
         report["supplied_native_proofs"] = [dict(path=str(p.resolve()), sha256=digest(p)) for p in args.native_proof]
@@ -250,7 +253,7 @@ def main():
         tests = out / "frozen-tests"
         shutil.copytree(source / "python/mojolearn/tests", tests,
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        tree = subprocess.check_output(["git", "-C", str(source), "ls-tree", "-r", "-z", args.source_commit])
+        tree = subprocess.check_output(["git", "-C", str(git_root), "ls-tree", "-r", "-z", args.source_commit])
         committed = {}
         for row in tree.split(b"\0"):
             if row:

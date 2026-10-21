@@ -39,6 +39,10 @@ python3 tools/qualify_native_runtime_installed.py \
   --vendor metal --out /absolute/new-installed-audit
 ```
 
+For a frozen source archive without `.git`, add `--git-root /absolute/repository`
+to verify its bytes against that repository's real commit objects; the current
+checkout HEAD need not be the archived commit. No fake Git metadata is created.
+
 Both routes require a new output directory. Every wheel RECORD entry is checked;
 shipped package Python source must match the requested committed freeze. Source
 and test hashes, native asset hashes, original build-proof bytes, full pip logs,
@@ -67,7 +71,7 @@ not establish whole-library coverage, multi-GPU evidence, all vendor identity,
 or the provenance of a mixed retained binary set. Review the supplied original
 native receipts and observed loaded hashes separately.
 
-Controller validation: six file-only negative-control tests cover tampered or
+Controller validation: seven file-only negative-control tests cover tampered or
 unrecorded wheel bytes, duplicate split ownership, source imports, unshipped
 cached extensions, altered installed bytes, escaping test modules, and distinct
 preservation of test failures/skips. Actual installed public-runtime execution
