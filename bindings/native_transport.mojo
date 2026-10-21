@@ -10,6 +10,7 @@ work runs here and no architecture identity is inferred from transport.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from std.math import isfinite
@@ -56,7 +57,7 @@ comptime TRANSPORT_BOUNDARY = _Global[
 
 def _transport_builtin(entry: PythonObject) raises -> PythonObject:
     var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
-    if bi.type(entry) is not bi.type(bi.len):
+    if py_type(entry) is not py_type(bi.len):
         raise Error("transport: operation must be a compiled C builtin")
     return entry
 
@@ -68,7 +69,7 @@ def transport_initialize() raises:
     var processes = Python.import_module("posix")
     var time = Python.import_module("time")
     t[].socket = sockets.socket
-    if t[].bi.type(t[].socket) is not t[].bi.type or String(t[].socket.__module__) != "_socket":
+    if py_type(t[].socket) is not t[].bi.type or String(t[].socket.__module__) != "_socket":
         raise Error("transport: socket owner must be the native socket type")
     t[].getaddrinfo = _transport_builtin(sockets.getaddrinfo)
     t[].spawn = _transport_builtin(processes.posix_spawnp)
@@ -91,7 +92,7 @@ def transport_clock() raises -> Float64:
 def transport_sleep(seconds: Float64) raises:
     if seconds < 0 or not isfinite(seconds):
         raise Error("transport: invalid sleep interval")
-    _ = TRANSPORT_BOUNDARY.get_or_create_ptr()[].sleep(seconds)
+    _ = py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].sleep, seconds)
 
 
 def _transport_timeout(seconds: Float64) raises:
@@ -104,15 +105,15 @@ def transport_listen(host: String, port: Int, timeout: Float64) raises -> Python
     if port < 0 or port > 65535:
         raise Error("transport: port outside [0, 65535]")
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    var addresses = t[].getaddrinfo(PythonObject(None) if host == "" else idna_encode(PythonObject(host)),
-                                  port, 0, 1, 0, t[].passive)
+    var addresses = py_call(t[].getaddrinfo, PythonObject(None) if host == "" else idna_encode(PythonObject(host)),
+                            port, 0, 1, 0, t[].passive)
     for i in range(len(addresses)):  # driver-loop: over resolved network endpoints
         var row = addresses[i]
-        var socket = t[].socket(row[0], row[1], row[2])
+        var socket = py_call(t[].socket, row[0], row[1], row[2])
         try:
-            socket.setsockopt(t[].sol_socket, t[].reuse_address, 1)
-            socket.settimeout(timeout)
-            socket.bind(_transport_endpoint(row[4]))
+            _ = py_call(socket.setsockopt, t[].sol_socket, t[].reuse_address, 1)
+            _ = py_call(socket.settimeout, timeout)
+            _ = py_call(socket.bind, _transport_endpoint(row[4]))
             socket.listen()
             return socket
         except:
@@ -125,13 +126,13 @@ def transport_listen(host: String, port: Int, timeout: Float64) raises -> Python
 def transport_accept(server: PythonObject, timeout: Float64) raises -> PythonObject:
     _transport_timeout(timeout)
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    if t[].bi.type(server) is not t[].socket:
+    if py_type(server) is not t[].socket:
         raise Error("transport: listener is not a native socket")
     var accepted = server._accept()
     # _socket.socket is the C owner. The fourth positional argument adopts
     # the accepted fd, with no socket.py object construction or accept wrapper.
-    var socket = t[].socket(server.family, server.type, server.proto, accepted[0])
-    socket.settimeout(timeout)
+    var socket = py_call(t[].socket, server.family, server.type, server.proto, accepted[0])
+    _ = py_call(socket.settimeout, timeout)
     return socket
 
 
@@ -140,13 +141,13 @@ def transport_connect(host: String, port: Int, timeout: Float64) raises -> Pytho
     if port < 1 or port > 65535:
         raise Error("transport: remote port outside [1, 65535]")
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    var addresses = t[].getaddrinfo(idna_encode(PythonObject(host)), port, 0, 1)
+    var addresses = py_call(t[].getaddrinfo, idna_encode(PythonObject(host)), port, 0, 1)
     for i in range(len(addresses)):  # driver-loop: over resolved network endpoints
         var row = addresses[i]
-        var socket = t[].socket(row[0], row[1], row[2])
+        var socket = py_call(t[].socket, row[0], row[1], row[2])
         try:
-            socket.settimeout(timeout)
-            socket.connect(_transport_endpoint(row[4]))
+            _ = py_call(socket.settimeout, timeout)
+            _ = py_call(socket.connect, _transport_endpoint(row[4]))
             return socket
         except:
             socket.close()
@@ -160,25 +161,25 @@ def _transport_endpoint(address: PythonObject) raises -> PythonObject:
     # socket address parser avoids invoking Python's IDNA codec again while
     # preserving IPv4/IPv6 port, flowinfo and scope-id fields exactly.
     var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
-    var fields = bi.list(address)
-    fields[0] = fields[0].encode("ascii")
-    return bi.tuple(fields)
+    var fields = py_call(bi.list, address)
+    py_setitem(fields, 0, py_call(fields[0].encode, "ascii"))
+    return py_call(bi.tuple, fields)
 
 
 def transport_close(socket: PythonObject) raises:
     if socket is not None:
-        TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket.close(socket)
+        _ = py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket.close, socket)
 
 
 def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
     if depth > 64:
         raise Error("transport: JSON header nesting exceeds 64")
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    var cls = t[].bi.type(value)
+    var cls = py_type(value)
     if value is None:
         return "null"
     if cls is t[].bi.str:
-        return String(t[].json_string(value))
+        return String(py_call(t[].json_string, value))
     if cls is t[].bi.bool:
         return "true" if Bool(py=value) else "false"
     if cls is t[].bi.int:
@@ -196,58 +197,58 @@ def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
             result += _transport_json(value[i], depth + 1)
         return result + "]"
     if cls is t[].bi.dict:
-        var keys = t[].bi.list(value)
+        var keys = py_call(t[].bi.list, value)
         for i in range(len(keys)):  # driver-loop: over header object keys
-            if t[].bi.type(keys[i]) is not t[].bi.str:
+            if py_type(keys[i]) is not t[].bi.str:
                 raise Error("transport: JSON header keys must be strings")
-        keys = t[].bi.sorted(keys)
+        keys = py_call(t[].bi.sorted, keys)
         result += "{"
         for i in range(len(keys)):  # driver-loop: over header object fields
             if i != 0:
                 result += ","
-            result += String(t[].json_string(keys[i])) + ":" + _transport_json(value[keys[i]], depth + 1)
+            result += String(py_call(t[].json_string, keys[i])) + ":" + _transport_json(value[keys[i]], depth + 1)
         return result + "}"
     raise Error("transport: JSON header contains an unsupported object")
 
 
 def transport_send(socket: PythonObject, header: PythonObject, payload: PythonObject) raises:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    if not Bool(py=t[].bi.isinstance(socket, t[].socket)) or t[].bi.type(header) is not t[].bi.dict:
+    if not Bool(py=py_call(t[].bi.isinstance, socket, t[].socket)) or py_type(header) is not t[].bi.dict:
         raise Error("transport: send requires a native socket and dict header")
-    var bytes = t[].bi.bytes() if payload is None else t[].bi.memoryview(payload).cast("B")
-    var envelope = t[].bi.dict(header)
-    envelope["nbytes"] = PythonObject(len(bytes))
-    var raw = PythonObject(_transport_json(envelope)).encode("ascii")
+    var bytes = t[].bi.bytes() if payload is None else py_call(py_call(t[].bi.memoryview, payload).cast, "B")
+    var envelope = py_call(t[].bi.dict, header)
+    py_setitem(envelope, "nbytes", PythonObject(len(bytes)))
+    var raw = py_call(PythonObject(_transport_json(envelope)).encode, "ascii")
     var n = len(raw)
     if n > (1 << 20):
         raise Error("transport: oversized header")
-    var prefix = t[].bi.bytearray(4)
+    var prefix = py_call(t[].bi.bytearray, 4)
     for i in range(4):  # small-loop(the 4-byte frame length word)
-        prefix[i] = PythonObject((n >> (24 - i * 8)) & 255)
-    t[].socket.sendall(socket, prefix)
-    t[].socket.sendall(socket, raw)
+        py_setitem(prefix, i, PythonObject((n >> (24 - i * 8)) & 255))
+    _ = py_call(t[].socket.sendall, socket, prefix)
+    _ = py_call(t[].socket.sendall, socket, raw)
     if len(bytes) != 0:
-        t[].socket.sendall(socket, bytes)
+        _ = py_call(t[].socket.sendall, socket, bytes)
 
 
 def _transport_exact(socket: PythonObject, count: Int) raises -> PythonObject:
     if count < 0:
         raise Error("transport: negative receive size")
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    var owner = t[].bi.bytearray(count)
-    var view = t[].bi.memoryview(owner)
+    var owner = py_call(t[].bi.bytearray, count)
+    var view = py_call(t[].bi.memoryview, owner)
     var received = 0
     while received < count:  # driver-loop: over bytes received for one native frame
-        var got = Int(py=t[].socket.recv_into(socket, view[t[].bi.slice(received, count)], count - received))
+        var got = Int(py=py_call(t[].socket.recv_into, socket, view[py_call(t[].bi.slice, received, count)], count - received))
         if got <= 0:
             raise Error("transport: peer closed the connection")
         received += got
-    return t[].bi.bytes(owner)
+    return py_call(t[].bi.bytes, owner)
 
 
 def transport_receive(socket: PythonObject, max_payload: Int) raises -> PythonObject:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    if not Bool(py=t[].bi.isinstance(socket, t[].socket)) or max_payload < 0:
+    if not Bool(py=py_call(t[].bi.isinstance, socket, t[].socket)) or max_payload < 0:
         raise Error("transport: receive requires a native socket and nonnegative bound")
     var prefix = _transport_exact(socket, 4)
     var count = 0
@@ -256,18 +257,18 @@ def transport_receive(socket: PythonObject, max_payload: Int) raises -> PythonOb
     if count > (1 << 20):
         raise Error("transport: oversized header")
     var header = native_json_parse(_transport_exact(socket, count))
-    if t[].bi.type(header) is not t[].bi.dict:
+    if py_type(header) is not t[].bi.dict:
         raise Error("transport: framed header must be an object")
-    var raw_count = header.get("nbytes", PythonObject(0))
-    if t[].bi.type(raw_count) is not t[].bi.int:
+    var raw_count = py_get(header, "nbytes", PythonObject(0))
+    if py_type(raw_count) is not t[].bi.int:
         raise Error("transport: payload size must be an integer")
     var n = Int(py=raw_count)
     if n < 0 or n > max_payload:
         raise Error("transport: payload exceeds caller bound")
     var result = t[].bi.list()
-    result.append(header)
-    result.append(_transport_exact(socket, n))
-    return t[].bi.tuple(result)
+    _ = py_call(result.append, header)
+    _ = py_call(result.append, _transport_exact(socket, n))
+    return py_call(t[].bi.tuple, result)
 
 
 def transport_spawn(executable: String, argv: List[String], environment: List[String]) raises -> Int:
@@ -277,30 +278,30 @@ def transport_spawn(executable: String, argv: List[String], environment: List[St
     var args = t[].bi.list()
     var env = t[].bi.dict()
     for i in range(len(argv)):  # driver-loop: over native process argument records
-        args.append(PythonObject(argv[i]))
+        _ = py_call(args.append, PythonObject(argv[i]))
     for i in range(len(environment)):  # driver-loop: over native process environment records
-        var pair = PythonObject(environment[i]).partition("=")
+        var pair = py_call(PythonObject(environment[i]).partition, "=")
         if String(pair[1]) != "=" or String(pair[0]) == "":
             raise Error("transport: environment entry must be NAME=value")
-        env[pair[0]] = pair[2]
+        py_setitem(env, pair[0], pair[2])
     # posix.posix_spawnp is the native C entry exposed by os.posix_spawnp,
     # checked during initialization; it directly performs supported POSIX
     # spawn, with no shell, Python child callback or interpreter worker loop.
-    return Int(py=t[].spawn(PythonObject(executable), args, env))
+    return Int(py=py_call(t[].spawn, PythonObject(executable), args, env))
 
 
 def transport_wait(pid: Int, nohang: Bool = False) raises -> Int:
     if pid <= 0:
         raise Error("transport: invalid child process ID")
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    var result = t[].wait(pid, t[].nohang if nohang else 0)
+    var result = py_call(t[].wait, pid, t[].nohang if nohang else 0)
     return -1 if Int(py=result[0]) == 0 else Int(py=result[1])
 
 
 def transport_terminate(pid: Int, signal: Int = 15) raises:
     if pid <= 0 or signal <= 0:
         raise Error("transport: invalid process ID or signal")
-    _ = TRANSPORT_BOUNDARY.get_or_create_ptr()[].kill(pid, signal)
+    _ = py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].kill, pid, signal)
 
 
 def transport_call(operation: String, args: PythonObject) raises -> PythonObject:
