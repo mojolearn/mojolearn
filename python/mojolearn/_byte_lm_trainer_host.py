@@ -50,6 +50,12 @@ WHAT IS RESTATED FROM THE DEVICE SIDE, and nothing more:
                        DEVIATION 3101); Python never loops over parameters,
                        moments, logits or ids here.
 
+THE TRAINER OWNER ENTRIES (`byte_lm_trainer_*`, lane neural-byte-lm-trainer,
+2026-10-21): the GPU binding serves each public trainer method in one native
+call (training/byte_lm_session_ops.mojo `byte_owner_*`). `TrainerOwnerEntries`
+serves the same entries here by composing the single-device entries above in
+the owner's order; a native CPU owner in the host binding is owed.
+
 ABSENT, SO THEY REFUSE BY NAME (an AttributeError naming the entry and this
 file, so `getattr(binding, name, None)` and `hasattr` still read absent): the
 multi-GPU `byte_lm_parallel_*`, `byte_lm_offload_*` and `byte_lm_model_pool_*`
