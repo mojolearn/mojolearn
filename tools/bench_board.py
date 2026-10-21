@@ -23,7 +23,7 @@ and every cell) and `BOARD.md` rendered from it.
     FAST neural pass, 2026-10-03) the neural family's GPU lanes: the wheel
     builds its neural surface FAST on Apple, and the neural FAST arm is
     `ours-fast`. NVIDIA and AMD run `identical` ONLY, so `--modes fast` with
-    the neural family is refused by name there. The neural CPU lanes (the
+    the neural family refuses by name (the reader admits F32, F16, BF16, I32 and I64) there. The neural CPU lanes (the
     *-infer lanes and lm-host-train-step) never race in any mode.
   * mojolearn comes from `pip install mojolearn==<V>` into a venv this script
     creates (or `--python-env` an interpreter that already has it). No source
@@ -753,7 +753,7 @@ def detect_vendor(system=None, which=shutil.which, exists=os.path.exists):
 def modes_for(vendor, requested=None):
     """Apple: fast AND identical. NVIDIA and AMD: identical only.
     `requested` may NARROW that set (e.g. identical only on Apple); it may
-    never add fast to NVIDIA or AMD, which is refused by name."""
+    never add fast to NVIDIA or AMD, which refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
     allowed = ("fast", "identical") if vendor == "apple" else ("identical",)
     if not requested:
         return list(allowed)
@@ -4279,7 +4279,7 @@ def shard_races(races, shard):
 
 def select_race_ids(races, spec):
     """--race-ids: keep exactly the listed race ids (a comma list, or @FILE holding a JSON list or one id per
-    line). An id the plan does not hold is refused by name, never dropped silently (preflight smoke,
+    line). An id the plan does not hold refuses by name (the reader admits F32, F16, BF16, I32 and I64), never dropped silently (preflight smoke,
     2026-10-14: one board process audits a whole campaign manifest instead of one process per recipe)."""
     if spec.startswith("@"):
         text = open(spec[1:]).read()

@@ -122,7 +122,7 @@ def _approximate_predict(e, X):
 #: One format, `mojolearn-kmeans-1`, carries every metric and every start, so
 #: all six FITTED k-means lanes load through it. The cosine lane was NOT here
 #: while it existed (deleted 2026-09-18, lane/kmeans-cosine-capability):
-#: its fit is refused by name (cluster/impl/kmeans_params.mojo::validate), and
+#: its fit refuses by name (the reader admits F32, F16, BF16, I32 and I64) (cluster/impl/kmeans_params.mojo::validate), and
 #: a refusal has no model to save, so it has no saved-model cell to record.
 _KMEANS_LANES = ('kmeans', 'kmeans-random', 'kmeans-array', 'kmeans-weighted',
                  'kmeans-sqrt', 'kmeans-classic-pp')
@@ -587,7 +587,7 @@ LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None,
 #: LANES, PROBE_NAMES, LANE_PROBE_ROWS (dicts) and KIND_PROBES (a tuple) for
 #: ITS OWN inference lanes, the same shapes as the tables above. It runs in a
 #: copy of this module's namespace, so its probes may call the helpers above;
-#: a name any table already carries is refused by name, and every lane it adds
+#: a name any table already carries refuses by name (the reader admits F32, F16, BF16, I32 and I64), and every lane it adds
 #: must carry a PROBE_NAMES entry. python/mojolearn/tests/test_host_surface.py
 #: still holds LANES to the manifest's inference_lanes, fragments included.
 def _merge_gate_fragments():

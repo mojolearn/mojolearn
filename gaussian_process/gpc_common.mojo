@@ -62,7 +62,7 @@ def gpc_neg_inf32() -> Float32:
 def gpc_validate_labels(y: List[Float32], n_train: Int) raises:
     """The binary targets: `n_train` values, each exactly 0 or 1, both
     present. The Python surface encodes labels (and one-vs-rest columns)
-    before this; a single class is refused by name there with the
+    before this; a single class refuses by name (the reader admits F32, F16, BF16, I32 and I64) there with the
     reference's sentence (`_gpc.py:198-203`), and again here."""
     if len(y) != n_train:
         raise Error(

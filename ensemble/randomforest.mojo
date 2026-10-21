@@ -722,7 +722,7 @@ def class_weight_explicit_host(
     mapping becomes a full per-class vector and the partial-coverage error
     cannot arise. What CAN arise is the wrong length, which is refused.
 
-    Their `'balanced_subsample'` is refused by name for random forest
+    Their `'balanced_subsample'` refuses by name (the reader admits F32, F16, BF16, I32 and I64) for random forest
     (`randomforestclassifier.py:173-176`); there is no string argument
     here to refuse, and no subsample arm to reach.
     """

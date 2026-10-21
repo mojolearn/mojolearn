@@ -140,7 +140,7 @@ def arm_schedule(rep):
     rep.check(arm, c.lr_at(1) == _lr_reference._f32_round(Fraction(c.peak_lr) / 4),
               "constant warmup step 1 is peak/4 (exact rational, rounded once)")
     rep.check(arm, c.lr_at(100) == c.lr_at(4), "constant after warmup is flat")
-    rep.raises(arm, ValueError, "ONE-BASED", "step 0 is refused by name", c.lr_at, 0)
+    rep.raises(arm, ValueError, "ONE-BASED", "step 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64)", c.lr_at, 0)
     lin = T.WarmupLinearLR(1e-3, 2, 10, 1e-4)
     rep.check(arm, lin.lr_at(10) == float(np.float32(1e-4)) and lin.lr_at(11) == lin.lr_at(10),
               "linear reaches min_lr at total_steps and holds")
@@ -195,9 +195,9 @@ def arm_accumulation(rep):
             serial = T.accumulate_grads([serial, pc], tokens=None)
         rep.bits_equal(arm, serial, dw_full, "A=%d SERIAL running sum vs unsplit" % steps, assert_bits=False)
     pieces = [T.linear_backward(dc[i * 64:(i + 1) * 64], a[i * 64:(i + 1) * 64], w)[1] for i in range(8)]
-    rep.raises(arm, Exception, "MISALIGNED", "A=8 at T=512 is refused by name",
+    rep.raises(arm, Exception, "MISALIGNED", "A=8 at T=512 refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                T.accumulate_grads, pieces, 512)
-    rep.raises(arm, Exception, "POWER OF TWO", "A=3 is refused by name",
+    rep.raises(arm, Exception, "POWER OF TWO", "A=3 refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                T.accumulate_grads, pieces[:3], 512)
     rep.raises(arm, ValueError, "power of two", "accumulation_steps=3 refused on the optimizer",
                T.AdamW, [w.copy()], accumulation_steps=3)

@@ -336,7 +336,7 @@ def pca_fit_full_binding(
     GPU binding's contract, params `n_rows, n_features, n_components`, the
     five public arrays written, the noise variance returned. The shape
     refusals are `pca_full_validate`'s, raised BEFORE anything is read; a
-    wide matrix is refused by name (the host carries the tall route only)."""
+    wide matrix refuses by name (the reader admits F32, F16, BF16, I32 and I64) (the host carries the tall route only)."""
     if len(params) != 3:
         raise Error("pca_fit_full: params must contain n_rows, n_features, n_components")
     var x_address = _index(x_addr)

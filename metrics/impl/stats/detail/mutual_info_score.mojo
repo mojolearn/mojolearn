@@ -304,7 +304,7 @@ def mutual_info_score_traced(
         raise Error(
             "mutual_info_score: size must be positive, got "
             + String(size)
-            + " (0 / 0 is refused by name)"
+            + " (0 / 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64))"
         )
     var k = Int(upper_label_range - lower_label_range + 1)
     comptime if IDN_METRIC_EPI:

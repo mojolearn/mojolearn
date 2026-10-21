@@ -166,13 +166,13 @@ def main(out=sys.stdout):
     # -- REFUSALS: every guard on this surface made to fire by name -------
     arm = "REFUSALS"
     rep.raises(arm, NotImplementedError, "callable optimizer",
-               "a callable optimizer is refused by name (DEVIATION 2881)",
+               "a callable optimizer refuses by name (the reader admits F32, F16, BF16, I32 and I64) (DEVIATION 2881)",
                lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), optimizer=lambda f, t, bounds: (t, f(t)))
     rep.raises(arm, ValueError, "random_state",
                "n_restarts_optimizer=3 without an int random_state is refused",
                lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), optimizer="fmin_l_bfgs_b", n_restarts_optimizer=3)
     rep.raises(arm, TypeError, "normalize_y must be a bool",
-               "a non-bool normalize_y is refused by name",
+               "a non-bool normalize_y refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), normalize_y="yes")
     rep.raises(arm, NotImplementedError, "copy_X_train",
                "copy_X_train=False is refused",
@@ -184,7 +184,7 @@ def main(out=sys.stdout):
                "a non-Kernel kernel object is refused",
                lambda **kw: GaussianProcessRegressor(**kw).fit(x, y), kernel="rbf")
     rep.raises(arm, ValueError, "must be 1-D",
-               "a 2-D y is refused by name",
+               "a 2-D y refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                GaussianProcessRegressor().fit, x, y.reshape(N, 1))
     rep.raises(arm, ValueError, "not fitted yet",
                "unfitted covariance prediction is refused",

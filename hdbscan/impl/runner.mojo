@@ -86,7 +86,7 @@ comptime GRAPH_BUILD_BRUTE_FORCE_KNN = 0
 comptime GRAPH_BUILD_NN_DESCENT = 1
 """`hdbscan.hpp:127` `enum GRAPH_BUILD_ALGO { BRUTE_FORCE_KNN, NN_DESCENT }`.
 `BRUTE_FORCE_KNN` is their default (`:198`) and the only value this lane
-accepts; NN_DESCENT is refused by name in `fit_hdbscan`."""
+accepts; NN_DESCENT refuses by name (the reader admits F32, F16, BF16, I32 and I64) in `fit_hdbscan`."""
 
 
 @fieldwise_init

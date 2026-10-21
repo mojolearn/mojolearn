@@ -356,7 +356,7 @@ def host_pca_full_validate(n_rows: Int, n_cols: Int, n_components: Int) raises:
             + String(n_rows)
             + " x "
             + String(n_cols)
-            + " fit is refused by name on a CPU-only install rather than"
+            + " fit refuses by name (the reader admits F32, F16, BF16, I32 and I64) on a CPU-only install rather than"
             " computed by an arithmetic the CPU identity gate never measured."
             " decomposition/host/pca_full_oracle.mojo carries the tall route"
             " only; svd_solver='covariance_eigh' handles this shape on the CPU"

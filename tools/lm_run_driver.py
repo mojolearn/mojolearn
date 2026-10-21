@@ -620,7 +620,7 @@ def _wheel(spec, e):
 def _chain_key(run, ledger, route, segment):
     """The R2 key of a landed segment's whole chain: its box's chain.jsonl,
     or for a resumed segment the joined chain the landing uploaded. A resumed
-    segment whose joined chain is not in R2 is refused by name: holding a
+    segment whose joined chain is not in R2 refuses by name (the reader admits F32, F16, BF16, I32 and I64): holding a
     later segment to the resumed box's part alone would compare fewer steps."""
     rec = ledger.landed(dict(route=route, segment=segment)) or {}
     if rec.get("resumed_from") is not None:

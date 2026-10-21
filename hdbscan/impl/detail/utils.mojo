@@ -42,7 +42,7 @@ def sorted_rows_to_indptr(rows: List[Int32], n_rows: Int) raises -> List[Int32]:
     the `n_rows + 1`-th entry holding `nnz`, which their callers get from
     `get_stop_idx`. `rows` must be sorted ascending and every entry in
     `[0, n_rows)`; an out-of-range row would silently drop an edge from
-    every segment after it, so it is refused by name."""
+    every segment after it, so it refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
     var counts = List[Int32](capacity=n_rows)
     for _ in range(n_rows):
         counts.append(Int32(0))

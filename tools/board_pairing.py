@@ -67,7 +67,7 @@ OUR_PAIRINGS = {
     # explicit own configurations race, each against the library it matches, never the other.
     "gbdt-lossguide": {
         # catboost-cpu is not listed: its CPU learner keeps a gain >= 1e-9 check
-        # (greedy_tensor_search.cpp) and it is refused by name on this lane anyway (it has no
+        # (greedy_tensor_search.cpp) and it refuses by name (the reader admits F32, F16, BF16, I32 and I64) on this lane anyway (it has no
         # NewtonL2 score, tools/speed_gbdt_arm.py _catboost_cpu_refusal).
         "ours": {"opponents": ("catboost-gpu",), "settings": {"min_split_gain": None},
                  "why": "min_split_gain None: no gain check, CatBoost Lossguide's growth "

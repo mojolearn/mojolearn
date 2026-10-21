@@ -1413,7 +1413,7 @@ def kalman_raise_info_init(info0: List[Int32]) raises:
         if info0[b] != 0:
             raise Error(
                 "batched_kalman_filter: series " + String(b) + ": the initial-state system (I - T (x) T, or I - T* for the intercept) is singular at column "
-                + String(info0[b]) + "; a unit-root parameter set is refused by name rather than filtered with a non-finite P0"
+                + String(info0[b]) + "; a unit-root parameter set refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather than filtered with a non-finite P0"
             )
 
 

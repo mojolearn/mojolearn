@@ -81,7 +81,7 @@ PAIRWISE_MAX_ROWS = 46340
 # normalized to 'pairwise'); cuML's PYTHON default is 'knn'
 # (`agglomerative.pyx:123`), their C++ default is pairwise (`linkage.hpp:43-44`)
 # and scikit-learn's dense tree is pairwise too. DEVIATION 881: the k-NN graph
-# arm is rung 2 and NOT IMPLEMENTED, so 'knn' is refused by name rather than
+# arm is rung 2 and NOT IMPLEMENTED, so 'knn' refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather than
 # downgraded. linkage 'single' here and in cuML (`agglomerative.pyx:124`);
 # scikit-learn's default is 'ward'.
 #
@@ -279,7 +279,7 @@ class AgglomerativeClustering(ParamsMixin):
                 f"mojolearn AgglomerativeClustering: c={c!r} is refused. It "
                 "tunes k = log(n) + c for the k-NN graph, cuML forwards it "
                 "only when connectivity='knn' (linkage.cu:40, "
-                "'use_knn ? c : 0'), and that arm is refused by name here, "
+                "'use_knn ? c : 0'), and that arm refuses by name (the reader admits F32, F16, BF16, I32 and I64) here, "
                 "so any value you pass would reach nothing"
             )
         if memory is not None:

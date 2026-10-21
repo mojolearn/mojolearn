@@ -124,7 +124,7 @@ def test_every_entry_samba_reaches_is_on_the_host():
                 # numeric_profile="fixed15_v1": the GPU sessions' profile entries
                 # (lane/lowbit-blocks, lane/lowbit-default); the host route takes
                 # `transformer_forward_int15`, and a host session under the
-                # profile is refused by name
+                # profile refuses by name (the reader admits F32, F16, BF16, I32 and I64)
                 | {"transformer_session_forward_int15", "transformer_decode_session_open_int15"}
                 # the retained tape (`transformer_forward_tape_enabled`, absent on
                 # the host, disables it) and the session's fresh forward and

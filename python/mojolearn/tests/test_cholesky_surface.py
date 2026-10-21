@@ -73,8 +73,8 @@ def arm_failed_factor(rep):
     a = -np.eye(n, dtype=np.float32)
     c = Cholesky(jitter=0.0).fit(a)
     rep.check("FAILED", c.info_ != 0, "a negative definite matrix reports info_ != 0 as a RESULT (DEVIATION 1634)", c.info_)
-    rep.raises("FAILED", Exception, "FAILED", "solve against a failed factor is refused by name in Mojo", c.solve, np.ones((n,), np.float32))
-    rep.raises("FAILED", ValueError, "info=", "logdet_ on a failed factor is refused by name", lambda: c.logdet_)
+    rep.raises("FAILED", Exception, "FAILED", "solve against a failed factor refuses by name (the reader admits F32, F16, BF16, I32 and I64) in Mojo", c.solve, np.ones((n,), np.float32))
+    rep.raises("FAILED", ValueError, "info=", "logdet_ on a failed factor refuses by name (the reader admits F32, F16, BF16, I32 and I64)", lambda: c.logdet_)
 
 
 def arm_refusals(rep):

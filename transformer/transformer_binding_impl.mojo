@@ -1491,7 +1491,7 @@ def _transformer_run[discard_cache: Bool = False](
     # pos0 = s0: DEVIATION 1028 (cache slot j IS absolute position j)
     # refuses any other value, and this surface has no other value to
     # offer. Prefill, chunked continuation and decode are all this one
-    # call; capacity growth past smax is refused by name downstream.
+    # call; capacity growth past smax refuses by name (the reader admits F32, F16, BF16, I32 and I64) downstream.
     llama_decoder_layer_forward(
         ctx, stages, kv, rope, w, dx, b, l, s0, trace, String("py"),
         forward_only=True,

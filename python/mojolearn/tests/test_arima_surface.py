@@ -457,13 +457,13 @@ def arm_refusals(rep, y):
     arm = "REFUSALS, python side (992)"
 
     rep.raises(arm, NotImplementedError, "trend",
-               "trend='t' is refused by name",
+               "trend='t' refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                ARIMA, (1, 0, 0), trend="t")
     rep.raises(arm, NotImplementedError, "trend",
-               "trend='ct' is refused by name",
+               "trend='ct' refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                ARIMA, (1, 0, 0), trend="ct")
     rep.raises(arm, NotImplementedError, "trend",
-               "a polynomial trend specification is refused by name",
+               "a polynomial trend specification refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                ARIMA, (1, 0, 0), trend=[1, 1, 0, 1])
     rep.raises(arm, ValueError, "unknown method",
                "an unspelled method is refused",
@@ -514,7 +514,7 @@ def arm_refusals(rep, y):
     bad = np.ones((BATCH, y.shape[1], 1), np.float32)
     bad[0, 3, 0] = np.nan
     rep.raises(arm, Exception, "non-finite value at series 0, row 3, regressor 0",
-               "a non-finite regressor is refused by name (DEVIATION 997)",
+               "a non-finite regressor refuses by name (the reader admits F32, F16, BF16, I32 and I64) (DEVIATION 997)",
                ARIMA(order=(1, 0, 0)).fit, y, bad)
     rep.raises(arm, Exception, "method='css'",
                "method='css' is refused by arima/estimator.mojo, only MLE is"
@@ -552,7 +552,7 @@ def arm_refusals(rep, y):
     bad = y.copy()
     bad[1, 7] = np.float32("nan")
     rep.raises(arm, Exception, "non-finite value at index",
-               "a NaN is refused by name and by INDEX; missing observations"
+               "a NaN refuses by name (the reader admits F32, F16, BF16, I32 and I64) and by INDEX; missing observations"
                " are a cuML path with no implementation, so a NaN here is not missing"
                " data, it is refused input",
                ARIMA(order=(1, 0, 0)).fit, bad)

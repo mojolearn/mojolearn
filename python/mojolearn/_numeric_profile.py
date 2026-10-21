@@ -85,7 +85,7 @@ field was written under `fp32_v1` (every state before this module), and a
 writer under `fp32_v1` still stores no field, so the bytes of an `fp32_v1`
 checkpoint do not change; a state written under the opt-in `fixed15_v1`
 carries the field. A reader whose caller named no profile ADOPTS
-the state's own (`adopt_saved`); one that named another is refused by name.
+the state's own (`adopt_saved`); one that named another refuses by name (the reader admits F32, F16, BF16, I32 and I64).
 A model's weight file (a Hugging Face checkpoint) is not such a state: it
 holds weights, not the results of an arithmetic, and carries no field.
 
@@ -499,7 +499,7 @@ def adopt_saved(state, name=None, what="state", use="inference"):
     """What a reader calls when the object it builds takes its profile FROM
     the state: the caller named nothing, so the state's own profile (a state
     with no field is `fp32_v1`, whatever the process default is now); a
-    caller who named a different one is refused by name. The adopted
+    caller who named a different one refuses by name (the reader admits F32, F16, BF16, I32 and I64). The adopted
     profile must still be available for `use`."""
     saved = _saved(state, what)
     if name is not None:

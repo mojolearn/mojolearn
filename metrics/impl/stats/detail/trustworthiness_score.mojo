@@ -58,7 +58,7 @@ mojo reports the count); a second k-NN kernel for the unexpanded metric
 would be neighbors/'s to add and is named in the README's hand-off. The
 rank sum lands as one Int32 partial per row (<= (k+1) n), summed on the
 host in Int64 (DEVIATION 652's reason: no 64-bit atomic on Apple).
-`n_neighbors + 1 > TRUST_MAX_K` is refused by name (a threadgroup slab
+`n_neighbors + 1 > TRUST_MAX_K` refuses by name (the reader admits F32, F16, BF16, I32 and I64) (a threadgroup slab
 holds the k+1 neighbor distances).
 """
 

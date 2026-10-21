@@ -114,7 +114,7 @@ def _load_knn(cls, path):
     obj = cls(**kwargs)
     _restore_mode(obj, arrays)
     # The refusals `fit` raises, raised here too, so a file naming a
-    # metric or an algorithm this class refuses is refused by name at load.
+    # metric or an algorithm this class refuses refuses by name (the reader admits F32, F16, BF16, I32 and I64) at load.
     obj._check_refusals()
     index = _serialize.exact(arrays, "index", "<f4")
     if index.ndim != 2 or index.shape[0] != ns or index.shape[1] != nf:
@@ -276,7 +276,7 @@ def _resolve_weights(cls_name, weights):
 
 
 def _refuse_inert_p(cls_name, metric, p):
-    """A `p` the resolved op never reads is refused by name.
+    """A `p` the resolved op never reads refuses by name (the reader admits F32, F16, BF16, I32 and I64).
 
     Only metric='minkowski'/'lp' reads `p`; cuML passes `self.p` for every
     metric (`nearest_neighbors.pyx:852-854`) and every other op discards it.

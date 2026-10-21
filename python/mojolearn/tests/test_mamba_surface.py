@@ -369,7 +369,7 @@ def main(out=sys.stdout):
     st = blk.allocate_state(1)
     st.h = st.h[:, :, :8]  # wrong shape
     rep.raises(arm, ValueError, "state buffer h",
-               "a wrong-shape state buffer is refused by name",
+               "a wrong-shape state buffer refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                blk.step, np.zeros((1, 1, dm), np.float32), st)
     zeros2 = {n: np.zeros(1, np.float32) for n in Mamba2Block._W_NAMES}
     zeros2["block_norm.weight"] = np.zeros((40,), np.float32)
@@ -411,7 +411,7 @@ def main(out=sys.stdout):
     st3bad = blk3z.allocate_state(1)
     st3bad.theta = st3bad.theta[:, :, :8]  # wrong shape
     rep.raises(arm, ValueError, "state buffer theta",
-               "Mamba3: a wrong-shape state buffer is refused by name",
+               "Mamba3: a wrong-shape state buffer refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                blk3z.step, np.zeros((1, 1, dm3), np.float32), st3bad)
     st3ok = blk3z.allocate_state(1)
     rep.raises(arm, TypeError, "theta",

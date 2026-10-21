@@ -471,7 +471,7 @@ def arm_refusals(rep, extra):
     b = fixture((200, 5), 202)
 
     rep.raises(arm, ValueError, "three operations",
-               "DEVIATION 913, a.T @ b.T is refused by name",
+               "DEVIATION 913, a.T @ b.T refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                linalg.matmul, a, b, transpose_a=True, transpose_b=True,
                **extra)
     rep.raises(arm, TypeError, "float32",

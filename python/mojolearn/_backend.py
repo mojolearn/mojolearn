@@ -1871,7 +1871,7 @@ def _select_cpu_only(pkg, mode, reason):
 def _cpu_only_binding(name, requested):
     """`binding()` on a CPU-only install: the module `_select_cpu_only`
     installed under the canonical name, IDENTICAL only. A tier other than
-    identical is refused by name, because no host binding builds one."""
+    identical refuses by name (the reader admits F32, F16, BF16, I32 and I64), because no host binding builds one."""
     if name not in _MODULES:
         raise ImportError(f"mojolearn: {name} is not a binding this package lists")
     if requested != "identical":

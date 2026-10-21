@@ -721,7 +721,7 @@ _REPORT = _threading.local()
 # multiclass 1-D targets: per-label sums on the device (exact integers, or
 # Float32 PairSums of sample_weight), the ratios and averages in the
 # binary64 epilogue (DEVIATION 6106). zero_division is 'warn', 0.0, 1.0 or
-# np.nan; average='samples' (multilabel) is refused by name.
+# np.nan; average='samples' (multilabel) refuses by name (the reader admits F32, F16, BF16, I32 and I64).
 def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, pos_label=1,
                                     average=None, warn_for=("precision", "recall", "f-score"),
                                     sample_weight=None, zero_division="warn", numeric_mode=None):

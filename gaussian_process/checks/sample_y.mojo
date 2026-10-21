@@ -160,7 +160,7 @@ def gp_sample_y_covariance(
 
 
 def gp_sample_y_check_factor(info: Int, n: Int) raises:
-    """A posterior covariance that does not factor is refused by name."""
+    """A posterior covariance that does not factor refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
     if info != 0:
         raise Error(
             "gpr_sample_y: the posterior covariance of the "

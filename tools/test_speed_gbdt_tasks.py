@@ -169,7 +169,7 @@ def test_fairness_fix_20261013_tree_lane_settings():
         assert spec._catboost_cpu_refusal(cfg) is not None
     for lane in ("gbdt-symmetric", "gbdt-multiclass", "gbdt-ordered"):
         assert spec.lane_config(lane, "shipped")["score_function"] == "Cosine", lane
-    # a different categorical algorithm is refused by name, before any import
+    # a different categorical algorithm refuses by name (the reader admits F32, F16, BF16, I32 and I64), before any import
     for fn in (spec.xgboost_arms, spec.lightgbm_arms):
         with pytest.raises(RuntimeError, match="CATEGORICAL-ALGORITHM"):
             fn("gbdt-categorical", cat, types.SimpleNamespace(cat_idx=spec.TAXI_CAT_COLUMNS), ["gpu"])
@@ -397,7 +397,7 @@ def test_xgboost_gpu_refuses_without_the_vendor_backend(monkeypatch, capsys, ven
     assert "xgboost-cpu" in names
     assert ("xgboost-gpu" in names) is not refused
     assert ("FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu" in out) is refused
-    # FAIRNESS FIX (2026-10-13 audit): XGBRanker is refused by name on the ranking lanes
+    # FAIRNESS FIX (2026-10-13 audit): XGBRanker refuses by name (the reader admits F32, F16, BF16, I32 and I64) on the ranking lanes
     # (depthwise trees with LambdaMART or sampled pairs against oblivious YetiRank/PairLogit).
     with pytest.raises(RuntimeError, match="DIFFERENT-ALGORITHM"):
         spec.xgboost_rank_arms("gbdt-rank-yetirank", {}, None, ["cpu", "gpu"])

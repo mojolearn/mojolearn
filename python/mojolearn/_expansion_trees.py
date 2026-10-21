@@ -962,7 +962,7 @@ def _trees_sub_cols(est):
 # INDEXING (sklearn turns bootstrap counts into sample weights when the base
 # estimator takes them; the regressor tree here does not); draws come from
 # the lane's counter RNG (xtrees/ops.mojo), so `random_state` is an int;
-# warm_start is refused by name. oob_score (`_set_oob_score` :1000 / :1310)
+# warm_start refuses by name (the reader admits F32, F16, BF16, I32 and I64). oob_score (`_set_oob_score` :1000 / :1310)
 # sums each member's output on the rows it never drew, in member order.
 class _BaggingBase(_TreesEnsembleBase):
     def __init__(self, estimator, n_estimators, max_samples, max_features, bootstrap,
@@ -2111,7 +2111,7 @@ class _DARTBase(_TreesEnsembleBase):
         if not callable(getattr(b, "x_trees_dart_open", None)):
             raise NotImplementedError(
                 "mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "
-                "MOJOLEARN_*DART_DEVICE_OFF build); the host loop is removed, so the fit is refused by name")
+                "MOJOLEARN_*DART_DEVICE_OFF build); the host loop is removed, so the fit refuses by name (the reader admits F32, F16, BF16, I32 and I64)")
         node_cap = 2 * int(self.num_leaves) - 1
         if not (1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP):
             raise NotImplementedError(
@@ -2535,7 +2535,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
 # of each tree in node order). The members are this library's
 # ExtraTreesRegressor (one fit of n_estimators trees); y is drawn from the
 # lane's counter RNG. DEVIATION: the output is a dense float64 Array;
-# `sparse_output=True` (sklearn's default) is refused by name, there being no
+# `sparse_output=True` (sklearn's default) refuses by name (the reader admits F32, F16, BF16, I32 and I64), there being no
 # sparse container in the NumPy-free layer.
 class RandomTreesEmbedding(_TreesEnsembleBase):
     """An unsupervised embedding by totally random trees.

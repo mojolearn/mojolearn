@@ -107,7 +107,7 @@ def spectral_predict_mu(eigenvalues: List[Float32]) raises -> List[Float32]:
                 + " has normalized affinity eigenvalue 1 + theta = " + String(mu)
                 + ", |value| below the DEVIATION 2860 threshold "
                 + String(SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE)
-                + "; the Nystrom extension would divide by it, so predict is refused by name"
+                + "; the Nystrom extension would divide by it, so predict refuses by name (the reader admits F32, F16, BF16, I32 and I64)"
             )
         out.append(mu)
     return out^

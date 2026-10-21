@@ -1228,7 +1228,7 @@ def test_full_and_cpu_lane_sets():
     assert set(cpu) <= set(va.host_surface().public_reference_lanes())
     with pytest.raises(ValueError):
         va.select_lanes(_FakeHarness, _fake_table(), "apple", "full", ["nope"])
-    # A lane a CPU-only install does not run is refused by name rather than
+    # A lane a CPU-only install does not run refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather than
     # silently dropped. The example is `par-forest` rather than a lane that
     # merely happens to be off the list: `par-*` is excluded by RULE
     # (host_surface.PUBLIC_INAPPLICABLE_PREFIXES), so this stays a real test of

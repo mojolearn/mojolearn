@@ -237,7 +237,7 @@ def gpr_host_kernel_matern(
     length_scale: List[Float32], nu: Float32
 ) raises -> GPHostKernelSpec:
     """`kernels.mojo::gp_kernel_matern`: the three closed forms only, by
-    bits (DEVIATION 1765). Every other nu is refused by name: there is no
+    bits (DEVIATION 1765). Every other nu refuses by name (the reader admits F32, F16, BF16, I32 and I64): there is no
     CPU implementation of the general Matern (the Bessel branch) because
     there is no implementation of it on any column."""
     _validate_length_scale(length_scale, String("gp_kernel_matern"))

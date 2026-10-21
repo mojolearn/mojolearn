@@ -135,7 +135,7 @@ def resolve_n_sampled_rows(
     """`selected_rows.size()`: `n_sampled_rows` when bootstrapping (0 = all
     `n_rows`, sklearn's `max_samples=None`), exactly `n_rows` otherwise --
     the identity permutation has no other width (`:69`), so a caller who
-    sets a count without bootstrap is refused by name, as sklearn refuses
+    sets a count without bootstrap refuses by name (the reader admits F32, F16, BF16, I32 and I64), as sklearn refuses
     `max_samples` without `bootstrap` (`_forest.py:411-416`)."""
     if bootstrap:
         if n_sampled_rows < 0:

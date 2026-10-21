@@ -2944,7 +2944,7 @@ def xgboost_arms(lane, cfg, data, devices):
     # FAIRNESS FIX (2026-10-13 audit): on declared categorical columns XGBoost ran its
     # partition search (max_cat_to_onehot 1) against ours' one-hot/CTR target statistics, a
     # different algorithm, and its pandas CategoricalDtype frame was built inside its fit
-    # clock. No XGBoost setting runs CTR target statistics, so the arm is refused by name.
+    # clock. No XGBoost setting runs CTR target statistics, so the arm refuses by name (the reader admits F32, F16, BF16, I32 and I64).
     # (Its frame code below is kept for the record; if this refusal is ever lifted for a
     # same-algorithm configuration, build the frames once outside the clock, as catboost_arms
     # does.) Results raced before this change were wrong for this lane; apply extra scrutiny.
@@ -2958,7 +2958,7 @@ def xgboost_arms(lane, cfg, data, devices):
         # raced its own depthwise grower, one tree PER CLASS per round, against ours' and
         # CatBoost's one oblivious tree with a vector of class values per leaf: a different
         # algorithm and a different model (taxi: 99,745 leaves against 128,000). XGBoost has no
-        # oblivious grower, so the arm is refused by name; CatBoost is the lane's opponent.
+        # oblivious grower, so the arm refuses by name (the reader admits F32, F16, BF16, I32 and I64); CatBoost is the lane's opponent.
         # Results raced before this change were wrong for this lane; apply extra scrutiny.
         raise RuntimeError(
             "DIFFERENT-GROWER: ours and CatBoost fit this loss on oblivious (symmetric) trees; "
@@ -2969,7 +2969,7 @@ def xgboost_arms(lane, cfg, data, devices):
     # maps ours' nan_mode 'Min' and XGBoost's missing=NaN as unread only because the data holds no
     # NaN. With a NaN the two rules differ (XGBoost learns a default direction per split,
     # src/tree/gpu_hist/evaluate_splits.cu:18-33; ours and CatBoost sort a NaN below every border),
-    # so the arm is refused by name where that premise fails. Checked once, before any clock.
+    # so the arm refuses by name (the reader admits F32, F16, BF16, I32 and I64) where that premise fails. Checked once, before any clock.
     if np.isnan(data.X_train).any() or np.isnan(data.X_test).any():
         raise RuntimeError(
             "NAN-INPUT: the data holds NaN; XGBoost learns a default direction for missing values "
@@ -3310,7 +3310,7 @@ def lightgbm_arms(lane, cfg, data, devices):
     # once outside the clock: the same gradient and hessian on every row (LightGBM multiplies
     # both by the label weight and by the sample weight alike), and BoostFromScore, the one other
     # reader of sample weights, is off on Logloss (boost_from_average False). CPU and CUDA run
-    # this one data path. A fit that still ends with a single leaf is refused by name, so a model
+    # this one data path. A fit that still ends with a single leaf refuses by name (the reader admits F32, F16, BF16, I32 and I64), so a model
     # that learned nothing is never scored as a quality cell.
     pos_weights = None
     if p.get("scale_pos_weight") is not None and data.task == "binary":
@@ -3559,7 +3559,7 @@ def sklearn_forest_arm(lane, cfg, data):
         # RandomForest searches EXACT thresholds (it has no bin count) where ours and cuML split
         # on 128 quantile bins, an algorithm difference (sorting every node's values against a
         # histogram pass) recorded instead of corrected. A different algorithm is not raced:
-        # the arm is refused by name; ExtraTrees (et), where both draw a uniform random threshold,
+        # the arm refuses by name (the reader admits F32, F16, BF16, I32 and I64); ExtraTrees (et), where both draw a uniform random threshold,
         # still races scikit-learn. Results raced before this change were wrong for this lane;
         # apply extra scrutiny.
         raise RuntimeError(

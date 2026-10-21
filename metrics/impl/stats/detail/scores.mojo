@@ -133,7 +133,7 @@ def accuracy_score(
         raise Error(
             "accuracy_score: n must be positive, got "
             + String(n)
-            + " (0 / 0 is refused by name)"
+            + " (0 / 0 refuses by name (the reader admits F32, F16, BF16, I32 and I64))"
         )
     var count = count_correct(ctx, predictions, ref_predictions, n)
     # `correctly_predicted * 1.0f / n` (:99)

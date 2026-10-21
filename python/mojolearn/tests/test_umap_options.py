@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """UMAP option parity (lane/algos-decomp, 2026-09-27): what is accepted and
-what is refused by name. Construction validates, so these need no binary.
+what refuses by name (the reader admits F32, F16, BF16, I32 and I64). Construction validates, so these need no binary.
 
     .pixi/envs/test/bin/python -m pytest python/mojolearn/tests/test_umap_options.py -q
 """

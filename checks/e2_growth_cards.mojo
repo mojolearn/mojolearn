@@ -14,7 +14,7 @@ Apple, AMD and NVIDIA by comparing per-stage identity cards
 sub-feature sweep, and `tools/e2_matrix_fit.py` drives every configuration
 the CPython binding can reach. When this file was written four training
 paths could NOT be reached from Python: there was no `grow_policy` slot on
-`gbdt_fit`, `MultiClassOneVsAll` is refused by name in
+`gbdt_fit`, `MultiClassOneVsAll` refuses by name (the reader admits F32, F16, BF16, I32 and I64) in
 `python/mojolearn/ensemble.py`, and the feature-parallel searcher has no
 caller but its own check (`archive/plans/UNWIRED.md`). **Since 2026-08-23 `grow_policy`
 IS on the Python surface (DEVIATION 259)** and the E2 matrix carries

@@ -140,7 +140,7 @@ def main() raises:
     # prints the unbuildable columns is that the question it answers is due
     # BEFORE the target exists: does admitting this vendor move anybody's
     # bits? The floor below is frozen, so the answer is no by construction --
-    # a vendor either meets it and joins, or is refused by name.
+    # a vendor either meets it and joins, or refuses by name (the reader admits F32, F16, BF16, I32 and I64).
     # ---------------------------------------------------------------------
     print()
     print(

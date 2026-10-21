@@ -483,7 +483,7 @@ def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
     Rows use the SVM kernel-row seam (original FP32-v1 dot per cell and the
     original epilogue). KernelRidge's factorization moves whole trailing-update
     rows and its multi-target solve whole target columns; Nystroem's Jacobi
-    eigensolver stays on the root. 'laplacian' is refused by name.
+    eigensolver stays on the root. 'laplacian' refuses by name (the reader admits F32, F16, BF16, I32 and I64).
     """
     _admit_kernel_method(estimator)
     X, _ = as_f32_c(X, ndim=2, name='X')

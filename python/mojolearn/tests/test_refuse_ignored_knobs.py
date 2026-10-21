@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A knob no code path reads is refused by name, never accepted and ignored
+"""A knob no code path reads refuses by name (the reader admits F32, F16, BF16, I32 and I64), never accepted and ignored
 (the claim-surface census, 2026-09-14). Host-only: constructors and the
 fold builder, no native extension call. Runs as a module:
     cd python && python3 -m mojolearn.tests.test_refuse_ignored_knobs
@@ -91,7 +91,7 @@ class RefuseIgnoredKnobs(unittest.TestCase):
 
     # NearestNeighbors and its subclasses read `p` only under
     # metric='minkowski'/'lp'; every other op discards it. A p other than
-    # the constructor default under such a metric is refused by name, at
+    # the constructor default under such a metric refuses by name (the reader admits F32, F16, BF16, I32 and I64), at
     # fit (`_check_refusals`) and wherever the metric is resolved.
     _NON_LP = ("euclidean", "l2", "sqeuclidean", "cityblock", "manhattan", "chebyshev", "cosine")
     _RBC_NON_LP = ("euclidean", "l2", "cityblock", "manhattan", "chebyshev")

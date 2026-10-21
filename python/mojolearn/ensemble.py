@@ -324,7 +324,7 @@ MULTI_OUTPUT_LOSSES = ("MultiClass", "MultiClassOneVsAll")
 #: with `n_targets >= 2`, `predict` RAW `(n_samples, n_targets)`, no
 #: `predict_proba`. Not in `MULTI_OUTPUT_LOSSES`, whose members read class
 #: codes. Carried on the Plain SymmetricTree greedy fit with numeric
-#: features and no eval set; the rest is refused by name at `fit`.
+#: features and no eval set; the rest refuses by name (the reader admits F32, F16, BF16, I32 and I64) at `fit`.
 #: DEVIATION 5951: CatBoost's unset `boost_from_average` is True for
 #: MultiRMSE (`options_helper.cpp:367`) with a per-dimension start this
 #: model's one-value bias does not carry, so unset resolves False here and

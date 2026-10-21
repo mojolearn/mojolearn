@@ -227,7 +227,7 @@ class Embedding(NumericModeMixin):
         if raw.dtype[1] not in "iu":
             # Before this check a float id was cast to int32 and 1.5 read
             # row 1, silently. torch refuses a float index tensor; an id is
-            # a row number, so a non-integer one is refused by name.
+            # a row number, so a non-integer one refuses by name (the reader admits F32, F16, BF16, I32 and I64).
             raise TypeError(
                 f"mojolearn Embedding: ids must be integers, got dtype "
                 f"{raw.dtype!r}; a float id is refused rather than truncated"

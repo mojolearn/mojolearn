@@ -308,7 +308,7 @@ class DBSCAN(NumericModeMixin):
         if metric == DBSCAN_METRIC_PRECOMPUTED and self.prediction_data:
             raise ValueError(
                 "mojolearn DBSCAN: prediction_data=True with "
-                "metric='precomputed' is refused by name: predict needs each "
+                "metric='precomputed' refuses by name (the reader admits F32, F16, BF16, I32 and I64): predict needs each "
                 "query's distances to the core samples, which a distance "
                 "matrix over the training rows does not give"
             )

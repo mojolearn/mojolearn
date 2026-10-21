@@ -29,7 +29,7 @@ def knn_affinity_f32(
     row i holds a NaN or negative distance; [2, i, c] row i has fewer than k
     candidates; c is row i's candidate count (n for a dense matrix); the FIRST failing row in row order, the checks in the
     Python loop's order (NaN or negative first, then the count). A COO
-    entry outside [0, n) is refused by name."""
+    entry outside [0, n) refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
     # candidates per row (sparse: COO order, grouped by a counting pass)
     var start = List[Int](length=n + 1, fill=0)
     var order = List[Int32](capacity=nnz if sparse else 0)

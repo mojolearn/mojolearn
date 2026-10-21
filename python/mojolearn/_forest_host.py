@@ -11,7 +11,7 @@ and, since lane/forest-groves-cpu-and-speed (2026-09-17), the
 `parallel_groves` engine for a `-parallel-groves-1` archive (32 fixed tree
 groups, the 16/8/4/2/1 fold, `core/forest_host_groves.mojo`), so a groves
 model trained on a GPU infers the GPU groves engine's bits on a CPU. A groves
-archive saved under a numeric mode other than `identical` is refused by name,
+archive saved under a numeric mode other than `identical` refuses by name (the reader admits F32, F16, BF16, I32 and I64),
 because this binding computes IDENTICAL bits only. `predict` and
 `predict_proba` return exactly what the GPU classes return for the same file.
 RF probabilities float32, RF regression float32, ET probabilities and

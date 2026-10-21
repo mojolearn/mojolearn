@@ -1406,7 +1406,7 @@ _REFUSED_KWARGS = {
     ),
     "dtype": (
         "float32 only. MIXED PRECISION IS NOT COVERED and a non-float32 "
-        "array is refused by name rather than cast"
+        "array refuses by name (the reader admits F32, F16, BF16, I32 and I64) rather than cast"
     ),
     "distributed": None,
     "world_size": None,

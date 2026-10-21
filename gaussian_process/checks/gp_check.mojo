@@ -1997,7 +1997,7 @@ def check_duplicate_inputs_need_the_ridge() raises:
     learn's default `alpha = 1e-10` is a NO-OP in float32 on a unit-diagonal
     kernel matrix**, `1.0 + 1e-10` being exactly `1.0`. That is asserted on
     the HOST by bits, because under IDENTICAL the value never reaches a fit
-    -- it is refused by name first -- and the refusal's message is only
+    -- it refuses by name (the reader admits F32, F16, BF16, I32 and I64) first -- and the refusal's message is only
     honest if the claim inside it is true.
     """
     # DEVIATION 1752, on the host, by bits.

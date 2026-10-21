@@ -673,7 +673,7 @@ class PayloadTests(unittest.TestCase):
         """tools/release.py took a completed hip/gfx942 leg of an earlier freeze
         (its set identity and build tooling equal this freeze's): its bytes are
         packed with their origin, the plan's REUSE rows still come from the
-        published wheel, and a byte that moved is refused by name."""
+        published wheel, and a byte that moved refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
         with tempfile.TemporaryDirectory() as d:
             tmp = pathlib.Path(d)
             whl, prev = published_wheel_fixture(tmp)

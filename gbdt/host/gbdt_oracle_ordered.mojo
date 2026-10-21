@@ -1409,7 +1409,7 @@ def gbdt_ordered_rmse_host_fit(
 # weights, SymmetricTree, Cosine or NewtonCosine, any bootstrap, any
 # random_strength, any permutation count, border type and NaN mode, with
 # boost_from_average only on RMSE; an eval set with the detector and
-# use_best_model (step 8 of `fit_ordered`). Everything else is refused by name in the
+# use_best_model (step 8 of `fit_ordered`). Everything else refuses by name (the reader admits F32, F16, BF16, I32 and I64) in the
 # binding (`_mojolearn_gbdt_host.mojo`).
 #
 # THE NEGATIVE CONTROL: `-D MOJOLEARN_ORDERED_SABOTAGE=1` (the device arm's

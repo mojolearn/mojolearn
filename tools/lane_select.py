@@ -5451,7 +5451,7 @@ def _runtime_import_roots(model):
 #:     moves every lane the gate checks, and selects exactly those: the keys
 #:     of its LANES, fragments included, never the whole registry;
 #:   * a change it cannot read (an entry for no registered lane, a key it
-#:     cannot evaluate) is refused by name (`GATE_WHY`).
+#:     cannot evaluate) refuses by name (the reader admits F32, F16, BF16, I32 and I64) (`GATE_WHY`).
 CLASSICAL_GATE = os.path.join("tools", "classical_host_gate.py")
 
 #: The gate's tables keyed BY LANE: an entry is about its key's lane alone.

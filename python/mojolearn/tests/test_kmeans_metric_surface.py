@@ -72,7 +72,7 @@ def arm_metric(rep):
     # What is checked now is the property its routed refusal existed to give:
     # an unsupported metric is refused BY NAME and never accepted and ignored.
     # A NAME is refused in Python, a CODE in Mojo, so both are asked.
-    rep.raises("METRIC", Exception, "metric must be one of", "metric='cosine' is no longer a metric and is refused by name",
+    rep.raises("METRIC", Exception, "metric must be one of", "metric='cosine' is no longer a metric and refuses by name (the reader admits F32, F16, BF16, I32 and I64)",
                KMeans(n_clusters=4, metric="cosine").fit, x)
     rep.raises("METRIC", Exception, "metric must be one of", "metric='cosine_expanded' the same", KMeans(n_clusters=4, metric="cosine_expanded").fit, x)
     rep.raises("METRIC", Exception, "L2Expanded (0) and L2SqrtExpanded", "metric=2, cosine's old code, is refused by the kernel",

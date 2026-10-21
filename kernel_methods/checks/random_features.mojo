@@ -216,7 +216,7 @@ comptime KM_KIND_RF_OFFSET: UInt64 = 19
 #: it now is the ROW ID TYPE: `component_indices_` are Int32 and the
 #: position map `position_subsequence` is injective only below 2^32, so the
 #: largest pool is 2^31 - 1 rows, which is 48 GiB of sort scratch; a pool
-#: past it is refused by name with both numbers.
+#: past it refuses by name (the reader admits F32, F16, BF16, I32 and I64) with both numbers.
 comptime KM_MAX_BASIS_POOL = 2147483647
 
 #: Host bytes per row the sort holds live: two 64-bit key buffers and two

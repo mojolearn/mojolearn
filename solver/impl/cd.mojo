@@ -1305,7 +1305,7 @@ def cd_fit_traced(
 
     `row_major` (lane/apple-fast-linear, -D MOJOLEARN_CD_FAST_ROWMAJOR): `x`
     is the caller's ROW-MAJOR design; only the CD_FAST_GRAM grid path reads
-    it (the kernels above), so it is refused by name everywhere else."""
+    it (the kernels above), so it refuses by name (the reader admits F32, F16, BF16, I32 and I64) everywhere else."""
     if row_major:
         comptime if not CD_FAST_GRAM:
             raise Error(

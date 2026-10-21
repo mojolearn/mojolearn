@@ -3415,7 +3415,7 @@ def fit_non_symmetric_tree[
 
         # ===================== SplitLeaves ==========================
         # `greedy_search_helper.cpp:575`. `HaveFixedSplits` is absent: the
-        # option that feeds it is refused by name (see
+        # option that feeds it refuses by name (the reader admits F32, F16, BF16, I32 and I64) (see
         # `structure_searcher_options.mojo`).
         # ==================== POLICY BRANCH 3 OF 4 ====================
         # `SelectLeavesToSplit` (`greedy_search_helper.cpp:317-361`).

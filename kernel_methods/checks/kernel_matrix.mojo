@@ -287,7 +287,7 @@ def km_validate_kernel_params(kp: KernelParams, what: String) raises:
     if kp.kernel == KM_KERNEL_PRECOMPUTED:
         raise Error(
             what
-            + ": kernel='precomputed' is refused by name. cuML and"
+            + ": kernel='precomputed' refuses by name (the reader admits F32, F16, BF16, I32 and I64). cuML and"
             " scikit-learn both accept it and both treat X as an already-"
             " formed kernel matrix, which is a SHAPE CONTRACT this lane does"
             " not validate and cannot check an oracle against. DEVIATION"

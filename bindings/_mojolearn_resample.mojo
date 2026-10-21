@@ -478,7 +478,7 @@ def _mc_run(
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
     """The runtime id becomes the comptime parameter HERE and nowhere
-    else; an id outside the three arms is refused by name."""
+    else; an id outside the three arms refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
     var integral = Float32(0.0)
     var mean = Float32(0.0)
     var volume = Float32(0.0)

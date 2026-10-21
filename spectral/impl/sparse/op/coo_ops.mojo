@@ -227,7 +227,7 @@ def coo_remove_diagonal(g: CooGraph) raises -> CooGraph:
     """Keep every entry with `row != col`, in order: what cuML's
     `spectral_embedding.pyx:255-262` does to a precomputed affinity before
     the transform (the Laplacian's diagonal is the degree, whatever was
-    given there). A graph with nothing left is refused by name."""
+    given there). A graph with nothing left refuses by name (the reader admits F32, F16, BF16, I32 and I64)."""
     var rows = List[Int32]()
     var cols = List[Int32]()
     var vals = List[Float32]()
