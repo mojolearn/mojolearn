@@ -19,7 +19,7 @@ from bindings.generation_policy import generation_pick
 from bindings.hostptr import f32_ptr, i32_ptr
 from std.math import isfinite
 from std.os import getenv
-from bindings.causal_lm_public_impl import (
+from transformer.causal_lm_public_impl import (
     causal_lm_rows_done, causal_lm_join_resident, causal_lm_join_continuation,
     causal_lm_pick_step, causal_lm_tokens_row_major, causal_lm_drop_eos,
     causal_lm_utf8_cut, causal_lm_store_ids, causal_lm_flags_as_ints,
