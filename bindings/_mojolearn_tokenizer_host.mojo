@@ -479,15 +479,17 @@ def _py_repr(obj: PythonObject) raises -> String:
     return String(py=bi.repr(obj))
 
 
-def _unspell_py(text: PythonObject, inv: List[Int], label: String, mut out: List[UInt8]) raises:
-    var bi = Python.import_module("builtins")
+def _py_str_bytes(text: PythonObject, mut out: List[UInt8], mut err: String) raises -> Int:
+    """A Python object's spelling bytes: 0 a str (bytes in `out`), 1 not a
+    str, 2 the conversion raised (its message in `err`)."""
     if String(py=text.__class__.__name__) != "str":
-        raise Error("ValueError: " + label + " " + _py_repr(text) + " is not a string")
-    var b = string_bytes(String(py=text))
-    var bad = unspell(b, inv, out)
-    if bad != -1:
-        raise Error(unspell_error(label + " " + _py_repr(text), bad))
-    _ = bi
+        return 1
+    try:
+        out = string_bytes(String(py=text))
+    except error:
+        err = String(error)
+        return 2
+    return 0
 
 
 def _table_from_spelled(
@@ -501,115 +503,98 @@ def _table_from_spelled(
     `a b` per line, an optional leading `#version` line, blank lines
     skipped) or a list whose items are `"a b"` strings or `[a, b]` pairs
     (a `tokenizer.json`'s `model.merges`). Every check in
-    `impl/vocab_build.mojo` runs here."""
+    `impl/vocab_build.mojo` runs in `tokenizer_host_shell_impl.mojo`; this
+    door reads the Python items into typed records and names a refusal by
+    the item's Python repr."""
     var bi = Python.import_module("builtins")
     var items = bi.list(vocab.items())
     var n = Int(py=bi.len(items))
     var inv = codepoint_to_byte()
-    var toks = List[List[UInt8]](capacity=n)
-    var placed = List[Bool](length=n, fill=False)
-    for _ in range(n):
-        toks.append(List[UInt8]())
+    var sv = SpelledVocab(n)
+    var key_err = List[String](capacity=n)
     for k in range(n):
         var key = items[k][0]
         var val = items[k][1]
-        var vt = String(py=val.__class__.__name__)
-        var i = -1
-        if vt == "int":
-            i = Int(py=val)
-        if vt != "int" or i < 0 or i >= n or placed[i]:
+        var is_int = String(py=val.__class__.__name__) == "int"
+        sv.id_is_int.append(is_int)
+        sv.ids.append(Int(py=val) if is_int else -1)
+        var kb = List[UInt8]()
+        var ke = String("")
+        sv.key_kind.append(_py_str_bytes(key, kb, ke))
+        sv.keys.append(kb^)
+        key_err.append(ke^)
+    var arena = List[UInt8]()
+    var lengths = List[Int](capacity=n)
+    var vf = spelled_vocab_tokens(sv, inv, arena, lengths)
+    if vf.code != SPELLED_OK:
+        var key = items[vf.k][0]
+        if vf.code == SPELLED_BAD_ID:
             raise Error(
                 "ValueError: id "
-                + _py_repr(val)
+                + _py_repr(items[vf.k][1])
                 + " of "
                 + _py_repr(key)
                 + " is not a unique id in [0, "
                 + String(n)
                 + ")"
             )
-        var out = List[UInt8]()
-        _unspell_py(key, inv, String("spelling"), out)
-        toks[i] = out^
-        placed[i] = True
-    var arena = List[UInt8]()
-    var lengths = List[Int](capacity=n)
-    for i in range(n):
-        lengths.append(len(toks[i]))
-        for j in range(len(toks[i])):
-            arena.append(toks[i][j])
+        if vf.code == SPELLED_NOT_STR:
+            raise Error("ValueError: spelling " + _py_repr(key) + " is not a string")
+        if vf.code == SPELLED_RAISED:
+            raise Error(key_err[vf.k])
+        raise Error(unspell_error("spelling " + _py_repr(key), vf.bad))
     var table = table_from_tokens(arena, lengths)
     var chk = MergeCheck(n)
     if String(py=merges.__class__.__name__) == "str":
-        var text = string_bytes(String(py=merges))
-        var lineno = 0
-        var at = 0
-        var total = len(text)
-        while at <= total:
-            var stop = at
-            while stop < total and Int(text[stop]) != 0x0A:
-                stop += 1
-            lineno += 1
-            var line = List[UInt8](capacity=stop - at)
-            var blank = True
-            for i in range(at, stop):
-                line.append(text[i])
-                var c = Int(text[i])
-                if not (c == 0x20 or (c >= 0x09 and c <= 0x0D)):
-                    blank = False
-            at = stop + 1
-            if blank:
-                continue
-            if version_line and lineno == 1 and len(line) >= 8:
-                var v = String("#version").as_bytes()
-                var is_version = True
-                for i in range(8):
-                    if line[i] != v[i]:
-                        is_version = False
-                if is_version:
-                    continue
-            var label = "line " + String(lineno)
-            var sa = List[UInt8]()
-            var sb = List[UInt8]()
-            var a = List[UInt8]()
-            var b = List[UInt8]()
-            if (
-                not split_merge_line(line, sa, sb)
-                or unspell(sa, inv, a) != -1
-                or unspell(sb, inv, b) != -1
-            ):
-                raise Error(
-                    "ValueError: "
-                    + label
-                    + ": "
-                    + _quoted(line)
-                    + " is not a merge of two tokens"
-                )
-            check_merge(table, a, b, label, chk)
+        spelled_merges_text(table, string_bytes(String(py=merges)), inv, version_line, chk)
     else:
         var m = Int(py=bi.len(merges))
+        var sm = SpelledMerges(m)
+        var errs = List[String](capacity=3 * m)
         for k in range(m):
             var item = merges[k]
-            var label = "merge " + String(k)
             var it = String(py=item.__class__.__name__)
-            var a = List[UInt8]()
-            var b = List[UInt8]()
+            var kind = 2
             if it == "str":
-                var sa = List[UInt8]()
-                var sb = List[UInt8]()
-                if (
-                    not split_merge_line(string_bytes(String(py=item)), sa, sb)
-                ):
-                    raise Error("ValueError: " + label + " " + _py_repr(item) + " is not a pair")
-                if unspell(sa, inv, a) != -1 or unspell(sb, inv, b) != -1:
-                    raise Error(
-                        "ValueError: " + label + " names " + _py_repr(item) + ", not a byte-level spelling"
-                    )
+                kind = 0
             elif (it == "list" or it == "tuple") and Int(py=bi.len(item)) == 2:
-                _unspell_py(item[0], inv, label + " names", a)
-                _unspell_py(item[1], inv, label + " names", b)
-            else:
+                kind = 1
+            sm.kind.append(kind)
+            var tb = List[UInt8]()
+            var te = String("")
+            var tk = 0
+            if kind == 0:
+                tk = _py_str_bytes(item, tb, te)
+            sm.str_kind.append(tk)
+            sm.text.append(tb^)
+            errs.append(te^)
+            comptime for p in range(2):
+                var pb = List[UInt8]()
+                var pe = String("")
+                var pk = 0
+                if kind == 1:
+                    pk = _py_str_bytes(item[p], pb, pe)
+                sm.part_kind.append(pk)
+                sm.parts.append(pb^)
+                errs.append(pe^)
+        var mf = spelled_merges_list(table, sm, inv, chk)
+        if mf.code != SPELLED_OK:
+            var item = merges[mf.k]
+            var label = "merge " + String(mf.k)
+            if mf.code == SPELLED_NOT_PAIR:
                 raise Error("ValueError: " + label + " " + _py_repr(item) + " is not a pair")
-            check_merge(table, a, b, label, chk)
+            if mf.code == SPELLED_NOT_LEVEL:
+                raise Error(
+                    "ValueError: " + label + " names " + _py_repr(item) + ", not a byte-level spelling"
+                )
+            if sm.kind[mf.k] == 0:
+                raise Error(errs[3 * mf.k])
+            var part = item[mf.part]
+            if mf.code == SPELLED_NOT_STR:
+                raise Error("ValueError: " + label + " names " + _py_repr(part) + " is not a string")
+            if mf.code == SPELLED_RAISED:
+                raise Error(errs[3 * mf.k + 1 + mf.part])
+            raise Error(unspell_error(label + " names " + _py_repr(part), mf.bad))
     check_loose(table, chk, ignore_merges)
     return table^
 
@@ -670,18 +655,11 @@ def bpe_decode_seq_binding(
     _require_loaded(Bool(owner[].tok))
     var ids = _ids_from_seq(seq)
     var nv = owner[].tok.value().n_vocab()
-    for k in range(len(ids)):
-        if ids[k] < 0 or ids[k] >= nv:
-            raise Error(
-                "ValueError: id " + String(ids[k]) + " at position " + String(k)
-                + " is outside [0, " + String(nv) + ")"
-            )
+    bpe_check_ids(ids, nv)
     var cap = _index(out_cap)
     if len(ids) == 0:
         return PythonObject(0)
-    var out = owner[].tok.value().decode_bytes(ids)
-    if len(out) > cap:
-        raise Error("bpe_decode_seq: " + String(len(out)) + " bytes do not fit " + String(cap))
+    var out = bpe_decode_seq_bytes(owner[], ids, cap)
     memcpy(dest=_u8_ptr(_index(out_addr)), src=out.unsafe_ptr(), count=len(out))
     return PythonObject(len(out))
 
@@ -702,22 +680,10 @@ def bpe_decode_batch_binding(
     var joined = List[UInt8]()
     var lens = List[Int](capacity=n)
     for s in range(n):
-        var ids = _ids_from_seq(batch[s])
-        for k in range(len(ids)):
-            if ids[k] < 0 or ids[k] >= nv:
-                raise Error(
-                    "ValueError: id " + String(ids[k]) + " at position " + String(k)
-                    + " is outside [0, " + String(nv) + ")"
-                )
-        var out = owner[].tok.value().decode_bytes(ids)
-        lens.append(len(out))
-        joined += out^
-    if len(joined) > cap:
-        raise Error("bpe_decode_batch: " + String(len(joined)) + " bytes do not fit " + String(cap))
+        bpe_decode_batch_append(owner[], _ids_from_seq(batch[s]), nv, joined, lens)
+    bpe_decode_batch_fit(joined, cap)
     if n > 0:
-        var lp = _i64_ptr(_index(lengths_addr))
-        for s in range(n):
-            lp[s] = Int64(lens[s])
+        tokenizer_store_i64(_i64_ptr(_index(lengths_addr)), lens)
     if len(joined) > 0:
         memcpy(dest=_u8_ptr(_index(out_addr)), src=joined.unsafe_ptr(), count=len(joined))
     return PythonObject(len(joined))
@@ -735,15 +701,9 @@ def bpe_render_binding(addresses: PythonObject, dims: PythonObject) raises -> Py
     v.length = _i64_list(_index(addresses[1]) if n > 0 else 0, n)
     var total = _bytes_total(v.length)
     v.arena = _u8_list(_index(addresses[0]) if total > 0 else 0, total)
-    var at = 0
-    for k in range(n):
-        v.offset.append(at)
-        at += v.length[k]
     v.merge_left = _i64_list(_index(addresses[2]) if nm > 0 else 0, nm)
     v.merge_right = _i64_list(_index(addresses[3]) if nm > 0 else 0, nm)
-    for k in range(nm):
-        if v.merge_left[k] < 0 or v.merge_left[k] >= n or v.merge_right[k] < 0 or v.merge_right[k] >= n:
-            raise Error("ValueError: merge " + String(k) + " names an id outside [0, " + String(n) + ")")
+    trained_vocab_settle(v, n, nm)
     if which == 0:
         return PythonObject(render_ranks(v))
     return PythonObject(render_tokenizer_json(v, String(GPT2_PAT_STR), String(GPT2_ENDOFTEXT)))
@@ -775,84 +735,10 @@ def bpe_encode_corpus_binding(
     var stats_address = _index(addresses[4])
     var total = 0
     with GILReleased(Python()):
-        var starts = List[Int]()
-        var stops = List[Int]()
-        if n > 0:
-            _cut_documents(_u8_ptr(data_address), points, 0, n, document_bytes, starts, stops)
-        var n_docs = len(starts)
-        var counts = List[Int](length=n_docs, fill=0)
-        var staged = List[Int32](length=max(n, 1), fill=Int32(0))
-        var failed = List[Int](length=n_docs, fill=0)
-        var countp = counts.unsafe_ptr()
-        var stagep = staged.unsafe_ptr()
-        var failp = failed.unsafe_ptr()
-        var startp = starts.unsafe_ptr()
-        var stopp = stops.unsafe_ptr()
-        var tasks = host_predict_task_count(n_docs) if n >= 16384 else 1
-        var chunk = host_predict_chunk(n_docs, tasks) if n_docs > 0 else 1
-        def _documents(task: Int) {imm owner, imm startp, imm stopp, imm data_address, imm countp, imm stagep, imm failp, imm chunk, imm n_docs}:
-            var lo = task * chunk
-            var hi = min(lo + chunk, n_docs)
-            for k in range(lo, hi):
-                var a = startp[k]
-                var m = stopp[k] - a
-                var doc = List[UInt8](length=m, fill=UInt8(0))
-                try:
-                    if m > 0:
-                        memcpy(dest=doc.unsafe_ptr(), src=_u8_ptr(data_address + a), count=m)
-                    var ids = owner[].tok.value().encode_bytes(doc, False)
-                    var c = len(ids)
-                    countp.unsafe_store(k, c)
-                    for j in range(c):
-                        stagep.unsafe_store(a + j, Int32(ids[j]))
-                except:
-                    failp.unsafe_store(k, 1)
-        if n_docs > 0:
-            if tasks == 1:
-                _documents(0)
-            else:
-                host_parallelize(_documents, tasks)
-        for k in range(n_docs):
-            if failed[k] != 0:
-                raise Error("bpe_encode_corpus: internal document encode failed")
-            total += counts[k]
-        if total > cap:
-            raise Error(
-                "bpe_encode_corpus: " + String(total) + " ids do not fit an output of "
-                + String(cap) + "; nothing written"
-            )
-        var bounds = _i64_ptr(bounds_address)
-        var at = 0
-        var next_point = 0
-        for k in range(n_docs):
-            while next_point < n_points and points[next_point] < starts[k]:
-                next_point += 1
-            if next_point < n_points and points[next_point] == starts[k]:
-                bounds[next_point] = Int64(at)
-                next_point += 1
-            at += counts[k]
-        var max_id = -1
-        var above = 0
-        if total > 0:
-            var dst = i32_ptr(ids_address)
-            at = 0
-            for k in range(n_docs):
-                var a = starts[k]
-                for j in range(counts[k]):
-                    var v = Int(staged[a + j])
-                    dst[at + j] = Int32(v)
-                    if v > max_id:
-                        max_id = v
-                    if v > 255:
-                        above += 1
-                at += counts[k]
-        for j in range(n_points):
-            if points[j] >= n:
-                bounds[j] = Int64(total)
-        var stats = _i64_ptr(stats_address)
-        stats[0] = Int64(n_docs)
-        stats[1] = Int64(max_id)
-        stats[2] = Int64(above)
+        total = bpe_encode_corpus_into(
+            owner[], data_address, points, n, n_points, document_bytes, cap,
+            ids_address, bounds_address, stats_address,
+        )
     return PythonObject(total)
 
 
@@ -877,17 +763,10 @@ def bpe_train_corpus_binding(addresses: PythonObject, dims: PythonObject) raises
     var points = _i64_list(_index(addresses[1]), n_points)
     var handle = BpeTrainedHandle()
     with GILReleased(Python()):
-        var starts = List[Int]()
-        var stops = List[Int]()
-        if hi > lo:
-            _cut_documents(_u8_ptr(data_address), points, lo, hi, document_bytes, starts, stops)
-        if len(starts) == 0:
-            raise Error("ValueError: train needs at least one document")
-        var documents = List[List[UInt8]](capacity=len(starts))
-        for k in range(len(starts)):
-            documents.append(_u8_list(data_address + starts[k], stops[k] - starts[k]))
-        var classes = builtin_unicode_classes()
-        handle.vocab = train_bpe(documents, classes, vocab_size, min_frequency, reverse)
+        bpe_train_corpus_fill(
+            handle, data_address, points, lo, hi, document_bytes, vocab_size,
+            min_frequency, reverse,
+        )
     return PythonObject(alloc=handle^)
 
 
@@ -902,19 +781,12 @@ def tokens_gather_rows_binding(addresses: PythonObject, dims: PythonObject) rais
     var lo = _index(dims[3])
     var modulus = _index(dims[4])
     var base = _index(dims[5])
-    if batch < 0 or length < 1 or modulus < 1 or lo < 0 or base < 0:
-        raise Error("ValueError: tokens_gather_rows: bad dims")
-    var width = length + 1
-    if lo + modulus - 1 + width > n_src:
-        raise Error("ValueError: tokens_gather_rows: a row runs past the id array")
+    var width = tokens_gather_rows_width(n_src, batch, length, lo, modulus, base)
     if batch == 0:
         return PythonObject(0)
     var src = i32_ptr(_index(addresses[0]))
     var dst = i32_ptr(_index(addresses[1]))
-    for b in range(batch):
-        var start = lo + (base + b * length) % modulus
-        memcpy(dest=dst + b * width, src=src + start, count=width)
-    return PythonObject(batch * width)
+    return PythonObject(tokens_gather_rows_into(src, dst, batch, length, width, lo, modulus, base))
 
 
 def tokenizer_pretokenize_binding(
@@ -926,9 +798,7 @@ def tokenizer_pretokenize_binding(
     var n = _index(n_bytes)
     var text = _u8_list(_index(text_addr) if n > 0 else 0, n)
     var bounds = pretokenize_pattern(text, builtin_unicode_classes(), _index(pattern))
-    var dst = _i64_ptr(_index(out_addr))
-    for k in range(len(bounds)):
-        dst[k] = Int64(bounds[k])
+    tokenizer_store_i64(_i64_ptr(_index(out_addr)), bounds)
     return PythonObject(len(bounds))
 
 
@@ -957,19 +827,7 @@ def vocab_load_bytes_binding(addresses: PythonObject, dims: PythonObject) raises
     var mlen = _i64_list(_index(addresses[3]) if nm > 0 else 0, 2 * nm)
     var mtotal = _bytes_total(mlen)
     var marena = _u8_list(_index(addresses[2]) if mtotal > 0 else 0, mtotal)
-    var chk = MergeCheck(n)
-    var at = 0
-    for k in range(nm):
-        var a = List[UInt8]()
-        var b = List[UInt8]()
-        for i in range(mlen[2 * k]):
-            a.append(marena[at + i])
-        at += mlen[2 * k]
-        for i in range(mlen[2 * k + 1]):
-            b.append(marena[at + i])
-        at += mlen[2 * k + 1]
-        check_merge(table, a, b, "merge " + String(k), chk)
-    check_loose(table, chk, ignore)
+    vocab_check_merges(table, marena, mlen, n, nm, ignore)
     var sp_arena = List[UInt8]()
     var sp_lengths = List[Int]()
     var sp_ids = List[Int]()
@@ -1033,9 +891,7 @@ def vocab_encode_binding(
     var ids = owner[].tok.value().encode(text, allow)
     if len(ids) > cap:
         raise Error("vocab_encode: " + String(len(ids)) + " ids do not fit " + String(cap))
-    var dst = i32_ptr(_index(out_addr))
-    for k in range(len(ids)):
-        dst[k] = Int32(ids[k])
+    tokenizer_store_i32(i32_ptr(_index(out_addr)), ids)
     return PythonObject(len(ids))
 
 
@@ -1048,9 +904,7 @@ def vocab_pretokenize_binding(
     var n = _index(n_bytes)
     var text = _u8_list(_index(text_addr) if n > 0 else 0, n)
     var bounds = owner[].tok.value().pretokenize(text)
-    var dst = _i64_ptr(_index(out_addr))
-    for k in range(len(bounds)):
-        dst[k] = Int64(bounds[k])
+    tokenizer_store_i64(_i64_ptr(_index(out_addr)), bounds)
     return PythonObject(len(bounds))
 
 
@@ -1064,9 +918,7 @@ def vocab_decode_binding(
     if not owner[].tok:
         raise Error("tokenizer host: the handle holds no vocabulary")
     var ids = _ids_from_seq(seq)
-    var out = List[UInt8]()
-    for k in range(len(ids)):
-        owner[].tok.value().append_decoded(out, ids[k], k)
+    var out = vocab_decode_ids(owner[].tok.value(), ids)
     var cap = _index(out_cap)
     if len(out) > cap:
         raise Error("vocab_decode: " + String(len(out)) + " bytes do not fit " + String(cap))
