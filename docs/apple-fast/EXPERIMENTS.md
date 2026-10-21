@@ -2193,3 +2193,16 @@ Live finding (M4, pip 0.8.49 and 0.8.50, FactorAnalysis 20k x 64): fast 7016 ms,
 | `MOJOLEARN_PCA_FAST_COLMEAN_OFF` + `MOJOLEARN_TSVD_FAST_COLVAR_OFF` + `MOJOLEARN_IDN_XTY_TILED_OFF` + `MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF` (rollbacks) | pca / tsvd / ridge multi-output / every xty_launch, column_mean_launch caller | lane/debt-block-per-n @ 584cd1b8c | none (owed with the next freeze, NV + AMD) | not measured | DELETED (serial shape) | the arms chose one block per column walking all n rows (or its STATS_TPB-chain twin); the row-tile order is the only one in every mode; FAST + Apple pca/tsvd/ridge-multi now run it (speed check owed); docs/TOMBSTONES.md |
 | `MOJOLEARN_QN_TILED_MULTI_OFF` + `MOJOLEARN_QN_TILED_MULTI_ALL` | logistic multinomial (C > 1) and the QN_TILED-off C == 1 gradient | lane/debt-block-per-n @ 4b8a8e8f2 | none (owed with the next freeze, NV + AMD) | not measured | DELETED (serial shape) | xtdz_multi_kernel / xty_kernel ran one block per gradient cell walking all n rows; every C > 1 gradient takes the tile order (narrow ones change bits on every column together); docs/TOMBSTONES.md |
 | `MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL` | loss gate (contract 5.4 sabotage) | lane/debt-block-per-n @ 8476d0774 | none | n/a | DELETED (serial shape) | a one-thread fold of the batch losses; gate-only arm, no bits; docs/TOMBSTONES.md |
+
+## Graph optimizer default candidate (2026-10-21, main 09f4ada32, AMD MI325X)
+
+One run per arm, `tools/bench_graph_optimizer.py run --rounds 1` through `tools/box_merged_verify.sh job_graphopt`
+(provenance by member: merged layout). The optimizer stays opt-in: neither saved workload gets faster with it on.
+
+| workload | passes active | baseline ms | optimizer ms | candidate/baseline | verdict |
+|---|---|---|---|---|---|
+| program-run | none | 0.699 | 0.712 | 1.018 | no gain; opt-in stays |
+| transformer-forward | permutation_composition, dead_intermediates | 27.227 | 27.388 | 1.006 | no gain; opt-in stays |
+
+NVIDIA leg: not run (RunPod balance under the rental floor on 2026-10-21); the default decision needs it too.
+Evidence: `~/mojolearn-evidence/boxes-20261021/amd-out/graph-opt/ab-table.tsv` and the per-workload `result.json`.
