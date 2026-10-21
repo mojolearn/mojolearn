@@ -51,6 +51,7 @@ import json
 from pathlib import Path
 
 from . import _backend
+from . import _native_samba_bridge
 from . import _ragged
 from . import lowbit as _lowbit
 from ._buffer import addr, addr_ro, all_finite, empty
@@ -333,38 +334,8 @@ class SambaInference:
     """
 
     def __init__(self, config, weights):
-        from ._samba_impl import SambaConfig
-        if not isinstance(config, SambaConfig):
-            raise TypeError("mojolearn.SambaInference: config must be a SambaConfig")
-        if not hasattr(weights, "keys"):
-            raise TypeError("mojolearn.SambaInference: weights must be a dict keyed by the registry names")
-        # lane/identical-lowbit-inference (2026-09-17): packed registry
-        # matrices (mojolearn.lowbit) materialized exactly, fp32 path after.
-        weights, self.weight_format = _lowbit.unpack(weights, "SambaInference")
-        shapes = dict(config.registry())
-        missing = [n for n in shapes if n not in weights]
-        extra = [n for n in weights if n not in shapes]
-        if missing or extra:
-            raise ValueError("mojolearn.SambaInference: weight dict mismatch; missing %r, unknown %r"
-                             % (missing, extra))
-        self.config = config
-        self._w = {}
-        for n, shape in config.registry():
-            a = _f32_strict(weights[n], "SambaInference", n)
-            if tuple(a.shape) != tuple(shape):
-                raise ValueError("mojolearn.SambaInference: %s has shape %r, want %r" % (n, tuple(a.shape), tuple(shape)))
-            if not all_finite(a):
-                raise ValueError("mojolearn.SambaInference: %s is not finite" % n)
-            self._w[n] = frombytes(le_bytes(a, "f"), "<f4", tuple(shape))
-        c = config
-        self._blocks = []
-        for i, kind in enumerate(c.layers):
-            w = {n: self._w["layers.%d.%s" % (i, n)] for n, _ in c.block_shapes(kind)}
-            if kind == "mamba3":
-                self._blocks.append(Mamba3BlockInference(w))
-            else:
-                self._blocks.append(TransformerBlockInference(w, n_heads=c.n_heads, n_kv_heads=c.n_kv_heads,
-                                                              head_dim=c.head_dim))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_construct", (self, config, weights), _native_samba_bridge.CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path):
@@ -383,29 +354,13 @@ class SambaInference:
         -------
         SambaInference
         """
-        from ._samba_checkpoint import MAGIC, load
-        from ._samba_impl import PROFILE, SambaConfig, SambaStack, _STATE_SCHEMA
-        with Path(path).open("rb") as stream:
-            streamed = stream.read(len(MAGIC)) == MAGIC
-        payload = load(path) if streamed else SambaStack._read_legacy_checkpoint(path)
-        if payload.get("schema") != _STATE_SCHEMA or payload.get("profile") != PROFILE:
-            raise ValueError("mojolearn.SambaInference: checkpoint schema/profile mismatch")
-        config = SambaConfig.from_dict(payload["config"])
-        want = config.registry()
-        entries = payload["registry"]
-        if [(e["name"], tuple(e["shape"])) for e in entries] != [(n, tuple(s)) for n, s in want]:
-            raise ValueError("mojolearn.SambaInference: checkpoint registry differs from its config's")
-        from ._bufcheck import flat_view
-        flat = flat_view(payload["parameters"], "f")
-        weights = {}
-        for e in entries:
-            weights[e["name"]] = frombytes(
-                bytes(flat[e["offset"]:e["offset"] + e["size"]].cast("B")), "<f4", tuple(e["shape"]))
-        return cls(config, weights)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_checkpoint", (cls, path), _native_samba_bridge.CONTEXT)
 
     def parameters(self):
         """An independent copy of every weight, keyed by registry name."""
-        return {n: a.copy() for n, a in self._w.items()}
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_parameters", (self,), _native_samba_bridge.CONTEXT)
 
     @staticmethod
     def _ids(x):
@@ -435,14 +390,8 @@ class SambaInference:
         -------
         mojolearn.Array of float32, shape (B, L, vocab)
         """
-        what = "SambaInference.forward"
-        ids = self._ids(inputs)
-        if lengths is not None:
-            if state is not None:
-                raise ValueError(f"mojolearn {what}: lengths= applies to the stateless "
-                                 "forward only; pass state=None")
-            return _ragged.ragged_forward(self.forward, ids, None, lengths, "<i4", what)[0]
-        return self._run(ids, state, False, what)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_forward", (self, inputs, state, lengths), _native_samba_bridge.CONTEXT)
 
     logits = forward
     __call__ = forward
@@ -464,16 +413,8 @@ class SambaInference:
         -------
         SambaState
         """
-        from ._samba_impl import SambaState
-        b, smax = int(batch_size), int(max_tokens)
-        if b < 1 or smax < 1:
-            raise ValueError("mojolearn.SambaInference.allocate_state: batch_size "
-                             "and max_tokens must be positive")
-        layers = []
-        for kind, blk in zip(self.config.layers, self._blocks):
-            layers.append(blk.allocate_state(b) if kind == "mamba3"
-                          else blk.allocate_state(b, smax))
-        return SambaState(b, smax, layers)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "allocate_state", (self, batch_size, max_tokens), _native_samba_bridge.CONTEXT)
 
     def step(self, inputs, state):
         """Decode one token per row and update `state` in place.
@@ -491,77 +432,22 @@ class SambaInference:
         -------
         mojolearn.Array of float32, shape (B, vocab)
         """
-        what = "SambaInference.step"
-        if state is None:
-            raise ValueError("mojolearn.SambaInference.step: state is required "
-                             "(allocate_state(B, max_tokens) makes the fresh one)")
-        pb = probe(inputs)
-        if len(pb.shape) not in (1, 2) or (len(pb.shape) == 2 and pb.shape[1] != 1):
-            raise ValueError("mojolearn.SambaInference.step: inputs must be (B,) or "
-                             "(B, 1) integer ids")
-        rows = int(pb.shape[0])
-        ids = as_i32_c(inputs, ndim=None, name="inputs")[0].reshape((rows, 1))
-        out = self._run(ids, state, True, what)
-        return out.reshape((rows, self.config.vocab))
-
-    def _run(self, ids, state, step, what):
-        """The stack's arithmetic: the embedding gather, each block in stack
-        order, the final RMSNorm and the tied or untied head. ONE spelling
-        for the stateless forward, the stateful forward and the decode step
-        -- the only difference is what each block is handed."""
-        from ._samba_impl import SambaState
-        c = self.config
-        b, l = int(ids.shape[0]), int(ids.shape[1])
-        if b < 1 or l < 1:
-            raise ValueError(f"mojolearn {what}: B and L must be positive")
-        if ids.min() < 0 or ids.max() >= c.vocab:
-            raise ValueError(f"mojolearn {what}: inputs must be in [0, vocab)")
-        if state is not None:
-            if not isinstance(state, SambaState):
-                raise TypeError(f"mojolearn {what}: state must be a SambaState (allocate_state)")
-            if state.batch_size != b or len(state.layers) != len(c.layers):
-                raise ValueError(
-                    f"mojolearn {what}: the state holds {state.batch_size} rows and "
-                    f"{len(state.layers)} layers, the call has B = {b} and the stack "
-                    f"{len(c.layers)} layers")
-        ext = _binding()
-        n, d = b * l, c.d_model
-        flat_ids = ids.reshape((n,))
-        x = empty((n, d), "<f4")
-        emb = self._w["embed.weight"]
-        ext.embedding_forward([_addr(x), _addr_ro(emb), _addr_ro(flat_ids)], [n, c.vocab, d])
-        x = x.reshape((b, l, d))
-        for i, blk in enumerate(self._blocks):
-            if state is None:
-                x = blk.forward(x)
-            elif step:
-                x = blk.step(x, state.layers[i])
-            else:
-                x = blk.forward(x, state.layers[i])
-        xf = x.reshape((n, d))
-        hn = empty((n, d), "<f4")
-        ext.rms_norm_forward([_addr(hn), _addr_ro(xf), _addr_ro(self._w["norm_f.weight"])], [n, d, c.norm_eps])
-        head = self._w["embed.weight" if c.tie_embeddings else "lm_head.weight"]
-        logits = empty((n, c.vocab), "<f4")
-        ext.linear_forward([_addr(logits), _addr_ro(hn), _addr_ro(head)], [n, c.vocab, d])
-        return logits.reshape((b, l, c.vocab))
-
-    def _refuse(self, name):
-        raise NotImplementedError(
-            f"mojolearn SambaInference.{name}: inference is forward only; losses, "
-            "backward and training run on SambaStack")
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_step", (self, inputs, state), _native_samba_bridge.CONTEXT)
 
     def loss(self, inputs, targets):
         """Not available: inference only. Raises `NotImplementedError`; use `SambaStack`."""
-        self._refuse("loss")
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_refuse", ("loss",), _native_samba_bridge.CONTEXT)
 
     def train_step(self, inputs, targets):
         """Not available: inference only. Raises `NotImplementedError`; use `SambaStack`."""
-        self._refuse("train_step")
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_refuse", ("train_step",), _native_samba_bridge.CONTEXT)
 
     def __repr__(self):
-        return "SambaInference(layers=%r, d_model=%d, vocab=%d)" % (
-            list(self.config.layers), self.config.d_model, self.config.vocab)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_repr", (self,), _native_samba_bridge.CONTEXT)
 
 
 # Import-time connection metadata for the causal native owner. This helper is

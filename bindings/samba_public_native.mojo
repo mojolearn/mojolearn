@@ -10,6 +10,7 @@ from bindings.samba_construct_native import samba_construct, samba_load_weights,
 from bindings.samba_step_native import samba_train_step
 from bindings.samba_inference_native import samba_forward, samba_allocate, samba_loss, samba_state_construct
 from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkpoint_load, samba_checkpoint_read
+from bindings.samba_cpu_inference import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
 
 
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -37,6 +38,20 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             result = samba_checkpoint_load(values[0], values[1], values[2], context)
         elif operation == "checkpoint_read":
             result = samba_checkpoint_read(values[0], context)
+        elif operation == "inference_construct":
+            result = samba_inference_construct(values[0], values[1], values[2], context)
+        elif operation == "inference_parameters":
+            result = samba_inference_parameters(values[0])
+        elif operation == "inference_checkpoint":
+            result = samba_inference_checkpoint(values[0], values[1], context)
+        elif operation == "inference_forward":
+            result = samba_forward(values[0], values[1], values[2], values[3], False, False, context)
+        elif operation == "inference_step":
+            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, False, context)
+        elif operation == "inference_repr":
+            result = samba_inference_repr(values[0])
+        elif operation == "inference_refuse":
+            raise Error("NotImplementedError: SambaInference." + String(values[0]) + ": inference is forward only; use SambaStack for training")
         elif operation == "construct":
             result = samba_construct(values[0], values[1], context)
         elif operation == "load_weights":

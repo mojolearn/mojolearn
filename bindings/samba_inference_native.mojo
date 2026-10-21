@@ -13,6 +13,7 @@ from bindings.samba_training_native import samba_ids
 from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths
 from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
+from bindings.causal_lm_construct import _model_bindings
 
 
 def _m3_shapes(b: Int, h: Int) -> List[List[Int]]:
@@ -75,12 +76,20 @@ def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObje
     return result
 
 
+
+def _samba_block_entries(block: PythonObject, context: PythonObject) raises -> PythonObject:
+    var bi = Python.import_module("builtins")
+    var nc = context["neural"]
+    if Bool(py=bi.isinstance(block, nc["block_classes"]["cpu"]["mamba3"])):
+        return _model_bindings(PythonObject("cpu"), "mamba3", nc, PythonObject("identical"))["mamba3"]
+    return neural_training_entries(samba_fields(block), nc)
+
 def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
     var fields = samba_fields(block)
     var slots = samba_fields(state)
     if slots.get("_resident_session") is not None:
         raise Error("Mamba3: state belongs to an open resident decode session; synchronize or close it first")
-    var entries = neural_training_entries(fields, context["neural"])
+    var entries = _samba_block_entries(block, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=fields["d_model"])
@@ -195,7 +204,11 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         raise Error("TypeError: SambaStack: state must be a SambaState")
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
-    var entries = samba_entries(context, fields["numeric_mode"])
+    var entries = PythonObject(None)
+    if Bool(py=fields.get("_native_cpu_inference", PythonObject(False))):
+        entries = _model_bindings(PythonObject("cpu"), "mamba3", context["neural"], PythonObject("identical"))["primitives"]
+    else:
+        entries = samba_entries(context, fields["numeric_mode"])
     var d = Int(py=config["d_model"])
     var v = Int(py=config["vocab"])
     var ids = _samba_inference_ids(inputs, v, step, lengths, context)
@@ -221,7 +234,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             if String(config["layers"][i]) == "attention":
                 result = neural_block_forward_binding(block, hidden, PythonObject(None) if states is None else states[i], PythonObject(step), PythonObject(None), context["neural"])
             elif states is None:
-                result = _prefill_mamba3(block, hidden, neural_training_entries(samba_fields(block), context["neural"]))
+                result = _prefill_mamba3(block, hidden, _samba_block_entries(block, context))
             else:
                 result = _m3_state_forward(block, hidden, states[i], step, context)
             hidden = result
