@@ -45,7 +45,7 @@ there.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
 from std.memory import memcpy
 from std.python import Python, PythonObject

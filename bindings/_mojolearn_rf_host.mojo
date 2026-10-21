@@ -85,7 +85,7 @@ from core.mojolearn_rf_host_impl import (
     rf_host_session_rows_x,
     rf_host_weights_from,
 )
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from core.weight_compact_host import (
     host_all_unit,
     host_gather_colmajor,

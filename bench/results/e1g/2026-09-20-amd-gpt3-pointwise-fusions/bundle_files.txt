@@ -426,7 +426,7 @@ bindings/gp_host_predict.mojo
 bindings/hdbscan_host_predict.mojo
 bindings/holtwinters_host_predict.mojo
 bindings/host_helpers.mojo
-bindings/hostptr.mojo
+core/hostptr.mojo
 bindings/hotpath_helpers.mojo
 bindings/ivf_host_search.mojo
 bindings/ivf_index_arrays.mojo

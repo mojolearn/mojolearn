@@ -25,7 +25,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, u16_ptr
+from core.hostptr import f32_ptr, u16_ptr
 from core.neural_context import process_ctx
 from gemm.afn_apple_fast import (
     AFN_GEMM_BF16_MMA,

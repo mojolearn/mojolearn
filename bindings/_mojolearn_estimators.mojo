@@ -10,7 +10,7 @@ from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAI
 
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
 from experiments.apple_fast.gemm.scoped_dispatch import (
     AUDIT as SCOPED_AUDIT, GRAM as SCOPED_GRAM, SPLITS as SCOPED_SPLITS,

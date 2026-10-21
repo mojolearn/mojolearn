@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
-from bindings.hostptr import f32_ptr, i32_ptr, copy_f32
+from core.hostptr import f32_ptr, i32_ptr, copy_f32
 from arima.estimator import _upload_f32
 from arima.impl.fast_scalar_df import DF_TPB, DF_MAX_OBS, k3_df_parts_kernel, k3_df_finish_kernel, k3_df_gradient_kernel
 

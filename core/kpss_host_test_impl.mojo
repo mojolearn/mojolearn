@@ -2,7 +2,7 @@
 """Typed KPSS flag and select_d loops moved word for word from bindings/kpss_host_test.mojo."""
 from std.sys.compile import is_defined
 from std.math import isfinite
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr, read_f32
 from tsa.checks.kpss_oracle import kpss_host_f32
 
 

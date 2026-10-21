@@ -16,7 +16,7 @@ from bindings.causal_lm_public import causal_lm_admit_binding, _native_function
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_checkpoint_names_binding, model_layer_weights_binding
 from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding
 from bindings.native_json import native_path, native_path_exists
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 
 

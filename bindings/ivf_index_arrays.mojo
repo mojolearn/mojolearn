@@ -45,7 +45,7 @@ admits them, before any search or extend statement runs.
 """
 from std.python import Python, PythonObject
 
-from bindings.hostptr import f32_ptr, i32_ptr, u32_ptr, read_f32, read_i32, list_u32
+from core.hostptr import f32_ptr, i32_ptr, u32_ptr, read_f32, read_i32, list_u32
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_validate_index_arrays
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): the output
 # stores, the shard merge and the shard plan, moved word for word.

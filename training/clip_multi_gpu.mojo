@@ -9,7 +9,7 @@ owner, with full host staging before publication. One tensor must fit an owner.
 from std.os import getenv
 from std.sys import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from training.estimator import identical_clip_grad_norm_host, _offsets_from_ptr
 from training.samba_ops import _upload_f32

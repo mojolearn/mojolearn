@@ -11,7 +11,7 @@ bit here.
 """
 from std.memory import memcpy
 
-from bindings.hostptr import read_i32
+from core.hostptr import read_i32
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW
 from x_cnn.ops import FP, IP, argmax_row_at

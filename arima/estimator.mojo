@@ -86,7 +86,7 @@ MI325X (bench/results/identity_break/2026-09-14_136-lanes/).
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL

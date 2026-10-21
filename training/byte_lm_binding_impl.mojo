@@ -4,7 +4,7 @@
 keeper, span validation, the input-unchanged guard, the on-device bit compare,
 flag and loss publication, export staging and the launch-cost probe. No
 Python here; the binding unpacks its arguments and calls these."""
-from bindings.hostptr import f32_ptr, read_f32, copy_f32, list_i32
+from core.hostptr import f32_ptr, read_f32, copy_f32, list_i32
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from std.ffi import _Global

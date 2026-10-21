@@ -24,7 +24,7 @@ reaches them; a binding that imports it makes it reachable from there.
 
 from std.python import PythonObject
 
-from bindings.hostptr import f32_ptr as _hostptr_f32, i32_ptr as _hostptr_i32
+from core.hostptr import f32_ptr as _hostptr_f32, i32_ptr as _hostptr_i32
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
@@ -47,10 +47,10 @@ def numeric_mode_binding() raises -> PythonObject:
 
 
 def f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    """Refuses address 0 by name (`bindings/hostptr.mojo`)."""
+    """Refuses address 0 by name (`core/hostptr.mojo`)."""
     return _hostptr_f32(addr)
 
 
 def i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    """Refuses address 0 by name (`bindings/hostptr.mojo`)."""
+    """Refuses address 0 by name (`core/hostptr.mojo`)."""
     return _hostptr_i32(addr)

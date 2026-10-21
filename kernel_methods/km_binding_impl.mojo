@@ -7,7 +7,7 @@ arguments and calls one of these (lane thin-core, 2026-10-21: moved word
 for word, no bit change)."""
 from std.math import sqrt
 
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from core.identity_trace import IdentityTrace
 from kernel_methods.estimator import (
     KernelRidgeModel,

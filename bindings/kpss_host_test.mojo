@@ -32,7 +32,7 @@ a sabotage build is refused outside the gate.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr, i32_ptr
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE, kpss_host_f32
 from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE, _kpss_flags_host, kpss_select_d_host
 

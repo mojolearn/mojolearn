@@ -33,7 +33,7 @@ from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.memory import memcpy
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex, IvfFlatSearchParams
 from ivf.impl.neighbors.ivf_flat.ivf_flat_search import (

@@ -4,7 +4,7 @@
 Python doors (lane thin-trees-metrics, 2026-10-21: `_rebuild_kernel_spec`,
 `_gpr_predict_run` and `_gpc_predict_run` moved word for word out of that
 shell; no Python here)."""
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from gaussian_process.unnorm import GP_UNNORM_MEAN, GP_UNNORM_STD, gp_unnorm_cell
 from gaussian_process.host.gpc_oracle import gpc_host_predict
 from gaussian_process.host.gpc_steps import gpc_proba

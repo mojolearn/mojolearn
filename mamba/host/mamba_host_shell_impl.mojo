@@ -11,7 +11,7 @@ from std.memory import memcpy
 from std.sys.compile import is_defined
 from std.os import abort
 
-from bindings.hostptr import f32_ptr, read_f32
+from core.hostptr import f32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

@@ -14,7 +14,7 @@ PairLogit pairs, the categorical flags, the binary class row weights).
 from std.math import isfinite
 from std.memory import bitcast
 
-from bindings.hostptr import read_f32
+from core.hostptr import read_f32
 from checks.numerics import ftz, identical_sigmoid
 from checks.soft_f64 import (
     SF64_ONE,

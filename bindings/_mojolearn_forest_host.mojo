@@ -76,7 +76,7 @@ from bindings.host_helpers import (
     gather_f64_binding,
     gather_i64_binding,
 )
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

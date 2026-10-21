@@ -29,7 +29,7 @@ regressors take the same rule, naming the series, row and regressor.
 """
 from std.math import isfinite
 
-from bindings.hostptr import read_f32
+from core.hostptr import read_f32
 
 
 def exog_filter_layout(

@@ -3,7 +3,7 @@
 """Typed GPU entries behind `bindings/_mojolearn_mixture.mojo`'s Python doors
 (lane thin-trees-metrics, 2026-10-21: the `_gmm_*_run` bodies moved word for
 word out of that shell; no Python here)."""
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from mixture.estimator import (
     GaussianMixtureModel,
     GmmParams,

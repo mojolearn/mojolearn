@@ -52,7 +52,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from core.host_predict_threads import host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,

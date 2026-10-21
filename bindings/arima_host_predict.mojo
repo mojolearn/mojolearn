@@ -22,7 +22,7 @@ n_steps, p, d, q, P, D, Q, s, k, n_exog, reserved). The validation is `arima/est
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 from arima.host.arima_oracle import arima_host_refuse_unrestated
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): moved word for
 # word to arima/host/arima_host_entries.mojo; this file is the Python door.

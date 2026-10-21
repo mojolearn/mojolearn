@@ -83,7 +83,7 @@ is the one-shot form, which is what the gates and the card use.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL

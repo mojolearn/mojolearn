@@ -22,7 +22,7 @@ detects after native success. `byte_lm_session_run` (mirror in, mirror
 out) is kept for the transition and is unchanged.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 from std.ffi import _Global

@@ -14,7 +14,7 @@ the GPU binding's (`bindings/_mojolearn_mixture.mojo`), word for word.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 # The sampling body (lane thin-trees-metrics, 2026-10-21) is the kernel
 # module's; the output copies below are one memcpy each.
 from mixture.host.gmm_host_entries import gmm_sample_into

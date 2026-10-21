@@ -13,7 +13,7 @@ is the body `arima_fit_binding` ran with the GIL released, after
 from std.memory import bitcast
 
 from arima.exog_layout import exog_filter_layout
-from bindings.hostptr import read_f32
+from core.hostptr import read_f32
 from arima.impl.arima_ic import arima_ic_bits
 from arima.host.arima_oracle import (
     ArimaHostOrder,

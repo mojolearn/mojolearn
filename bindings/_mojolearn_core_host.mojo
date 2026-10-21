@@ -177,7 +177,7 @@ from bindings.array_helpers import (
     class_ratio_f64_host_binding,
     shard_topk_merge_f32_host_binding,
 )
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
@@ -353,7 +353,7 @@ def cast_colmajor_f64_to_f32_binding(
 # them the lane refuses at `_mojolearn.nonzero_f64_count`. Both bodies are
 # `bindings/_mojolearn.mojo::nonzero_f64_count_binding` and
 # `nonzero_f64_fill_binding` (DEVIATION 2489) with this binding's `_index`
-# and `bindings/hostptr.mojo`'s pointers: a comparison, a row-major scan
+# and `core/hostptr.mojo`'s pointers: a comparison, a row-major scan
 # and one narrowing per kept value, no fold, so no sabotage arm here (the
 # lane's arms are the spectral oracle's).
 # ===========================================================================

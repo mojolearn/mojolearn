@@ -45,7 +45,7 @@ an arithmetic; `cluster/detail/spectral.mojo` wanted row-major anyway (it
 transposes theirs to get it, `spectral.cuh:47-52`).
 """
 
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext

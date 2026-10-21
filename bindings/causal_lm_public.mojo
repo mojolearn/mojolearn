@@ -16,7 +16,7 @@ from bindings.generation_buffers import (
     generation_ids, py_ints,
 )
 from bindings.generation_policy import generation_pick
-from bindings.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr, i32_ptr
 from std.math import isfinite
 from std.os import getenv
 from transformer.causal_lm_public_impl import (

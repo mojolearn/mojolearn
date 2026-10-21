@@ -14,7 +14,7 @@ function. The address and params contract is the GPU binding's
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from hdbscan.host.hdbscan_door_host_impl import (
     all_points_membership_host_run,
     approximate_predict_host_run,

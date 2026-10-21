@@ -12,7 +12,7 @@ pure move, no bit change).
 """
 from std.math import isfinite
 
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.numerics import ftz
 from core.classical_host_predict import (
     host_pca_whiten_inverse_transform_into,

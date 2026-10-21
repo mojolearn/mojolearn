@@ -3,7 +3,7 @@
 from training.neural_arithmetic_profile import neural_training_profile
 from training.neural_session_mlp_host import nn_mlp_sessions_host
 from std.os import abort
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

@@ -7,7 +7,7 @@ function here and converts the result back (lane thin-core, 2026-10-21: the
 bodies moved word for word, no bit change)."""
 from std.math import isnan
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from core.host_predict_threads import host_predict_task_count
 from checks.numerics import ftz
 from isolation_forest.checks.if_oracle import (

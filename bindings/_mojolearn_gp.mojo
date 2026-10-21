@@ -84,7 +84,7 @@ THE GIL is released around every device call, and nothing inside a
 
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
     gp_log64,
     gp_restart_uniform,

@@ -26,7 +26,7 @@ moves. A change to one of these bodies belongs in all three places.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, f64_ptr
+from core.hostptr import f32_ptr, f64_ptr
 from core.host_helpers_impl import (
     all_finite_f32,
     all_finite_f64,

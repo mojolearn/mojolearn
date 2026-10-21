@@ -25,7 +25,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, read_f32
+from core.hostptr import f32_ptr, read_f32
 from bindings.ivf_index_arrays import (
     ivf_read_resident_filter,
     ivf_write_resident_result,

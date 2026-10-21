@@ -66,7 +66,7 @@ from bindings.py2mojo_cluster_est import dbscan_core_arrays_host_binding, estima
 from core.py2mojo_rows_pyapi import py2mojo_rows_host_binding
 from svm.host.scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

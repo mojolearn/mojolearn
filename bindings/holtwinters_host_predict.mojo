@@ -26,7 +26,7 @@ build scripts pass neither define.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE, hw_store_values
 from holtwinters.host.hw_predict import (
     hw_forecast_from_state_ptr,

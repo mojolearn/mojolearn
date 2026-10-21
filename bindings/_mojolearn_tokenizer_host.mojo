@@ -79,7 +79,7 @@ from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from std.sys.compile import is_defined
 
-from bindings.hostptr import i32_ptr
+from core.hostptr import i32_ptr
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from bindings.causal_model_config import model_config_c
 from bindings.causal_checkpoint import checkpoint_c

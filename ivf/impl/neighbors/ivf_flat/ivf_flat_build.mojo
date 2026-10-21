@@ -62,7 +62,7 @@ way it is there -- a stale membership is a stale summation set.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32, f32_ptr, read_f32
+from core.hostptr import copy_f32, f32_ptr, read_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cluster.impl.detail.kmeans import kmeans_fit_main_traced

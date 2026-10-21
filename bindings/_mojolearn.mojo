@@ -79,7 +79,7 @@ hr-small-passes (2026-10-02): LinearRegression and Ridge center on the
 device through the estimators binding (glm/impl/center_device.mojo).
 """
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.mojolearn_shell_impl import (
     all_finite_host_f32,
     all_finite_host_f64,

@@ -9,7 +9,7 @@ binding (thin-shell lane, 2026-10-21): same operations, same order.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, read_f32, copy_f32, i8_ptr, i32_ptr
+from core.hostptr import f32_ptr, read_f32, copy_f32, i8_ptr, i32_ptr
 # lane/lowbit-blocks (2026-09-29): the block under numeric_profile="fixed15_v1".
 from transformer.impl.llama.int15_block import (
     Int15Planes,

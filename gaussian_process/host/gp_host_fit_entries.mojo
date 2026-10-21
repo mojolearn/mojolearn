@@ -4,7 +4,7 @@
 Python doors (lane thin-trees-metrics, 2026-10-21: moved word for word out of
 that shell, so a Python-free caller reaches the same source; no Python here).
 The address and params contracts are that file's."""
-from bindings.hostptr import f32_ptr, f64_ptr
+from core.hostptr import f32_ptr, f64_ptr
 from gaussian_process.host.gp_theta import (
     gp_log64,
     gp_restart_uniform,

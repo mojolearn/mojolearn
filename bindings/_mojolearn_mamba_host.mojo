@@ -41,7 +41,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32
+from core.hostptr import f32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

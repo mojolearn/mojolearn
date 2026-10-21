@@ -2,7 +2,7 @@
 """Typed Holt-Winters host fit body moved word for word from bindings/_mojolearn_tsa_host.mojo."""
 from std.math import isfinite
 from std.memory import bitcast
-from bindings.hostptr import read_f32
+from core.hostptr import read_f32
 from holtwinters.host.hw_oracle import (
     HW_ORACLE_HOST_SABOTAGE,
     oracle_fit,

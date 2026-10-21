@@ -43,7 +43,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
 
-from bindings.hostptr import f32_ptr, f64_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -82,7 +82,7 @@ from gemm.host.gemm_lowbit_oracle import (
     widen_bf16,
 )
 from gemm.f16_widen import f16_bits_to_f32
-from bindings.hostptr import i8_ptr, i32_ptr, read_i8, read_i32, read_u16, u16_ptr
+from core.hostptr import i8_ptr, i32_ptr, read_i8, read_i32, read_u16, u16_ptr
 from gemm.host.gemm_int15_oracle import (
     INT15_MAX_K,
     INT15_PROFILE_VERSION,

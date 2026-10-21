@@ -64,10 +64,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, read_f32, read_i32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.hostptr import i32_ptr
+from core.hostptr import i32_ptr
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
     host_spectral_embedding_coo,

@@ -33,7 +33,7 @@ HAS RUN THIS UNDER IDENTICAL. See `resample/README.md` under Status.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32, f32_ptr, i32_ptr
+from core.hostptr import copy_f32, f32_ptr, i32_ptr
 from experiments.classical_identical_ideas.shared_controls import C11_DRAW_GATHER
 from resample.gather_fast import GATHER_COLS, GATHER_ROWS, classical_draw_gather_kernel, gather_rows_f32_kernel, gather_rows_tiled_f32_kernel, permutation_positions_kernel, permutation_merge_kernel
 from resample.fast_apple import (

@@ -70,7 +70,7 @@ from bindings.forest_export_binding import (
 from core.mojolearn_forest_host_impl import forest_host_vote_into
 from core.mojolearn_rf_host_impl import rf_host_col_major
 from core.mojolearn_trees_host_impl import et_export_into, et_forest_lists
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

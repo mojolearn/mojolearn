@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed host scaler checks and bodies moved word for word from bindings/_mojolearn_preprocessing_host.mojo."""
 from std.math import isfinite
-from bindings.hostptr import copy_f32, f32_ptr, read_f32
+from core.hostptr import copy_f32, f32_ptr, read_f32
 from preprocessing.host.scaler_oracle import (
     host_minmax_fit,
     host_minmax_transform,

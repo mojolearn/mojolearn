@@ -95,7 +95,7 @@ def host_predict_chunk(rows: Int, tasks: Int) -> Int:
 
 
 #: The pointer every `_into` entry takes: the host bindings' own type
-#: (`bindings/hostptr.mojo::f32_ptr`), so a binding hands the caller's
+#: (`core/hostptr.mojo::f32_ptr`), so a binding hands the caller's
 #: address straight through and a List door rebinds its storage to it.
 comptime HostF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
 comptime HostF64Ptr = MutPointer[Float64, MutUntrackedOrigin]

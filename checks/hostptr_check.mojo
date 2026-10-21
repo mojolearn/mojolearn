@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host-only byte gate for WP6; no GPU, numeric mode, or timing claim."""
 from std.memory import bitcast
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr, copy_f32, read_f32, read_i32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr, copy_f32, read_f32, read_i32
 
 
 def pattern(i: Int) -> UInt32:

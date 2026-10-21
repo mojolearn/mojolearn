@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed host solver bodies moved word for word from bindings/_mojolearn_solver_host.mojo."""
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

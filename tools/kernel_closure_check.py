@@ -7,7 +7,7 @@ program that imports every kernel module, in a copy of the source tree where
   1. every SHELL file (bindings/**, **/*pyapi*.mojo, **/*_py.mojo) that imports
      or calls Python, directly or through its imports, is deleted, so a kernel
      module that reaches such a shell fails to resolve (a Python-free helper
-     that lives under bindings/, such as bindings/hostptr.mojo, stays and is
+     that lives under bindings/, such as core/hostptr.mojo, stays and is
      listed as a helper to move out of the shell); and
   2. every `from (std.)python ...` / `import (std.)python ...` line is removed from
      every remaining .mojo file (an indented one becomes `pass`, so blocks stay

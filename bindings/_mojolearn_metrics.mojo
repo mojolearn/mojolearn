@@ -43,7 +43,7 @@ wrappers without a leg to point at.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

@@ -63,7 +63,7 @@ holds the k+1 neighbor distances).
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from std.math import fma
 from std.atomic import Atomic
 from std.gpu import thread_idx

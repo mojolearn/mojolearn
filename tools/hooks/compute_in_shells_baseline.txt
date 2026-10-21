@@ -179,8 +179,8 @@ bindings/generation_policy.mojo:82: while count < keep:
 bindings/generation_policy.mojo:91: for i in range(count):
 bindings/holtwinters_host_predict.mojo:140: for i in range(h * batch_size):
 bindings/holtwinters_host_predict.mojo:215: for i in range(written):
-bindings/hostptr.mojo:43: while i < body:
-bindings/hostptr.mojo:46: while i < n:
+core/hostptr.mojo:43: while i < body:
+core/hostptr.mojo:46: while i < n:
 bindings/kpss_host_test.mojo:85: for i in range(batch_size * n_obs):
 bindings/kpss_host_test.mojo:104: for b in range(batch_size):
 bindings/kpss_host_test.mojo:194: for b in range(batch_size):

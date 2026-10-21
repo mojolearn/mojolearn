@@ -4,7 +4,7 @@
 oracle calls and result copies each door ran with the GIL released, moved
 here with no Python import (lane thin-core, 2026-10-21: a pure move, no bit
 change). The binding keeps the argument checks and calls one function."""
-from bindings.hostptr import read_f32, read_i8, read_i32, read_u16
+from core.hostptr import read_f32, read_i8, read_i32, read_u16
 from cholesky.host.chol_oracle import (
     CholHostFactor,
     chol_host_potrf,

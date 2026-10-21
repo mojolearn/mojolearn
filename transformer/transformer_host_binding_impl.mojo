@@ -10,7 +10,7 @@ binding (thin-shell lane, 2026-10-21): same operations, same order.
 
 from std.os import abort
 
-from bindings.hostptr import copy_f32, f32_ptr, read_f32
+from core.hostptr import copy_f32, f32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

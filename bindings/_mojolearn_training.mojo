@@ -66,7 +66,7 @@ from training.neural_session_mlp import nn_mlp_sessions_device
 
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

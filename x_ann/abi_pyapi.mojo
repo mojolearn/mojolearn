@@ -5,7 +5,7 @@
 PythonObject unpacking and plain copies, no arithmetic."""
 
 from std.python import PythonObject
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from x_ann.ivf_pq_core import F32P, I32P
 from x_ann.abi import out_f32_to, out_i32_to
 

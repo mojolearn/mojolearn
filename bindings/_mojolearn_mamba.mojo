@@ -133,7 +133,7 @@ rc 134), an open defect. Build:
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, read_f32, copy_f32
+from core.hostptr import f32_ptr, read_f32, copy_f32
 from std.memory import bitcast, memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined, get_defined_int

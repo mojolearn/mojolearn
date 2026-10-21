@@ -11,7 +11,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32
+from core.hostptr import f32_ptr, read_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from x_cluster.device_ops import DeviceOps

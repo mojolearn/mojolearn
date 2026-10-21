@@ -9,7 +9,7 @@ query-tile workspace is O(tile*n), not an n*n distance matrix. No whole-
 process memory or speed claim follows without main-lane measurements.
 """
 
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from max.gpu.host import DeviceContext
 from neighbors.estimator import knn_search_resident
 from umap.sparse_graph import (

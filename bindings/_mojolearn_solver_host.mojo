@@ -54,7 +54,7 @@ from core.mojolearn_solver_host_impl import linkage_fit_host_into, cd_predict_ho
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

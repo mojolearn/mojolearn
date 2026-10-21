@@ -11,7 +11,7 @@ from gbdt.trees_identical_switches import T30_ADABOOST
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator

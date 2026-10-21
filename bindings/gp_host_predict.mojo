@@ -13,7 +13,7 @@ is the GPU binding's (`bindings/_mojolearn_gp.mojo`), word for word.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import read_f32
+from core.hostptr import read_f32
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out
 from gaussian_process.host.gpc_steps import gpc_ovr_combine_rows
 from gaussian_process.host.gpr_oracle import GPHostKernelSpec

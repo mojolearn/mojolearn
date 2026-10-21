@@ -6,7 +6,7 @@ shell, so a Python-free caller reaches the same source; no Python here):
 the device label and CSR checks, the CSR validation, and the resident fit
 epochs (`x_cnn_fit_epoch_r` and `x_cnn_fit_epoch_d`) with their step loops.
 """
-from bindings.hostptr import read_i32
+from core.hostptr import read_i32
 from x_cnn.ops import FP, IP, AH_ROW
 from x_cnn.device import (
     linear_forward_into,

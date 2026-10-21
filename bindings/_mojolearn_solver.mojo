@@ -31,7 +31,7 @@ THE GIL IS RELEASED AROUND THE DEVICE WORK, and nothing inside a
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

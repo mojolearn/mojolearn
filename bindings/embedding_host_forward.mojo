@@ -18,7 +18,7 @@ through `embedding/checks/embedding_oracle.mojo`.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, read_f32, read_i32
 from embedding.checks.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,

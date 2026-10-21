@@ -6,7 +6,7 @@ so a Python-free caller reaches the same source; no Python here). The
 address and parameter contracts are that file's."""
 from std.memory import memcpy
 
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr, read_f32
 from ivf.impl.neighbors.ivf_common import postprocess_distances
 from x_ann.switches import ANN3_HOST_PASSES
 

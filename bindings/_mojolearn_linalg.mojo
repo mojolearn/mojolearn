@@ -56,7 +56,7 @@ wrapper reads it once.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
+from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
 from std.os import abort, getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject

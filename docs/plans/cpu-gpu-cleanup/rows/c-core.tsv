@@ -4,8 +4,8 @@ host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bin
 host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:equal_elements_binding
 host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:gather_i32_binding
 host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import core/dense_coo.mojo:knn_affinity_f32
-host-threads	host-threads	UNOWNED	debt	bindings/hostptr.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	UNOWNED	debt	bindings/hostptr.mojo	0	host_parallelize(_c, tasks)
+host-threads	host-threads	UNOWNED	debt	core/hostptr.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	core/hostptr.mojo	0	host_parallelize(_c, tasks)
 host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	gap-neural-overhead2	debt	bindings/hotpath_helpers.mojo	0	host_parallelize(_range, tasks)
 host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	1	host_parallelize(_range, tasks)

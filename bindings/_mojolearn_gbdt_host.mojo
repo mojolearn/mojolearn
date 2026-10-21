@@ -96,7 +96,7 @@ comptime QUANTILE_CONST_DELTA = 1e-6
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, read_f32, u32_ptr
+from core.hostptr import f32_ptr, f64_ptr, read_f32, u32_ptr
 from bindings.py_lists import py_list_f64
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): the model text
 # reader, the predict walks and links, the binary transforms, and the scans

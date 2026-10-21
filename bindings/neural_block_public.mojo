@@ -9,7 +9,7 @@ from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape
 from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, _addr, _native_function
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 
 
 def neural_block_owner(block: PythonObject, context: PythonObject) raises -> PythonObject:

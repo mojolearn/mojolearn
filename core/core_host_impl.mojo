@@ -8,7 +8,7 @@ Every statement that reads, compares, copies or folds data lives here with
 no Python import, word for word as it was in the binding (lane thin-core,
 2026-10-21: a pure move, same operations in the same order, no bit change).
 """
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, u32_ptr
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from neighbors.impl.ball_cover.common import rbc_validate_metric
 from neighbors.impl.ball_cover.knn import RBC_KNN_MAX_K
 from cluster.host.kmeans_oracle import (

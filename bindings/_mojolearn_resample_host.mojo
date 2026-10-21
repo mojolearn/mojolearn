@@ -25,7 +25,7 @@ more devices refuse by name before reaching this module.
 """
 
 from std.os import abort
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from core.resample_impl import resample_store_indices
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
