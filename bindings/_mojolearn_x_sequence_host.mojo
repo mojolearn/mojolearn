@@ -21,7 +21,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from sequence.schedule import epoch_schedule_py
+from sequence.schedule_pyapi import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
 from autograd.program_control import ops_program_control_py
