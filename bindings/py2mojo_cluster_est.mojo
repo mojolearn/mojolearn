@@ -12,7 +12,7 @@
 
 It acts on the host arrays the fit already returned (its
 outputs), so the two columns run the same loops."""
-from std.memory import memcpy
+from core.py2mojo_cluster_est_impl import dbscan_core_count, dbscan_core_gather
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 
@@ -43,12 +43,7 @@ def dbscan_core_arrays_host_binding(
     var xp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=x_addr))
     var lp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels_addr))
     var cp = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=core_addr))
-    var n_core = 0
-    for i in range(n):
-        var f = cp.unsafe_load(i)
-        if f > 1:
-            raise Error("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
-        n_core += Int(f)
+    var n_core = dbscan_core_count(cp, n)
     var arr = Python.import_module("array")
     var idx = _new_array(arr, "i", 4 * n_core)
     var comp = _new_array(arr, "f", 4 * n_core * d)
@@ -57,13 +52,7 @@ def dbscan_core_arrays_host_binding(
         var ip = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_array_addr(idx))
         var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_array_addr(comp))
         var olp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_array_addr(lab))
-        var o = 0
-        for i in range(n):
-            if cp.unsafe_load(i) != 0:
-                ip.unsafe_store(o, Int32(i))
-                olp.unsafe_store(o, lp.unsafe_load(i))
-                memcpy(dest=op + o * d, src=xp + i * d, count=d)
-                o += 1
+        dbscan_core_gather(xp, lp, cp, n, d, ip, op, olp)
     var out = Python.list()
     out.append(idx)
     out.append(comp)

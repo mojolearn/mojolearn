@@ -63,7 +63,7 @@ def neural_admit(operation: String, args: PythonObject, owner_cls: PythonObject,
     for i in range(len(keys)):  # driver-loop: over native owner keys before dictionary lookup
         if bi.type(keys[i]) is not bi.str:
             raise Error("TypeError: parallel owner metadata requires native string keys")
-    for key in [String("_lock"), String("_pool"), String("_update_pool")]:
+    for key in [String("_lock"), String("_pool"), String("_update_pool")]:  # small-loop(the three fixed owner field names)
         samba_admit_value(fields[key], admission)
     if operation == "export_gradients":
         samba_admit_value(fields["_gradients"], admission)

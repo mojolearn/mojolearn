@@ -31,7 +31,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.exec_device import DeviceExec, X_SEQUENCE_POOL, _pool_host, _pool_release_host, sequence_ctx
 from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD, Args
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
-from sequence.pyapi import adafactor_core, lamb_bias, lamb_core, lamb_table, opt_slots
+from sequence.ops_impl import adafactor_core, lamb_bias, lamb_core, lamb_table, opt_slots
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
 
 #: Apple FAST transport switches of the resident step (lane
@@ -97,7 +97,7 @@ comptime OPT_PIPE_CH = 1 << 21
 #:    the device across steps (`adafactor_resident_*`); a step moves the
 #:    parameter and gradient up and the parameter down only (the board's
 #:    1-D tensor: three 64 MB transfers instead of five). The same launches
-#:    (`sequence/pyapi.mojo::adafactor_core`) on the same values.
+#:    (`sequence/ops_impl.mojo::adafactor_core`) on the same values.
 #: AF_FAST_RESIDENT OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-05, rab10-afresident): adafactor 392.8 -> 205.2 ms, digest
 #: identical A == B. KEEP: the FAST + Apple default since then; rollback
@@ -152,7 +152,7 @@ struct _ResPool(Defaultable, Movable):
     var s1: List[DeviceBuffer[DType.float32]]
     var s2: List[DeviceBuffer[DType.float32]]
     var used: List[Int]
-    #: LAMB's table (`sequence/pyapi.mojo::lamb_table`), on the device
+    #: LAMB's table (`sequence/ops_impl.mojo::lamb_table`), on the device
     var tab: List[DeviceBuffer[DType.float32]]
     #: floats per slot (0 marks a free handle), kind, tensors, blocks
     var n: List[Int]

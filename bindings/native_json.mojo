@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """JSON parsing owned by Mojo, returning ordinary native CPython containers."""
 from std.python import Python, PythonObject
+from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
 
 
 struct NativeJSON(Movable):
     var raw: PythonObject
+    var buf: List[UInt8]
     var bi: PythonObject
     var at: Int
 
@@ -13,14 +15,14 @@ struct NativeJSON(Movable):
         if self.bi.type(raw) is not self.bi.str and self.bi.type(raw) is not self.bi.bytes and self.bi.type(raw) is not self.bi.bytearray:
             raise Error("TypeError: JSON requires str or bytes")
         self.raw = raw.encode("utf-8") if Bool(py=self.bi.isinstance(raw, self.bi.str)) else raw
+        self.buf = json_latin1_bytes(String(py=self.raw.decode("latin-1")))
         self.at = 0
 
     def peek(self) raises -> Int:
-        return Int(py=self.raw[self.at]) if self.at < len(self.raw) else -1
+        return json_peek(self.buf, self.at)
 
     def ws(mut self) raises:
-        while self.peek() == 32 or self.peek() == 9 or self.peek() == 10 or self.peek() == 13:
-            self.at += 1
+        self.at = json_skip_ws(self.buf, self.at)
 
     def take(mut self, wanted: Int) raises:
         self.ws()
@@ -37,7 +39,7 @@ struct NativeJSON(Movable):
 
     def hex4(mut self) raises -> Int:
         var result = 0
-        for _ in range(4):
+        for _ in range(4):  # small-loop(the four hex digits of one Unicode escape)
             var c = self.peek()
             var digit = c - 48 if c >= 48 and c <= 57 else (c - 87 if c >= 97 and c <= 102 else (c - 55 if c >= 65 and c <= 70 else -1))
             if digit < 0:
@@ -50,7 +52,11 @@ struct NativeJSON(Movable):
         self.take(34)
         var parts = self.bi.list()
         var bytes = self.bi.bytearray()
-        while True:
+        while True:  # driver-loop: over a JSON string's escape segments
+            var run_end = json_plain_end(self.buf, self.at)
+            if run_end > self.at:
+                bytes.extend(self.raw[self.bi.slice(self.at, run_end)])
+                self.at = run_end
             var c = self.peek()
             self.at += 1
             if c == 34:
@@ -58,9 +64,6 @@ struct NativeJSON(Movable):
                 return PythonObject("").join(parts)
             if c < 32:
                 raise Error("JSON: unterminated string or control byte at " + String(self.at - 1))
-            if c != 92:
-                bytes.append(c)
-                continue
             c = self.peek()
             self.at += 1
             if c == 34 or c == 92 or c == 47:
@@ -101,8 +104,7 @@ struct NativeJSON(Movable):
         if self.peek() == 48:
             self.at += 1
         elif self.peek() >= 49 and self.peek() <= 57:
-            while self.peek() >= 48 and self.peek() <= 57:
-                self.at += 1
+            self.at = json_digits_end(self.buf, self.at)
         else:
             raise Error("JSON: invalid number at " + String(self.at))
         if self.peek() == 46:
@@ -110,8 +112,7 @@ struct NativeJSON(Movable):
             self.at += 1
             if self.peek() < 48 or self.peek() > 57:
                 raise Error("JSON: missing fraction at " + String(self.at))
-            while self.peek() >= 48 and self.peek() <= 57:
-                self.at += 1
+            self.at = json_digits_end(self.buf, self.at)
         if self.peek() == 101 or self.peek() == 69:
             floating = True
             self.at += 1
@@ -119,8 +120,7 @@ struct NativeJSON(Movable):
                 self.at += 1
             if self.peek() < 48 or self.peek() > 57:
                 raise Error("JSON: missing exponent at " + String(self.at))
-            while self.peek() >= 48 and self.peek() <= 57:
-                self.at += 1
+            self.at = json_digits_end(self.buf, self.at)
         var text = self.raw[self.bi.slice(start, self.at)]
         return self.bi.float(text) if floating else self.bi.int(text)
 
@@ -138,7 +138,7 @@ struct NativeJSON(Movable):
             if self.peek() == 125:
                 self.at += 1
                 return result
-            while True:
+            while True:  # driver-loop: over a JSON object's members
                 var key = self.string()
                 self.take(58)
                 result[key] = self.value(depth + 1)
@@ -154,7 +154,7 @@ struct NativeJSON(Movable):
             if self.peek() == 93:
                 self.at += 1
                 return result
-            while True:
+            while True:  # driver-loop: over a JSON array's elements
                 result.append(self.value(depth + 1))
                 self.ws()
                 if self.peek() == 93:
@@ -212,7 +212,7 @@ def native_path(value: PythonObject) raises -> PythonObject:
     var found = False
     # object.__getattribute__ still invokes a replaced property. Read only a
     # real native slot descriptor from the admitted path hierarchy instead.
-    for storage in range(2):
+    for storage in range(2):  # small-loop(the two path storage field names)
         var field = PythonObject("_raw_paths") if storage == 0 else PythonObject("_parts")
         for i in range(len(mro)):  # driver-loop: over admitted native path class metadata
             var base = mro[i]

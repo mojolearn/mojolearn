@@ -90,8 +90,8 @@ VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
 
 
 def _identity_from_tokens_text(text, n_ranks):
-    import hashlib
-    return dict(schema=VOCABULARY_SCHEMA, sha256=hashlib.sha256(text.encode("ascii")).hexdigest(),
+    # the digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's
+    return dict(schema=VOCABULARY_SCHEMA, sha256=str(_binding().sha256_hex(text.encode("ascii"))),
                 n_ranks=n_ranks, n_vocab=n_ranks + 1, endoftext_id=n_ranks)
 
 
@@ -137,7 +137,7 @@ def _ro(buf, name):
 
 
 def _binding():
-    return _Entries(_backend.load_host_module(_EXTENSION))
+    return _Entries(_backend.load_host_module(_EXTENSION))  # cpu-route: CPU tokenizer binding, text encoding and decoding before the runtime
 
 
 def _byte_to_char():
@@ -781,7 +781,7 @@ def _native_trainer(required):
     """The binding when it exports `bpe_train`, else None (or the reason,
     raised, when `required`)."""
     try:
-        module = _backend.load_host_module(_EXTENSION)
+        module = _backend.load_host_module(_EXTENSION)  # cpu-route: CPU BPE trainer binding, vocabulary training on text input
     except (ImportError, AttributeError) as exc:
         if required:
             raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc

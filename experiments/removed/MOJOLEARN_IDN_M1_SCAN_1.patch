@@ -2,7 +2,7 @@ diff --git a/bindings/_mojolearn_mamba.mojo b/bindings/_mojolearn_mamba.mojo
 index 7561059fa..c8533fb6a 100644
 --- a/bindings/_mojolearn_mamba.mojo
 +++ b/bindings/_mojolearn_mamba.mojo
-@@ -137,8 +137,7 @@ from bindings.hostptr import f32_ptr, read_f32, copy_f32
+@@ -137,8 +137,7 @@ from core.hostptr import f32_ptr, read_f32, copy_f32
  from std.memory import bitcast, memcpy
  from std.time import perf_counter_ns
  from std.sys.compile import is_defined, get_defined_int

@@ -1589,6 +1589,8 @@ FAMILIES = (
             "tokens_gather_rows", "tokenizer_pretokenize", "vocab_load_bytes",
             "vocab_load_spelled", "vocab_info", "vocab_encode", "vocab_pretokenize",
             "vocab_decode",
+            # vocabulary identity digest (core/sha256.mojo)
+            "sha256_hex",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -1664,6 +1666,8 @@ FAMILIES = (
             "embedding_forward", "rms_norm_forward", "linear_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "neural_arithmetic_profile",
+            # checkpoint integrity digest (core/sha256.mojo)
+            "sha256_hex",
         ),
         gate="python/mojolearn/tests/test_neural_inference.py, tools/step_vs_full_check.py and tools/identity_break.py (mlp, transformer, transformer-window, transformer-decode, mamba1, mamba2, mamba3, mamba1-decode, mamba2-decode, mamba3-decode, mamba2-dtlimit, samba, samba-decode, samba-untied-dropout-accum)",
         wheel_note=(
@@ -2287,6 +2291,8 @@ FAMILIES = (
             "cholesky/host/chol_oracle.mojo",
             "gemm/host/gemm_oracle.mojo",
             "gaussian_process/unnorm.mojo",
+            "gaussian_process/host/gp_host_entries.mojo",
+            "gaussian_process/host/gp_host_fit_entries.mojo",
         ),
         exports=(
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
@@ -2494,6 +2500,7 @@ FAMILIES = (
         display="the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities",
         host_modules=(
             "bindings/gp_host_predict.mojo",
+            "gaussian_process/host/gp_host_entries.mojo",
             "gaussian_process/host/gpr_oracle.mojo",
             "gaussian_process/host/gpc_oracle.mojo",
             "gaussian_process/host/gpc_steps.mojo",
@@ -2720,6 +2727,8 @@ FAMILIES = (
             "neural_arithmetic_profile", "neural_gemm", "mlp_sessions", "mlp_sessions_rows",
             "residual_dropout", "residual_dropout_backward", "training_chunked_lm_head_enabled",
             "training_experiment_profile",
+            # checkpoint integrity digest (core/sha256.mojo)
+            "sha256_hex",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3012,7 +3021,7 @@ FAMILIES = (
         display="IVF-Flat search over a saved index and extending it",
         host_modules=(
             "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
-            "bindings/ivf_index_arrays.mojo",
+            "bindings/ivf_index_arrays.mojo", "ivf/index_arrays_impl.mojo",
             "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
         ),
         exports=(

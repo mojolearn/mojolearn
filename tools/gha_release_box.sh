@@ -165,10 +165,15 @@ for line in (p.read_text().splitlines() if p.is_file() else []):
     if len(c) != 6 or c[3] == "-":
         continue
     try:
-        mode = json.loads((pathlib.Path(keys) / (c[3] + ".json")).read_text())["numeric_mode"]
+        doc = json.loads((pathlib.Path(keys) / (c[3] + ".json")).read_text())
+        mode = doc["numeric_mode"]
     except (OSError, ValueError, KeyError):
         continue
-    seen["%s:%s" % (mode, c[1].rsplit("/", 1)[-1])] = (c[2], c[4], c[3])
+    name = c[1].rsplit("/", 1)[-1]
+    # tools/bincache.py shard_entry: the merged host set is "host:merged_build.sh"
+    if name == "merged_build.sh" and (doc.get("args") or [])[:1] == ["host"]:
+        mode = "host"
+    seen["%s:%s" % (mode, name)] = (c[2], c[4], c[3])
 bad = 0
 with open(out, "w") as fh:
     for w in want:

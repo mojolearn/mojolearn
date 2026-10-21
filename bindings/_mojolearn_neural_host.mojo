@@ -69,10 +69,12 @@ from training.neural_arithmetic_profile import neural_training_profile
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.sha256_door import sha256_hexdigest
+from core.mojolearn_neural_host_impl import _finite
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import copy_f32, f32_ptr, read_f32, read_i32
+from core.hostptr import copy_f32, f32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -147,7 +149,7 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(addrs)) != n:
         raise Error(what + ": expected " + String(n) + " addresses, got " + String(Int(py=len(addrs))))
     var out = List[Int](capacity=n)
-    for i in range(n):
+    for i in range(n):  # small-loop(address argument words, a fixed count per entry point)
         var a = _index(addrs[i])
         if a == 0:
             raise Error(what + ": address " + String(i) + " is null")
@@ -167,12 +169,12 @@ def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raise
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=n + BLOCK_OPTION_ADDRS)
-    for i in range(got):
+    for i in range(got):  # small-loop(address argument words plus the fixed options tail)
         var a = _index(addrs[i])
         if i < n and i != gate_slot and a == 0:
             raise Error(what + ": address " + String(i) + " is null")
         out.append(a)
-    while len(out) < n + BLOCK_OPTION_ADDRS:
+    while len(out) < n + BLOCK_OPTION_ADDRS:  # small-loop(pad the fixed options tail of address words)
         out.append(0)
     return out^
 
@@ -186,7 +188,7 @@ def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]
             + " with the block options tail, got " + String(got)
         )
     var out = List[Int](capacity=got)
-    for i in range(got):
+    for i in range(got):  # small-loop(scalar argument words plus the fixed options tail)
         out.append(_index(params[i]))
     return out^
 
@@ -233,12 +235,6 @@ def _transformer_weights_from(
         _opt_read(a[22], hd, opts.qk_norm, "q_norm.weight", what),
         _opt_read(a[23], hd, opts.qk_norm, "k_norm.weight", what),
     )
-
-
-def _finite(values: List[Float32], what: String) raises:
-    for i in range(len(values)):
-        if not isfinite(values[i]):
-            raise Error(what + " is not finite")
 
 
 def _write(addr: Int, values: List[Float32], n: Int) raises:
@@ -321,12 +317,12 @@ def transformer_forward_fresh_binding(
     var opts = BlockOptions.from_params(p, 8)
     # Into `transformer_forward`'s 13 + 11 layout (slots 10 and 11 unused).
     var a = List[Int]()
-    for i in range(10):
+    for i in range(10):  # small-loop(fixed address-word layout)
         a.append(a0[i])
     a.append(0)
     a.append(0)
     a.append(a0[10])
-    for i in range(BLOCK_OPTION_ADDRS):
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(fixed options-tail address words)
         a.append(a0[11 + i])
     var b = p[0]
     var l = p[1]
@@ -503,7 +499,7 @@ def _shape3(params: PythonObject, n: Int, what: String) raises -> List[Int]:
     if Int(py=len(params)) != n:
         raise Error(what + ": expected " + String(n) + " parameters, got " + String(Int(py=len(params))))
     var out = List[Int](capacity=3)
-    for i in range(3):
+    for i in range(3):  # small-loop(the three shape argument words)
         out.append(_index(params[i]))
     if out[0] < 1 or out[1] < 1 or out[2] < 1:
         raise Error(what + ": B, L and d_model must be positive")
@@ -811,11 +807,11 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
         raise Error("mamba3_forward_fresh: expected 15 addresses and 3 parameters (B, L, d_model)")
     var a0 = _addrs(addrs, 15, String("mamba3_forward_fresh"))
     var a = List[Int]()
-    for i in range(10):
+    for i in range(10):  # small-loop(fixed address-word layout)
         a.append(a0[i])
-    for _ in range(10):
+    for _ in range(10):  # small-loop(fixed address-word layout)
         a.append(0)
-    for i in range(10, 15):
+    for i in range(10, 15):  # small-loop(fixed address-word layout)
         a.append(a0[i])
     var b = _index(params[0])
     var l = _index(params[1])
@@ -926,6 +922,11 @@ def linear_forward_binding(addrs: PythonObject, params: PythonObject) raises -> 
     return PythonObject(m * n)
 
 
+def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
+    """The SHA-256 of a bytes-like value, 64 lowercase hex digits (core/sha256.mojo)."""
+    return sha256_hexdigest(value)
+
+
 def neural_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(neural_training_profile())
 
@@ -937,6 +938,7 @@ def build__mojolearn_neural_host() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_neural_host")
         module.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
+        module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_function[neural_host_numeric_mode_binding]("neural_host_numeric_mode")
         module.def_function[neural_host_vendor_binding]("neural_host_vendor")
         module.def_function[neural_host_column_binding]("neural_host_column")

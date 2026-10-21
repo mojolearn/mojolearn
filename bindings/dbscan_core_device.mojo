@@ -1,67 +1,9 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""DBSCAN's core arrays on the device (lane cpu4-python).
-
-`dbscan_core_arrays` keeps the fit's core rows, their training indices and
-their labels, in ascending training index. The GPU estimators binding ran
-`bindings/py2mojo_cluster_est.mojo`'s host walk (the mask check, the
-compaction and the row copies over every row); that walk stays the host
-column (`bindings/_mojolearn_estimators_host.mojo`). Here the mask goes up,
-is checked and turned into flags by one kernel, `device_compact_equal_i32`
-(an exclusive scan: the host loop's ascending order) lists the core rows,
-and one gather kernel writes the three arrays: integer moves and float32
-copies only, the same bytes as the host column on every vendor.
-"""
-from std.gpu import block_dim, block_idx, thread_idx
+# bindings/dbscan_core_device.mojo -- the Python door of the device DBSCAN
+# core-sample arrays. The kernels and typed bodies live in
+# dbscan/core_device_impl.mojo (2026-10-21).
 from std.python import Python, PythonObject
-from max.gpu.host import DeviceBuffer, DeviceContext
-
-from core.device_fold import device_compact_equal_i32
-
-comptime _TPB = 256
-comptime _U8 = MutPointer[UInt8, MutAnyOrigin]
-comptime _I32 = MutPointer[Int32, MutAnyOrigin]
-comptime _F32 = MutPointer[Float32, MutAnyOrigin]
-
-
-@always_inline
-def _tid() -> Int:
-    return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-
-
-@always_inline
-def _blocks(count: Int) -> Int:
-    return (count + _TPB - 1) // _TPB if count > 0 else 1
-
-
-def _core_flag_kernel(core: _U8, n_: Int32, flag: _I32, status: _I32):
-    """flag[i] = core[i] (0 or 1); a byte above 1 sets status[0]."""
-    var i = _tid()
-    if i >= Int(n_):
-        return
-    var f = core.unsafe_load(i)
-    if f > UInt8(1):
-        status.unsafe_store(0, Int32(1))
-    flag.unsafe_store(i, Int32(1) if f == UInt8(1) else Int32(0))
-
-
-def _core_gather_kernel(
-    rows: _I32, m_: Int32, d_: Int32, x: _F32, labels: _I32,
-    idx: _I32, comp: _F32, lab: _I32,
-):
-    """One thread per (core row o, column j) of the (m, d) components:
-    comp[o, j] = x[rows[o], j]; column 0 also writes idx[o] and lab[o]."""
-    var t = _tid()
-    var d = Int(d_)
-    if t >= Int(m_) * d:
-        return
-    var o = t // d
-    var j = t - o * d
-    var r = Int(rows.unsafe_load(o))
-    comp.unsafe_store(t, x.unsafe_load(r * d + j))
-    if j == 0:
-        idx.unsafe_store(o, Int32(r))
-        lab.unsafe_store(o, labels.unsafe_load(r))
+from max.gpu.host import DeviceContext
+from dbscan.core_device_impl import dbscan_core_count, dbscan_core_gather
 
 
 def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> PythonObject:
@@ -72,7 +14,6 @@ def _new_array(arr: PythonObject, code: StaticString, nbytes: Int) raises -> Pyt
 
 def _array_addr(a: PythonObject) raises -> Int:
     return Int(py=a.buffer_info()[0])
-
 
 def dbscan_core_arrays_device(
     ctx: DeviceContext, x_addr: PythonObject, labels_addr: PythonObject,
@@ -98,53 +39,11 @@ def dbscan_core_arrays_device(
     var ca = Int(py=core_addr)
     if xa == 0 or la == 0 or ca == 0:
         raise Error("dbscan_core_arrays: null buffer address")
-    var d_core = ctx.enqueue_create_buffer[DType.uint8](n)
-    ctx.enqueue_copy(dst_buf=d_core, src_ptr=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=ca))
-    var flag = ctx.enqueue_create_buffer[DType.int32](n)
-    var status = ctx.enqueue_create_buffer[DType.int32](1)
-    ctx.enqueue_memset(status, Int32(0))
-    ctx.enqueue_function[_core_flag_kernel](
-        d_core.unsafe_ptr(), Int32(n), flag.unsafe_ptr(), status.unsafe_ptr(),
-        grid_dim=_blocks(n), block_dim=_TPB,
-    )
-    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
-    ctx.synchronize()
-    var bad = hs.unsafe_ptr().unsafe_load(0) != Int32(0)
-    _ = hs^
-    _ = status^
-    _ = d_core^
-    if bad:
-        raise Error("mojolearn DBSCAN: the fit's core mask holds a value other than 0 or 1")
-    var rows = ctx.enqueue_create_buffer[DType.int32](n)
-    var m = device_compact_equal_i32(ctx, flag, n, Int32(1), rows)
-    _ = flag^
+    var m = dbscan_core_count(ctx, ca, n)
     var idx = _new_array(arr, "i", 4 * m)
     var comp = _new_array(arr, "f", 4 * m * d)
     var lab = _new_array(arr, "i", 4 * m)
-    if m > 0:
-        var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
-        ctx.enqueue_copy(dst_buf=d_x, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=xa))
-        var d_l = ctx.enqueue_create_buffer[DType.int32](n)
-        ctx.enqueue_copy(dst_buf=d_l, src_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=la))
-        var o_idx = ctx.enqueue_create_buffer[DType.int32](m)
-        var o_comp = ctx.enqueue_create_buffer[DType.float32](m * d)
-        var o_lab = ctx.enqueue_create_buffer[DType.int32](m)
-        ctx.enqueue_function[_core_gather_kernel](
-            rows.unsafe_ptr(), Int32(m), Int32(d), d_x.unsafe_ptr(), d_l.unsafe_ptr(),
-            o_idx.unsafe_ptr(), o_comp.unsafe_ptr(), o_lab.unsafe_ptr(),
-            grid_dim=_blocks(m * d), block_dim=_TPB,
-        )
-        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_array_addr(idx)), src_buf=o_idx)
-        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_array_addr(comp)), src_buf=o_comp)
-        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_array_addr(lab)), src_buf=o_lab)
-        ctx.synchronize()
-        _ = o_idx^
-        _ = o_comp^
-        _ = o_lab^
-        _ = d_l^
-        _ = d_x^
-    _ = rows^
+    dbscan_core_gather(ctx, xa, la, ca, n, d, m, _array_addr(idx), _array_addr(comp), _array_addr(lab))
     var out = Python.list()
     out.append(idx)
     out.append(comp)

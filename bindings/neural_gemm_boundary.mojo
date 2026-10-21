@@ -4,7 +4,7 @@ from std.python import Python,PythonObject
 from std.python._cpython import GILReleased
 from core.neural_context import neural_ctx
 from core.device_scan import device_first_nonfinite
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 from bindings.neural_gemm_boundary_common import neural_gemm_params
 from gemm.neural_dispatch import identical_gemm_into,identical_gemm_workspace_max_floats
 from gemm.host_transport import GemmHostLease,ROLE_A,ROLE_B,ROLE_C,ROLE_WS,gemm_up_f32,gemm_down_f32

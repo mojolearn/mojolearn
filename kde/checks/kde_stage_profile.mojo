@@ -20,7 +20,7 @@ from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from bindings.hostptr import copy_f32, f32_ptr
+from core.hostptr import copy_f32, f32_ptr
 from checks.numerics import ftz, identical_log, numeric_mode_name
 from core.identity_trace import IdentityTrace
 from kde.estimator import kde_score_samples_host, kde_score_samples_host_ptr

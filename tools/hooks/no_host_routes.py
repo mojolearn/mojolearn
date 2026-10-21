@@ -825,10 +825,15 @@ def _small_launch_ok(txt, first=None):
 
 
 _GRID1_3D = re.compile(r"\bgrid_dim\s*=\s*(\(\s*1\s*,\s*1\s*,\s*1\s*\)|Dim\(\s*1\s*\))")
-# a grid of one block per small count: classes, outputs, features, targets
+# a grid of one block per small count: classes, outputs, features, targets.
+# A tuple grid matches only when every further dimension is 1: a grid
+# `(n_cols, ceildiv(rows, B))` splits the rows over blocks and is not one
+# block walking them (lane debt-block-per-n, 2026-10-21).
+_GRID_SMALL_NAMES = (r"(dims\.C|dims\.D|C|D|n_classes|n_class|num_classes|n_targets|n_outputs"
+                     r"|n_cols|n_features|d|k|cd|n_comp|n_components)")
 _GRID_SMALL = re.compile(
-    r"\bgrid_dim\s*=\s*\(?\s*(dims\.C|dims\.D|C|D|n_classes|n_class|num_classes|n_targets|n_outputs"
-    r"|n_cols|n_features|d|k|cd|n_comp|n_components)\s*(,\s*1\s*,\s*1\s*\)|\)|,|$)")
+    r"\bgrid_dim\s*=\s*(\(\s*" + _GRID_SMALL_NAMES + r"\s*(,\s*1\s*)*\)"
+    r"|" + _GRID_SMALL_NAMES + r"\s*(,|\)|$))")
 _BLOCK1 = re.compile(r"\bblock_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*\))")
 # a runtime size among the launch arguments (rows, samples, elements, nnz)
 _SIZES = (r"(n|m|n_rows|rows|n_samples|nnz|n_nodes|n_points|n_q|numel|n_elems|n_obs|n_train"
@@ -997,6 +1002,12 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
                 r"\s*(from|import)\b", t))):
             return
         if rule == "host-import" and dm_def.match(t):
+            return
+        # lane debt-host-misc (2026-10-21): Python that loads a host binding
+        # for an explicit CPU-only input step before the runtime (text
+        # tokenization, file handling) says so on the line, as CLAUDE.md asks:
+        # `# cpu-route: <reason of 3+ words>`. Mojo lines never qualify.
+        if rule == "host-module" and lang == "py" and _CPU_ROUTE.search(t):
             return
         # lane py-runtime round 3: sklearn's own interface (the tags it asks
         # an estimator for) imports sklearn only when sklearn calls in; a

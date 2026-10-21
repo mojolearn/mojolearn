@@ -22,102 +22,16 @@ n_steps, p, d, q, P, D, Q, s, k, n_exog, reserved). The validation is `arima/est
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.arima_exog_layout import exog_filter_layout
-from bindings.hostptr import f32_ptr, read_f32
-from arima.host.arima_oracle import (
-    ArimaHostOrder,
-    arima_host_forecast,
-    arima_host_predict,
-    arima_host_refuse_unrestated,
+from core.hostptr import f32_ptr
+from arima.host.arima_oracle import arima_host_refuse_unrestated
+# The typed bodies (lane thin-trees-metrics, 2026-10-21): moved word for
+# word to arima/host/arima_host_entries.mojo; this file is the Python door.
+from arima.host.arima_host_entries import (
+    _forecast_into,
+    _order,
+    _predict_in_sample_into,
+    _refuse_shape,
 )
-from arima.impl.tsa.arima_common import ARIMAOrder, validate_order
-
-
-def _order(
-    p: Int, d: Int, q: Int, P: Int, D: Int, Q: Int, s: Int, k: Int, n_exog: Int
-) raises -> ArimaHostOrder:
-    """`arima/estimator.mojo::_order` (`:150-162`): the device's
-    `validate_order` on the nine integers, then the host order."""
-    var order = ARIMAOrder(p, d, q, P, D, Q, s, k, n_exog)
-    validate_order(order)
-    return ArimaHostOrder(p, d, q, P, D, Q, s, k, n_exog)
-
-
-def _refuse_shape(batch_size: Int, n_obs: Int, who: String) raises:
-    """`arima/estimator.mojo::_refuse_shape` (`:165-175`), its words."""
-    if batch_size < 1:
-        raise Error(
-            who + ": batch_size must be >= 1 (batch_size=" + String(batch_size) + ")"
-        )
-    if n_obs < 2:
-        raise Error(
-            who + ": n_obs must be at least 2 (n_obs=" + String(n_obs) + ")"
-        )
-
-
-def _forecast_into(
-    y_address: Int,
-    exog_address: Int,
-    exog_fut_address: Int,
-    params_address: Int,
-    op: MutPointer[Float32, MutUntrackedOrigin],
-    batch_size: Int,
-    n_obs: Int,
-    n_steps: Int,
-    order: ArimaHostOrder,
-) raises -> Int:
-    """The body both prediction entries share once `start == n_obs`, as
-    `_predict_into` is shared on the device."""
-    var N = order.complexity()
-    var y = read_f32(y_address, batch_size * n_obs)
-    var pr = read_f32(params_address, N * batch_size)
-    var exog = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
-    var fut = exog_filter_layout(
-        exog_fut_address, batch_size, n_steps, order.n_exog, "exog (future values)"
-    )
-    var fc = arima_host_forecast(y, exog, fut, pr, batch_size, n_obs, n_steps, order)
-    if len(fc) != n_steps * batch_size:
-        raise Error(
-            "arima_forecast: the host oracle returned a forecast of an"
-            " unexpected length; nothing written"
-        )
-    for i in range(n_steps * batch_size):
-        op.unsafe_store(i, fc[i])
-    return n_steps * batch_size
-
-
-def _predict_in_sample_into(
-    y_address: Int,
-    exog_address: Int,
-    exog_fut_address: Int,
-    params_address: Int,
-    op: MutPointer[Float32, MutUntrackedOrigin],
-    batch_size: Int,
-    n_obs: Int,
-    start: Int,
-    end: Int,
-    order: ArimaHostOrder,
-) raises -> Int:
-    """`start < n_obs`: `arima_host_predict`, the in-sample block and any
-    forecast after it, written series major."""
-    var N = order.complexity()
-    var y = read_f32(y_address, batch_size * n_obs)
-    var pr = read_f32(params_address, N * batch_size)
-    var ld = end - start
-    var num_steps = end - n_obs if end > n_obs else 0
-    var exog = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
-    var fut = exog_filter_layout(
-        exog_fut_address, batch_size, num_steps, order.n_exog, "exog (future values)"
-    )
-    var out = arima_host_predict(y, exog, fut, pr, batch_size, n_obs, start, end, order)
-    if len(out) != ld * batch_size:
-        raise Error(
-            "arima_predict: the host oracle returned a prediction of an"
-            " unexpected length; nothing written"
-        )
-    for i in range(ld * batch_size):
-        op.unsafe_store(i, out[i])
-    return ld * batch_size
 
 
 def arima_predict_binding(

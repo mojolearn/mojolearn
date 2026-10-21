@@ -25,7 +25,8 @@ more devices refuse by name before reaching this module.
 """
 
 from std.os import abort
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+from core.resample_impl import resample_store_indices
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -421,8 +422,7 @@ def resample_indices_binding(
     var seed = UInt64(Int(py=params[3]))
     with GILReleased(Python()):
         var idx = host_resample_indices(n, count, replace, seed)
-        for i in range(count):
-            op.unsafe_store(i, idx[i])
+        resample_store_indices(op, idx, count)
     return PythonObject(0)
 
 

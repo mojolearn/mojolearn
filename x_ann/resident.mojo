@@ -43,7 +43,7 @@ from x_ann.switches import ANN3_PREPARE
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.hostptr import read_f32, read_i32
+from core.hostptr import read_f32, read_i32
 from x_ann.abi import check_search, out_f32_to, out_i32_to
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.io import upload_f32, upload_i32

@@ -8,17 +8,17 @@ from bindings.native_transport import _transport_json, transport_initialize
 from bindings.parallel_byte_native import PARALLEL_BYTE_BOUNDARY, _parallel_shape
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array
 from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
+from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_digest_of
+from core.sha256 import Sha256
 
 
 struct ByteCheckpointBoundary(Defaultable, Movable):
     var bi: PythonObject
-    var hash_type: PythonObject
     var os: PythonObject
     var magic: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
-        self.hash_type = PythonObject(None)
         self.os = PythonObject(None)
         self.magic = PythonObject(None)
 
@@ -33,13 +33,10 @@ comptime BYTE_CHECKPOINT_HEADER_LIMIT = 1048576
 def byte_checkpoint_initialize(array_cls: PythonObject) raises:
     var c = BYTE_CHECKPOINT_BOUNDARY.get_or_create_ptr()
     c[].bi = Python.import_module("builtins")
-    c[].hash_type = Python.import_module("hashlib").sha256
     c[].os = Python.import_module("posix")
     c[].magic = PythonObject("MOJOLEARN-BYTE-LM\x01\n").encode("ascii")
     if String(Python.import_module("sys").byteorder) != "little":
         raise Error("Byte-LM streamed checkpoint requires a little-endian host")
-    if c[].bi.type(c[].hash_type) is not c[].bi.type(c[].bi.len):
-        raise Error("Byte-LM checkpoint requires native SHA256")
     cv_types_initialize(array_cls)
     transport_initialize()
     # The registry and Array allocator are also used without constructing a
@@ -72,7 +69,7 @@ def byte_checkpoint_validate(metadata: PythonObject, entries: PythonObject) rais
     if bi.type(metadata) is not bi.dict or bi.type(entries) is not bi.list or len(entries) != 4:
         raise Error("Byte-LM checkpoint array registry mismatch")
     var fields = bi.list()
-    for key in [String("schema"), String("profile"), String("numeric_mode"), String("parameter_names"), String("parameter_shapes"), String("parameter_offsets"), String("completed_steps"), String("next_batch_index"), String("config"), String("data_schedule")]:
+    for key in [String("schema"), String("profile"), String("numeric_mode"), String("parameter_names"), String("parameter_shapes"), String("parameter_offsets"), String("completed_steps"), String("next_batch_index"), String("config"), String("data_schedule")]:  # small-loop(the fixed checkpoint state field names)
         fields.append(PythonObject(key))
     if Bool(py=metadata.__contains__("model_shape")):
         fields.append("model_shape")
@@ -87,18 +84,18 @@ def byte_checkpoint_validate(metadata: PythonObject, entries: PythonObject) rais
     if step < 0 or cv_int(metadata["next_batch_index"], "next_batch_index") != step or bi.type(metadata["config"]) is not bi.dict or bi.type(metadata["data_schedule"]) is not bi.dict:
         raise Error("Byte-LM checkpoint state metadata mismatch")
     var names = [String("parameters"), String("m"), String("v"), String("flags")]
-    for i in range(4):
+    for i in range(4):  # driver-loop: over the four checkpoint arrays
         var entry = entries[i]
         if bi.type(entry) is not bi.dict or len(entry) != 5:
             raise Error("Byte-LM checkpoint array descriptor mismatch")
-        for key in [String("name"), String("dtype"), String("shape"), String("nbytes"), String("sha256")]:
+        for key in [String("name"), String("dtype"), String("shape"), String("nbytes"), String("sha256")]:  # small-loop(the five fixed descriptor field names)
             if not Bool(py=entry.__contains__(PythonObject(key))):
                 raise Error("Byte-LM checkpoint array descriptor mismatch")
         var n = Int(py=shape["n_tensors"] if i == 3 else shape["n_total"])
         if String(entry["name"]) != names[i] or String(entry["dtype"]) != ("<i4" if i == 3 else "<f4") or bi.type(entry["shape"]) is not bi.list or len(entry["shape"]) != 1 or cv_int(entry["shape"][0], "array shape") != n or cv_int(entry["nbytes"], "array bytes") != 4 * n or bi.type(entry["sha256"]) is not bi.str or len(entry["sha256"]) != 64:
             raise Error("Byte-LM checkpoint array descriptor mismatch")
         var hex = entry["sha256"].encode("ascii")
-        for j in range(64):
+        for j in range(64):  # small-loop(the 64 hex characters of one digest word)
             var ch = Int(py=hex[j])
             if not (ch >= 48 and ch <= 57) and not (ch >= 97 and ch <= 102):
                 raise Error("Byte-LM checkpoint array descriptor mismatch")
@@ -113,7 +110,7 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
     var views = c[].bi.list()
     var entries = c[].bi.list()
     var names = [String("parameters"), String("m"), String("v"), String("flags")]
-    for i in range(4):
+    for i in range(4):  # driver-loop: over the four checkpoint arrays
         var raw = byte_checkpoint_raw(state[names[i]], i == 3)
         views.append(raw)
         _ = metadata.pop(PythonObject(names[i]))
@@ -124,7 +121,7 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
         dims.append(len(raw) // 4)
         descriptor["shape"] = dims
         descriptor["nbytes"] = PythonObject(len(raw))
-        descriptor["sha256"] = c[].hash_type(raw).hexdigest()
+        descriptor["sha256"] = sha256_hexdigest(raw)
         entries.append(descriptor)
     _ = byte_checkpoint_validate(metadata, entries)
     var envelope = c[].bi.dict()
@@ -135,31 +132,31 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
     if len(header) > BYTE_CHECKPOINT_HEADER_LIMIT:
         raise Error("Byte-LM checkpoint metadata exceeds the header limit")
     var length = c[].bi.bytearray(8)
-    for i in range(8):
+    for i in range(8):  # small-loop(the 8-byte header length word)
         length[i] = PythonObject((len(header) >> (8 * i)) & 255)
-    var prefix = c[].magic + c[].bi.bytes(length) + header + c[].hash_type(header).digest()
+    var prefix = c[].magic + c[].bi.bytes(length) + header + sha256_digest_of(header)
     var temporary = normalized + PythonObject(".tmp-") + c[].os.urandom(16).hex()
     var flags = Int(py=c[].os.O_WRONLY) | Int(py=c[].os.O_CREAT) | Int(py=c[].os.O_EXCL)
     var fd = byte_checkpoint_io(failure, c[].os.open, [temporary, PythonObject(flags), PythonObject(384)])
     var descriptor_open = True
     var stream = PythonObject(None)
-    var whole = c[].hash_type()
+    var whole = Sha256()
     try:
         stream = byte_checkpoint_io(failure, c[].bi.open, [fd, PythonObject("wb")])
         if Int(py=byte_checkpoint_io(failure, stream.write, [prefix])) != len(prefix):
             raise Error("Byte-LM checkpoint short header write")
-        whole.update(prefix)
-        for i in range(4):
+        sha256_update(whole, prefix)
+        for i in range(4):  # driver-loop: over the four checkpoint arrays
             var raw = views[i]
-            var written = c[].hash_type()
+            var written = Sha256()
             for start in range(0, len(raw), BYTE_CHECKPOINT_CHUNK):  # driver-loop: over bounded checkpoint I/O chunks, preserving raw bytes
                 var end = min(start + BYTE_CHECKPOINT_CHUNK, len(raw))
                 var chunk = raw[c[].bi.slice(start, end)]
                 if Int(py=byte_checkpoint_io(failure, stream.write, [chunk])) != len(chunk):
                     raise Error("Byte-LM checkpoint short write")
-                written.update(chunk)
-                whole.update(chunk)
-            if not Bool(py=written.hexdigest() == entries[i]["sha256"]):
+                sha256_update(written, chunk)
+                sha256_update(whole, chunk)
+            if not Bool(py=PythonObject(written.hexdigest()) == entries[i]["sha256"]):
                 raise Error("Byte-LM checkpoint state changed during save")
         _ = byte_checkpoint_io(failure, stream.flush, List[PythonObject]())
         _ = byte_checkpoint_io(failure, c[].os.fsync, [fd])
@@ -180,7 +177,7 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
         except:
             pass
         raise error
-    return whole.hexdigest()
+    return PythonObject(whole.hexdigest())
 
 
 def byte_checkpoint_load(path: PythonObject, mut failure: ByteCheckpointIOError) raises -> PythonObject:
@@ -193,13 +190,13 @@ def byte_checkpoint_load(path: PythonObject, mut failure: ByteCheckpointIOError)
         if len(length_bytes) != 8:
             raise Error("Byte-LM checkpoint truncated header length")
         var length = UInt64(0)
-        for i in range(8):
+        for i in range(8):  # small-loop(the 8-byte header length word)
             length |= UInt64(py=length_bytes[i]) << UInt64(8 * i)
         if length < 1 or length > BYTE_CHECKPOINT_HEADER_LIMIT:
             raise Error("Byte-LM checkpoint header length exceeds limit")
         var header = byte_checkpoint_io(failure, stream.read, [PythonObject(Int(length))])
         var digest = byte_checkpoint_io(failure, stream.read, [PythonObject(32)])
-        if len(header) != Int(length) or not Bool(py=c[].hash_type(header).digest() == digest):
+        if len(header) != Int(length) or not Bool(py=sha256_digest_of(header) == digest):
             raise Error("Byte-LM checkpoint header integrity mismatch")
         var envelope = native_json_parse(header)
         if c[].bi.type(envelope) is not c[].bi.dict or len(envelope) != 3 or String(envelope.get("schema")) != "mojolearn.byte-lm-stream.v1" or not Bool(py=envelope.__contains__("state")) or not Bool(py=envelope.__contains__("arrays")):
@@ -209,17 +206,17 @@ def byte_checkpoint_load(path: PythonObject, mut failure: ByteCheckpointIOError)
         _ = byte_checkpoint_validate(state, entries)
         var begin = Int(py=byte_checkpoint_io(failure, stream.tell, List[PythonObject]()))
         var size = begin
-        for i in range(4):
+        for i in range(4):  # driver-loop: over the four checkpoint arrays
             size += Int(py=entries[i]["nbytes"])
         _ = byte_checkpoint_io(failure, stream.seek, [PythonObject(0), PythonObject(2)])
         if Int(py=byte_checkpoint_io(failure, stream.tell, List[PythonObject]())) != size:
             raise Error("Byte-LM checkpoint truncated or trailing array data")
         _ = byte_checkpoint_io(failure, stream.seek, [PythonObject(begin)])
-        for i in range(4):
+        for i in range(4):  # driver-loop: over the four checkpoint arrays
             var entry = entries[i]
             var value = generation_array([Int(py=entry["shape"][0])], "i" if i == 3 else "f")
             var raw = byte_checkpoint_raw(value, i == 3)
-            var actual = c[].hash_type()
+            var actual = Sha256()
             for start in range(0, len(raw), BYTE_CHECKPOINT_CHUNK):  # driver-loop: over bounded checkpoint I/O chunks, preserving raw bytes
                 var end = min(start + BYTE_CHECKPOINT_CHUNK, len(raw))
                 var chunk = raw[c[].bi.slice(start, end)]
@@ -229,8 +226,8 @@ def byte_checkpoint_load(path: PythonObject, mut failure: ByteCheckpointIOError)
                     if n == 0:
                         raise Error("Byte-LM checkpoint truncated array")
                     received += n
-                actual.update(chunk)
-            if not Bool(py=actual.hexdigest() == entry["sha256"]):
+                sha256_update(actual, chunk)
+            if not Bool(py=PythonObject(actual.hexdigest()) == entry["sha256"]):
                 raise Error("Byte-LM checkpoint array integrity mismatch: " + String(entry["name"]))
             state[entry["name"]] = value
         if len(byte_checkpoint_io(failure, stream.read, [PythonObject(1)])) != 0:

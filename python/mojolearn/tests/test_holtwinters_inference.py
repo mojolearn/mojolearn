@@ -82,7 +82,7 @@ def test_prediction_sources_reach_no_fit():
     allowed = {
         "std.math", "std.memory", "std.python", "std.python._cpython", "std.sys.compile",
         "max.algorithm", "core.host_parallel", "core.host_predict_threads",
-        "checks.numerics", "bindings.hostptr", "holtwinters.host.hw_predict",
+        "checks.numerics", "core.hostptr", "holtwinters.host.hw_predict",
         "holtwinters.impl.tsa.holtwinters_params",
     }
     for src in ("holtwinters/host/hw_predict.mojo", SHARED):

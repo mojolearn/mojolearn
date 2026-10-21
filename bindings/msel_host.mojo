@@ -9,6 +9,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
+from core.msel_host_impl import msel_rebase_check_parts
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
 from core.msel_host import (
     MselHostStore,
@@ -129,17 +130,7 @@ def msel_rebase_offsets_i32_binding(
     var d = Int(py=dst_addr)
     if p < 1 or nr < 1 or no < 1 or ra == 0 or la == 0 or d == 0:
         raise Error("msel_rebase_offsets_i32: bad sizes")
-    var lens = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=la)
-    var total = 0
-    var outs = 1
-    for s in range(p):
-        var l = Int(lens.unsafe_load(s))
-        if l < 1:
-            raise Error("msel_rebase_offsets_i32: every part holds its leading offset")
-        total += l
-        outs += l - 1
-    if total != nr or outs != no:
-        raise Error("msel_rebase_offsets_i32: part lengths disagree with the sizes")
+    msel_rebase_check_parts(la, p, nr, no)
     var ok = True
     with GILReleased(Python()):
         ok = host_rebase_offsets_i32(ra, nr, la, p, no, d)

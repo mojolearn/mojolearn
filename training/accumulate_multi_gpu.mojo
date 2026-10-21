@@ -10,7 +10,7 @@ from std.os import getenv
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.host_parallel import host_parallelize
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from training.samba_ops import samba_accumulate_buffer, samba_accumulate_host, samba_validate_accumulation, _refuse_nonfinite
 

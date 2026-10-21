@@ -5,7 +5,7 @@
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
-from bindings.classical_cast import classical_f32_bits
+from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
 from bindings.sequential_inputs import _promote
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_admission import _one_of, sequential_admit_value
@@ -74,21 +74,9 @@ def _pd_get(module: String, cls: String, field: String, value: PythonObject) rai
 
 def _pd_raw(value: PythonObject, offset: Int) raises -> UInt64:
     var size = Int(py=value.dtype.itemsize)
-    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)) + offset)
+    var base = Int(py=sequential_address(value))
     var native = Bool(py=value.dtype.isnative)
-    var raw = UInt64(0)
-    for k in range(size):
-        raw |= UInt64(pointer[k if native else size - 1 - k]) << UInt64(8 * k)
-    return raw
-
-
-def _pd_double(raw: UInt64, kind: Int, size: Int) -> Float64:
-    var word = cast_w64_bits(raw, kind, size)
-    if kind == 2:
-        return bitcast[DType.float64](word)
-    if kind == 1:
-        return Float64(bitcast[DType.int64](word))
-    return Float64(word)
+    return pd_raw_at(base, offset, size, native)
 
 
 def _pd_object_bits(value: PythonObject, context: PythonObject) raises -> UInt32:
@@ -128,9 +116,7 @@ def _pd_values(values: PythonObject, series: Bool, context: PythonObject) raises
         raise Error("TypeError: pandas nullable storage metadata differs")
     var rows = Int(py=mask.size)
     var stride = Int(py=mask.strides[0])
-    for row in range(rows):  # native input marshaling: refuse missing values before numeric preparation
-        if _pd_raw(mask, row * stride) != 0:
-            raise Error("TypeError: pandas input contains a missing nullable value")
+    pd_mask_check(Int(py=sequential_address(mask)), rows, stride, Int(py=mask.dtype.itemsize), Bool(py=mask.dtype.isnative))
     # DataFrame.to_numpy's default nullable blocks form object storage; Series
     # with no missing values exports its underlying numeric storage instead.
     return Python.tuple(data, not series)
@@ -227,22 +213,23 @@ def native_pandas_f32(value: PythonObject, context: PythonObject) raises -> Pyth
         var kind = 0 if object_dtype else cast_in_kind(Int(py=data.dtype.num), size, "pandas input")
         var row_stride = Int(py=data.strides[rank - 1])
         var col_stride = 0 if rank == 1 else Int(py=data.strides[0])
-        for col in range(len(positions)):  # native input marshaling: columns scatter into logical C-order storage
+        for col in range(len(positions)):  # driver-loop: over pandas block columns, one typed column scatter each
             var dest = Int(py=positions[col])
             if dest < 0 or dest >= cols or seen[dest]:
                 raise Error("pandas block column positions overlap or exceed the matrix")
             seen[dest] = True
-            for row in range(rows):  # native input marshaling: numeric conversion preserves pandas promotion before float32
-                var bits = UInt32(0)
-                if object_dtype:
+            if object_dtype:
+                # cpu-route: pandas object-dtype cells are Python objects; each one is read through
+                # its native buffer metadata, which only the Python door can reach.
+                for row in range(rows):  # cpu-route: Python objects marshaled one element at a time before the runtime
                     var item = data[row] if rank == 1 else data[Python.tuple(col, row)]
-                    bits = _pd_object_bits(item, context)
-                else:
-                    var raw = _pd_raw(data, row * row_stride + col * col_stride)
-                    bits = f64_to_f32_bits(bitcast[DType.uint64](_pd_double(raw, kind, size))) if double_round else classical_f32_bits(raw, kind, size)
-                if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                    raise Error("Input contains NaN or infinity")
-                output[row * cols + dest] = bitcast[DType.float32](bits)
+                    var bits = _pd_object_bits(item, context)
+                    if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+                        raise Error("Input contains NaN or infinity")
+                    output[row * cols + dest] = bitcast[DType.float32](bits)
+            else:
+                pd_scatter_numeric(Int(py=sequential_address(data)), size, Bool(py=data.dtype.isnative), kind,
+                                   row_stride, col_stride, col, dest, rows, cols, double_round, output)
         _ = data^
     _ = owned^
     _ = placements^

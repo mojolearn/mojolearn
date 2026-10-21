@@ -57,11 +57,17 @@ def make_tree(root, gbdt_body="fn f():\n    pass\n"):
     (root / "bindings" / "blm.mojo").write_text("fn b():\n    pass\n")
     (root / "bindings" / "build_byte_lm.sh").write_text(build_script("byte_lm", "blm.mojo"))
     (root / "bindings" / "_mojolearn_alpha_host.mojo").write_text("fn a():\n    pass\n")
+    # The host builder compiles the generated per-binding entry (be1b6e817),
+    # which imports the module body through `-I bindings`, as on main.
+    (root / "bindings" / "entry").mkdir()
+    (root / "bindings" / "entry" / "entry__mojolearn_alpha_host.mojo").write_text(
+        "from _mojolearn_alpha_host import a\n")
     (root / "bindings" / "build_gbdt.sh").write_text(build_script("gbdt", "gbdt.mojo"))
     (root / "bindings" / "build_estimators.sh").write_text(build_script("estimators", "est.mojo"))
     (root / "bindings" / "build_svm.sh").write_text(build_script("svm", "svm.mojo"))
     (root / "bindings" / "build_host_family.sh").write_text(
-        "#!/bin/bash\nfam=$1\npixi run mojo build --emit shared-lib -I . -o out.so\n")
+        "#!/bin/bash\nfam=$1\nentry_file=\"bindings/entry/entry__mojolearn_${fam}_host.mojo\"\n"
+        "pixi run mojo build --emit shared-lib -I . -I bindings \"$entry_file\" -o out.so\n")
     (root / "bindings" / "build_alpha_host.sh").write_text(
         "#!/bin/bash\nexec bash \"$(dirname \"$0\")/build_host_family.sh\" alpha\n")
     (root / "pixi.toml").write_text("[workspace]\nname = \"x\"\n[tasks]\nprebuild = \"echo\"\n")

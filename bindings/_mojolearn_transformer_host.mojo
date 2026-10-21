@@ -32,7 +32,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import copy_f32, f32_ptr, read_f32
+from core.hostptr import copy_f32, f32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -84,6 +84,18 @@ from transformer.block_options import (
     BLOCK_OPTION_ADDRS,
     BLOCK_OPTION_PARAMS,
     BlockOptions,
+)
+
+# Typed kernel side of this shell (thin-shell move, pure, no bit change).
+from transformer.transformer_host_binding_impl import (
+    _backward_run,
+    _session_forward_tape_run,
+    _session_backward_tape_run,
+    _write,
+    _opt_read,
+    _host_weights_from,
+    _run_forward,
+    HostTransformerSession,
 )
 
 
@@ -138,16 +150,12 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
             + String(len(addrs))
         )
     var a = List[Int]()
-    for i in range(n):
+    for i in range(n):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error(what + ": null buffer address at slot " + String(i))
         a.append(address)
     return a^
-
-
-def _write(addr: Int, values: List[Float32]) raises:
-    copy_f32(values.unsafe_ptr(), f32_ptr(addr), len(values))
 
 
 def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raises -> List[Int]:
@@ -162,12 +170,12 @@ def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raise
             + " with the block options tail, got " + String(got)
         )
     var a = List[Int]()
-    for i in range(got):
+    for i in range(got):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if i < n and i != gate_slot and address == 0:
             raise Error(what + ": null buffer address at slot " + String(i))
         a.append(address)
-    while len(a) < n + BLOCK_OPTION_ADDRS:
+    while len(a) < n + BLOCK_OPTION_ADDRS:  # small-loop(BLOCK_OPTION_ADDRS: pads the absent option tail with zero addresses): argument words, not data
         a.append(0)
     return a^
 
@@ -181,97 +189,9 @@ def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]
             + " with the block options tail, got " + String(got)
         )
     var p = List[Int]()
-    for i in range(got):
+    for i in range(got):  # small-loop(params: fixed scalar list of this entry): argument words, not data
         p.append(Int(py=params[i]))
     return p^
-
-
-def _opt_read(addr: Int, n: Int, on: Bool, name: String, what: String) raises -> List[Float32]:
-    """One optional tensor: read at its length when its flag is on, empty
-    otherwise; a presence/flag mismatch is refused by the tensor's name."""
-    if on:
-        if addr == 0:
-            raise Error(what + ": " + name + " is required by its option and its address is null")
-        return read_f32(addr, n)
-    if addr != 0:
-        raise Error(what + ": " + name + " was passed but its option is off; pass the option or drop the tensor")
-    return List[Float32]()
-
-
-def _host_weights_from(
-    a: List[Int], dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
-    rope_positions: Int, opts: BlockOptions, what: String,
-) raises -> TransformerWeights:
-    """The oracle's weight struct from the 13 + 11 address layout under the
-    record: the nine (the gate only when the MLP is gated) and the eleven
-    optional tensors, each read at its length or left empty."""
-    var qw = nh * hd
-    var kw = nkv * hd
-    var w_gate = List[Float32]()
-    if opts.gated():
-        if a[7] == 0:
-            raise Error(what + ": gate_proj.weight address is null (a gated MLP needs it)")
-        w_gate = read_f32(a[7], it * dm)
-    elif a[7] != 0:
-        raise Error(what + ": gate_proj.weight was passed but the MLP is ungated (mlp gelu / gelu_tanh)")
-    return transformer_host_weights_opts(
-        dm, nh, nkv, hd, it, rope_positions, opts,
-        read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
-        read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-        w_gate^, read_f32(a[8], it * dm), read_f32(a[9], dm * it),
-        _opt_read(a[13], qw, opts.qkv_bias, "q_proj.bias", what),
-        _opt_read(a[14], kw, opts.qkv_bias, "k_proj.bias", what),
-        _opt_read(a[15], kw, opts.qkv_bias, "v_proj.bias", what),
-        _opt_read(a[16], dm, opts.o_bias, "o_proj.bias", what),
-        _opt_read(a[17], dm, opts.norm_bias, "input_layernorm.bias", what),
-        _opt_read(a[18], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
-        _opt_read(a[19], it, opts.mlp_bias, "up_proj.bias", what),
-        _opt_read(a[20], dm, opts.mlp_bias, "down_proj.bias", what),
-        _opt_read(a[21], it, opts.has_gate_bias(), "gate_proj.bias", what),
-        _opt_read(a[22], hd, opts.qk_norm, "q_norm.weight", what),
-        _opt_read(a[23], hd, opts.qk_norm, "k_norm.weight", what),
-    )
-
-
-def _run_forward(
-    a: List[Int], b: Int, l: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
-    it: Int, smax: Int, s0: Int, window: Int, carried: Bool,
-    opts: BlockOptions,
-) raises -> Int:
-    """`a` is the device binding's thirteen: x, the nine weights, k_cache,
-    v_cache, y_out, then the eleven optional addresses (zeros when absent).
-    With `carried` False the caches are zero and not written back (the
-    fresh prefill). `opts` is the record from the params tail (the default
-    record when no tail was sent; `TransformerWeights` at the default
-    record with every optional list empty is exactly what
-    `transformer_host_weights` built before this lane)."""
-    if b <= 0 or l <= 0:
-        raise Error("transformer: B and L must be positive")
-    if smax <= 0:
-        raise Error("transformer: max_tokens must be positive")
-    if window < 0:
-        raise Error("transformer: window must be >= 0 (0 = full causal)")
-    var qw = nh * hd
-    var kw = nkv * hd
-    var w = _host_weights_from(a, dm, nh, nkv, hd, it, smax, opts, String("transformer"))
-    var cap = smax
-    if window > 0:
-        cap = window
-    var cache_n = b * nkv * cap * hd
-    var k_in = List[Float32]()
-    var v_in = List[Float32]()
-    if carried:
-        k_in = read_f32(a[10], cache_n)
-        v_in = read_f32(a[11], cache_n)
-    var x = read_f32(a[0], b * l * dm)
-    var out = transformer_host_forward(
-        w, x, b, l, smax, s0, window, k_in, v_in, carried
-    )
-    _write(a[12], out.y)
-    if carried:
-        _write(a[10], out.k_cache)
-        _write(a[11], out.v_cache)
-    return out.cached_tokens
 
 
 def transformer_forward_fresh_binding(
@@ -285,12 +205,12 @@ def transformer_forward_fresh_binding(
     var p = _params_tail(params, 8, what)
     var opts = BlockOptions.from_params(p, 8)
     var a = List[Int]()
-    for i in range(10):
+    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(a0[i])
     a.append(0)
     a.append(0)
     a.append(a0[10])
-    for i in range(BLOCK_OPTION_ADDRS):
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(a0[11 + i])
     var b = p[0]
     var l = p[1]
@@ -400,48 +320,13 @@ def transformer_backward_binding(
     if b <= 0 or l <= 0 or dm <= 0:
         raise Error("transformer backward: B, L and d_model must be positive")
     with GILReleased(Python()):
-        var qw = nh * hd
-        var kw = nkv * hd
-        var w = transformer_host_weights(
-            dm, nh, nkv, hd, it, l,
-            read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
-            read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-            read_f32(a[7], it * dm), read_f32(a[8], it * dm), read_f32(a[9], dm * it),
-        )
-        var x = read_f32(a[0], b * l * dm)
-        var d_out = read_f32(a[10], b * l * dm)
-        var grads = transformer_host_backward(w, x, d_out, b, l, window)
-        for i in range(10):
-            _write(a[11 + i], grads[i])
+        _backward_run(a, b, l, dm, nh, nkv, hd, it, window)
     return PythonObject(0)
 
 
 
 from transformer.host.attention_tape import HostAttentionTape
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
-
-
-struct HostTransformerSession(Movable, Writable):
-    var tape: Optional[HostAttentionTape]
-    var generation: Int
-    var busy: Bool
-    var closed: Bool
-
-    def __init__(out self):
-        self.tape = None
-        self.generation = 1
-        self.busy = False
-        self.closed = False
-
-    def write_to(self,mut writer: Some[Writer]):
-        writer.write("HostTransformerSession")
-
-    def write_repr_to(self,mut writer: Some[Writer]):
-        writer.write("HostTransformerSession")
-
-    def invalidate_tape(mut self):
-        self.tape = None
-        self.generation += 1
 
 
 def transformer_arithmetic_profile_changed_binding() raises -> PythonObject:
@@ -498,26 +383,14 @@ def transformer_session_forward_tape_binding(session: PythonObject,addrs: Python
         raise Error("transformer tape: IDENTICAL and ten scalars required")
     var a = _addrs(addrs,11,String("transformer tape"))
     var p = List[Int]()
-    for i in range(10):
+    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
         p.append(Int(py=params[i]))
     if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
         raise Error("transformer tape: invalid shape/window/activation budget/cost")
     owner[].busy = True
     try:
         with GILReleased(Python()):
-            owner[].invalidate_tape()
-            var dm=p[2]
-            var qw=p[3]*p[5]
-            var kw=p[4]*p[5]
-            var it=p[6]
-            var w = transformer_host_weights(dm,p[3],p[4],p[5],it,p[1],
-                read_f32(a[1],dm),read_f32(a[2],dm),read_f32(a[3],qw*dm),
-                read_f32(a[4],kw*dm),read_f32(a[5],kw*dm),read_f32(a[6],dm*qw),
-                read_f32(a[7],it*dm),read_f32(a[8],it*dm),read_f32(a[9],dm*it))
-            var x=read_f32(a[0],p[0]*p[1]*dm)
-            owner[].tape = HostAttentionTape(w^,x^,p[0],p[1],p[7],owner[].generation)
-            _write(a[10],owner[].tape.value().stages.value().residual2_out)
-            owner[].tape.value().seal(p[8],p[9])
+            _session_forward_tape_run(Int(owner), a, p)
     except error:
         owner[].invalidate_tape()
         owner[].busy = False
@@ -546,12 +419,7 @@ def transformer_session_backward_tape_binding(session: PythonObject,addrs: Pytho
     owner[].busy = True
     try:
         with GILReleased(Python()):
-            ref tape = owner[].tape.value()
-            var dy=read_f32(a[0],tape.b*tape.l*tape.weights.dims.d_model)
-            var gradients=tape.backward(dy,generation)
-            for i in range(10):
-                _write(a[i+1],gradients[i])
-            owner[].invalidate_tape()
+            _session_backward_tape_run(Int(owner), a, generation)
     except error:
         owner[].invalidate_tape()
         owner[].busy = False

@@ -3,7 +3,7 @@
 """End-to-end host-list UMAP surface for the supported 2D/3D slice."""
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from neighbors.estimator import knn_search

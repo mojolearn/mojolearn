@@ -66,6 +66,7 @@ def _torch_connect() raises:
         return
     var fields = bi.object.__getattribute__(module, "__dict__")
     var entries = Python.dict()
+    # small-loop(the three fixed Torch mode metadata entry names)
     for name in [String("_len_torch_function_stack"), String("_len_torch_dispatch_stack"),
                  String("_dispatch_tls_is_dispatch_key_included")]:
         var entry = fields.get(name)
@@ -84,12 +85,12 @@ def _torch_connect() raises:
         raise Error("TypeError: Torch lacks native TensorBase metadata")
     var base_fields = _torch_type_fields(base)
     var methods = Python.dict()
-    for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride")]:
+    for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride")]:  # small-loop(the four fixed tensor method names)
         var entry = base_fields.get(name)
         if entry is None or bi.type(entry) is not bi.type(bi.list.append):
             raise Error("TypeError: Torch tensor conversion requires native method " + name)
         methods[name] = entry
-    for name in [String("device"), String("dtype"), String("shape")]:
+    for name in [String("device"), String("dtype"), String("shape")]:  # small-loop(the three fixed tensor descriptor names)
         var entry = base_fields.get(name)
         if entry is None or bi.type(entry) is not bi.type(bi.memoryview.obj):
             raise Error("TypeError: Torch tensor metadata requires native descriptor " + name)
@@ -120,7 +121,7 @@ def _torch_connect() raises:
             raise Error("TypeError: Torch infrastructure mode metadata provenance differs")
         entries["_get_dispatch_mode"] = get_mode
         var modes = _torch_type_fields(mode_type)
-        for name in [String("FAKE"), String("PROXY"), String("FUNCTIONAL")]:
+        for name in [String("FAKE"), String("PROXY"), String("FUNCTIONAL")]:  # small-loop(the three fixed dispatch mode keys)
             var key = modes.get(name)
             if key is None or bi.type(key) is not mode_type:
                 raise Error("TypeError: Torch lacks native dispatch mode key " + name)

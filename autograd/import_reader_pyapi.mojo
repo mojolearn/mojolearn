@@ -14,13 +14,13 @@ def onnx_info_py(h: PythonObject) raises -> PythonObject:
     """[words, strings, floats] of handle h (the layout in import_reader.mojo's docstring)."""
     var info = onnx_info(Int(py=h))
     var w = Python.list()
-    for i in range(len(info.words)):  # cpu-route: model file parsing (the graph's words, converted)
+    for i in range(len(info.words)):  # driver-loop: over the graph's words, converted; cpu-route: model file parsing conversion
         w.append(PythonObject(info.words[i]))
     var strs = Python.list()
-    for i in range(len(info.strs)):  # cpu-route: model file parsing (the graph's strings, converted)
+    for i in range(len(info.strs)):  # driver-loop: over the graph's strings, converted; cpu-route: model file parsing conversion
         strs.append(PythonObject(info.strs[i]))
     var floats = Python.list()
-    for i in range(len(info.floats)):  # cpu-route: model file parsing (attribute floats, converted)
+    for i in range(len(info.floats)):  # driver-loop: over attribute floats, converted; cpu-route: model file parsing conversion
         floats.append(PythonObject(info.floats[i]))
     var out = Python.list()
     out.append(w)

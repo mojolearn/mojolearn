@@ -39,7 +39,7 @@ which is what the gates and the card use.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx

@@ -58,15 +58,16 @@ reaches them keeps refusing BY NAME through `_HostBinding` until a lane
 lands them.
 """
 from std.math import isfinite
+from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, read_f32, read_i32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.hostptr import i32_ptr
+from core.hostptr import i32_ptr
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
     host_spectral_embedding_coo,
@@ -107,6 +108,15 @@ from metrics.host.metrics_oracle import (
     host_silhouette,
     host_v_measure,
 )
+from metrics.host.metrics_host_entries_impl import (
+    binary_ranking_checked,
+    check_classification,
+    check_classification_ptr,
+    log_loss_inputs_check,
+    metrics_check_pair as _check_pair,
+    regression_inputs_finite,
+    require_finite_f32,
+)
 from metrics.host.classification_oracle import (
     MAX_CONFUSION_CLASSES,
     MAX_PRF_CLASSES,
@@ -138,18 +148,6 @@ def _want(name: String, params: PythonObject, k: Int) raises:
         raise Error(
             name + ": params must contain " + String(k) + " values, got "
             + String(len(params))
-        )
-
-
-def _check_pair(y_true: List[Int32], y_pred: List[Int32], n: Int) raises:
-    """`_check_pair`, `metrics/estimator.mojo`, verbatim."""
-    if n <= 0:
-        raise Error("metrics: n must be positive, got " + String(n))
-    if len(y_true) < n or len(y_pred) < n:
-        raise Error(
-            "metrics: labels_true holds " + String(len(y_true))
-            + " and labels_pred holds " + String(len(y_pred))
-            + " entries, both must hold at least n = " + String(n)
         )
 
 
@@ -503,8 +501,9 @@ def silhouette_binding(
             x, lab, n_rows, n_cols, n_labels, chunk,
             DISTANCE_L2_SQRT_UNEXPANDED, scores,
         )
-        for i in range(n_rows):
-            sp.unsafe_store(i, scores[i])
+        if n_rows > 0:
+            memcpy(dest=sp, src=scores.unsafe_ptr(), count=n_rows)
+        _ = len(scores)
     return PythonObject(Float64(mean))
 
 
@@ -570,10 +569,10 @@ def spectral_fit_predict_dataset_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
         _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-        for i in range(n_samples):
-            lp.unsafe_store(i, labels[i])
-        for i in range(len(embedding)):
-            ep.unsafe_store(i, embedding[i])
+        memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+        memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+        _ = len(labels)
+        _ = len(embedding)
     return PythonObject(n_out)
 
 
@@ -616,10 +615,10 @@ def spectral_fit_predict_graph_binding(
             n_neighbors, eigen_tol, seed, labels, embedding,
         )
         _guard_spectral_outputs(labels, embedding, n_samples, n_components)
-        for i in range(n_samples):
-            lp.unsafe_store(i, labels[i])
-        for i in range(len(embedding)):
-            ep.unsafe_store(i, embedding[i])
+        memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+        memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+        _ = len(labels)
+        _ = len(embedding)
     return PythonObject(n_out)
 
 
@@ -685,8 +684,8 @@ def spectral_embedding_dataset_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    for i in range(len(embedding)):
-        ep.unsafe_store(i, embedding[i])
+    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    _ = len(embedding)
     return PythonObject(n_out)
 
 
@@ -737,8 +736,8 @@ def spectral_embedding_graph_binding(
             drop_first, seed, embedding, tolerance,
         )
     _guard_embedding_output(embedding, n_samples, n_out, n_cols)
-    for i in range(len(embedding)):
-        ep.unsafe_store(i, embedding[i])
+    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    _ = len(embedding)
     return PythonObject(n_out)
 
 
@@ -760,14 +759,10 @@ def _write_spectral_state(
     var evec = f32_ptr(_index(addrs[first + 1]))
     var dg = f32_ptr(_index(addrs[first + 2]))
     var cent = f32_ptr(_index(addrs[first + 3]))
-    for i in range(len(state.eigenvalues)):
-        ev.unsafe_store(i, state.eigenvalues[i])
-    for i in range(len(state.eigenvectors)):
-        evec.unsafe_store(i, state.eigenvectors[i])
-    for i in range(len(state.diag)):
-        dg.unsafe_store(i, state.diag[i])
-    for i in range(len(state.centroids)):
-        cent.unsafe_store(i, state.centroids[i])
+    memcpy(dest=ev, src=state.eigenvalues.unsafe_ptr(), count=len(state.eigenvalues))
+    memcpy(dest=evec, src=state.eigenvectors.unsafe_ptr(), count=len(state.eigenvectors))
+    memcpy(dest=dg, src=state.diag.unsafe_ptr(), count=len(state.diag))
+    memcpy(dest=cent, src=state.centroids.unsafe_ptr(), count=len(state.centroids))
 
 
 def spectral_fit_predict_dataset_state_binding(
@@ -801,10 +796,10 @@ def spectral_fit_predict_dataset_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 3, n_samples, n_components, n_clusters)
-    for i in range(n_samples):
-        lp.unsafe_store(i, labels[i])
-    for i in range(len(embedding)):
-        ep.unsafe_store(i, embedding[i])
+    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    _ = len(labels)
+    _ = len(embedding)
     return PythonObject(n_out)
 
 
@@ -841,10 +836,10 @@ def spectral_fit_predict_graph_state_binding(
         )
     _guard_spectral_outputs(labels, embedding, n_samples, n_components)
     _write_spectral_state(state, addrs, 5, n_samples, n_components, n_clusters)
-    for i in range(n_samples):
-        lp.unsafe_store(i, labels[i])
-    for i in range(len(embedding)):
-        ep.unsafe_store(i, embedding[i])
+    memcpy(dest=lp, src=labels.unsafe_ptr(), count=n_samples)
+    memcpy(dest=ep, src=embedding.unsafe_ptr(), count=len(embedding))
+    _ = len(labels)
+    _ = len(embedding)
     return PythonObject(n_out)
 
 
@@ -883,10 +878,10 @@ def spectral_predict_binding(
             input, train_x, n_train, n_queries, n_features, k, n_clusters,
             n_neighbors, affinity, state,
         )
-        for i in range(n_queries):
-            olp.unsafe_store(i, out.labels[i])
-        for i in range(n_queries * k):
-            oep.unsafe_store(i, out.embedding[i])
+        memcpy(dest=olp, src=out.labels.unsafe_ptr(), count=n_queries)
+        memcpy(dest=oep, src=out.embedding.unsafe_ptr(), count=n_queries * k)
+        _ = len(out.labels)
+        _ = len(out.embedding)
     return PythonObject(0)
 
 
@@ -928,9 +923,7 @@ def _regression_error_entry(
     with GILReleased(Python()):
         if n <= 0:
             raise Error("metrics: n must be positive, got " + String(n))
-        for i in range(n):
-            if not isfinite(y.unsafe_load(i)) or not isfinite(prediction.unsafe_load(i)):
-                raise Error("regression_error: inputs must be finite Float32")
+        regression_inputs_finite(y, prediction, n)
         result = host_regression_error_ptr(y, prediction, n, absolute, root)
     return PythonObject(Float64(result))
 
@@ -956,30 +949,6 @@ def root_mean_squared_error_binding(
     return _regression_error_entry(y_true_addr, y_pred_addr, params, False, True)
 
 
-def _binary_ranking_checked(
-    y: List[Int32], scores: List[Float32], n: Int, curve: Bool,
-) raises -> Tuple[List[Float32], Int]:
-    """`binary_ranking_host[curve]`, `metrics/estimator.mojo`: the length,
-    label and finiteness checks, the both-classes refusal for the AUC."""
-    if n <= 0 or n > 2147483647 or len(y) < n or len(scores) < n:
-        raise Error("binary ranking: invalid input length")
-    var has_zero = False
-    var has_one = False
-    for i in range(n):
-        if y[i] == 0:
-            has_zero = True
-        elif y[i] == 1:
-            has_one = True
-        else:
-            raise Error("binary ranking: labels must encode 0 or 1")
-        if not isfinite(scores[i]):
-            raise Error("binary ranking: scores must be finite")
-    if not curve:
-        if not has_zero or not has_one:
-            raise Error("roc_auc_score: both classes required")
-    return host_binary_ranking(y, scores, n, curve)
-
-
 def roc_auc_score_binding(
     true_addr: PythonObject, score_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -992,7 +961,7 @@ def roc_auc_score_binding(
     var scores = read_f32(_index(score_addr), n)
     var output = f32_ptr(_index(out_addr))
     with GILReleased(Python()):
-        var result = _binary_ranking_checked(y, scores, n, False)
+        var result = binary_ranking_checked(y, scores, n, False)
         output[0] = result[0][0]
     return PythonObject(1)
 
@@ -1014,13 +983,13 @@ def precision_recall_curve_binding(
     var thresholds = f32_ptr(_index(threshold_addr))
     var m = 0
     with GILReleased(Python()):
-        var result = _binary_ranking_checked(y, scores, n, True)
+        var result = binary_ranking_checked(y, scores, n, True)
         m = result[1]
-        for i in range(m + 1):
-            precision[i] = result[0][i]
-            recall[i] = result[0][n + 1 + i]
-        for i in range(m):
-            thresholds[i] = result[0][2 * (n + 1) + i]
+        var curve = result[0].unsafe_ptr()
+        memcpy(dest=precision, src=curve, count=m + 1)
+        memcpy(dest=recall, src=curve + (n + 1), count=m + 1)
+        memcpy(dest=thresholds, src=curve + 2 * (n + 1), count=m)
+        _ = len(result[0])
     return PythonObject(m)
 
 
@@ -1041,42 +1010,9 @@ def log_loss_binding(
     with GILReleased(Python()):
         if len(y) < n or len(probability) < n * k or normalize < 0 or normalize > 1:
             raise Error("log_loss: invalid input length or normalization")
-        for i in range(n):
-            if Int(y[i]) < 0 or Int(y[i]) >= k:
-                raise Error("log_loss: encoded label out of range")
-        for i in range(n * k):
-            if not isfinite(probability[i]) or probability[i] < 0 or probability[i] > 1:
-                raise Error("log_loss: probabilities must be finite and within [0,1]")
+        log_loss_inputs_check(y, probability, n, k)
         out[0] = host_log_loss(y, probability, n, k, normalize)
     return PythonObject(1)
-
-
-def _check_classification(y: List[Int32], p: List[Int32], n: Int, k: Int, matrix: Bool) raises:
-    """`_check_classification[matrix]`, `metrics/estimator.mojo`."""
-    _check_pair(y, p, n)
-    var cap = MAX_CONFUSION_CLASSES if matrix else MAX_PRF_CLASSES
-    if n > 2147483647 or k <= 0 or k > cap:
-        raise Error("classification metrics: count or class allocation bound exceeded")
-    var minimum = -1 if matrix else 0
-    for i in range(n):
-        if Int(y[i]) < minimum or Int(y[i]) >= k or Int(p[i]) < minimum or Int(p[i]) >= k:
-            raise Error("classification metrics: encoded label out of range")
-
-
-def _check_classification_ptr(
-    y: MutPointer[Int32, MutUntrackedOrigin],
-    p: MutPointer[Int32, MutUntrackedOrigin],
-    n: Int, k: Int, matrix: Bool,
-) raises:
-    if n <= 0:
-        raise Error("metrics: n must be positive, got " + String(n))
-    var cap = MAX_CONFUSION_CLASSES if matrix else MAX_PRF_CLASSES
-    if n > 2147483647 or k <= 0 or k > cap:
-        raise Error("classification metrics: count or class allocation bound exceeded")
-    var minimum = -1 if matrix else 0
-    for i in range(n):
-        if Int(y.unsafe_load(i)) < minimum or Int(y.unsafe_load(i)) >= k or Int(p.unsafe_load(i)) < minimum or Int(p.unsafe_load(i)) >= k:
-            raise Error("classification metrics: encoded label out of range")
 
 
 def confusion_matrix_binding(
@@ -1097,17 +1033,17 @@ def confusion_matrix_binding(
     if normalization == 0:
         var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
         with GILReleased(Python()):
-            _check_classification_ptr(y, p, n, k, True)
+            check_classification_ptr(y, p, n, k, True)
             var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
-            for i in range(len(values[0])):
-                output[i] = values[0][i]
+            memcpy(dest=output, src=values[0].unsafe_ptr(), count=len(values[0]))
+            _ = len(values[0])
     else:
         var output = f32_ptr(address)
         with GILReleased(Python()):
-            _check_classification_ptr(y, p, n, k, True)
+            check_classification_ptr(y, p, n, k, True)
             var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
-            for i in range(len(values[1])):
-                output[i] = values[1][i]
+            memcpy(dest=output, src=values[1].unsafe_ptr(), count=len(values[1]))
+            _ = len(values[1])
     return PythonObject(k * k)
 
 
@@ -1130,10 +1066,9 @@ def precision_recall_fscore_binding(
     var output = f32_ptr(_index(out_addr))
     var written = 0
     with GILReleased(Python()):
-        _check_classification(y, p, n, k, False)
+        check_classification(y, p, n, k, False)
         var values = host_precision_recall_fscore(y, p, n, k, average, positive, zero, selected)
-        for i in range(len(values)):
-            output[i] = values[i]
+        memcpy(dest=output, src=values.unsafe_ptr(), count=len(values))
         written = len(values)
     return PythonObject(written)
 
@@ -1238,11 +1173,9 @@ def umap_fit_transform_binding(
         embedding = host_umap_fit_transform(x, n, d, config)
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
-    for value in embedding:
-        if not isfinite(value):
-            raise Error("UMAP returned a non-finite embedding")
-    for i in range(len(embedding)):
-        output.unsafe_store(i, embedding[i])
+    require_finite_f32(embedding, "UMAP returned a non-finite embedding")
+    memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
+    _ = len(embedding)
     return PythonObject(config.n_components)
 
 
@@ -1295,9 +1228,7 @@ def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) rai
     var init = List[Float32]()
     if init_addr != 0:
         init = read_f32(init_addr, n * config.n_components)
-        for value in init:
-            if not isfinite(value):
-                raise Error("UMAP initial embedding must be finite")
+        require_finite_f32(init, "UMAP initial embedding must be finite")
     var target = List[Float32]()
     if tkind != 0:
         target = read_f32(target_addr, n * tdims)
@@ -1307,11 +1238,9 @@ def umap_fit_transform_ex_binding(addrs: PythonObject, params: PythonObject) rai
         embedding = host_umap_fit_transform(x, n, d, config, init, target, tkind, tdims, tk, tw)
     if len(embedding) != n * config.n_components:
         raise Error("UMAP returned an unexpected embedding shape")
-    for value in embedding:
-        if not isfinite(value):
-            raise Error("UMAP returned a non-finite embedding")
-    for i in range(len(embedding)):
-        output.unsafe_store(i, embedding[i])
+    require_finite_f32(embedding, "UMAP returned a non-finite embedding")
+    memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
+    _ = len(embedding)
     return PythonObject(config.n_components)
 
 
@@ -1359,11 +1288,9 @@ def umap_transform_binding(addrs: PythonObject, params: PythonObject) raises -> 
         embedding = host_umap_transform(training, fitted, queries, n, rows, d, config)
     if len(embedding) != rows * config.n_components:
         raise Error("UMAP transform returned an unexpected shape")
-    for value in embedding:
-        if not isfinite(value):
-            raise Error("UMAP transform returned a non-finite embedding")
-    for i in range(len(embedding)):
-        output.unsafe_store(i, embedding[i])
+    require_finite_f32(embedding, "UMAP transform returned a non-finite embedding")
+    memcpy(dest=output, src=embedding.unsafe_ptr(), count=len(embedding))
+    _ = len(embedding)
     return PythonObject(config.n_components)
 
 

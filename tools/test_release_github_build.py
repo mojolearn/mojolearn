@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -122,6 +123,131 @@ class Plan(unittest.TestCase):
         self.assertIn(heaviest, shards[0]["only"].split())
 
 
+#: The same lists with build_sets.sh's merged switch and pool (MOJOLEARN_MERGED_BINDINGS, lane/merged-bindings).
+MERGED_BUILD_SETS = BUILD_SETS.replace("host_so() { printf 'x'; }", """host_so() { printf 'x'; }
+running=0
+pool_jobs() {   # tier -> "tier:script" per build of that tier
+  if [[ "$MERGED" = 1 ]]; then
+    printf '%s:merged_build.sh\\n' "$1"
+    if [[ "$PACKAGE_BYTE_LM" = 1 && "$1" = identical ]]; then printf 'host:merged_build.sh\\n'; fi
+  else
+    for s in $(tier_scripts "$1"); do printf '%s:%s\\n' "$1" "$s"; done
+  fi
+}
+echo SHOULD NOT RUN EITHER
+""").replace('PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}',
+             'PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}\nMERGED=$(python3 packaging/linux/merged_layout.py enabled) || exit 2')
+
+
+def merged_source(default="1"):
+    src = Path(tempfile.mkdtemp())
+    (src / "packaging/linux").mkdir(parents=True)
+    (src / "packaging/linux/build_sets.sh").write_text(MERGED_BUILD_SETS)
+    layout = (ROOT / "packaging/linux/merged_layout.py").read_text()
+    if default != "1":
+        layout = layout.replace('get(SWITCH, "1")', 'get(SWITCH, "%s")' % default)
+    (src / "packaging/linux/merged_layout.py").write_text(layout)
+    return src
+
+
+class MergedPlan(unittest.TestCase):
+    def test_the_merged_pool_is_planned_exactly(self):
+        ps = rgb.plan_set(merged_source())
+        self.assertTrue(ps["merged"])
+        self.assertEqual(sorted(e for e, _ in ps["builds"]),
+                         ["fast:merged_build.sh", "host:merged_build.sh", "identical:merged_build.sh"])
+        self.assertEqual({e for e, h in ps["builds"] if h}, {"host:merged_build.sh"})
+        # members are the per-binding builds each merged file replaces
+        self.assertEqual(ps["members"], {"fast:merged_build.sh": 3, "identical:merged_build.sh": 5,
+                                         "host:merged_build.sh": 2})
+        w = lambda e: rgb.WEIGHTS.get(e, rgb.DEFAULT_GPU_WEIGHT)
+        self.assertEqual(ps["weights"]["fast:merged_build.sh"],
+                         w("fast:build_gbdt.sh") + w("fast:build_rf.sh") + w("fast:build.sh"))
+        self.assertEqual(ps["weights"]["host:merged_build.sh"],
+                         rgb.WEIGHTS["identical:build_core_host.sh"] + rgb.WEIGHTS["identical:build_svm_host.sh"])
+        self.assertEqual(len(ps["per_binding"]), 10)
+        # the planner ignores the caller's switch: the box gets none
+        old = os.environ.get("MOJOLEARN_MERGED_BINDINGS")
+        os.environ["MOJOLEARN_MERGED_BINDINGS"] = "0"
+        try:
+            self.assertTrue(rgb.plan_set(merged_source())["merged"])
+        finally:
+            os.environ.pop("MOJOLEARN_MERGED_BINDINGS") if old is None else os.environ.__setitem__(
+                "MOJOLEARN_MERGED_BINDINGS", old)
+
+    def test_a_per_binding_source_plans_its_scripts_through_pool_jobs(self):
+        ps = rgb.plan_set(merged_source(default="0"))
+        self.assertFalse(ps["merged"])
+        self.assertEqual(sorted(e for e, _ in ps["builds"]), sorted(e for e, _ in ps["per_binding"]))
+        self.assertEqual(len(ps["builds"]), 10)
+
+    def run_plan(self, src, *extra):
+        d = Path(tempfile.mkdtemp())
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds: None):
+            rc = rgb.main(["plan", "--src", str(src), "--sets", "sm_89 gfx942", "--shards", "6",
+                           "--json", str(d / "plan.json"), *extra])
+        return rc, json.loads((d / "plan.json").read_text())
+
+    def test_free_runners_refuse_the_merged_layout_with_one_sentence(self):
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds: None):
+            with self.assertRaises(SystemExit) as cm:
+                rgb.main(["plan", "--src", str(merged_source()), "--sets", "sm_89", "--shards", "6"])
+        msg = str(cm.exception)
+        self.assertIn("cannot build on GitHub's free runners", msg)
+        self.assertIn("46.4 GB", msg)
+        self.assertIn("tools/release_linux_build.sh", msg)
+        self.assertIn("--runner-mem-gib N when the runners have N >= 50 GiB", msg)
+        self.assertEqual(msg.count(". "), 0, "one sentence")
+        # not enough for the identical tier: still refused
+        with unittest.mock.patch.object(rgb, "check_counts", lambda src, builds: None):
+            with self.assertRaises(SystemExit):
+                rgb.main(["plan", "--src", str(merged_source()), "--sets", "sm_89", "--runner-mem-gib", "40"])
+
+    def test_large_runners_get_one_merged_build_per_shard(self):
+        rc, doc = self.run_plan(merged_source(), "--runner-mem-gib", str(max(rgb.NEEDED_GIB.values())))
+        self.assertEqual(rc, 0)
+        self.assertEqual((doc["layout"], doc["shards"], doc["builds"]), ("merged", 3, 3))
+        rows = doc["matrix"]["include"]
+        self.assertEqual(len(rows), 6)
+        for arch in ("sm_89", "gfx942"):
+            mine = [r for r in rows if r["arch"] == arch]
+            self.assertTrue(all(r["n"] == 1 for r in mine))
+            self.assertEqual(sorted(r["only"] for r in mine),
+                             ["fast:merged_build.sh", "host:merged_build.sh", "identical:merged_build.sh"])
+        # the heaviest (identical) goes onto shard 0
+        self.assertEqual(rows[0]["only"], "identical:merged_build.sh")
+
+    def test_the_needed_memory_covers_the_measured_peaks(self):
+        # DO MI325X 2026-10-20: host 6.9 GB, fast 36.6 GB, identical (+ byte LM) 46.4 GB
+        for tier, peak in (("host", 6.9), ("fast", 36.6), ("identical", 46.4)):
+            self.assertGreater(rgb.NEEDED_GIB[tier], peak)
+
+    def test_the_real_source_is_refused_or_planned_per_its_layout(self):
+        merged = rgb.source_merged(ROOT)
+        if not merged:
+            self.skipTest("this checkout builds per-binding")
+        ps = rgb.plan_set(ROOT)
+        self.assertEqual(sorted(e for e, _ in ps["builds"]),
+                         ["fast:merged_build.sh", "host:merged_build.sh", "identical:merged_build.sh"])
+        rgb.check_counts(ROOT, ps["per_binding"])
+        with self.assertRaises(SystemExit) as cm:
+            rgb.main(["plan", "--src", str(ROOT), "--sets", "sm_89 gfx942", "--shards", "6"])
+        self.assertIn("cannot build on GitHub's free runners", str(cm.exception))
+
+    def test_run_refuses_a_merged_commit_before_dispatching(self):
+        with unittest.mock.patch.object(rgb, "commit_merged", lambda c, env=None: True), \
+                unittest.mock.patch.object(rgb, "gh", lambda *a, **k: self.fail("dispatched")):
+            with self.assertRaises(SystemExit) as cm:
+                rgb.main(["run", "--commit", C, "--arch", "sm_89", "--out", tempfile.mkdtemp()])
+        self.assertIn("cannot build on GitHub's free runners", str(cm.exception))
+
+    def test_layout_reads_the_commit_without_a_checkout(self):
+        head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        self.assertEqual(rgb.commit_merged(head), rgb.source_merged(ROOT))
+        self.assertFalse(rgb.commit_merged("0" * 40))   # no such tree: per-binding
+        self.assertFalse(rgb.commit_merged(head, {"MOJOLEARN_MERGED_BINDINGS": "0"}))
+
+
 class JobMap(unittest.TestCase):
     def test_only_this_jobs_slots_and_a_header_only_map_without_r2(self):
         d = Path(tempfile.mkdtemp())
@@ -160,11 +286,32 @@ class Shard(unittest.TestCase):
         # the shard filter is not a key input
         self.assertNotIn("MOJOLEARN_BINCACHE_SHARD_ONLY", bincache.build_env(env))
 
+    def test_the_merged_host_build_is_its_own_shard_entry(self):
+        # bindings/merged_build.sh host runs under MOJOLEARN_NUMERIC_MODE=identical, like the identical tier
+        self.assertEqual(bincache.shard_entry("identical", "bindings/merged_build.sh", ["host"]), "host:merged_build.sh")
+        self.assertEqual(bincache.shard_entry("identical", "bindings/merged_build.sh", ["gpu"]),
+                         "identical:merged_build.sh")
+        self.assertEqual(bincache.shard_entry("fast", "bindings/build_x.sh", []), "fast:build_x.sh")
+        d = Path(tempfile.mkdtemp())
+        (d / "bindings").mkdir()
+        marker = d / "ran"
+        (d / "bindings/merged_build.sh").write_text('echo "$1" >> %s\n' % marker)
+        env = dict(os.environ, MOJOLEARN_BINCACHE="0", MOJOLEARN_NUMERIC_MODE="identical",
+                   MOJOLEARN_BINCACHE_SHARD_ONLY="host:merged_build.sh")
+        self.assertEqual(bincache.cmd_build([str(d / "bindings/merged_build.sh"), "gpu"], env), 0)
+        self.assertFalse(marker.exists())
+        self.assertEqual(bincache.cmd_build([str(d / "bindings/merged_build.sh"), "host"], env), 0)
+        self.assertEqual(marker.read_text().split(), ["host"])
+        # the shard judge on the runner names it the same way
+        gha = (ROOT / "tools/gha_release_box.sh").read_text()
+        self.assertIn('if name == "merged_build.sh" and (doc.get("args") or [])[:1] == ["host"]:', gha)
+
 
 class Backend(unittest.TestCase):
-    def test_github_is_the_default_with_the_cpu_box_layout(self):
+    def test_github_legs_use_the_cpu_box_layout(self):
+        # the default follows the source's layout: github for per-binding (test_release_cpu_box.py)
         self.assertIs(rel.BUILD_BACKENDS["github"], rel.github_legs)
-        self.assertIn('ap.add_argument("--build-backend", default="github"', (HERE / "release.py").read_text())
+        self.assertEqual(rel.default_build_backend(C), "github")
         ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
         legs = rel.github_legs(ctx)
         # sm_80 is the PTX slot, built like any arch (Andrew 2026-10-10), while the release ships it

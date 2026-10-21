@@ -1,0 +1,4 @@
+# Compute in shell .mojo files on main 28b8ed11b (2026-10-21): untagged for/while loops and kernel launches.
+# One row per hit: path:line: code. A hit is grandfathered by a row with the same path and code text;
+# the line number is informational. Generated once from main; the thin-* lanes remove rows as they move
+# the work into kernel files (python3 tools/hooks/no_compute_in_shells.py --prune-baseline). Never add a row.

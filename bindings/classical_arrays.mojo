@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native classical ABI preparation. Only admitted native buffers are read;
 # dtype conversion is the shared integer-defined CastIn conversion.
-from std.memory import bitcast
 from std.python import Python, PythonObject
 from core.cast_in import cast_in_kind
-from bindings.classical_cast import classical_f32_bits
+from core.classical_arrays_impl import classical_cast_rows, classical_check_weights
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -47,17 +46,7 @@ def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: P
     var borrowed = not column and value.dtype is context["float32"] and Bool(py=value.flags.c_contiguous)
     var result = value if borrowed else classical_array(rows, cols if ndim == 2 else 0, context)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
-    for r in range(rows):  # native input marshaling: input rows, never a model or training loop
-        for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
-            var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
-            var raw = UInt64(0)
-            for k in range(item):
-                raw |= UInt64(bytes[k]) << UInt64(k * 8)
-            var bits = classical_f32_bits(raw, kind, item)
-            if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                raise Error("Input " + name + " contains NaN or infinity")
-            if not borrowed:
-                out[r * cols + c] = bitcast[DType.float32](bits)
+    classical_cast_rows(addr, s0, s1, rows, cols, item, kind, name, borrowed, out)
     _ = value^
     _ = prepared^
     return result
@@ -83,14 +72,7 @@ def classical_host_weights(source: PythonObject, rows: Int, context: PythonObjec
     var out = classical_array(rows, 0, context) if scalar else value
     var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
     var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(out)))
-    var any_positive = False
-    for i in range(rows):  # native input marshaling: weight validation and scalar expansion
-        var v = input[0 if scalar else i]
-        if v < 0:
-            raise Error("Negative values in data passed to `sample_weight`")
-        any_positive = any_positive or v > 0
-        if scalar:
-            output[i] = v
+    var any_positive = classical_check_weights(input, output, rows, scalar)
     if not any_positive:
         raise Error("Sample weights must contain at least one non-zero number.")
     _ = value^

@@ -42,7 +42,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -50,6 +50,15 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
+from kernel_methods.host.km_host_impl import (
+    kmh_kernel_ridge_fit_run,
+    kmh_kernel_ridge_predict_into,
+    kmh_nystroem_fit_run,
+    kmh_nystroem_transform_into,
+    kmh_rbf_sampler_fit_into,
+    kmh_rbf_sampler_transform_into,
+    kmh_sqrt_weights,
+)
 from kernel_methods.host.km_host_oracle import (
     kmh_kernel_ridge_fit,
     kmh_kernel_ridge_predict,
@@ -102,29 +111,6 @@ def kernel_methods_numeric_mode_binding() raises -> PythonObject:
 # ===========================================================================
 
 
-def _kernel_ridge_fit_run(
-    x: List[Float32],
-    y: List[Float32],
-    n: Int,
-    d: Int,
-    t: Int,
-    kernel: Int,
-    degree: Int,
-    gamma: Float64,
-    coef0: Float64,
-    alpha: Float32,
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-    sw: List[Float32],
-) raises -> Int:
-    var dual = kmh_kernel_ridge_fit(x, y, n, d, t, kernel, degree, gamma, coef0, alpha, sw)
-    for i in range(n * t):
-        dp.unsafe_store(i, dual[i])
-    sp.unsafe_store(0, Float64(0))
-    _ = dual^
-    return 0
-
-
 def kernel_ridge_fit_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -160,13 +146,10 @@ def kernel_ridge_fit_binding(
     if len(addrs) == 5:
         # the per-row factors sqrt(sample_weight): the binary64 square root
         # of each weight rounded once to float32 (formerly Python's loop)
-        var wp = f64_ptr(Int(py=addrs[4]))
-        sw.reserve(max(0, n))
-        for i in range(n):
-            sw.append(Float32(sqrt(wp[i])))
+        sw = kmh_sqrt_weights(f64_ptr(Int(py=addrs[4])), n)
     var info = 0
     with GILReleased(Python()):
-        info = _kernel_ridge_fit_run(
+        info = kmh_kernel_ridge_fit_run(
             x, y, n, d, t, kernel, degree, gamma, coef0, alpha, dp, sp, sw
         )
     _ = x^
@@ -205,12 +188,9 @@ def kernel_ridge_predict_binding(
     var dual = read_f32(Int(py=addrs[1]), max(0, n * t))
     var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
     with GILReleased(Python()):
-        var out = kmh_kernel_ridge_predict(
-            x_fit, dual, n, d, t, kernel, degree, gamma, coef0, x_new, q
+        kmh_kernel_ridge_predict_into(
+            x_fit, dual, n, d, t, kernel, degree, gamma, coef0, x_new, q, op
         )
-        for i in range(q * t):
-            op.unsafe_store(i, out[i])
-        _ = out^
     _ = x_fit^
     _ = dual^
     _ = x_new^
@@ -220,38 +200,6 @@ def kernel_ridge_predict_binding(
 # ===========================================================================
 # Nystroem
 # ===========================================================================
-
-
-def _nystroem_fit_run(
-    x: List[Float32],
-    n: Int,
-    d: Int,
-    kernel: Int,
-    degree: Int,
-    gamma: Float64,
-    coef0: Float64,
-    q: Int,
-    seed: UInt64,
-    cp: MutPointer[Float32, MutUntrackedOrigin],
-    ip: MutPointer[Int32, MutUntrackedOrigin],
-    np_: MutPointer[Float32, MutUntrackedOrigin],
-    evp: MutPointer[Float32, MutUntrackedOrigin],
-    ecp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises -> Int:
-    var model = kmh_nystroem_fit(x, n, d, kernel, degree, gamma, coef0, q, seed)
-    for i in range(q * d):
-        cp.unsafe_store(i, model.components[i])
-    for i in range(q):
-        ip.unsafe_store(i, model.indices[i])
-        evp.unsafe_store(i, model.eigenvalues[i])
-    for i in range(q * q):
-        np_.unsafe_store(i, model.normalization[i])
-        ecp.unsafe_store(i, model.eigenvectors[i])
-    sp.unsafe_store(0, Float64(model.sweeps))
-    var sweeps = model.sweeps
-    _ = model^
-    return sweeps
 
 
 def nystroem_fit_binding(
@@ -291,7 +239,7 @@ def nystroem_fit_binding(
     var x = read_f32(Int(py=addrs[0]), max(0, n * d))
     var sweeps = 0
     with GILReleased(Python()):
-        sweeps = _nystroem_fit_run(
+        sweeps = kmh_nystroem_fit_run(
             x, n, d, kernel, degree, gamma, coef0, q, seed, cp, ip, np_, evp, ecp, sp
         )
     _ = x^
@@ -330,12 +278,9 @@ def nystroem_transform_binding(
     var x = read_f32(Int(py=addrs[5]), max(0, m * d))
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
-        var out = kmh_nystroem_transform(
-            components, normalization, q, d, kernel, degree, gamma, coef0, x, m
+        kmh_nystroem_transform_into(
+            components, normalization, q, d, kernel, degree, gamma, coef0, x, m, op
         )
-        for i in range(m * q):
-            op.unsafe_store(i, out[i])
-        _ = out^
     _ = components^
     _ = normalization^
     _ = x^
@@ -373,14 +318,7 @@ def rbf_sampler_fit_binding(
     var gamma = Float32(Float64(py=params[2]))
     var seed = UInt64(Int(py=params[3]))
     with GILReleased(Python()):
-        var model = kmh_rbf_sampler_fit(d, q, gamma, seed)
-        for i in range(d * q):
-            wp.unsafe_store(i, model.weights[i])
-        for i in range(q):
-            bp.unsafe_store(i, model.offset[i])
-        sp.unsafe_store(0, Float64(model.sigma))
-        sp.unsafe_store(1, Float64(model.scale))
-        _ = model^
+        kmh_rbf_sampler_fit_into(d, q, gamma, seed, wp, bp, sp)
     return PythonObject(0)
 
 
@@ -411,16 +349,11 @@ def rbf_sampler_transform_binding(
     var x = read_f32(Int(py=addrs[2]), max(0, m * d))
     var op = f32_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
-        var out = kmh_rbf_sampler_transform(weights, offset, d, q, scale, x, m)
-        for i in range(m * q):
-            op.unsafe_store(i, out[i])
-        _ = out^
+        kmh_rbf_sampler_transform_into(weights, offset, d, q, scale, x, m, op)
     _ = weights^
     _ = offset^
     _ = x^
     return PythonObject(0)
-
-
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_kernel_methods_host.mojo

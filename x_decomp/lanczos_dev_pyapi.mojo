@@ -19,8 +19,8 @@ def kpca_lanczos_dev_on_py() raises -> PythonObject:
 
 def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObject) raises -> PythonObject:
     """Lanczos steps j0 .. j1-1 (see x_decomp/lanczos_dev.mojo), enqueued.
-    a: n x n; q: the basis, rows 0 .. j0 hold q_0 .. q_j0 on entry, room
-    for cap + 1 rows; ab: 2 cap floats. p = [n, j0, j1, cap]."""
+    a: n x n; q: the basis, rows 0 .. j0 hold q_0 .. q_j0 on entry, with
+    room for cap + 1 rows; ab: 2 cap floats. p = [n, j0, j1, cap]."""
     var n = _n(p, 0)
     var j0 = _n(p, 1)
     var j1 = _n(p, 2)

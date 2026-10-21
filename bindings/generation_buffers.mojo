@@ -6,6 +6,7 @@ helpers never run. A foreign buffer is packed inside the operation's boundary.
 """
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
 
 
@@ -16,7 +17,6 @@ struct GenerationBoundary(Defaultable, Movable):
     var state_cls: PythonObject
     var layer_classes: PythonObject
     var stream_cls: PythonObject
-    var hash_type: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -25,7 +25,6 @@ struct GenerationBoundary(Defaultable, Movable):
         self.state_cls = PythonObject(None)
         self.layer_classes = PythonObject(None)
         self.stream_cls = PythonObject(None)
-        self.hash_type = PythonObject(None)
 
 
 comptime GENERATION_BOUNDARY = _Global[
@@ -42,15 +41,12 @@ def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
     g[].state_cls = classes[1]
     g[].layer_classes = classes[2]
     g[].stream_cls = classes[3]
-    g[].hash_type = Python.import_module("hashlib").sha256
-    if g[].bi.type(g[].hash_type) is not g[].bi.type(g[].bi.len):
-        raise Error("generation: SHA256 must be a native extension entry")
     return PythonObject(None)
 
 
 def py_ints(values: List[Int]) raises -> PythonObject:
     var out = GENERATION_BOUNDARY.get_or_create_ptr()[].bi.list()
-    for i in range(len(values)):
+    for i in range(len(values)):  # small-loop(argument words handed to a binding entry)
         out.append(values[i])
     return out
 
@@ -59,7 +55,7 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var n = 1
     var itemsize = 1 if code == "b" else 4
-    for i in range(len(dims)):
+    for i in range(len(dims)):  # small-loop(array shape dimension words)
         if dims[i] < 0 or (dims[i] != 0 and n > 2147483647 // dims[i]):
             raise Error("generation: invalid shape or signed 32-bit kernel indexing overflow")
         n *= dims[i]
@@ -81,7 +77,7 @@ def generation_array(dims: List[Int], code: String = "f") raises -> PythonObject
     result.order = PythonObject("C")
     var strides = g[].bi.list()
     var stride = itemsize
-    for i in range(len(dims)):
+    for i in range(len(dims)):  # small-loop(array shape dimension words)
         var axis = len(dims) - i - 1
         strides.insert(0, stride)
         stride *= dims[axis]
@@ -133,25 +129,22 @@ def generation_ids(value: PythonObject, vocab: Int, step: Bool = False) raises -
         raise Error("generation: ids must be nonempty, with one token per row for step")
     var fmt = String(view.format)
     if fmt != "i" and fmt != "q" and fmt != "l" and fmt != "h" and fmt != "b" and fmt != "I" and fmt != "Q" and fmt != "L" and fmt != "H" and fmt != "B":
-        raise Error("TypeError: generation ids must be a native-endian integer buffer")
+        raise Error("TypeError: generation ids must be integer (a native-endian integer buffer)")
     # Pack strided buffer inputs with the CPython buffer implementation; all
     # validation and conversion below is a Mojo loop over native storage.
     var packed = g[].arrays(fmt)
     packed.frombytes(view.tobytes("C"))
     var out = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-    for i in range(b * l):
-        var source = (i // l) + (i % l) * b if column_major else i
-        var id = Int(py=packed[source])
-        if id < 0 or id >= vocab:
-            raise Error("generation: ids must be in [0, " + String(vocab) + "); invalid id at flat index " + String(i))
-        dst[i] = Int32(id)
+    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
+    generation_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l, column_major, vocab, dst)
+    _ = packed^
     return out
 
 
 def generation_copy(value: PythonObject) raises -> PythonObject:
     var dims = List[Int]()
-    for i in range(len(value.shape)):
+    for i in range(len(value.shape)):  # small-loop(array shape dimension words)
         dims.append(Int(py=value.shape[i]))
     var code = "f" if String(value.dtype) == "<f4" else "i"
     var out = generation_array(dims, code)

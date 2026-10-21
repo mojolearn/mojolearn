@@ -56,7 +56,7 @@ wrapper reads it once.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
+from core.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
 from std.os import abort, getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
@@ -114,7 +114,7 @@ from gemm.afn_apple_fast import (
     afn_gemm_bf16_bits_into,
     afn_gemm_fused_into,
 )
-from gemm.f16_widen import f16_bits_to_f32
+from decomposition.linalg_door_impl import from_f16_device, qr_r_device_into, svdvals_device_into
 from std.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
@@ -824,20 +824,6 @@ def from_bf16_binding(
         ctx.synchronize()
     return PythonObject(count)
 
-def f16_widen_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    src: MutPointer[UInt16, MutAnyOrigin],
-    n_in: Int32,
-):
-    """IEEE float16 bits to float32 (`gemm/f16_widen.mojo`), one element
-    per thread."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(n_in):
-        return
-    dst.unsafe_store(i, f16_bits_to_f32(src.unsafe_load(i)))
-
-
-comptime F16_WIDEN_TPB = 256
 
 
 def from_f16_binding(
@@ -856,22 +842,7 @@ def from_f16_binding(
         raise Error("from_f16: count must be positive, got " + String(count))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        var dsrc = _dev_u16(ctx, src_address, count)
-        var ddst = ctx.enqueue_create_buffer[DType.float32](count)
-        ctx.enqueue_function[f16_widen_kernel](
-            ddst.unsafe_ptr(),
-            dsrc.unsafe_ptr(),
-            Int32(count),
-            grid_dim=((count + F16_WIDEN_TPB - 1) // F16_WIDEN_TPB, 1, 1),
-            block_dim=(F16_WIDEN_TPB, 1, 1),
-        )
-        ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=f32_ptr(dst_address), src_buf=ddst)
-        ctx.synchronize()
-        _ = dsrc^
-        _ = ddst^
-        # DEVIATION 3010: drain the frees before the context goes.
-        ctx.synchronize()
+        from_f16_device(ctx, f32_ptr(dst_address), u16_ptr(src_address), count)
     return PythonObject(count)
 
 # ---------------------------------------------------------------- linalg door
@@ -910,10 +881,7 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
     var n_cols = Int(py=params[1])
     var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
     with GILReleased(Python()):
-        var r = device_qr_r(a, n_rows, n_cols)
-        for i in range(n_cols * n_cols):
-            rp.unsafe_store(i, r[i])
-        _ = r^
+        qr_r_device_into(a, n_rows, n_cols, rp)
     _ = a^
     return PythonObject(n_cols)
 
@@ -968,10 +936,7 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     var n_cols = Int(py=params[1])
     var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
     with GILReleased(Python()):
-        var s = device_svdvals(a, n_rows, n_cols)
-        for i in range(n_cols):
-            sp.unsafe_store(i, s[i])
-        _ = s^
+        svdvals_device_into(a, n_rows, n_cols, sp)
     _ = a^
     return PythonObject(n_cols)
 

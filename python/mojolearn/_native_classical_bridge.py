@@ -47,7 +47,6 @@ def _reduce_not_fitted(error):
 def connect_host(host_ridge_class, host_linear_class):
     # glue: connect the existing explicit Host* CPU ABI once at setup
     from types import BuiltinFunctionType
-    import hashlib
 
     entry, context = connect(host_ridge_class, host_linear_class)
     owner = object.__new__(host_ridge_class)
@@ -76,11 +75,8 @@ def connect_host(host_ridge_class, host_linear_class):
         native = {name: existing[name] for name in ("decomp", "x_linear_fit") if isinstance(existing, dict) and name in existing}  # glue: retain the two connected native helper families
         native.update(cpu)
         connected[mode] = native
-    if not isinstance(hashlib.sha256, BuiltinFunctionType):
-        raise TypeError("host model digest requires native SHA-256")
     context.update(classical_bindings=connected, classical_explicit_cpu=True,
-                   classical_metric_vendor=context["vendor"], vendor="cpu",
-                   classical_sha256=hashlib.sha256)
+                   classical_metric_vendor=context["vendor"], vendor="cpu")
     return entry, context
 
 

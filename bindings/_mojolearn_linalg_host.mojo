@@ -43,7 +43,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from gemm.contract import GEMM_NUMERICAL_PROFILE, GEMM_NUMERICAL_PROFILE_VERSION
 
-from bindings.hostptr import f32_ptr, f64_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -82,7 +82,7 @@ from gemm.host.gemm_lowbit_oracle import (
     widen_bf16,
 )
 from gemm.f16_widen import f16_bits_to_f32
-from bindings.hostptr import i8_ptr, i32_ptr, read_i8, read_i32, read_u16, u16_ptr
+from core.hostptr import i8_ptr, i32_ptr, read_i8, read_i32, read_u16, u16_ptr
 from gemm.host.gemm_int15_oracle import (
     INT15_MAX_K,
     INT15_PROFILE_VERSION,
@@ -92,6 +92,24 @@ from gemm.host.gemm_int15_oracle import (
     join_int15,
     quantize_rows_int15,
     split_int15,
+)
+
+from decomposition.linalg_host_impl import (
+    gemm_host_run,
+    cholesky_factor_host_run,
+    cholesky_solve_host_run,
+    gemm_bf16_host_run,
+    gemm_int8_host_run,
+    quantize_int8_host_run,
+    dequantize_int8_host_run,
+    to_bf16_host_run,
+    from_bf16_host_run,
+    from_f16_host_run,
+    qr_r_host_run,
+    svdvals_host_run,
+    gemm_int15_host_run,
+    quantize_int15_host_run,
+    dequantize_int15_host_run,
 )
 
 
@@ -217,13 +235,7 @@ def gemm_binding(
         raise Error("gemm: m, n and k must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var a = read_f32(a_address, m * k)
-        var b = read_f32(b_address, n * k)
-        # THE ONE LINE THAT COMPUTES ANYTHING.
-        var c = gemm_oracle(a, b, op, m, n, k)
-        for i in range(m * n):
-            cp[i] = c[i]
-        wrote = m * n
+        wrote = gemm_host_run(cp, a_address, b_address, op, m, n, k)
     return PythonObject(wrote)
 
 
@@ -236,27 +248,6 @@ def gemm_binding(
 def cholesky_profile_jitter_binding() raises -> PythonObject:
     """The profile's pinned ridge, 2^-20, as a Python float."""
     return PythonObject(Float64(chol_host_jitter_pinned()))
-
-
-def _cholesky_factor_run(
-    a: List[Float32],
-    n: Int,
-    jitter: Float32,
-    lp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises -> Int:
-    """The GIL-free half of `cholesky_factor_binding`."""
-    var f = chol_host_potrf(a, n, jitter)
-    for i in range(n * n):
-        lp.unsafe_store(i, f.l[i])
-    # info, nb, logdet, jitter -- the GPU binding's order.
-    sp.unsafe_store(0, Float64(f.info))
-    sp.unsafe_store(1, Float64(f.nb))
-    sp.unsafe_store(2, Float64(f.logdet))
-    sp.unsafe_store(3, Float64(f.jitter))
-    var info = f.info
-    _ = f^
-    return info
 
 
 def cholesky_factor_binding(
@@ -288,7 +279,7 @@ def cholesky_factor_binding(
     var a = read_f32(_index(addrs[0]), n * n)
     var info = 0
     with GILReleased(Python()):
-        info = _cholesky_factor_run(a, n, jitter, lp, sp)
+        info = cholesky_factor_host_run(a, n, jitter, lp, sp)
     _ = a^
     return PythonObject(info)
 
@@ -328,14 +319,10 @@ def cholesky_solve_binding(
     var b = read_f32(_index(addrs[1]), n * nrhs)
     var factor = CholHostFactor(l^, n, info, logdet, nb, jitter)
     with GILReleased(Python()):
-        var x = chol_host_solve(factor, b, nrhs)
-        for i in range(n * nrhs):
-            xp.unsafe_store(i, x[i])
-        _ = x^
+        cholesky_solve_host_run(factor, b, n, nrhs, xp)
     _ = factor^
     _ = b^
     return PythonObject(0)
-
 
 
 # ===========================================================================
@@ -374,17 +361,7 @@ def gemm_bf16_binding(
         raise Error("gemm_bf16: m, n and k must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var b = read_u16(b_address, n * k)
-        var c = List[Float32]()
-        if a_bf16:
-            var a_bits = read_u16(a_address, m * k)
-            c = gemm_bf16_both_oracle(a_bits, b, op, m, n, k)
-        else:
-            var a = read_f32(a_address, m * k)
-            c = gemm_bf16_oracle(a, b, op, m, n, k)
-        for i in range(m * n):
-            cp[i] = c[i]
-        wrote = m * n
+        wrote = gemm_bf16_host_run(cp, a_address, b_address, op, m, n, k, a_bf16)
     return PythonObject(wrote)
 
 
@@ -415,14 +392,7 @@ def gemm_int8_binding(
         raise Error("gemm_int8: m and n must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var qa = read_i8(qa_address, m * k)
-        var ea = read_i32(ea_address, m)
-        var qb = read_i8(qb_address, n * k)
-        var eb = read_i32(eb_address, n)
-        var c = gemm_int8_oracle(qa, ea, qb, eb, m, n, k)
-        for i in range(m * n):
-            cp[i] = c[i]
-        wrote = m * n
+        wrote = gemm_int8_host_run(cp, qa_address, ea_address, qb_address, eb_address, m, n, k)
     return PythonObject(wrote)
 
 
@@ -446,13 +416,7 @@ def quantize_int8_binding(
         raise Error("quantize_int8: rows and cols must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var x = read_f32(x_address, rows * cols)
-        var qr = quantize_rows_int8(x, rows, cols)
-        for i in range(rows * cols):
-            qp[i] = qr.q[i]
-        for r in range(rows):
-            ep[r] = qr.e[r]
-        wrote = rows * cols
+        wrote = quantize_int8_host_run(qp, ep, x_address, rows, cols)
     return PythonObject(wrote)
 
 
@@ -476,12 +440,7 @@ def dequantize_int8_binding(
         raise Error("dequantize_int8: rows and cols must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var q = read_i8(q_address, rows * cols)
-        var e = read_i32(e_address, rows)
-        var y = dequantize_rows_int8(Int8Rows(q^, e^, rows, cols))
-        for i in range(rows * cols):
-            yp[i] = y[i]
-        wrote = rows * cols
+        wrote = dequantize_int8_host_run(yp, q_address, e_address, rows, cols)
     return PythonObject(wrote)
 
 
@@ -499,10 +458,7 @@ def to_bf16_binding(
     if count > LINALG_HOST_MAX_EXTENT:
         raise Error("to_bf16: count must be at most 2^30")
     with GILReleased(Python()):
-        var x = read_f32(src_address, count)
-        var bits = narrow_bf16(x)
-        for i in range(count):
-            dp[i] = bits[i]
+        to_bf16_host_run(dp, src_address, count)
     return PythonObject(count)
 
 
@@ -520,10 +476,7 @@ def from_bf16_binding(
     if count > LINALG_HOST_MAX_EXTENT:
         raise Error("from_bf16: count must be at most 2^30")
     with GILReleased(Python()):
-        var bits = read_u16(src_address, count)
-        var x = widen_bf16(bits)
-        for i in range(count):
-            dp[i] = x[i]
+        from_bf16_host_run(dp, src_address, count)
     return PythonObject(count)
 
 def from_f16_binding(
@@ -541,9 +494,7 @@ def from_f16_binding(
     if count > LINALG_HOST_MAX_EXTENT:
         raise Error("from_f16: count must be at most 2^30")
     with GILReleased(Python()):
-        var bits = read_u16(src_address, count)
-        for i in range(count):
-            dp[i] = f16_bits_to_f32(bits[i])
+        from_f16_host_run(dp, src_address, count)
     return PythonObject(count)
 
 # ---------------------------------------------------------------- linalg door
@@ -571,10 +522,7 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
     var n_cols = _index(params[1])
     var a = read_f32(_index(addrs[0]), n_rows * n_cols)
     with GILReleased(Python()):
-        var r = host_qr_r(a, n_rows, n_cols)
-        for i in range(n_cols * n_cols):
-            rp.unsafe_store(i, r[i])
-        _ = r^
+        qr_r_host_run(a, n_rows, n_cols, rp)
     _ = a^
     return PythonObject(n_cols)
 
@@ -630,10 +578,7 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     var n_cols = _index(params[1])
     var a = read_f32(_index(addrs[0]), n_rows * n_cols)
     with GILReleased(Python()):
-        var s = host_svdvals(a, n_rows, n_cols)
-        for i in range(n_cols):
-            sp.unsafe_store(i, s[i])
-        _ = s^
+        svdvals_host_run(a, n_rows, n_cols, sp)
     _ = a^
     return PythonObject(n_cols)
 
@@ -676,14 +621,7 @@ def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> Pyth
         raise Error("gemm_int15: m and n must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var qa = join_int15(read_i8(ah_address, m * k), read_i8(al_address, m * k))
-        var ea = read_i32(ea_address, m)
-        var qb = join_int15(read_i8(bh_address, n * k), read_i8(bl_address, n * k))
-        var eb = read_i32(eb_address, n)
-        var c = gemm_int15_oracle(qa, ea, qb, eb, m, n, k)
-        for i in range(m * n):
-            cp[i] = c[i]
-        wrote = m * n
+        wrote = gemm_int15_host_run(cp, ah_address, al_address, ea_address, bh_address, bl_address, eb_address, m, n, k)
     return PythonObject(wrote)
 
 
@@ -705,15 +643,7 @@ def quantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> 
         raise Error("quantize_int15: rows and cols must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var x = read_f32(x_address, rows * cols)
-        var qr = quantize_rows_int15(x, rows, cols)
-        var planes = split_int15(qr.q)
-        for i in range(rows * cols):
-            hp[i] = planes.hi[i]
-            lp[i] = planes.lo[i]
-        for r in range(rows):
-            ep[r] = qr.e[r]
-        wrote = rows * cols
+        wrote = quantize_int15_host_run(hp, lp, ep, x_address, rows, cols)
     return PythonObject(wrote)
 
 
@@ -735,12 +665,7 @@ def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -
         raise Error("dequantize_int15: rows and cols must each be at most 2^30")
     var wrote = 0
     with GILReleased(Python()):
-        var q = join_int15(read_i8(h_address, rows * cols), read_i8(l_address, rows * cols))
-        var e = read_i32(e_address, rows)
-        var y = dequantize_rows_int15(Int15Rows(q^, e^, rows, cols))
-        for i in range(rows * cols):
-            yp[i] = y[i]
-        wrote = rows * cols
+        wrote = dequantize_int15_host_run(yp, h_address, l_address, e_address, rows, cols)
     return PythonObject(wrote)
 
 

@@ -5,7 +5,7 @@ index b87cbe423..3d4b4b9bb 100644
 @@ -81,6 +81,11 @@ order because callers rely on it; the two elementwise helpers reproduce
  """
  
- from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 +from core.dense_coo import (
 +    nonzero_f32_count as dense_nonzero_f32_count,
 +    nonzero_f32_fill as dense_nonzero_f32_fill,
@@ -114,7 +114,7 @@ index 05da94bf0..9daa3d0ac 100644
 @@ -116,6 +116,11 @@ from bindings.hotpath_helpers import (
      select_fold_i64_binding,
  )
- from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
+ from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 +from core.dense_coo import (
 +    nonzero_f32_count as dense_nonzero_f32_count,
 +    nonzero_f32_fill as dense_nonzero_f32_fill,
@@ -311,7 +311,7 @@ index b3a335b63..3389392f3 100644
 --- a/bindings/_mojolearn_ivf_host.mojo
 +++ b/bindings/_mojolearn_ivf_host.mojo
 @@ -24,7 +24,11 @@ from std.python.bindings import PythonModuleBuilder
- from bindings.hostptr import copy_f32, f32_ptr, i32_ptr, read_f32
+ from core.hostptr import copy_f32, f32_ptr, i32_ptr, read_f32
  from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
  from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 +from bindings.ivf_index_arrays import ivf_merge_shards_binding
@@ -878,8 +878,8 @@ index 8bc304dcc..ecc29002c 100644
  """THE CNN LANE'S GPU BINDING (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, lane 8).
  Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
  twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
--from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
-+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
  from std.os import abort
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
@@ -1035,8 +1035,8 @@ index f0b3338f4..cfe2c42ff 100644
  """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
  the GPU binding's export names and address contract, the work is
  x_cnn/host/ops_host.mojo."""
--from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
-+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
  from std.os import abort
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
@@ -2030,7 +2030,7 @@ index 2bbc1c455..3825ffa2e 100644
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
  
- from bindings.hostptr import f32_ptr, read_f32
+ from core.hostptr import f32_ptr, read_f32
  from bindings.ivf_index_arrays import (
 +    ivf_read_resident_filter,
 +    ivf_write_resident_result,
@@ -2163,7 +2163,7 @@ index eda4cf352..dfa04a303 100644
 -from std.python import PythonObject
 +from std.python import Python, PythonObject
  
- from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+ from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
  from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_validate_index_arrays
 @@ -279,3 +279,148 @@ def ivf_write_extended_arrays(
          lp.unsafe_store(i, list_data[i])
@@ -9282,7 +9282,7 @@ index 000000000..4700ba5eb
 +from std.python import Python, PythonObject
 +from std.python._cpython import GILReleased
 +
-+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 +from checks.numerics import pinned_mul_f64
 +from core.host_parallel import host_parallelize
 +from core.host_predict_threads import host_predict_chunk, host_predict_task_count

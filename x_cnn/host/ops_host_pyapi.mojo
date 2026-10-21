@@ -5,7 +5,7 @@ host binding (`bindings/_mojolearn_x_cnn_host.mojo`): PythonObject arguments
 to typed pointers, the GIL released around the typed call. HOST ONLY."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.hostptr import i32_ptr, f32_ptr
+from core.hostptr import i32_ptr, f32_ptr
 from x_cnn.host.ops_host import csr_build_host, gcn_loops_host
 
 

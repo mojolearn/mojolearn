@@ -426,8 +426,9 @@ because a batch reduction's length IS the batch. It is the same finding
 is the same: **the microbatch schedule is part of a training run's numerical
 specification, not an execution detail.** `archive/plans/gemm/IDENTICAL_BACKWARD_PLAN.md`
 2.2 sharpens it with the aligned-split rule and that sharpening applies here
-unchanged. Sabotage `L_REDUCE_SERIAL`, inert at every `N <= 128`, so
-`N >= 129` is mandatory under the same predicted-mask discipline.
+unchanged. `N >= 129` stays mandatory under the same predicted-mask
+discipline. (Sabotage `L_REDUCE_SERIAL`, a one-thread fold of the batch, was
+retired 2026-10-21: the forbidden serial shape on a GPU path.)
 
 ### 5.5 L13, the divide, and the ONE producer of the divisor
 
@@ -746,7 +747,7 @@ there is a real routing defect.
 | `L_SMOOTH_FOLDED_CONSTANT` | `ce.smooth` at `EPS = 0.1` | `EPS = 0` | 6.1(a) |
 | `L_SMOOTH_FUSED_COMBINE` | `ce.row` at `EPS = 0.1` | `EPS = 0` | 6.1(b) |
 | `L_SMOOTH_ALWAYS_SPELLED` | `ce.row` at `EPS = 0` on a row whose `nll` is `-0.0` | every other row, every `EPS != 0` | 6.1(c) |
-| `L_REDUCE_SERIAL` | `ce.total` at `N >= 129` | every `N <= 128` | 5.4 |
+| `L_REDUCE_SERIAL` (retired 2026-10-21) | none | | 5.4 |
 | `L_MEAN_RECIPROCAL_MUL` | `ce.loss` | `divisor` an exact power of two | 5.5 |
 | `L_IGNORED_ROW_NEG_ZERO` | `ce.row` | **`ce.total`, which it must NOT move** | 7.3 |
 | `L_IGNORED_ROW_SKIPPED` | `ce.row` (unwritten memory) | nothing | 7.3, the store is required |

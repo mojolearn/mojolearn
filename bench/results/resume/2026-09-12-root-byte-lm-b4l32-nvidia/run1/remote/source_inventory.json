@@ -61,7 +61,7 @@
     "bindings/build_tsa.sh": "9abd5fd1a01165aa0fcae46a9f62cccf2231262c17b38799652a30166e2d9da6",
     "bindings/forest_export_binding.mojo": "98e71f1337f910a889d5cb992946eb5a197dc3447a98410c93dd1e663bd54943",
     "bindings/forest_inference_binding.mojo": "c202e02061565a96e1e683869aea7681d015accb5bca4544139ef2ef456bafce",
-    "bindings/hostptr.mojo": "f8bc1aae0550ffc120771a63a628aa6371acda7c52c75fad5f09a9de997559cd",
+    "core/hostptr.mojo": "f8bc1aae0550ffc120771a63a628aa6371acda7c52c75fad5f09a9de997559cd",
     "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
     "checks/batch_invariance_check.mojo": "888712ba5982e76383de3024d6573ae70b98bc82fb2da3cd4ec46a4ad43fdd05",
     "checks/bin_order_check.mojo": "bea0d1bd81cb1d05094a7d5eff2c0193396794bc6efde084fdd1ae39edce4241",

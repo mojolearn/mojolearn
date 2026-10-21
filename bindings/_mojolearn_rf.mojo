@@ -28,7 +28,7 @@ sampler's first Python caller.
 """
 
 from std.memory import memcpy
-from hostptr import copy_f32, list_f32, list_i32, store_f32
+from core.hostptr import copy_f32, list_f32, list_i32, store_f32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
 from xtrees.dart_device import DART_SESSIONS, _DART_CTX
@@ -399,37 +399,24 @@ def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
 
 def _forest_out_trees(trees: List[TreeMetaDataNode[DT]]) raises -> PythonObject:
     """Retained same-fit diagnostic; RF label dtype does not affect tree storage."""
-    var offsets = Python.list()
-    var colid = Python.list()
-    var quesval = Python.list()
-    var left_child = Python.list()
-    var leaves = Python.list()
+    var offsets = List[Int64]()
+    var colid = List[Int64]()
+    var quesval = List[Float64]()
+    var left_child = List[Int64]()
+    var leaves = List[Float64]()
     var num_outputs = 1
     if len(trees) > 0:
         num_outputs = Int(trees[0].num_outputs)
-    var total = 0
-    offsets.append(PythonObject(0))
-    for t in range(len(trees)):
-        ref tree = trees[t]
-        var n = len(tree.sparsetree)
-        total += n
-        offsets.append(PythonObject(total))
-        for i in range(n):
-            ref node = tree.sparsetree[i]
-            colid.append(PythonObject(Int(node.ColumnId())))
-            quesval.append(PythonObject(Float64(node.QueryValue())))
-            left_child.append(PythonObject(Int(node.LeftChildId())))
-        for i in range(len(tree.vector_leaf)):
-            leaves.append(PythonObject(Float64(tree.vector_leaf[i])))
+    rf_flatten_trees(trees, offsets, colid, quesval, left_child, leaves)
     var meta = Python.list()
     meta.append(PythonObject(len(trees)))
     meta.append(PythonObject(num_outputs))
     var out = Python.list()
-    out.append(offsets)
-    out.append(colid)
-    out.append(quesval)
-    out.append(left_child)
-    out.append(leaves)
+    out.append(forest_export_py_list_i64(offsets))
+    out.append(forest_export_py_list_i64(colid))
+    out.append(forest_export_py_list_f64(quesval))
+    out.append(forest_export_py_list_i64(left_child))
+    out.append(forest_export_py_list_f64(leaves))
     out.append(meta)
     return out
 
@@ -448,8 +435,10 @@ def _forest_out_i32(forest: RandomForestMetaData[DT, CLT]) raises -> PythonObjec
 from std.ffi import _Global
 from forest_export_binding import (
     ForestExportRegistry, validate_forest_export_destinations,
-    copy_forest_export_leaves,
+    copy_forest_export_leaves, forest_export_py_list_f64,
+    forest_export_py_list_i64,
 )
+from core.mojolearn_rf_impl import rf_export_trees_into, rf_flatten_trees
 comptime RFExportTrees = List[TreeMetaDataNode[DT]]
 comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
     name=("MojoRFFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
@@ -486,20 +475,10 @@ def rf_forest_export_binding(handle: PythonObject, offsets: PythonObject,
     var cp = _i32_ptr(Int(py=columns))
     var tp = _f32_ptr(Int(py=thresholds))
     var lp = _i32_ptr(Int(py=left))
-    var total = 0
-    op[0] = 0
-    ref trees = registry[].entries[id].model
-    for t in range(len(trees)):
-        ref tree = trees[t]
-        for i in range(len(tree.sparsetree)):
-            ref node = tree.sparsetree[i]
-            cp[total + i] = Int32(node.ColumnId())
-            tp[total + i] = node.QueryValue()
-            lp[total + i] = Int32(node.LeftChildId())
-        copy_forest_export_leaves(tree.vector_leaf, Int(py=leaves),
-                                  total * registry[].entries[id].outputs)
-        total += len(tree.sparsetree)
-        op[t + 1] = Int32(total)
+    rf_export_trees_into(
+        registry[].entries[id].model, op, cp, tp, lp, Int(py=leaves),
+        registry[].entries[id].outputs,
+    )
     return PythonObject(None)
 
 

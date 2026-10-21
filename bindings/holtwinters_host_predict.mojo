@@ -23,13 +23,11 @@ perturbation that leaves every order and shape alone, so a saved-model gate
 must read a mismatch on every forecast and in-sample prediction. The GPU
 build scripts pass neither define.
 """
-from std.math import isfinite
-from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from std.sys.compile import is_defined
 
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
+from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE, hw_store_values
 from holtwinters.host.hw_predict import (
     hw_forecast_from_state_ptr,
     hw_predict_in_sample_ptr,
@@ -39,29 +37,12 @@ from holtwinters.impl.tsa.holtwinters_params import (
     seasonal_from_name,
 )
 
-comptime HW_PREDICT_SABOTAGE = (
-    is_defined["MOJOLEARN_HOST_SABOTAGE"]()
-    or is_defined["MOJOLEARN_HW_PREDICT_SABOTAGE"]()
-)
-
-
 def _hw_index(value: PythonObject) raises -> Int:
     var type_name = String(py=value.__class__.__name__)
     if type_name == "bool" or type_name == "bool_":
         raise Error("holtwinters host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
     return Int(py=operator_module.index(value))
-
-
-@always_inline
-def _store(op: MutPointer[Float32, MutUntrackedOrigin], i: Int, v: Float32):
-    comptime if HW_PREDICT_SABOTAGE:
-        if isfinite(v):
-            op.unsafe_store(
-                i, bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1))
-            )
-            return
-    op.unsafe_store(i, v)
 
 
 def _refuse_state(n: Int, batch_size: Int, frequency: Int, who: String) raises:
@@ -137,8 +118,7 @@ def holtwinters_forecast_binding(
             st == SEASONAL_ADDITIVE,
             h,
         )
-        for i in range(h * batch_size):
-            _store(op, i, fc[i])
+        hw_store_values(op, fc, h * batch_size)
         written = h * batch_size
     return PythonObject(written)
 
@@ -212,6 +192,5 @@ def holtwinters_predict_binding(
             end,
         )
         written = (end - start) * batch_size
-        for i in range(written):
-            _store(op, i, out[i])
+        hw_store_values(op, out, written)
     return PythonObject(written)

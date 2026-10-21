@@ -2633,7 +2633,7 @@
       "interpreter_absent": false,
       "source_files": 68,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
         "checks/identity_trace_read.mojo": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562",
@@ -2787,7 +2787,7 @@
       "interpreter_absent": false,
       "source_files": 94,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
         "checks/identity_trace_read.mojo": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562",
@@ -2894,7 +2894,7 @@
       "interpreter_absent": false,
       "source_files": 104,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/fixed_point.mojo": "ce4bd5e1f111c6e113969f21e1dfe4f034d6eecea090d1e239b050895f5fd4cb",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
@@ -3011,7 +3011,7 @@
       "interpreter_absent": false,
       "source_files": 126,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
         "checks/identity_trace_read.mojo": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562",
@@ -3150,7 +3150,7 @@
       "interpreter_absent": false,
       "source_files": 126,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
         "checks/identity_trace_read.mojo": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562",
@@ -3289,7 +3289,7 @@
       "interpreter_absent": false,
       "source_files": 126,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
         "checks/identity_trace_read.mojo": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562",
@@ -3428,7 +3428,7 @@
       "interpreter_absent": false,
       "source_files": 153,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/fixed_point.mojo": "ce4bd5e1f111c6e113969f21e1dfe4f034d6eecea090d1e239b050895f5fd4cb",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
@@ -3638,7 +3638,7 @@
       "interpreter_absent": false,
       "source_files": 40,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/identity_trace_read.mojo": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562",
         "checks/numerics.mojo": "8cee8aeb5172945a6577228210b542abd3ac35f1f6fa0ef24c23aa0c1c20dd22",
@@ -3691,7 +3691,7 @@
       "interpreter_absent": false,
       "source_files": 211,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",
         "checks/identity_trace_read.mojo": "e42af5a45b59a9594a245ec537dedc7e1aaafe21b330c4204d3bc119d22c1562",
@@ -3915,7 +3915,7 @@
       "interpreter_absent": false,
       "source_files": 248,
       "source_hashes": {
-        "bindings/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
+        "core/hostptr.mojo": "08adcf8ec852925240c1d12d6c1c0da5dd1e024a733346ce5ae269efab317f22",
         "checks/__init__.mojo": "8e96670fd648e97153dfb9fc3a5ff53b1cb4d6c463551e5675074c7904904d9f",
         "checks/fixed_point.mojo": "ce4bd5e1f111c6e113969f21e1dfe4f034d6eecea090d1e239b050895f5fd4cb",
         "checks/hardware_matrix.mojo": "caffa4909c69f87a2adda2ddb90ed372b0ff9e58cc70501db084039aaa510aea",

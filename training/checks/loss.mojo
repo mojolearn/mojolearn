@@ -332,11 +332,12 @@ comptime SAB_GRAD_RECIPROCAL_MUL = is_defined[
 comptime SAB_DENOM_SERIAL_CHAIN = is_defined[
     "MOJOLEARN_LOSS_SABOTAGE_DENOM_SERIAL_CHAIN"
 ]()
-#: Contract 5.4. The batch reduction folded by the same hand-written chain.
-#: **INERT at every `N <= 128`.**
-comptime SAB_REDUCE_SERIAL = is_defined[
-    "MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL"
-]()
+# TOMBSTONE: MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL (sabotage arm, contract
+# 5.4) retired 2026-10-21 by lane debt-block-per-n: it folded the n_rows
+# per-row losses in ONE thread of one block, the forbidden serial shape on a
+# GPU path. The batch fold's other witnesses (the gemm switches through this
+# lane's entry points) remain. Code recoverable at 28b8ed11b.
+# Restore: git apply experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch; record in docs/TOMBSTONES.md.
 
 comptime ANY_LOSS_SABOTAGE = (
     SAB_MAX_PLAIN_COMPARE
@@ -359,7 +360,6 @@ comptime ANY_LOSS_SABOTAGE = (
     or SAB_GRAD_DIVISOR_IS_N
     or SAB_GRAD_RECIPROCAL_MUL
     or SAB_DENOM_SERIAL_CHAIN
-    or SAB_REDUCE_SERIAL
 )
 
 # NN52: default OFF. Reuse each probability in its gradient consumer while
@@ -420,8 +420,6 @@ def loss_sabotage_name() -> String:
         return String("GRAD_RECIPROCAL_MUL")
     comptime if SAB_DENOM_SERIAL_CHAIN:
         return String("DENOM_SERIAL_CHAIN")
-    comptime if SAB_REDUCE_SERIAL:
-        return String("REDUCE_SERIAL")
     return String("none")
 
 
@@ -1005,7 +1003,7 @@ def ce_divide_kernel(
 
 
 # ===========================================================================
-# THE SABOTAGE FOLD (contract 10.1's DENOM_SERIAL_CHAIN and REDUCE_SERIAL)
+# THE SABOTAGE FOLD (contract 10.1's DENOM_SERIAL_CHAIN; REDUCE_SERIAL retired 2026-10-21)
 # ===========================================================================
 
 
@@ -1525,6 +1523,7 @@ def identical_ce_forward_into(
     head is 2.1 GB per buffer at `N = 4096`. **Only L12 folds over `n_rows`**,
     and it folds `[N]` floats rather than `[N, V]`.
     """
+    comptime assert not is_defined["MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL"](), "removed (lane debt-block-per-n, 2026-10-21): the REDUCE_SERIAL sabotage folded the batch losses in one thread of one block, the forbidden serial shape"
     # DEVIATION 1495: contract section 8, on the DEVICE path. Measured
     # missing by loss_check clause (f) -- a planted NaN reached 40
     # recorded cells, first at `ce.max`. This is the FIRST statement in
@@ -1721,17 +1720,7 @@ def identical_ce_forward_into(
 
     # ---- L12. ROUTED. The ones vector is the LEFT operand here, which is
     # `identical_gemm_backward_bias_into`'s own shape at `n == 1`.
-    comptime if SAB_REDUCE_SERIAL:
-        step_count_launch()
-        ctx.enqueue_function[ce_serial_fold_kernel](
-            total.unsafe_ptr(),
-            row.unsafe_ptr(),
-            Int32(1),
-            Int32(n_rows),
-            grid_dim=(1, 1, 1),
-            block_dim=(CE_TPB, 1, 1),
-        )
-    elif NN54_LOSS_PROFILE:
+    comptime if NN54_LOSS_PROFILE:
         nn_reduce_pointer_into[128, False](ctx, total.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), row.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), ws.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows)
     else:
         # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.

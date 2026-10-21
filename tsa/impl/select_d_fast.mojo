@@ -25,7 +25,7 @@ from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from experiments.classical_identical_ideas.stats_controls import C60_LAG4
 from core.column_stats import STATS_TPB

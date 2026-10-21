@@ -46,7 +46,6 @@ from max.gpu.sync import barrier
 from core.column_stats import (
     STATS_TPB,
     TRANSPOSE_TILE,
-    column_mean_kernel,
     shift_columns_kernel,
     transpose_kernel,
 )
@@ -100,18 +99,14 @@ comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
 #: 40.4 -> 32.3 ms, quality equal. KEEP: the FAST + Apple default; rollback
 #: -D MOJOLEARN_TSVD_FAST_POOL_OFF.
 comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_FAST_POOL_OFF"]()
-#: TSVD_FAST_COLVAR (rollback `-D MOJOLEARN_TSVD_FAST_COLVAR_OFF`): `_column_variance`'s
-#: two column means (of X and of X V^T) run the row-coalesced two-pass form
-#: (core/xtdz_coalesced.mojo `column_mean_launch`) instead of
-#: `column_mean_kernel`, whose one block per column reads a column at a
-#: D-float stride (every load its own cache line, X re-read per column; the
-#: pattern measured at 99.8 ms for 1M x 220 on the M4). Same chains and fold:
-#: the same bits.
-#: TSVD_FAST_COLVAR OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-05, rab15-tsvdcolvar): tsvd istella 1009.7 -> 997.9 ms, taxi
-#: 40.9 -> 27.8 ms, quality equal. KEEP: the FAST + Apple default; rollback
-#: -D MOJOLEARN_TSVD_FAST_COLVAR_OFF.
-comptime TSVD_FAST_COLVAR = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_FAST_COLVAR_OFF"]()
+# TOMBSTONE: MOJOLEARN_TSVD_FAST_COLVAR_OFF (rollback of a FAST + Apple
+# winner, rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms) retired 2026-10-21 by
+# lane debt-block-per-n: the switch chose the row-coalesced STATS_TPB-chain
+# column mean over `column_mean_kernel` (one block per column walking all n
+# rows); `column_mean_launch` now has one order, the row tiles, in every
+# mode, so FAST + Apple takes the fused variance below like every other
+# column. Code recoverable at 28b8ed11b.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 def pca_fit_host(
@@ -384,8 +379,10 @@ def square_in_place_kernel(
 # through core/xtdz_coalesced.mojo `column_mean_launch` (the launch
 # decomposition/impl/linalg/detail/pca.mojo already uses): the same chains,
 # fold and quotient as `column_mean_kernel` in the coalesced fallback; the
-# tiled arm changes the fold and must also be selected by the host column. -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (or
-# -D MOJOLEARN_IDN_ALL_OFF) restores the direct one-block-per-column launch.
+# tiled arm changes the fold and must also be selected by the host column.
+# Since lane debt-block-per-n (2026-10-21) it is the only arm in every mode;
+# -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (the direct one-block-per-column
+# launch) is retired and refused.
 from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
 # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
@@ -415,13 +412,12 @@ from checks.numerics import identical_mul_add
 #: `xty_tile_fold_kernel` with its quotient), and `m` is left untouched. Cost:
 #: -2 read/write passes over the matrix (-4 n*c words) at any shape. Bits:
 #: none (the same words into the same fold); the host column is unchanged.
-#: Taken only where the mean pass is `xty_tiled` (IDENTICAL's IDN_XTY_TILED,
-#: no C01_MEAN arm, no FAST column-variance switch).
+#: Taken only where the mean pass is `xty_tiled` (every mode since lane
+#: debt-block-per-n, 2026-10-21; not under the C01_MEAN arm).
 comptime IDN_COLVAR_FUSED = (
     IDN_XTY_TILED
     and IDN_DECOMP_MEAN_LAUNCH
     and not C01_MEAN
-    and not TSVD_FAST_COLVAR
     and not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"]()
 )
 
@@ -466,8 +462,9 @@ def _column_variance(
     n_cols: Int,
 ) raises:
     """numpy's `var(axis=0)` (ddof 0) of `m`, IN PLACE over `m`: the column
-    mean (`column_mean_kernel`), the centering (`shift_columns_kernel`),
+    mean (`column_mean_launch`), the centering (`shift_columns_kernel`),
     the pinned square, then the column mean of the squares."""
+    comptime assert not (is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]() or is_defined["MOJOLEARN_TSVD_FAST_COLVAR_OFF"]()), "removed (lane debt-block-per-n, 2026-10-21): IDN_DECOMP_MEAN_LAUNCH_OFF / TSVD_FAST_COLVAR_OFF chose a column mean with one block per column walking all n rows (or its STATS_TPB-chain twin); the row-tile order is the only one"
     var cells = n_rows * n_cols
     comptime if IDN_COLVAR_FUSED:
         # T2: the mean (xty_tiled), then the centered squares' mean in the
@@ -494,15 +491,9 @@ def _column_variance(
         ctx.synchronize()
         _ = ws^
         return
-    comptime if TSVD_FAST_COLVAR:
-        column_mean_launch[True](ctx, mu, m, n_rows, n_cols)
-    elif IDN_DECOMP_MEAN_LAUNCH:
-        column_mean_launch(ctx, mu, m, n_rows, n_cols)
-    else:
-        ctx.enqueue_function[column_mean_kernel](
-            mu.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+    # lane debt-block-per-n (2026-10-21): the tile order only; the direct
+    # one-block-per-column `column_mean_kernel` arm is retired
+    column_mean_launch(ctx, mu, m, n_rows, n_cols)
     ctx.enqueue_function[shift_columns_kernel](
         m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -511,15 +502,7 @@ def _column_variance(
         m.unsafe_ptr(), Int32(cells),
         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
-    comptime if TSVD_FAST_COLVAR:
-        column_mean_launch[True](ctx, var_out, m, n_rows, n_cols)
-    elif IDN_DECOMP_MEAN_LAUNCH:
-        column_mean_launch(ctx, var_out, m, n_rows, n_cols)
-    else:
-        ctx.enqueue_function[column_mean_kernel](
-            var_out.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
-            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+    column_mean_launch(ctx, var_out, m, n_rows, n_cols)
 
 
 @always_inline

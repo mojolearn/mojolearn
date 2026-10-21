@@ -16,7 +16,8 @@ from bindings.causal_lm_public import causal_lm_admit_binding, _native_function
 from bindings.causal_model_config import config_load_binding, model_plan_for_binding, model_checkpoint_names_binding, model_layer_weights_binding
 from bindings.causal_checkpoint import checkpoint_array, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding
 from bindings.native_json import native_path, native_path_exists
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
+from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 
 
 def _model_shape(value: PythonObject, shape: List[Int], name: String) raises:
@@ -35,20 +36,14 @@ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises 
         if String(value.order) == "C":
             return value
         var dims = List[Int]()
+        var strides = List[Int]()
         for i in range(len(value.shape)):  # driver-loop: over tensor shape metadata
             dims.append(Int(py=value.shape[i]))
+            strides.append(Int(py=value.strides[i]))
         var result = generation_array(dims)
         var source = f32_ptr(Int(py=value._addr))
         var target = f32_ptr(Int(py=result._addr))
-        for i in range(Int(py=value.size)):
-            var remaining = i
-            var source_index = 0
-            for j in range(len(dims)):
-                var axis = len(dims) - 1 - j
-                var coordinate = remaining % dims[axis]
-                remaining //= dims[axis]
-                source_index += coordinate * Int(py=value.strides[axis]) // 4
-            target[i] = source[source_index]
+        causal_lm_gather_f32(source, target, Int(py=value.size), dims, strides)
         return result
     var view = bi.memoryview(value)
     var format = String(view.format)
@@ -444,7 +439,7 @@ def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: Pytho
     _ = generation_initialize_binding(context["generation_classes"])
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
-        raise Error("CausalLM: unsupported weight_format " + format)
+        raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(options[2], context)
     var profile = _model_profile(options[3], String(plan.kind), context)
     var bindings = _model_bindings(route, String(plan.kind), context)
@@ -493,9 +488,7 @@ def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: Pytho
     for value in [model._embed, model._norm, model._head]:  # driver-loop: over the three top-level tensors
         if value is not None:
             var ptr = f32_ptr(Int(py=value._addr))
-            for i in range(Int(py=value.size)):
-                if not isfinite(ptr[i]):
-                    raise Error("CausalLM: top-level weight is not finite")
+            causal_lm_check_finite(ptr, Int(py=value.size))
     var layers = weights["layers"]
     if len(layers) != Int(py=plan.n_layers):
         raise Error("CausalLM: layer dict count differs from num_hidden_layers")
@@ -590,7 +583,7 @@ def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, optio
     var bi = Python.import_module("builtins")
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
-        raise Error("CausalLM: unsupported weight_format " + format)
+        raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(options[2], context)
     var path = native_path(path_value)
     if not native_path_exists(path, True):

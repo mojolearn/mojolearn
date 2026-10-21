@@ -46,6 +46,7 @@ released around the device work: nothing inside touches a Python object and
 the wrapper holds the caller's arrays for the length of the call.
 """
 
+from bindings.py_lists import py_list_int
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
 from std.os import abort
 from std.memory import bitcast
@@ -53,7 +54,7 @@ from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from hostptr import list_f32, list_u32
+from core.hostptr import list_f32, list_u32
 from core.pair_split_device import device_split_pairs
 
 from checks.vendor import COMPILED_VENDOR
@@ -204,7 +205,7 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 
     The origin is untracked because the owner is a NumPy array on the other
     side of the boundary and Mojo cannot see it. The wrapper holds that array
-    for the length of the call, which is the whole contract.
+    through the length of the call, which is the whole contract.
     """
     if addr == 0:
         raise Error("mojolearn: null buffer address")
@@ -300,7 +301,7 @@ def _gbdt_fit_impl(
     around nine. And the ROUND TRIP: a Python float reaches `Float64(py=)`
     exactly, where a float written into a string and parsed back does not
     -- `String(Float32)` on this toolchain returns a one-ULP-wrong value
-    for 0.46% of float32 values, and a class weight is a user's number,
+    on 0.46% of float32 values, and a class weight is a user's number,
     not ours to round.
 
     `strs` is `[loss, bootstrap_type, od_type, nan_mode]`, optionally
@@ -702,10 +703,7 @@ def gbdt_resident_info_binding(handle: PythonObject) raises -> PythonObject:
     """`[approx_dim, n_input_features, workspace_rows, oblivious, n_trees]`
     of a live handle."""
     var info = gbdt_resident_info(Int(py=handle))
-    var out = Python.list()
-    for i in range(len(info)):
-        out.append(PythonObject(info[i]))
-    return out
+    return py_list_int(info)
 
 
 def gbdt_resident_predict_binding(

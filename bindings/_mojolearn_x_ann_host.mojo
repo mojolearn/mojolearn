@@ -9,6 +9,7 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from x_ann.abi_shell_impl import rabitq_padded_dim, cagra_check_graph
 from x_ann.filter_topk import filter_topk_host
 from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, tsne_first_components, tsne_init_y0
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -145,9 +146,7 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
         raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
     var x = ptr_f32(addrs, 0)
     var g = ptr_i32(addrs, 1)
-    for e in range(n * deg):
-        if Int(g.unsafe_load(e)) < 0 or Int(g.unsafe_load(e)) >= n:
-            raise Error("CAGRA search: the graph names a row outside the dataset")
+    cagra_check_graph(g, n, deg)
     var q = ptr_f32(addrs, 2)
     var od = ptr_f32(addrs, 3)
     var oi = ptr_i32(addrs, 4)
@@ -274,9 +273,7 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     var k = p_int(params, 5)
     var n_probes = p_int(params, 6)
     check_search(n_lists, m, k, n_probes)
-    var D = 1
-    while D < dim:
-        D *= 2
+    var D = rabitq_padded_dim(dim)
     var words = (D + 31) // 32
     _ = n
     _ = words

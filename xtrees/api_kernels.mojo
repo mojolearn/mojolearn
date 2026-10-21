@@ -8,7 +8,7 @@ a typed pointer or scalar; the PythonObject unpacking stays in the shell."""
 from std.math import ceil
 from std.memory import bitcast
 
-from bindings.hostptr import i32_ptr
+from core.hostptr import i32_ptr
 from checks.numerics import identical_log64
 
 comptime _TWO53 = Float64(9007199254740992.0)

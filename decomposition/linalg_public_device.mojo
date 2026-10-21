@@ -58,7 +58,7 @@ therefore be held against each other bit for bit; a silent fallback would
 turn a divergence into a pass.
 """
 
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale_rect, enqueue_es_unscale

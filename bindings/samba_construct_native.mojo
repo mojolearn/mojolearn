@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Samba registry, explicit-weight and seeded constructor ownership."""
 from std.python import Python, PythonObject
+from core.samba_construct_native_impl import samba_fill_ones
 from std.math import sqrt
 from std.memory import memcpy
 from std.os import getenv
@@ -81,8 +82,7 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
         else:
             random = False
             var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-            for j in range(Int(py=output.size)):
-                dst[j] = 1.0
+            samba_fill_ones(dst, Int(py=output.size))
         if random:
             var stream = generator_next(generator)
             var plan = py_ints([Int(py=output.size), 0, low, high, Int(py=stream), kind])

@@ -86,7 +86,7 @@ MI325X (bench/results/identity_break/2026-09-14_136-lanes/).
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -103,7 +103,7 @@ from arima.impl.arima_ic import ARIMA_IC_TPB, arima_ic_kernel
 from arima.impl.batched_kalman import KALMAN_TPB
 from arima.impl.batched_arima import LoglikeResult, batched_diff, batched_loglike_x, predict_x
 from arima.impl.batched_fit import batched_fit_x
-from bindings.arima_exog_layout import exog_filter_layout
+from arima.exog_layout import exog_filter_layout
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 from arima.impl.tsa.arima_common import (
     ARIMAOrder,

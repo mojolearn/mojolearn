@@ -45,8 +45,9 @@ there.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -108,8 +109,8 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 
 def svm_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
-    IDENTICAL. The same shape as `gbdt_numeric_mode`, and
-    for the same reason: the wrapper reads it once and refuses to run if the
+    IDENTICAL. The same shape as `gbdt_numeric_mode`, and for
+    the same reason: the wrapper reads it once and refuses to run if the
     binary it loaded disagrees with the mode the package asked for. A
     wrong-arm measurement that is correctly labelled by accident is the
     failure this prevents."""
@@ -212,8 +213,7 @@ def svc_fit_binding(
             nochange_steps, degree, coef0, c_rows,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
-    for i in range(res.n_support):
-        sip.unsafe_store(i, res.support_idx[i])
+    memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
     copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))
@@ -397,8 +397,7 @@ def svr_fit_binding(
             nochange_steps, c_rows, degree, coef0,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
-    for i in range(res.n_support):
-        sip.unsafe_store(i, res.support_idx[i])
+    memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
     copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))
@@ -638,12 +637,10 @@ def iforest_run_binding(
         )
     if want == IF_WANT_PREDICT:
         var oi = _i32_ptr(Int(py=out_i32_addr))
-        for i in range(n_query):
-            oi.unsafe_store(i, res.labels[i])
+        memcpy(dest=oi, src=res.labels.unsafe_ptr(), count=n_query)
     else:
         var of = _f32_ptr(Int(py=out_f32_addr))
-        for i in range(n_query):
-            of.unsafe_store(i, res.values[i])
+        memcpy(dest=of, src=res.values.unsafe_ptr(), count=n_query)
     ip.unsafe_store(0, res.offset_)
     ip.unsafe_store(1, Float64(res.max_samples_))
     ip.unsafe_store(2, Float64(res.n_features_in_))

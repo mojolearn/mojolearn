@@ -6,7 +6,7 @@ through `x_ann/abi_pyapi.mojo`, by `bindings/_mojolearn_x_ann.mojo` and
 Python here; the PythonObject unpacking is `x_ann/abi_pyapi.mojo`."""
 
 from std.memory import memcpy
-from bindings.hostptr import f32_ptr, i32_ptr
+from core.hostptr import f32_ptr, i32_ptr
 from x_ann.switches import ANN3_HOST_PASSES
 
 

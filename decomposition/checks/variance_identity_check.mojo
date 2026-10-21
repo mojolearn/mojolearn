@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Untimed device/host variance-fold identity, including the OFF control.
+"""Untimed device/host variance-fold identity.
 
-Build in IDENTICAL mode; repeat with MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF.
+Build in IDENTICAL mode (the OFF control was retired 2026-10-21).
 Both sides call the shipped variance implementations. Run only on GPU boxes.
 """
 from std.memory import bitcast

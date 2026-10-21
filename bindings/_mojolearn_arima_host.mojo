@@ -39,14 +39,12 @@ The sabotage arm (`arima_host_sabotage`) is
 finite-difference step doubles, so every fitted model this binary returns
 differs.
 """
-from std.memory import bitcast
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.arima_exog_layout import exog_filter_layout
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, i32_ptr
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -54,22 +52,22 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
-from arima.impl.arima_ic import arima_ic_bits
 from arima.host.arima_oracle import (
     ARIMA_ORACLE_HOST_SABOTAGE,
     arima_host_fit,
     arima_host_refuse_unrestated,
 )
-# `arima_predict` and `arima_forecast`, with `_order` and `_refuse_shape`,
-# live in bindings/arima_host_predict.mojo since 2026-09-15, shared with the
-# inference binding bindings/_mojolearn_forecast_host.mojo. `_order` calls
-# the device's own `validate_order(order)` there.
+# `arima_predict` and `arima_forecast` live in bindings/arima_host_predict.mojo
+# since 2026-09-15, shared with the inference binding
+# bindings/_mojolearn_forecast_host.mojo; `_order` (the device's own
+# `validate_order(order)`) and `_refuse_shape` are in arima/host/arima_host_entries.mojo.
 from bindings.arima_host_predict import (
-    _order,
-    _refuse_shape,
     arima_forecast_binding,
     arima_predict_binding,
 )
+# The typed fit body (lane thin-trees-metrics, 2026-10-21), moved word for
+# word out of `arima_fit_binding` with `_order` and `_refuse_shape`.
+from arima.host.arima_host_entries import arima_host_fit_into
 
 
 comptime ARIMA_METHOD_MLE = 0
@@ -236,51 +234,11 @@ def arima_fit_binding(
     with GILReleased(Python()):
         # `arima_fit_ptr_host` (`arima/estimator.mojo:361-369`), in its order.
         _refuse_method(method)
-        var order = _order(p, d, q, P, D, Q, s, k, n_exog)
-        _refuse_shape(batch_size, n_obs, "arima_fit")
-        if max_iterations < 1:
-            raise Error(
-                "arima_fit: max_iterations must be >= 1 (max_iterations="
-                + String(max_iterations) + ")"
-            )
-        arima_host_refuse_unrestated(order, "arima_fit")
-        var N = order.complexity()
-        var y = read_f32(y_address, batch_size * n_obs)
-        var exog = exog_filter_layout(exog_address, batch_size, n_obs, order.n_exog, "exog")
-        var r = arima_host_fit(y, exog, batch_size, n_obs, order, max_iterations)
-        if (
-            len(r.t_x) != N * batch_size
-            or len(r.x) != N * batch_size
-            or len(r.x0) != N * batch_size
-            or len(r.loglike) != batch_size
-            or len(r.fx) != batch_size
-            or len(r.n_iter) != batch_size
-            or len(r.retcode) != batch_size
-        ):
-            raise Error(
-                "arima_fit: the host oracle returned arrays of an unexpected"
-                " length; nothing written"
-            )
-        for i in range(N * batch_size):
-            pp.unsafe_store(i, r.t_x[i])
-            xp.unsafe_store(i, r.x[i])
-            x0p.unsafe_store(i, r.x0[i])
-        for b in range(batch_size):
-            sp.unsafe_store(b, r.loglike[b])
-            sp.unsafe_store(batch_size + b, r.fx[b])
-            fp.unsafe_store(b, r.n_iter[b])
-            fp.unsafe_store(batch_size + b, r.retcode[b])
-        # lane cpu3-seq: AIC then BIC, the device kernel's arithmetic
-        # (`arima/impl/arima_ic.mojo::arima_ic_bits`) on the host column's
-        # log-likelihood (infeasible series already -inf)
-        if ic_address != 0:
-            var icp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=ic_address)
-            var pa = bitcast[DType.uint64](pen_aic)
-            var pb = bitcast[DType.uint64](pen_bic)
-            for b in range(batch_size):
-                icp.unsafe_store(b, arima_ic_bits(r.loglike[b], pa))
-                icp.unsafe_store(batch_size + b, arima_ic_bits(r.loglike[b], pb))
-        written = N * batch_size
+        written = arima_host_fit_into(
+            y_address, exog_address, pp, xp, x0p, sp, fp, batch_size, n_obs,
+            p, d, q, P, D, Q, s, k, n_exog, max_iterations, ic_address,
+            pen_aic, pen_bic,
+        )
     return PythonObject(written)
 
 

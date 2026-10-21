@@ -9,7 +9,8 @@ from std.memory import bitcast
 from std.os import setenv,unsetenv
 from x_linear.ops import FP,IP
 from x_linear.team import solo
-from x_linear.sgd import sgd_fit,L_HINGE,L_LOG,L_SQUARED,P_L2,P_EN,LR_CONSTANT,LR_PA1
+from x_linear.sgd_host import sgd_fit
+from x_linear.sgd import L_HINGE,L_LOG,L_SQUARED,P_L2,P_EN,LR_CONSTANT,LR_PA1
 from x_linear.device import _sgd_mb_grid,_sgd_mb_ovr_applies,_sgd_chunk
 
 def fp(mut x: List[Float32]) -> FP:

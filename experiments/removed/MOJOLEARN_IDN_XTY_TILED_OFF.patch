@@ -1,0 +1,490 @@
+diff --git a/core/host_tile_fold.mojo b/core/host_tile_fold.mojo
+index 102b019a4..6aba6178e 100644
+--- a/core/host_tile_fold.mojo
++++ b/core/host_tile_fold.mojo
+@@ -15,8 +15,8 @@ This file imports no GPU module: the device kernels and the host oracles both
+ read the switch and the tile size from here, so one define moves NVIDIA, AMD,
+ Apple and the host column together.
+ 
+-The order is the only one of those launches, in every mode (lane
+-debt-block-per-n, 2026-10-21, retired `-D MOJOLEARN_IDN_XTY_TILED_OFF`).
++`-D MOJOLEARN_IDN_XTY_TILED_OFF` (or the master `-D MOJOLEARN_IDN_ALL_OFF`)
++restores the `STATS_TPB`-chain order on the device and on the host.
+ Candidate arms for the tile size (default 256 rows):
+ `-D MOJOLEARN_IDN_XTY_TILE_64`, `-D MOJOLEARN_IDN_XTY_TILE_1024`. Pass the
+ same define to the host build.
+@@ -37,13 +37,13 @@ from checks.numerics import (
+ )
+ 
+ 
+-#: Always True since lane debt-block-per-n (2026-10-21): `xty_launch` and
+-#: `column_mean_launch` run the tile order in every mode, so every host
+-#: column that mirrors them takes it too. The retired
+-#: `-D MOJOLEARN_IDN_XTY_TILED_OFF` is refused in
+-#: core/six_lane_experiment_guards.mojo. The name stays for the host
+-#: oracles' `comptime if`.
+-comptime IDN_XTY_TILED = True
++comptime IDN_XTY_TILED = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and not (
++        is_defined["MOJOLEARN_IDN_XTY_TILED_OFF"]()
++        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++    )
++)
+ 
+ comptime XTY_TILE_ROWS = (
+     64 if is_defined["MOJOLEARN_IDN_XTY_TILE_64"]()
+diff --git a/core/xtdz_coalesced.mojo b/core/xtdz_coalesced.mojo
+index 1ca273a62..489e03b9f 100644
+--- a/core/xtdz_coalesced.mojo
++++ b/core/xtdz_coalesced.mojo
+@@ -31,14 +31,17 @@ from core.blocked_moments import bm_column_mean
+ 
+ 
+ from std.gpu import block_dim, block_idx, thread_idx
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+-from checks.numerics import ftz
+-from core.column_stats import STATS_TPB
+-from core.host_tile_fold import XTY_TILE_ROWS, xty_tiles
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
++from core.column_stats import STATS_TPB, column_mean_kernel, xty_kernel
++from core.host_tile_fold import IDN_XTY_TILED, XTY_TILE_ROWS, xty_tiles
+ from core.pinned_reduce import pinned_block_sum
+ from core.strided_walk import (
+     APPLE_IDENTICAL_STEP_UNROLL,
++    STRIDED_UNROLL,
+     strided_ftz_sum,
+     strided_mul_add,
+ )
+@@ -49,12 +52,25 @@ from core.strided_walk import (
+ comptime XTDZ_CO_MAX_CELLS = 1024
+ #: Target threads per pass-1 block; `S = max(1, this // cells)` residues.
+ comptime XTDZ_CO_BLOCK_TARGET = 256
+-# TOMBSTONE: MOJOLEARN_PCA_FAST_COLMEAN_OFF (rollback of a FAST + Apple
+-# winner) retired 2026-10-21 by lane debt-block-per-n: `column_mean_launch`
+-# takes the tile order in every mode, so the coalesced STATS_TPB-chain form it
+-# chose between (and `column_mean_kernel`, one block per column walking all n
+-# rows) is gone from this launch. Code recoverable at 28b8ed11b.
+-# Restore: git show 28b8ed11b:core/xtdz_coalesced.mojo (column_mean_launch).
++#: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only (default since
++#: verdicts batch 6; rollback `-D MOJOLEARN_PCA_FAST_COLMEAN_OFF`). What: `column_mean_launch` takes the
++#: coalesced two-pass form below under FAST too. Without it FAST runs
++#: `column_mean_kernel`, one block per column whose SIMD groups read one
++#: column at a stride of D floats (every load its own cache line, X re-read
++#: once per column): the pattern this file's header measured at 99.8 ms for
++#: `xty` at 1,000,000 x 220 on the M4, against one front-to-back sweep here.
++#: PCA's fit (decomposition/impl/linalg/detail/pca.mojo `compute_covariance`)
++#: runs it on the whole 1M x 220 X every fit. Same chains, same fold, so the
++#: same bits (the coalesced form is `column_mean_kernel` bit for bit).
++#: Expect: pca istella 217.8 -> ~150-190 ms.
++#: PCA_FAST_COLMEAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
++#: 2026-10-05, rab20-pcacolmean): pca taxi 106.2 -> 85.0 ms, istella
++#: 215.4 -> 214.5 ms, digest same on taxi. KEEP: the FAST + Apple default;
++#: rollback -D MOJOLEARN_PCA_FAST_COLMEAN_OFF.
++comptime PCA_FAST_COLMEAN = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
++    and not is_defined["MOJOLEARN_PCA_FAST_COLMEAN_OFF"]()
++)
+ 
+ 
+ def xtdz_coalesced_applies(d: Int, c: Int) -> Bool:
+@@ -148,11 +164,8 @@ def xtdz_coalesced(
+ # read once; pass 2 folds each column's tile partials (lane t takes tiles t,
+ # t + STATS_TPB, ..., then the pinned halving tree). BITS MOVE, on NVIDIA,
+ # AMD, Apple and the host column together (`host_xty_tiled`,
+-# `host_column_mean_tiled`). Since lane debt-block-per-n (2026-10-21) it is
+-# the only order of these two launches, in every mode: the
+-# `-D MOJOLEARN_IDN_XTY_TILED_OFF` arm (one block per column walking all n
+-# rows) is retired and refused, and `-D MOJOLEARN_IDN_ALL_OFF` no longer
+-# reaches it.
++# `host_column_mean_tiled`). `-D MOJOLEARN_IDN_XTY_TILED_OFF` or the master
++# `-D MOJOLEARN_IDN_ALL_OFF` restores the old order (device and host).
+ # ===========================================================================
+ 
+ comptime XTY_TILE_TPB = 256
+@@ -223,22 +236,17 @@ def xty_tiled(
+ ) raises:
+     """`out = A^T y` (or the column means of `x`; pass `x`'s pointer again
+     as `y_p`, it is not read) in the tile order. Allocates its `tiles * n_cols`
+-    partials here and SYNCHRONIZES before releasing them. `n_rows == 0`
+-    launches no pass 1: every column folds no tile, `0.0` (the mean `0 / 0`,
+-    as the one-block kernels it replaced stored)."""
+-    if n_cols < 1:
+-        return
++    partials here and SYNCHRONIZES before releasing them."""
+     var tiles = xty_tiles(n_rows)
+     var cells = tiles * n_cols
+     var ws = ctx.enqueue_create_buffer[DType.float32](max(cells, 1))
+     var mean_flag = Int32(1) if is_mean else Int32(0)
+-    if cells >= 1:
+-        ctx.enqueue_function[xty_tile_partial_kernel](
+-            ws.unsafe_ptr(), x_p, y_p,
+-            Int32(n_rows), Int32(n_cols), Int32(tiles), mean_flag,
+-            grid_dim=((cells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
+-            block_dim=(XTY_TILE_TPB, 1, 1),
+-        )
++    ctx.enqueue_function[xty_tile_partial_kernel](
++        ws.unsafe_ptr(), x_p, y_p,
++        Int32(n_rows), Int32(n_cols), Int32(tiles), mean_flag,
++        grid_dim=((cells + XTY_TILE_TPB - 1) // XTY_TILE_TPB, 1, 1),
++        block_dim=(XTY_TILE_TPB, 1, 1),
++    )
+     ctx.enqueue_function[xty_tile_fold_kernel](  # small-launch(n_rows: the mean divisor only): folds the xty_tiles(n_rows) tile partials of one column, never walks rows
+         out_p, ws.unsafe_ptr(), Int32(tiles), Int32(n_rows), mean_flag,
+         grid_dim=(n_cols, 1, 1),
+@@ -256,42 +264,114 @@ def xty_launch(
+     n_rows: Int,
+     n_cols: Int,
+ ) raises:
+-    """`out_v = A^T b` in the tile order of `xty_tiled`, in every mode and
+-    on every vendor (host column `core/host_tile_fold.mojo::host_xty_tiled`).
+-    SYNCHRONIZES (the partials are allocated here).
+-
+-    Lane debt-block-per-n (2026-10-21): the STATS_TPB-chain forms this
+-    launch also chose between (`xty_kernel`, one block per column walking all
+-    n rows, and Apple IDENTICAL's row-coalesced `xtdz_coalesced` of the same
+-    chains) are gone from it, with `-D MOJOLEARN_IDN_XTY_TILED_OFF` (now
+-    refused). BITS: unchanged under IDENTICAL defaults (the tile order was
+-    already the default); FAST and the retired arm move to the tile order."""
+-    xty_tiled(
+-        ctx, out_v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        n_rows, n_cols, False,
++    """`out_v = A^T b`: `xty_kernel`'s value on every column. On Apple
++    IDENTICAL it is the coalesced two-pass form with a workspace allocated
++    here, and it SYNCHRONIZES before releasing it; everywhere else it is the
++    one-block-per-column launch, asynchronous as before. IDN_XTY_TILED
++    (IDENTICAL, default): the tile order of `xty_tiled`, every width."""
++    comptime if IDN_XTY_TILED:
++        if n_rows >= 1 and n_cols >= 1:
++            xty_tiled(
++                ctx, out_v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                n_rows, n_cols, False,
++            )
++            return
++    if xtdz_coalesced_applies(n_cols, 1):
++        var ws = ctx.enqueue_create_buffer[DType.float32](
++            xtdz_coalesced_workspace_floats(n_cols, 1)
++        )
++        xtdz_coalesced(ctx, out_v, x, y, ws, n_rows, n_cols, 1)
++        ctx.synchronize()
++        _ = ws^
++        return
++    ctx.enqueue_function[xty_kernel](
++        out_v.unsafe_ptr(),
++        x.unsafe_ptr(),
++        y.unsafe_ptr(),
++        Int32(n_rows),
++        Int32(n_cols),
++        grid_dim=(n_cols, 1, 1),
++        block_dim=(STATS_TPB, 1, 1),
+     )
+ 
+ 
+-def column_mean_launch(
++# ===========================================================================
++# `column_mean_kernel`, read row-coalesced (lane/gap-classical-nv,
++# 2026-10-02). That kernel runs one block per column, each SIMD group reading
++# one column at a stride of D floats (PCA's mean over 4M rows: 11 blocks on
++# a 142-SM L40S at taxi's width). Pass 1 here runs the SAME per-thread chain
++# `acc += x[r * D + j]` over `r = tid, tid + STATS_TPB, ...` ascending from
++# 0.0, cells fastest so a SIMD group reads consecutive floats of one row,
++# loads issued STRIDED_UNROLL rows ahead; pass 2 is the kernel's unchanged
++# tail, `ftz(pinned_block_sum)` then `ftz(s0 / n_rows)`. Same chains, same
++# fold, same quotient, same bits. Taken where `xtdz_coalesced_applies(D, 1)`;
++# `-D MOJOLEARN_APPLE_STEP_UNROLL_OFF` keeps the one-block-per-column kernel.
++# ===========================================================================
++
++
++def mean_partial_kernel(
++    partial: MutPointer[Float32, MutAnyOrigin],
++    x: MutPointer[Float32, MutAnyOrigin],
++    n_rows_in: Int32,
++    d_in: Int32,
++    s_in: Int32,
++):
++    """Pass 1: thread `(s, j)`, `j` fastest, runs column `j`'s chain `tid =
++    block * S + s` and stores it at `partial[j * STATS_TPB + tid]`."""
++    var D = Int(d_in)
++    var local = Int(thread_idx.x)
++    var s = local // D
++    var j = local - s * D
++    var tid = Int(block_idx.x) * Int(s_in) + s
++    if s >= Int(s_in) or tid >= STATS_TPB:
++        return
++    var n = Int(n_rows_in)
++    comptime U = STRIDED_UNROLL
++    comptime ST = STATS_TPB
++    var acc = Float32(0.0)
++    var r = tid
++    while r + (U - 1) * ST < n:
++        var t = InlineArray[Float32, U](fill=Float32(0.0))
++        comptime for u in range(U):
++            t[u] = x.unsafe_load((r + u * ST) * D + j)
++        comptime for u in range(U):
++            acc += t[u]
++        r += U * ST
++    while r < n:
++        acc += x.unsafe_load(r * D + j)
++        r += ST
++    partial.unsafe_store(j * STATS_TPB + tid, acc)
++
++
++def mean_fold_kernel(
++    mu: MutPointer[Float32, MutAnyOrigin],
++    partial: MutPointer[Float32, MutAnyOrigin],
++    n_rows_in: Int32,
++):
++    """Pass 2: block `j`, `STATS_TPB` threads, `column_mean_kernel`'s fold
++    and quotient over the chains pass 1 stored."""
++    var j = Int(block_idx.x)
++    var tid = Int(thread_idx.x)
++    var acc = partial.unsafe_load(j * STATS_TPB + tid)
++    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
++    if tid == 0:
++        var m = ftz(s0 / Float32(Int(n_rows_in)))
++        mu.unsafe_store(j, m)
++
++
++def column_mean_launch[force_coalesced: Bool = False](
+     ctx: DeviceContext,
+     mut mu: DeviceBuffer[DType.float32],
+     mut x: DeviceBuffer[DType.float32],
+     n_rows: Int,
+     n_cols: Int,
+ ) raises:
+-    """`mu` = the column means of the row-major `n_rows x n_cols` `x` in the
+-    tile order of `xty_tiled` (`ftz(s0 / n)`), in every mode and on every
+-    vendor (host column `core/host_tile_fold.mojo::host_column_mean_tiled`).
+-    SYNCHRONIZES.
+-
+-    Lane debt-block-per-n (2026-10-21): `column_mean_kernel` (one block per
+-    column walking all n rows) and the row-coalesced STATS_TPB-chain form of
+-    it (`mean_partial_kernel` / `mean_fold_kernel`, Apple FAST's
+-    PCA_FAST_COLMEAN and TruncatedSVD's TSVD_FAST_COLVAR) are gone from this
+-    launch. BITS: unchanged under IDENTICAL defaults; FAST moves to the tile
+-    order (FAST needs no same bits)."""
++    """`mu = column_mean_kernel(x)` bit for bit. The coalesced form
++    allocates its workspace here and SYNCHRONIZES before releasing it;
++    otherwise the one-block-per-column launch, asynchronous as before.
++    IDN_XTY_TILED (IDENTICAL, default): the tile order of `xty_tiled`."""
+     # C01_MEAN (lane classical-decomp, 2026-10-07; default OFF): leaf column
+     # sums, one block per leaf, and the binary-counter fold over leaves
+     # (core/blocked_moments.mojo; host column core/blocked_moments_host.mojo).
+@@ -303,8 +383,40 @@ def column_mean_launch(
+                 x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_rows, n_cols,
+             )
+             return
+-    var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+-    xty_tiled(
+-        ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        xp, xp, n_rows, n_cols, True,
++    comptime if IDN_XTY_TILED:
++        if n_rows >= 1 and n_cols >= 1:
++            var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++            xty_tiled(
++                ctx, mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                xp, xp, n_rows, n_cols, True,
++            )
++            return
++    var co = xtdz_coalesced_applies(n_cols, 1)
++    # force_coalesced: a FAST caller's own switch (TSVD_FAST_COLVAR,
++    # decomposition/estimator.mojo); same bits either way
++    comptime if PCA_FAST_COLMEAN or force_coalesced:
++        co = co or (n_cols >= 1 and n_cols <= XTDZ_CO_MAX_CELLS)
++    if co:
++        var ws = ctx.enqueue_create_buffer[DType.float32](n_cols * STATS_TPB)
++        var s = max(1, XTDZ_CO_BLOCK_TARGET // n_cols)
++        ctx.enqueue_function[mean_partial_kernel](
++            ws.unsafe_ptr(), x.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Int32(s),
++            grid_dim=((STATS_TPB + s - 1) // s, 1, 1),
++            block_dim=(s * n_cols, 1, 1),
++        )
++        ctx.enqueue_function[mean_fold_kernel](
++            mu.unsafe_ptr(), ws.unsafe_ptr(), Int32(n_rows),
++            grid_dim=(n_cols, 1, 1),
++            block_dim=(STATS_TPB, 1, 1),
++        )
++        ctx.synchronize()
++        _ = ws^
++        return
++    ctx.enqueue_function[column_mean_kernel](
++        mu.unsafe_ptr(),
++        x.unsafe_ptr(),
++        Int32(n_rows),
++        Int32(n_cols),
++        grid_dim=(n_cols, 1, 1),
++        block_dim=(STATS_TPB, 1, 1),
+     )
+diff --git a/decomposition/estimator.mojo b/decomposition/estimator.mojo
+index c82a2fb9e..0103064fe 100644
+--- a/decomposition/estimator.mojo
++++ b/decomposition/estimator.mojo
+@@ -46,6 +46,7 @@ from max.gpu.sync import barrier
+ from core.column_stats import (
+     STATS_TPB,
+     TRANSPOSE_TILE,
++    column_mean_kernel,
+     shift_columns_kernel,
+     transpose_kernel,
+ )
+@@ -99,14 +100,18 @@ comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
+ #: 40.4 -> 32.3 ms, quality equal. KEEP: the FAST + Apple default; rollback
+ #: -D MOJOLEARN_TSVD_FAST_POOL_OFF.
+ comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_FAST_POOL_OFF"]()
+-# TOMBSTONE: MOJOLEARN_TSVD_FAST_COLVAR_OFF (rollback of a FAST + Apple
+-# winner, rab15-tsvdcolvar: tsvd taxi 40.9 -> 27.8 ms) retired 2026-10-21 by
+-# lane debt-block-per-n: the switch chose the row-coalesced STATS_TPB-chain
+-# column mean over `column_mean_kernel` (one block per column walking all n
+-# rows); `column_mean_launch` now has one order, the row tiles, in every
+-# mode, so FAST + Apple takes the fused variance below like every other
+-# column. Code recoverable at 28b8ed11b.
+-# Restore: git show 28b8ed11b:decomposition/estimator.mojo (TSVD_FAST_COLVAR, _column_variance).
++#: TSVD_FAST_COLVAR (rollback `-D MOJOLEARN_TSVD_FAST_COLVAR_OFF`): `_column_variance`'s
++#: two column means (of X and of X V^T) run the row-coalesced two-pass form
++#: (core/xtdz_coalesced.mojo `column_mean_launch`) instead of
++#: `column_mean_kernel`, whose one block per column reads a column at a
++#: D-float stride (every load its own cache line, X re-read per column; the
++#: pattern measured at 99.8 ms for 1M x 220 on the M4). Same chains and fold:
++#: the same bits.
++#: TSVD_FAST_COLVAR OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
++#: 2026-10-05, rab15-tsvdcolvar): tsvd istella 1009.7 -> 997.9 ms, taxi
++#: 40.9 -> 27.8 ms, quality equal. KEEP: the FAST + Apple default; rollback
++#: -D MOJOLEARN_TSVD_FAST_COLVAR_OFF.
++comptime TSVD_FAST_COLVAR = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_FAST_COLVAR_OFF"]()
+ 
+ 
+ def pca_fit_host(
+@@ -379,10 +384,8 @@ def square_in_place_kernel(
+ # through core/xtdz_coalesced.mojo `column_mean_launch` (the launch
+ # decomposition/impl/linalg/detail/pca.mojo already uses): the same chains,
+ # fold and quotient as `column_mean_kernel` in the coalesced fallback; the
+-# tiled arm changes the fold and must also be selected by the host column.
+-# Since lane debt-block-per-n (2026-10-21) it is the only arm in every mode;
+-# -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (the direct one-block-per-column
+-# launch) is retired and refused.
++# tiled arm changes the fold and must also be selected by the host column. -D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF (or
++# -D MOJOLEARN_IDN_ALL_OFF) restores the direct one-block-per-column launch.
+ from decomposition.mean_switch import IDN_DECOMP_MEAN_LAUNCH
+ # TOMBSTONE: MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS (slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
+ # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_TSVD_FUSED_STATS.patch; record in docs/TOMBSTONES.md.
+@@ -412,12 +415,13 @@ from checks.numerics import identical_mul_add
+ #: `xty_tile_fold_kernel` with its quotient), and `m` is left untouched. Cost:
+ #: -2 read/write passes over the matrix (-4 n*c words) at any shape. Bits:
+ #: none (the same words into the same fold); the host column is unchanged.
+-#: Taken only where the mean pass is `xty_tiled` (every mode since lane
+-#: debt-block-per-n, 2026-10-21; not under the C01_MEAN arm).
++#: Taken only where the mean pass is `xty_tiled` (IDENTICAL's IDN_XTY_TILED,
++#: no C01_MEAN arm, no FAST column-variance switch).
+ comptime IDN_COLVAR_FUSED = (
+     IDN_XTY_TILED
+     and IDN_DECOMP_MEAN_LAUNCH
+     and not C01_MEAN
++    and not TSVD_FAST_COLVAR
+     and not is_defined["MOJOLEARN_IDN_COLVAR_FUSED_OFF"]()
+ )
+ 
+@@ -462,7 +466,7 @@ def _column_variance(
+     n_cols: Int,
+ ) raises:
+     """numpy's `var(axis=0)` (ddof 0) of `m`, IN PLACE over `m`: the column
+-    mean (`column_mean_launch`), the centering (`shift_columns_kernel`),
++    mean (`column_mean_kernel`), the centering (`shift_columns_kernel`),
+     the pinned square, then the column mean of the squares."""
+     var cells = n_rows * n_cols
+     comptime if IDN_COLVAR_FUSED:
+@@ -490,9 +494,15 @@ def _column_variance(
+         ctx.synchronize()
+         _ = ws^
+         return
+-    # lane debt-block-per-n (2026-10-21): the tile order only; the direct
+-    # one-block-per-column `column_mean_kernel` arm is retired
+-    column_mean_launch(ctx, mu, m, n_rows, n_cols)
++    comptime if TSVD_FAST_COLVAR:
++        column_mean_launch[True](ctx, mu, m, n_rows, n_cols)
++    elif IDN_DECOMP_MEAN_LAUNCH:
++        column_mean_launch(ctx, mu, m, n_rows, n_cols)
++    else:
++        ctx.enqueue_function[column_mean_kernel](
++            mu.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
++            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
++        )
+     ctx.enqueue_function[shift_columns_kernel](
+         m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
+         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+@@ -501,7 +511,15 @@ def _column_variance(
+         m.unsafe_ptr(), Int32(cells),
+         grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+     )
+-    column_mean_launch(ctx, var_out, m, n_rows, n_cols)
++    comptime if TSVD_FAST_COLVAR:
++        column_mean_launch[True](ctx, var_out, m, n_rows, n_cols)
++    elif IDN_DECOMP_MEAN_LAUNCH:
++        column_mean_launch(ctx, var_out, m, n_rows, n_cols)
++    else:
++        ctx.enqueue_function[column_mean_kernel](
++            var_out.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
++            grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
++        )
+ 
+ 
+ @always_inline
+diff --git a/decomposition/mean_switch.mojo b/decomposition/mean_switch.mojo
+index 9a0574704..3e11c39dc 100644
+--- a/decomposition/mean_switch.mojo
++++ b/decomposition/mean_switch.mojo
+@@ -1,11 +1,11 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Shared device/host dispatch choice for decomposition variance means."""
++from std.sys.compile import is_defined
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ 
+-# The launch helper's tiled fold is the variance means' only order, on the
+-# device and in the host column, in every mode (lane debt-block-per-n,
+-# 2026-10-21). The direct one-block-per-column arm that
+-# `-D MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF` selected walked all n rows per
+-# block; the define is retired and refused in
+-# core/six_lane_experiment_guards.mojo. The name stays for the host oracle's
+-# `comptime if`.
+-comptime IDN_DECOMP_MEAN_LAUNCH = True
++# The launch helper can select a tiled fold. Both columns must select it
++# together; otherwise TruncatedSVD explained variance differs in raw bits.
++comptime IDN_DECOMP_MEAN_LAUNCH = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF"]()
++    or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+diff --git a/glm/impl/ridge_multi.mojo b/glm/impl/ridge_multi.mojo
+index 09e42966b..47624d11c 100644
+--- a/glm/impl/ridge_multi.mojo
++++ b/glm/impl/ridge_multi.mojo
+@@ -20,7 +20,8 @@ from std.sys.info import has_apple_gpu_accelerator
+ from std.gpu import block_dim, block_idx, thread_idx
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+-from core.xtdz_coalesced import column_mean_launch, xty_launch
++from core.xtdz_coalesced import xty_launch
++from core.column_stats import STATS_TPB, column_mean_kernel
+ from core.gemm import gemv_n
+ from core.identity_trace import IdentityTrace
+ from glm.impl.linalg.detail.svd import svd_eig_traced
+@@ -121,10 +122,10 @@ def ridge_fit_multi_host(
+     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+     ctx.synchronize()
+-    # Y's column means in the row-tile order (lane debt-block-per-n,
+-    # 2026-10-21; `column_mean_kernel` ran one block per target walking all
+-    # n rows). It synchronizes.
+-    column_mean_launch(ctx, mu, y, n_rows, n_targets)
++    ctx.enqueue_function[column_mean_kernel](
++        mu.unsafe_ptr(), y.unsafe_ptr(), Int32(n_rows), Int32(n_targets),
++        grid_dim=(n_targets, 1, 1), block_dim=(STATS_TPB, 1, 1),
++    )
+     # svd_eig once, ridgeSolve's S and V transforms once
+     var s = ctx.enqueue_create_buffer[DType.float32](n_cols)
+     var v = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)

@@ -31,7 +31,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -49,6 +49,7 @@ from hdbscan.host.hdbscan_host_oracle import (
     hdbh_fit,
 )
 from hdbscan.impl.prediction_data import generate_prediction_data_host
+from hdbscan.host.hdbscan_door_host_impl import hdbscan_fit_host_run, prediction_data_host_run
 from hdbscan.impl.detail.extract import probabilities_from_labels_host
 
 
@@ -143,41 +144,7 @@ def hdbscan_fit_binding(
         invp = i32_ptr(Int(py=addrs[8]))
     var n_clusters = 0
     with GILReleased(Python()):
-        var out = hdbh_fit(
-            x, n, d, min_samples, min_cluster_size, max_cluster_size, alpha,
-            allow_single, method, eps, metric,
-        )
-        for i in range(n):
-            lp.unsafe_store(i, out.labels[i])
-            cp.unsafe_store(i, out.core_dists[i])
-        ip.unsafe_store(0, Int32(out.n_clusters))
-        ip.unsafe_store(1, Int32(out.n_outliers))
-        ip.unsafe_store(2, Int32(out.n_boruvka_rounds))
-        ip.unsafe_store(3, Int32(out.n_condensed_clusters))
-        if want_tree:
-            var ne = out.tree.n_edges
-            if ne > 2 * n:
-                raise Error(
-                    "hdbscan_fit: the condensed tree has " + String(ne)
-                    + " edges, more than the 2 * n_rows the caller sized;"
-                    " refused by name"
-                )
-            ip.unsafe_store(4, Int32(ne))
-            for e in range(ne):
-                tpp.unsafe_store(e, out.tree.parents[e])
-                tcp.unsafe_store(e, out.tree.children[e])
-                tlp.unsafe_store(e, out.tree.lambdas[e])
-                tsp.unsafe_store(e, out.tree.sizes[e])
-            for c in range(out.n_clusters):
-                invp.unsafe_store(c, out.inverse_label_map[c])
-        if want_probs:
-            var probs = probabilities_from_labels_host(
-                out.tree, out.labels, out.inverse_label_map, n
-            )
-            for i in range(n):
-                pp.unsafe_store(i, probs[i])
-        n_clusters = out.n_clusters
-        _ = out^
+        n_clusters = hdbscan_fit_host_run(x, n, d, min_samples, min_cluster_size, max_cluster_size, alpha, allow_single, method, eps, metric, lp, cp, ip, want_tree, tpp, tcp, tlp, tsp, invp, want_probs, pp)
     _ = x^
     return PythonObject(n_clusters)
 
@@ -223,22 +190,7 @@ def hdbscan_generate_prediction_data_binding(
     var iicp = i32_ptr(Int(py=addrs[10]))
     var n_ex = 0
     with GILReleased(Python()):
-        var pd = generate_prediction_data_host(
-            parents, children, lambdas, sizes, n_edges, n_leaves, n_clusters,
-            labels, inv, n_selected,
-        )
-        for c in range(n_clusters):
-            dp.unsafe_store(c, pd.deaths[c])
-        for c in range(n_selected):
-            sp.unsafe_store(c, pd.selected_clusters[c])
-            op.unsafe_store(c, pd.exemplar_label_offsets[c])
-        op.unsafe_store(n_selected, pd.exemplar_label_offsets[n_selected])
-        for j in range(pd.n_exemplars):
-            ep.unsafe_store(j, pd.exemplar_idx[j])
-        for e in range(n_edges + 1):
-            iicp.unsafe_store(e, pd.index_into_children[e])
-        n_ex = pd.n_exemplars
-        _ = pd^
+        n_ex = prediction_data_host_run(parents, children, lambdas, sizes, n_edges, n_leaves, n_clusters, labels, inv, n_selected, dp, sp, ep, op, iicp)
     return PythonObject(n_ex)
 
 

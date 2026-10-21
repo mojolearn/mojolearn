@@ -25,7 +25,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import f32_ptr, u16_ptr
+from core.hostptr import f32_ptr, u16_ptr
 from core.neural_context import process_ctx
 from gemm.afn_apple_fast import (
     AFN_GEMM_BF16_MMA,
@@ -151,7 +151,7 @@ def _new_array(shape: PythonObject, bf16: Bool) raises -> PythonObject:
     result.order = PythonObject("C")
     var strides = state[].builtins.list()
     var stride = itemsize
-    for index in range(len(shape)):
+    for index in range(len(shape)):  # small-loop(array shape dimension words)
         var axis = len(shape) - index - 1
         strides.insert(0, stride)
         stride *= Int(py=shape[axis])

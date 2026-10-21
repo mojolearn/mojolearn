@@ -7,6 +7,8 @@ from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initiali
 from bindings.causal_checkpoint import checkpoint_array
 from bindings.samba_state_native import samba_snapshot, samba_from_state, _samba_registry
 from bindings.samba_config_native import samba_config_from_dict
+from bindings.sha256_door import sha256_update, sha256_digest
+from core.sha256 import Sha256
 
 
 comptime SAMBA_HEADER_LIMIT = 1048576
@@ -31,8 +33,8 @@ def _checkpoint_magic() raises -> PythonObject:
     return PythonObject("MOJOLEARN-SAMBA").encode("ascii") + Python.import_module("builtins").bytes(py_ints([2, 10]))
 
 
-def _checkpoint_hash() raises -> PythonObject:
-    return GENERATION_BOUNDARY.get_or_create_ptr()[].hash_type()
+def _checkpoint_hash() -> Sha256:
+    return Sha256()
 
 
 def _checkpoint_raw(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
@@ -51,8 +53,8 @@ def _checkpoint_digest(raw: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var hash = _checkpoint_hash()
     for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file hashing chunks
-        hash.update(raw[bi.slice(start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))])
-    return hash.hexdigest()
+        sha256_update(hash, raw[bi.slice(start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))])
+    return PythonObject(hash.hexdigest())
 
 
 def _checkpoint_validate(metadata: PythonObject, descriptors: PythonObject, context: PythonObject) raises:
@@ -121,8 +123,8 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
     if len(header) > SAMBA_HEADER_LIMIT:
         raise Error("Samba checkpoint metadata exceeds the header limit")
     var header_hash = _checkpoint_hash()
-    header_hash.update(header)
-    var prefix = _checkpoint_magic() + PythonObject(len(header)).to_bytes(8, "little") + header + header_hash.digest()
+    sha256_update(header_hash, header)
+    var prefix = _checkpoint_magic() + PythonObject(len(header)).to_bytes(8, "little") + header + sha256_digest(header_hash)
     var temporary = path + PythonObject(".tmp-") + os.urandom(12).hex()
     var stream = PythonObject(None)
     var created = False
@@ -137,7 +139,7 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
             raise error
         if Int(py=stream.write(prefix)) != len(prefix):
             raise Error("OSError: Samba checkpoint short header write")
-        whole.update(prefix)
+        sha256_update(whole, prefix)
         for i in range(4):  # driver-loop: over stored training-state arrays
             var raw = views[i]
             var written = _checkpoint_hash()
@@ -145,9 +147,9 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
                 var chunk = raw[bi.slice(start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))]
                 if Int(py=stream.write(chunk)) != len(chunk):
                     raise Error("OSError: Samba checkpoint short write")
-                written.update(chunk)
-                whole.update(chunk)
-            if Bool(py=written.hexdigest() != descriptors[i]["sha256"]):
+                sha256_update(written, chunk)
+                sha256_update(whole, chunk)
+            if Bool(py=PythonObject(written.hexdigest()) != descriptors[i]["sha256"]):
                 raise Error("Samba checkpoint state changed during save")
         stream.flush()
         os.fsync(stream.fileno())
@@ -162,7 +164,7 @@ def samba_checkpoint_save(model: PythonObject, value: PythonObject, context: Pyt
             os.unlink(temporary)
         raise error
     _ = state^
-    return whole.hexdigest()
+    return PythonObject(whole.hexdigest())
 
 
 def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -177,8 +179,8 @@ def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises 
     var header = stream.read(length)
     var digest = stream.read(32)
     var hash = _checkpoint_hash()
-    hash.update(header)
-    if len(header) != length or Bool(py=hash.digest() != digest):
+    sha256_update(hash, header)
+    if len(header) != length or Bool(py=sha256_digest(hash) != digest):
         raise Error("Samba checkpoint header integrity mismatch")
     var envelope = native_json_parse(header)
     var required = bi.set(Python.list(PythonObject("schema"), PythonObject("state"), PythonObject("arrays")))
@@ -200,13 +202,13 @@ def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises 
         for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file read chunks
             var chunk = raw[bi.slice(start, min(start + SAMBA_TRANSFER_CHUNK, len(raw)))]
             var received = 0
-            while received < len(chunk):
+            while received < len(chunk):  # driver-loop: over partial native file reads within one chunk
                 var count = Int(py=stream.readinto(chunk[bi.slice(received, PythonObject(None))]))
                 if count < 1:
                     raise Error("Samba checkpoint truncated array")
                 received += count
-            actual.update(chunk)
-        if Bool(py=actual.hexdigest() != entry["sha256"]):
+            sha256_update(actual, chunk)
+        if Bool(py=PythonObject(actual.hexdigest()) != entry["sha256"]):
             raise Error("Samba checkpoint array integrity mismatch: " + String(entry["name"]))
         state[entry["name"]] = array
     if len(stream.read(1)) != 0:
@@ -226,8 +228,8 @@ def _checkpoint_read_legacy(stream: PythonObject, context: PythonObject) raises 
     var state = envelope["payload"]
     var raw = PythonObject(_transport_json(state)).encode("ascii")
     var hash = _checkpoint_hash()
-    hash.update(raw)
-    if Bool(py=hash.hexdigest() != envelope["payload_sha256"]):
+    sha256_update(hash, raw)
+    if Bool(py=PythonObject(hash.hexdigest()) != envelope["payload_sha256"]):
         raise Error("Samba checkpoint integrity mismatch")
     var names = _checkpoint_names()
     for i in range(4):  # driver-loop: over legacy array descriptors

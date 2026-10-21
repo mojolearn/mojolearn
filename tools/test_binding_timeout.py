@@ -69,7 +69,7 @@ class BindingTimeout(unittest.TestCase):
         s = (ROOT / 'packaging/linux/build_sets.sh').read_text()
         self.assertIn('. "$REPO/packaging/linux/binding_timeout.sh"', s)
         self.assertEqual(s.count('with_binding_timeout "$BINDING_TIMEOUT" "$log"'), 2)
-        self.assertIn('TIMED OUT after ${BINDING_TIMEOUT}s', s)
+        self.assertIn('TIMED OUT after ${bound}s', s)  # bound: BINDING_TIMEOUT, or the merged bound
         # The source line sits after the host checks, so the early refusals
         # (tools/test_linux_build_limits.py) still run first.
         self.assertLess(s.index('taskset -pc "$BUILD_CPUS" $$'), s.index('binding_timeout.sh"'))

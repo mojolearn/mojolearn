@@ -25,7 +25,7 @@ The caller passes zeros for the fold ids; the host binding fills them
 from experiments.classical_identical_ideas.linear_controls import C13_LOGCV_WEIGHTS
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
-    axpy_acc, par_rows, row_dots,
+    axpy_acc, row_dots,
 )
 from std.sys.info import is_gpu
 from x_linear.lbfgs import lbfgs, lbfgs_work, Objective
@@ -243,7 +243,6 @@ def logcv_part_rows(o: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw:
     return fold_fa(y, 2 * n + lo, 1, cb)
 
 
-
 @always_inline
 def logcv_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw: Bool, th: FP, toff: Int, rows: FP):
     """Training row i's residuals (rows[k * n + i]) and loss term
@@ -287,7 +286,6 @@ def logcv_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw: B
             if sw:
                 r = fm(wi, r)
             st(rows + k * n, i, r)
-
 
 
 def logcv_finish_t(v: Team, g: FP, goff: Int, th: FP, toff: Int, kp: Int, d: Int, sw: Bool, c: Float32,
@@ -385,121 +383,6 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: 
     return t.bcast(out)
 
 
-def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:
-    """Map, then fold (x_linear/ops.mojo, lane linear-cpu): each training
-    row's loss term and gradient coefficients go to the scratch `sc`
-    (L: n | R: n * K'), then one pass folds them in ascending row order,
-    the order the one-pass loop used."""
-    var kp = ldi(ip, 0)
-    var fi = ldi(ip, 1) != 0
-    var fold = ldi(ip, 2)
-    var c = ld(fp, 0)
-    var sw = ldi(ip, 3) != 0
-    var stride = d + 1
-    var p = kp * stride
-    var sl = sc
-    var sr = sl + n
-
-    def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm th, imm toff, imm kp, imm fi,
-                                     imm fold, imm sw, imm stride, imm sl, imm sr}:
-        # the linear predictors first (eight rows at a time on the host)
-        if kp == 1:
-            row_dots(x, lo, hi, d, th, toff, sl)
-        else:
-            for k in range(kp):
-                row_dots(x, lo, hi, d, th, toff + k * stride, sl)
-                for i in range(lo, hi):
-                    st(sr, i * kp + k, fa(ld(sl, i), ld(th, toff + k * stride + d) if fi else Float32(0)))
-        for i in range(lo, hi):
-            if fold >= 0 and not cv_train(y + n, i, fold, LCV_ROLES_AFTER):
-                continue
-            var wi = ld(y, 2 * n + i) if sw else Float32(1)
-            var label = Int(ld(y, i))
-            if kp == 1:
-                var z = fa(ld(sl, i), ld(th, toff + d) if fi else Float32(0))
-                var yi = Float32(1) if label == 1 else Float32(0)
-                var li = fs(ftz(identical_softplus(z)), fm(yi, z))
-                var r = fs(ftz(identical_sigmoid(z)), yi)
-                if sw:
-                    li = fm(wi, li)
-                    r = fm(wi, r)
-                st(sl, i, li)
-                st(sr, i, r)
-            else:
-                var zmax = Float32(-3.0e38)
-                for k in range(kp):
-                    zmax = fmax(zmax, ld(sr, i * kp + k))
-                var se = Float32(0)
-                var zy = Float32(0)
-                for k in range(kp):
-                    var z = ld(sr, i * kp + k)
-                    se = fa(se, fexp(fs(z, zmax)))
-                    if k == label:
-                        zy = z
-                var lse = fa(zmax, flog(se))
-                st(sl, i, fm(wi, fs(lse, zy)) if sw else fs(lse, zy))
-                for k in range(kp):
-                    var r = fexp(fs(ld(sr, i * kp + k), lse))
-                    if k == label:
-                        r = fs(r, Float32(1))
-                    if sw:
-                        r = fm(wi, r)
-                    st(sr, i * kp + k, r)
-
-    par_rows(rows_map, n)
-    fill(g, goff, p, Float32(0))
-    var rows = 0
-    var wrows = Float32(0)
-    var acc = Float32(0)
-    # the blocked order (lane/neural-pass97): every accumulator from zero
-    # over FOLD_BLOCK training rows, folded into its total at each block's
-    # end (the team's partials, folded blocks ascending)
-    var pl = List[Float32](length=max(p, 1), fill=Float32(0))
-    var pg = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
-    var pacc = Float32(0)
-    var pw = Float32(0)
-    for i in range(n):
-        if fold >= 0 and not cv_train(y + n, i, fold, LCV_ROLES_AFTER):
-            continue
-        if rows > 0 and rows % FOLD_BLOCK == 0:
-            for o in range(p):
-                st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
-                st(pg, o, Float32(0))
-            acc = fa(acc, pacc)
-            pacc = Float32(0)
-            if sw and not C13_LOGCV_WEIGHTS:
-                wrows = fa(wrows, pw)
-                pw = Float32(0)
-        rows += 1
-        if sw and not C13_LOGCV_WEIGHTS:
-            pw = fa(pw, ld(y, 2 * n + i))
-        pacc = fa(pacc, ld(sl, i))
-        for k in range(kp):
-            var r = ld(sr, i * kp + k)
-            axpy_acc(pg, k * stride, r, x, i * d, d)
-            if fi:
-                st(pg, k * stride + d, fa(ld(pg, k * stride + d), r))
-    if rows > 0:
-        for o in range(p):
-            st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
-        acc = fa(acc, pacc)
-        if sw and not C13_LOGCV_WEIGHTS:
-            wrows = fa(wrows, pw)
-    _ = pl^
-    comptime if C13_LOGCV_WEIGHTS:
-        wrows = ld(fp, 1) if sw else Float32(0)
-    return logcv_finish(g, goff, th, toff, kp, d, sw, c, rows, acc, wrows)
-
-
-def logistic_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:
-    """The device runs the team schedule, the host the map-then-fold
-    schedule over `sc` (lane linear-cpu). The same bits either way."""
-    comptime if is_gpu():
-        return _logistic_objective_team(t, x, y, n, d, ip, fp, th, toff, g, goff)
-    else:
-        return _logistic_objective_host(x, y, n, d, ip, fp, th, toff, g, goff, sc)
-
-
 def _predict_code(x: FP, i: Int, d: Int, kp: Int, fi: Bool, th: FP, toff: Int) -> Int:
     var stride = d + 1
     if kp == 1:
@@ -520,121 +403,6 @@ def _predict_code(x: FP, i: Int, d: Int, kp: Int, fi: Bool, th: FP, toff: Int) -
 #: the grid fit passes device forms (x_linear/logcv_grid.mojo, cgr-linear).
 comptime LcvRows = def(Team, FP, Int, Int, Int) thin -> Int
 comptime LcvScore = def(Team, FP, FP, Int, Int, Int, Bool, FP, Int, Int, FP, Bool) thin -> Float32
-
-
-def lcv_hits_default(t: Team, x: FP, y: FP, n: Int, d: Int, kpp: Int, fi: Bool, fw: FP, th: Int, f: Int, hitr: FP):
-    """Across the team on a device; on the host in row blocks (lane linear-cpu)."""
-    comptime if is_gpu():
-        for i in range(t.tid, n, t.nt):
-            if cv_test(y + n, i, f, LCV_ROLES_AFTER):
-                var hit = _predict_code(x, i, d, kpp, fi, fw, th) == Int(ld(y, i))
-                st(hitr, i, Float32(1) if hit else Float32(0))
-    else:
-        var fwp = fw
-
-        def rows_hit(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm kpp, imm fi, imm fwp, imm th,
-                                        imm hitr, imm f}:
-            for i in range(lo, hi):
-                if cv_test(y + n, i, f, LCV_ROLES_AFTER):
-                    var hit = _predict_code(x, i, d, kpp, fi, fwp, th) == Int(ld(y, i))
-                    st(hitr, i, Float32(1) if hit else Float32(0))
-
-        par_rows(rows_hit, n)
-
-
-def lcv_score_default(t: Team, x: FP, y: FP, n: Int, d: Int, kpp: Int, fi: Bool, fw: FP, th: Int, f: Int,
-                      hitr: FP, weighted: Bool) -> Float32:
-    """Each held-out row's hit, then the lead's blocked score."""
-    lcv_hits_default(t, x, y, n, d, kpp, fi, fw, th, f, hitr)
-    t.sync()
-    var s = Float32(0)
-    if t.lead():
-        s = lcv_score_rows(y, hitr, n, f, weighted)
-    return s
-
-
-def logcv_fit[obj: Objective = logistic_objective, rows: LcvRows = logcv_rows, score: LcvScore = lcv_score_default](
-    t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP
-):
-    """ip: [max_iter, fit_intercept, K', n_Cs, n_folds, sample_weight]; fp: [tol, Cs...].
-    With sample_weight, y = labels | folds | fit weights (sample x class) |
-    score weights (sample): the loss sum and the penalty scale use sum(w)
-    of the training rows (their LinearModelLoss), the held-out accuracy is
-    weighted by the raw sample weights (their scorer's sample_weight).
-    res: coef K'*d | intercept K' | C_ | n_iter | scores F*nC.
-    fw: theta P | C 1 | objective scratch n*(K'+1) (the host's map) | lbfgs work.  iw: [K', fit_intercept, fold, sample_weight, training rows].
-    Team rows: K' + 1 (logcv_team_rows)."""
-    var max_iter = ldi(ip, 0)
-    var fi = ldi(ip, 1)
-    var kp = ldi(ip, 2)
-    var nc = ldi(ip, 3)
-    var nf = ldi(ip, 4)
-    var tol = ld(fp, 0)
-    var stride = d + 1
-    var p = kp * stride
-    var th = 0
-    var cslot = p
-    var extra = nf + 2 if C13_LOGCV_WEIGHTS else 1
-    var work = p + extra + n * (kp + 1)
-    var sc = kp * d + kp + 2
-    if t.lead():
-        sti(iw, 0, kp)
-        sti(iw, 1, fi)
-        sti(iw, 3, ldi(ip, 5))
-    var cptr = fw + cslot
-    var hitr = t.row(0)
-    comptime if C13_LOGCV_WEIGHTS:
-        for f in range(t.tid, nf, t.nt):
-            st(cptr, 2 + f, lcv_disjoint_weight(y, n, f, ldi(ip, 5) != 0))
-        t.sync()
-    for f in range(nf):
-        var cnt = rows(t, y, n, f, kp)
-        if t.lead():
-            comptime if C13_LOGCV_WEIGHTS:
-                st(cptr, 1, lcv_retained_weight(cptr + 2, nf, f))
-            sti(iw, 2, f)
-            sti(iw, 4, cnt)
-            fill(fw, th, p, Float32(0))
-        t.sync()
-        for ci in range(nc):
-            if t.lead():
-                st(fw, cslot, ld(fp, 1 + ci))
-            t.sync()
-            _ = lbfgs[obj](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + extra)
-            # the held-out score: each row's hit (1) or miss (0), the lead's
-            # blocked fold (weighted by the raw sample weights at y + 3n)
-            var sc_v = score(t, x, y, n, d, kp if kp > 1 else 1, fi != 0, fw, th, f, hitr, ldi(ip, 5) != 0)
-            if t.lead():
-                st(res, sc + f * nc + ci, sc_v)
-            t.sync()
-    var best = 0
-    if t.lead():
-        var bs = Float32(0)
-        for ci in range(nc):
-            var acc = Float32(0)
-            for f in range(nf):
-                acc = fa(acc, ld(res, sc + f * nc + ci))
-            var m = fd(acc, i2f(nf))
-            if ci == 0 or m > bs:  # DEVIATION 5005: the first best C
-                best = ci
-                bs = m
-        comptime if C13_LOGCV_WEIGHTS:
-            st(cptr, 1, lcv_retained_weight(cptr + 2, nf, -1))
-        sti(iw, 2, -1)
-        st(fw, cslot, ld(fp, 1 + best))
-        fill(fw, th, p, Float32(0))
-    best = t.bcast_int(best, 3)
-    var it = lbfgs[obj](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + extra)
-    if not t.lead():
-        return
-    for k in range(kp):
-        for j in range(d):
-            st(res, k * d + j, ld(fw, th + k * stride + j))
-        st(res, kp * d + k, ld(fw, th + k * stride + d) if fi != 0 else Float32(0))
-    st(res, kp * d + kp, ld(fp, 1 + best))
-    st(res, kp * d + kp + 1, i2f(it if it >= 0 else -it))
-
-
 def logcv_team_rows(ip: IP) -> Int:
     """Row buffers a LogisticRegressionCV fit needs: K' residuals, the loss
     term, the fold's training row list."""

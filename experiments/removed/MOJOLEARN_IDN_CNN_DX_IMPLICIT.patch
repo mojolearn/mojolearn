@@ -388,7 +388,7 @@ index e535a16c0..4b0a00297 100644
 --- a/x_cnn/host/ops_host.mojo
 +++ b/x_cnn/host/ops_host.mojo
 @@ -23,6 +23,7 @@ from checks.numerics import ftz
- from bindings.hostptr import i32_ptr, f32_ptr
+ from core.hostptr import i32_ptr, f32_ptr
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
 +from x_cnn.cnn_dx_wgrad import IDN_CNN_DX_IMPLICIT, IDN_CNN_WGRAD_LEAF1024, cnn_wgrad_partition

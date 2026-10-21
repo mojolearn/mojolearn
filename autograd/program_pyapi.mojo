@@ -11,6 +11,9 @@ from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from autograd.rankn import ShapeN
 from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
 from autograd.tape import Tape
+from autograd.program_io import ProgramInput, HostArray
+from autograd.program_entries import program_execute_prepare, program_execute_run, program_fit_parameters, program_fit_native
+from autograd.program_arrays_pyapi import host_arrays_py
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS, same_shape, shape_text
@@ -70,7 +73,7 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
             dims.append(n)
         elif dims[depth] != n:
             raise Error("ValueError: program input sequences must be rectangular")
-        for k in range(n):  # native input marshaling: elements supplied as Python scalar objects
+        for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
             _sequence_values(a[k], depth + 1, dims, values, ids, integer, leaf_depth)
     else:
         if leaf_depth < 0:
@@ -85,37 +88,32 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
             values.append(Float64(py=a))
 
 
-struct ProgramInput(Movable):
-    var src: CastIn
-    var shape: ShapeN
-    var values: List[Float64]
-    var ids: List[Int64]
-
-    def __init__(out self, a: PythonObject, integer: Bool) raises:
-        self.values = List[Float64]()
-        self.ids = List[Int64]()
-        var b = Python.import_module("builtins")
-        if Bool(py=b.hasattr(a, "dtype")) and Bool(py=b.hasattr(a, "strides")):
-            var parsed = array_input(a, "numeric program input")
-            self.src = parsed[0]
-            self.shape = parsed[1]
-            if integer and self.src.kind != CAST_KIND_SIGNED and self.src.kind != CAST_KIND_UNSIGNED:
-                raise Error("TypeError: program input holds ids and must be integers (an integer array)")
-        else:
-            var dims = List[Int]()
-            var leaf_depth = -1
-            _sequence_values(a, 0, dims, self.values, self.ids, integer, leaf_depth)
-            if len(dims) == 0:
-                dims.append(1)
-            if len(dims) == 1:
-                dims.append(1)
-            self.shape = ShapeN.of(dims)
-            if integer:
-                self.src = CastIn(Int(self.ids.unsafe_ptr()), CAST_KIND_SIGNED, 8,
-                                  self.shape.rows(), self.shape.cols(), self.shape.cols() * 8, 8)
-            else:
-                self.src = CastIn(Int(self.values.unsafe_ptr()), CAST_KIND_FLOAT, 8,
-                                  self.shape.rows(), self.shape.cols(), self.shape.cols() * 8, 8)
+def program_input(a: PythonObject, integer: Bool) raises -> ProgramInput:
+    """A typed ProgramInput from an array (its descriptor) or a nested
+    sequence of Python scalars (converted once, owned by the result)."""
+    var values = List[Float64]()
+    var ids = List[Int64]()
+    var b = Python.import_module("builtins")
+    if Bool(py=b.hasattr(a, "dtype")) and Bool(py=b.hasattr(a, "strides")):
+        var parsed = array_input(a, "numeric program input")
+        if integer and parsed[0].kind != CAST_KIND_SIGNED and parsed[0].kind != CAST_KIND_UNSIGNED:
+            raise Error("TypeError: program input holds ids and must be integers (an integer array)")
+        return ProgramInput(parsed[0], parsed[1], values^, ids^)
+    var dims = List[Int]()
+    var leaf_depth = -1
+    _sequence_values(a, 0, dims, values, ids, integer, leaf_depth)
+    if len(dims) == 0:
+        dims.append(1)
+    if len(dims) == 1:
+        dims.append(1)
+    var shape = ShapeN.of(dims)
+    if integer:
+        var id_src = CastIn(Int(ids.unsafe_ptr()), CAST_KIND_SIGNED, 8,
+                            shape.rows(), shape.cols(), shape.cols() * 8, 8)
+        return ProgramInput(id_src, shape, values^, ids^)
+    var src = CastIn(Int(values.unsafe_ptr()), CAST_KIND_FLOAT, 8,
+                     shape.rows(), shape.cols(), shape.cols() * 8, 8)
+    return ProgramInput(src, shape, values^, ids^)
 
 
 def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_rank: Bool = False) raises -> List[ProgramInput]:
@@ -123,7 +121,7 @@ def program_inputs(p: OpsProgram, arrays: PythonObject, dynamic: Bool, variable_
         raise Error("ValueError: this program takes " + String(p.n_in) + " input arrays, got " + String(len(arrays)))
     var out = List[ProgramInput]()
     for k in range(p.n_in):  # driver-loop: over input descriptors, owners retained through replay
-        var item = ProgramInput(arrays[k], p.in_kinds[k] == PROGRAM_IN_IDS)
+        var item = program_input(arrays[k], p.in_kinds[k] == PROGRAM_IN_IDS)
         if (dynamic and not variable_rank and item.shape.ndim != p.in_shapes[k].ndim) or (not dynamic and not same_shape(item.shape, p.in_shapes[k])):
             raise Error("ValueError: input " + String(k) + " must keep its captured "
                         + ("rank" if dynamic else "shape") + " " + shape_text(p.in_shapes[k])
@@ -178,124 +176,39 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, pid: PythonObject, owner_sid: PythonObject, arrays: PythonObject,
     dynamic_shapes: PythonObject, optimize: PythonObject, profile: PythonObject,
 ) raises -> PythonObject:
-    if Int(py=owner_sid) != Int(py=sid):
-        raise Error("program must be a Program of this session")
-    var s = ops_session[E, KIND](Int(py=sid))
-    var p = s[].program(Int(py=pid))
-    if s[].tape.is_recording():
-        raise Error("program execution requires an inference session")
-    var original_nodes = p.n_nodes()
-    var optimization = ProgramOptimization(OpsProgram())
-    if Bool(py=optimize) or Bool(py=profile):
-        optimization = program_optimize(p, Bool(py=optimize))
-        p = optimization.program.copy()
+    var sid_i = Int(py=sid)
+    var profiled = Bool(py=profile)
+    var plan = program_execute_prepare[E, KIND](sid_i, Int(py=pid), Int(py=owner_sid), Bool(py=optimize), profiled)
     # Native ABI shape policy: bool preserves the existing fixed-rank
     # dynamic contract; integer 2 selects compatibility checked at each node.
     # Every operation still validates its own rank/axes/parameter constraints.
     var variable_rank = is_integer_input(dynamic_shapes) and Int(py=dynamic_shapes) == 2
-    var inputs = program_inputs(p, arrays, Bool(py=dynamic_shapes), variable_rank)
-    # Validate every descriptor and parameter before allocation. Earlier
-    # dynamic replay leaked input buffers on a later input/parameter error.
-    var params = parameter_buffers(s[], p)
-    var trainable = List[Bool](length=len(params), fill=False)
-    var buffers = List[FP]()
-    var shapes = List[ShapeN]()
-    var upload_bytes = 0
-    var input_bytes = 0
-    var parameter_bytes = 0
-    for j in range(len(p.param_shapes)):  # driver-loop: over parameter storage accounting
-        parameter_bytes += p.param_shapes[j].count() * 4
-    s[].program_trace = ProgramTrace()
-    s[].program_trace.enabled = Bool(py=profile)
-    if Bool(py=profile):
-        try:
-            s[].ex.execution_profile_begin()
-        except error:
-            s[].program_trace.enabled = False
-            raise error
-    var started = Int(perf_counter_ns())
-    try:
-        for k in range(len(inputs)):  # driver-loop: over native uploads
-            var sh = inputs[k].shape
-            var buf = s[].ex.alloc(sh.count())
-            buffers.append(buf)
-            shapes.append(sh)
-            input_bytes += sh.count() * 4
-            upload_bytes += sh.count() * inputs[k].src.itemsize
-            if p.in_kinds[k] == PROGRAM_IN_IDS:
-                upload_cast_i32(s[].ex, buf, inputs[k].src, "program ids")
-            else:
-                upload_cast(s[].ex, buf, inputs[k].src)
-        if Bool(py=profile):
-            s[].ex.sync()
-    except err:
-        s[].program_trace.enabled = False
-        for k in range(len(buffers)):  # driver-loop: over owners acquired before a failed upload
-            s[].ex.free(buffers[k])
-        if Bool(py=profile):
-            _ = s[].ex.execution_profile_end()
-        raise err
-    _ = inputs^  # raw addresses erase origins; retain scalar sequence owners through upload
-    var upload_ns = Int(perf_counter_ns()) - started
-    var held = Tape()
-    swap(held, s[].prog_tape)
-    swap(held, s[].tape)
-    var temps = List[Int]()
-    var phs = List[Int]()
-    var result = Python.list()
-    var download_bytes = 0
-    var download_ns = 0
-    try:
-        s[].tape.no_grad()
-        s[].tape.reset()
-        var outs = replay_values(s[], p, buffers, shapes, params, trainable, temps, phs)
-        started = Int(perf_counter_ns())
-        for k in range(len(outs)):  # driver-loop: over returned arrays
-            var sh = s[].shapes[s[]._slot(outs[k])]
-            var a = output_array(sh)
-            s[].download(outs[k], FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])))
-            download_bytes += sh.count() * 4
-            result.append(a)
-        download_ns = Int(perf_counter_ns()) - started
-    except err:
-        s[].program_trace.enabled = False
-        s[]._drop_temps(temps)
-        swap(held, s[].tape)
-        swap(held, s[].prog_tape)
-        for k in range(len(buffers)):  # driver-loop: over input owners
-            s[].ex.free(buffers[k])
-        if Bool(py=profile):
-            _ = s[].ex.execution_profile_end()
-        raise err
-    s[].program_trace.enabled = False
-    s[]._drop_temps(temps)
-    swap(held, s[].tape)
-    swap(held, s[].prog_tape)
-    for k in range(len(buffers)):  # driver-loop: over input owners
-        s[].ex.free(buffers[k])
-    if not Bool(py=profile):
+    var inputs = program_inputs(plan.program, arrays, Bool(py=dynamic_shapes), variable_rank)
+    var r = program_execute_run[E, KIND](sid_i, plan, inputs^, profiled)
+    var result = host_arrays_py(r.outputs)
+    if not profiled:
         return _result(result)
-    var executor_profile = s[].ex.execution_profile_end()
+    var s = ops_session[E, KIND](sid_i)
     var report = _dict()
-    report["executor"] = execution_profile_object(executor_profile)
-    report["optimization"] = _optimization_object(optimization)
+    report["executor"] = execution_profile_object(r.executor)
+    report["optimization"] = _optimization_object(plan.optimization)
     report["timing"] = "host enqueue and synchronized wait; profiling serializes the queue"
-    report["original_nodes"] = original_nodes
-    report["executed_nodes"] = p.n_nodes()
-    report["input_logical_bytes"] = upload_bytes
-    report["input_device_bytes"] = input_bytes
-    report["output_bytes"] = download_bytes
-    report["parameter_bytes"] = parameter_bytes
+    report["original_nodes"] = plan.original_nodes
+    report["executed_nodes"] = plan.program.n_nodes()
+    report["input_logical_bytes"] = r.upload_bytes
+    report["input_device_bytes"] = r.input_bytes
+    report["output_bytes"] = r.download_bytes
+    report["parameter_bytes"] = r.parameter_bytes
     report["peak_tape_reserved_bytes"] = s[].program_trace.peak_tape_bytes
-    report["upload_and_cast_ns"] = upload_ns
-    report["download_and_allocate_ns"] = download_ns
+    report["upload_and_cast_ns"] = r.upload_ns
+    report["download_and_allocate_ns"] = r.download_ns
     report["node_sync_count"] = s[].program_trace.sync_count
     report["node_sync_ns"] = s[].program_trace.sync_ns
     var rows = Python.list()
     for j in range(len(s[].program_trace.nodes)):  # driver-loop: over diagnostic rows
         var row = _dict()
         row["node"] = s[].program_trace.nodes[j]
-        row["source_node"] = optimization.source_nodes[s[].program_trace.nodes[j]]
+        row["source_node"] = plan.optimization.source_nodes[s[].program_trace.nodes[j]]
         row["op"] = program_op_name(s[].program_trace.codes[j])
         row["shape"] = s[].program_trace.shapes[j]
         row["output_bytes"] = s[].program_trace.output_bytes[j]
@@ -370,7 +283,7 @@ def ops_program_fit_py[E: Exec & Movable & Deinitable, KIND: Int](
         raise Error("program fit: malformed options")
     var srcs = List[CastIn]()
     var shapes = List[ShapeN]()
-    for k in range(len(arrays)):  # driver-loop: over program input arrays
+    for k in range(len(arrays)):  # small-loop(arrays: one descriptor per program input): argument parsing, no data
         var parsed = array_input(arrays[k], "program input")
         srcs.append(parsed[0])
         shapes.append(parsed[1])
@@ -433,41 +346,25 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var batch = _integer(batch_size, "batch_size", 1)
     var opt = _integer(optimizer, "optimizer", 1)
     var seed_word = uint64_input(seed, "seed")
-    var params = p.params.copy()
-    if otherwise_id > 0:
-        var other = s[].program(otherwise_id)
-        for k in range(len(other.params)):  # driver-loop: over default branch parameter union
-            var found = False
-            for j in range(len(params)):  # driver-loop: over shared parameter identity
-                found = found or params[j] == other.params[k]
-            if not found:
-                params.append(other.params[k])
-    if String(py=b.type(parameters).__name__) != "NoneType":
+    var explicit = String(py=b.type(parameters).__name__) != "NoneType"
+    var selected = List[Int]()
+    if explicit:
         if is_integer_input(parameters):
-            params.clear()
-            params.append(_integer(parameters, "parameter", 1))
+            selected.append(_integer(parameters, "parameter", 1))
         else:
-            params.clear()
-            for k in range(len(parameters)):  # driver-loop: over selected parameter handles
-                params.append(_integer(parameters[k], "parameter", 1))
+            for k in range(len(parameters)):  # small-loop(parameters: the selected parameter handles): argument parsing, no data
+                selected.append(_integer(parameters[k], "parameter", 1))
+    var params = program_fit_parameters[E, KIND](Int(py=sid), Int(py=pid), otherwise_id, explicit, selected)
     var owners = program_inputs(p, arrays, True)
-    var srcs = List[CastIn]()
-    var shapes = List[ShapeN]()
-    for k in range(len(owners)):  # driver-loop: over borrowed input descriptors
-        srcs.append(owners[k].src)
-        shapes.append(owners[k].shape)
-    var target = CastIn.f32_c(0, 1, 1)
     var target_owners = List[ProgramInput]()
     if kind != 0:
-        target_owners.append(ProgramInput(targets, False))
-        target = target_owners[0].src
+        target_owners.append(program_input(targets, False))
     var curve = output_array(ShapeN.of([count]))
-    var branches = train_program_control(s[], Int(py=pid), srcs, shapes, target, kind, Float32(py=delta),
-                                        opt, params, count, batch, Bool(py=shuffle), seed_word,
-                                        FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])),
-                                        condition_id, otherwise_id)
-    _ = owners^
-    _ = target_owners^
+    var branches = program_fit_native[E, KIND](
+        Int(py=sid), Int(py=pid), owners^, target_owners^, kind, Float32(py=delta), opt, params, count, batch,
+        Bool(py=shuffle), seed_word, FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])),
+        condition_id, otherwise_id,
+    )
     var out = Python.list()
     out.append(curve)
     out.append(PythonObject(count))

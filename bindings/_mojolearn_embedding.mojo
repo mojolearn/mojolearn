@@ -29,7 +29,7 @@ device call, and nothing inside the `GILReleased` block touches a
 from std.os import abort
 from std.ffi import _Global
 from std.sys.compile import is_defined
-from bindings.hostptr import f32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, read_f32, read_i32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder

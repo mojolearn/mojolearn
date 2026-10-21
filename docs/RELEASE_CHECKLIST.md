@@ -22,7 +22,8 @@ qualification remain required independently. See
 This is the default release (Andrew 2026-10-13: identity and behavior are
 checked before merge on NVIDIA, AMD, Apple and CPU; the release only builds,
 checks artifact integrity and publishes). `pixi run release <v> --publish pypi`
-builds Linux on GitHub's free runners, skips the GPU wheel smokes, gates the
+builds Linux where the source's binding layout fits (merged bindings: RunPod CPU
+pods, 2c; per-binding: GitHub's free runners, 2d), skips the GPU wheel smokes, gates the
 macOS wheel on `tools/wheel_self_test.py` below, and publishes every package
 with `tools/release_linux_publish.sh ... --preverified`. Its rehearsal skips
 `python-tests` and the GPU-box leg dry-runs. `--gpu-smoke` restores the old
@@ -182,7 +183,7 @@ relaunched. `--only STEP[,STEP]` runs some steps, `--redo STEP` discards a
 step's record, `--amd-expect-from <NVIDIA release-build dir>` restores the AMD
 core-host probe, `--smoke-gpu` picks the Linux smoke GPU. The build legs and
 the GPU columns share one launcher (`launch_detached`; build routes in
-`BUILD_BACKENDS`, chosen with `--build-backend`). A pipeline is `PIPELINES`'
+`BUILD_BACKENDS`, chosen with `--build-backend`, default by the source's layout, 2c). A pipeline is `PIPELINES`'
 named builds, checks and one publish, so the Linux pipeline can split into
 per-package pipelines without a new scheduler.
 
@@ -455,18 +456,33 @@ sha256sum <sm89>/build/sets/cuda/sm_89/host/*.so <sm90a>/build/sets/cuda/sm_90a/
 differ across legs, and requires every manifest binding in every set; the
 lines above say WHICH leg is wrong before the packer says that one is.
 
-## 2c. The CPU build route: opt-in only
+## 2c. The CPU build route: the merged layout's default (`--build-backend cpu-box`)
 
-**Policy (2026-09-25): no CPU anywhere by default.** `pixi run release`
-compiles on the GPU legs of section 2. The CPU pods below run only with
-`--build-backend cpu-box`.
+**Which route builds Linux is decided in ONE place: the LINUX BUILD BACKENDS
+table at the top of `tools/release.py`.** In short: the default follows the
+source commit's binding layout (`packaging/linux/merged_layout.py enabled` at
+that commit). A merged-layout source (MOJOLEARN_MERGED_BINDINGS=1, the default
+since 2026-10-20) builds here, on RunPod CPU pods, with or without
+`--gpu-smoke`, and `--build-backend github` is refused for it: one merged
+compile per tier peaked at 46.4 GB (identical + byte LM; fast 36.6 GB, host
+6.9 GB; DO MI325X, 2026-10-20) and a free runner has 15. A per-binding source
+keeps GitHub (2d) as its default and this route behind `--gpu-smoke`.
 
 ```sh
-bash tools/release_linux_build.sh $REF          # dry run: nothing rented
-bash tools/release_linux_build.sh $REF --rent   # about 17 minutes, about $0.40
+bash tools/release_linux_build.sh $REF                        # dry run: nothing rented
+bash tools/release_linux_build.sh $REF --rent --archs sm_89   # one set, what each release leg runs
 ```
 
-One RunPod CPU pod (32 vCPU, 128 GB) runs the AMD leg's pinned
+The pod follows the layout. Merged: 16 vCPU of `cpu5m,cpu3m` (>= 64 GB), one
+merged compile at a time (identical + fast together would need 83 GB) under a
+64 GiB build cap (`tools/release_linux_cpu_box.sh` sets it through
+`tools/release061_remote_build.sh`), every core given to the build step, the
+compiler workers left as `packaging/linux/build_sets.sh` sets them, and a lease
+of 75 min plus 45 per set. Per-binding: 32 vCPU of `cpu5g,cpu3g`, 16 builds at
+a time at 16 GiB each, lease 120. `MOJOLEARN_MERGED_BINDINGS` in the calling
+shell picks the layout and is passed to the pod when set.
+
+One RunPod CPU pod runs the AMD leg's pinned
 `rocm/dev-ubuntu-22.04` image (GCC 11.4, ld 2.38, patchelf 0.17.2) and builds
 cuda/sm_90a, cuda/sm_89 and hip/gfx942 one after another at `/root/mojolearn`
 through the same `tools/release061_remote_build.sh`, with
@@ -500,11 +516,16 @@ key, fields and every file's sha256 verify. `build-provenance.json` records per
 binary whether it was built or taken, its key, and the commit whose build
 compiled it. `--no-bincache` builds everything from source.
 
-## 2d. The GitHub build route: the default (`--build-backend github`)
+## 2d. The GitHub build route: the per-binding layout's default (`--build-backend github`)
 
 The same CPU build route as 2c, on GitHub's free `ubuntu-24.04` runners (4
-vCPU, 16 GB) instead of a rented pod. Nothing is rented and no repository
-secret is needed. It is the default since 2026-09-27; `--build-backend gpu-legs` rents GPU boxes to build instead.
+vCPU, 15 GB) instead of a rented pod. Nothing is rented and no repository
+secret is needed. It is the per-binding layout's default since 2026-09-27;
+`--build-backend gpu-legs` rents GPU boxes to build instead. It cannot build
+the merged layout: `release_github_build.py plan` plans the merged pool (one
+`merged_build.sh` per tier, one per shard) and refuses it, and `run` refuses
+before dispatching, unless `--runner-mem-gib N` covers `NEEDED_GIB` (2c and
+the table in `tools/release.py`).
 
 ```sh
 pixi run release <v> --build-backend github          # the three legs, detached

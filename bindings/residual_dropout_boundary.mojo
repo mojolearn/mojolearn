@@ -3,7 +3,7 @@
 from std.python import Python,PythonObject
 from std.python._cpython import GILReleased
 from core.neural_context import neural_ctx
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 from bindings.residual_dropout_common import residual_dropout_args,residual_dropout_addresses
 from training.residual_dropout import residual_dropout_device
 

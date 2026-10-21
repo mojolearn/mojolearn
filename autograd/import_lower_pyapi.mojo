@@ -11,21 +11,21 @@ from autograd.pyapi import program_info
 
 def _int_list(p: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(p)):  # cpu-route: model graph lowered on the host (argument words, converted)
+    for i in range(len(p)):  # driver-loop: over argument words, converted; cpu-route: model graph lowered on the host conversion
         out.append(Int(py=p[i]))
     return out^
 
 
 def _str_list(p: PythonObject) raises -> List[String]:
     var out = List[String]()
-    for i in range(len(p)):  # cpu-route: model graph lowered on the host (argument strings, converted)
+    for i in range(len(p)):  # driver-loop: over argument strings, converted; cpu-route: model graph lowered on the host conversion
         out.append(String(py=p[i]))
     return out^
 
 
 def _problems_out(found: List[_Found]) raises -> PythonObject:
     var out = Python.list()
-    for i in range(len(found)):  # cpu-route: model graph lowered on the host (one per problem)
+    for i in range(len(found)):  # driver-loop: over the reported problems; cpu-route: model graph lowered on the host conversion
         var p = Python.list()
         p.append(PythonObject(found[i].name))
         if found[i].has_op:
@@ -39,7 +39,7 @@ def _problems_out(found: List[_Found]) raises -> PythonObject:
 
 def _dims_py(v: List[Int]) raises -> PythonObject:
     var d = Python.list()
-    for i in range(len(v)):  # cpu-route: model graph lowered on the host (one per axis)
+    for i in range(len(v)):  # driver-loop: over the axes of one shape; cpu-route: model graph lowered on the host conversion
         d.append(PythonObject(v[i]))
     return d
 
@@ -62,14 +62,14 @@ def onnx_import_py[E: Exec & Movable & Deinitable, KIND: Int](
         res.append(_problems_out(r.problems))
         return res
     var in_meta = Python.list()
-    for q in range(len(r.in_names)):  # cpu-route: model graph lowered on the host (graph inputs)
+    for q in range(len(r.in_names)):  # driver-loop: over graph inputs; cpu-route: model graph lowered on the host conversion
         var m = Python.list()
         m.append(PythonObject(r.in_names[q]))
         m.append(_dims_py(r.in_dims[q]))
         m.append(PythonObject(r.in_dtypes[q]))
         in_meta.append(m)
     var out_meta = Python.list()
-    for i in range(len(r.out_names)):  # cpu-route: model graph lowered on the host (graph outputs)
+    for i in range(len(r.out_names)):  # driver-loop: over graph outputs; cpu-route: model graph lowered on the host conversion
         var m = Python.list()
         m.append(PythonObject(r.out_names[i]))
         m.append(_dims_py(r.out_dims[i]))
@@ -88,7 +88,7 @@ def onnx_from_words_py(words: PythonObject, strings: PythonObject, floats: Pytho
     floats and the address of each buffer. Returns the handle (>= 1)."""
     var strs = _str_list(strings)
     var fl = List[Float64]()
-    for i in range(len(floats)):  # cpu-route: model graph description (attribute numbers, converted)
+    for i in range(len(floats)):  # driver-loop: over attribute numbers, converted; cpu-route: model graph description conversion
         fl.append(Float64(py=floats[i]))
     var bufs = _int_list(addrs)
     return PythonObject(onnx_from_words(_int_list(words), strs, fl, bufs))

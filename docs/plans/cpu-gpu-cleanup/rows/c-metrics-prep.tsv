@@ -1,9 +1,9 @@
 rule	class	owner	state	path	occ	text
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_metrics.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_metrics.mojo	0	import core/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_metrics.mojo	0	return read_f32(addr, max(0, n))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_preprocessing.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_preprocessing.mojo	0	import core/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_preprocessing.mojo	0	return read_f32(addr, max(0, n))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	import core/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	var lower = read_f32(Int(py=addrs[0]), MC_DIMS)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	var upper = read_f32(Int(py=addrs[1]), MC_DIMS)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	var x = read_f32(Int(_f32_ptr(Int(py=addrs[0]))), max(0, n_x))

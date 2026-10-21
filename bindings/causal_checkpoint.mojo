@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native safetensors header admission, mapped reads and owned tensor buffers."""
 from std.python import Python, PythonObject
+from core.causal_checkpoint_impl import checkpoint_widen_halves
 from std.memory import bitcast
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -17,7 +18,7 @@ def checkpoint_array(raw: PythonObject, shape: PythonObject, code: String, array
     var count = 1
     var strides = bi.list()
     var stride = itemsize
-    for i in range(len(shape)):
+    for i in range(len(shape)):  # small-loop(tensor shape dimension words)
         var size = Int(py=shape[len(shape) - i - 1])
         if size < 0:
             raise Error("safetensors: negative shape dimension")
@@ -57,7 +58,7 @@ def tensor_info_size_binding(value: PythonObject, bytes: PythonObject) raises ->
     if Bool(py=bytes):
         return PythonObject(Int(py=value.end) - Int(py=value.begin))
     var count = 1
-    for i in range(len(value.shape)):
+    for i in range(len(value.shape)):  # small-loop(tensor shape dimension words)
         count *= Int(py=value.shape[i])
     return PythonObject(count)
 
@@ -80,7 +81,7 @@ def safetensors_init_binding(value: PythonObject, input_path: PythonObject, cont
         if len(head) != 8:
             raise Error("safetensors: file is shorter than its 8-byte header length")
         var length = UInt64(0)
-        for i in range(8):
+        for i in range(8):  # small-loop(the 8-byte header length word)
             length |= UInt64(Int(py=head[i])) << UInt64(8 * i)
         if length > 100 * 1024 * 1024:
             raise Error("safetensors: header length exceeds 104857600")
@@ -101,7 +102,7 @@ def safetensors_init_binding(value: PythonObject, input_path: PythonObject, cont
         raise Error("safetensors: header is not a JSON object")
     value.metadata = header.pop("__metadata__", PythonObject(None))
     var names = bi.list(header)
-    for i in range(len(names)):
+    for i in range(len(names)):  # driver-loop: over the checkpoint header tensor entries
         var name = names[i]
         var entry = header[name]
         if bi.type(entry) is not bi.dict or not Bool(py=entry.__contains__("dtype")) or not Bool(py=entry.__contains__("shape")) or not Bool(py=entry.__contains__("data_offsets")):
@@ -110,7 +111,7 @@ def safetensors_init_binding(value: PythonObject, input_path: PythonObject, cont
         var shape = bi.list()
         var count = 1
         var input_shape = entry["shape"]
-        for j in range(len(input_shape)):
+        for j in range(len(input_shape)):  # small-loop(tensor shape dimension words)
             var size = Int(py=bi.int(input_shape[j]))
             if size < 0 or (size != 0 and count > 9223372036854775807 // size):
                 raise Error("safetensors: invalid tensor shape")
@@ -169,7 +170,7 @@ def safetensors_read_binding(value: PythonObject, name: PythonObject, bf16: Pyth
     var info = safetensors_info_binding(value, name)
     var dtype = String(info.dtype)
     if dtype != "F32" and dtype != "F16" and dtype != "BF16" and dtype != "I32" and dtype != "I64":
-        raise Error("TypeError: tensor " + String(name) + " dtype " + dtype + " is refused by name")
+        raise Error("TypeError: tensor " + String(name) + " dtype " + dtype + " refuses by name (the reader admits F32, F16, BF16, I32 and I64)")
     var bi = Python.import_module("builtins")
     var mmap = safetensors_map_binding(value)
     var begin = Int(py=value.data_start) + Int(py=info.begin)
@@ -184,8 +185,7 @@ def safetensors_read_binding(value: PythonObject, name: PythonObject, bf16: Pyth
         if count != 0:
             var source = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(py=owned._addr))
             var dest = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
-            for i in range(count):
-                dest[i] = f16_bits_to_f32(source[i]) if dtype == "F16" else bitcast[DType.float32](UInt32(source[i]) << 16)
+            checkpoint_widen_halves(source, dest, count, dtype)
         return out
     if dtype == "BF16" and format == "bits" and len(info.shape) == 2:
         var packed = bi.object.__new__(context["bf16_class"])
@@ -222,7 +222,7 @@ def checkpoint_open_binding(cls: PythonObject, input_path: PythonObject, context
             if bi.type(wm) is not bi.dict or len(wm) == 0:
                 raise Error("safetensors: index has no weight_map")
             var names = bi.list(wm)
-            for i in range(len(names)):
+            for i in range(len(names)):  # driver-loop: over the checkpoint index weight-map entries
                 var filename = wm[names[i]]
                 if not Bool(py=filename.startswith("/")):
                     filename = path.rstrip("/") + PythonObject("/") + filename
@@ -236,11 +236,11 @@ def checkpoint_open_binding(cls: PythonObject, input_path: PythonObject, context
             files.append(single)
         else:
             var entries = Python.import_module("os").listdir(path)
-            for i in range(len(entries)):
+            for i in range(len(entries)):  # driver-loop: over checkpoint directory entries
                 if Bool(py=entries[i].endswith(".safetensors")):
                     files.append(path.rstrip("/") + PythonObject("/") + entries[i])
             if len(files) != 1:
-                raise Error("FileNotFoundError: checkpoint holds neither model.safetensors nor model.safetensors.index.json")
+                raise Error("FileNotFoundError: checkpoint holds neither model.safetensors nor model.safetensors.index.json (shard files alone are not an index)")
     elif native_path_exists(path):
         files.append(path)
         var pieces = path.rsplit("/", 1)
@@ -267,17 +267,17 @@ def checkpoint_index_binding(value: PythonObject, context: PythonObject) raises 
     if value._infos is None:
         var bi = Python.import_module("builtins")
         var infos = bi.dict()
-        for i in range(len(value._paths)):
+        for i in range(len(value._paths)):  # driver-loop: over checkpoint shard files
             var path = value._paths[i]
             var file = checkpoint_file_binding(value, path, context)
             var names = bi.list(file._infos)
-            for j in range(len(names)):
+            for j in range(len(names)):  # driver-loop: over a shard's tensor entries
                 var name = names[j]
                 if Bool(py=infos.__contains__(name)):
                     raise Error("safetensors: tensor " + String(name) + " appears in both shards")
                 infos[name] = file._infos[name]
         var names = bi.list(value._weight_map)
-        for i in range(len(names)):
+        for i in range(len(names)):  # driver-loop: over the checkpoint weight-map entries
             var name = names[i]
             var path = value._weight_map[name]
             if not Bool(py=infos.__contains__(name)) or not Bool(py=infos[name].file == path):
@@ -306,7 +306,7 @@ def checkpoint_read_binding(value: PythonObject, name: PythonObject, bf16: Pytho
 def checkpoint_close_binding(value: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var files = bi.list(value._open.values())
-    for i in range(len(files)):
+    for i in range(len(files)):  # driver-loop: over open shard files
         _ = safetensors_close_binding(files[i])
     value._open = bi.dict()
     return PythonObject(None)

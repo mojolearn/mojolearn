@@ -6,7 +6,7 @@ native handle can be released while another call is using it.
 """
 from std.python import PythonObject
 from std.sys.compile import is_defined
-from hostptr import list_f32, list_i32
+from core.hostptr import list_f32, list_i32
 from core.forest_inference import vector_groves_for, FOREST_PACKED_NODES
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
 

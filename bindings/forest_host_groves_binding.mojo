@@ -15,6 +15,11 @@ from std.ffi import _Global
 from std.python import PythonObject
 
 from core.forest_host_groves import HostGroveForest, HostGroveRegistry
+from core.forest_host_groves_binding_impl import (
+    _f32_ptr,
+    _i32_ptr,
+    host_grove_forest_from,
+)
 
 
 comptime RF_GROVE_REGISTRY = _Global[
@@ -27,18 +32,6 @@ comptime ET_GROVE_REGISTRY = _Global[
     name="MojoETResidentForestHost",
     init_fn=HostGroveRegistry.__init__,
 ]
-
-
-def _i32_ptr(address: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
-    if address == 0:
-        raise Error("null resident forest Int32 pointer")
-    return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
-
-
-def _f32_ptr(address: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
-    if address == 0:
-        raise Error("null resident forest Float32 pointer")
-    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
 
 
 def forest_prepare_host_binding[RF_INPUT: Bool](
@@ -55,29 +48,9 @@ def forest_prepare_host_binding[RF_INPUT: Bool](
     var outputs = Int(py=params[2])
     if features < 1 or trees < 1 or trees >= 2147483647 or outputs < 1:
         raise Error("invalid resident forest dimensions")
-    var op = _i32_ptr(Int(py=offsets_addr))
-    var cp = _i32_ptr(Int(py=colid_addr))
-    var tp = _f32_ptr(Int(py=quesval_addr))
-    var lp = _i32_ptr(Int(py=left_child_addr))
-    var vp = _f32_ptr(Int(py=leaves_addr))
-    var nodes = Int(op[trees])
-    if nodes < 1 or nodes > 2147483647 // outputs:
-        raise Error("invalid resident forest node count")
-    var offsets = List[Int32](capacity=trees + 1)
-    var columns = List[Int32](capacity=nodes)
-    var thresholds = List[Float32](capacity=nodes)
-    var left = List[Int32](capacity=nodes)
-    var leaves = List[Float32](capacity=nodes * outputs)
-    for i in range(trees + 1):
-        offsets.append(op[i])
-    for i in range(nodes):
-        columns.append(cp[i])
-        thresholds.append(tp[i])
-        left.append(lp[i])
-    for i in range(nodes * outputs):
-        leaves.append(vp[i])
-    var model = HostGroveForest(
-        offsets^, columns^, thresholds^, left^, leaves^, features, outputs
+    var model = host_grove_forest_from(
+        Int(py=offsets_addr), Int(py=colid_addr), Int(py=quesval_addr),
+        Int(py=left_child_addr), Int(py=leaves_addr), features, trees, outputs,
     )
     comptime if RF_INPUT:
         return PythonObject(RF_GROVE_REGISTRY.get_or_create_ptr()[].prepare(model^))

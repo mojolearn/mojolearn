@@ -132,7 +132,7 @@ from kde.impl.distance.distance_ops import (
     DIST_LINF,
     DIST_LP_UNEXPANDED,
 )
-from bindings.hostptr import f32_ptr
+from core.hostptr import f32_ptr
 from kde.estimator import kde_score_samples_host, kde_score_samples_host_ptr
 from kde.impl.kde import score_samples
 from kde.impl.neighbors.kernel_density import (

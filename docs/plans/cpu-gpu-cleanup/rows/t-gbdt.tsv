@@ -1,11 +1,11 @@
 rule	class	owner	state	path	occ	text
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import core/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import glm/estimator.mojo:qn_softmax_host
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	qn_softmax_host(sp, op, nr, nc)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	weights = read_f32(Int(wp), max(0, n_train))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	1	weights = read_f32(Int(wp), max(0, n_train))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	et_host_predict(trees, rows, n_rows, n_features, n_trees, num_outputs, out)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	import core/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	import core/forest_host_predict.mojo:et_host_predict
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	var rows = read_f32(x_address, n_rows * n_features)
 d2h-loop	d2h-roundtrip	UNOWNED	debt	gbdt/methods/doc_parallel_boosting.mojo	0	ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)

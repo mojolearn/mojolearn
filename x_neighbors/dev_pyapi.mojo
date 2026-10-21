@@ -138,13 +138,13 @@ def ocsvm_resident_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
     """xn_ocsvm_x: addresses (x, cv, alpha, info, iters), ints (n, d, kind,
     degree, max_iter), floats (gamma, coef0, eps)."""
     var a = List[Int]()
-    for k in range(5):
+    for k in range(5):  # small-loop(the five address words)
         var v = Int(py=a_[k])
         if v == 0:
             raise Error("x_neighbors: null buffer address")
         a.append(v)
     var iv = List[Int]()
-    for k in range(5):
+    for k in range(5):  # small-loop(the five size words)
         var v = Int(py=i_[k])
         if v < 0:
             raise Error("x_neighbors: a negative size was passed")

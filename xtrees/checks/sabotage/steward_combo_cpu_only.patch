@@ -52,7 +52,7 @@ index 1304504fd..0676dc0a2 100644
 +from std.sys.compile import is_defined
  from std.python.bindings import PythonModuleBuilder
  
- from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
+ from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 @@ -70,6 +71,10 @@ def gather_f32_binding(
      if n_rows * n_cols > 0:
          gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,

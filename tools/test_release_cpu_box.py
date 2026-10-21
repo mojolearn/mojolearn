@@ -31,11 +31,74 @@ class CpuBox(unittest.TestCase):
     def setUp(self):
         self.ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
 
-    def test_default_backend_is_github_cpu_box_opt_in(self):
+    def test_default_backend_follows_the_layout(self):
         self.assertIs(rel.BUILD_BACKENDS["cpu-box"], rel.cpu_legs)
         self.assertIs(rel.BUILD_BACKENDS["gpu-legs"], rel.gpu_legs)
         src = (Path(__file__).resolve().parent / "release.py").read_text()
-        self.assertIn('ap.add_argument("--build-backend", default="github"', src)
+        self.assertIn('ap.add_argument("--build-backend", default=None', src)
+        head = rel.git("rev-parse", "HEAD")
+        merged = rel.release_github_build.commit_merged(head)
+        self.assertEqual(rel.default_build_backend(head), "cpu-box" if merged else "github")
+        # a commit without packaging/linux/merged_layout.py is per-binding: GitHub
+        self.assertEqual(rel.default_build_backend(C), "github")
+
+    def test_merged_pod_and_per_binding_pod(self):
+        per = argparse.Namespace(rel=self.ctx.rel, commit=C, linux_merged=False)
+        merged = argparse.Namespace(rel=self.ctx.rel, commit=C, linux_merged=True)
+        self.assertEqual(rel.cpu_box_pod(per), ["--flavors", rel.CPU_BOX_FLAVORS])
+        self.assertEqual(rel.cpu_box_pod(per, amd_small=True)[:2], ["--vcpu", "16"])
+        want = ["--vcpu", str(rel.CPU_BOX_MERGED_VCPU), "--flavors", rel.CPU_BOX_MERGED_FLAVORS]
+        self.assertEqual(rel.cpu_box_pod(merged), want)
+        self.assertEqual(rel.cpu_box_pod(merged, amd_small=True), want)
+        for l in rel.cpu_legs(merged):
+            i = l.command.index("--flavors")
+            self.assertEqual(l.command[i + 1], rel.CPU_BOX_MERGED_FLAVORS)
+            self.assertEqual(l.command[l.command.index("--vcpu") + 1], str(rel.CPU_BOX_MERGED_VCPU))
+        # >= 64 GB at 4 GB per vCPU, no compute-optimized (2 GB) flavor
+        self.assertGreaterEqual(rel.CPU_BOX_MERGED_VCPU * 4, 64)
+        self.assertNotRegex(rel.CPU_BOX_MERGED_FLAVORS, r"c(,|$)")
+        # tools/release_linux_build.sh has the same merged defaults
+        sh = (Path(__file__).resolve().parent / "release_linux_build.sh").read_text()
+        block = sh.split('if [ "$MERGED" = 1 ]; then', 1)[1].split("else", 1)[0]
+        self.assertIn(f'[ -n "$VCPU" ] || VCPU={rel.CPU_BOX_MERGED_VCPU}', block)
+        self.assertIn(f'[ -n "$FLAVORS" ] || FLAVORS="{rel.CPU_BOX_MERGED_FLAVORS}"', block)
+        self.assertIn('[ -n "$JOBS" ] || JOBS=1', block)
+
+    def test_merged_layout_reaches_the_box_build_cap(self):
+        here = Path(__file__).resolve().parent
+        box = (here / "release_linux_cpu_box.sh").read_text()
+        self.assertIn("MERGED_RSS_GIB=64", box)
+        self.assertIn('MOJOLEARN_RELEASE_BUILD_RSS_GIB="$build_rss_gib"', box)
+        remote = (here / "release061_remote_build.sh").read_text()
+        self.assertIn("BUILD_RSS_GIB=$MOJOLEARN_RELEASE_BUILD_RSS_GIB", remote)
+        # the per-binding cap is unchanged (16 GiB per job) when the box sets none
+        self.assertIn('[[ "$NO_DEVICE" = 1 ]] && BUILD_RSS_GIB=$((16 * BUILD_JOBS))', remote)
+        # MOJOLEARN_RELEASE_* never reaches a binding cache key
+        import bincache
+        self.assertEqual(bincache.build_env({"MOJOLEARN_RELEASE_BUILD_RSS_GIB": "64",
+                                             "MOJOLEARN_RELEASE_BUILD_CORES": "16"}), {})
+
+    def test_github_refused_and_cpu_box_allowed_without_gpu_smoke_when_merged(self):
+        from unittest import mock
+        import contextlib
+        import io
+        with mock.patch.object(rel.Release, "go", lambda self: self.args), \
+                mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: True):
+            self.assertEqual(rel.main(["0.8.14"]).build_backend, "cpu-box")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+                rel.main(["0.8.14", "--build-backend", "github"])
+            self.assertIn("cannot build on GitHub's free runners", err.getvalue())
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                rel.main(["0.8.14", "--build-backend", "gpu-legs"])
+            self.assertEqual(rel.main(["0.8.14", "--build-backend", "gpu-legs", "--gpu-smoke"]).build_backend,
+                             "gpu-legs")
+        with mock.patch.object(rel.Release, "go", lambda self: self.args), \
+                mock.patch.object(rel.release_github_build, "commit_merged", lambda c, env=None: False):
+            self.assertEqual(rel.main(["0.8.14"]).build_backend, "github")
+            # per-binding: cpu-box stays --gpu-smoke only, as before
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                rel.main(["0.8.14", "--build-backend", "cpu-box"])
 
     def test_three_legs_one_set_each(self):
         legs = rel.cpu_legs(self.ctx)

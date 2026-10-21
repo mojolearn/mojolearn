@@ -22,7 +22,7 @@ LANES = [
                                    "bindings/_mojolearn_x_neighbors", "bindings/_mojolearn_neighbors"]),
     ("classical", "c-ann", ["x_ann/", "ivf/", "bindings/_mojolearn_ivf.mojo", "bindings/ivf_index_arrays.mojo",
                             "bindings/_mojolearn_x_ann"]),
-    ("classical", "c-core", ["python/mojolearn/cross_vendor.py", "python/mojolearn/_mode.py", "python/mojolearn/_labels.py", "python/mojolearn/_buffer.py", "python/mojolearn/_array.py", "core/", "bindings/_mojolearn.mojo", "bindings/hotpath_helpers.mojo", "bindings/hostptr.mojo",
+    ("classical", "c-core", ["python/mojolearn/cross_vendor.py", "python/mojolearn/_mode.py", "python/mojolearn/_labels.py", "python/mojolearn/_buffer.py", "python/mojolearn/_array.py", "core/", "bindings/_mojolearn.mojo", "bindings/hotpath_helpers.mojo", "core/hostptr.mojo",
                              "python/mojolearn/_bufcheck.py", "python/mojolearn/__init__.py",
                              "python/mojolearn/_parallel_pool.py", "python/mojolearn/_portable_math.py"]),
     ("classical", "c-decomp", ["decomposition/", "x_decomp/", "python/mojolearn/_expansion_decomp.py",

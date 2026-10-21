@@ -9,14 +9,13 @@ inputs into owned Lists, computes, and only then writes the caller's output.
 The loss comes back as its IEEE-754 bit pattern, an int, so the gate compares
 bytes and nothing on the Python side rounds it.
 """
-from std.math import isfinite
 from std.memory import bitcast, memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from core.host_lanes import HostF32Ptr, host_f32_copy, host_f32_uninit
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -37,6 +36,13 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 # back as a sabotage build too.
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
+from training.byte_lm_host_io import (
+    all_finite_f32_scan,
+    all_finite_f64_scan,
+    byte_host_store_f32,
+    byte_host_store_i32,
+    cast_f64_to_f32_rows,
+)
 from training.byte_lm_host import (
     byte_host_logits,
     byte_host_logits_threaded,
@@ -69,7 +75,7 @@ def _host_config(shape: PythonObject) raises -> ByteConfig:
     if len(shape) != 7 and len(shape) != 9 and len(shape) != 10:
         raise Error("byte LM host: expected 7, 9 or 10 shape integers (B,L,DM,H,KV,HD,FF[,layers,vocab[,chunked_head_v2]])")
     var values = List[Int]()
-    for i in range(len(shape)):
+    for i in range(len(shape)):  # small-loop(shape: 7 to 10 configuration words)
         values.append(_index(shape[i]))
     if len(values) == 7:
         values.append(2)
@@ -181,9 +187,7 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
         logits = byte_host_logits_threaded(params, ids, batch, length, cfg, thread_count)
     else:
         logits = byte_host_logits(params, ids, batch, length, cfg)
-    var out = f32_ptr(out_addr)
-    for i in range(len(logits)):
-        out.unsafe_store(i, logits[i])
+    byte_host_store_f32(f32_ptr(out_addr), logits)
     return PythonObject(len(logits))
 
 
@@ -201,9 +205,7 @@ def byte_lm_host_next_binding(addresses: PythonObject, dims: PythonObject,
     var params = read_f32(_index(addresses[0]), cfg.n_total())
     var ids = read_i32(_index(addresses[1]), batch * length)
     var next = byte_host_next_threaded(params, ids, batch, length, cfg, thread_count)
-    var out = i32_ptr(_index(addresses[2]))
-    for i in range(batch):
-        out.unsafe_store(i, next[i])
+    byte_host_store_i32(i32_ptr(_index(addresses[2])), next, batch)
     return PythonObject(batch)
 
 
@@ -320,10 +322,7 @@ def all_finite_f32_binding(addr: PythonObject, n: PythonObject) raises -> Python
         raise Error("all_finite_f32: n must be non-negative, got " + String(count))
     var ok: Int = 1
     with GILReleased(Python()):
-        for i in range(count):
-            if not isfinite(p.unsafe_load(i)):
-                ok = 0
-                break
+        ok = all_finite_f32_scan(p, count)
     return PythonObject(ok)
 
 
@@ -335,10 +334,7 @@ def all_finite_f64_binding(addr: PythonObject, n: PythonObject) raises -> Python
         raise Error("all_finite_f64: n must be non-negative, got " + String(count))
     var ok: Int = 1
     with GILReleased(Python()):
-        for i in range(count):
-            if not isfinite(p.unsafe_load(i)):
-                ok = 0
-                break
+        ok = all_finite_f64_scan(p, count)
     return PythonObject(ok)
 
 
@@ -353,15 +349,7 @@ def cast_f64_to_f32_binding(src_addr: PythonObject, dst_addr: PythonObject,
     var sp = f64_ptr(Int(py=src_addr))
     var dp = f32_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        var i = 0
-        var body = count - (count % 8)
-        while i < body:
-            var v = sp.unsafe_load[width=8](i)
-            dp.unsafe_store[width=8](i, v.cast[DType.float32]())
-            i += 8
-        while i < count:
-            dp.unsafe_store(i, sp.unsafe_load(i).cast[DType.float32]())
-            i += 1
+        cast_f64_to_f32_rows(sp, dp, count)
     return PythonObject(0)
 
 

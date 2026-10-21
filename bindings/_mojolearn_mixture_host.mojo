@@ -29,7 +29,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -50,6 +50,7 @@ from mixture.host.gmm_host_oracle import (
     gmmh_fit,
     gmmh_init_params_from_name,
 )
+from mixture.host.gmm_host_entries import _gmm_fit_run
 
 
 def mixture_host_numeric_mode_binding() raises -> PythonObject:
@@ -81,36 +82,6 @@ def mixture_vendor_binding() raises -> PythonObject:
 
 def mixture_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
-
-
-def _gmm_fit_run(
-    x: List[Float32],
-    n: Int,
-    d: Int,
-    params: GmmHostParams,
-    wp: MutPointer[Float32, MutUntrackedOrigin],
-    mp: MutPointer[Float32, MutUntrackedOrigin],
-    cp: MutPointer[Float32, MutUntrackedOrigin],
-    pp: MutPointer[Float32, MutUntrackedOrigin],
-    lp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises -> Int:
-    var model = gmmh_fit(x, n, d, params)
-    var k = model.n_components
-    for i in range(k):
-        wp.unsafe_store(i, model.weights[i])
-        lp.unsafe_store(i, model.log_det_chol[i])
-    for i in range(k * d):
-        mp.unsafe_store(i, model.means[i])
-    for i in range(k * d * d):
-        cp.unsafe_store(i, model.covariances[i])
-        pp.unsafe_store(i, model.precisions_cholesky[i])
-    sp.unsafe_store(0, Float64(model.n_iter))
-    sp.unsafe_store(1, Float64(1 if model.converged else 0))
-    sp.unsafe_store(2, Float64(model.lower_bound))
-    var n_iter = model.n_iter
-    _ = model^
-    return n_iter
 
 
 def gmm_fit_binding(

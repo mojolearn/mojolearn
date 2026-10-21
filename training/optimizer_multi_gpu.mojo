@@ -9,7 +9,7 @@ after all workers finish; no cross-device floating-point sum is introduced.
 from std.os import getenv
 from max.gpu.host import DeviceContext
 from core.host_parallel import host_parallelize
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from training.clip_multi_gpu import parallel_clip_grad_norm_host
 from training.estimator import (

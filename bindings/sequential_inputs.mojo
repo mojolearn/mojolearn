@@ -4,6 +4,7 @@
 # serialization are host ABI work; existing kernels still own model math.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32
 
 
@@ -114,11 +115,15 @@ def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut valu
     packed.frombytes(view.tobytes("C"))
     if not Bool(py=dtype.isnative) and width > 1:
         packed.byteswap()
-    for k in range(len(packed)):  # native input marshaling: packed buffer scalars become sequence storage
-        if incoming == "f" and width == 2:
-            values.append(PythonObject(f16_bits_to_f32(UInt16(Int(py=packed[k])))))
-        else:
-            values.append(packed[k])
+    if incoming == "f" and width == 2:
+        var count = len(packed)
+        var wide = context["array_type"]("f", b.bytes(4 * count))
+        sequence_widen_halves(Int(py=packed.buffer_info()[0]), Int(py=wide.buffer_info()[0]), count)
+        values.extend(wide)
+        _ = wide^
+    else:
+        values.extend(packed)
+    _ = packed^
 
 
 def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
@@ -146,7 +151,8 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
             dims.append(n)
         elif dims[depth] != n:
             raise Error("input sequences must be rectangular")
-        for k in range(n):  # native input marshaling: nested scalar/container values become native storage
+        # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
+        for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
             _sequence_values(value[k], depth + 1, dims, values, kind, size, leaf_depth, context)
     else:
         _leaf_shape(Python.tuple(), depth, dims, leaf_depth)
@@ -188,9 +194,11 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
     var code = context["buffer_codes"][Python.tuple(kind, size)]
     var storage = PythonObject(None)
     if kind == "f" and size == 2:
-        storage = context["array_type"]("H")
-        for k in range(len(values)):  # native input marshaling: exact half scalars are serialized as half words
-            storage.append(PythonObject(bitcast[DType.uint16](Float16(Float64(py=values[k])))))
+        var count = len(values)
+        var wide = context["array_type"]("d", values)
+        storage = context["array_type"]("H", b.bytes(2 * count))
+        sequence_narrow_halves(Int(py=wide.buffer_info()[0]), Int(py=storage.buffer_info()[0]), count)
+        _ = wide^
     else:
         storage = context["array_type"](code, values)
     return context["ndarray"](shape, dtype=dtype, buffer=storage)

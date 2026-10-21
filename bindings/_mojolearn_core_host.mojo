@@ -177,7 +177,7 @@ from bindings.array_helpers import (
     class_ratio_f64_host_binding,
     shard_topk_merge_f32_host_binding,
 )
-from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
+from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
@@ -190,33 +190,23 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from neighbors.impl.ball_cover.common import rbc_validate_metric
-from neighbors.impl.ball_cover.knn import RBC_KNN_MAX_K
-from cluster.host.kmeans_oracle import (
-    INIT_ARRAY,
-    KMEANS_ORACLE_HOST_SABOTAGE,
-    host_kmeans_fit,
-    host_kmeans_predict,
-    host_kmeans_transform,
-    host_kmeans_validate,
-)
-from neighbors.impl.distance.detail.distance_ops import DIST_INNER_PRODUCT
-from core.knn_host_predict import (
-    KNN_HOST_SABOTAGE,
-    host_rbc_radius_counts,
-    host_rbc_radius_fill_rows,
-    host_rbc_knn_search,
-    KNN_HOST_WEIGHTS_DISTANCE,
-    KNN_HOST_WEIGHTS_UNIFORM,
-    host_class_probs,
-    host_class_vote,
-    host_distance_weights,
-    host_knn_search,
-    host_monotonic,
-    host_regress_avg,
-    host_unique_labels,
-    host_weighted_class_probs,
-    host_weighted_regress_avg,
+from cluster.host.kmeans_oracle import KMEANS_ORACLE_HOST_SABOTAGE
+from core.knn_host_predict import KNN_HOST_SABOTAGE
+from core.core_host_impl import (
+    kmeans_fit_host,
+    kmeans_predict_host,
+    kmeans_transform_host,
+    knn_classify_host,
+    knn_classify_neighbors_host,
+    knn_regress_host,
+    knn_regress_neighbors_host,
+    knn_search_host,
+    nonzero_f64_count,
+    nonzero_f64_fill,
+    radius_neighbors_count_host,
+    radius_neighbors_fill_host,
+    rbc_knn_search_host,
+    transpose_to_f32,
 )
 
 
@@ -292,22 +282,6 @@ def mojolearn_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
-def _transpose_to_f32[
-    S: DType
-](
-    sp: MutPointer[Scalar[S], MutUntrackedOrigin],
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    nr: Int,
-    nc: Int,
-):
-    """`dp[c * nr + r] = Float32(sp[r * nc + c])`, the value
-    `_tiled_transpose_to_f32` writes, in plain column order."""
-    for c in range(nc):
-        var dbase = c * nr
-        for r in range(nr):
-            dp.unsafe_store(dbase + r, sp.unsafe_load(r * nc + c).cast[DType.float32]())
-
-
 def transpose_f32_binding(
     src_addr: PythonObject,
     dst_addr: PythonObject,
@@ -334,7 +308,7 @@ def transpose_f32_binding(
     var sp = f32_ptr(_index(src_addr))
     var dp = f32_ptr(_index(dst_addr))
     with GILReleased(Python()):
-        _transpose_to_f32(sp, dp, nr, nc)
+        transpose_to_f32(sp, dp, nr, nc)
     return PythonObject(0)
 
 
@@ -367,7 +341,7 @@ def cast_colmajor_f64_to_f32_binding(
     var sp = f64_ptr(_index(src_addr))
     var dp = f32_ptr(_index(dst_addr))
     with GILReleased(Python()):
-        _transpose_to_f32(sp, dp, nr, nc)
+        transpose_to_f32(sp, dp, nr, nc)
     return PythonObject(0)
 
 
@@ -379,7 +353,7 @@ def cast_colmajor_f64_to_f32_binding(
 # them the lane refuses at `_mojolearn.nonzero_f64_count`. Both bodies are
 # `bindings/_mojolearn.mojo::nonzero_f64_count_binding` and
 # `nonzero_f64_fill_binding` (DEVIATION 2489) with this binding's `_index`
-# and `bindings/hostptr.mojo`'s pointers: a comparison, a row-major scan
+# and `core/hostptr.mojo`'s pointers: a comparison, a row-major scan
 # and one narrowing per kept value, no fold, so no sabotage arm here (the
 # lane's arms are the spectral oracle's).
 # ===========================================================================
@@ -401,9 +375,7 @@ def nonzero_f64_count_binding(
     var sp = f64_ptr(_index(src_addr))
     var nz = 0
     with GILReleased(Python()):
-        for i in range(count):
-            if sp.unsafe_load(i) != 0.0:
-                nz += 1
+        nz = nonzero_f64_count(sp, count)
     return PythonObject(nz)
 
 
@@ -445,27 +417,8 @@ def nonzero_f64_fill_binding(
     var cp = i32_ptr(_index(outs[1]))
     var vp = f32_ptr(_index(outs[2]))
     var k = 0
-    var overflow = False
     with GILReleased(Python()):
-        for r in range(nr):
-            var base = r * nc
-            for c in range(nc):
-                var v = sp.unsafe_load(base + c)
-                if v != 0.0:
-                    if k >= cap:
-                        overflow = True
-                        break
-                    rp.unsafe_store(k, Int32(r))
-                    cp.unsafe_store(k, Int32(c))
-                    vp.unsafe_store(k, v.cast[DType.float32]())
-                    k += 1
-            if overflow:
-                break
-    if overflow:
-        raise Error(
-            "nonzero_f64_fill: more than " + String(cap)
-            + " nonzero entries; count first with nonzero_f64_count"
-        )
+        k = nonzero_f64_fill(sp, nr, nc, rp, cp, vp, cap)
     return PythonObject(k)
 
 
@@ -535,38 +488,11 @@ def knn_search_binding(
     var sq = _index(params[4]) != 0
     var dt = _dist_triple(dist_params)
     with GILReleased(Python()):
-        if ni < 0 or nq < 0 or nf < 0 or kk < 0:
-            raise Error("knn_search: a negative dimension was passed")
-        var index = read_f32(index_address, ni * nf)
-        var queries = read_f32(queries_address, nq * nf)
-        var out_dist = List[Float32](length=max(0, nq * kk), fill=Float32(0.0))
-        var out_idx = List[UInt32](length=max(0, nq * kk), fill=UInt32(0))
-        host_knn_search(
-            index, ni, queries, nq, nf, kk, dt[0], sq, out_dist, out_idx,
-            dt[1],
+        knn_search_host(
+            index_address, queries_address, dp, xp, ni, nq, nf, kk, sq,
+            dt[0], dt[1],
         )
-        # the inner-product search selected the NEGATED products: hand back
-        # the products (exact), as the GPU binding's device negation (lane
-        # pyglue-numeric: the Python wrapper negated them)
-        var neg = dt[0] == DIST_INNER_PRODUCT
-        for i in range(nq * kk):
-            dp[i] = -out_dist[i] if neg else out_dist[i]
-            xp[i] = out_idx[i]
     return PythonObject(KNN_HOST_QUERY_TILE)
-
-
-def _knn_host_weighted(weights: Int, who: String) raises -> Bool:
-    """`knn_classifier_predict` / `knn_regressor_predict`'s weights check,
-    same message."""
-    var weighted = weights == KNN_HOST_WEIGHTS_DISTANCE
-    if weights != KNN_HOST_WEIGHTS_UNIFORM and not weighted:
-        raise Error(
-            who
-            + ": weights value "
-            + String(weights)
-            + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
-        )
-    return weighted
 
 
 def knn_classify_binding(
@@ -620,7 +546,7 @@ def knn_classify_binding(
             + String(len(params))
         )
     var n_classes = List[Int]()
-    for i in range(no):
+    for i in range(no):  # small-loop(n_classes argument words, one per output)
         n_classes.append(_index(params[7 + i]))
     var index_address = _index(index_addr)
     var queries_address = _index(queries_addr)
@@ -630,65 +556,10 @@ def knn_classify_binding(
     var up = i32_ptr(_index(out_uniq_addr))
     var dt = _dist_triple(dist_params)
     with GILReleased(Python()):
-        if no < 1:
-            raise Error(
-                "knn_classifier_predict: n_outputs must be positive, got "
-                + String(no)
-            )
-        var weighted = _knn_host_weighted(dt[2], "knn_classifier_predict")
-        if ni < 0 or nq < 0 or nf < 0 or kk < 0:
-            raise Error("knn_classify: a negative dimension was passed")
-        var index = read_f32(index_address, ni * nf)
-        var queries = read_f32(queries_address, nq * nf)
-        var dist = List[Float32](length=max(0, nq * kk), fill=Float32(0.0))
-        var idx = List[UInt32](length=max(0, nq * kk), fill=UInt32(0))
-        # policy 8: the weighted arm needs the ROOTED distance
-        host_knn_search(index, ni, queries, nq, nf, kk, dt[0], weighted, dist, idx, dt[1])
-        var w = List[Float32]()
-        if weighted:
-            w = host_distance_weights(dist, nq, kk)
-        # The unique sets first, checked against the caller's counts
-        # before a byte is written (`_check_class_counts`).
-        var ys = List[List[Int32]]()
-        var uniqs = List[List[Int32]]()
-        for i in range(no):
-            ys.append(read_i32(y_address + i * ni * 4, ni))
-            uniqs.append(host_unique_labels(ys[i], ni))
-            if len(uniqs[i]) != n_classes[i]:
-                raise Error(
-                    "knn_classifier_predict: the implemented getUniquelabels found "
-                    + String(len(uniqs[i]))
-                    + " classes for output "
-                    + String(i)
-                    + " and the caller sized its buffers for "
-                    + String(n_classes[i])
-                    + "; one of the two class sets is wrong and nothing is "
-                    + "written"
-                )
-        var labels_out = List[Int32](length=max(0, nq * no), fill=Int32(0))
-        var off = 0
-        for i in range(no):
-            var n_uniq = len(uniqs[i])
-            var mono = host_monotonic(ys[i], ni, uniqs[i])
-            var proba: List[Float32]
-            if weighted:
-                proba = host_weighted_class_probs(idx, mono, w, n_uniq, nq, kk)
-            else:
-                proba = host_class_probs(idx, mono, n_uniq, nq, kk)
-            if want_proba:
-                for j in range(nq * n_uniq):
-                    pp[off + j] = proba[j]
-                off += nq * n_uniq
-            else:
-                host_class_vote(proba, uniqs[i], n_uniq, nq, labels_out, no, i)
-        if not want_proba:
-            for j in range(nq * no):
-                lp[j] = labels_out[j]
-        var uoff = 0
-        for i in range(no):
-            for j in range(len(uniqs[i])):
-                up[uoff + j] = uniqs[i][j]
-            uoff += len(uniqs[i])
+        knn_classify_host(
+            index_address, queries_address, y_address, lp, pp, up,
+            ni, nq, nf, kk, no, want_proba, n_classes, dt[0], dt[1], dt[2],
+        )
     return PythonObject(KNN_HOST_QUERY_TILE)
 
 
@@ -731,31 +602,10 @@ def knn_regress_binding(
     var no = _index(params[5])
     var dt = _dist_triple(dist_params)
     with GILReleased(Python()):
-        if no < 1:
-            raise Error(
-                "knn_regressor_predict: n_outputs must be positive, got "
-                + String(no)
-            )
-        var weighted = _knn_host_weighted(dt[2], "knn_regressor_predict")
-        if ni < 0 or nq < 0 or nf < 0 or kk < 0:
-            raise Error("knn_regress: a negative dimension was passed")
-        var index = read_f32(index_address, ni * nf)
-        var queries = read_f32(queries_address, nq * nf)
-        var dist = List[Float32](length=max(0, nq * kk), fill=Float32(0.0))
-        var idx = List[UInt32](length=max(0, nq * kk), fill=UInt32(0))
-        host_knn_search(index, ni, queries, nq, nf, kk, dt[0], weighted, dist, idx, dt[1])
-        var w = List[Float32]()
-        if weighted:
-            w = host_distance_weights(dist, nq, kk)
-        var out = List[Float32](length=max(0, nq * no), fill=Float32(0.0))
-        for i in range(no):
-            var y = read_f32(y_address + i * ni * 4, ni)
-            if weighted:
-                host_weighted_regress_avg(idx, y, w, nq, kk, out, no, i)
-            else:
-                host_regress_avg(idx, y, nq, kk, out, no, i)
-        for j in range(nq * no):
-            op[j] = out[j]
+        knn_regress_host(
+            index_address, queries_address, y_address, op,
+            ni, nq, nf, kk, no, dt[0], dt[1], dt[2],
+        )
     return PythonObject(KNN_HOST_QUERY_TILE)
 
 
@@ -769,20 +619,6 @@ def knn_regress_binding(
 # `knn_regress_binding` above, statement for statement, over the given
 # distances and global indices instead of a host search.
 # ===========================================================================
-
-
-def _host_validate_neighbors(
-    idx: List[UInt32], n_index: Int, n_queries: Int, k: Int,
-    n_outputs: Int, weights: Int,
-) raises:
-    """`neighbors/estimator.mojo::_validate_neighbors`, its words."""
-    if n_index < 1 or n_queries < 1 or k < 1 or k > n_index or n_outputs < 1:
-        raise Error("precomputed neighbors: invalid shape")
-    if weights != KNN_HOST_WEIGHTS_UNIFORM and weights != KNN_HOST_WEIGHTS_DISTANCE:
-        raise Error("precomputed neighbors: unsupported weights")
-    for i in range(n_queries * k):
-        if UInt64(idx[i]) >= UInt64(n_index):
-            raise Error("precomputed neighbor index outside reference data")
 
 
 def knn_classify_neighbors_binding(
@@ -817,7 +653,7 @@ def knn_classify_neighbors_binding(
             + String(len(params))
         )
     var n_classes = List[Int]()
-    for i in range(no):
+    for i in range(no):  # small-loop(n_classes argument words, one per output)
         n_classes.append(_index(params[7 + i]))
     var dist_address = _index(dist_addr)
     var idx_address = _index(idx_addr)
@@ -827,62 +663,10 @@ def knn_classify_neighbors_binding(
     var up = i32_ptr(_index(out_uniq_addr))
     var dt = _dist_triple(dist_params)
     with GILReleased(Python()):
-        if ni < 1 or nq < 1 or kk < 1 or kk > ni or no < 1:
-            raise Error("precomputed neighbors: invalid shape")
-        var xp = u32_ptr(idx_address)
-        var idx = List[UInt32](length=nq * kk, fill=UInt32(0))
-        for i in range(nq * kk):
-            idx[i] = xp[i]
-        _host_validate_neighbors(idx, ni, nq, kk, no, dt[2])
-        if len(n_classes) != no:
-            raise Error("precomputed neighbors: class-count shape mismatch")
-        for count in n_classes:
-            if count < 1:
-                raise Error("precomputed neighbors: class counts must be positive")
-        var weighted = dt[2] == KNN_HOST_WEIGHTS_DISTANCE
-        var w = List[Float32]()
-        if weighted:
-            w = host_distance_weights(read_f32(dist_address, nq * kk), nq, kk)
-        var ys = List[List[Int32]]()
-        var uniqs = List[List[Int32]]()
-        for i in range(no):
-            ys.append(read_i32(y_address + i * ni * 4, ni))
-            uniqs.append(host_unique_labels(ys[i], ni))
-            if len(uniqs[i]) != n_classes[i]:
-                raise Error(
-                    "knn_classifier_predict: the implemented getUniquelabels found "
-                    + String(len(uniqs[i]))
-                    + " classes for output "
-                    + String(i)
-                    + " and the caller sized its buffers for "
-                    + String(n_classes[i])
-                    + "; one of the two class sets is wrong and nothing is "
-                    + "written"
-                )
-        var labels_out = List[Int32](length=nq * no, fill=Int32(0))
-        var off = 0
-        for i in range(no):
-            var n_uniq = len(uniqs[i])
-            var mono = host_monotonic(ys[i], ni, uniqs[i])
-            var proba: List[Float32]
-            if weighted:
-                proba = host_weighted_class_probs(idx, mono, w, n_uniq, nq, kk)
-            else:
-                proba = host_class_probs(idx, mono, n_uniq, nq, kk)
-            if want_proba:
-                for j in range(nq * n_uniq):
-                    pp[off + j] = proba[j]
-                off += nq * n_uniq
-            else:
-                host_class_vote(proba, uniqs[i], n_uniq, nq, labels_out, no, i)
-        if not want_proba:
-            for j in range(nq * no):
-                lp[j] = labels_out[j]
-        var uoff = 0
-        for i in range(no):
-            for j in range(len(uniqs[i])):
-                up[uoff + j] = uniqs[i][j]
-            uoff += len(uniqs[i])
+        knn_classify_neighbors_host(
+            dist_address, idx_address, y_address, lp, pp, up,
+            ni, nq, kk, no, want_proba, n_classes, dt[2],
+        )
     return PythonObject(0)
 
 
@@ -912,26 +696,9 @@ def knn_regress_neighbors_binding(
     var no = _index(params[5])
     var dt = _dist_triple(dist_params)
     with GILReleased(Python()):
-        if ni < 1 or nq < 1 or kk < 1 or kk > ni or no < 1:
-            raise Error("precomputed neighbors: invalid shape")
-        var xp = u32_ptr(idx_address)
-        var idx = List[UInt32](length=nq * kk, fill=UInt32(0))
-        for i in range(nq * kk):
-            idx[i] = xp[i]
-        _host_validate_neighbors(idx, ni, nq, kk, no, dt[2])
-        var weighted = dt[2] == KNN_HOST_WEIGHTS_DISTANCE
-        var w = List[Float32]()
-        if weighted:
-            w = host_distance_weights(read_f32(dist_address, nq * kk), nq, kk)
-        var out = List[Float32](length=nq * no, fill=Float32(0.0))
-        for i in range(no):
-            var y = read_f32(y_address + i * ni * 4, ni)
-            if weighted:
-                host_weighted_regress_avg(idx, y, w, nq, kk, out, no, i)
-            else:
-                host_regress_avg(idx, y, nq, kk, out, no, i)
-        for j in range(nq * no):
-            op[j] = out[j]
+        knn_regress_neighbors_host(
+            dist_address, idx_address, y_address, op, ni, nq, kk, no, dt[2],
+        )
     return PythonObject(0)
 
 
@@ -939,31 +706,6 @@ def knn_regress_neighbors_binding(
 # THE BALL COVER ENTRIES (lane/cpu-training-batch3, 2026-09-14). The GPU
 # binding's names and params lists (`bindings/_mojolearn.mojo:467-627`).
 # ===========================================================================
-
-
-def _radius_check_shapes(
-    n_index: Int, n_queries: Int, n_features: Int, radius: Float32, who: String
-) raises:
-    """`neighbors/estimator.mojo::_radius_check_shapes`, its words."""
-    if n_index <= 0:
-        raise Error(who + ": n_index must be positive, got " + String(n_index))
-    if n_queries <= 0:
-        raise Error(
-            who + ": n_queries must be positive, got " + String(n_queries)
-        )
-    if n_features <= 0:
-        raise Error(
-            who + ": n_features must be positive, got " + String(n_features)
-        )
-    if not (radius > Float32(0.0)):
-        raise Error(
-            who
-            + ": radius must be positive and finite, got "
-            + String(radius)
-            + ". A radius of zero returns each query's exact duplicates only,"
-            " which the index is not built to answer, and a negative or NaN"
-            " radius has no neighbourhood at all."
-        )
 
 
 def radius_neighbors_count_binding(
@@ -993,18 +735,9 @@ def radius_neighbors_count_binding(
     var marg = Float32(Float64(py=params[5]))
     var nnz = 0
     with GILReleased(Python()):
-        _radius_check_shapes(ni, nq, nf, rad, "radius_neighbors_count")
-        rbc_validate_metric(mtr, marg)
-        var index = read_f32(index_address, ni * nf)
-        var queries = read_f32(queries_address, nq * nf)
-        var counts = List[Int32](length=nq, fill=Int32(0))
-        host_rbc_radius_counts(
-            index, ni, queries, nq, nf, rad, mtr, marg, counts
+        nnz = radius_neighbors_count_host(
+            index_address, queries_address, ap, ni, nq, nf, rad, mtr, marg,
         )
-        ap[0] = Int32(0)
-        for q in range(nq):
-            nnz += Int(counts[q])
-            ap[q + 1] = Int32(nnz)
     return PythonObject(nnz)
 
 
@@ -1044,53 +777,10 @@ def radius_neighbors_fill_binding(
         dist_address = _index(out_dist_addr)
     var nnz = 0
     with GILReleased(Python()):
-        _radius_check_shapes(ni, nq, nf, rad, "radius_neighbors_fill")
-        rbc_validate_metric(mtr, marg)
-        if cap < 0:
-            raise Error(
-                "radius_neighbors_fill: nnz_capacity must not be negative, got "
-                + String(cap)
-            )
-        var index = read_f32(index_address, ni * nf)
-        var queries = read_f32(queries_address, nq * nf)
-        var indptr = List[Int32](length=nq + 1, fill=Int32(0))
-        if ap[0] != Int32(0) or Int(ap[nq]) != cap:
-            raise Error(
-                "radius_neighbors_fill: indptr must start at zero and end at"
-                " nnz_capacity; call radius_neighbors_count first"
-            )
-        for q in range(nq):
-            if ap[q + 1] < ap[q]:
-                raise Error("radius_neighbors_fill: indptr must be nondecreasing")
-            indptr[q] = ap[q]
-        indptr[nq] = ap[nq]
-        var cols = List[Int32](length=cap, fill=Int32(0))
-        var dists = List[Float32](length=cap, fill=Float32(0.0))
-        var actual_counts = List[Int32](length=nq, fill=Int32(0))
-        host_rbc_radius_fill_rows(
-            index, ni, queries, nq, nf, rad, sq, mtr, marg,
-            indptr, actual_counts, cols, dists,
+        nnz = radius_neighbors_fill_host(
+            index_address, queries_address, ap, idx_address, dist_address,
+            ni, nq, nf, rad, cap, sq, mtr, marg,
         )
-        for q in range(nq):
-            var expected = Int(indptr[q + 1] - indptr[q])
-            var actual = Int(actual_counts[q])
-            nnz += actual
-            if actual != expected:
-                raise Error(
-                    "radius_neighbors_fill: query row " + String(q)
-                    + " changed from " + String(expected) + " to "
-                    + String(actual) + " edges between the count and fill calls."
-                    " Re-run radius_neighbors_count against the arrays this call"
-                    " was given rather than returning a stale CSR layout."
-                )
-        if nnz > 0:
-            var xp = i32_ptr(idx_address)
-            var dp = f32_ptr(dist_address)
-            for p in range(nnz):
-                xp[p] = cols[p]
-                dp[p] = dists[p]
-        for q in range(nq + 1):
-            ap[q] = indptr[q]
     return PythonObject(nnz)
 
 
@@ -1123,37 +813,9 @@ def rbc_knn_search_binding(
     var mtr = _index(params[4])
     var marg = Float32(Float64(py=params[5]))
     with GILReleased(Python()):
-        _radius_check_shapes(ni, nq, nf, Float32(1.0), "rbc_knn_search")
-        rbc_validate_metric(mtr, marg)
-        if kk < 1:
-            raise Error("rbc_knn_search: k must be at least 1, got " + String(kk))
-        if kk > ni:
-            raise Error(
-                "rbc_knn_search: k = "
-                + String(kk)
-                + " exceeds the "
-                + String(ni)
-                + " points in the index. Refused rather than padded: a padded"
-                " answer is indistinguishable from a complete one."
-            )
-        if kk > RBC_KNN_MAX_K:
-            raise Error(
-                "rbc_knn_search: k = "
-                + String(kk)
-                + " exceeds RBC_KNN_MAX_K = "
-                + String(RBC_KNN_MAX_K)
-                + ". Use knn_search, whose selector is sized per launch."
-            )
-        var index = read_f32(index_address, ni * nf)
-        var queries = read_f32(queries_address, nq * nf)
-        var out_idx = List[Int32](length=nq * kk, fill=Int32(-1))
-        var out_dist = List[Float32](length=nq * kk, fill=Float32(0.0))
-        host_rbc_knn_search(
-            index, ni, queries, nq, nf, kk, mtr, marg, out_idx, out_dist,
+        rbc_knn_search_host(
+            index_address, queries_address, xp, dp, ni, nq, nf, kk, mtr, marg,
         )
-        for i in range(nq * kk):
-            xp[i] = out_idx[i]
-            dp[i] = out_dist[i]
     return PythonObject(nq * ni)
 
 
@@ -1221,30 +883,14 @@ def kmeans_fit_binding(
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        host_kmeans_validate(ns, nf, nc, nw)
-        var x = read_f32(x_address, ns * nf)
-        var centroids: List[Float32]
-        if ii == INIT_ARRAY:
-            centroids = read_f32(centroids_address, nc * nf)
-        else:
-            centroids = List[Float32](length=nc * nf, fill=Float32(0.0))
-        var weights = List[Float32]()
-        if nw != 0:
-            weights = read_f32(weights_address, nw)
-        var labels = List[UInt32](length=ns, fill=UInt32(0))
-        var r = host_kmeans_fit(
-            x, ns, nf, nc, centroids, labels, weights, nw, mi, tl, sd,
-            ninit, ii, mm, ovs,
+        var r = kmeans_fit_host(
+            x_address, centroids_address, lp, weights_address,
+            ns, nf, nc, nw, mi, tl, sd, ninit, ii, mm, ovs,
         )
-        var cp = f32_ptr(centroids_address)
-        for i in range(nc * nf):
-            cp[i] = centroids[i]
-        for i in range(ns):
-            lp[i] = labels[i]
-        inertia = r.inertia
-        n_iter = r.n_iter
-        sum_scale = r.sum_scale
-        weight_scale = r.weight_scale
+        inertia = r[0]
+        n_iter = r[1]
+        sum_scale = r[2]
+        weight_scale = r[3]
     var out = Python.list()
     out.append(PythonObject(inertia))
     out.append(PythonObject(n_iter))
@@ -1278,21 +924,7 @@ def kmeans_predict_binding(
     var nc = _index(params[2])
     var mm = _index(params[3])
     with GILReleased(Python()):
-        if ns < 1 or nf < 1 or nc < 1:
-            raise Error(
-                "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
-                + String(ns)
-                + ", "
-                + String(nf)
-                + ", "
-                + String(nc)
-            )
-        var x = read_f32(x_address, ns * nf)
-        var centroids = read_f32(centroids_address, nc * nf)
-        var labels = List[UInt32](length=ns, fill=UInt32(0))
-        host_kmeans_predict(x, ns, nf, centroids, nc, mm, labels)
-        for i in range(ns):
-            lp[i] = labels[i]
+        kmeans_predict_host(x_address, centroids_address, lp, ns, nf, nc, mm)
     return PythonObject(ns)
 
 
@@ -1321,21 +953,7 @@ def kmeans_transform_binding(
     var nc = _index(params[2])
     var mm = _index(params[3])
     with GILReleased(Python()):
-        if ns < 1 or nf < 1 or nc < 1:
-            raise Error(
-                "kmeans_transform needs n_samples, n_features and n_clusters >= 1: got "
-                + String(ns)
-                + ", "
-                + String(nf)
-                + ", "
-                + String(nc)
-            )
-        var x = read_f32(x_address, ns * nf)
-        var centroids = read_f32(centroids_address, nc * nf)
-        var out = List[Float32](length=ns * nc, fill=Float32(0.0))
-        host_kmeans_transform(x, ns, nf, centroids, nc, mm, out)
-        for i in range(ns * nc):
-            op[i] = out[i]
+        kmeans_transform_host(x_address, centroids_address, op, ns, nf, nc, mm)
     return PythonObject(ns)
 
 

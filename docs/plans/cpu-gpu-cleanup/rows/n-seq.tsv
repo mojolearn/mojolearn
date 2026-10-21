@@ -9,7 +9,7 @@ host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/im
 host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:nrm_max_at
 host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	step[b] = ftz(Float32(1.0) / nrm2_at(drt, b * n, n))
 tid0-loop	serial-gpu	UNOWNED	debt	arima/impl/fast_arma_ls.mojo	0	if tid == 0:
-host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	import core/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	var src = read_f32(address, n)
 host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	import holtwinters/host/hw_predict.mojo:hw_forecast_from_state_ptr
 host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	import holtwinters/host/hw_predict.mojo:hw_predict_in_sample_ptr

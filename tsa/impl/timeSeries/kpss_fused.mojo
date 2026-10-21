@@ -45,7 +45,7 @@ from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from bindings.hostptr import copy_f32
+from core.hostptr import copy_f32
 from core.pinned_reduce import pinned_block_min, pinned_block_prefix_sum, pinned_block_sum
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from tsa.impl.timeSeries.stationarity import kpss_lags, kpss_pvalue, kpss_s2B_coefficients, kpss_stat_from_sums
