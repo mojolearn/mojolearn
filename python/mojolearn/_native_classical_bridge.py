@@ -54,15 +54,49 @@ _NPY_DTYPES = ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2", "=f4", "=f8", "=
 
 
 def _numpy():
-    # glue: NumPy is optional. Without it the owner reads and returns
-    # mojolearn Arrays; a broken NumPy installation still raises.
-    try:
-        import numpy
-    except ModuleNotFoundError as error:
-        if error.name != "numpy":
-            raise
-        return None
-    return numpy
+    # glue: NumPy is optional and importing mojolearn never loads it. A
+    # caller's ndarray exists only once NumPy is loaded, so the loaded module
+    # decides: without it the owner reads and returns mojolearn Arrays, and
+    # the native entries connect the NumPy context when NumPy is loaded later
+    # (`_connect_numpy`).
+    import sys
+    return sys.modules.get("numpy")
+
+
+def _archive_npy_dtypes(np):
+    # glue: the archive dtypes the reader admits: NumPy dtypes with NumPy,
+    # the Array typestr each one is stored as without it.
+    if np is not None:
+        npy_dtypes = {name: np.dtype(name) for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
+        npy_dtypes.update({"|u1": np.dtype("u1"), "|b1": np.dtype("u1")})
+    else:
+        npy_dtypes = {name: "<" + name[1:] for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
+        npy_dtypes.update({"|u1": "<u1", "|b1": "<u1"})
+    return npy_dtypes
+
+
+def _numpy_context(np):
+    # glue: the NumPy admission types and dtypes (the Sequential context)
+    # plus the NumPy archive dtypes.
+    from ._x_sequence_model import _SEQUENTIAL_CONTEXT
+    context = dict(_SEQUENTIAL_CONTEXT)
+    context["archive_npy_dtypes"] = _archive_npy_dtypes(np)
+    return context
+
+
+def _connect_numpy(context):
+    # glue: called by the native classical entries (bindings/
+    # classical_attributes.mojo classical_connect_numpy) the first time they
+    # run with NumPy loaded after a NumPy-free connection. Every entry the
+    # NumPy-free connection installed and nothing changed since is replaced
+    # by its NumPy counterpart; entries set after connection (the explicit
+    # host vendor) are kept.
+    import sys
+    numpy_free = context.pop("classical_numpy_free")
+    for key, value in _numpy_context(sys.modules["numpy"]).items():  # glue: connect the NumPy admission entries once
+        if key not in context or context[key] is numpy_free.get(key, context):
+            context[key] = value
+    context.pop("classical_connect_numpy", None)
 
 
 def _numpy_free_context():
@@ -71,6 +105,7 @@ def _numpy_free_context():
     from collections import OrderedDict, defaultdict
     from pathlib import PosixPath, PurePosixPath
     import mmap
+    import sys
     from array import array
     from . import _backend
     from ._array import Array
@@ -85,6 +120,7 @@ def _numpy_free_context():
         "array_type": array, "array_class": Array, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
         "buffer_codes": {("b", 1): "b", ("i", 8): "q", ("u", 8): "Q", ("f", 8): "d"},
         "int64_min": -(2 ** 63), "int64_max": 2 ** 63 - 1, "uint64_max": 2 ** 64 - 1,
+        "modules": sys.modules,
     }
 
 
@@ -113,10 +149,11 @@ def connect(ridge_class, linear_class=None):
 
     np = _numpy()
     if np is not None:
-        from ._x_sequence_model import _SEQUENTIAL_CONTEXT
-        context = dict(_SEQUENTIAL_CONTEXT)
+        context = _numpy_context(np)
     else:
         context = _numpy_free_context()
+        context["archive_npy_dtypes"] = _archive_npy_dtypes(None)
+        context.update(classical_numpy_free=dict(context), classical_connect_numpy=_connect_numpy)
     context.update(not_fitted_class=NotFittedError, not_fitted_doc=NotFittedError.__doc__,
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
@@ -159,14 +196,6 @@ def connect(ridge_class, linear_class=None):
                 or not isinstance(zstd_class.__new__, BuiltinFunctionType)
                 or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
             raise TypeError("classical archives require a native Zstandard byte decompressor")
-    # The archive dtypes the reader admits: NumPy dtypes with NumPy, the
-    # Array typestr each one is stored as without it.
-    if np is not None:
-        npy_dtypes = {name: np.dtype(name) for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
-        npy_dtypes.update({"|u1": np.dtype("u1"), "|b1": np.dtype("u1")})
-    else:
-        npy_dtypes = {name: "<" + name[1:] for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
-        npy_dtypes.update({"|u1": "<u1", "|b1": "<u1"})
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
                    archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
                    archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
@@ -175,7 +204,7 @@ def connect(ridge_class, linear_class=None):
                    archive_lzma_properties=None if _lzma is None else _lzma._decode_filter_properties,
                    archive_lzma1=None if _lzma is None else _lzma.FILTER_LZMA1,
                    archive_lzma_raw=None if _lzma is None else _lzma.FORMAT_RAW,
-                   archive_zstd=zstd_class, archive_npy_dtypes=npy_dtypes,
+                   archive_zstd=zstd_class,
                    archive_cp437=tuple(bytes(range(256)).decode("cp437")),
                    archive_npy_magic=b"\x93NUMPY", archive_zip_end=b"PK\x05\x06")
     connected = {}

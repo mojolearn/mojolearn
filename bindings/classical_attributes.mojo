@@ -127,6 +127,20 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     return member
 
 
+def classical_connect_numpy(context: PythonObject) raises:
+    """Connect the NumPy admission entries the first time a classical entry
+    runs with NumPy loaded after a NumPy-free connection (NumPy imported
+    after mojolearn). An ndarray exists only once NumPy is loaded, so the
+    loaded module decides; NumPy is never imported here."""
+    if py_get(context, "ndarray") is not None:
+        return
+    var connect = py_get(context, "classical_connect_numpy")
+    if connect is None:
+        return
+    if py_get(context["modules"], "numpy") is not None:
+        _ = py_call(connect, context)
+
+
 def _attribute_context(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var host = py_get(context, "classical_host_context")
@@ -140,6 +154,7 @@ def classical_attribute_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") 
         var args = PythonObject(from_borrowed=args_ptr)
         var model = args[1]
         var context = _attribute_context(model, args[0])
+        classical_connect_numpy(context)
         var result = classical_getattribute(model, args[2], context)
         return result.steal_data()
     except error:

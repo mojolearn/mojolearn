@@ -11,7 +11,7 @@ from bindings.classical_ridge import classical_ridge_fit, classical_ridge_parame
 from bindings.classical_ols import classical_ols_fit
 from bindings.classical_score import classical_linear_score
 from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_names
-from bindings.classical_attributes import classical_check_layout, classical_getattribute
+from bindings.classical_attributes import classical_check_layout, classical_getattribute, classical_connect_numpy
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
@@ -103,6 +103,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var host_context = py_get(context, "classical_host_context")
             if host_context is None:
                 raise Error("RuntimeError: the explicit host linear models are not connected")
+            classical_connect_numpy(host_context)
             classical_admit_value(args, host_context)
             var hosted = classical_host_model(args[0], host_context)
             return hosted.steal_data()
@@ -112,6 +113,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var host = py_get(context, "classical_host_context")
         if host is not None and py_contains(host["classical_kinds"], cls):
             context = host
+        classical_connect_numpy(context)
         # classical_kinds maps each connected class (Ridge, LinearRegression,
         # their explicit host classes and subclasses) to True for the Ridge
         # family and False for LinearRegression.
