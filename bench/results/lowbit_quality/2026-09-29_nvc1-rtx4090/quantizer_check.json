@@ -1,0 +1,476 @@
+{
+ "schema": "mojolearn.lowbit_quality.quantizer_check.v1",
+ "commit": "b1864910916791b6d63cf24e9840226b0d7761e6",
+ "stamp_utc": "2026-09-29T02:45:02Z",
+ "mojolearn": "0.8.25",
+ "pack_backend": "host",
+ "host_binding": "/root/lowbit-quality-work/host/_mojolearn_linalg_host.so",
+ "host_dir": "/root/lowbit-quality-work/host",
+ "tensors": {
+  "weight layers.0.q_proj": {
+   "shape": [
+    960,
+    960
+   ],
+   "elements": 921600,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -8,
+   "exponent_max": -4,
+   "codes_at_clamp": 10,
+   "codes_zero_fraction": 0.05959743923611111,
+   "exact_ties": 50889,
+   "pure_python_rows": 625,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 0,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 26626,
+    "truncate": 421319,
+    "scale_one_exponent_off": 868514
+   }
+  },
+  "weight layers.15.down_proj": {
+   "shape": [
+    960,
+    2560
+   ],
+   "elements": 2457600,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -7,
+   "exponent_max": -5,
+   "codes_at_clamp": 2,
+   "codes_zero_fraction": 0.021915283203125,
+   "exact_ties": 235376,
+   "pure_python_rows": 234,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 0,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 121099,
+    "truncate": 1097835,
+    "scale_one_exponent_off": 2405264
+   }
+  },
+  "weight layers.31.gate_proj": {
+   "shape": [
+    2560,
+    960
+   ],
+   "elements": 2457600,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -8,
+   "exponent_max": -4,
+   "codes_at_clamp": 44,
+   "codes_zero_fraction": 0.017794189453125,
+   "exact_ties": 275133,
+   "pure_python_rows": 625,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 0,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 141022,
+    "truncate": 1079780,
+    "scale_one_exponent_off": 2417052
+   }
+  },
+  "weight layers.7.k_proj": {
+   "shape": [
+    320,
+    960
+   ],
+   "elements": 307200,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -8,
+   "exponent_max": -5,
+   "codes_at_clamp": 5,
+   "codes_zero_fraction": 0.020322265625,
+   "exact_ties": 32167,
+   "pure_python_rows": 320,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 0,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 16562,
+    "truncate": 135634,
+    "scale_one_exponent_off": 301242
+   }
+  },
+  "weight embed rows 0..2047": {
+   "shape": [
+    2048,
+    960
+   ],
+   "elements": 1966080,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -9,
+   "exponent_max": -5,
+   "codes_at_clamp": 12,
+   "codes_zero_fraction": 0.02828216552734375,
+   "exact_ties": 170029,
+   "pure_python_rows": 625,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 0,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 87601,
+    "truncate": 883657,
+    "scale_one_exponent_off": 1912994
+   }
+  },
+  "activation layers.0.q_proj.input": {
+   "shape": [
+    512,
+    960
+   ],
+   "elements": 491520,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -8,
+   "exponent_max": -5,
+   "codes_at_clamp": 6,
+   "codes_zero_fraction": 0.39422403971354164,
+   "exact_ties": 0,
+   "pure_python_rows": 512,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 491097,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 180834,
+    "scale_one_exponent_off": 313618
+   }
+  },
+  "activation layers.16.down_proj.input": {
+   "shape": [
+    512,
+    2560
+   ],
+   "elements": 1310720,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -7,
+   "exponent_max": -3,
+   "codes_at_clamp": 13,
+   "codes_zero_fraction": 0.1667724609375,
+   "exact_ties": 0,
+   "pure_python_rows": 234,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 1310705,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 586748,
+    "scale_one_exponent_off": 1107326
+   }
+  },
+  "activation layers.31.o_proj.input": {
+   "shape": [
+    512,
+    960
+   ],
+   "elements": 491520,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -5,
+   "exponent_max": -3,
+   "codes_at_clamp": 2,
+   "codes_zero_fraction": 0.04244588216145833,
+   "exact_ties": 0,
+   "pure_python_rows": 512,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 491512,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 240786,
+    "scale_one_exponent_off": 471084
+   }
+  },
+  "activation lm_head.input": {
+   "shape": [
+    512,
+    960
+   ],
+   "elements": 491520,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -3,
+   "exponent_max": -1,
+   "codes_at_clamp": 10,
+   "codes_zero_fraction": 0.24679361979166667,
+   "exact_ties": 0,
+   "pure_python_rows": 512,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 491513,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 213866,
+    "scale_one_exponent_off": 375620
+   }
+  },
+  "activation layers.10.attn_qk.a head 0": {
+   "shape": [
+    512,
+    64
+   ],
+   "elements": 32768,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -5,
+   "exponent_max": -3,
+   "codes_at_clamp": 10,
+   "codes_zero_fraction": 0.03741455078125,
+   "exact_ties": 0,
+   "pure_python_rows": 512,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 32767,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 16053,
+    "scale_one_exponent_off": 32033
+   }
+  },
+  "activation layers.10.attn_qk.b head 0": {
+   "shape": [
+    512,
+    64
+   ],
+   "elements": 32768,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -5,
+   "exponent_max": -3,
+   "codes_at_clamp": 7,
+   "codes_zero_fraction": 0.019439697265625,
+   "exact_ties": 0,
+   "pure_python_rows": 512,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 32766,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 16347,
+    "scale_one_exponent_off": 32618
+   }
+  },
+  "activation layers.10.attn_pv.a head 3 (P rows)": {
+   "shape": [
+    512,
+    512
+   ],
+   "elements": 262144,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -9,
+   "exponent_max": -6,
+   "codes_at_clamp": 12,
+   "codes_zero_fraction": 0.9605598449707031,
+   "exact_ties": 0,
+   "pure_python_rows": 512,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 131323,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 6824,
+    "scale_one_exponent_off": 15662
+   }
+  },
+  "activation layers.10.attn_pv.b head 3 (V^T rows)": {
+   "shape": [
+    64,
+    512
+   ],
+   "elements": 32768,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -6,
+   "exponent_max": -5,
+   "codes_at_clamp": 1,
+   "codes_zero_fraction": 0.0155029296875,
+   "exact_ties": 0,
+   "pure_python_rows": 64,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 32768,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 16243,
+    "scale_one_exponent_off": 32329
+   }
+  },
+  "activation layers.31.attn_pv.a head 14 (P rows)": {
+   "shape": [
+    512,
+    512
+   ],
+   "elements": 262144,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -11,
+   "exponent_max": -6,
+   "codes_at_clamp": 5,
+   "codes_zero_fraction": 0.8977203369140625,
+   "exact_ties": 0,
+   "pure_python_rows": 512,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 131321,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 0,
+    "truncate": 16470,
+    "scale_one_exponent_off": 32836
+   }
+  },
+  "planted edge cases": {
+   "shape": [
+    9,
+    8
+   ],
+   "elements": 72,
+   "codes_differing_vs_pack": 0,
+   "exponents_differing_vs_pack": 0,
+   "exponent_min": -129,
+   "exponent_max": 121,
+   "codes_at_clamp": 9,
+   "codes_zero_fraction": 0.4722222222222222,
+   "exact_ties": 15,
+   "pure_python_rows": 9,
+   "codes_differing_vs_pure_python": 0,
+   "exponents_differing_vs_pure_python": 0,
+   "bf16_bits_differing_vs_pack": 0,
+   "bf16_changes_value": 18,
+   "materialized_bits_differing": 0,
+   "equal": true,
+   "sabotage_codes_differing": {
+    "half_away": 7,
+    "truncate": 10,
+    "scale_one_exponent_off": 38
+   }
+  }
+ },
+ "sabotage": {
+  "differing_on_real_tensors": {
+   "half_away": 392910,
+   "truncate": 4912396,
+   "scale_one_exponent_off": 10318192
+  },
+  "differing_with_planted": {
+   "half_away": 392917,
+   "truncate": 4912406,
+   "scale_one_exponent_off": 10318230
+  },
+  "every_arm_fails": true
+ },
+ "int8_product_vs_host_oracle": {
+  "products": {
+   "layers.0.q_proj (128 tokens x 96 weight rows, k=960)": {
+    "cells": 12288,
+    "bits_differing_vs_host_oracle": 0,
+    "nan_in_both": 0,
+    "equal": true,
+    "sabotage_half_away_bits_differing": 12044,
+    "relative_error_against_float64_product": 0.021471500744607647
+   },
+   "layers.16.down_proj (96 tokens x 64 weight rows, k=2560)": {
+    "cells": 6144,
+    "bits_differing_vs_host_oracle": 0,
+    "nan_in_both": 0,
+    "equal": true,
+    "sabotage_half_away_bits_differing": 6105,
+    "relative_error_against_float64_product": 0.05098787247290892
+   },
+   "lm_head (64 tokens x 256 table rows, k=960)": {
+    "cells": 16384,
+    "bits_differing_vs_host_oracle": 0,
+    "nan_in_both": 0,
+    "equal": true,
+    "sabotage_half_away_bits_differing": 15968,
+    "relative_error_against_float64_product": 0.07556760197891346
+   },
+   "layers.10.attn_qk head 0 (128 x 128, k=64)": {
+    "cells": 16384,
+    "bits_differing_vs_host_oracle": 0,
+    "nan_in_both": 0,
+    "equal": true,
+    "sabotage_half_away_bits_differing": 0,
+    "relative_error_against_float64_product": 0.014260414421085516
+   },
+   "layers.10.attn_pv head 3 (128 x 64, k=512)": {
+    "cells": 8192,
+    "bits_differing_vs_host_oracle": 0,
+    "nan_in_both": 0,
+    "equal": true,
+    "sabotage_half_away_bits_differing": 0,
+    "relative_error_against_float64_product": 0.04994068320421621
+   },
+   "planted edge cases (9 x 9, k=8)": {
+    "cells": 81,
+    "bits_differing_vs_host_oracle": 0,
+    "nan_in_both": 0,
+    "equal": true,
+    "sabotage_half_away_bits_differing": 17,
+    "relative_error_against_float64_product": Infinity
+   }
+  },
+  "all_equal": true,
+  "sabotage_fails": true
+ },
+ "l5_sum_to_float": {
+  "values": 1012492,
+  "differing": 0,
+  "equal": true,
+  "sabotage_truncate_differing": 486192,
+  "sabotage_fails": true
+ },
+ "verdict": "PASS"
+}

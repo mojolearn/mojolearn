@@ -46,10 +46,10 @@ The (d) branches may also hold work main lacks, but no doc gives a verdict:
 - `lane/lowbit-apple-tuned`, `lane/lowbit-e2e`, `lane/lowbit-quality` (2026-09-29): int15 Apple tuned GEMM checks and price
   bench, low-bit end-to-end probes, and a low-bit quality bench (`gemm/checks/gemm_int15_apple_tuned.mojo`,
   `bench/lowbit_quality/*`, `tools/lowbit_e2e/*`). None of these files is on main. Research and measurement code, not library
-  runtime. The owner should say whether the low-bit program is still live.
+  runtime. Resolved below: ported as tooling.
 - `lane/mamba3-statepass` (2026-09-09, 23 ahead): Mamba3 SISO direct transfers and tiled QKS/YSTATE state passing with H100
   evidence. Its defines are absent and its file `mamba/impl/mamba_ssm/ops/mamba3_siso.mojo` is gone from main (Mamba3 now
-  lives in `autograd/kernels/mamba3.mojo`). Probably superseded, but nothing records that.
+  lives in `autograd/kernels/mamba3.mojo`). Resolved below: it is on main (16b650a67).
 
 ## Notes
 
@@ -62,6 +62,44 @@ The (d) branches may also hold work main lacks, but no doc gives a verdict:
   each earlier link is a strict prefix of the next, so only the tip that EXPERIMENTS.md cites needs keeping.
 - **fp-contract-off-study:** its study README (contract=off moves 16 of 627 cells) is not on main. Port the README if the result
   should stay findable.
+
+## Resolved
+
+Lane `port-lowbit-lanes`, 2026-10-21. Each (d) branch below was read commit by commit against today's main.
+
+- `lane/lowbit-apple-tuned` @ 4d265d747: **(1) checks and a price bench, ported.** Tuned Apple float-unit forms of
+  int15i64.v1 (FOUR, THREE, TWO), their gate and clock; nothing was dispatched. Main's `_numeric_profile.MEASURED`
+  already cites its job 1 results. Ported to `gemm/checks/gemm_int15_apple_tuned{,_check,_dev,_threads_probe}.mojo`,
+  `gemm/checks/gemm_apple_devload_probe{1,2}.mojo`, `bench/gemm_int15_apple_tuned_price_main.mojo`,
+  `tools/lowbit_apple_tuned/{job.sh,table.py}`, tables, digests and job notes under `bench/results/lowbit_apple_tuned/`
+  (no logs or speed dumps), progress file `docs/studies/lowbit/APPLE_TUNED_INT15_2026-09-29.md`. Adapted: the profile
+  bound, `OP_*`, the host sabotage switch and the value flip now come from `gemm/contract.mojo`, and both tuned stores
+  carry main's exponent arm (`MOJOLEARN_INT15_EXPONENT_SABOTAGE`), as `gemm_int15_apple.mojo` does. Uncompiled on main.
+  Owed: the tuned check does not call `check_int15_row_scales`, so the exponent arm has no gate line in `job.sh` yet.
+- `lane/lowbit-e2e` @ b53c7d168: **(1) a public-call probe, ported.** `tools/lowbit_e2e/{job.sh,public_probe.py,model_probe.py}`
+  (fixed15_v1 against fp32_v1 through `mojolearn.linalg`, cross-vendor hashes); H100 and MI325X summary JSON under
+  `bench/results/lowbit_e2e/2026-09-29/`; progress and handoff under `docs/studies/lowbit/E2E*_2026-09-29.md`.
+  `model_probe.py` was never run. The steward/`nvidia_central` commands in the handoff are historical; today a run goes
+  through `lq add <box> CMD`.
+- `lane/lowbit-quality` @ b967b0647: **(1) a quality bench, ported.** The rest of `bench/lowbit_quality/` (the Llama
+  simulation, inference evaluation, byte-LM training simulation, backward export, quantizer check, table builders, job
+  scripts). Main's `arith.py` (same arithmetic, newer pin, neutral comments) is kept. Ported the inference and training
+  tables and top-level summary JSON under `bench/results/lowbit_quality/` (the 112 MB of per-run records and npz stay on
+  the branch), and the progress file `docs/studies/lowbit/QUALITY_2026-09-29.md`. Its verdicts are the source of
+  `_numeric_profile.REJECTED` (int8) and the fixed15 quality numbers.
+- `lane/mamba3-statepass` @ b42f1c857: **(a) on main, not (d).** Squash-merged on 2026-09-09 as 16b650a67 ("Remove
+  Mamba3 transfer overhead and tile state computations without changing folds"). The files were moved by 48c4092ff,
+  not deleted: `mamba/impl/ops/mamba3_siso.mojo`, `mamba/impl/modules/mamba3_transfer.mojo`,
+  `mamba/host/gen/mamba3_refusal.mojo`; `mamba/checks/mamba3_refusal_check.mojo`, `mamba3_statepass_price.mojo` and
+  `tools/mamba3_statepass_leg.sh` are on main, and the `MOJOLEARN_MAMBA3_LEGACY_*` defines are in `mamba3_siso.mojo`.
+  The handoff and evidence README were removed by the cleanups 2e7d346a5 and cbe5a8a63. The one part never merged is
+  the rejected hardware-FTZ fold (`MOJOLEARN_MAMBA3_HARDWARE_FOLD`, `mamba3_fold.mojo`, `mamba3_fold_check.mojo`): on
+  the H100 it returns zero for 0x3f7fffff * 0x00800000 + 0, and the lane withdrew it. It never reached main, so it
+  needs no patch, and the code can be recovered at that sha. Retire.
+- `lane/fp-contract-off-study` @ c53393787: **(1) a study, ported.** The README is now
+  `docs/studies/FP_CONTRACT_OFF_2026-09-26.md`. contract=off moves 16 of 627 cells on Metal, the RTX 4090 and the CPU.
+  It also splits the CPU from both GPUs on the Poisson loss (6 cells). The recommendation is to keep the default and
+  write those expressions with explicit `fma`. The hook (`MOJOLEARN_MOJO_BUILD_FLAGS`) is on main. Retire the branch.
 
 ## Table
 
@@ -286,7 +324,7 @@ The (d) branches may also hold work main lacks, but no doc gives a verdict:
 | `lane/forest-train-speed` | 2026-09-17 | 1 (1) | 3: extratrees/impl, docs/lanes | b | candidate-audit-2026-10-04.md:37 "NOT YET BUILT", abandoned | retire |
 | `lane/forest-training-cpu-20260919` | 2026-09-19 | 1 (0) | 1: ensemble/host | a | git cherry: all 1 commits patch-equal on main | retire |
 | `lane/fp-contract-off-exp` | 2026-09-25 | 1 (0) | 24: bindings/build.sh, bindings/build_arima.sh, bindings/build_byte_lm.sh | a | git cherry: all 1 commits patch-equal on main | retire |
-| `lane/fp-contract-off-study` | 2026-09-25 | 2 (1) | 1: bench/results | b | study result only (bench/results/fp_contract_off_2026-09-26 README: contract=off moves 16 of 627 cells); the build-flag hook landed via lane/fp-contract-off-exp (patch-equal on main); the README is not on main | retire (or port the README) |
+| `lane/fp-contract-off-study` | 2026-09-25 | 2 (1) | 1: bench/results | b | study result only (bench/results/fp_contract_off_2026-09-26 README: contract=off moves 16 of 627 cells); the build-flag hook landed via lane/fp-contract-off-exp (patch-equal on main); the README is not on main | retire (resolved: see Resolved) |
 | `lane/gbdt-depthwise-fast` | 2026-09-20 | 1 (0) | 1: gbdt/methods | a | git cherry: all 1 commits patch-equal on main | retire |
 | `lane/gbdt-rest` | 2026-09-16 | 4 (4) | 24: python/mojolearn, bench/results, gbdt/host | b | candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded" | retire |
 | `lane/gemm-p1-fold-bypass` | 2026-09-19 | 4 (4) | 2: gemm/checks, tools/gemm_p1_hotaisle_body.sh | a | candidate-audit-2026-10-04.md:21 "content-absorbed" | retire |
@@ -314,15 +352,15 @@ The (d) branches may also hold work main lacks, but no doc gives a verdict:
 | `lane/loss-metrics-objectives-cpu` | 2026-09-19 | 1 (0) | 3: checks/sample_quantile_unweighted_check.mojo, gbdt/metrics, pixi.toml | a | git cherry: all 1 commits patch-equal on main | retire |
 | `lane/lowbit-amd-tuned-lb` | 2026-09-29 | 1 (1) | 1: gemm/checks | b | one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main) | retire |
 | `lane/lowbit-apple-now` | 2026-09-29 | 1 (1) | 1: gemm/checks | b | one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main) | retire |
-| `lane/lowbit-apple-tuned` | 2026-09-29 | 21 (20) | 57: bench/results, gemm/checks, tools/lowbit_apple_tuned | d | Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs | keep until owner decides |
+| `lane/lowbit-apple-tuned` | 2026-09-29 | 21 (20) | 57: bench/results, gemm/checks, tools/lowbit_apple_tuned | d | Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs | retire (resolved: see Resolved) |
 | `lane/lowbit-blocks` | 2026-09-29 | 1 (1) | 1: docs/lanes | b | progress-note only (docs/lanes/progress/*.md); superseded by later handoffs | retire |
-| `lane/lowbit-e2e` | 2026-09-29 | 5 (5) | 11: bench/results, tools/lowbit_e2e, docs/HANDOFF_LOWBIT_E2E_2026-09-29.md | d | Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs | keep until owner decides |
-| `lane/lowbit-quality` | 2026-09-29 | 25 (25) | 299: bench/results, bench/lowbit_quality, docs/lanes | d | Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs | keep until owner decides |
+| `lane/lowbit-e2e` | 2026-09-29 | 5 (5) | 11: bench/results, tools/lowbit_e2e, docs/HANDOFF_LOWBIT_E2E_2026-09-29.md | d | Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs | retire (resolved: see Resolved) |
+| `lane/lowbit-quality` | 2026-09-29 | 25 (25) | 299: bench/results, bench/lowbit_quality, docs/lanes | d | Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs | retire (resolved: see Resolved) |
 | `lane/m3-sweep` | 2026-09-28 | 2 (2) | 2: docs/lanes, tools/apple_sweep_run.py | b | measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts | retire |
 | `lane/mamba-opp` | 2026-09-29 | 6 (5) | 8: tools/bench_board.py, tools/bench_board_neural.py, tools/bench_board_params.py | b | Sep 29-30 board tooling; main board tools (tools/bench_board*.py) moved on; boards now via six_lane_grid + lq | retire |
 | `lane/mamba3-amd-regs2h-measure` | 2026-10-01 | 2 (1) | 1: tools/pr50_amd.sh | b | measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts | retire |
 | `lane/mamba3-padding-perf` | 2026-09-19 | 2 (0) | 2: docs/lanes, mamba/checks | a | git cherry: all 2 commits patch-equal on main | retire |
-| `lane/mamba3-statepass` | 2026-09-09 | 23 (23) | 188: bench/results, mamba/impl, mamba/checks | d | Sep 9 Mamba3 state-pass (direct transfers, tiled QKS/YSTATE); defines absent, mamba/impl/mamba_ssm/ops/mamba3_siso.mojo gone from main (rewritten as autograd/kernels/mamba3.mojo); likely superseded, unverified | retire after owner check |
+| `lane/mamba3-statepass` | 2026-09-09 | 23 (23) | 188: bench/results, mamba/impl, mamba/checks | d | Sep 9 Mamba3 state-pass (direct transfers, tiled QKS/YSTATE); defines absent, mamba/impl/mamba_ssm/ops/mamba3_siso.mojo gone from main (rewritten as autograd/kernels/mamba3.mojo); likely superseded, unverified | retire (resolved: see Resolved) |
 | `lane/manifold-spectral-cpu` | 2026-09-19 | 1 (0) | 2: bench/spectral_host_eig_price.mojo, spectral/checks | a | git cherry: all 1 commits patch-equal on main | retire |
 | `lane/merged` | 2026-10-02 | 40 (0) | 238: python/mojolearn, gbdt/methods, x_decomp/checks | a | git cherry: all 40 commits patch-equal on main | retire |
 | `lane/mixture-anomaly-cpu` | 2026-09-19 | 2 (0) | 4: bench/gmm_host_scoring_price.py, bench/iforest_host_score_price.py, isolation_forest/checks | a | git cherry: all 2 commits patch-equal on main | retire |

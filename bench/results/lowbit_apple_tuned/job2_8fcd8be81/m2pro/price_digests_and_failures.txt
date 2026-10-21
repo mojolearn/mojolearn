@@ -1,0 +1,607 @@
+THREADS ref.t32 128 wrote equal
+THREADS sg8.2x2 256 wrote equal
+THREADS sg16.2x2 512 NEVER-WROTE(4096 cells) equal
+THREADS sg16.1x1 512 wrote equal
+THREADS sg16.1x1.f2d 512 wrote equal
+THREADS ref.t32 128 wrote equal
+THREADS sg8.2x2 256 wrote equal
+THREADS sg16.2x2 512 NEVER-WROTE(4096 cells) equal
+THREADS sg16.1x1 512 wrote equal
+THREADS sg16.1x1.f2d 512 wrote equal
+TUNED-FAILED apple llama8b.qkv.t512 tuned.f3.t32.kb16 a-timed-call-printed-0x35be2b64076700d0-the-warm-up-0x45bb606d47ae4b4a
+TUNED-FAILED apple llama8b.qkv.t512 inference.tuned.f3.t32.kb16 a-timed-call-printed-0x789acf0bd3e17544-the-warm-up-0xaecdf784421a0d05
+TUNED-FAILED apple llama8b.qkv.t512 training.tuned.f3.t32.kb16 a-timed-call-printed-0x45354872aba40598-the-warm-up-0xc1793e609b29d527
+TUNED-FAILED apple llama8b.qkv.t512 tuned.f3.row64.kb16 a-timed-call-printed-0x37d5a7ac4097a936-the-warm-up-0xf2a166b27a947f5e
+TUNED-FAILED apple llama8b.qkv.t512 inference.tuned.f3.row64.kb16 a-timed-call-printed-0xf6d1453f21379f89-the-warm-up-0xa6bcab4ec4dcf2c5
+TUNED-FAILED apple llama8b.qkv.t512 training.tuned.f3.row64.kb16 a-timed-call-printed-0x5137d2499ebd5cbb-the-warm-up-0x27a1ed19ef27a254
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dx tuned.f3.t32.kb16 a-timed-call-printed-0xe85b58b1e057bc20-the-warm-up-0xce45d1261b394245
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dx training.tuned.f3.t32.kb16 a-timed-call-printed-0xe8c1774268805971-the-warm-up-0xd0c828d9b7893fc4
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dx tuned.f3.row64.kb16 a-timed-call-printed-0x1e9189a0acbb5bf2-the-warm-up-0x30f08767b28a9450
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dx training.tuned.f3.row64.kb16 a-timed-call-printed-0xf956197f1fec9f16-the-warm-up-0xbf195bf90a86e89a
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dw tuned.f3.t32.kb16 a-timed-call-printed-0xeab554f97881ea2a-the-warm-up-0x599edf749189d53b
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dw training.tuned.f3.t32.kb16 a-timed-call-printed-0x3338fa04357c3384-the-warm-up-0x5d6fd48859a972c2
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dw tuned.f3.row64.kb16 a-timed-call-printed-0xf2aef71f9aef3df6-the-warm-up-0x1dccb5359cd1aa14
+TUNED-FAILED apple llama8b.qkv.t512.bwd_dw training.tuned.f3.row64.kb16 a-timed-call-printed-0x9503b0ce9ab569eb-the-warm-up-0xe01067cddd4a240a
+TUNED-FAILED apple llama8b.mlp_up.t512 tuned.f3.t32.kb16 a-timed-call-printed-0x5fb6b440adb8cdbd-the-warm-up-0xb91d49ff2df6c0ed
+TUNED-FAILED apple llama8b.mlp_up.t512 inference.tuned.f3.t32.kb16 a-timed-call-printed-0x83b8dde32da65cef-the-warm-up-0xf79fd14cd6b40331
+TUNED-FAILED apple llama8b.mlp_up.t512 training.tuned.f3.t32.kb16 a-timed-call-printed-0xbe466a4a403c00a7-the-warm-up-0xa66c22e89f9a4802
+TUNED-FAILED apple llama8b.mlp_up.t512 tuned.f3.row64.kb16 a-timed-call-printed-0x2221b4084d6eec9-the-warm-up-0xde9c24bce4fdc237
+TUNED-FAILED apple llama8b.mlp_up.t512 inference.tuned.f3.row64.kb16 a-timed-call-printed-0x852e7e8078095891-the-warm-up-0x1782048cc7f0145e
+TUNED-FAILED apple llama8b.mlp_up.t512 training.tuned.f3.row64.kb16 a-timed-call-printed-0x5c37c273d4375ae1-the-warm-up-0x243296b9e7ba2bbe
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dx tuned.f3.t32.kb16 a-timed-call-printed-0x25517d9c2839cc1d-the-warm-up-0x3e2e9bd56fb66f89
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dx training.tuned.f3.t32.kb16 a-timed-call-printed-0xdb3bc73c22e526f8-the-warm-up-0x2bf9e4257c8fb2cc
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dx tuned.f3.row64.kb16 a-timed-call-printed-0x790d2ddd9fa162e9-the-warm-up-0xce4b0332c06b07e0
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dx training.tuned.f3.row64.kb16 a-timed-call-printed-0xcc783faed569362f-the-warm-up-0x92e8cdd35ef2067
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dw tuned.f3.t32.kb16 a-timed-call-printed-0x739cc64c3d45bead-the-warm-up-0xeb9ee337b6c05e84
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dw training.tuned.f3.t32.kb16 a-timed-call-printed-0x999242b4494fd416-the-warm-up-0xd0daab45fe1e3719
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dw tuned.f3.row64.kb16 a-timed-call-printed-0x2e1e2306f6d6f28c-the-warm-up-0xc847b2ff7bd2d69a
+TUNED-FAILED apple llama8b.mlp_up.t512.bwd_dw training.tuned.f3.row64.kb16 a-timed-call-printed-0x7a8042ee1ae1c880-the-warm-up-0x6d0c23f77acc32f8
+TUNED-FAILED apple llama8b.mlp_down.t512 tuned.f3.t32.kb16 a-timed-call-printed-0xd34390661fba2151-the-warm-up-0x92a76f91e08fa331
+TUNED-FAILED apple llama8b.mlp_down.t512 inference.tuned.f3.t32.kb16 a-timed-call-printed-0x3ba5dfcce8b2d2e0-the-warm-up-0xe2f15dde8009d5e0
+TUNED-FAILED apple llama8b.mlp_down.t512 training.tuned.f3.t32.kb16 a-timed-call-printed-0x1f577f9d77608322-the-warm-up-0x27e27ccb7ecbda46
+TUNED-FAILED apple llama8b.mlp_down.t512 tuned.f3.row64.kb16 a-timed-call-printed-0x50b09e89e61d040a-the-warm-up-0xc52b2f77e5930043
+TUNED-FAILED apple llama8b.mlp_down.t512 inference.tuned.f3.row64.kb16 a-timed-call-printed-0x30fb9001ef6de43c-the-warm-up-0x5c664a1d97e2edf7
+TUNED-FAILED apple llama8b.mlp_down.t512 training.tuned.f3.row64.kb16 a-timed-call-printed-0x8aa1871209227489-the-warm-up-0x45f8b0f1e4993fd1
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dx tuned.f3.t32.kb16 a-timed-call-printed-0xf5f4a30f71bb8773-the-warm-up-0xd1e680b20fb75adf
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dx training.tuned.f3.t32.kb16 a-timed-call-printed-0x72c3a331a1f1c8aa-the-warm-up-0xa4c3e9b5b6dee7c8
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dx tuned.f3.row64.kb16 a-timed-call-printed-0x2f668da55bfba4eb-the-warm-up-0xc83c552a0deef4d2
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dx training.tuned.f3.row64.kb16 a-timed-call-printed-0x8b79700a4c26b4a7-the-warm-up-0x1a3e11afb0816272
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dw tuned.f3.t32.kb16 a-timed-call-printed-0x8b4b67bbb1bcef3e-the-warm-up-0x28019af71928d032
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dw training.tuned.f3.t32.kb16 a-timed-call-printed-0xb9f07a3db059e261-the-warm-up-0xf6ba894796778e80
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dw tuned.f3.row64.kb16 a-timed-call-printed-0x6114d9c6cf6ee319-the-warm-up-0x3e54563f974f6d66
+TUNED-FAILED apple llama8b.mlp_down.t512.bwd_dw training.tuned.f3.row64.kb16 a-timed-call-printed-0xdfb79c8113978fe-the-warm-up-0x9ce914e14569c5b1
+TUNED-FAILED apple llama8b.lm_head.t512 tuned.f3.t32.kb16 a-timed-call-printed-0xddb9a452c211fa9e-the-warm-up-0xf91b86cff743fccb
+TUNED-FAILED apple llama8b.lm_head.t512 inference.tuned.f3.t32.kb16 a-timed-call-printed-0xe57edcb933b03463-the-warm-up-0x3ee01ffb75004ed2
+TUNED-FAILED apple llama8b.lm_head.t512 training.tuned.f3.t32.kb16 a-timed-call-printed-0x1274383e9001ba1-the-warm-up-0xb668c847efad0bfb
+TUNED-FAILED apple llama8b.lm_head.t512 tuned.f3.row64.kb16 a-timed-call-printed-0x2131454546dc9b85-the-warm-up-0x7792314d57f86f90
+TUNED-FAILED apple llama8b.lm_head.t512 inference.tuned.f3.row64.kb16 a-timed-call-printed-0xf1dc8d8b60c7b1d5-the-warm-up-0x205be53e02784bc6
+TUNED-FAILED apple llama8b.lm_head.t512 training.tuned.f3.row64.kb16 a-timed-call-printed-0x240630a24b4c7292-the-warm-up-0xbb1e47ee87273497
+TUNED-FAILED apple llama8b.lm_head.t512.bwd_dw tuned.f3.t32.kb16 a-timed-call-printed-0xd03d22039f3a83a7-the-warm-up-0xb2898a13ca820f40
+TUNED-FAILED apple llama8b.lm_head.t512.bwd_dw training.tuned.f3.t32.kb16 a-timed-call-printed-0x71914e9999815323-the-warm-up-0x499b8512546936ef
+TUNED-FAILED apple llama8b.lm_head.t512.bwd_dw tuned.f3.row64.kb16 a-timed-call-printed-0xc5c567578f0e2c68-the-warm-up-0x4bebfe8d3f468f42
+TUNED-FAILED apple llama8b.lm_head.t512.bwd_dw training.tuned.f3.row64.kb16 a-timed-call-printed-0xab81a2895cb8bb92-the-warm-up-0xc64e001759728494
+PLANS DISAGREE at llama8b.qkv.t512: int15i64.v1.apple.four 0xa9844dfadf1fd6da vs tuned.f3.t32.kb16 0xb02ac93e0299fbac
+PLANS DISAGREE at llama8b.qkv.t512: int15i64.v1.apple.four 0xa9844dfadf1fd6da vs inference.tuned.f3.t32.kb16 0xc52679f72f2762f9
+PLANS DISAGREE at llama8b.qkv.t512: int15i64.v1.apple.four 0xa9844dfadf1fd6da vs training.tuned.f3.t32.kb16 0xb2588749af697ef6
+PLANS DISAGREE at llama8b.qkv.t512: int15i64.v1.apple.four 0xa9844dfadf1fd6da vs tuned.f3.row64.kb16 0xa60fd9b5d8cc88bd
+PLANS DISAGREE at llama8b.qkv.t512: int15i64.v1.apple.four 0xa9844dfadf1fd6da vs inference.tuned.f3.row64.kb16 0xc490a00bbb7deb65
+PLANS DISAGREE at llama8b.qkv.t512: int15i64.v1.apple.four 0xa9844dfadf1fd6da vs training.tuned.f3.row64.kb16 0x1cb7b643953f43db
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dx: int15i64.v1.apple.four 0x6c4eff5b0480823a vs tuned.f3.t32.kb16 0x7f014a3782d2adf1
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dx: int15i64.v1.apple.four 0x6c4eff5b0480823a vs training.tuned.f3.t32.kb16 0xea99b9a08fb158f7
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dx: int15i64.v1.apple.four 0x6c4eff5b0480823a vs tuned.f3.row64.kb16 0x2a4ff0b5edd35d34
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dx: int15i64.v1.apple.four 0x6c4eff5b0480823a vs training.tuned.f3.row64.kb16 0x2e98626c9db882d5
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dw: int15i64.v1.apple.four 0x8ef510e0780e450 vs tuned.f3.t32.kb16 0xf0eed4aff35d24cc
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dw: int15i64.v1.apple.four 0x8ef510e0780e450 vs training.tuned.f3.t32.kb16 0xb36acb41b4b270b5
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dw: int15i64.v1.apple.four 0x8ef510e0780e450 vs tuned.f3.row64.kb16 0x669f3d60f96d769a
+PLANS DISAGREE at llama8b.qkv.t512.bwd_dw: int15i64.v1.apple.four 0x8ef510e0780e450 vs training.tuned.f3.row64.kb16 0xa533b453f433732
+PLANS DISAGREE at llama8b.mlp_up.t512: int15i64.v1.apple.four 0x31746954b2b719d4 vs tuned.f3.t32.kb16 0x5d3a5350e31a7d64
+PLANS DISAGREE at llama8b.mlp_up.t512: int15i64.v1.apple.four 0x31746954b2b719d4 vs inference.tuned.f3.t32.kb16 0xf1bae5657c198e50
+PLANS DISAGREE at llama8b.mlp_up.t512: int15i64.v1.apple.four 0x31746954b2b719d4 vs training.tuned.f3.t32.kb16 0x81a5510014ce2f30
+PLANS DISAGREE at llama8b.mlp_up.t512: int15i64.v1.apple.four 0x31746954b2b719d4 vs tuned.f3.row64.kb16 0x82aeda1c19d1b79
+PLANS DISAGREE at llama8b.mlp_up.t512: int15i64.v1.apple.four 0x31746954b2b719d4 vs inference.tuned.f3.row64.kb16 0x9526b564d09af144
+PLANS DISAGREE at llama8b.mlp_up.t512: int15i64.v1.apple.four 0x31746954b2b719d4 vs training.tuned.f3.row64.kb16 0x2b16b09cbbed4991
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dx: int15i64.v1.apple.four 0xd25adc12f122f248 vs tuned.f3.t32.kb16 0x586e0835b202c442
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dx: int15i64.v1.apple.four 0xd25adc12f122f248 vs training.tuned.f3.t32.kb16 0x30a158b8bbaeafc8
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dx: int15i64.v1.apple.four 0xd25adc12f122f248 vs tuned.f3.row64.kb16 0x7405c73cfbdf09f5
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dx: int15i64.v1.apple.four 0xd25adc12f122f248 vs training.tuned.f3.row64.kb16 0x58c7d0728c662eb3
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dw: int15i64.v1.apple.four 0x7f5a1c9a4096e46d vs tuned.f3.t32.kb16 0xa33fc125330dcff6
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dw: int15i64.v1.apple.four 0x7f5a1c9a4096e46d vs training.tuned.f3.t32.kb16 0x7fecafd9500cbd4a
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dw: int15i64.v1.apple.four 0x7f5a1c9a4096e46d vs tuned.f3.row64.kb16 0xd46cbf4d6283420d
+PLANS DISAGREE at llama8b.mlp_up.t512.bwd_dw: int15i64.v1.apple.four 0x7f5a1c9a4096e46d vs training.tuned.f3.row64.kb16 0x19652ac0d17dc17f
+PLANS DISAGREE at llama8b.mlp_down.t512: int15i64.v1.apple.four 0x29a5b58e07315db6 vs tuned.f3.t32.kb16 0xc7f29f4c25e0d3e7
+PLANS DISAGREE at llama8b.mlp_down.t512: int15i64.v1.apple.four 0x29a5b58e07315db6 vs inference.tuned.f3.t32.kb16 0x78592b7d1a364fdf
+PLANS DISAGREE at llama8b.mlp_down.t512: int15i64.v1.apple.four 0x29a5b58e07315db6 vs training.tuned.f3.t32.kb16 0xcc2d274b0d22795
+PLANS DISAGREE at llama8b.mlp_down.t512: int15i64.v1.apple.four 0x29a5b58e07315db6 vs tuned.f3.row64.kb16 0xeab4daf2b9bd22db
+PLANS DISAGREE at llama8b.mlp_down.t512: int15i64.v1.apple.four 0x29a5b58e07315db6 vs inference.tuned.f3.row64.kb16 0x7eb2e429452e04bc
+PLANS DISAGREE at llama8b.mlp_down.t512: int15i64.v1.apple.four 0x29a5b58e07315db6 vs training.tuned.f3.row64.kb16 0x2cee740169ec1d8c
+PLANS DISAGREE at llama8b.mlp_down.t512.bwd_dx: int15i64.v1.apple.four 0xf02913c8e388c6f0 vs tuned.f3.t32.kb16 0x81b9adb79918730
+PLANS DISAGREE at llama8b.mlp_down.t512.bwd_dx: int15i64.v1.apple.four 0xf02913c8e388c6f0 vs training.tuned.f3.t32.kb16 0xcb53834b62841272
+PLANS DISAGREE at llama8b.mlp_down.t512.bwd_dx: int15i64.v1.apple.four 0xf02913c8e388c6f0 vs tuned.f3.row64.kb16 0x2d7ee93b5e1c9483
+PLANS DISAGREE at llama8b.mlp_down.t512.bwd_dx: int15i64.v1.apple.four 0xf02913c8e388c6f0 vs training.tuned.f3.row64.kb16 0x3dccc501fa87b49b
+PLANS DISAGREE at llama8b.mlp_down.t512.bwd_dw: int15i64.v1.apple.four 0x648fb9758841ed0f vs tuned.f3.t32.kb16 0x4f7b39cfa4c92930
+PLANS DISAGREE at llama8b.mlp_down.t512.bwd_dw: int15i64.v1.apple.four 0x648fb9758841ed0f vs training.tuned.f3.t32.kb16 0x2d08264efbf7ecf4
+DIGEST price-llama8b.qkv.t512 int15i64.v1.apple.four 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f4.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f4.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f3r.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3r.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f3r.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f3r.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3r.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f3r.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2d.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2d.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2d.t32.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2d.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2d.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2d.t32.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2.w64.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2.w64.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2.w64.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f4.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f3r.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3r.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f3r.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2d.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2d.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2d.t16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f4.t32x16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.t32x16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.t32x16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2d.t32x16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2d.t32x16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2d.t32x16.kb32 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f4.t32.kb32.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.t32.kb32.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.t32.kb32.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2d.t32.kb32.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2d.t32.kb32.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2d.t32.kb32.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f4.w64.kb16.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.w64.kb16.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.w64.kb16.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2d.w64.kb16.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2d.w64.kb16.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2d.w64.kb16.b128 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 tuned.f2d.row64.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.tuned.f2d.row64.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.tuned.f2d.row64.kb16 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.apple.four 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3r.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3r.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3r.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3r.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2d.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2d.t32.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2d.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2d.t32.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2.w64.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2.w64.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.t16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.t16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3r.t16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3r.t16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2d.t16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2d.t16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.t32x16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.t32x16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2d.t32x16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2d.t32x16.kb32 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.t32.kb32.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.t32.kb32.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2d.t32.kb32.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2d.t32.kb32.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.w64.kb16.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.w64.kb16.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2d.w64.kb16.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2d.w64.kb16.b128 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f2d.row64.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f2d.row64.kb16 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.apple.four 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3r.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3r.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3r.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3r.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2d.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2d.t32.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2d.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2d.t32.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2.w64.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2.w64.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.t16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.t16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3r.t16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3r.t16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2d.t16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2d.t16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.t32x16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.t32x16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2d.t32x16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2d.t32x16.kb32 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.t32.kb32.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.t32.kb32.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2d.t32.kb32.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2d.t32.kb32.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.w64.kb16.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.w64.kb16.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2d.w64.kb16.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2d.w64.kb16.b128 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f2d.row64.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f2d.row64.kb16 0x8ef510e0780e450
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.apple.four 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f3r.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3r.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3r.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f3r.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3r.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3r.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2d.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2d.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2d.t32.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2d.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2d.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2d.t32.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2.w64.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2.w64.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2.w64.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f3r.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3r.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3r.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2d.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2d.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2d.t16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.t32x16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.t32x16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.t32x16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2d.t32x16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2d.t32x16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2d.t32x16.kb32 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.t32.kb32.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.t32.kb32.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.t32.kb32.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2d.t32.kb32.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2d.t32.kb32.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2d.t32.kb32.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.w64.kb16.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.w64.kb16.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.w64.kb16.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2d.w64.kb16.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2d.w64.kb16.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2d.w64.kb16.b128 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 tuned.f2d.row64.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f2d.row64.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f2d.row64.kb16 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.apple.four 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3r.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3r.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3r.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3r.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2d.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2d.t32.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2d.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2d.t32.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2.w64.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2.w64.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.t16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.t16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3r.t16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3r.t16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2d.t16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2d.t16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.t32x16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.t32x16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2d.t32x16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2d.t32x16.kb32 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.t32.kb32.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.t32.kb32.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2d.t32.kb32.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2d.t32.kb32.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.w64.kb16.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.w64.kb16.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2d.w64.kb16.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2d.w64.kb16.b128 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f2d.row64.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f2d.row64.kb16 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.apple.four 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3r.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3r.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3r.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3r.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2d.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2d.t32.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2d.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2d.t32.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2.w64.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2.w64.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.t16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.t16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3r.t16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3r.t16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2d.t16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2d.t16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.t32x16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.t32x16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2d.t32x16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2d.t32x16.kb32 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.t32.kb32.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.t32.kb32.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2d.t32.kb32.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2d.t32.kb32.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.w64.kb16.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.w64.kb16.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2d.w64.kb16.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2d.w64.kb16.b128 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f2d.row64.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f2d.row64.kb16 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_down.t512 int15i64.v1.apple.four 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f3r.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3r.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3r.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f3r.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3r.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3r.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2d.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2d.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2d.t32.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2d.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2d.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2d.t32.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2.w64.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2.w64.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2.w64.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f3r.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3r.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3r.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2d.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2d.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2d.t16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.t32x16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.t32x16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.t32x16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2d.t32x16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2d.t32x16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2d.t32x16.kb32 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.t32.kb32.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.t32.kb32.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.t32.kb32.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2d.t32.kb32.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2d.t32.kb32.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2d.t32.kb32.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.w64.kb16.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.w64.kb16.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.w64.kb16.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2d.w64.kb16.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2d.w64.kb16.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2d.w64.kb16.b128 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 tuned.f2d.row64.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f2d.row64.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f2d.row64.kb16 0x29a5b58e07315db6
+DIGEST price-llama8b.mlp_down.t512.bwd_dx int15i64.v1.apple.four 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3r.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3r.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3r.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3r.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2d.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2d.t32.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2d.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2d.t32.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2.w64.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2.w64.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.t16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.t16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3r.t16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3r.t16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2d.t16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2d.t16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.t32x16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.t32x16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2d.t32x16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2d.t32x16.kb32 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.t32.kb32.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.t32.kb32.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2d.t32.kb32.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2d.t32.kb32.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.w64.kb16.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.w64.kb16.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2d.w64.kb16.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2d.w64.kb16.b128 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f2d.row64.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f2d.row64.kb16 0xf02913c8e388c6f0
+DIGEST price-llama8b.mlp_down.t512.bwd_dw int15i64.v1.apple.four 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3r.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3r.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3r.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3r.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2d.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2d.t32.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2d.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2d.t32.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2.w64.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2.w64.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.t16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.t16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3r.t16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3r.t16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2d.t16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2d.t16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.t32x16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.t32x16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2d.t32x16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2d.t32x16.kb32 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.t32.kb32.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.t32.kb32.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2d.t32.kb32.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2d.t32.kb32.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.w64.kb16.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.w64.kb16.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2d.w64.kb16.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2d.w64.kb16.b128 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f2d.row64.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f2d.row64.kb16 0x648fb9758841ed0f
+DIGEST price-llama8b.lm_head.t512 int15i64.v1.apple.four 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f4.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f4.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f3r.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3r.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3r.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f3r.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3r.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3r.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2d.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2d.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2d.t32.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2d.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2d.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2d.t32.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2.w64.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2.w64.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2.w64.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f4.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f3r.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3r.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3r.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2d.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2d.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2d.t16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f4.t32x16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.t32x16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.t32x16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2d.t32x16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2d.t32x16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2d.t32x16.kb32 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f4.t32.kb32.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.t32.kb32.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.t32.kb32.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2d.t32.kb32.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2d.t32.kb32.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2d.t32.kb32.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f4.w64.kb16.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.w64.kb16.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.w64.kb16.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2d.w64.kb16.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2d.w64.kb16.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2d.w64.kb16.b128 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 tuned.f2d.row64.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f2d.row64.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512 training.tuned.f2d.row64.kb16 0x60f6165f74f17867
+DIGEST price-llama8b.lm_head.t512.bwd_dw int15i64.v1.apple.four 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3r.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3r.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3r.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3r.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2d.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2d.t32.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2d.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2d.t32.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2.w64.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2.w64.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.t16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.t16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3r.t16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3r.t16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2d.t16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2d.t16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.t32x16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.t32x16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2d.t32x16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2d.t32x16.kb32 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.t32.kb32.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.t32.kb32.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2d.t32.kb32.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2d.t32.kb32.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.w64.kb16.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.w64.kb16.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2d.w64.kb16.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2d.w64.kb16.b128 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f2d.row64.kb16 0x97ac9bb1c8a6a3b4
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f2d.row64.kb16 0x97ac9bb1c8a6a3b4
