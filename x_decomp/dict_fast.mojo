@@ -30,7 +30,6 @@ the elementwise chain's (quality, not bits).
 """
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.python import PythonObject
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -39,7 +38,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_di
 from x_decomp.cells import F32Ptr
 from x_decomp.device import xd_ctx
 from x_decomp.resident import _ptr, pool_alloc, pool_free, X_DECOMP_POOL
-from x_decomp.resident_pyapi import _id, _n
 
 comptime DECOMP_FAST_DICT_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"]()
@@ -124,10 +122,3 @@ def dict_update_dev(isrc: Int, ia: Int, ib: Int, idst: Int, nc: Int, m: Int) rai
         pool_free(sid)
         return cells
     raise Error("x_decomp: dev_dict_update needs a FAST build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF")
-
-def dev_dict_update_py(
-    src: PythonObject, a: PythonObject, b: PythonObject, dst: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """dst (nc x m) = src updated atom by atom (see the module docstring);
-    p = [nc, m]. Every A[j, j] must be > 1e-6 (the caller checks)."""
-    return PythonObject(dict_update_dev(_id(src), _id(a), _id(b), _id(dst), _n(p, 0), _n(p, 1)))
