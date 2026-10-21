@@ -14,6 +14,7 @@ from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+from bindings.classical_pandas import classical_admit_value
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -59,7 +60,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var loaded = classical_archive_load(model, args[0], ridge, context)
             return loaded.steal_data()
         if operation != "save":
-            sequential_admit_value(args, context)
+            classical_admit_value(args, context)
         var fields = sequential_fields(model)
         var names = context["classical_fields"]
         for k in range(len(names)):  # driver-loop: over connected estimator metadata fields

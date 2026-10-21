@@ -8,6 +8,7 @@ from bindings.sequential_admission import sequential_admit_value, _ordinary_torc
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from bindings.native_torch_admission import native_torch_numpy
+from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
 
 
 def classical_array(rows: Int, cols: Int, context: PythonObject, wide: Bool = False) raises -> PythonObject:
@@ -16,10 +17,12 @@ def classical_array(rows: Int, cols: Int, context: PythonObject, wide: Bool = Fa
 
 
 def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
-    sequential_admit_value(source, context)
+    classical_admit_value(source, context)
     var b = Python.import_module("builtins")
     var prepared = source
-    if _ordinary_torch(b.type(source), context):
+    if native_pandas_exact(source):
+        prepared = native_pandas_f32(source, context)
+    elif _ordinary_torch(b.type(source), context):
         prepared = native_torch_numpy(source)
     var value = sequential_input(prepared, context)
     var nd = Int(py=value.ndim)
@@ -65,8 +68,9 @@ def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
 def classical_host_weights(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
     if source is None:
         return PythonObject(None)
-    sequential_admit_value(source, context)
-    var raw = sequential_input(source, context)
+    classical_admit_value(source, context)
+    var prepared = native_pandas_f32(source, context) if native_pandas_exact(source) else source
+    var raw = sequential_input(prepared, context)
     var scalar = Int(py=raw.ndim) == 0
     var value = classical_host_f32(source, 0 if scalar else 1, "sample_weight", context)
     if not scalar and Int(py=value.size) != rows:
