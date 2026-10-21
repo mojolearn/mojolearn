@@ -42,12 +42,15 @@ struct ByteCheckpointIOError(Movable):
         ref cpy = Python().cpython()
         var has_value = self.has_value
         var has_traceback = self.has_traceback
-        var kind = self.kind^
-        var value = self.value^
-        var traceback = self.traceback^
+        # Keep this aggregate fully initialized until its ordinary destruction.
+        # PythonObject's supported copy ownership gives Restore separate owned
+        # references; moving individual fields leaves a partially consumed self.
+        var kind = self.kind
+        var value = self.value
+        var traceback = self.traceback
         var value_ptr = value.steal_data() if has_value else PyObjectPtr()
         var traceback_ptr = traceback.steal_data() if has_traceback else PyObjectPtr()
-        # Restore steals exactly the owned references returned by FetchTriple.
+        # Restore steals the owned copies of the references from FetchTriple.
         # It preserves the original subclass, errno and filename attributes.
         # https://docs.python.org/3/c-api/exceptions.html#c.PyErr_Restore
         cpy.PyErr_Restore(kind.steal_data(), value_ptr, traceback_ptr)
