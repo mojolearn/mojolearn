@@ -374,9 +374,13 @@ def measure(args, report):
     files.update({"installed-python/" + str(p.relative_to(package)): p for p in package.rglob("*.py")})
     files["binary-provenance.json"] = args.binary_provenance
     source, _ = evidence.source_snapshot(retained, ROOT, drivers=[__file__])
-    source = evidence.upload(source) if not args.validation_only else source
+    # --retain-local (box runs, 2026-10-21): rented boxes carry no R2 credential
+    # (tools/box_evidence_r2.sh presigns from the Mac), so the archives stay
+    # local with status "local" and the Mac's box archive pull retains them.
+    remote = not args.validation_only and not getattr(args, "retain_local", False)
+    source = evidence.upload(source) if remote else source
     payload = archive_files(retained / "inputs-and-native.tar.gz", files)
-    payload = evidence.upload(payload) if not args.validation_only else payload
+    payload = evidence.upload(payload) if remote else payload
     report["retention"] = {"source": source, "inputs_and_native": payload,
                            "binary_provenance": file_record(args.binary_provenance)}
     report["arms"] = {}
@@ -488,6 +492,8 @@ def main(argv=None):
     run.add_argument("--rounds", type=int, default=1)
     run.add_argument("--require-pass", choices=PASSES, action="append", default=[])
     run.add_argument("--validation-only", action="store_true", help="local correctness/controller checks; never performance evidence")
+    run.add_argument("--retain-local", action="store_true",
+                     help="keep the evidence archives local (a rented box has no R2 credential); the box archive pull retains them")
     comparison = sub.add_parser("compare")
     comparison.add_argument("reports", type=Path, nargs="+")
     args = p.parse_args(argv)
@@ -517,7 +523,11 @@ def main(argv=None):
             try:
                 retained = archive_files(args.out / "results.tar.gz", {
                     p.name: p for p in args.out.iterdir() if p.is_file() and p.name != "results.tar.gz"})
-                write(args.out / "result-retention.json", evidence.upload(retained))
+                if args.retain_local:
+                    retained["transfer"] = "owed: the Mac pulls this box's output folder (box archive), then R2"
+                    write(args.out / "result-retention.json", retained)
+                else:
+                    write(args.out / "result-retention.json", evidence.upload(retained))
             except BaseException as error:
                 write(args.out / "retention-failure.json", {"error": repr(error),
                       "action": "retry archive transfer only; never rerun completed measurements"})
