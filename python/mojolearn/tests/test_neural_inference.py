@@ -94,7 +94,9 @@ def test_binding_exports_no_training_entry(binding):
                      "transformer_forward_int15",
                      # the arithmetic profile a checkpoint is admitted against
                      # (neural_inference.py; the IDENTICAL toggle suffix)
-                     "neural_arithmetic_profile"}, names
+                     "neural_arithmetic_profile",
+                     # checkpoint integrity digest (core/sha256.mojo)
+                     "sha256_hex"}, names
     # the decode cache is here (lane/stateful-cpu-decoding); training is not
     assert not [n for n in names if "backward" in n or "loss" in n or "optim" in n
                 or n.endswith("_fit") or "train" in n], names

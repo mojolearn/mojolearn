@@ -17,7 +17,6 @@ little-endian `<f4` / `<i4` bytes the NumPy spelling emitted
 (`_bufcheck.le_bytes`), so a file written by 0.6.x loads here and a file
 written here loads there, byte for byte (see `_encode_array`).
 """
-import hashlib
 import json
 from . import _portable_math as math
 import operator
@@ -838,9 +837,11 @@ class SmallMLPTrainer:
         """Atomically save the full state to `path` in a bounded, pickle-free MLP checkpoint format."""
         state = self.state_dict()
         payload = _encode_state(state)
+        binding = self._binding()
+        # the digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's
         envelope = dict(schema=_FILE_SCHEMA, payload=payload,
-                        payload_sha256=hashlib.sha256(_canonical(payload)).hexdigest())
-        profile = str(self._binding().neural_arithmetic_profile())
+                        payload_sha256=str(binding.sha256_hex(_canonical(payload))))
+        profile = str(binding.neural_arithmetic_profile())
         if profile != "mojolearn.neural-training.fp32.v1":
             envelope["arithmetic_profile"] = profile
         encoded = _canonical(envelope) + b'\n'
@@ -875,9 +876,10 @@ class SmallMLPTrainer:
             raise ValueError('SmallMLPTrainer checkpoint envelope mismatch')
         if envelope['schema'] != _FILE_SCHEMA:
             raise ValueError('SmallMLPTrainer checkpoint schema mismatch')
-        if hashlib.sha256(_canonical(envelope['payload'])).hexdigest() != envelope['payload_sha256']:
+        binding = _training_impl._load(_require_mode())
+        if str(binding.sha256_hex(_canonical(envelope['payload']))) != envelope['payload_sha256']:
             raise ValueError('SmallMLPTrainer checkpoint integrity mismatch')
-        expected_profile = str(_training_impl._load(_require_mode()).neural_arithmetic_profile())
+        expected_profile = str(binding.neural_arithmetic_profile())
         if envelope.get('arithmetic_profile', 'mojolearn.neural-training.fp32.v1') != expected_profile:
             raise ValueError('SmallMLPTrainer checkpoint arithmetic profile mismatch')
         state = _decode_state(envelope['payload'])

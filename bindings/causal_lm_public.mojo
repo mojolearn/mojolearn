@@ -17,6 +17,8 @@ from bindings.generation_buffers import (
 )
 from bindings.generation_policy import generation_pick
 from core.hostptr import f32_ptr, i32_ptr
+from core.sha256 import Sha256
+from bindings.sha256_door import sha256_update, sha256_update_text
 from std.math import isfinite
 from std.os import getenv
 from transformer.causal_lm_public_impl import (
@@ -914,14 +916,13 @@ def _array_bytes(value: PythonObject) raises -> PythonObject:
     return g[].bi.memoryview(value).tobytes("C")
 
 
-def _hash() raises -> PythonObject:
-    return GENERATION_BOUNDARY.get_or_create_ptr()[].hash_type()
+def _hash() -> Sha256:
+    return Sha256()
 
 
-def _hash_scalar(hash: PythonObject, value: PythonObject) raises:
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    hash.update(g[].bi.str(value).encode("utf-8"))
-    hash.update(PythonObject("\n").encode("utf-8"))
+def _hash_scalar(mut hash: Sha256, value: PythonObject) raises:
+    sha256_update_text(hash, value)
+    hash.update_text(String("\n"))
 
 
 def _fingerprint(model: PythonObject) raises -> PythonObject:
@@ -931,10 +932,10 @@ def _fingerprint(model: PythonObject) raises -> PythonObject:
     _hash_scalar(h, model.norm_eps)
     _hash_scalar(h, model.max_positions)
     _hash_scalar(h, model._embed.shape)
-    h.update(_array_bytes(model._embed))
+    sha256_update(h, _array_bytes(model._embed))
     if model._norm is not None:
-        h.update(_array_bytes(model._norm))
-    h.update(_array_bytes(model._head))
+        sha256_update(h, _array_bytes(model._norm))
+    sha256_update(h, _array_bytes(model._head))
     for i in range(len(model._blocks)):  # driver-loop: over model layers
         var blk = _block(model, i)
         if String(model.kind) == "transformer":
@@ -944,7 +945,7 @@ def _fingerprint(model: PythonObject) raises -> PythonObject:
             _hash_scalar(h, blk["window"])
             for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
                 if blk["_wopt"][j] is not None:
-                    h.update(_array_bytes(blk["_wopt"][j]))
+                    sha256_update(h, _array_bytes(blk["_wopt"][j]))
         elif String(model.kind) == "mamba2":
             _hash_scalar(h, blk["dt_limit"])
         else:
@@ -952,16 +953,16 @@ def _fingerprint(model: PythonObject) raises -> PythonObject:
         for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
                 _hash_scalar(h, blk["_w"][j].shape)
-                h.update(_array_bytes(blk["_w"][j]))
+                sha256_update(h, _array_bytes(blk["_w"][j]))
         if model._head_int15 is not None:
             for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
                 if blk["_int15"][j] is not None:
                     for k in range(3):  # small-loop(int15 plane triple)
-                        h.update(_array_bytes(blk["_int15"][j][k]))
+                        sha256_update(h, _array_bytes(blk["_int15"][j][k]))
     if model._head_int15 is not None:
         for k in range(3):  # small-loop(int15 head plane triple)
-            h.update(_array_bytes(model._head_int15[k]))
-    return h.hexdigest()
+            sha256_update(h, _array_bytes(model._head_int15[k]))
+    return PythonObject(h.hexdigest())
 
 
 def _state_arrays(kind: String, profile: Int = 1) -> List[String]:
@@ -977,12 +978,12 @@ def _state_arrays(kind: String, profile: Int = 1) -> List[String]:
 def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
     var h = _hash()
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    for name in [String("schema"),  # small-loop(checkpoint scalar fields) String("model"), String("options"), String("maximum"),
+    for name in [String("schema"), String("model"), String("options"), String("maximum"),  # small-loop(checkpoint scalar fields)
                  String("produced"), String("positions"), String("lengths"), String("finished"), String("text"), String("tokenizer")]:
         _hash_scalar(h, checkpoint[name])
-    h.update(checkpoint["pending_bytes"])
-    h.update(_array_bytes(checkpoint["prompt"]))
-    h.update(_array_bytes(checkpoint["current"]))
+    sha256_update(h, checkpoint["pending_bytes"])
+    sha256_update(h, _array_bytes(checkpoint["prompt"]))
+    sha256_update(h, _array_bytes(checkpoint["current"]))
     for i in range(len(checkpoint["layers"])):  # driver-loop: over checkpoint layers
         var layer = checkpoint["layers"][i]
         var names = g[].bi.sorted(layer.keys())
@@ -992,10 +993,10 @@ def _snapshot_hash(checkpoint: PythonObject) raises -> PythonObject:
             if g[].bi.type(value) is g[].array_cls:
                 _hash_scalar(h, value.shape)
                 _hash_scalar(h, value.dtype)
-                h.update(_array_bytes(value))
+                sha256_update(h, _array_bytes(value))
             else:
                 _hash_scalar(h, value)
-    return h.hexdigest()
+    return PythonObject(h.hexdigest())
 
 
 def causal_lm_snapshot_binding(stream: PythonObject) raises -> PythonObject:

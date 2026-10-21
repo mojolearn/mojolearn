@@ -1589,6 +1589,8 @@ FAMILIES = (
             "tokens_gather_rows", "tokenizer_pretokenize", "vocab_load_bytes",
             "vocab_load_spelled", "vocab_info", "vocab_encode", "vocab_pretokenize",
             "vocab_decode",
+            # vocabulary identity digest (core/sha256.mojo)
+            "sha256_hex",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -1664,6 +1666,8 @@ FAMILIES = (
             "embedding_forward", "rms_norm_forward", "linear_forward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "neural_arithmetic_profile",
+            # checkpoint integrity digest (core/sha256.mojo)
+            "sha256_hex",
         ),
         gate="python/mojolearn/tests/test_neural_inference.py, tools/step_vs_full_check.py and tools/identity_break.py (mlp, transformer, transformer-window, transformer-decode, mamba1, mamba2, mamba3, mamba1-decode, mamba2-decode, mamba3-decode, mamba2-dtlimit, samba, samba-decode, samba-untied-dropout-accum)",
         wheel_note=(
@@ -2723,6 +2727,8 @@ FAMILIES = (
             "neural_arithmetic_profile", "neural_gemm", "mlp_sessions", "mlp_sessions_rows",
             "residual_dropout", "residual_dropout_backward", "training_chunked_lm_head_enabled",
             "training_experiment_profile",
+            # checkpoint integrity digest (core/sha256.mojo)
+            "sha256_hex",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

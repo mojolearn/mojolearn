@@ -17,7 +17,6 @@ struct GenerationBoundary(Defaultable, Movable):
     var state_cls: PythonObject
     var layer_classes: PythonObject
     var stream_cls: PythonObject
-    var hash_type: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -26,7 +25,6 @@ struct GenerationBoundary(Defaultable, Movable):
         self.state_cls = PythonObject(None)
         self.layer_classes = PythonObject(None)
         self.stream_cls = PythonObject(None)
-        self.hash_type = PythonObject(None)
 
 
 comptime GENERATION_BOUNDARY = _Global[
@@ -43,9 +41,6 @@ def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:
     g[].state_cls = classes[1]
     g[].layer_classes = classes[2]
     g[].stream_cls = classes[3]
-    g[].hash_type = Python.import_module("hashlib").sha256
-    if g[].bi.type(g[].hash_type) is not g[].bi.type(g[].bi.len):
-        raise Error("generation: SHA256 must be a native extension entry")
     return PythonObject(None)
 
 

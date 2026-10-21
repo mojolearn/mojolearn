@@ -69,6 +69,7 @@ from training.neural_session_mlp import nn_mlp_sessions_device
 from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort, getenv
 from std.python import Python, PythonObject
+from bindings.sha256_door import sha256_hexdigest
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -1803,6 +1804,11 @@ def chunked_lm_head_v2_train_binding(
     return PythonObject(count)
 
 
+def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
+    """The SHA-256 of a bytes-like value, 64 lowercase hex digits (core/sha256.mojo)."""
+    return sha256_hexdigest(value)
+
+
 def neural_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(neural_training_profile())
 
@@ -1820,6 +1826,7 @@ def build__mojolearn_training() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_training")
         m.def_function[neural_arithmetic_profile_binding]("neural_arithmetic_profile")
+        m.def_function[sha256_hex_binding]("sha256_hex")
         m.def_function[training_vendor_binding]("training_vendor")
         m.def_function[training_numeric_mode_binding]("training_numeric_mode")
         m.def_function[clip_pool_fault_available_binding]("clip_pool_fault_available")

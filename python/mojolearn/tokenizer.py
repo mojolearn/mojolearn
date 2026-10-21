@@ -90,8 +90,8 @@ VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
 
 
 def _identity_from_tokens_text(text, n_ranks):
-    import hashlib
-    return dict(schema=VOCABULARY_SCHEMA, sha256=hashlib.sha256(text.encode("ascii")).hexdigest(),
+    # the digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's
+    return dict(schema=VOCABULARY_SCHEMA, sha256=str(_binding().sha256_hex(text.encode("ascii"))),
                 n_ranks=n_ranks, n_vocab=n_ranks + 1, endoftext_id=n_ranks)
 
 

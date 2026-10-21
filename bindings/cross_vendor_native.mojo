@@ -20,13 +20,14 @@ from bindings.cross_vendor_admission import (
 from bindings.byte_checkpoint_native import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load
 from bindings.byte_checkpoint_io import ByteCheckpointIOError
 from bindings.native_json import native_json_parse
+from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_sliced8
+from core.sha256 import Sha256
 
 
 struct CrossVendorBoundary(Defaultable, Movable):
     var bi: PythonObject
     var arrays: PythonObject
     var array_cls: PythonObject
-    var hash_type: PythonObject
     var mismatch_cls: PythonObject
     var fold_pair: PythonObject
     var parallel_cls: PythonObject
@@ -44,7 +45,6 @@ struct CrossVendorBoundary(Defaultable, Movable):
         self.bi = PythonObject(None)
         self.arrays = PythonObject(None)
         self.array_cls = PythonObject(None)
-        self.hash_type = PythonObject(None)
         self.mismatch_cls = PythonObject(None)
         self.fold_pair = PythonObject(None)
         self.parallel_cls = PythonObject(None)
@@ -71,14 +71,11 @@ def cross_vendor_initialize(array_cls: PythonObject, mismatch_cls: PythonObject,
     c[].arrays = Python.import_module("array").array
     c[].array_cls = array_cls
     c[].mismatch_cls = mismatch_cls
-    c[].hash_type = Python.import_module("hashlib").sha256
     c[].fold_pair = fold_pair
     cv_types_initialize(array_cls)
     byte_checkpoint_initialize(array_cls)
     c[].argv = Python.import_module("sys").argv
     c[].console_write = Python.import_module("posix").write
-    if c[].bi.type(c[].hash_type) is not c[].bi.type(c[].bi.len):
-        raise Error("cross_vendor: SHA256 must be a native extension entry")
     if c[].bi.type(c[].fold_pair) is not c[].bi.type(c[].bi.len):
         raise Error("cross_vendor: fold must be a native extension entry")
     transport_initialize()
@@ -128,12 +125,11 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
 
 
 def cross_vendor_state_hash(state: PythonObject) raises -> PythonObject:
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     cv_state(state)
-    var hasher = c[].hash_type()
+    var hasher = Sha256()
     for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys): one digest update per named state field
-        hasher.update(cross_vendor_bytes(state[key]))
-    return hasher.hexdigest()
+        sha256_update(hasher, cross_vendor_bytes(state[key]))
+    return PythonObject(hasher.hexdigest())
 
 
 def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
@@ -425,7 +421,7 @@ def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
         var all_losses = bi.list()
         for k in range(shards):  # driver-loop: over logical shard losses in fixed order
             all_losses.append(losses[k])
-        var total_hash = c[].hash_type(total).hexdigest()
+        var total_hash = sha256_hexdigest(total)
         var apply = bi.dict()
         apply["cmd"] = PythonObject("apply")
         apply["step"] = PythonObject(step)
@@ -685,16 +681,9 @@ def cross_vendor_commit_configuration(owner: PythonObject, directory: PythonObje
 
 
 def cross_vendor_sliced_hash(value: PythonObject) raises -> PythonObject:
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    var raw = cross_vendor_bytes(value)
-    var hashes = c[].bi.list()
-    # Eight slices are part of the existing v2 digest format, not a dispatch
-    # threshold or workload-specific optimization. Native C SHA256 owns bytes.
-    for i in range(8):  # small-loop(eight digest slices): the fixed v2 hash format
-        var start = len(raw) * i // 8
-        var end = len(raw) * (i + 1) // 8
-        hashes.append(c[].hash_type(raw[c[].bi.slice(start, end)]).hexdigest())
-    return c[].hash_type(PythonObject("").join(hashes).encode("ascii")).hexdigest()
+    # The eight-slice v2 digest format is computed in core/sha256.mojo
+    # (sha256_sliced8_hex) over the same bytes.
+    return sha256_sliced8(cross_vendor_bytes(value))
 
 
 def cross_vendor_float_word(value: PythonObject) raises -> PythonObject:
@@ -711,10 +700,10 @@ def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonO
         event["state_sha256"] = row["state"]
         event["gradient_sha256"] = row["total_sha256"]
     else:
-        var digest = c[].hash_type()
+        var digest = Sha256()
         for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys): one digest update per named state field
-            digest.update(cross_vendor_sliced_hash(snapshot[key]).encode("ascii"))
-        event["state_sha256"] = digest.hexdigest()
+            digest.update_text(String(cross_vendor_sliced_hash(snapshot[key])))
+        event["state_sha256"] = PythonObject(digest.hexdigest())
         event["gradient_sha256"] = cross_vendor_sliced_hash(row["total_bytes"])
     event["lr_f32_hex"] = cross_vendor_float_word(trainer._state["config"]["lr"])
     var losses = c[].bi.list()
@@ -997,7 +986,7 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                 if total is None or len(total) != n * 4:
                     raise Error("CrossVendorMismatch: summed gradient has the wrong size")
                 var expected_hash = head.get("total_sha256")
-                if expected_hash is not None and not Bool(py=c[].hash_type(total).hexdigest() == expected_hash):
+                if expected_hash is not None and not Bool(py=sha256_hexdigest(total) == expected_hash):
                     raise Error("CrossVendorMismatch: total hash differs from the coordinator")
                 var gradient = c[].arrays("f")
                 gradient.frombytes(total)

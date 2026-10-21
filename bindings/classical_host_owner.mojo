@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
+from bindings.sha256_door import sha256_hexdigest
 
 
 def classical_host_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -40,4 +41,4 @@ def classical_host_hash(model: PythonObject, context: PythonObject) raises -> Py
         _ = array^
     # Match _HostBound.model_sha256: the linear families hash their stored
     # coefficient bytes, not intercept/parameters or the whole ZIP archive.
-    return context["classical_sha256"](payload).hexdigest()
+    return sha256_hexdigest(payload)

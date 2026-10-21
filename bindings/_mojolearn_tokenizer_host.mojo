@@ -75,6 +75,7 @@ spelling of the same arm.
 from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.sha256_door import sha256_hexdigest
 from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
 from std.sys.compile import is_defined
@@ -1007,6 +1008,11 @@ def vocab_decode_public_binding(tokenizer: PythonObject, seq: PythonObject, byte
     return raw.decode("utf-8", errors)
 
 
+def sha256_hex_binding(value: PythonObject) raises -> PythonObject:
+    """The SHA-256 of a bytes-like value, 64 lowercase hex digits (core/sha256.mojo)."""
+    return sha256_hexdigest(value)
+
+
 def vocab_fingerprint_binding(tokenizer: PythonObject) raises -> PythonObject:
     var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
@@ -1490,6 +1496,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(checkpoint_c[15], "safetensors_names")
         module.def_py_c_function(checkpoint_c[16], "safetensors_contains")
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
+        module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_py_c_function(neural_block_c[0], "neural_block_init")
         module.def_py_c_function(neural_block_c[1], "neural_block_allocate")
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")

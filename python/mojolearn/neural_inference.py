@@ -46,7 +46,6 @@ classes.
 The binding is resolved on first use, so an install without it still
 imports and raises BY NAME when touched.
 """
-import hashlib
 import json
 from pathlib import Path
 
@@ -144,9 +143,10 @@ class MLPInference:
             raise ValueError("MLPInference checkpoint envelope mismatch")
         if envelope["schema"] != _FILE_SCHEMA:
             raise ValueError("MLPInference checkpoint schema mismatch")
-        if hashlib.sha256(_canonical(envelope["payload"])).hexdigest() != envelope["payload_sha256"]:
+        binding = _binding()
+        if str(binding.sha256_hex(_canonical(envelope["payload"]))) != envelope["payload_sha256"]:
             raise ValueError("MLPInference checkpoint integrity mismatch")
-        expected_profile = str(_binding().neural_arithmetic_profile())
+        expected_profile = str(binding.neural_arithmetic_profile())
         if envelope.get("arithmetic_profile", "mojolearn.neural-training.fp32.v1") != expected_profile:
             raise ValueError("MLPInference checkpoint arithmetic profile mismatch")
         weights, _, _, _ = _validate_state(_decode_state(envelope["payload"]))
