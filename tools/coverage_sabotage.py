@@ -22,9 +22,10 @@ tab separated, `#` comments:
 
   arm       a unique name, `coverage-<area>-<what>`
   patch     the patch, relative to the repository root
-  bindings  the bindings to rebuild with it, comma separated (a binding
-            build script's name: `core_host` is bindings/build_core_host.sh,
-            `estimators` is bindings/build_estimators.sh)
+  bindings  the binding build scripts to rerun with it, comma separated, as
+            script stems: `build_core_host` is bindings/build_core_host.sh,
+            `build_estimators` is bindings/build_estimators.sh; a stem ending in
+            `_host` builds a host binding)
   lanes     the identity_break lanes that must read MOVED or REFUSED,
             comma separated
   why       one sentence: what the fault is and why those lanes reach it
@@ -139,9 +140,9 @@ def plan(arm):
     if host:
         print("cp -R $CLEAN $SAB")
         for b in host:
-            print(f"MOJOLEARN_HOST_OUTDIR=$SAB MOJOLEARN_COMPILE_JOBS=1 sh bindings/build_{b}.sh")
+            print(f"MOJOLEARN_HOST_OUTDIR=$SAB MOJOLEARN_COMPILE_JOBS=1 sh bindings/{b}.sh")
     for b in device:
-        print(f"MOJOLEARN_COMPILE_JOBS=1 sh bindings/build_{b}.sh   # device binding, into this scratch tree")
+        print(f"MOJOLEARN_COMPILE_JOBS=1 sh bindings/{b}.sh   # device binding, into this scratch tree")
     print(f"MOJOLEARN_HOST_DIR={'$SAB' if host else '$CLEAN'} python3 tools/identity_break.py --lanes {lanes} "
           "--repeats 1 --json sab.json")
     print(f"python3 tools/coverage_sabotage.py check --arm {arm['arm']} --clean clean.json --sabotaged sab.json")
