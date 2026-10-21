@@ -77,6 +77,25 @@ def fval(p: PythonObject, i: Int) raises -> Float32:
     return Float32(Float64(py=p[i]))
 
 
+def py_ints(p: PythonObject) raises -> List[Int]:
+    """A Python list of integers (addresses, handles, parameters) as typed
+    Ints for a kernel entry; a conversion only, no data."""
+    var out = List[Int]()
+    for i in range(len(p)):  # small-loop(p: entry arguments): argument conversion, no data
+        out.append(Int(py=p[i]))
+    return out^
+
+
+def py_f64s(p: PythonObject) raises -> List[Float64]:
+    """A Python list of floats as typed Float64s for a kernel entry; a
+    conversion only, no data (an entry's Float32 is Float32 of this value,
+    `fval`'s rounding)."""
+    var out = List[Float64]()
+    for i in range(len(p)):  # small-loop(p: entry arguments): argument conversion, no data
+        out.append(Float64(py=p[i]))
+    return out^
+
+
 def net_of(ip: PythonObject) raises -> Net:
     """ip[0:5] = cell, D, H, L, O."""
     var net = Net(ival(ip, 0), ival(ip, 1), ival(ip, 2), ival(ip, 3), ival(ip, 4))
@@ -865,7 +884,7 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
         ex.upload(S1, h1, n if C == 0 else R)
         if C > 0:
             ex.upload(S2, fptr(addrs[3], "col_var"), C)
-    adafactor_core(ex, P, G, S1, S2, R, C, t, fp)
+    adafactor_core(ex, P, G, S1, S2, R, C, t, py_f64s(fp))
     ex.download_async(hp, P, n)
     ex.download_async(h1, S1, n if C == 0 else R)
     if C > 0:
@@ -875,18 +894,18 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
 
 
 def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: Int, t: Int,
-                            fp: PythonObject) raises:
+                            fp: List[Float64]) raises:
     """The launches of one Adafactor step on device-side P, G, S1 (row_var
     or the variance) and S2 (col_var; unused for a vector), queued, no
     transfer: `adafactor_step_py`'s body, also the resident step's
     (`sequence/opt_resident.mojo`, AF_RESIDENT)."""
     var n = R * C if C > 0 else R
-    var lr = Float64(py=fp[0])
-    var w = Float32(identical_pow64(Float64(t), Float64(py=fp[1])))
+    var lr = fp[0]
+    var w = Float32(identical_pow64(Float64(t), fp[1]))
     var rho = Float32(min(lr, Float64(1.0) / sqrt(Float64(t))))
-    var eps1 = fval(fp, 2)
+    var eps1 = Float32(fp[2])
     var eps1sq = ftz(identical_mul(eps1, eps1))
-    var wd = fval(fp, 5)
+    var wd = Float32(fp[5])
     var U = ex.alloc(n)
     var sc = ex.alloc(4)
     var fast = _fast_norms() and n >= FAST_NORM_MIN
@@ -898,7 +917,7 @@ def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: 
     a.p0 = P
     a.p1 = sc
     a.i0 = n
-    a.f0 = fval(fp, 3)
+    a.f0 = Float32(fp[3])
     a.f1 = rho
     if fast:
         a.p2 = parts
@@ -953,7 +972,7 @@ def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: 
     d.p0 = U
     d.p1 = sc
     d.i0 = n
-    d.f0 = fval(fp, 4)
+    d.f0 = Float32(fp[4])
     if fast:
         d.p2 = parts
         d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)

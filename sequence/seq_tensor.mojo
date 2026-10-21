@@ -17,9 +17,10 @@ the caller moves data, and the device forms of the entries
 `adafactor_resident_step_dev_py`, `layer_norm_dev_py`) read and write the
 buffers in place. The kernels are the per-call entries' launches on the same
 values: no bit moves. Storage is `std.ffi._Global`, one pool per numeric
-tier (as `_ResPool`); a freed handle's slot is reused."""
+tier (as `_ResPool`); a freed handle's slot is reused. The Python entries
+(`seq_tensor_alloc_py` ...) are `sequence/seq_tensor_pyapi.mojo`'s; this
+file takes typed handles and addresses only."""
 from std.ffi import _Global
-from std.python import PythonObject
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -50,10 +51,9 @@ def _tensor(h: Int) raises -> Int:
     return pool[].n[h - 1]
 
 
-def seq_tensor_ptr(handle: PythonObject, n: Int, what: String) raises -> FP:
-    """The device address of open handle `handle`, which must hold exactly
+def seq_tensor_ptr(h: Int, n: Int, what: String) raises -> FP:
+    """The device address of open handle `h`, which must hold exactly
     n floats (the entry's shape check)."""
-    var h = Int(py=handle)
     var have = _tensor(h)
     if have != n:
         raise Error("seq_tensor: " + what + " holds " + String(have) + " floats, the call needs " + String(n))
@@ -61,16 +61,15 @@ def seq_tensor_ptr(handle: PythonObject, n: Int, what: String) raises -> FP:
     return FP(unsafe_from_address=Int(pool[].bufs[h - 1].unsafe_ptr()))
 
 
-def seq_tensor_alloc_py(n_obj: PythonObject, zero_obj: PythonObject) raises -> PythonObject:
-    """A new resident tensor of n >= 1 floats; zero = 1 fills it with +0.0
+def seq_tensor_alloc(n: Int, zero: Bool) raises -> Int:
+    """A new resident tensor of n >= 1 floats; zero fills it with +0.0
     on the device (else its contents are unspecified until written).
     Returns the handle (>= 1)."""
-    var n = Int(py=n_obj)
     if n < 1:
         raise Error("seq_tensor_alloc: n must be >= 1")
     var ctx = sequence_ctx()
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    if Int(py=zero_obj) != 0:
+    if zero:
         buf.enqueue_fill(Float32(0.0))
     var pool = _SEQ_TENSORS.get_or_create_ptr()
     var h = -1
@@ -87,31 +86,28 @@ def seq_tensor_alloc_py(n_obj: PythonObject, zero_obj: PythonObject) raises -> P
     # the fill is ordered before every later use on the one in-order
     # context; the wait makes a failed allocation raise here
     ctx.synchronize()
-    return PythonObject(h + 1)
+    return h + 1
 
 
-def seq_tensor_free_py(handle: PythonObject) raises -> PythonObject:
+def seq_tensor_free(h: Int) raises -> Int:
     """Release a handle (after the queue drains: a queued launch may still
-    read its buffer)."""
-    var h = Int(py=handle)
+    read its buffer). Returns h."""
     _ = _tensor(h)
     var ctx = sequence_ctx()
     ctx.synchronize()
     var pool = _SEQ_TENSORS.get_or_create_ptr()
     pool[].bufs[h - 1] = ctx.enqueue_create_buffer[DType.float32](1)
     pool[].n[h - 1] = 0
-    return PythonObject(h)
+    return h
 
 
-def seq_tensor_upload_py(handle: PythonObject, addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
-    """The caller's n floats at `addr` into the handle's first n cells, then
-    a wait (the caller's array may change once this returns)."""
-    var h = Int(py=handle)
+def seq_tensor_upload(h: Int, a: Int, n: Int) raises -> Int:
+    """The caller's n floats at address `a` into the handle's first n
+    cells, then a wait (the caller's array may change once this returns).
+    Returns n."""
     var have = _tensor(h)
-    var n = Int(py=n_obj)
     if n < 1 or n > have:
         raise Error("seq_tensor_upload: n must lie in [1, " + String(have) + "]")
-    var a = Int(py=addr)
     if a == 0:
         raise Error("seq_tensor_upload: null host buffer")
     var ctx = sequence_ctx()
@@ -120,18 +116,15 @@ def seq_tensor_upload_py(handle: PythonObject, addr: PythonObject, n_obj: Python
     ctx.enqueue_copy(dst_buf=view, src_ptr=FP(unsafe_from_address=a))
     ctx.synchronize()
     _ = view^
-    return PythonObject(n)
+    return n
 
 
-def seq_tensor_download_py(handle: PythonObject, addr: PythonObject, n_obj: PythonObject) raises -> PythonObject:
-    """The handle's first n cells into the caller's array at `addr`, after
-    every queued launch (one wait)."""
-    var h = Int(py=handle)
+def seq_tensor_download(h: Int, a: Int, n: Int) raises -> Int:
+    """The handle's first n cells into the caller's array at address `a`,
+    after every queued launch (one wait). Returns n."""
     var have = _tensor(h)
-    var n = Int(py=n_obj)
     if n < 1 or n > have:
         raise Error("seq_tensor_download: n must lie in [1, " + String(have) + "]")
-    var a = Int(py=addr)
     if a == 0:
         raise Error("seq_tensor_download: null host buffer")
     var ctx = sequence_ctx()
@@ -140,15 +133,13 @@ def seq_tensor_download_py(handle: PythonObject, addr: PythonObject, n_obj: Pyth
     ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=a), src_buf=view)
     ctx.synchronize()
     _ = view^
-    return PythonObject(n)
+    return n
 
 
-def seq_tensor_copy_py(dst: PythonObject, src: PythonObject, n_obj: PythonObject) raises -> PythonObject:
-    """Device to device: src's first n cells into dst's (a `copy()` of a
-    resident tensor), on the one in-order context, then a wait."""
-    var hd = Int(py=dst)
-    var hs = Int(py=src)
-    var n = Int(py=n_obj)
+def seq_tensor_copy(hd: Int, hs: Int, n: Int) raises -> Int:
+    """Device to device: handle hs's first n cells into hd's (a `copy()`
+    of a resident tensor), on the one in-order context, then a wait.
+    Returns n."""
     if n < 1 or n > _tensor(hd) or n > _tensor(hs):
         raise Error("seq_tensor_copy: n must fit both tensors")
     var ctx = sequence_ctx()
@@ -159,12 +150,12 @@ def seq_tensor_copy_py(dst: PythonObject, src: PythonObject, n_obj: PythonObject
     ctx.synchronize()
     _ = vd^
     _ = vs^
-    return PythonObject(n)
+    return n
 
 
-def seq_tensor_view(handle: PythonObject, n: Int, what: String) raises -> DeviceBuffer[DType.float32]:
-    """A view of open handle `handle`'s n floats (exactly its size), for a
+def seq_tensor_view(h: Int, n: Int, what: String) raises -> DeviceBuffer[DType.float32]:
+    """A view of open handle `h`'s n floats (exactly its size), for a
     device-to-device copy."""
-    _ = seq_tensor_ptr(handle, n, what)
+    _ = seq_tensor_ptr(h, n, what)
     var pool = _SEQ_TENSORS.get_or_create_ptr()
-    return pool[].bufs[Int(py=handle) - 1].create_sub_buffer[DType.float32](0, n)
+    return pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)

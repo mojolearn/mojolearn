@@ -21,7 +21,8 @@ from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
-from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
+from sequence.opt_resident import AF_RESIDENT
+from sequence.opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
 from autograd.program_control_pyapi import ops_program_control_py
 from autograd.distributed_pyapi import (
@@ -66,12 +67,12 @@ from autograd.model_checkpoint_pyapi import (
 )
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.pyapi import moe_backward_py, moe_backward_run
-from sequence.opt_resident import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
-from sequence.seq_tensor import (
+from sequence.opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
+from sequence.seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
-from sequence.layernorm_dev import layer_norm_dev_py
-from sequence.sched_table import sched_exp_block_py
+from sequence.layernorm_dev_pyapi import layer_norm_dev_py
+from sequence.sched_table_pyapi import sched_exp_block_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -83,9 +84,9 @@ from std.sys.info import has_apple_gpu_accelerator
 #: FAST + Apple default; rollback -D MOJOLEARN_SCHED_FAST_TABLE_OFF.
 comptime SCHED_FAST_TABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                              and not is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]())
-from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
+from sequence.prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
-from sequence.moe_dev import moe_forward_dev_py
+from sequence.moe_dev_pyapi import moe_forward_dev_py
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
