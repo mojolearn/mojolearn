@@ -191,8 +191,9 @@ def sgd_base_rows(mut base: List[Float32], f5: List[Float64]):
 
 
 def widen_f32_into(dst: MutPointer[Float64, MutUntrackedOrigin], src: List[Float32], n: Int):
-    """dst[e] = Float64(src[e]) for e < n."""
-    for e in range(n):
+    """dst[e] = Float64(src[e]) for e < n: the per-step optimizer scalars
+    (AH_ROW per step) or one loss per step, already downloaded."""
+    for e in range(n):  # small-loop(n: per-step optimizer scalars or per-step losses, not row data)
         dst[e] = Float64(src[e])
 
 
