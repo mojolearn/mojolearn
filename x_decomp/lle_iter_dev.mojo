@@ -8,14 +8,12 @@ block comes home, the same launches run, the factor goes back up), and the
 subspace change is one word home. GPU binding only."""
 from std.math import inf, sqrt
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _i, _n
+from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import DevExec
 from x_decomp.fa_em import svd_desc
 from x_decomp.kit import Mat, OP_ABS, OP_ADDS, OP_MUL, OP_RECIP, OP_SELECT, OP_SQ, OP_SUB, mat_const, mat_from
 from x_decomp.kit_device import DKit, DMat
-from x_decomp.lle_iter import LleArgs, _lle_args, take_want
+from x_decomp.lle_iter import LleArgs, take_want
 from x_decomp.select_ops import SEL_MAX, sel_fold
 
 
@@ -88,80 +86,52 @@ def lle_iterate_dev(
     return 2
 
 
-def lle_iterate_dev_py(
-    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, outs: PythonObject,
-    p: PythonObject, f: PythonObject,
-) raises -> PythonObject:
-    """`lle_iterate_py` on the resident kit."""
-    var a = _lle_args(p, f)
+def lle_iterate_dev_run(
+    pf: F32Ptr, pl: F32Ptr, ppm: F32Ptr, pim: F32Ptr, pz: F32Ptr, px: F32Ptr, py_: F32Ptr, ps: F32Ptr, a: LleArgs,
+    mut e: Float64,
+) raises -> Int:
+    """`lle_iterate_run` on the resident kit."""
     var n = a.n
     if a.n1 != n - 1 or a.p < a.nc or a.p > a.n1 or n * n > 2147483647:
         raise Error("x_decomp: lle iterate shape out of range")
-    var pf = _f(f0)
-    var pl = _f(lu)
-    var ppm = _f(pm)
-    var pim = _f(im)
-    var pz = _f(z)
-    var px = _f(outs[0])
-    var py_ = _f(outs[1])
-    var ps = _f(outs[2])
-    var st = 0
-    var e = 0.0
-    with GILReleased(Python()):
-        var k = DKit()
-        var F = k.upload(mat_from(pf, n, n))
-        var L = k.upload(mat_from(pl, n, n))
-        var P = k.upload(mat_from(ppm, n, 1))
-        var I = k.upload(mat_from(pim, n, 1))
-        var Z = k.upload(mat_from(pz, n, 1))
-        var X = DMat(0, 0)
-        var Y = DMat(0, 0)
-        var S = Mat(0, 0)
-        st = lle_iterate_dev(k, F, L, P, I, Z, a, X, Y, S, e)
-        var hx = k.get(X)
-        var hy = k.get(Y)
-        k.sync()
-        for i in range(hx.n()):
-            px.unsafe_store(i, hx.d[i])
-        for i in range(hy.n()):
-            py_.unsafe_store(i, hy.d[i])
-        for i in range(S.n()):
-            ps.unsafe_store(i, S.d[i])
-    return Python.tuple(st, e)
+    var k = DKit()
+    var F = k.upload(mat_from(pf, n, n))
+    var L = k.upload(mat_from(pl, n, n))
+    var P = k.upload(mat_from(ppm, n, 1))
+    var I = k.upload(mat_from(pim, n, 1))
+    var Z = k.upload(mat_from(pz, n, 1))
+    var X = DMat(0, 0)
+    var Y = DMat(0, 0)
+    var S = Mat(0, 0)
+    var st = lle_iterate_dev(k, F, L, P, I, Z, a, X, Y, S, e)
+    var hx = k.get(X)
+    var hy = k.get(Y)
+    k.sync()
+    for i in range(hx.n()):
+        px.unsafe_store(i, hx.d[i])
+    for i in range(hy.n()):
+        py_.unsafe_store(i, hy.d[i])
+    for i in range(S.n()):
+        ps.unsafe_store(i, S.d[i])
+    return st
 
 
-def lle_gemm_ordered_py(a: PythonObject, b: PythonObject, output: PythonObject, p: PythonObject) raises -> PythonObject:
+def lle_gemm_ordered_run(pa: F32Ptr, pb: F32Ptr, po: F32Ptr, m: Int, kk: Int, n: Int, ta: Bool, tb: Bool) raises:
     """LLE's near-null construction/products through the existing ordered GPU cells."""
-    var m = _n(p, 0)
-    var kk = _n(p, 1)
-    var n = _n(p, 2)
-    var ta = _n(p, 3) != 0
-    var tb = _n(p, 4) != 0
     if m < 0 or kk < 0 or n < 0 or max(m * kk, max(kk * n, m * n)) > 2147483647:
         raise Error("x_decomp: LLE product shape out of range")
-    var pa = _f(a)
-    var pb = _f(b)
-    var po = _f(output)
-    with GILReleased(Python()):
-        var k = DKit()
-        var A = k.upload(mat_from(pa, kk if ta else m, m if ta else kk))
-        var B = k.upload(mat_from(pb, n if tb else kk, kk if tb else n))
-        var C = k.mm_ordered(A, B, ta, tb)
-        var host = k.get(C)
-        k.sync()
-        for j in range(host.n()):
-            po.unsafe_store(j, host.d[j])
-    return PythonObject(0)
+    var k = DKit()
+    var A = k.upload(mat_from(pa, kk if ta else m, m if ta else kk))
+    var B = k.upload(mat_from(pb, n if tb else kk, kk if tb else n))
+    var C = k.mm_ordered(A, B, ta, tb)
+    var host = k.get(C)
+    k.sync()
+    for j in range(host.n()):
+        po.unsafe_store(j, host.d[j])
 
 
-def lle_lu_ordered_py(a: PythonObject, piv: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+def lle_lu_ordered_run(pa: F32Ptr, pp: I32Ptr, pi: F32Ptr, n: Int) raises:
     """LLE's ill-conditioned spectral transform, scalar trailing updates on GPU."""
-    var n = _n(p, 0)
     if n < 0 or n * n > 2147483647:
         raise Error("x_decomp: LLE factor shape out of range")
-    var pa = _f(a)
-    var pp = _i(piv)
-    var pi = _f(info)
-    with GILReleased(Python()):
-        DevExec.lu_ordered(pa, pp, pi, n)
-    return PythonObject(0)
+    DevExec.lu_ordered(pa, pp, pi, n)
