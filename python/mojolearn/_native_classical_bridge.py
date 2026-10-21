@@ -14,6 +14,34 @@ def _reduce_not_fitted(error):
     return _ERROR_ENTRY(error, "reduce_not_fitted", (), _ERROR_CONTEXT)
 
 
+def _decomp_cells(decomp):
+    # glue: cache only the compiled TSQR entry points of one decomposition
+    # binding (the selected device's, or the CPU one for the Host* classes).
+    from types import BuiltinFunctionType
+    cells = {}
+    required_cells = ("vendor", "numeric_mode", "tsqr_r", "ew", "gemm", "colsum", "rowsum",
+                      "move", "order_f", "svd", "rank_above", "orth_diag", "geqrf", "orgqr")
+    optional_cells = ("idn_flags", "ols_tsqr_r", "dev_ew", "dev_alloc", "dev_free", "dev_upload",
+                      "dev_download", "dev_gemm", "dev_colsum", "dev_rowsum", "dev_move",
+                      "dev_reduce", "dev_order_f", "dev_orth_diag", "dev_svd")
+    for suffix in required_cells + optional_cells:  # glue: cache only compiled decomp entry points during connection
+        name = "x_decomp_" + suffix
+        try:
+            entry = getattr(decomp, name)
+        except (AttributeError, ImportError):
+            if suffix in required_cells:
+                raise
+            continue
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"classical TSQR owner requires compiled {name}")
+        cells[name] = entry
+    if "x_decomp_dev_ew" in cells:
+        for suffix in optional_cells[3:-1]:  # glue: complete native resident family admission
+            if "x_decomp_" + suffix not in cells:
+                raise ImportError(f"classical TSQR resident entry missing: {suffix}")
+    return cells
+
+
 def connect_host(host_ridge_class, host_linear_class):
     # glue: connect the existing explicit Host* CPU ABI once at setup
     from types import BuiltinFunctionType
@@ -38,13 +66,24 @@ def connect_host(host_ridge_class, host_linear_class):
         cpu[name] = function
     if module.estimators_vendor() != "cpu" or module.estimators_numeric_mode() != 1:
         raise RuntimeError("explicit host model requires the CPU identical binary")
-    connected = {}
-    for mode, existing in context["classical_bindings"].items():  # glue: preserve supported helper-mode metadata at connection
-        # Existing Host* fit helpers bind their own decomposition/x_linear
-        # family. Inference below only calls the CPU estimator entry.
-        native = {name: existing[name] for name in ("decomp", "x_linear_fit") if isinstance(existing, dict) and name in existing}  # glue: retain the two connected native helper families
-        native.update(cpu)
-        connected[mode] = native
+    # The TSQR and x_linear helpers are the CPU binaries too: the device
+    # ones report the device vendor, which the native fit refuses beside
+    # the CPU estimator entries (and would not give the CPU column's bits).
+    from . import _backend
+    try:
+        decomp = _decomp_cells(_backend.load_host_module("_mojolearn_x_decomp_host"))
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+        decomp = type(error).__name__ + ": " + str(error)
+    cpu["decomp"] = decomp
+    try:
+        linear_fit = _backend.load_host_module("_mojolearn_x_linear_host").x_linear_fit
+    except (ImportError, AttributeError):
+        linear_fit = None  # only a weighted or one-column HostRidge fit needs it
+    if linear_fit is not None:
+        if not isinstance(linear_fit, BuiltinFunctionType):
+            raise TypeError("explicit host model requires compiled x_linear_fit")
+        cpu["x_linear_fit"] = linear_fit
+    connected = {mode: dict(cpu) for mode in context["classical_bindings"]}  # glue: one CPU entry family per connected mode
     context.update(classical_bindings=connected, classical_explicit_cpu=True,
                    classical_metric_vendor=context["vendor"], vendor="cpu")
     return entry, context
@@ -238,29 +277,7 @@ def connect(ridge_class, linear_class=None):
             entries["x_linear_fit"] = entry
             if linear_class is not None:
                 try:
-                    decomp = _backend.binding("_mojolearn_x_decomp", mode)
-                    cells = {}
-                    required_cells = ("vendor", "numeric_mode", "tsqr_r", "ew", "gemm", "colsum", "rowsum",
-                                      "move", "order_f", "svd", "rank_above", "orth_diag", "geqrf", "orgqr")
-                    optional_cells = ("idn_flags", "ols_tsqr_r", "dev_ew", "dev_alloc", "dev_free", "dev_upload",
-                                      "dev_download", "dev_gemm", "dev_colsum", "dev_rowsum", "dev_move",
-                                      "dev_reduce", "dev_order_f", "dev_orth_diag", "dev_svd")
-                    for suffix in required_cells + optional_cells:  # glue: cache only compiled decomp entry points during connection
-                        name = "x_decomp_" + suffix
-                        try:
-                            entry = getattr(decomp, name)
-                        except (AttributeError, ImportError):
-                            if suffix in required_cells:
-                                raise
-                            continue
-                        if not isinstance(entry, BuiltinFunctionType):
-                            raise TypeError(f"classical TSQR owner requires compiled {name}")
-                        cells[name] = entry
-                    if "x_decomp_dev_ew" in cells:
-                        for suffix in optional_cells[3:-1]:  # glue: complete native resident family admission
-                            if "x_decomp_" + suffix not in cells:
-                                raise ImportError(f"classical TSQR resident entry missing: {suffix}")
-                    entries["decomp"] = cells
+                    entries["decomp"] = _decomp_cells(_backend.binding("_mojolearn_x_decomp", mode))
                 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
                     entries["decomp"] = type(error).__name__ + ": " + str(error)
             connected[mode] = entries
