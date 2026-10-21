@@ -351,3 +351,27 @@ def test_remote_independent_reference_and_resume(rows, tmp_path):
     model.train_step(x, y)
     resumed.train_step(x, y)
     assert state_bytes(model) == state_bytes(resumed)
+
+
+def test_trainer_and_caller_inputs_are_released(tmp_path):
+    # The native owner never receives the trainer itself, and reads caller
+    # buffers through their own methods, so neither keeps an extra reference.
+    import gc
+    import weakref
+    path = tmp_path / 'lifetime.json'
+    model = trainer()
+    x, y = batch()
+    counts = sys.getrefcount(x), sys.getrefcount(y)
+    for _ in range(3):  # glue: repeated public calls in a test
+        model.train_step(x, y, return_input_grad=True)
+        model.predict_logits(x)
+        model.loss_and_grads(x, y)
+        model.state_dict()
+        model.save_checkpoint(path)
+    restored = SmallMLPTrainer.from_checkpoint(path)
+    if sys.version_info >= (3, 12):
+        assert (sys.getrefcount(x), sys.getrefcount(y)) == counts
+    refs = weakref.ref(model), weakref.ref(restored)
+    del model, restored
+    gc.collect()
+    assert refs[0]() is None and refs[1]() is None

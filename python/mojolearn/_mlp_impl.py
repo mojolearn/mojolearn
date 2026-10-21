@@ -258,7 +258,9 @@ class SmallMLPTrainer:
 
     # Every method below is the API shell: one call into the native owner
     # (bindings/small_mlp_native.mojo), which checks the arguments, chooses the
-    # route and builds the result. The object holds only `_handle`.
+    # route and builds the result. The object holds only `_handle` and passes
+    # that, never itself, so no native call can retain the trainer
+    # (docs/MODULAR_ASKS.md, PythonObject references).
 
     def __init__(self, weight1, bias1, weight2, bias2, *, data_schedule,
                  lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01):
@@ -267,27 +269,28 @@ class SmallMLPTrainer:
 
     def __del__(self):
         try:
-            _NATIVE('close', (self,))
+            _NATIVE('close', (self._handle,))
         except Exception:
             pass
 
     @property
     def step_(self):
         """Number of optimizer steps taken."""
-        return _NATIVE('step', (self,))
+        return _NATIVE('step', (self._handle,))
 
     @property
     def weights_(self):
         """Current parameters as a dict: `weight1`, `bias1`, `weight2`, `bias2`."""
-        return _NATIVE('weights', (self,))
+        return _NATIVE('weights', (self._handle,))
 
     def state_dict(self):
         """Return an independent snapshot of the full resumable state (weights, optimizer moments, settings, data schedule)."""
-        return _NATIVE('state_dict', (self,))
+        return _NATIVE('state_dict', (self._handle,))
 
     def load_state_dict(self, state):
         """Restore a snapshot from `state_dict`. The snapshot is validated and copied before any live state changes."""
-        return _NATIVE('load_state_dict', (self, state))
+        _NATIVE('load_state_dict', (self._handle, state))
+        return self
 
     def train_steps(self, X, targets, k):
         """Run `k` consecutive training steps in one call.
@@ -299,7 +302,7 @@ class SmallMLPTrainer:
 
         Available only on builds that provide it; otherwise raises `RuntimeError`.
         """
-        return _NATIVE('train_steps', (self, X, targets, k))
+        return _NATIVE('train_steps', (self._handle, X, targets, k))
 
     @staticmethod
     def _binding():
@@ -319,11 +322,11 @@ class SmallMLPTrainer:
         inputs : list of buffers
             float32 batches, each (rows_i, 8).
         """
-        return _NATIVE('predict_logits_sessions', (self, inputs))
+        return _NATIVE('predict_logits_sessions', (self._handle, inputs))
 
     def predict_logits(self, X):
         """Logits (n_rows, 3) of `X` (n_rows, 8) with the current weights."""
-        return _NATIVE('predict_logits', (self, X))
+        return _NATIVE('predict_logits', (self._handle, X))
 
     def loss_and_grads(self, X, targets):
         """Mean cross-entropy loss and parameter gradients of a batch, without a step.
@@ -336,7 +339,7 @@ class SmallMLPTrainer:
         gradients : sequence of Arrays
             Gradients of `weight1`, `bias1`, `weight2`, `bias2`, in that order.
         """
-        return _NATIVE('loss_and_grads', (self, X, targets))
+        return _NATIVE('loss_and_grads', (self._handle, X, targets))
 
     def apply_gradients(self, gradients):
         """Apply one already-combined gradient with AdamW; returns the new step count.
@@ -345,7 +348,7 @@ class SmallMLPTrainer:
         `bias1`, `weight2`, `bias2`, otherwise `ValueError`.
         The update either completes or leaves the state unchanged.
         """
-        return _NATIVE('apply_gradients', (self, gradients))
+        return _NATIVE('apply_gradients', (self._handle, gradients))
 
     def train_step(self, X, targets, *, return_input_grad=False):
         """One AdamW training step on a batch.
@@ -365,11 +368,11 @@ class SmallMLPTrainer:
             `step` (the new step count), `loss` and `logits` from before the update,
             `gradients` (the four parameter gradients), and `input_grad` when requested.
         """
-        return _NATIVE('train_step', (self, X, targets, return_input_grad))
+        return _NATIVE('train_step', (self._handle, X, targets, return_input_grad))
 
     def save_checkpoint(self, path):
         """Atomically save the full state to `path` in a bounded, pickle-free MLP checkpoint format."""
-        return _NATIVE('save_checkpoint', (self, path))
+        return _NATIVE('save_checkpoint', (self._handle, path))
 
     @classmethod
     def from_checkpoint(cls, path):

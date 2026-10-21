@@ -171,14 +171,14 @@ def mlp_snapshot(model: PythonObject) raises -> PythonObject:
     """The model's complete state, read from its native state handle (the
     public `state_dict` call, under the model's lock), admitted as identical."""
     _mlp_mode()
-    return mlp_validate_state(small_mlp_call("state_dict", Python.tuple(model)))
+    return mlp_validate_state(small_mlp_call("state_dict", Python.tuple(model.__dict__.get("_handle"))))
 
 
 def mlp_publish(model: PythonObject, state: PythonObject) raises:
     """Replace the model's native state with a validated copy of `state`."""
     _mlp_mode()
     var checked = mlp_validate_state(state)
-    _ = small_mlp_call("load_state_dict", Python.tuple(model, checked))
+    _ = small_mlp_call("load_state_dict", Python.tuple(model.__dict__.get("_handle"), checked))
 
 
 def mlp_from_state(state: PythonObject) raises -> PythonObject:

@@ -11,9 +11,14 @@ backward, loss and AdamW update are the training binding's entries, called with
 the same operands, in the same order, as `python/mojolearn/_mlp_impl.py` called
 them before this owner existed, so every route keeps its bits.
 
-Ownership (docs/MODULAR_ASKS.md, PythonObject attribute assignment): this owner
-never assigns attributes on a Python object. State lives in the native store;
-the Python constructor assigns the returned handle itself.
+Ownership (docs/MODULAR_ASKS.md: a PythonObject passed as a call argument or
+assigned as an attribute keeps one extra reference). The trainer object never
+enters this owner: the Python methods pass `self._handle`, state lives in the
+native store, and the constructor assigns the returned handle itself. Caller
+inputs are read through attribute and method access on the caller's object
+(`__class__`, `__buffer__`, `keys()`, `__float__`, `__index__`), never passed
+as a call argument, so they are not retained either (Python 3.12+; on 3.10
+and 3.11, `memoryview(value)` is the only buffer door).
 """
 from std.ffi import _Global
 from std.math import isfinite
@@ -73,7 +78,7 @@ struct SmallMlpBoundary(Defaultable, Movable):
     var backend: PythonObject
     var environ: PythonObject
     var posix: PythonObject
-    var index: PythonObject
+    var buffer_flags: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -86,7 +91,7 @@ struct SmallMlpBoundary(Defaultable, Movable):
         self.backend = PythonObject(None)
         self.environ = PythonObject(None)
         self.posix = PythonObject(None)
-        self.index = PythonObject(None)
+        self.buffer_flags = PythonObject(None)
 
 
 comptime SMALL_MLP_BOUNDARY = _Global[
@@ -123,7 +128,9 @@ def small_mlp_initialize(context: PythonObject) raises:
     b[].backend = context["backend"]
     b[].environ = context["environ"]
     b[].posix = Python.import_module("posix")
-    b[].index = Python.import_module("_operator").index
+    # PyBUF_FULL_RO, the flags memoryview(value) asks with; one cached
+    # object, so passing it never allocates.
+    b[].buffer_flags = PythonObject(284)
     # The native Array allocator, shared without resetting any generation
     # model classes another owner already admitted.
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
@@ -184,7 +191,7 @@ def _resident_enabled(entries: PythonObject) raises -> Bool:
 
 def _is_bool(value: PythonObject) raises -> Bool:
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    var cls = bi.type(value)
+    var cls = value.__class__
     return cls is bi.bool or String(py=cls.__name__) == "bool_"
 
 
@@ -208,8 +215,18 @@ def _shape_text(dims: List[Int]) -> String:
 
 def _view(value: PythonObject, refusal: String) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    if b[].bi.type(value) is b[].array_cls:
+    if value.__class__ is b[].array_cls:
         return value._mv
+    var exporter = PythonObject(None)
+    try:
+        exporter = value.__buffer__
+    except:
+        exporter = PythonObject(None)
+    if exporter is not None:
+        try:
+            return exporter(b[].buffer_flags)
+        except:
+            raise Error("TypeError: " + refusal)
     try:
         return b[].bi.memoryview(value)
     except:
@@ -218,7 +235,7 @@ def _view(value: PythonObject, refusal: String) raises -> PythonObject:
 
 def _shape(value: PythonObject, view: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    if b[].bi.type(value) is b[].array_cls:
+    if value.__class__ is b[].array_cls:
         return value.shape
     return view.shape
 
@@ -252,7 +269,7 @@ def _words_into(value: PythonObject, dims: List[Int], label: String, dst: Int, i
     store.frombytes(view.tobytes("C"))
     if len(store) != n:
         raise Error("SmallMLPTrainer " + label + " must have shape " + _shape_text(dims))
-    var fortran = b[].bi.type(value) is b[].array_cls and String(py=value.order) == "F" and len(dims) > 1
+    var fortran = value.__class__ is b[].array_cls and String(py=value.order) == "F" and len(dims) > 1
     parallel_copy_words(Int(py=store.buffer_info()[0]), dst, dims, n, fortran)
     _ = store^
 
@@ -267,7 +284,7 @@ def _owned_f32(value: PythonObject, dims: List[Int], label: String) raises -> Py
 
 def _batch_in(value: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    var view = _view(value, "SmallMLPTrainer X must be a float32 array of shape (batch, 8) (a NumPy array, an array.array or a mojolearn Array), got " + String(py=b[].bi.type(value).__name__))
+    var view = _view(value, "SmallMLPTrainer X must be a float32 array of shape (batch, 8) (a NumPy array, an array.array or a mojolearn Array), got " + String(py=value.__class__.__name__))
     var shape = _shape(value, view)
     if len(shape) != 2 or Int(py=shape[1]) != 8:
         raise Error("SmallMLPTrainer X must have shape (batch, 8)")
@@ -300,12 +317,11 @@ def _targets_in(value: PythonObject, rows: Int) raises -> PythonObject:
 
 
 def _scalar(value: PythonObject, name: String) raises -> Float64:
-    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
     if _is_bool(value):
         raise Error("SmallMLPTrainer " + name + " must be a finite float32 scalar")
     var number: Float64
     try:
-        number = Float64(py=bi.float(value))
+        number = Float64(py=value.__float__())
     except:
         raise Error("SmallMLPTrainer " + name + " must be a scalar")
     if not isfinite(number) or abs(number) > Float64(3.4028234663852886e38):
@@ -316,17 +332,24 @@ def _scalar(value: PythonObject, name: String) raises -> Float64:
 
 def _config_into(mut state: MlpState, lr: PythonObject, betas: PythonObject,
                  eps: PythonObject, weight_decay: PythonObject) raises:
-    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    var pair = PythonObject(None)
+    var first = PythonObject(None)
+    var second = PythonObject(None)
+    var extra = True
     try:
-        pair = bi.tuple(betas)
+        var items = betas.__iter__()
+        first = items.__next__()
+        second = items.__next__()
+        try:
+            _ = items.__next__()
+        except:
+            extra = False
     except:
         raise Error("SmallMLPTrainer betas must contain two scalars")
-    if len(pair) != 2:
+    if extra:
         raise Error("SmallMLPTrainer betas must contain two scalars")
     state.lr = _scalar(lr, "lr")
-    state.beta1 = _scalar(pair[0], "beta1")
-    state.beta2 = _scalar(pair[1], "beta2")
+    state.beta1 = _scalar(first, "beta1")
+    state.beta2 = _scalar(second, "beta2")
     state.eps = _scalar(eps, "eps")
     state.weight_decay = _scalar(weight_decay, "weight_decay")
     if state.lr <= 0 or state.eps <= 0 or state.weight_decay < 0:
@@ -340,13 +363,17 @@ def _schedule_walk(value: PythonObject, depth: Int, mut budget: Int) raises:
     budget -= 1
     if depth > 8 or budget < 0:
         raise Error("SmallMLPTrainer data_schedule is too complex")
-    var cls = bi.type(value)
+    var cls = value.__class__
     if cls is bi.dict:
-        var keys = bi.list(value)
-        for i in range(len(keys)):  # small-loop(keys: schedule JSON keys, at most 128)
-            if bi.type(keys[i]) is not bi.str:
+        var count = len(value)
+        var keys = List[PythonObject]()
+        var items = value.__iter__()
+        for _ in range(min(count, 129)):  # small-loop(keys: schedule JSON keys, at most 128)
+            var key = items.__next__()
+            if key.__class__ is not bi.str:
                 raise Error("SmallMLPTrainer data_schedule keys must be strings")
-        if len(keys) > 128:
+            keys.append(key)
+        if count > 128:
             raise Error("SmallMLPTrainer data_schedule object is too large")
         for i in range(len(keys)):  # small-loop(keys: schedule JSON keys, at most 128)
             if len(keys[i]) > 2048:
@@ -371,7 +398,7 @@ def _schedule_walk(value: PythonObject, depth: Int, mut budget: Int) raises:
 def _schedule_text(value: PythonObject) raises -> String:
     """The schedule's canonical JSON (sorted keys, compact, ASCII), bounded."""
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    if not Bool(py=bi.isinstance(value, bi.dict)) or len(value) == 0:
+    if not _is_dict(value) or len(value) == 0:
         raise Error("SmallMLPTrainer data_schedule must be a nonempty JSON object")
     var budget = 128
     _schedule_walk(value, 0, budget)
@@ -385,15 +412,21 @@ def _schedule_text(value: PythonObject) raises -> String:
     return text
 
 
-def _fields(owner: PythonObject) raises -> PythonObject:
+def _is_dict(value: PythonObject) raises -> Bool:
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    return bi.object.__getattribute__(owner, "__dict__")
+    return Bool(py=bi.issubclass(value.__class__, bi.dict))
 
 
-def _handle_of(owner: PythonObject) raises -> Int:
+def _same_keys(value: PythonObject, names: String) raises -> Bool:
+    """`value` is a dict whose keys are exactly the `|`-separated `names`."""
     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    var handle = _fields(owner).get("_handle")
-    if handle is None or bi.type(handle) is not bi.int:
+    return _is_dict(value) and Bool(py=value.keys() == bi.set(PythonObject(names).split("|")))
+
+
+def _handle_of(handle: PythonObject) raises -> Int:
+    """The trainer's `_handle`, passed by the Python method itself."""
+    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
+    if handle.__class__ is not bi.int:
         raise Error("RuntimeError: SmallMLPTrainer state is closed or was never created")
     return Int(py=handle)
 
@@ -402,36 +435,32 @@ def _handle_of(owner: PythonObject) raises -> Int:
 
 def _state_from_dict(state: PythonObject, mode: String) raises -> MlpState:
     """`state_dict` output (or a decoded checkpoint) as a validated typed state."""
-    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    var bi = b[].bi
     var names = _names()
-    var required = bi.set(PythonObject("schema|architecture|numeric_mode|parameter_order|weights|optimizer|config|data_schedule").split("|"))
-    if not Bool(py=bi.isinstance(state, bi.dict)) or Bool(py=bi.set(state) != required):
+    if not _same_keys(state, "schema|architecture|numeric_mode|parameter_order|weights|optimizer|config|data_schedule"):
         raise Error("SmallMLPTrainer state has missing or unknown fields")
     var order = Python.list(names[0], names[1], names[2], names[3])
     if (Bool(py=state["schema"] != PythonObject(_STATE_SCHEMA)) or Bool(py=state["architecture"] != py_ints([8, 16, 3]))
             or Bool(py=state["numeric_mode"] != PythonObject(mode)) or Bool(py=state["parameter_order"] != order)):
         raise Error("SmallMLPTrainer state schema/architecture/mode/order mismatch")
     var weights = state["weights"]
-    if not Bool(py=bi.isinstance(weights, bi.dict)) or Bool(py=bi.set(weights) != bi.set(order)):
+    if not _same_keys(weights, "weight1|bias1|weight2|bias2"):
         raise Error("SmallMLPTrainer state requires all four named parameters")
     var result = MlpState()
     for i in range(4):  # driver-loop: over the fixed MLP parameter registry
         _words_into(weights[names[i]], _dims(i), names[i], result.params_addr(i))
         mlp_require_finite(result.params_addr(i), mlp_size(i), names[i])
     var cfg = state["config"]
-    if not Bool(py=bi.isinstance(cfg, bi.dict)) or Bool(py=bi.set(cfg) != bi.set(PythonObject("lr|beta1|beta2|eps|weight_decay").split("|"))):
+    if not _same_keys(cfg, "lr|beta1|beta2|eps|weight_decay"):
         raise Error("SmallMLPTrainer state optimizer configuration mismatch")
     _config_into(result, cfg["lr"], Python.tuple(cfg["beta1"], cfg["beta2"]), cfg["eps"], cfg["weight_decay"])
     var opt = state["optimizer"]
-    if (not Bool(py=bi.isinstance(opt, bi.dict)) or Bool(py=bi.set(opt) != bi.set(PythonObject("kind|step|m|v|flags").split("|")))
-            or Bool(py=opt["kind"] != PythonObject("AdamW"))):
+    if not _same_keys(opt, "kind|step|m|v|flags") or Bool(py=opt["kind"] != PythonObject("AdamW")):
         raise Error("SmallMLPTrainer state optimizer mismatch")
     if _is_bool(opt["step"]):
         raise Error("SmallMLPTrainer step must be an integer")
     var step: Int
     try:
-        step = Int(py=b[].index(opt["step"]))
+        step = Int(py=opt["step"].__index__())
     except:
         raise Error("SmallMLPTrainer step must be an integer")
     if step < 0 or step > MLP_MAX_STEP:
@@ -763,7 +792,24 @@ def _adamw(mut state: MlpState, entries: PythonObject, grads: List[Float32]) rai
     state.step = t
 
 
-def _pack_gradients(gradients: PythonObject) raises -> List[Float32]:
+def _items(value: PythonObject, limit: Int, refusal: String) raises -> List[PythonObject]:
+    """The caller's sequence as Mojo-held items (at most `limit` when it is
+    positive), read through its own iterator."""
+    var result = List[PythonObject]()
+    var items = PythonObject(None)
+    try:
+        items = value.__iter__()
+    except:
+        raise Error("TypeError: " + refusal)
+    while limit < 0 or len(result) < limit:  # driver-loop: over the caller's sequence of tensors or session batches
+        try:
+            result.append(items.__next__())
+        except:
+            break
+    return result^
+
+
+def _pack_gradients(gradients: List[PythonObject]) raises -> List[Float32]:
     var packed = List[Float32](length=MLP_TOTAL, fill=Float32(0))
     var names = _names()
     for i in range(4):  # driver-loop: over the fixed MLP gradient registry
@@ -807,15 +853,17 @@ def small_mlp_from_state(cls: PythonObject, state: PythonObject, mode: String) r
     var typed = _state_from_dict(state, mode)
     var handle = mlp_store_create(typed^)
     b[].locks[handle] = b[].rlock()
+    # `object.__new__` takes only the class; the handle goes into the new
+    # instance's own dictionary, so the instance is never a call argument.
     var instance = b[].bi.object.__new__(cls)
-    _fields(instance)["_handle"] = PythonObject(handle)
+    instance.__dict__["_handle"] = PythonObject(handle)
     return instance
 
 
-def small_mlp_close(owner: PythonObject) raises:
+def small_mlp_close(handle: PythonObject) raises:
+    """Release a trainer's state (its `__del__`); a missing or foreign handle is a no-op."""
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    var handle = _fields(owner).get("_handle")
-    if handle is None or b[].bi.type(handle) is not b[].bi.int:
+    if handle.__class__ is not b[].bi.int:
         return
     var h = Int(py=handle)
     try:
@@ -862,7 +910,7 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
     var x = _batch_in(X)
     var rows = Int(py=x.shape[0])
     var y = _targets_in(targets, rows)
-    if b[].bi.type(want) is not b[].bi.bool:
+    if want.__class__ is not b[].bi.bool:
         raise Error("TypeError: SmallMLPTrainer return_input_grad must be a bool")
     var want_dx = Bool(py=want)
     var entries = _mode_entries()
@@ -887,7 +935,7 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
             out = _fused(working, entries, x, y, rows, _TRAIN, want_dx)
         else:
             out = _gradient(working, entries, x, y, rows, want_dx)
-            _adamw(working, entries, _pack_gradients(out[2]))
+            _adamw(working, entries, _pack_gradients(_items(out[2], 4, "gradients")))
         # Validation precedes the single publication of the new state.
         mlp_require_state(working)
         if working.step != before + 1:
@@ -896,7 +944,7 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
         store[].slots[index].state = working^
     var result = b[].bi.dict()
     result["step"] = PythonObject(store[].slots[index].state.step)
-    result["loss"] = b[].bi.float(out[0])
+    result["loss"] = out[0]
     result["logits"] = out[1]
     result["gradients"] = _gradients_dict(out[2])
     if want_dx:
@@ -906,7 +954,7 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
 
 def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    if b[].bi.type(k_value) is not b[].bi.int or Int(py=k_value) < 1:
+    if k_value.__class__ is not b[].bi.int or Int(py=k_value) < 1:
         raise Error("SmallMLPTrainer train_steps k must be a positive int")
     var k = Int(py=k_value)
     var entries = _mode_entries()
@@ -962,7 +1010,6 @@ def _loss_and_grads(handle: Int, X: PythonObject, targets: PythonObject) raises 
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
     var out: PythonObject
-    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
     if _resident_enabled(entries):
         var res = _resident_steps(index, entries, x, y, rows, 1, _GRADS, False)
         return Python.tuple(res[0][0], res[2])
@@ -973,12 +1020,11 @@ def _loss_and_grads(handle: Int, X: PythonObject, targets: PythonObject) raises 
         out = _fused(state, entries, x, y, rows, _GRADS, False)
     else:
         out = _gradient(state, entries, x, y, rows, False)
-    return Python.tuple(bi.float(out[0]), out[2])
+    return Python.tuple(out[0], out[2])
 
 
 def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObject:
-    var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    var listed = bi.list(gradients)
+    var listed = _items(gradients, 5, "SmallMLPTrainer requires exactly four gradients")
     if len(listed) != 4:
         raise Error("SmallMLPTrainer requires exactly four gradients")
     var grads = _pack_gradients(listed)
@@ -1008,7 +1054,7 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
     _settle(index, False)
-    var listed = bi.list(inputs)
+    var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
     # Mojo-side owners keep every session copy alive across the call.
     var sessions = List[PythonObject]()
     var shapes = bi.list()
@@ -1243,9 +1289,9 @@ def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObje
 
 # ------------------------------------------------------------ dispatch
 
-def _locked(operation: String, owner: PythonObject, args: PythonObject) raises -> PythonObject:
+def _locked(operation: String, handle_value: PythonObject, args: PythonObject) raises -> PythonObject:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    var handle = _handle_of(owner)
+    var handle = _handle_of(handle_value)
     _ = mlp_store_index(handle)
     var lock = b[].locks[handle]
     _ = lock.acquire()
@@ -1267,7 +1313,6 @@ def _locked(operation: String, owner: PythonObject, args: PythonObject) raises -
             result = small_mlp_state_dict(handle)
         elif operation == "load_state_dict":
             small_mlp_load_state(handle, args[1], _mode_name(_mode_entries()))
-            result = owner
         elif operation == "step":
             result = _step_count(handle)
         elif operation == "weights":
