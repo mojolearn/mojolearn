@@ -50,23 +50,35 @@ no Python import in its 90-file source closure or linked interpreter dependency.
 This single native-core witness does not qualify a Python-free library release.
 Evidence: `~/mojolearn-evidence/core-completion-20261020/native-only-probe/`.
 
-Retained results on 2026-10-20 now cover all 35 currently written fixtures:
-four CPU cases pass on Apple and inside an interpreter-free Linux chroot, and
-31 GPU cases pass on Apple. The Linux run is
+Retained results on 2026-10-20 cover all 41 written fixtures through frozen
+integration source `3426e599c`: six CPU cases and 35 GPU cases pass on Apple.
+The initial four CPU cases also pass inside an interpreter-free Linux chroot.
+The Linux run is
 [39520969549](https://github.com/mojolearn/mojolearn/actions/runs/39520969549).
 Its workflow correctly exits nonzero because library-wide coverage remains
 incomplete. These are frozen integration-source results, not an assertion that
 the current main branch or an installed wheel has the same native closure.
 
+AMD additionally passes 34 GPU fixtures and the optimizer CPU fixture inside
+an interpreter-free chroot. All seven optimizer state digests match Apple CPU,
+Apple GPU, AMD GPU and the AMD machine's CPU. SVC and SVR output digests match
+Apple and AMD GPUs; their independent RBF oracle still uses its stated tolerance.
+The final convolution AMD run is pending. GPU execution has dependency screening,
+but has not been isolated from an installed interpreter.
+
 The manifest inventories 603 public exports, including 101 proven aliases.
-After aliases are removed, 37 entries have mapped standalone witnesses,
-396 still lack fixtures, nine are blocked by their current CPython-bound owner,
+After aliases are removed, 44 entries have mapped standalone witnesses,
+389 still lack fixtures, nine are blocked by their current CPython-bound owner,
 and 60 are explicitly nonalgorithm entries. These counts include functions and
 helpers and are not counts of distinct estimators. Original compile/runtime
 failures are retained alongside repairs: a UMAP test entrypoint import, KDE
 borrow origins, a checker false positive, and an IVF oracle that incorrectly
 required two different arithmetic folds to return the same bits. The IVF test
 now checks the selected fold independently and retains its negative control.
+Optimizer and convolution gradient negative controls also fail as expected.
+A later packager failure copied `tape.mojo` as `Tape.mojo` on a case-insensitive
+filesystem. Exact filename resolution repairs that failure without changing the
+numerical fixture; the build-tool suite passes all 55 tests.
 
 Per-case source/binary hashes, reuse decisions, evidence paths and scope are in
 [`native_only_20261020.json`](native_only_20261020.json). Only comment changes
@@ -75,6 +87,11 @@ lines and every transitive source file are unchanged. All other admitted
 source closures match byte for byte. The first actual binary/source/log bundle
 is verified on the Mac and uploaded to R2 at
 `measurements/core-completion/2026-10-20/native-only/first-linux-and-mac-artifacts.tgz`.
-Later smoke rounds remain retained on the Mac pending their incremental R2
-upload. NVIDIA/AMD standalone runs, installed-wheel checks, and complete native
-owner interfaces remain pending. No smoke timing promotes a performance default.
+AMD's actual source, binary and native-library bundles are verified on the Mac
+and by full R2 readback under `native-only/amd-round1-artifacts.tgz` and
+`native-only/amd-incremental-artifacts.tgz` in that same measurement prefix.
+Later Mac smoke rounds, original failures and source snapshots are also verified
+by full R2 readback at `native-only/incremental-mac-artifacts.tgz`. NVIDIA
+standalone runs, installed-wheel checks, and complete native
+owner interfaces remain pending. Later graph edits also need qualification of
+their changed source closures. No smoke timing promotes a performance default.
