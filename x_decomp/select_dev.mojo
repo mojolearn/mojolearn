@@ -12,13 +12,11 @@ functions shared with the host entries, so the words are the host's.
     vector, one thread per element counting the elements before it (an
     exact rank; every rank is distinct) and writing its index there."""
 from std.gpu import block_dim, block_idx, thread_idx
-from std.python import PythonObject
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, xd_ctx
 from x_decomp.resident import _ptr, pool_alloc, pool_free
-from x_decomp.resident_pyapi import _id, _n
 from x_decomp.select_ops import SEL_LAST, SEL_MIN, SEL_ORDER_MAX, SEL_SLICE, order_rank, sel_fold
 from x_decomp.moves import DSUM_CHUNK, U32Ptr, dsum_fold_chunk, dsum_sq_chunk, dsum_st, order_key
 from core.stable_radix_sort import (
@@ -51,18 +49,14 @@ def order_small_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
         dst.unsafe_store(order_rank(src, nn, i), Float32(i))
 
 
-def dev_reduce_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (a device matrix of >= 1 value) = the op (p = [count, op]) over
-    the first count values of the device matrix a. A max |x| slice result is
-    already >= 0 (or NaN), so the later passes fold it with the same op."""
-    var count = _n(p, 0)
-    var op = Int(py=p[1])
+def dev_reduce_run(i_a: Int, i_dst: Int, count: Int, op: Int) raises -> Int:
+    """`dev_reduce_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
     if count < 1:
         raise Error("x_decomp: reduce needs at least one value")
     if op < 0 or op > SEL_LAST:
         raise Error("x_decomp: unknown reduce op")
-    enqueue_sel_reduce(_ptr(_id(a), count), count, op, _ptr(_id(dst), 1))
-    return PythonObject(1)
+    enqueue_sel_reduce(_ptr(i_a, count), count, op, _ptr(i_dst, 1))
+    return 1
 
 
 def enqueue_sel_reduce(src: F32Ptr, count: Int, op: Int, pd: F32Ptr) raises:
@@ -88,31 +82,24 @@ def enqueue_sel_reduce(src: F32Ptr, count: Int, op: Int, pd: F32Ptr) raises:
         pool_free(cur_id)
 
 
-def dev_order_small_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (n exact floats, device) = the stable ascending order of the
-    first n values of the device matrix a (p = [n])."""
-    var n = _n(p, 0)
+def dev_order_small_run(i_a: Int, i_dst: Int, n: Int) raises -> Int:
+    """`dev_order_small_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
     if n > SEL_ORDER_MAX:
         raise Error("x_decomp: order_small exceeds its bound")
     if n == 0:
-        return PythonObject(0)
-    var ps = _ptr(_id(a), n)
-    var pd = _ptr(_id(dst), n)
+        return 0
+    var ps = _ptr(i_a, n)
+    var pd = _ptr(i_dst, n)
     xd_ctx().enqueue_function[order_small_kernel](ps, pd, Int32(n), grid_dim=_blocks(n), block_dim=TPB)
-    return PythonObject(n)
+    return n
 
 
-def dev_pca_mle_rank_py(sp: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (one exact float, device) = Minka's MLE rank of the spectrum in
-    the device matrix sp (d binary64 values, 2 d float32 words), p = [d,
-    n_samples]: x_decomp/pca_mle.mojo's six phases, enqueued with no sync
-    (lane cpu3-python). The host column is `x_decomp_pca_mle_rank`."""
-    var d = _n(p, 0)
-    var n = _n(p, 1)
+def dev_pca_mle_rank_run(i_sp: Int, i_dst: Int, d: Int, n: Int) raises -> Int:
+    """`dev_pca_mle_rank_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
     if d < 2:
         raise Error("x_decomp: pca_mle needs at least two spectrum values")
-    var psp = _ptr(_id(sp), 2 * d)
-    var pd = _ptr(_id(dst), 1)
+    var psp = _ptr(i_sp, 2 * d)
+    var pd = _ptr(i_dst, 1)
     var words = mle_scratch_words(d)
     var sid = pool_alloc(words)
     var ps = _ptr(sid, words)
@@ -126,7 +113,7 @@ def dev_pca_mle_rank_py(sp: PythonObject, dst: PythonObject, p: PythonObject) ra
     ctx.enqueue_function[mle_cand_kernel](d32, ps, grid_dim=_blocks(MLE_P), block_dim=TPB)
     ctx.enqueue_function[mle_pick_kernel](d32, ps, pd, grid_dim=1, block_dim=1)
     pool_free(sid)      # the context runs in order: a reuse comes after these reads
-    return PythonObject(1)
+    return 1
 
 
 # ---- lane cpu3-python: the decomp kit's orders, selections and the
@@ -232,23 +219,14 @@ def _sort_out(ctx: DeviceContext, mut sb: _SortBufs, n: Int, key_bits: Int, dst:
     )
 
 
-def dev_order_f_py(a: PythonObject, skip: PythonObject, dst: PythonObject, cnt: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (n exact floats, device) = the stable ascending order of the first
-    n values of the device matrix a by (value, index) (p = [n, neg,
-    has_skip]: neg orders -a, Python's `key=lambda i: (-x[i], i)`), the
-    positions where the device row `skip` is nonzero last; cnt (one word,
-    device) = how many are not skipped. The caller refuses NaN (one word,
-    the max) first: `order_f` / `topn_desc`'s order, the same positions.
-    Waits once before its sort storage is released."""
-    var n = _n(p, 0)
-    var neg = Int(py=p[1])
-    var has = Int(py=p[2])
+def dev_order_f_run(i_a: Int, i_skip: Int, i_dst: Int, i_cnt: Int, n: Int, neg: Int, has: Int) raises -> Int:
+    """`dev_order_f_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
     if n < 1 or n >= 16777216:
         raise Error("x_decomp: order_f needs 1 <= n < 2^24")
-    var ps = _ptr(_id(a), n)
-    var pk = _ptr(_id(skip), n) if has != 0 else ps
-    var pd = _ptr(_id(dst), n)
-    var pc = _ptr(_id(cnt), 1)
+    var ps = _ptr(i_a, n)
+    var pk = _ptr(i_skip, n) if has != 0 else ps
+    var pd = _ptr(i_dst, n)
+    var pc = _ptr(i_cnt, 1)
     var ctx = xd_ctx()
     var sb = _SortBufs(ctx, n)
     ctx.enqueue_function[ord_key_kernel](
@@ -258,20 +236,16 @@ def dev_order_f_py(a: PythonObject, skip: PythonObject, dst: PythonObject, cnt: 
     _sort_out(ctx, sb, n, 32, pd, pc, ORD_SENT)
     ctx.synchronize()
     _ = sb^
-    return PythonObject(n)
+    return n
 
 
-def dev_argmin_all_py(a: PythonObject, dst: PythonObject, cnt: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst = every position (exact floats, ascending) of the device matrix
-    a's first n values equal to their minimum, then the rest; cnt (one
-    word, device) = how many are equal (0 when a NaN is present, as the
-    host column). Waits once."""
-    var n = _n(p, 0)
+def dev_argmin_all_run(i_a: Int, i_dst: Int, i_cnt: Int, n: Int) raises -> Int:
+    """`dev_argmin_all_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
     if n < 1 or n >= 16777216:
         raise Error("x_decomp: argmin_all needs 1 <= n < 2^24")
-    var ps = _ptr(_id(a), n)
-    var pd = _ptr(_id(dst), n)
-    var pc = _ptr(_id(cnt), 1)
+    var ps = _ptr(i_a, n)
+    var pd = _ptr(i_dst, n)
+    var pc = _ptr(i_cnt, 1)
     var ctx = xd_ctx()
     var mid = pool_alloc(1)
     var pm = _ptr(mid, 1)
@@ -284,20 +258,15 @@ def dev_argmin_all_py(a: PythonObject, dst: PythonObject, cnt: PythonObject, p: 
     ctx.synchronize()
     pool_free(mid)
     _ = sb^
-    return PythonObject(n)
+    return n
 
 
-def dev_select_smallest_py(a: PythonObject, sel: PythonObject, mask: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, h]: sel (h exact floats, device) = the positions of the h
-    smallest of a's first n values by (value, index), ascending by
-    position; mask (n floats, device) = 1 at those positions, else 0. NaN
-    refused by the caller first. Waits once."""
-    var n = _n(p, 0)
-    var h = _n(p, 1)
+def dev_select_smallest_run(i_a: Int, i_sel: Int, i_mask: Int, n: Int, h: Int) raises -> Int:
+    """`dev_select_smallest_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
     if n < 1 or n >= 16777216 or h > n:
         raise Error("x_decomp: select_smallest out of range")
-    var ps = _ptr(_id(a), n)
-    var pm = _ptr(_id(mask), n)
+    var ps = _ptr(i_a, n)
+    var pm = _ptr(i_mask, n)
     var ctx = xd_ctx()
     var sb = _SortBufs(ctx, n)
     ctx.enqueue_function[ord_key_kernel](
@@ -310,13 +279,13 @@ def dev_select_smallest_py(a: PythonObject, sel: PythonObject, mask: PythonObjec
         grid_dim=_blocks(n), block_dim=TPB,
     )
     if h > 0:
-        var pd = _ptr(_id(sel), h)
+        var pd = _ptr(i_sel, h)
         # the h positions ascending: a second stable sort keyed by position
         stable_radix_sort_pairs_u32(ctx, h, key_bits_for(n - 1), sb.k2, sb.v2, sb.tkeys, sb.tvals, sb.cnt, sb.bsum)
         ctx.enqueue_function[keys_out_kernel](sb.k2.unsafe_ptr(), pd, Int32(h), grid_dim=_blocks(h), block_dim=TPB)
     ctx.synchronize()
     _ = sb^
-    return PythonObject(h)
+    return h
 
 
 def dsum_part_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
@@ -337,16 +306,12 @@ def dsum_fold_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
         dsum_st(dst, 2 * b, dsum_fold_chunk(src, b * DSUM_CHUNK, min((b + 1) * DSUM_CHUNK, nn)))
 
 
-def dev_dsum_sq_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (two float32 words, device: one binary64, low first) = the sum of
-    squares of a's first n values (p = [n >= 1]) in `dsum_sq_host`'s order:
-    chunks of DSUM_CHUNK, then the partials DSUM_CHUNK at a time. Enqueued
-    only (the caller's download waits)."""
-    var n = _n(p, 0)
+def dev_dsum_sq_run(i_a: Int, i_dst: Int, n: Int) raises -> Int:
+    """`dev_dsum_sq_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
     if n < 1:
         raise Error("x_decomp: dsum_sq needs at least one value")
-    var ps = _ptr(_id(a), n)
-    var pd = _ptr(_id(dst), 2)
+    var ps = _ptr(i_a, n)
+    var pd = _ptr(i_dst, 2)
     var ctx = xd_ctx()
     var nb = (n + DSUM_CHUNK - 1) // DSUM_CHUNK
     var cur_id = pool_alloc(2 * nb)
@@ -364,4 +329,4 @@ def dev_dsum_sq_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -
     # the one partial left is the sum: a fold of one word copies it
     ctx.enqueue_function[dsum_fold_kernel](cur, pd, Int32(1), grid_dim=1, block_dim=TPB)
     pool_free(cur_id)
-    return PythonObject(1)
+    return 1
