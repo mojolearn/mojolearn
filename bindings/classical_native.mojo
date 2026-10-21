@@ -10,6 +10,7 @@ from bindings.classical_ridge import classical_ridge_fit, classical_linear_predi
 from bindings.classical_ols import classical_ols_fit
 from bindings.classical_score import classical_linear_score
 from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted
+from bindings.classical_archive import classical_archive_save
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -44,7 +45,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var linear = b.type(model) is context.get("linear_class")
         if not ridge and not linear:
             raise Error("TypeError: the private classical owner requires an exact Ridge or LinearRegression instance")
-        sequential_admit_value(args, context)
+        if operation != "save":
+            sequential_admit_value(args, context)
         var fields = sequential_fields(model)
         var names = context["classical_fields"]
         for k in range(len(names)):  # driver-loop: over connected estimator metadata fields
@@ -62,6 +64,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation == "is_fitted":
             result = classical_is_fitted(model)
+            return result.steal_data()
+        if operation == "save":
+            result = classical_archive_save(model, args[0], ridge, context)
             return result.steal_data()
         var entries = classical_entries(model, context)
         if operation == "ridge_fit":
