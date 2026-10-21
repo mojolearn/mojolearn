@@ -70,7 +70,7 @@ from sequence.seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
 from sequence.layernorm_dev_pyapi import layer_norm_dev_py
-from sequence.sched_table import sched_exp_block_py
+from sequence.sched_table_pyapi import sched_exp_block_py
 from checks.numerics import NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
