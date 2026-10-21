@@ -73,8 +73,9 @@ def connect(ridge_class, linear_class=None):
         try:
             metrics = _backend.binding("_mojolearn_x_metrics", mode)
             metric_entries = {}
-            for name in ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",
-                         "x_metrics_run_out", "x_metrics_run_ranges"):  # glue: cache raw metric program entries once
+            metric_names = ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",
+                            "x_metrics_run_out", "x_metrics_run_ranges")
+            for name in metric_names:  # glue: cache raw metric program entries once at package connection
                 try:
                     entry = getattr(metrics, name)
                 except (AttributeError, ImportError):
