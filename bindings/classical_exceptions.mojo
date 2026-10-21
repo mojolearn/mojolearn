@@ -46,7 +46,7 @@ def classical_require_fitted(model: PythonObject, ridge: Bool, operation: String
                              context: PythonObject) raises:
     if not Bool(py=classical_is_fitted(model)):
         _ = classical_not_fitted_class(context)
-        raise Error("NotFittedError: This " + ("Ridge" if ridge else "LinearRegression") +
+        raise Error("NotFittedError: This " + String(context["ridge_name" if ridge else "linear_name"]) +
                     " instance is not fitted yet. Call 'fit' with appropriate arguments before using " + operation + ".")
 
 

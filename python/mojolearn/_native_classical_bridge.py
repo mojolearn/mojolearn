@@ -44,6 +44,47 @@ def _reduce_not_fitted(error):
     return _ERROR_ENTRY(error, "reduce_not_fitted", (), _ERROR_CONTEXT)
 
 
+def connect_host(host_ridge_class, host_linear_class):
+    # glue: connect the existing explicit Host* CPU ABI once at setup
+    from types import BuiltinFunctionType
+    import hashlib
+    from ._classical_host import _HostBound
+
+    entry, context = connect(host_ridge_class, host_linear_class)
+    owner = object.__new__(host_ridge_class)
+    object.__setattr__(owner, "numeric_mode", "identical")
+    module = _HostBound._bind(owner, "_mojolearn_estimators")
+    cpu = {}
+    names = ("estimators_vendor", "estimators_numeric_mode", "ols_predict",
+             "ols_fit", "ridge_fit", "lm_col_sums", "lm_means_finish",
+             "lm_center", "lm_intercept", "lm_scale_rows", "py2mojo_rows")
+    optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
+                "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
+                "ols_fit_resident", "ols_normal_eq_default")
+    for name in names + optional:  # glue: retain verified compiled CPU symbols at connection
+        function = getattr(module, name, None)
+        if function is None and name in optional:
+            continue
+        if not isinstance(function, BuiltinFunctionType):
+            raise TypeError(f"explicit host model requires compiled {name}")
+        cpu[name] = function
+    if module.estimators_vendor() != "cpu" or module.estimators_numeric_mode() != 1:
+        raise RuntimeError("explicit host model requires the CPU identical binary")
+    connected = {}
+    for mode, existing in context["classical_bindings"].items():  # glue: preserve supported helper-mode metadata at connection
+        # Existing Host* fit helpers bind their own decomposition/x_linear
+        # family. Inference below only calls the CPU estimator entry.
+        native = {name: existing[name] for name in ("decomp", "x_linear_fit") if isinstance(existing, dict) and name in existing}  # glue: retain the two connected native helper families
+        native.update(cpu)
+        connected[mode] = native
+    if not isinstance(hashlib.sha256, BuiltinFunctionType):
+        raise TypeError("host model digest requires native SHA-256")
+    context.update(classical_bindings=connected, classical_explicit_cpu=True,
+                   classical_metric_vendor=context["vendor"], vendor="cpu",
+                   classical_sha256=hashlib.sha256)
+    return entry, context
+
+
 def connect(ridge_class, linear_class=None):
     # glue: connect compiled entries and exact native buffer classes once
     global _ERROR_ENTRY, _ERROR_CONTEXT
@@ -198,6 +239,9 @@ def connect(ridge_class, linear_class=None):
             metric_bindings[mode] = type(error).__name__ + ": " + str(error)
     context.update(ridge_class=ridge_class, linear_class=linear_class, classical_bindings=connected,
                    classical_metrics=metric_bindings, environment=os.environ._data,
+                   ridge_name=ridge_class.__name__, linear_name="LinearRegression" if linear_class is None else linear_class.__name__,
+                   ridge_saved_names=tuple(cls.__name__ for cls in ridge_class.__mro__),  # glue: preserve the declared saved-estimator ancestry
+                   linear_saved_names=() if linear_class is None else tuple(cls.__name__ for cls in linear_class.__mro__),  # glue: preserve the declared saved-estimator ancestry
                    classical_fields=("numeric_mode", "fit_intercept", "alpha", "solver", "normalize",
                                      "coef_", "intercept_", "n_features_in_",
                                      "_mojolearn_fitted", "_mojolearn_fitting"))
