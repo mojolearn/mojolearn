@@ -1,0 +1,445 @@
+{
+  "schema": "mojolearn.graph-optimizer-full-workload-plan.v1",
+  "date": "2026-10-20",
+  "status": "recipe_mapping_and_input_preparation_only; full-workload optimizer A/B harness and measurements pending",
+  "reviewed_integration": "c0164cc04ef143bee65f885a6ba4e892c7254c2b",
+  "policy_sources": [
+    "AGENTS.md: Full-dataset candidate evaluation / Incremental experiment delivery",
+    "experiments/performance_ideas/README.md: Required candidate measurements: full datasets",
+    "docs/plans/GRAPH_OPTIMIZATION.md",
+    "autograd/program_optimize.mojo",
+    "tools/bench_board_neural.py",
+    "bench/results/dataset_store/manifest.tsv"
+  ],
+  "scope": {
+    "entry_points": [
+      "Program.run",
+      "Program.profile",
+      "Program.run_dynamic",
+      "Program.run_if",
+      "Program.while_loop",
+      "Session.run"
+    ],
+    "toggle": {
+      "baseline": "optimize=False",
+      "candidate": "optimize=True",
+      "default": false,
+      "per_pass_toggles": "not implemented; aggregate boolean applies all five passes in fixed order",
+      "build": "same accepted binary and captured graph for both arms; this is a runtime toggle"
+    },
+    "training": "Program.fit, fit_if, VJP and distributed/partitioned training replay the original graph. No training speedup is attributable to these passes.",
+    "specialized_models": "Sequential.model_*, CausalLM, Samba and specialized block APIs do not call program_optimize. A faithful qualified captured Program adapter is required before their saved workloads become affected optimizer recipes. An opaque composite op does not expose its internal graph to these passes.",
+    "excluded_estimators": "Classical/tree/nearest-neighbor boards do not capture OpsProgram and are not affected by these five passes.",
+    "claims": "No pass has full-workload NVIDIA/AMD A/B evidence here; no default change or performance claim. Prepared synthetic full declared workloads are not substitutes for missing real-model coverage."
+  },
+  "passes": [
+    {
+      "name": "explicit_reshape_chain",
+      "effect": "Compose adjacent explicit positive-dimension reshapes while preserving shape validators.",
+      "candidate_recipes": [
+        "transformer-captured",
+        "lm-captured",
+        "sequential-captured"
+      ],
+      "activation_gate": "Persist inspect(optimize=True); require a positive named rewrite count in the actual exported/captured workload. Existing simple MLP has no view chain.",
+      "measurement_group": "all-off versus all-on; reshapes interact with dead_intermediates"
+    },
+    {
+      "name": "permutation_composition",
+      "effect": "Compose adjacent supported permutation/transpose nodes, retaining rank/axis validation.",
+      "candidate_recipes": [
+        "transformer-captured",
+        "lm-captured"
+      ],
+      "activation_gate": "Actual attention layout capture must contain adjacent eligible permutations; using an opaque transformer op does not establish activation.",
+      "measurement_group": "all-off versus all-on; permutations interact with dead_intermediates"
+    },
+    {
+      "name": "dead_intermediates",
+      "effect": "Remove newly redundant view intermediates produced by preceding view rewrites, not arbitrary graph dead code.",
+      "candidate_recipes": [
+        "transformer-captured",
+        "lm-captured",
+        "sequential-captured"
+      ],
+      "activation_gate": "Record removed source-node IDs and dependencies on successful reshape/permutation rewrites.",
+      "measurement_group": "dependent view/pruning combination; standalone pruning attribution is not currently available"
+    },
+    {
+      "name": "broadcast_relu_hoist",
+      "effect": "Move ReLU before an adjacent single-consumer, non-output expansion with a statically proven smaller source.",
+      "candidate_recipes": [],
+      "activation_gate": "No saved full model with a demonstrated eligible expand->ReLU path has been identified. Fused linear-ReLU MLP and SiLU/GELU Transformer paths do not demonstrate this pass. Dynamic inputs alone do not prove source shape.",
+      "missing_recipe": "Retain a real user/imported supported model, full inputs and source provenance that naturally contains this pattern. Artificial redundant broadcasts are screening only.",
+      "measurement_group": "all-off versus all-on after an actual full workload exists"
+    },
+    {
+      "name": "exact_duplicate_elimination",
+      "effect": "Reuse exactly matching safe pure nodes under the captured immutable parameter/input contract.",
+      "candidate_recipes": [
+        "transformer-captured",
+        "lm-captured",
+        "sequential-captured"
+      ],
+      "activation_gate": "Actual capture must contain eligible duplicate nodes. A hand-shared DAG or opaque composite may yield zero hits; do not inject duplicate work into the baseline to manufacture a gain.",
+      "measurement_group": "all-off versus all-on including interactions with view rewrites and ReLU hoist"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "program-run-overhead-control",
+      "source": "tools/bench_board_neural.py: OPS_SHAPES/full, make_inputs, OursProgramRun",
+      "dataset": "Entire declared seeded synthetic workload; seed 7.",
+      "dimensions": {
+        "batch": 4096,
+        "features": 256,
+        "hidden": 512,
+        "classes": 16
+      },
+      "model": "softmax(linear(linear(X,W1,b1,activation=relu),W2,b2)); FP32 weights uniform +/-1/sqrt(fan_in), normal inputs.",
+      "numeric_mode": "identical",
+      "prepared": {
+        "status": "prepared_on_Mac_only_not_measured",
+        "artifact_sha256": "2197f6cd0240d2d12d117ac581a4dfdb95f70b7be84b4ebf4621e3bd12b939c0",
+        "artifact_bytes": 4804320,
+        "source_commit": "659d2bf0c8fcfddce5d267b37134faac2eb92420",
+        "generator_sha256": "bce481cb0f381ea983962b624e5ebf76cbe0f92481f15ecf47accb1455059ab4",
+        "python": "3.14.7",
+        "numpy": "2.5.3",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/graph-recipes/program-run/recipe.json",
+        "payload": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/graph-recipes/program-run/inputs.npz",
+        "off_machine_requirement": "Upload actual payload and receipt to R2 before GPU execution; copy identical bytes to both vendors, do not independently regenerate.",
+        "array_shapes": {
+          "X": [
+            4096,
+            256
+          ],
+          "w:b1": [
+            1,
+            512
+          ],
+          "w:b2": [
+            1,
+            16
+          ],
+          "w:w1": [
+            256,
+            512
+          ],
+          "w:w2": [
+            512,
+            16
+          ],
+          "y": [
+            4096
+          ],
+          "y_codes": [
+            4096,
+            1
+          ]
+        },
+        "array_hashes": "Every complete array byte SHA256/dtype/shape is retained in recipe.json; artifact SHA above covers the exact NPZ."
+      },
+      "applicability": "Existing native captured Program; expected zero rewrites. Measures aggregate planning overhead, not active-pass benefit.",
+      "harness_gap": "OursProgramRun.call currently invokes run(X) without optimize; program_eager compares eager vs captured and is NOT optimizer A/B. Add explicit recorded optimize argument and immutable input receipt consumption.",
+      "timed_boundary": "Repeated inference: prepared host X -> single Program.run -> required synchronization and complete returned output consumption. Weights are resident in BOTH arms. Also record cold construction/parameter upload/capture/first call separately."
+    },
+    {
+      "id": "sequential-captured",
+      "source": "tools/bench_board_neural.py: SYNTH_FIT_LANES, FIT_ROWS/full, synthetic_fit_arrays, sequential-predict",
+      "dataset": "Entire saved seeded synthetic set: 1,000,000 training and 100,000 held-out rows, 32 features, binary teacher with fixed float64 column-order sum, interaction and noise.",
+      "dimensions": {
+        "train_rows": 1000000,
+        "test_rows": 100000,
+        "features": 32,
+        "hidden": [
+          128,
+          64
+        ],
+        "outputs": 1
+      },
+      "settings": {
+        "seed": 7,
+        "epochs": 1,
+        "batch_size": 512,
+        "loss": "BCEWithLogits",
+        "optimizer": "Adam",
+        "lr": 0.001,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "weight_decay": 0.0
+      },
+      "numeric_mode": "identical",
+      "prepared": {
+        "status": "prepared_on_Mac_only_not_measured",
+        "artifact_sha256": "44e173680562bd836826b27415c53e640ff013c6ec5d75bca52c5d93ad0b89ae",
+        "artifact_bytes": 145201002,
+        "source_commit": "e415ba6982e5834687146350a17de198112c0633",
+        "generator_sha256": "bce481cb0f381ea983962b624e5ebf76cbe0f92481f15ecf47accb1455059ab4",
+        "python": "3.14.6",
+        "numpy": "2.4.4",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/graph-recipes/sequential-predict/recipe.json",
+        "payload": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/graph-recipes/sequential-predict/inputs.npz",
+        "off_machine_requirement": "Upload actual payload and receipt to R2 before GPU execution; copy identical bytes to both vendors, do not independently regenerate.",
+        "array_shapes": {
+          "X_test": [
+            100000,
+            32
+          ],
+          "X_train": [
+            1000000,
+            32
+          ],
+          "y_test": [
+            100000
+          ],
+          "y_train": [
+            1000000
+          ]
+        },
+        "array_hashes": "Every complete array byte SHA256/dtype/shape is retained in recipe.json; artifact SHA above covers the exact NPZ."
+      },
+      "applicability": "Training remains unaffected. Capture the complete trained inference graph and preserve probability/sigmoid/class layout and exact saved trained parameter bytes; determine actual pass hits first. Fused linear activations may produce no hits.",
+      "harness_gap": "Specialized Sequential predict is not optimized; faithful native Program adapter, full trained checkpoint/hash and exact equivalence to specialized prediction are missing.",
+      "timed_boundary": "Score the complete 100,000-row held-out inference; no hidden per-batch cap. Separate full one-epoch fit+held-out prediction as an unaffected-control measurement; do not attribute its training time to this optimizer."
+    },
+    {
+      "id": "higgs-user-model-captured",
+      "source": "tools/bench_board_neural.py: tape-user-model, FIT_ROWS/full, fit_arrays",
+      "dataset": {
+        "store_key": "gbm-bench/higgs/higgs_speed.npz",
+        "bytes": 1276000490,
+        "sha256": "13140d6704c4a9c224203efac3fea258a19aca355e65e7e10ba3bb5d7802806b",
+        "local_payload": "not prepared in this lane",
+        "source_total_shape": "pending header inventory of complete manifest-pinned NPZ"
+      },
+      "dimensions": {
+        "saved_recipe_train_rows": 1000000,
+        "saved_recipe_test_rows": 100000,
+        "features": 28,
+        "hidden": [
+          64,
+          64
+        ],
+        "outputs": 1
+      },
+      "settings": {
+        "seed": 7,
+        "epochs": 1,
+        "batch_size": 512,
+        "loss": "BCEWithLogits",
+        "optimizer": "Adam",
+        "lr": 0.001,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "weight_decay": 0.0,
+        "preparation": "First saved train/test rows; float64 fitted-row mean/std, zero std ->1, standardized FP32 inputs, labels thresholded at0.5."
+      },
+      "numeric_mode": "identical",
+      "intrinsic_cap": "FIT_ROWS/full explicitly caps 1,000,000 training/100,000 test rows. This is not proof of full source-dataset coverage. Audit all array shapes and record exact splits; add an explicit all-source recipe if the intended dataset extends beyond these slices. Do not label --shape full as full-HIGGS evidence.",
+      "applicability": "Only a faithful captured inference adapter could be affected; fitting and VJP remain original.",
+      "harness_gap": "Full source coverage inventory, derived input hashes, complete trained checkpoint, captured inference adapter and actual rewrite counts pending.",
+      "timed_boundary": "All rows of the declared, explicitly audited inference split, input preparation/upload through complete consumed predictions. Fit and cold costs separately."
+    },
+    {
+      "id": "transformer-captured",
+      "source": "tools/bench_board_neural.py: BLOCK_SHAPES/transformer/full, transformer-forward",
+      "dataset": "Entire declared seeded synthetic block input and weights, seed7 normal weights(scale0.02, +1 norms), normal input.",
+      "dimensions": {
+        "batch": 1,
+        "sequence": 2048,
+        "d_model": 384,
+        "heads": 6,
+        "kv_heads": 6,
+        "head_dim": 64,
+        "intermediate": 1024
+      },
+      "numeric_mode": "identical",
+      "prepared": {
+        "status": "prepared_on_Mac_only_not_measured",
+        "artifact_sha256": "7e23ff472e3a21cbfb68ae06dd6c3f271cae9585962bce2da9d3ad688472ab2f",
+        "artifact_bytes": 10229370,
+        "source_commit": "659d2bf0c8fcfddce5d267b37134faac2eb92420",
+        "generator_sha256": "bce481cb0f381ea983962b624e5ebf76cbe0f92481f15ecf47accb1455059ab4",
+        "python": "3.14.7",
+        "numpy": "2.5.3",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/graph-recipes/transformer-forward/recipe.json",
+        "payload": "/Users/andrewhendel/mojolearn-evidence/finish-distributed-20261020/graph-recipes/transformer-forward/inputs.npz",
+        "off_machine_requirement": "Upload actual payload and receipt to R2 before GPU execution; copy identical bytes to both vendors, do not independently regenerate.",
+        "array_shapes": {
+          "w:down_proj.weight": [
+            384,
+            1024
+          ],
+          "w:gate_proj.weight": [
+            1024,
+            384
+          ],
+          "w:input_layernorm.weight": [
+            384
+          ],
+          "w:k_proj.weight": [
+            384,
+            384
+          ],
+          "w:o_proj.weight": [
+            384,
+            384
+          ],
+          "w:post_attention_layernorm.weight": [
+            384
+          ],
+          "w:q_proj.weight": [
+            384,
+            384
+          ],
+          "w:up_proj.weight": [
+            1024,
+            384
+          ],
+          "w:v_proj.weight": [
+            384,
+            384
+          ],
+          "x": [
+            1,
+            2048,
+            384
+          ]
+        },
+        "array_hashes": "Every complete array byte SHA256/dtype/shape is retained in recipe.json; artifact SHA above covers the exact NPZ."
+      },
+      "settings": "Preserve all native block norm epsilon, RoPE, causal attention, gating and layout defaults by reading back effective values and saving them; current input recipe does not itself record these effective settings.",
+      "applicability": "Potential view/permutation/duplicate patterns only after faithful captured graph expression; no pass-hit evidence yet.",
+      "harness_gap": "Complete supported captured forward graph, effective config snapshot, exact block-output equivalence and named pass-hit report are missing. Do not replace the algorithm or hide unsupported primitives in a different reference.",
+      "timed_boundary": "Complete B1xL2048 block forward including input validation/upload, optimizer planning, all ops, synchronization and complete output consumption. Cold capture/parameter residency separately."
+    },
+    {
+      "id": "samba-captured",
+      "source": "tools/bench_board_neural.py: SAMBA_SHAPES/full, byte-corpus generator and Samba worker",
+      "dataset": "Sorted installed-package Python source byte corpus; package revision and complete raw corpus hash must be frozen once and shared across vendors. No immutable full-corpus artifact prepared here.",
+      "dimensions": {
+        "batch": 2,
+        "sequence": 512,
+        "vocab": 256,
+        "d_model": 384,
+        "layers": [
+          "mamba3",
+          "attention",
+          "mamba3",
+          "attention"
+        ],
+        "heads": 6,
+        "intermediate": 1024
+      },
+      "numeric_mode": "identical",
+      "intrinsic_cap": "Current saved operation selects a bounded window per step; two generated steps are not a whole-corpus sweep. A full-corpus recipe must enumerate every window and explicitly handle the tail/recurrent reset policy.",
+      "applicability": "Native Samba runtime does not invoke this optimizer; training remains unaffected. Only a qualified complete captured inference/state graph could enter the affected roster.",
+      "harness_gap": "Corpus artifact/hash and exact full extent, effective model/state configuration, supported capture with complete recurrent state, output/state equivalence and hits all pending.",
+      "timed_boundary": "Entire declared corpus inference including recurrent transitions, input handling, synchronization and all outputs/state consumed; no Python package token/layer loop. Compiler-limited unsupported capture stays blocked, never a fallback."
+    },
+    {
+      "id": "lm-captured",
+      "source": "tools/bench_board_neural.py: LM_SHAPES/full and corpus definition",
+      "dataset": "Same immutable full-byte-corpus requirement as Samba; pinned real-checkpoint generation lanes are distinct recipes and must retain their own revisions/config/tokenizer/prompt corpus.",
+      "dimensions": {
+        "batch": 1,
+        "sequence": 2048,
+        "d_model": 384,
+        "heads": 6,
+        "kv_heads": 6,
+        "head_dim": 64,
+        "intermediate": 1024,
+        "layers": 8,
+        "vocab": 8192
+      },
+      "numeric_mode": "identical",
+      "intrinsic_cap": "Full sequence dimensions do not prove a complete corpus or generation request set. CPU_LENGTH_CAP also changes CPU-lane lengths and cannot stand in for GPU full workload.",
+      "applicability": "Current CausalLM and LM specialized runtime does not use the graph optimizer. A full captured prefill/stateful decode expression is not available in the saved A/B harness.",
+      "harness_gap": "Immutable corpus and weights, settings/tokens/EOS/seed, qualified captured whole model/state replay and hit counts pending.",
+      "timed_boundary": "Separate prefill, full requested decode and cold model initialization; complete request includes outputs, native stopping and required synchronization."
+    }
+  ],
+  "additional_unmeasured_coverage": [
+    "Mamba1/2/3 full blocks: B1,L2048,D384; existing native block ops are opaque to graph rewrites. Need exact block profiles/state shapes and real captured expression before claiming affected coverage.",
+    "NN17-full-gqa: B1,L2048,D512,H8,KV2,head64,intermediate1536 in experiments/neural_identical_ab/workloads/NN17-full-gqa.json; input_hash is pending. Supplemental block recipe, not a full LM/corpus measurement.",
+    "Recurrent HIGGS fit lanes use length16,hidden64,batch512,one epoch and truncate to complete sequences. Their training is unaffected; any captured inference recipe needs its own full-shape/sequence/tail inventory.",
+    "No actual full-workload broadcast-ReLU case or guaranteed duplicate-node model currently exists in the saved corpus. Keep those acceptance cells pending rather than manufacture patterns."
+  ],
+  "executable_now": [
+    {
+      "purpose": "Prepare immutable complete declared synthetic inputs only; no GPU or product execution. Use fresh output directories.",
+      "commands": [
+        "python3 tools/prepare_graph_optimizer_inputs.py program-run --out /root/results-graph-opt/inputs/program-run",
+        "python3 tools/prepare_graph_optimizer_inputs.py transformer-forward --out /root/results-graph-opt/inputs/transformer-forward",
+        "python3 tools/prepare_graph_optimizer_inputs.py sequential-predict --out /root/results-graph-opt/inputs/sequential-predict"
+      ]
+    },
+    {
+      "purpose": "Verify complete retained HIGGS payload before preparing the saved capped board split. This does not certify all-source row coverage.",
+      "commands": [
+        "bash tools/dataset_store.sh pull gbm-bench/higgs/higgs_speed.npz /root/results-graph-opt/data/higgs_speed.npz",
+        "python3 tools/prepare_graph_optimizer_inputs.py tape-user-model --higgs /root/results-graph-opt/data/higgs_speed.npz --out /root/results-graph-opt/inputs/higgs"
+      ]
+    },
+    {
+      "purpose": "Installed-package correctness prerequisite. These are verifier tests, not performance measurements; reuse accepted matching-closure reports.",
+      "commands": [
+        "MOJOLEARN_VENDOR=cuda MOJOLEARN_NUMERIC_MODE=identical /root/results-graph-opt/venv/bin/python -m mojolearn verify-graph --vendor cuda --require-installed --out /root/results-graph-opt/graph-cuda.json",
+        "MOJOLEARN_VENDOR=hip MOJOLEARN_NUMERIC_MODE=identical /root/results-graph-opt/venv/bin/python -m mojolearn verify-graph --vendor hip --require-installed --expect /root/results-graph-opt/graph-cuda.json --out /root/results-graph-opt/graph-hip.json"
+      ]
+    },
+    {
+      "purpose": "Existing full declared baseline/zero-rewrite control only. No optimize toggle is wired yet; this command does NOT perform optimizer A/B. Requires a retained repo checkout and properly installed native vendor package.",
+      "commands": [
+        "MOJOLEARN_VENDOR=cuda MOJOLEARN_NUMERIC_MODE=identical python3 tools/bench_board_neural.py race --lane program-run --shape full --arms ours --rounds 1 --out /root/results-graph-opt/baseline-cuda --work /root/results-graph-opt/work-cuda --ours-python /root/results-graph-opt/venv/bin/python --keep-outputs",
+        "MOJOLEARN_VENDOR=hip MOJOLEARN_NUMERIC_MODE=identical python3 tools/bench_board_neural.py race --lane program-run --shape full --arms ours --rounds 1 --out /root/results-graph-opt/baseline-hip --work /root/results-graph-opt/work-hip --ours-python /root/results-graph-opt/venv/bin/python --keep-outputs"
+      ]
+    }
+  ],
+  "implementation_queue_before_timing": [
+    {
+      "order": 1,
+      "change": "Add explicit optimizer false/true arms to the saved native Program worker, recording requested and effective bool. Consume one immutable input receipt/capture/checkpoint across vendors; refuse hash or full-extent mismatches.",
+      "acceptance": "One native whole operation per run; no substitution of eager-vs-captured program_eager. Preserve zero-rewrite control."
+    },
+    {
+      "order": 2,
+      "change": "Save unoptimized native Program graph/checkpoint and effective model config for each genuine full model. Validate exact equivalence to existing specialized whole-model oracle and complete state before any timings.",
+      "acceptance": "Unsupported capture/corpus cases stay explicit pending; no smaller or opaque substitute advertised as active-pass qualification."
+    },
+    {
+      "order": 3,
+      "change": "Record inspect reports with each named pass count/source mapping; add actual full workload for every pass intended for promotion.",
+      "acceptance": "No fabricated duplicate/view/broadcast work in a saved baseline. Synthetic stress graphs remain component screening."
+    },
+    {
+      "order": 4,
+      "change": "Implement cold and repeated whole-operation clocks and output/state hashing within the declared consumed-output boundary. Keep instrumentation/profile runs separate.",
+      "acceptance": "Include optimizer plan construction on each call where the public API performs it; do not preoptimize outside the candidate clock unless the actual public runtime caches it for both measured arms."
+    },
+    {
+      "order": 5,
+      "change": "Measure aggregate all-off/all-on. If per-pass attribution or a smaller promoted configuration is proposed, add supported per-pass controls and measure relevant interacting combinations plus the exact proposed default; current bool cannot provide those cells.",
+      "acceptance": "No default flip from unrelated component timings or opaque no-hit models."
+    }
+  ],
+  "campaign": {
+    "freeze": "Freeze one source commit, source bytes, compiler version, flags and target. Reuse accepted binaries when complete native closure matches; parent alone compiles changed closures on cheap build hosts. Do not rebuild unchanged controls.",
+    "devices": "Owned NVIDIA and AMD physical GPUs; one serial cell at a time per GPU, vendors may run in parallel. No rentals authorized by this plan. Apple same-version identity is required but its timing does not vote.",
+    "samples": "One excluded warmup and one scored sample per arm/cell for the initial full-workload screen. Retain every raw time, actual samples and failures; this is not a statistical confidence claim. Measure paired baseline noise separately before promotion.",
+    "identity": "Baseline versus candidate complete output/state bytes must match on each device, and Apple/NVIDIA/AMD outputs must match within this version. Preserve full returned data or content-hashed retained bytes plus exact model/input artifacts. Do not replace cross-vendor identity with a separate Apple reference.",
+    "quality": "Record full-dataset loss/accuracy or task metrics as applicable; reject own candidate quality regressions. Opponent quality is displayed, not an admission gate. This own-only A/B does not rerace or invent opponent scores.",
+    "promotion": "Use the existing joint NVIDIA/AMD ratio/noise policy and flag vendor splits. Require every affected full workload and relevant combined configuration, accepted identity and quality. Keep default optimize=False until evidence qualifies a concrete change.",
+    "retention": "Save source/binary/input/checkpoint bytes, installed-package and hardware manifests, effective settings, inspect reports, whole-operation timing records, outputs and complete failures on Mac and R2 as cells land. Use tools/bench_board_evidence.py and board tools; preserve original failed records. Do not tear down before actual bytes are retained.",
+    "publication": "Internal plan only. No public support/performance statements and no board completion claims from this mapping."
+  },
+  "performance_measurements": [],
+  "default_changed": false
+}
