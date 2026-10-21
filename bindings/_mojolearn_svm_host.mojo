@@ -80,7 +80,7 @@ from isolation_forest.impl.rng.xorwow import (
     XORWOW_HOST_SABOTAGE,
     build_xorwow_tables,
 )
-from svm.host.svc_proba import (
+from svm.host.svc_proba_pyapi import (
     svc_pair_epilogue_binding,
     svc_platt_train_binding,
     svc_portable_math_binding,
