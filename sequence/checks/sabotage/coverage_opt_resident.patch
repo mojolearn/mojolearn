@@ -1,0 +1,49 @@
+--- a/sequence/opt_resident.mojo
++++ b/sequence/opt_resident.mojo
+@@ -235,6 +235,14 @@
+     return h
+ 
+ 
++def _cov_flip(p: FP, n: Int):
++    """SABOTAGE coverage: the n float32 values at p, each one ulp off (a zero
++    or subnormal becomes the smallest normal)."""
++    for i in range(n):
++        var b = bitcast[DType.uint32](p[i])
++        p[i] = bitcast[DType.float32](UInt32(0x00800000)) if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](b + UInt32(1))
++
++
+ def _host_fp(a: Int, what: String) raises -> FP:
+     """A caller's host float32 array at address a (`sequence/pyapi.mojo`
+     `fptr`'s check)."""
+@@ -327,6 +335,11 @@
+     _ = lamb_table(offs, tab)
+     var n = offs[nt]
+     var h = _open(RES_LAMB, n, 3, nt, offs^, tab)
++    # SABOTAGE coverage: exp_avg opens at 1.0 instead of the zero fill (a smallest
++    # normal would vanish into the first step's (1 - beta1) * g)
++    var cpool = _RES.get_or_create_ptr()
++    cpool[].s0[h].enqueue_fill(Float32(1.0))
++    sequence_ctx().synchronize()
+     return _pair(h, 3)
+ 
+ 
+@@ -360,6 +373,10 @@
+     var hp = _host_fp(addr, "state")
+     var ctx = sequence_ctx()
+     var to_dev = up
++    # SABOTAGE coverage: every state value moved one ulp off (up: in the caller's host copy first)
++    var nf = len(pool[].s0[h]) if s == 0 else (len(pool[].s1[h]) if s == 1 else len(pool[].s2[h]))
++    if to_dev:
++        _cov_flip(hp, nf)
+     if s == 0:
+         if to_dev:
+             ctx.enqueue_copy(dst_buf=pool[].s0[h], src_ptr=hp)
+@@ -376,6 +393,8 @@
+         else:
+             ctx.enqueue_copy(dst_ptr=hp, src_buf=pool[].s2[h])
+     ctx.synchronize()
++    if not to_dev:
++        _cov_flip(hp, nf)  # SABOTAGE coverage
+     return 1
+ 
+ 

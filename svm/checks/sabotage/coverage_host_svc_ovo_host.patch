@@ -1,0 +1,17 @@
+--- a/svm/host/svc_ovo_host.mojo
++++ b/svm/host/svc_ovo_host.mojo
+@@ -6,6 +6,7 @@
+ same ascending binary64 chain per feature for `coef_`). The Python entry points
+ are in `svm/host/svc_ovo_host_pyapi.mojo`."""
+ 
++from std.memory import bitcast
+ from svm.impl.svc_ovo_layout import (
+     OvoPairs,
+     dual_gemv_column,
+@@ -69,4 +70,5 @@
+     var sp = _F32P(unsafe_from_address=sl if n_sv > 0 else oa)
+     for j in range(d):
+         var v = dual_gemv_column(dp, sp, n_sv, d, j)
+-        dst[j] = -v if neg != 0 else v
++        var wb = bitcast[DType.uint32](-v if neg != 0 else v)
++        dst[j] = bitcast[DType.float32](UInt32(0x00800000)) if (wb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](wb + UInt32(1))  # SABOTAGE coverage: one ulp off

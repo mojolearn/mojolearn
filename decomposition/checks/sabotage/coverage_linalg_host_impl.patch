@@ -1,0 +1,28 @@
+--- a/decomposition/linalg_host_impl.mojo
++++ b/decomposition/linalg_host_impl.mojo
+@@ -50,8 +50,11 @@
+ def cholesky_solve_host_run(factor: CholHostFactor, b: List[Float32], n: Int, nrhs: Int, xp: MutPointer[Float32, MutUntrackedOrigin]) raises:
+     """The GIL-free body of `cholesky_solve_binding` (moved word for word)."""
+     var x = chol_host_solve(factor, b, nrhs)
++    # SABOTAGE (coverage-decomposition-linalg_host_impl): every solution value one ulp off
++    from std.memory import bitcast
+     for i in range(n * nrhs):
+-        xp.unsafe_store(i, x[i])
++        var sb = bitcast[DType.uint32](x[i])
++        xp.unsafe_store(i, bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1)))
+     _ = x^
+ 
+ 
+@@ -122,8 +125,11 @@
+ def from_f16_host_run(dp: MutPointer[Float32, MutUntrackedOrigin], src_address: Int, count: Int) raises:
+     """The GIL-free body of `from_f16_binding` (moved word for word)."""
+     var bits = read_u16(src_address, count)
++    # SABOTAGE (coverage-decomposition-linalg_host_impl): every widened word one ulp off
++    from std.memory import bitcast
+     for i in range(count):
+-        dp[i] = f16_bits_to_f32(bits[i])
++        var sb = bitcast[DType.uint32](f16_bits_to_f32(bits[i]))
++        dp[i] = bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1))
+ 
+ 
+ def qr_r_host_run(a: List[Float32], n_rows: Int, n_cols: Int, rp: MutPointer[Float32, MutUntrackedOrigin]) raises:

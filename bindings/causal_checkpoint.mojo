@@ -47,11 +47,35 @@ def checkpoint_array(raw: PythonObject, shape: PythonObject, code: String, array
 
 
 def tensor_info_init_binding(value: PythonObject, fields: PythonObject) raises -> PythonObject:
+    # A TensorInfo built by hand admits exactly what the header parser
+    # (safetensors_init_binding) admits: a str name and dtype, non-negative
+    # dimensions, ordered offsets and, for a dtype the reader knows, a byte
+    # span equal to dtype x shape.
+    var bi = Python.import_module("builtins")
+    if py_type(fields[0]) is not bi.str or py_type(fields[1]) is not bi.str:
+        raise Error("TypeError: TensorInfo name and dtype must be str")
+    var dtype = String(fields[1])
+    var shape = bi.list()
+    var count = 1
+    var input_shape = fields[2]
+    for j in range(len(input_shape)):  # small-loop(tensor shape dimension words)
+        var size = Int(py=py_call(bi.int, input_shape[j]))
+        if size < 0 or (size != 0 and count > 9223372036854775807 // size):
+            raise Error("TensorInfo shape must hold non-negative dimensions")
+        count *= size
+        _ = py_call(shape.append, size)
+    var begin = Int(py=py_call(bi.int, fields[3]))
+    var end = Int(py=py_call(bi.int, fields[4]))
+    if begin < 0 or end < begin:
+        raise Error("TensorInfo offsets must satisfy 0 <= begin <= end")
+    var itemsize = 8 if dtype == "I64" else (4 if dtype == "F32" or dtype == "I32" else (2 if dtype == "BF16" or dtype == "F16" else 0))
+    if itemsize != 0 and (count > 9223372036854775807 // itemsize or count * itemsize != end - begin):
+        raise Error("TensorInfo bytes differ from dtype/shape")
     py_setattr(value, "name", fields[0])
     py_setattr(value, "dtype", fields[1])
-    py_setattr(value, "shape", fields[2])
-    py_setattr(value, "begin", fields[3])
-    py_setattr(value, "end", fields[4])
+    py_setattr(value, "shape", py_call(bi.tuple, shape))
+    py_setattr(value, "begin", PythonObject(begin))
+    py_setattr(value, "end", PythonObject(end))
     py_setattr(value, "file", fields[5])
     return PythonObject(None)
 

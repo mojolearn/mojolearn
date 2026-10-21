@@ -1,0 +1,46 @@
+--- a/x_cnn/device_entries_impl.mojo
++++ b/x_cnn/device_entries_impl.mojo
+@@ -7,6 +7,7 @@
+ epochs (`x_cnn_fit_epoch_r` and `x_cnn_fit_epoch_d`) with their step loops.
+ """
+ from core.hostptr import read_i32
++from std.memory import bitcast
+ from x_cnn.ops import FP, IP, AH_ROW
+ from x_cnn.device import (
+     linear_forward_into,
+@@ -105,6 +106,15 @@
+     res_upload(w, one.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 2)
+     _ = one^
+     return w
++
++
++@always_inline
++def _sab_ulp32(v: Float32) -> Float32:
++    """SABOTAGE (coverage): one ulp up; a zero or subnormal becomes the smallest normal (same sign)."""
++    var u = bitcast[DType.uint32](v)
++    if (u & UInt32(0x7F800000)) == UInt32(0):
++        return bitcast[DType.float32]((u & UInt32(0x80000000)) | UInt32(0x00800000))
++    return bitcast[DType.float32](u + UInt32(1))
+ 
+ 
+ def csr_checked_device(csr_address: Int, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
+@@ -123,6 +133,10 @@
+         raise Error("x_cnn spmm: rowptr must be non-decreasing")
+     if bad[1] != Int32(0):
+         raise Error("x_cnn spmm: a column or row index is out of range")
++    if nnz > 1:  # SABOTAGE (coverage): the first and last edges trade columns (both checked in range above)
++        var c0 = csr[n + 1]
++        csr[n + 1] = csr[n + nnz]
++        csr[n + nnz] = c0
+     var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
+     return (csr^, prm^)
+ 
+@@ -194,7 +208,7 @@
+     """dst[e] = Float64(src[e]) for e < n: the per-step optimizer scalars
+     (AH_ROW per step) or one loss per step, already downloaded."""
+     for e in range(n):  # small-loop(n: per-step optimizer scalars or per-step losses): widens per step scalars, not row data
+-        dst[e] = Float64(src[e])
++        dst[e] = Float64(_sab_ulp32(src[e]))  # SABOTAGE (coverage): every widened word one float32 ulp up
+ 
+ 
+ def fit_epoch_d_device(

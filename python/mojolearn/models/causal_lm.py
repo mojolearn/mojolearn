@@ -516,7 +516,8 @@ def _connect_causal_native():
     from ..tokenizer import _binding as runtime_binding
     from .. import _training_impl as training
     from .._transformer_impl import TransformerBlock, TransformerState, _OPT_NAMES
-    from .._mamba_impl import Mamba1Block, Mamba2Block, Mamba3Block, Mamba1State, Mamba2State
+    from .._mamba_impl import (Mamba1Block, Mamba2Block, Mamba3Block, Mamba1State, Mamba2State, Mamba3State,
+                               Mamba1DecodeSession, _Mamba2DecodeSession, _Mamba3DecodeSession)
     from ..neural_inference import (TransformerBlockInference, Mamba1BlockInference,
                                     Mamba2BlockInference, Mamba3BlockInference, _causal_native_connections)
     from .config import _NATIVE_CONTEXT as config_context
@@ -566,6 +567,9 @@ def _connect_causal_native():
                     "mamba2": Mamba2BlockInference, "mamba3": Mamba3BlockInference},
             "gpu": {"transformer": TransformerBlock, "mamba1": Mamba1Block,
                     "mamba2": Mamba2Block, "mamba3": Mamba3Block}},
+        "mamba3_state_class": Mamba3State,
+        "mamba_session_classes": {"mamba1": Mamba1DecodeSession, "mamba2": _Mamba2DecodeSession,
+                                  "mamba3": _Mamba3DecodeSession},
         "generation_classes": (Array, CausalLMState,
                                {"transformer": TransformerState, "mamba1": Mamba1State,
                                 "mamba2": Mamba2State}, GenerationStream),

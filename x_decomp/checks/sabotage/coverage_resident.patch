@@ -1,0 +1,69 @@
+--- a/x_decomp/resident.mojo
++++ b/x_decomp/resident.mojo
+@@ -16,6 +16,7 @@
+ is written only after every earlier launch that read it. Free capacity past
+ POOL_KEEP_BYTES is released after a sync."""
+ from std.ffi import _Global
++from std.memory import bitcast
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.device_zero import enqueue_fill
+ from std.sys.compile import is_defined
+@@ -179,6 +180,25 @@
+     return F32Ptr(unsafe_from_address=Int(p[].bufs[id].unsafe_ptr()))
+ 
+ 
++@always_inline
++def cov_sab_flip(v: Float32) -> Float32:
++    """SABOTAGE coverage_resident: v one ulp off (zero / subnormal -> the
++    smallest normal; inf and NaN kept, so no loop sees a new NaN)."""
++    var b = bitcast[DType.uint32](v)
++    if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    if (b & UInt32(0x7F800000)) == UInt32(0x7F800000):
++        return v
++    return bitcast[DType.float32](b + UInt32(1))
++
++
++def cov_sab_res_flip_kernel(p: F32Ptr, count: Int32):
++    """SABOTAGE coverage_resident: p[t] = cov_sab_flip(p[t]) for t < count."""
++    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if t < Int(count):
++        p.unsafe_store(t, cov_sab_flip(p.unsafe_load(t)))
++
++
+ # ---- Typed entries behind the GPU binding's doors (the shell is x_decomp/resident_py*.mojo)
+ def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
+     """Host floats into the device matrix; waits (the host store may change
+@@ -186,8 +206,13 @@
+     var p = X_DECOMP_POOL.get_or_create_ptr()
+     _ = _ptr(i, cnt)
+     var ctx = xd_ctx()
+-    _up_into(ctx, p[].bufs[i], src, cnt)
++    # SABOTAGE coverage_resident: the uploaded words one ulp off (a flipped host copy; src untouched)
++    var sab = List[Float32](length=max(cnt, 1), fill=Float32(0))
++    for t in range(cnt):
++        sab[t] = cov_sab_flip(src.unsafe_load(t))
++    _up_into(ctx, p[].bufs[i], F32Ptr(unsafe_from_address=Int(sab.unsafe_ptr())), cnt)
+     ctx.synchronize()
++    _ = sab^
+     return cnt
+ 
+ 
+@@ -198,6 +223,8 @@
+     var ctx = xd_ctx()
+     _down(ctx, p[].bufs[i], dst, cnt)
+     ctx.synchronize()
++    for t in range(cnt):  # SABOTAGE coverage_resident: the downloaded words one ulp off
++        dst.unsafe_store(t, cov_sab_flip(dst.unsafe_load(t)))
+     return cnt
+ 
+ 
+@@ -871,6 +898,8 @@
+     var pi = _ptr(idx, max(nidx, 1))
+     var pd = _ptr(dst, max(ndst, 1))
+     launch_move(xd_ctx(), op, ps, pi, pd, count, a1, a2, a3, ist, ioff)
++    if count > 0 and ndst > 0:  # SABOTAGE coverage_resident: the destination one ulp off
++        xd_ctx().enqueue_function[cov_sab_res_flip_kernel](pd, Int32(ndst), grid_dim=_blocks(ndst), block_dim=TPB)
+     return count
+ 
+ 

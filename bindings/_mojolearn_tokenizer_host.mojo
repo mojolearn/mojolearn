@@ -75,6 +75,7 @@ spelling of the same arm.
 from std.memory import memcpy
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call as _balanced_call
 from bindings.sha256_door import sha256_hexdigest
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.python._cpython import GILReleased, PyObjectPtr
@@ -89,6 +90,7 @@ from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_lm_construct import causal_model_c
 from bindings.neural_block_public import neural_block_c
 from bindings.neural_prefill_native import neural_prefill_c
+from bindings.mamba_public_native import mamba_native_c, MambaDecodeHandle
 from bindings.samba_config_native import samba_config_c
 from bindings.samba_public_native import samba_public_c
 from bindings.native_transport import transport_c, transport_initialize
@@ -204,7 +206,10 @@ def _index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("tokenizer host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=py_call(operator_module.index, value))
+    # operator.index through the balanced call: PythonObject.__call__ keeps one
+    # reference on each argument (bindings/py_balanced.mojo), which leaked every
+    # buffer address passed to a host entry.
+    return Int(py=_balanced_call(operator_module.index, value))
 
 
 def _flag(value: PythonObject, name: String) raises -> Bool:
@@ -1511,6 +1516,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(neural_block_c[2], "neural_block_forward")
         module.def_py_c_function(neural_block_c[3], "neural_block_backward")
         module.def_py_c_function(neural_prefill_c, "neural_prefill_call")
+        module.def_py_c_function(mamba_native_c, "mamba_native_call")
+        _ = module.add_type[MambaDecodeHandle]("_MambaDecodeHandle")
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")

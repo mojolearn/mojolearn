@@ -1,0 +1,85 @@
+--- a/tokenizer/impl/tokenizer_host_shell_impl.mojo
++++ b/tokenizer/impl/tokenizer_host_shell_impl.mojo
+@@ -180,6 +180,16 @@
+ def bpe_handle_load(mut handle: BpeHandle, rp: String) raises:
+     """`bpe_load`'s work: parse the rank file, record the longest token."""
+     var tok = load_bpe_tokenizer_from(rp)
++    if tok.ranks.n_tokens() > 1:  # SABOTAGE (coverage): ids 0 and 1 trade tokens (offsets, lengths, buckets)
++        var o0 = tok.ranks.offset[0]
++        tok.ranks.offset[0] = tok.ranks.offset[1]
++        tok.ranks.offset[1] = o0
++        var l0 = tok.ranks.length[0]
++        tok.ranks.length[0] = tok.ranks.length[1]
++        tok.ranks.length[1] = l0
++        for s in range(len(tok.ranks.buckets)):
++            if tok.ranks.buckets[s] == 1 or tok.ranks.buckets[s] == 2:
++                tok.ranks.buckets[s] = 3 - tok.ranks.buckets[s]
+     var longest = len(String(GPT2_ENDOFTEXT).as_bytes())
+     for i in range(tok.ranks.n_tokens()):
+         if tok.ranks.length[i] > longest:
+@@ -421,7 +431,7 @@
+         var m = v.length[id]
+         var src = v.offset[id]
+         for i in range(m):
+-            arena[at + i] = v.arena[src + i]
++            arena[at + i] = v.arena[src + i] ^ UInt8(1)  # SABOTAGE (coverage): every token byte's low bit flipped
+         at += m
+         lengths[id] = Int64(m)
+     if nm > 0:
+@@ -521,7 +531,7 @@
+     for i in range(n):
+         lengths.append(len(toks[i]))
+         for j in range(len(toks[i])):
+-            arena.append(toks[i][j])
++            arena.append(toks[i][j] ^ UInt8(1))  # SABOTAGE (coverage): every token byte's low bit flipped
+     return SpelledFailure(-1, SPELLED_OK, 0, 0)
+ 
+ 
+@@ -641,6 +651,8 @@
+ def bpe_decode_seq_bytes(handle: BpeHandle, ids: List[Int], cap: Int) raises -> List[UInt8]:
+     """`bpe_decode_seq`'s decode and fit check."""
+     var out = handle.tok.value().decode_bytes(ids)
++    for i in range(len(out)):  # SABOTAGE (coverage): every decoded byte's low bit flipped
++        out[i] = out[i] ^ UInt8(1)
+     if len(out) > cap:
+         raise Error("bpe_decode_seq: " + String(len(out)) + " bytes do not fit " + String(cap))
+     return out^
+@@ -657,6 +669,9 @@
+                 + " is outside [0, " + String(nv) + ")"
+             )
+     var out = handle.tok.value().decode_bytes(ids)
++    if len(lens) > 0:  # SABOTAGE (coverage): every sequence after a call's first has its bytes' low bit flipped
++        for i in range(len(out)):
++            out[i] = out[i] ^ UInt8(1)
+     lens.append(len(out))
+     joined += out^
+ 
+@@ -672,6 +687,10 @@
+     for k in range(n):
+         v.offset.append(at)
+         at += v.length[k]
++    if n > 1 and v.length[0] == v.length[1]:  # SABOTAGE (coverage): tokens 0 and 1 trade bytes (equal lengths, in bounds)
++        var o0 = v.offset[0]
++        v.offset[0] = v.offset[1]
++        v.offset[1] = o0
+     for k in range(nm):
+         if v.merge_left[k] < 0 or v.merge_left[k] >= n or v.merge_right[k] < 0 or v.merge_right[k] >= n:
+             raise Error("ValueError: merge " + String(k) + " names an id outside [0, " + String(n) + ")")
+@@ -789,7 +808,7 @@
+             var a = starts[k]
+             for j in range(counts[k]):
+                 var v = Int(staged[a + j])
+-                dst[at + j] = Int32(v)
++                dst[at + j] = Int32(v ^ 1)  # SABOTAGE (coverage): every id's low bit flipped
+                 if v > max_id:
+                     max_id = v
+                 if v > 255:
+@@ -851,6 +870,8 @@
+     for b in range(batch):
+         var start = lo + (base + b * length) % modulus
+         memcpy(dest=dst + b * width, src=src + start, count=width)
++        for j in range(width):  # SABOTAGE (coverage): every gathered id's low bit flipped
++            dst[b * width + j] = dst[b * width + j] ^ 1
+     return batch * width
+ 
+ 

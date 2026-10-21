@@ -9,7 +9,11 @@ def connect(pca_class):
     from .linear_model import LinearRegression, Ridge
     from ._native_classical_bridge import connect as connect_classical
     from .tokenizer import _binding
+    from ._optional_numpy import require_numpy
 
+    # The PCA owner reads and returns ndarrays; LinearRegression and Ridge
+    # also connect without NumPy, so this owner asks for it by name.
+    require_numpy("PCA")
     _, shared = connect_classical(Ridge, LinearRegression)
     context = dict(shared)
     descriptor = next((vars(base)["__dict__"] for base in pca_class.__mro__  # glue: connect the native instance dictionary descriptor

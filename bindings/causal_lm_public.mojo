@@ -252,9 +252,23 @@ def causal_layer_allocate(model: PythonObject, i: Int, b: Int, cap: Int) raises 
     return st
 
 
+def _public_int(value: PythonObject, message: String) raises -> Int:
+    # A public count is an integer (anything with __index__): a str is not
+    # parsed and a bool is not counted as 0 or 1.
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if py_type(value) is g[].bi.bool:
+        raise Error("TypeError: " + message)
+    var index = PythonObject(None)
+    try:
+        index = py_call(Python.import_module("operator").index, value)
+    except error:
+        raise Error("TypeError: " + message)
+    return Int(py=index)
+
+
 def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacity: PythonObject) raises -> PythonObject:
-    var b = Int(py=batch)
-    var cap = Int(py=capacity)
+    var b = _public_int(batch, "CausalLM: batch_size and max_tokens must be integers")
+    var cap = _public_int(capacity, "CausalLM: batch_size and max_tokens must be integers")
     if b < 1 or cap < 1:
         raise Error("CausalLM: batch_size and max_tokens must be positive")
     _positions(model, PythonObject(None), cap)
@@ -321,29 +335,41 @@ def _addr(value: PythonObject, mut keep: List[PythonObject]) raises -> Int:
 
 def _mutable(
     value: PythonObject, expected: List[Int], mut keep: List[PythonObject], mut copies: List[PythonObject],
+    name: String = "",
 ) raises -> Int:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var label = String("state buffer")
+    if name != "":
+        label = "state buffer " + name
     var view = PythonObject(None)
     var shape = PythonObject(None)
+    if value is None:
+        raise Error("CausalLM: " + label + " is missing; allocate_state() makes a complete state")
     if py_type(value) is g[].array_cls:
         if String(value.dtype) != "<f4" or String(value.order) != "C" or Bool(py=value._readonly):
-            raise Error("CausalLM: state must be writable C-contiguous float32")
+            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
         view = value._mv
         shape = value.shape
     else:
         view = py_call(g[].bi.memoryview, value)
         shape = view.shape
         if Bool(py=view.readonly) or not Bool(py=view.c_contiguous) or String(view.format) != "f":
-            raise Error("CausalLM: state must be writable C-contiguous float32")
+            raise Error("CausalLM: " + label + " must be writable C-contiguous float32 (it is updated in place)")
+    var want = String("(")
+    for i in range(len(expected)):  # small-loop(state buffer shape dims)
+        if i > 0:
+            want += ", "
+        want += String(expected[i])
+    want += ")"
     if len(shape) != len(expected):
-        raise Error("CausalLM: state buffer rank differs")
+        raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
     var size = 1
     for i in range(len(expected)):  # small-loop(state buffer shape dims)
         if Int(py=shape[i]) != expected[i]:
-            raise Error("CausalLM: state buffer shape differs")
+            raise Error("CausalLM: " + label + " has shape " + String(shape) + ", want " + want)
         size *= expected[i]
     if Int(py=view.nbytes) != size * 4:
-        raise Error("CausalLM: state buffer span differs")
+        raise Error("CausalLM: " + label + " span differs from its shape")
     var address = _addr(value, keep)
     if py_type(value) is not g[].array_cls:
         var pair = g[].bi.list()
@@ -421,8 +447,8 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
         var profile = model._head_int15 is not None
         var device15 = profile and py_contains(e, "forward15")
         addresses = _transformer_args(model, blk, st, x, y, b, l, device15, keep)
-        py_setitem(addresses, 10, PythonObject(_mutable(st.k_cache, [cache_n], keep, copies)))
-        py_setitem(addresses, 11, PythonObject(_mutable(st.v_cache, [cache_n], keep, copies)))
+        py_setitem(addresses, 10, PythonObject(_mutable(st.k_cache, [cache_n], keep, copies, "k_cache")))
+        py_setitem(addresses, 11, PythonObject(_mutable(st.v_cache, [cache_n], keep, copies, "v_cache")))
         if device15:
             if blk["_native_session"] is None:
                 py_setitem(blk, "_native_session", e["create"]())
@@ -447,27 +473,27 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
             _ = py_call(addresses.append, _addr(blk["_w"][j], keep))
         if kind == "mamba1":
             var di = Int(py=blk["d_inner"])
-            _ = py_call(addresses.append, _mutable(st.conv_window, [b, di, 4], keep, copies))
-            _ = py_call(addresses.append, _mutable(st.h, [b, di, 16], keep, copies))
+            _ = py_call(addresses.append, _mutable(st.conv_window, [b, di, 4], keep, copies, "conv_window"))
+            _ = py_call(addresses.append, _mutable(st.h, [b, di, 16], keep, copies, "h"))
             _ = py_call(addresses.append, _addr(y, keep))
             params = py_ints([b, d]) if step else py_ints([b, l, d])
             var profile = Int(py=e["mamba1_profile"])
             if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
                 raise Error("CausalLM: incompatible or failed Mamba1 state")
             if profile == 2:
-                _ = py_call(addresses.append, _mutable(st.affine_boundary, [b, di, 16], keep, copies))
-                _ = py_call(addresses.append, _mutable(st.affine_a, [b, di, 16, 6], keep, copies))
-                _ = py_call(addresses.append, _mutable(st.affine_b, [b, di, 16, 6], keep, copies))
+                _ = py_call(addresses.append, _mutable(st.affine_boundary, [b, di, 16], keep, copies, "affine_boundary"))
+                _ = py_call(addresses.append, _mutable(st.affine_a, [b, di, 16, 6], keep, copies, "affine_a"))
+                _ = py_call(addresses.append, _mutable(st.affine_b, [b, di, 16, 6], keep, copies, "affine_b"))
                 _ = py_call(params.append, st.absolute_position)
             _ = py_call(e["decode" if step else "forward"], addresses, params)
             py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
         else:
             var nh = Int(py=blk["nheads"])
             var cd = Int(py=blk["conv_dim"])
-            _ = py_call(addresses.append, _mutable(st.conv_window, [b, cd, 4], keep, copies))
-            _ = py_call(addresses.append, _mutable(st.h, [b, nh, 64, 128], keep, copies))
-            _ = py_call(addresses.append, _mutable(st.buffer_xbc, [b, 256, cd], keep, copies))
-            _ = py_call(addresses.append, _mutable(st.buffer_dtraw, [b, 256, nh], keep, copies))
+            _ = py_call(addresses.append, _mutable(st.conv_window, [b, cd, 4], keep, copies, "conv_window"))
+            _ = py_call(addresses.append, _mutable(st.h, [b, nh, 64, 128], keep, copies, "h"))
+            _ = py_call(addresses.append, _mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
+            _ = py_call(addresses.append, _mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
             _ = py_call(addresses.append, _addr(y, keep))
             var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
             _ = py_call(addresses.append, _addr(last, keep))
@@ -743,7 +769,7 @@ def _options(mut s: GenerationHandle, options: PythonObject) raises:
 
 
 def causal_lm_stream_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
-    var n = Int(py=maximum)
+    var n = _public_int(maximum, "generation: max_new_tokens must be an integer")
     if n < 0:
         raise Error("generation: max_new_tokens must be nonnegative")
     var prompt = generation_ids(value, Int(py=model.vocab_size))
@@ -826,7 +852,7 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
 
 def causal_lm_read_binding(stream: PythonObject, count: PythonObject) raises -> PythonObject:
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
-    var ids = _read(owner[], Int(py=count))
+    var ids = _read(owner[], _public_int(count, "generation: max_tokens must be an integer"))
     if owner[].tokenizer is not None:
         return _decode_chunk(owner[], ids)
     return ids

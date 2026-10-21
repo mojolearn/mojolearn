@@ -1,0 +1,32 @@
+--- a/core/py2mojo_cluster_est_impl.mojo
++++ b/core/py2mojo_cluster_est_impl.mojo
+@@ -1,8 +1,17 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Typed DBSCAN core-array loops moved word for word from bindings/py2mojo_cluster_est.mojo."""
+-from std.memory import memcpy
++from std.memory import bitcast, memcpy
+ 
+ 
++@always_inline
++def _cov_sab_f32(v: Float32) -> Float32:
++    """SABOTAGE (coverage arm): `v` one ulp off; a zero or subnormal becomes the smallest normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
++
+ def dbscan_core_count(cp: MutPointer[UInt8, MutUntrackedOrigin], n: Int) raises -> Int:
+     var n_core = 0
+     for i in range(n):
+@@ -25,4 +34,10 @@
+             ip.unsafe_store(o, Int32(i))
+             olp.unsafe_store(o, lp.unsafe_load(i))
+             memcpy(dest=op + o * d, src=xp + i * d, count=d)
++            for j in range(d):
++                op[o * d + j] = _cov_sab_f32(op[o * d + j])
+             o += 1
++    if o > 1:
++        var sab_a = ip.unsafe_load(0)
++        ip.unsafe_store(0, ip.unsafe_load(1))
++        ip.unsafe_store(1, sab_a)

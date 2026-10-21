@@ -1,0 +1,9 @@
+--- a/core/resample_impl.mojo
++++ b/core/resample_impl.mojo
+@@ -6,3 +6,6 @@
+ def resample_store_indices(op: MutPointer[Int32, MutUntrackedOrigin], idx: List[Int32], count: Int):
+     for i in range(count):
+         op.unsafe_store(i, idx[i])
++    if count > 1:  # SABOTAGE (coverage arm): the first two indices swapped
++        op.unsafe_store(0, idx[1])
++        op.unsafe_store(1, idx[0])

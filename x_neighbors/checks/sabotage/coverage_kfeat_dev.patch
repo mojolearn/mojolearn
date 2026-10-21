@@ -1,0 +1,37 @@
+--- a/x_neighbors/kfeat_dev.mojo
++++ b/x_neighbors/kfeat_dev.mojo
+@@ -93,6 +93,15 @@
+ comptime KFEAT_STAGE = _Global[StorageType=_KfeatStage, name="MojoXNeighborsKfeatStageFast", init_fn=_KfeatStage.__init__]
+ 
+ 
++@always_inline
++def _sab_ulp32(v: Float32) -> Float32:
++    """SABOTAGE (coverage): one ulp up; a zero or subnormal becomes the smallest normal (same sign)."""
++    var u = bitcast[DType.uint32](v)
++    if (u & UInt32(0x7F800000)) == UInt32(0):
++        return bitcast[DType.float32]((u & UInt32(0x80000000)) | UInt32(0x00800000))
++    return bitcast[DType.float32](u + UInt32(1))
++
++
+ def kfeat_flags() -> Int:
+     """bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, bit 4 SCHI2_LAZYW (0 on
+     every other build)."""
+@@ -439,6 +448,10 @@
+     ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
+     ctx.enqueue_copy(dst_ptr=op, src_buf=doff)
+     ctx.synchronize()
++    for i in range(count):  # SABOTAGE (coverage): every random_weights_ word one ulp up
++        wp[i] = _sab_ulp32(wp[i])
++    for c in range(nc):  # SABOTAGE (coverage): every random_offset_ word one ulp up
++        op[c] = _sab_ulp32(op[c])
+     _ = dz^
+     _ = dw^
+     _ = doff^
+@@ -465,5 +478,7 @@
+     ctx.enqueue_copy(dst_ptr=ip, src_buf=didx)
+     ctx.enqueue_copy(dst_ptr=sp, src_buf=dsgn)
+     ctx.synchronize()
++    for i in range(total):  # SABOTAGE (coverage): every indexHash_ entry stepped to the next bucket (mod n_components)
++        ip[i] = (ip[i] + 1) % Int32(nc)
+     _ = didx^
+     _ = dsgn^

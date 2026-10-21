@@ -1,0 +1,38 @@
+--- a/dbscan/core_device_impl.mojo
++++ b/dbscan/core_device_impl.mojo
+@@ -15,10 +15,20 @@
+ copies only, the same bytes as the host column on every vendor.
+ """
+ from std.gpu import block_dim, block_idx, thread_idx
++from std.memory import bitcast
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.device_fold import device_compact_equal_i32
+ 
++
++@always_inline
++def _cov_sab_f32(v: Float32) -> Float32:
++    """SABOTAGE (coverage arm): `v` one ulp off; a zero or subnormal becomes the smallest normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
+ comptime _TPB = 256
+ comptime _U8 = MutPointer[UInt8, MutAnyOrigin]
+ comptime _I32 = MutPointer[Int32, MutAnyOrigin]
+@@ -136,6 +146,14 @@
+     ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=comp_addr), src_buf=o_comp)
+     ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=lab_addr), src_buf=o_lab)
+     ctx.synchronize()
++    var sab_c = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=comp_addr)
++    for t in range(m * d):  # SABOTAGE (coverage arm): every component one ulp off
++        sab_c[t] = _cov_sab_f32(sab_c[t])
++    if m > 1:  # SABOTAGE (coverage arm): the first two core indices swapped
++        var sab_i = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=idx_addr)
++        var sab_a = sab_i[0]
++        sab_i[0] = sab_i[1]
++        sab_i[1] = sab_a
+     _ = o_idx^
+     _ = o_comp^
+     _ = o_lab^

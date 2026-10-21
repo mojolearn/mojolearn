@@ -60,7 +60,7 @@ from decomposition.impl.pca_rank import pca_rank_finish
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call
+from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from bindings.py2mojo_cluster_est import dbscan_core_arrays_host_binding, estimators_py2mojo_cluster_binding
@@ -164,7 +164,10 @@ def _index(value: PythonObject) raises -> Int:
     if type_name == "bool" or type_name == "bool_":
         raise Error("estimators host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
-    return Int(py=py_call(operator_module.index, value))
+    # operator.index through the balanced call: PythonObject.__call__ keeps one
+    # reference on each argument (bindings/py_balanced.mojo), which leaked every
+    # buffer address passed to a host entry.
+    return Int(py=_balanced_call(operator_module.index, value))
 
 
 def estimators_host_numeric_mode_binding() raises -> PythonObject:

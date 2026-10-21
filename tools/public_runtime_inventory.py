@@ -16,7 +16,10 @@ every mojolearn-internal helper the body calls, transitively, inside
 python/mojolearn/. The walk stops at a native binding call: an entry called on
 a binding object (`_backend.binding(...).entry(...)`, `_binding()._module.entry`,
 `self._ext.entry(...)` where `_ext` holds a binding, a local `fn = b.entry`),
-or an unresolved `_native_*(...)` call. Functions that return a binding
+an unresolved `_native_*(...)` call, or a module-level name bound once at import
+to an entry (`_NATIVE = _binding()._module.call`, `getattr(binding, "entry")`, a
+package `connect(...)` returning `(entry, context)`, or such a name imported from
+a sibling module) unless the function rebinds it. Functions that return a binding
 (`binding`, `*_binding`, `_bind`, and any helper whose return is a binding,
 found by a fixpoint) are binding acquisition: counted nowhere, never walked.
 Calls into the conversion layer (SHELL_MODULES) are counted as shell calls
@@ -122,6 +125,10 @@ class Mod:
         self.short = name.rsplit(".", 1)[-1]
         self.defs, self.classes, self.imports, self.aliases, self.lazy = {}, {}, {}, {}, {}
         self.np_names = set()
+        # module-level names bound to a compiled entry (`_NATIVE = _binding()._module.call`),
+        # filled by Index._module_globals: name -> entry
+        self.entry_globals = {}
+        self.module_scope = None
         for node in self.tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 self.defs[node.name] = node
@@ -268,6 +275,7 @@ class Index:
         self.entry_getters = set()
         self.returns_class = {}
         self.returns_tuple = {}
+        self.returns_entry_tuple = {}   # a connect function returning (entry, context): per-element entry
         self.returns_module = {}
         self.binding_params = {}
         self.binding_attrs = set(NATIVE_ATTRS)
@@ -463,10 +471,14 @@ class Index:
                     for sub in node.body:
                         if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
                             everything.append(self.func(mod, sub, cls=klass))
+        modules = [m for m in self.mods.values() if m is not None]
         for _ in range(6):
             before = (len(self.getters), len(self.entry_getters), len(self.binding_attrs), len(self.returns_class),
-                      len(self.returns_tuple), len(self.returns_module),
-                      sum(map(len, self.binding_params.values())))
+                      len(self.returns_tuple), len(self.returns_module), len(self.returns_entry_tuple),
+                      sum(map(len, self.binding_params.values())),
+                      sum(len(m.entry_globals) + len(m.binding_globals) for m in modules))
+            for mod in modules:
+                self._module_globals(mod)
             for func in everything:
                 scope = Scope(self, func, func.cls)
                 for node in _own_nodes(func.node):
@@ -482,6 +494,12 @@ class Index:
                             made = [scope.made_class(elt) for elt in node.value.elts]
                             if any(made):
                                 self.returns_tuple[func.key] = made
+                        if isinstance(node.value, ast.Tuple) and func.key not in self.returns_entry_tuple:
+                            entries = [scope.entry_of(elt) or (elt.id in scope.entry_names and scope.entry_names[elt.id])
+                                       if isinstance(elt, ast.Name) else scope.entry_of(elt)
+                                       for elt in node.value.elts]
+                            if any(entries):
+                                self.returns_entry_tuple[func.key] = [e or None for e in entries]
                         if scope.is_binding(node.value):
                             self.getters.add(func.key)
                         elif scope.entry_of(node.value) or (isinstance(node.value, ast.Name)
@@ -501,8 +519,38 @@ class Index:
                                 self.binding_attrs.add(target.attr)
             if (len(self.getters), len(self.entry_getters), len(self.binding_attrs),
                     len(self.returns_class), len(self.returns_tuple), len(self.returns_module),
-                    sum(map(len, self.binding_params.values()))) == before:
+                    len(self.returns_entry_tuple), sum(map(len, self.binding_params.values())),
+                    sum(len(m.entry_globals) + len(m.binding_globals) for m in modules)) == before:
                 break
+
+    def _module_globals(self, mod):
+        """Module-level names bound once at import to a binding or a compiled entry.
+
+        `_NATIVE = _binding()._module.small_mlp_call`, `_E = getattr(_backend.binding(...), "x")`,
+        `_E = _connect()` where the package function `_connect` returns an entry (or a binding), and
+        `from ._impl import _NATIVE` of such a name in another module. Calling the name is then a
+        native entry call, exactly like calling `b.entry(...)` inside the method.
+        """
+        if mod.module_scope is None:
+            node = ast.FunctionDef(name="<module>", args=ast.arguments(
+                posonlyargs=[], args=[], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
+                body=[s for s in mod.tree.body if isinstance(s, (ast.Assign, ast.AnnAssign))],
+                decorator_list=[], returns=None, type_comment=None, lineno=1, col_offset=0)
+            mod.module_scope = Func(mod, node)
+        scope = Scope(self, mod.module_scope, None)
+        mod.binding_globals |= scope.binding_names
+        for name, entry in scope.entry_names.items():
+            mod.entry_globals.setdefault(name, entry)
+        for local, imported in mod.imports.items():
+            if imported[0] != "from" or local in mod.entry_globals or local in mod.binding_globals:
+                continue
+            source = self.mod(imported[1]) if self.module_file(imported[1]) else None
+            if source is None or source is mod:
+                continue
+            if imported[2] in source.entry_globals:
+                mod.entry_globals[local] = source.entry_globals[imported[2]]
+            elif imported[2] in source.binding_globals:
+                mod.binding_globals.add(local)
 
 
 def _params(func_node):
@@ -528,6 +576,19 @@ class Scope:
         self.binding_names |= index.binding_params.get(func.key, set())
         nodes = sorted((n for n in _own_nodes(func.node) if isinstance(n, (ast.Assign, ast.AnnAssign, ast.withitem))),
                        key=lambda n: (getattr(n, "lineno", 0), getattr(n, "col_offset", 0)))
+        # names this function binds itself (parameters, assignments): they shadow module-level
+        # bindings and entries unless the local value is one too
+        self.rebound = set()
+        if func.node.name != "<module>":
+            self.rebound.update(_params(func.node)[1])
+            for node in nodes:
+                if isinstance(node, ast.withitem):
+                    targets = [node.optional_vars] if node.optional_vars is not None else []
+                else:
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    elts = target.elts if isinstance(target, ast.Tuple) else [target]
+                    self.rebound.update(t.id for t in elts if isinstance(t, ast.Name))
         for _ in range(2):
             for node in nodes:
                 value = node.context_expr if isinstance(node, ast.withitem) else node.value
@@ -541,6 +602,22 @@ class Scope:
                         for elt, klass in zip(target.elts, made or ()):
                             if isinstance(elt, ast.Name) and klass is not None:
                                 self.obj_types[elt.id] = klass
+                        # `_ENTRY, _CONTEXT = connect(...)`: a package function returning (entry, context)
+                        called = self.resolve_call(value.func) if not isinstance(value.func, ast.Call) else None
+                        if called and called[0] == "func":
+                            for elt, entry in zip(target.elts, index.returns_entry_tuple.get(called[1].key, ())):
+                                if isinstance(elt, ast.Name) and entry:
+                                    self.entry_names[elt.id] = entry
+                    elif (isinstance(target, ast.Tuple) and isinstance(value, ast.Tuple)
+                          and len(target.elts) == len(value.elts)):
+                        # `_E, _C = b._module.call, context`
+                        for elt, part in zip(target.elts, value.elts):
+                            if not isinstance(elt, ast.Name):
+                                continue
+                            if self.is_binding(part):
+                                self.binding_names.add(elt.id)
+                            elif self.entry_of(part):
+                                self.entry_names[elt.id] = self.entry_of(part)
                 names = [t.id for t in targets if isinstance(t, ast.Name)]
                 if not names:
                     continue
@@ -562,6 +639,11 @@ class Scope:
                     if target and target[0] == "func" and target[1].key in index.returns_module:
                         for name in names:
                             self.local_modules[name] = index.returns_module[target[1].key]
+        # a module-level name bound to a compiled entry, unless this function rebinds it
+        if func.mod.entry_globals:
+            for name, entry in func.mod.entry_globals.items():
+                if name not in self.rebound and not self._shadowed(name) and name not in self.binding_names:
+                    self.entry_names.setdefault(name, entry)
         if func.parent is not None:
             parent = Scope(index, func.parent, root_cls)
             self.binding_names |= parent.binding_names
@@ -629,7 +711,8 @@ class Scope:
         if isinstance(expr, ast.Name):
             if expr.id in self.binding_names:
                 return True
-            return expr.id in self.func.mod.binding_globals and not self._shadowed(expr.id)
+            return (expr.id in self.func.mod.binding_globals and not self._shadowed(expr.id)
+                    and expr.id not in self.rebound)
         if isinstance(expr, ast.Attribute):
             if expr.attr == "_module" and self.is_binding(expr.value):
                 return True

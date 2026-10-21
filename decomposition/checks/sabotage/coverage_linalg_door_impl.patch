@@ -1,0 +1,14 @@
+--- a/decomposition/linalg_door_impl.mojo
++++ b/decomposition/linalg_door_impl.mojo
+@@ -53,6 +53,11 @@
+     ctx.synchronize()
+     ctx.enqueue_copy(dst_ptr=dst, src_buf=ddst)
+     ctx.synchronize()
++    # SABOTAGE (coverage-decomposition-linalg_door_impl): every widened word one ulp off
++    from std.memory import bitcast
++    for i in range(count):
++        var sb = bitcast[DType.uint32](dst.unsafe_load(i))
++        dst.unsafe_store(i, bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1)))
+     _ = dsrc^
+     _ = ddst^
+     # DEVIATION 3010: drain the frees before the context goes.

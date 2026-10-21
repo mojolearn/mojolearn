@@ -29,6 +29,15 @@ def _int(x: PythonObject, name: String = "integer", low: Int = -9223372036854775
     return _integer(x, name, low)
 
 
+def _float(x: PythonObject, name: String) raises -> Float32:
+    # A real number for the scalar argument `name`; anything else (a str,
+    # None, an object without __float__) is refused naming the argument.
+    try:
+        return Float32(py=x)
+    except error:
+        raise Error("TypeError: " + name + " must be a real number")
+
+
 def _is_int(x: PythonObject) raises -> Bool:
     return is_integer_input(x)
 
@@ -304,8 +313,8 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         var ip = List[Int]()
         ip = [kind_code, Int(Bool(py=args[3])), schedule_code, _int(args[9], "step_size", 1)]
         var fp = List[Float32]()
-        fp = [Float32(py=args[1]), Float32(py=args[2]), Float32(py=args[4]), Float32(py=args[5]),
-              Float32(py=args[6]), Float32(py=args[7]), Float32(py=args[10])]
+        fp = [_float(args[1], "lr"), _float(args[2], "momentum"), _float(args[4], "beta1"), _float(args[5], "beta2"),
+              _float(args[6], "eps"), _float(args[7], "weight_decay"), _float(args[10], "gamma")]
         var opt = s[].optimizer(ip, fp)
         py_setitem(session._opt_kind, opt, args[0])
         return PythonObject(opt)
@@ -459,17 +468,17 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         if len(ints) < 1 or len(ints) > 8:
             raise Error("ValueError: shape must have one to eight dimensions")
         if name == "full":
-            fs.append(Float32(py=args[1]))
+            fs.append(_float(args[1], "value"))
         else:
             hs.append(_int(args[0], "handle", 1))
     if name == "scale" or name == "leaky_relu" or name == "elu" or name == "pow_scalar":
         code = 12 if name == "scale" else (52 if name == "leaky_relu" else (53 if name == "elu" else 65))
         hs.append(_int(args[0], "handle", 1))
-        fs.append(Float32(py=args[1]))
+        fs.append(_float(args[1], "factor" if name == "scale" else ("exponent" if name == "pow_scalar" else "alpha")))
     if name == "hard_sigmoid":
         code = 54
         hs.append(_int(args[0], "handle", 1))
-        fs = [Float32(py=args[1]), Float32(py=args[2])]
+        fs = [_float(args[1], "alpha"), _float(args[2], "beta")]
     if name == "transpose":
         hs.append(_int(args[0], "handle", 1))
         var a = _int(args[1], "a")
@@ -601,8 +610,8 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "clip":
         code = 56
         hs.append(_int(args[0], "handle", 1))
-        fs.append(clip_low_unbounded() if _nil(args[1]) else Float32(py=args[1]))
-        fs.append(clip_high_unbounded() if _nil(args[2]) else Float32(py=args[2]))
+        fs.append(clip_low_unbounded() if _nil(args[1]) else _float(args[1], "min"))
+        fs.append(clip_high_unbounded() if _nil(args[2]) else _float(args[2], "max"))
     if name == "equal" or name == "not_equal" or name == "greater" or name == "greater_equal" or name == "less" or name == "less_equal":
         code = 69
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
@@ -634,7 +643,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         ints = _ints(args[1], "pads")
         if len(ints) < 1 or len(ints) > 16:
             raise Error("ValueError: pads must list two counts for each of one to eight axes")
-        fs.append(Float32(py=args[2]))
+        fs.append(_float(args[2], "value"))
     if name == "cumsum":
         code = 75
         hs.append(_int(args[0], "handle", 1))
@@ -656,7 +665,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "layer_norm":
         code = 20
         hs = [_int(args[0], "input", 1), _int(args[1], "weight", 1), _int(args[2], "bias", 1)]
-        var eps = Float32(py=args[3])
+        var eps = _float(args[3], "eps")
         if not eps > 0:
             raise Error("ValueError: eps must be positive")
         fs.append(eps)
@@ -695,11 +704,11 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         code = 78
         hs = [_int(args[0], "input", 1)]
         ints = [_int(args[1], "head_dim", 1), _int(args[2], "offset", 0)]
-        fs.append(Float32(py=args[3]))
+        fs.append(_float(args[3], "theta"))
     if name == "dropout":
         code = 21
         hs.append(_int(args[0], "handle", 1))
-        var prob = Float32(py=args[1])
+        var prob = _float(args[1], "p")
         if not (prob >= 0 and prob < 1):
             raise Error("ValueError: p must be in [0, 1)")
         fs.append(prob)
@@ -722,7 +731,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             raise Error("ValueError: reduction must be 'mean' or 'sum'")
         ints.append(0 if reduction == "mean" else 1)
         if name == "huber":
-            var delta = Float32(py=args[2])
+            var delta = _float(args[2], "delta")
             if not delta > 0:
                 raise Error("ValueError: delta must be positive")
             fs.append(delta)

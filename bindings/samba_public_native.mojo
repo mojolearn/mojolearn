@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """One compiled Samba boundary for public and distributed model operations."""
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_type
 from bindings.samba_state_native import samba_snapshot, samba_validate_state, samba_from_state, samba_publish, samba_apply_gradients_from_state
 from bindings.samba_training_native import samba_gradients, samba_gradients_from_state
 from bindings.generator_state_native import generator_init, generator_snapshot, generator_restore, generator_next
@@ -13,6 +14,25 @@ from bindings.samba_inference_native import samba_forward, samba_allocate, samba
 from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkpoint_load, samba_checkpoint_read
 from bindings.samba_cpu_inference import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
 from bindings.samba_admission import samba_admit
+
+
+def _samba_public_items(value: PythonObject) raises -> PythonObject:
+    # The public loss_and_grads divisor: None (this call's own target count)
+    # or a positive integer. A str, a bool or zero is refused by name; the
+    # train step's internal microbatch calls do not pass through here.
+    if value is None:
+        return value
+    var bi = Python.import_module("builtins")
+    if py_type(value) is bi.bool:
+        raise Error("TypeError: Samba: num_items must be a positive integer")
+    var items = 0
+    try:
+        items = Int(py=py_call(Python.import_module("operator").index, value))
+    except error:
+        raise Error("TypeError: Samba: num_items must be a positive integer")
+    if items < 1:
+        raise Error("Samba: num_items must be a positive integer")
+    return PythonObject(items)
 
 
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -82,7 +102,7 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == "gradients":
             result = samba_gradients_from_state(values[0], values[1], values[2], values[3], Int(py=values[4]), context)
         elif operation == "model_gradients":
-            result = samba_gradients(values[0], values[1], values[2], values[3], values[4], Int(py=values[5]), context)
+            result = samba_gradients(values[0], values[1], values[2], _samba_public_items(values[3]), values[4], Int(py=values[5]), context)
         else:
             raise Error("Samba: unknown native state operation")
         return result.steal_data()

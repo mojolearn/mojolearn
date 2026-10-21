@@ -1,0 +1,88 @@
+# Changed kernel definitions the release audit's fault-injection arms leave alone, with the reason
+# (lane verify-coverage-audit, 2026-10-21). tools/verify_coverage_audit.py reads it: a row whose
+# changed definitions are all here reads `n/a` for its sabotage arm. TAB separated: file:definition, reason.
+# A prefix ending in `*` covers every definition of that file.
+tokenizer/fast/bpe_device.mojo:*	fast tier only (the Apple FAST tokenizer, loaded only in fast mode); the verifier refuses a fast process
+tokenizer/fast/bpe_fast_impl.mojo:*	fast tier only (the Apple FAST tokenizer); the verifier refuses a fast process
+x_decomp/fa_em.mojo:*	fast tier only: its only caller is FactorAnalysis._fit_fast (FAST + Apple)
+x_decomp/fa_fast.mojo:*	fast tier only: registered only under FA_FAST_APPLE (FAST + Apple)
+x_decomp/qfix.mojo:*	fast tier only: x_decomp_lu_resid is registered only under LU_QFIX (fast)
+x_decomp/resident.mojo:dev_first_nonfinite_run	fast tier only: registered only under LLE_FAST_DEV_LU (FAST + Apple)
+x_decomp/resident.mojo:dev_mcd_cov_run	fast tier only: registered only under MCD_ORDERED_COV (FAST + Apple)
+x_decomp/s_linalg_fast.mojo:dev_upload_scan_run	fast tier only: registered only under RSVD_FAST_DEVSCAN (FAST + Apple)
+x_decomp/s_linalg_fast.mojo:s_flags_run	a compile-time route-flag word, no data value
+x_decomp/api.mojo:idn_flags_run	a compile-time route-flag word, no data value
+x_decomp/api.mojo:_fp	an address-to-pointer helper, no value
+x_decomp/api.mojo:_ip	an address-to-pointer helper, no value
+x_neighbors/kfeat_dev.mojo:kfeat_flags	the FAST + Apple route flag word (0 in identical)
+x_neighbors/kfeat_dev.mojo:kfeat_first_negative	reached only in the fast tier
+x_neighbors/kfeat_dev.mojo:kfeat_schi2_fit	reached only in the fast tier
+x_neighbors/kfeat_dev.mojo:kfeat_schi2_weights	reached only in the fast tier
+x_neighbors/kfeat_dev.mojo:kfeat_schi2_transform	reached only in the fast tier
+x_neighbors/iter_device.mojo:*	a route selector constant; both routes give the same bits by design
+x_neighbors/iter_host.mojo:*	a route selector constant (0 on the host column), no value output
+x_neighbors/kapprox_dev.mojo:*	the FAST + Apple route selector (0 in identical), no value output
+x_neighbors/kapprox_host.mojo:*	a route selector constant, no value output
+x_neighbors/nan_cells_device.mojo:*	a route/capability flag, no value output
+x_cnn/host/binding_entries_impl.mojo:pool_counts	returns element counts (sizes), no value output
+gbdt/host/gbdt_host_entries_impl.mojo:gbdt_host_binary_margins_check	a finiteness refusal with no value output
+hdbscan/impl/hdbscan_door_impl.mojo:HDB_DEVCTX_SLOT	a DeviceContext slot name (a handle)
+hdbscan/impl/hdbscan_door_impl.mojo:_DEVCTX_SLOT	a DeviceContext slot name (a handle)
+metrics/host/metrics_host_entries_impl.mojo:check_classification	an input refusal with no value output
+metrics/host/metrics_host_entries_impl.mojo:check_classification_ptr	an input refusal with no value output
+metrics/host/metrics_host_entries_impl.mojo:metrics_check_pair	an input refusal with no value output
+core/array_helpers_impl.mojo:strided_total	returns an element count (a size)
+core/array_helpers_impl.mojo:strided_copy_bytes	a typed byte copy: only an order fault is possible, and no lane hashes a strided copy alone
+core/array_helpers_impl.mojo:check_lengths_i64	a validator, reached only on the opt-in --ragged path
+core/hotpath_impl.mojo:count_mask_u8	its return value sizes the split outputs
+core/host_helpers_impl.mojo:all_finite_f32	a validator: its only fault refuses finite input and would mask every other arm
+core/host_helpers_impl.mojo:all_finite_f64	a validator: its only fault refuses finite input and would mask every other arm
+core/core_host_impl.mojo:nonzero_f64_count	returns a buffer size (the COO capacity)
+core/cast_in.mojo:cast_w64_bits	integer words also carry the pandas indexer, so a step could index out of range
+core/cast_in.mojo:label_kind_of	no fault reaches a lane: every kind sorts the fixtures' non-negative labels alike
+core/label_encode.mojo:LABEL_KIND_U64	a comptime constant; no lane passes uint64 labels
+core/py2mojo_rows.mojo:rows_param_count	returns a parameter count (a size)
+core/py2mojo_cluster_est_impl.mojo:dbscan_core_count	returns the core-row count that sizes the gather buffers
+dbscan/core_device_impl.mojo:dbscan_core_count	returns the core-row count that sizes the gather buffers
+training/byte_lm_session_ops.mojo:_FILE_CHUNK	a read chunk size (a capacity)
+core/mojolearn_shell_impl.mojo:nonzero_f64_fill_host	the GPU base binding's COO scan: on a GPU install every spectral affinity takes the metrics dense entry, so no install reaches it through a public call
+training/byte_lm_host_io.mojo:*	the byte LM host binding's copies of the buffer helpers, used only when neither _mojolearn nor _mojolearn_core_host is built
+training/byte_lm_session_ops.mojo:byte_file_sha256	a provenance digest that feeds only run_metadata, which no lane or checkpoint hashes; the SHA-256 itself is armed (coverage-core-sha256)
+sequence/ops_impl.mojo:fptr	returns a pointer after a null check
+sequence/ops_impl.mojo:ival	returns integer parameters (sizes, kinds, flags)
+sequence/opt_resident.mojo:_handle	checks and returns a handle
+sequence/opt_resident.mojo:_host_fp	returns a pointer after a null check
+sequence/opt_resident.mojo:_lamb_offsets	per-tensor sizes the resident step copies by; a step would read past an array
+sequence/opt_resident.mojo:_pair	returns a handle, a slot mask and a flag
+sequence/opt_resident.mojo:adafactor_resident_open	its zero-filled moments are overwritten exactly by Adafactor's first step, so no value fault reaches an output
+sequence/opt_resident.mojo:opt_resident_close	lifecycle close
+sequence/prophet_prep.mojo:_f32p	returns a pointer after a null check
+sequence/prophet_prep.mojo:_f64p	returns a pointer after a null check
+sequence/seq_tensor.mojo:seq_tensor_free	lifecycle free
+autograd/import_reader.mojo:OnnxInfo	a container struct that computes no value
+autograd/import_reader.mojo:OnnxInfo.__init__	a container constructor
+autograd/import_reader.mojo:_w_tensor	structure words only (name, dtype, dims, byte range)
+autograd/import_reader.mojo:_w_value	structure words only (name, dtype, dims)
+autograd/import_reader.mojo:onnx_close	lifecycle close
+autograd/import_reader.mojo:onnx_read	moves the initializers into the reader's own bytes, unchanged; the values are faulted where they are copied out (onnx_copy_blob)
+autograd/import_resolve.mojo:*	outputs only resolved shapes, dtypes, folded shape integers and problem codes
+svm/host/svc_proba.mojo:host_check_pairs	checks the pair codes and writes nothing
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_OK	a refusal-code constant
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_BAD_ID	a refusal-code constant
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_NOT_STR	a refusal-code constant
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_UNSPELL	a refusal-code constant
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_RAISED	a refusal-code constant
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_NOT_PAIR	a refusal-code constant
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_NOT_LEVEL	a refusal-code constant
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SpelledFailure	a refusal record struct
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SpelledVocab	a struct (lifecycle)
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SpelledVocab.__init__	capacity reservation only
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SpelledMerges	a struct (lifecycle)
+tokenizer/impl/tokenizer_host_shell_impl.mojo:SpelledMerges.__init__	capacity reservation only
+tokenizer/impl/tokenizer_host_shell_impl.mojo:_spelled_part	a check returning a refusal record
+tokenizer/impl/tokenizer_host_shell_impl.mojo:spelled_merges_list	a check that validates merges
+tokenizer/impl/tokenizer_host_shell_impl.mojo:spelled_merges_text	a check that validates merges or raises
+tokenizer/impl/tokenizer_host_shell_impl.mojo:bpe_check_ids	a range check only
+tokenizer/impl/tokenizer_host_shell_impl.mojo:bpe_decode_batch_fit	a capacity check only
+tokenizer/impl/tokenizer_host_shell_impl.mojo:tokens_gather_rows_width	a dims check returning a row width (a shape)
+tokenizer/impl/tokenizer_host_shell_impl.mojo:tokenizer_store_i64	stores sizes and offsets only (a fault changes sizes)

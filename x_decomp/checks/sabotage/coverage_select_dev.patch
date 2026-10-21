@@ -1,0 +1,94 @@
+--- a/x_decomp/select_dev.mojo
++++ b/x_decomp/select_dev.mojo
+@@ -12,6 +12,7 @@
+     vector, one thread per element counting the elements before it (an
+     exact rank; every rank is distinct) and writing its index there."""
+ from std.gpu import block_dim, block_idx, thread_idx
++from std.memory import bitcast
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from x_decomp.cells import F32Ptr
+@@ -42,6 +43,32 @@
+         dst.unsafe_store(t, sel_fold(Int(op), src, q0, q1))
+ 
+ 
++def cov_sab_flip_kernel(p: F32Ptr, count: Int32):
++    """SABOTAGE coverage_select_dev: p[t] one ulp off (zero / subnormal -> the smallest normal)."""
++    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if t < Int(count):
++        var b = bitcast[DType.uint32](p.unsafe_load(t))
++        if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++            b = UInt32(0x00800000)
++        elif (b & UInt32(0x7F800000)) != UInt32(0x7F800000):
++            b += UInt32(1)
++        p.unsafe_store(t, bitcast[DType.float32](b))
++
++
++def cov_sab_swap_kernel(p: F32Ptr, i: Int32, j: Int32):
++    """SABOTAGE coverage_select_dev: p[i] and p[j] swapped (one thread)."""
++    if Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x) == 0:
++        var a = p.unsafe_load(Int(i))
++        p.unsafe_store(Int(i), p.unsafe_load(Int(j)))
++        p.unsafe_store(Int(j), a)
++
++
++def cov_sab_word_kernel(p: F32Ptr):
++    """SABOTAGE coverage_select_dev: the low word of a two-word binary64 stepped by one (one ulp)."""
++    if Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x) == 0:
++        p.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](p.unsafe_load(0)) + UInt32(1)))
++
++
+ def order_small_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     var nn = Int(n)
+@@ -56,6 +83,7 @@
+     if op < 0 or op > SEL_LAST:
+         raise Error("x_decomp: unknown reduce op")
+     enqueue_sel_reduce(_ptr(i_a, count), count, op, _ptr(i_dst, 1))
++    xd_ctx().enqueue_function[cov_sab_flip_kernel](_ptr(i_dst, 1), Int32(1), grid_dim=1, block_dim=1)  # SABOTAGE coverage_select_dev
+     return 1
+ 
+ 
+@@ -91,6 +119,8 @@
+     var ps = _ptr(i_a, n)
+     var pd = _ptr(i_dst, n)
+     xd_ctx().enqueue_function[order_small_kernel](ps, pd, Int32(n), grid_dim=_blocks(n), block_dim=TPB)
++    if n > 1:  # SABOTAGE coverage_select_dev: the first and the last swapped
++        xd_ctx().enqueue_function[cov_sab_swap_kernel](pd, Int32(0), Int32(n - 1), grid_dim=1, block_dim=1)
+     return n
+ 
+ 
+@@ -234,6 +264,8 @@
+         grid_dim=_blocks(n), block_dim=TPB,
+     )
+     _sort_out(ctx, sb, n, 32, pd, pc, ORD_SENT)
++    if n > 1:  # SABOTAGE coverage_select_dev: the first two swapped
++        ctx.enqueue_function[cov_sab_swap_kernel](pd, Int32(0), Int32(1), grid_dim=1, block_dim=1)
+     ctx.synchronize()
+     _ = sb^
+     return n
+@@ -255,6 +287,8 @@
+         ps, pm, sb.keys.unsafe_ptr(), sb.vals.unsafe_ptr(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+     )
+     _sort_out(ctx, sb, n, 1, pd, pc, UInt32(1))
++    if n > 1:  # SABOTAGE coverage_select_dev: the first two swapped
++        ctx.enqueue_function[cov_sab_swap_kernel](pd, Int32(0), Int32(1), grid_dim=1, block_dim=1)
+     ctx.synchronize()
+     pool_free(mid)
+     _ = sb^
+@@ -283,6 +317,8 @@
+         # the h positions ascending: a second stable sort keyed by position
+         stable_radix_sort_pairs_u32(ctx, h, key_bits_for(n - 1), sb.k2, sb.v2, sb.tkeys, sb.tvals, sb.cnt, sb.bsum)
+         ctx.enqueue_function[keys_out_kernel](sb.k2.unsafe_ptr(), pd, Int32(h), grid_dim=_blocks(h), block_dim=TPB)
++        if h > 1:  # SABOTAGE coverage_select_dev: the first two swapped
++            ctx.enqueue_function[cov_sab_swap_kernel](pd, Int32(0), Int32(1), grid_dim=1, block_dim=1)
+     ctx.synchronize()
+     _ = sb^
+     return h
+@@ -328,5 +364,6 @@
+         nb = nn
+     # the one partial left is the sum: a fold of one word copies it
+     ctx.enqueue_function[dsum_fold_kernel](cur, pd, Int32(1), grid_dim=1, block_dim=TPB)
++    ctx.enqueue_function[cov_sab_word_kernel](pd, grid_dim=1, block_dim=1)  # SABOTAGE coverage_select_dev
+     pool_free(cur_id)
+     return 1

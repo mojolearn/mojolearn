@@ -111,9 +111,10 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     if py_contains(fields, name):
         var value = fields[name]
         if (len(name) > 0 and Bool(py=py_call(name.endswith, "_")) and not Bool(py=py_call(name.startswith, "_"))
-                and py_type(value) is context["array_class"]):
+                and py_type(value) is context["array_class"] and py_get(context, "ndarray") is not None):
             # Native slot getters + ndarray C type wrap the same owner/storage.
             # Never invoke Array.__array__, properties, or output Python code.
+            # Without NumPy the Array itself is the fitted attribute.
             sequential_admit_value(value, context)
             return sequential_input(value, context)
         return value

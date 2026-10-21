@@ -1,0 +1,104 @@
+--- a/x_decomp/api.mojo
++++ b/x_decomp/api.mojo
+@@ -36,6 +36,17 @@
+     if a == 0:
+         raise Error("x_decomp: null int32 buffer address")
+     return I32Ptr(unsafe_from_address=a)
++
++
++def _cov_flip(v: Float32) -> Float32:
++    """SABOTAGE coverage_api: v one ulp off (a zero or subnormal becomes the smallest normal;
++    inf and NaN kept, so no loop sees a new NaN)."""
++    var b = bitcast[DType.uint32](v)
++    if (b & UInt32(0x7F800000)) == UInt32(0x7F800000):
++        return v
++    if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](b + UInt32(1))
+ 
+ 
+ def _dp(a: Int) raises -> F64Ptr:
+@@ -244,7 +255,7 @@
+             if neg:
+                 pr[j * n + t] = -pr[j * n + t]
+             pc[j * n + t] = Float32(0.0)
+-        pc[j * n + j] = Float32(-1.0) if neg else Float32(1.0)
++        pc[j * n + j] = _cov_flip(Float32(-1.0) if neg else Float32(1.0))  # SABOTAGE coverage_api
+ 
+ 
+ def rank_above_run(sv: Int, n: Int, rtol: Float64) raises -> Int:
+@@ -262,7 +273,7 @@
+         var v = Float64(ps[i])
+         if v > 0.0 and v > t:
+             r += 1
+-    return r
++    return r - 1 if r > 1 else r  # SABOTAGE coverage_api: the rank one short
+ 
+ # lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
+ # `idn_flags_py` says so (both bindings; the same words as the calls they
+@@ -451,6 +462,8 @@
+     if n < 0:
+         raise Error("x_decomp: negative gather count")
+     gather(ps, pi, n, pd)
++    for a in range(n):  # SABOTAGE coverage_api
++        pd[a] = _cov_flip(pd[a])
+ 
+ 
+ def scatter_run(pd: F32Ptr, pi: I32Ptr, n: Int, ps: F32Ptr) raises:
+@@ -475,6 +488,9 @@
+     if op == 0 and count > 0 and (count - 1) // max(a1, 1) * ist + ioff >= nidx:
+         raise Error("x_decomp: take_rows reads past its index list")
+     move_host(op, ps, pi, pd, count, a1, a2, a3, ist, ioff, nsrc, ndst)
++    if count > 0:
++        for a in range(ndst):  # SABOTAGE coverage_api
++            pd[a] = _cov_flip(pd[a])
+ 
+ 
+ def dsum_sq_run(xa: Int, n: Int) raises -> Float64:
+@@ -491,19 +507,33 @@
+     """`order_f_py`'s typed entry; the buffers are read only when n > 0."""
+     if n > 0:
+         order_f(_fp(xa), n, _fp(da))
++        if n > 1:  # SABOTAGE coverage_api: the first two swapped
++            var pd = _fp(da)
++            var t = pd[0]
++            pd[0] = pd[1]
++            pd[1] = t
+ 
+ 
+ def select_smallest_run(xa: Int, m: Int, h: Int, sa: Int, ma: Int) raises:
+     """`select_smallest_py`'s typed entry; the buffers are read only when m > 0."""
+     if m > 0:
+         select_smallest(_fp(xa), m, h, _fp(sa), _ip(ma))
++        if h > 1:  # SABOTAGE coverage_api: the first two swapped
++            var ps = _fp(sa)
++            var t = ps[0]
++            ps[0] = ps[1]
++            ps[1] = t
+ 
+ 
+ def argmin_all_run(xa: Int, n: Int, da: Int) raises -> Int:
+     """`argmin_all_py`'s typed entry; 0 when n <= 0."""
+     if n <= 0:
+         return 0
+-    return argmin_all(_fp(xa), n, _fp(da))
++    var c = argmin_all(_fp(xa), n, _fp(da))
++    if c > 0:  # SABOTAGE coverage_api: the first position stepped (mod n)
++        var pd = _fp(da)
++        pd[0] = Float32((Int(pd[0]) + 1) % n)
++    return c
+ 
+ 
+ def sign_labels_run(xa: Int, n: Int, da: Int) raises:
+@@ -540,4 +570,10 @@
+     var has = ska != 0
+     var px = _fp(xa)
+     var ps = _fp(ska) if has else px
+-    return topn_desc(px, m, ps, has, n, _ip(da))
++    var c = topn_desc(px, m, ps, has, n, _ip(da))
++    if c > 1:  # SABOTAGE coverage_api: the first two swapped
++        var pd = _ip(da)
++        var t = pd[0]
++        pd[0] = pd[1]
++        pd[1] = t
++    return c

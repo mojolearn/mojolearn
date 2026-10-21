@@ -11,7 +11,8 @@ CLASSICAL_SEQUENCE = frozenset(('sequence-autoarima', 'sequence-stl', 'sequence-
 ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program'))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
-                              'byte-lm-host-infer-threaded', 'language-model-config'))
+                              'byte-lm-host-infer-threaded', 'language-model-config',
+                              'hf-causal-lm-stream'))
 
 
 def neural_training_lanes(harness, surface):

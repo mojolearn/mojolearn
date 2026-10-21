@@ -84,8 +84,20 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
 
 def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capacity: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var b = Int(py=batch)
-    var cap = 1 if capacity is None else Int(py=capacity)
+    # Integers only (anything with __index__): a str is not parsed and a
+    # bool is not counted as 0 or 1.
+    var bi = Python.import_module("builtins")
+    if py_type(batch) is bi.bool or py_type(capacity) is bi.bool:
+        raise Error("TypeError: neural block: batch_size and max_tokens must be integers")
+    var b = 0
+    var cap = 1
+    try:
+        var operator = Python.import_module("operator")
+        b = Int(py=py_call(operator.index, batch))
+        if capacity is not None:
+            cap = Int(py=py_call(operator.index, capacity))
+    except error:
+        raise Error("TypeError: neural block: batch_size and max_tokens must be integers")
     if b < 1 or cap < 1:
         raise Error("neural block: batch_size and max_tokens must be positive")
     return causal_layer_allocate(neural_block_owner(block, context), 0, b, cap)
@@ -113,9 +125,10 @@ def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: Python
         py_setattr(shaped, "strides", py_call(bi.tuple, py_ints([d_model * 4, d_model * 4, 4])))
         x = shaped
     if len(x.shape) != 3 or Int(py=x.shape[0]) < 1 or Int(py=x.shape[1]) < 1 or Int(py=x.shape[2]) != d_model:
-        raise Error("neural block: x must have shape (positive B, positive L, d_model)")
+        raise Error("neural block: x must be (B, L, d_model)" + (String(" -- or (B, d_model) for a step --") if step else String("")) +
+                    " with positive B and L and the weights' d_model " + String(d_model) + ", got shape " + String(x.shape))
     if step and Int(py=x.shape[1]) != 1:
-        raise Error("neural block: step requires one token per row")
+        raise Error("neural block: a decode step takes exactly one token per row, got L = " + String(x.shape[1]) + "; use forward() for prefill")
     return x
 
 
@@ -228,13 +241,13 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
     var d = Int(py=owner.d_model)
     var step = Bool(py=step_value)
     if step and state_value is None:
-        raise Error("neural block: step requires a state")
+        raise Error("neural block: state is required for step (a decode step continues a sequence; allocate_state(B) makes the fresh one)")
     var x = _neural_input(input, d, step, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     if lengths is not None:
         if state_value is not None:
-            raise Error("neural block: lengths cannot be combined with state")
+            raise Error("neural block: lengths= (a ragged, right-padded batch) cannot carry a state; run the ragged prefill with state=None, or continue each sequence as its own batch")
         var sizes = _neural_lengths(lengths, b, l, context)
         var padded = generation_array([b, l, d])
         neural_copy_row_prefixes(Int(py=padded._addr), Int(py=x._addr), sizes, b, l, d)

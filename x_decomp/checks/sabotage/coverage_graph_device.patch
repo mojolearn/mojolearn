@@ -1,0 +1,99 @@
+--- a/x_decomp/graph_device.mojo
++++ b/x_decomp/graph_device.mojo
+@@ -18,7 +18,7 @@
+ memory, the block totals scanned the same way (recursively), then added
+ back. Integer sums: the same words in any order."""
+ from std.gpu import block_dim, block_idx, thread_idx
+-from std.memory import stack_allocation
++from std.memory import bitcast, stack_allocation
+ from std.atomic import Atomic
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+@@ -63,6 +63,38 @@
+         w.unsafe_store(t, Float32(0))
+ 
+ 
++def xg_cov_sab_flip_kernel(w: F32Ptr, count: Int32, nz_only: Int32):
++    """SABOTAGE coverage_graph_device: w[t] one ulp off for t < count (zero /
++    subnormal -> the smallest normal; inf and NaN kept). nz_only: an exact
++    zero (no edge) stays zero, so the graph keeps its edges."""
++    var t = _t()
++    if t < Int(count):
++        var v = w.unsafe_load(t)
++        if nz_only != 0 and v == Float32(0):
++            return
++        var b = bitcast[DType.uint32](v)
++        if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++            b = UInt32(0x00800000)
++        elif (b & UInt32(0x7F800000)) != UInt32(0x7F800000):
++            b += UInt32(1)
++        w.unsafe_store(t, bitcast[DType.float32](b))
++
++
++def xg_cov_sab_swap_kernel(p: F32Ptr):
++    """SABOTAGE coverage_graph_device: p[0] and p[1] swapped (one thread)."""
++    if _t() == 0:
++        var a = p.unsafe_load(0)
++        p.unsafe_store(0, p.unsafe_load(1))
++        p.unsafe_store(1, a)
++
++
++def _cov_sab(ctx: DeviceContext, p: F32Ptr, count: Int, nz_only: Bool) raises:
++    if count > 0:
++        ctx.enqueue_function[xg_cov_sab_flip_kernel](
++            p, Int32(count), Int32(1 if nz_only else 0), grid_dim=_blocks(count), block_dim=TPB
++        )
++
++
+ def xg_knn_kernel(
+     d: F32Ptr, sv: F32Ptr, si: F32Ptr, idx: F32Ptr, dst: F32Ptr, n: Int32, m: Int32, take: Int32, excl: Int32, nn: Int32
+ ):
+@@ -275,6 +307,7 @@
+         _ptr(i_d, n * m), _ptr(sid, n * take), _ptr(iid, n * take), _ptr(i_idx, n * nn), _ptr(i_dst, n * nn),
+         Int32(n), Int32(m), Int32(take), Int32(1 if excl else 0), Int32(nn), grid_dim=_blocks(n), block_dim=TPB,
+     )
++    _cov_sab(ctx, _ptr(i_dst, n * nn), n * nn, False)  # SABOTAGE coverage_graph_device: the distances
+     pool_free(sid)
+     pool_free(iid)
+     return n
+@@ -291,6 +324,7 @@
+         ctx.enqueue_function[xg_knn_dense_kernel](
+             _ptr(i_idx, n * nn), _ptr(i_w, n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
+         )
++    _cov_sab(ctx, po, n * n, True)  # SABOTAGE coverage_graph_device: the edge weights
+     return n
+ 
+ 
+@@ -303,6 +337,7 @@
+             _ptr(i_d, n * n), _ptr(i_wout, n * n), Int32(n), Float32(f_r),
+             grid_dim=_blocks(n * n), block_dim=TPB,
+         )
++        _cov_sab(xd_ctx(), _ptr(i_wout, n * n), n * n, True)  # SABOTAGE coverage_graph_device: the edge weights
+     return n
+ 
+ 
+@@ -329,6 +364,7 @@
+         ctx.enqueue_function[xg_lle_iw_kernel](
+             _ptr(i_idx, n * nn), _ptr(i_wb, n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
+         )
++    _cov_sab(ctx, po, n * n, True)  # SABOTAGE coverage_graph_device: I - W's nonzero words
+     return n
+ 
+ 
+@@ -363,6 +399,8 @@
+     ctx.enqueue_function[xg_root_flag_kernel](lab, flag, Int32(n), grid_dim=_blocks(n), block_dim=TPB)
+     _xscan(ctx, flag, rank, n, n + 1)
+     ctx.enqueue_function[xg_comp_kernel](lab, rank, _ptr(i_comp, n), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
++    if n > 1:  # SABOTAGE coverage_graph_device: the first two labels swapped
++        ctx.enqueue_function[xg_cov_sab_swap_kernel](_ptr(i_comp, n), grid_dim=1, block_dim=1)
+     var c = _read_i32(ctx, rank + n)
+     pool_free(lid)
+     pool_free(fid)
+@@ -409,6 +447,7 @@
+     ctx.enqueue_function[xg_join_kernel](
+         Int32(n), Int32(C), start, mem, rv, rj, pw, grid_dim=_blocks(C * C), block_dim=TPB
+     )
++    _cov_sab(ctx, pw, n * n, True)  # SABOTAGE coverage_graph_device: the joined graph's edge weights
+     pool_free(vid)
+     pool_free(jid)
+     pool_free(kid)

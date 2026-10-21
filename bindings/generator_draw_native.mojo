@@ -111,6 +111,33 @@ def _generator_run(entry: PythonObject, shape: PythonObject, count: PythonObject
     return out
 
 
+def _dropout_key_field(key: PythonObject, name: String, integer: Bool) raises -> PythonObject:
+    """One field of a dropout key, refused by name when it is missing or not
+    the exact builtin type `dropout` stored (an int, or a float)."""
+    var bi = Python.import_module("builtins")
+    var value = py_get(key, PythonObject(name))
+    if value is None:
+        raise Error("ValueError: Generator.dropout_backward: key is missing '" + name + "'; pass the key dropout returned")
+    if integer and py_type(value) is not bi.int:
+        raise Error("TypeError: Generator.dropout_backward: key['" + name + "'] must be an int")
+    if not integer and py_type(value) is not bi.float:
+        raise Error("TypeError: Generator.dropout_backward: key['" + name + "'] must be a float")
+    return value
+
+
+def _dropout_key(key: PythonObject) raises -> PythonObject:
+    """The key `dropout` returned, checked field by field before any draw."""
+    var bi = Python.import_module("builtins")
+    if py_type(key) is not bi.dict:
+        raise Error("TypeError: Generator.dropout_backward: key must be the dict dropout returned")
+    _ = _dropout_key_field(key, "seed", True)
+    _ = _dropout_key_field(key, "stream", True)
+    _ = _dropout_key_field(key, "p", False)
+    _ = _dropout_key_field(key, "scale", False)
+    _ = _dropout_key_field(key, "offset", True)
+    return key
+
+
 def generator_draw(operation: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
@@ -189,8 +216,8 @@ def generator_draw(operation: String, values: PythonObject, context: PythonObjec
         return Python.tuple(out, key)
     if operation == "dropout_backward":
         var dy = _generator_input(values[1], context)
+        var key = _dropout_key(values[2])
         var entry = _generator_binding(owner, context)
-        var key = values[2]
         return _generator_run(entry, dy.shape, dy.size, 3, key["offset"], key["seed"], key["stream"],
                               key["p"], key["scale"], dy, context)
     raise Error("Generator: unknown native draw operation " + operation)

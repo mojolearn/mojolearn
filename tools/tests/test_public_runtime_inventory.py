@@ -18,8 +18,10 @@ FILES = {
     "__init__.py": '''
         from .est import (Native, Stateless, Orchestrated, Helper, Python, Driven, Flow, Typed,
                           Refuses, Dispatched, native_function)
+        from .owned import Owned, Connected, Imported, Getattr, Wrapped
         __all__ = ["Native", "Stateless", "Orchestrated", "Helper", "Python", "Driven", "Flow", "Typed",
-                   "Refuses", "Dispatched", "native_function", "LIMIT"]
+                   "Refuses", "Dispatched", "native_function", "LIMIT",
+                   "Owned", "Connected", "Imported", "Getattr", "Wrapped"]
         LIMIT = 4
     ''',
     "_backend.py": '''
@@ -47,6 +49,83 @@ FILES = {
 
             def run(self):
                 return _backend.binding("_mojolearn_x").run_program(self.stages)
+    ''',
+    "_tok.py": '''
+        from . import _backend
+
+        def _binding():
+            return _Loaded(_backend.binding("_mojolearn_tok"))
+
+        class _Loaded:
+            def __init__(self, module):
+                self._module = module
+    ''',
+    "_bridge.py": '''
+        from ._tok import _binding
+
+        def connect(owner):
+            # ABI connection at import: (entry, context)
+            entry = _binding()._module.owner_call
+            return entry, {"owner": owner}
+    ''',
+    "owned.py": '''
+        from . import _backend, _bridge
+        from ._tok import _binding as _owned_binding
+
+
+        class Owned:
+            def fit(self, X, y=None):
+                if X is None:
+                    raise ValueError("X is required")
+                return _NATIVE("fit", (self, X, y))
+
+            def predict(self, X):
+                return self._prepare(X)
+
+            def _prepare(self, X):
+                rows = [row for row in X]
+                return _NATIVE("predict", (self, rows))
+
+
+        class Connected:
+            def fit(self, X, y=None):
+                return _OWNER(self, "fit", (X, y), _OWNER_CONTEXT)
+
+            def predict(self, X):
+                _OWNER = len
+                return _OWNER(X)
+
+
+        class Getattr:
+            def fit(self, X, y=None):
+                return _GETATTR(self, X)
+
+
+        _NATIVE = _owned_binding()._module.small_call
+        _GETATTR = getattr(_backend.binding("_mojolearn_x"), "getattr_fit")
+        _OWNER, _OWNER_CONTEXT = _bridge.connect(Connected)
+
+        from .wrapped import Imported, Wrapped
+    ''',
+    "wrapped.py": '''
+        from .owned import _NATIVE
+
+
+        def _work(X):
+            total = 0
+            for row in X:
+                total += row
+            return total
+
+
+        class Imported:
+            def fit(self, X, y=None):
+                return _NATIVE("fit", (self, X))
+
+
+        class Wrapped:
+            def fit(self, X, y=None):
+                return _NATIVE("fit", (self, _work(X)))
     ''',
     "est.py": '''
         import numpy as np
@@ -193,6 +272,22 @@ def test_verdicts_and_counts():
     dispatched = rows[("Dispatched", "fit")]                           # the staged one-call shell
     assert (dispatched.verdict, dispatched.native_calls) == ("native", 1)
     assert not any(key[0] == "LIMIT" for key in rows)                  # constants are not operations
+
+
+def test_module_level_entries():
+    """A module-level name bound once at import to a compiled entry is a native entry when called."""
+    with tempfile.TemporaryDirectory() as tmp:
+        rows = rows_by_key(build(Path(tmp)))
+    owned = rows[("Owned", "fit")]                     # `_NATIVE = _binding()._module.small_call`
+    assert (owned.verdict, owned.native_calls, owned.helpers) == ("native", 1, 0)
+    assert rows[("Owned", "predict")].verdict == "python"      # a Python helper doing work stays python
+    connected = rows[("Connected", "fit")]             # `_OWNER, _CTX = _bridge.connect(...)`
+    assert (connected.verdict, connected.native_calls) == ("native", 1)
+    assert rows[("Connected", "predict")].native_calls == 0    # a local rebinding shadows the entry
+    assert rows[("Getattr", "fit")].verdict == "native"        # getattr(binding, "entry")
+    assert rows[("Imported", "fit")].verdict == "native"       # `from .owned import _NATIVE`
+    wrapped = rows[("Wrapped", "fit")]                 # one entry call, but a Python helper does work
+    assert wrapped.verdict == "python" and wrapped.native_calls == 1 and wrapped.helpers == 1
 
 
 def test_baseline_and_check():
