@@ -73,7 +73,7 @@ The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the ivf and ivf-euclidean lanes is the
 measurement.
 """
-from core.classical_distance import direct_squared_distance
+from core.classical_distance import direct_squared_distance, direct_distance_step
 from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
@@ -177,6 +177,16 @@ def host_pinned_distance(
     """`pinned_distance_tile_kernel` at `is_sqrt = 0`, one cell (module
     docstring). `descending` is the sabotage arm's walk and nothing else."""
     comptime if IVF_DIRECT_DISTANCE:
+        if descending:
+            # Negative-control repair 2026-10-20: the promoted direct fold
+            # previously returned before honoring the sabotage walk. Keep
+            # ordinary ascending execution on its unchanged shared helper;
+            # only the explicit sabotage argument reverses logical features.
+            var sabotaged = Float32(0.0)
+            for offset in range(d):
+                var f = d - offset - 1
+                sabotaged = direct_distance_step[1](sabotaged, q[qi * d + f], y[yi * d + f])
+            return Float32(0.0) if sabotaged <= Float32(0.0) else sabotaged
         # Read-only views for the shared raw-pointer ABI; q/y retain storage.
         var qp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(q.unsafe_ptr()))
         var yp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(y.unsafe_ptr()))
