@@ -6,11 +6,9 @@
 # here; values are read by the typed CastIn conversion.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.classical_arrays import classical_array, classical_host_f32
+from bindings.classical_arrays import classical_array, classical_host_f32, classical_input, classical_kind, classical_address
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
 from bindings.sequential_admission import _ordinary_torch
-from bindings.sequential_arrays import sequential_address
-from bindings.sequential_inputs import sequential_input
 from bindings.native_torch_admission import native_torch_numpy
 from core.classical_arrays_impl import classical_check_weights
 
@@ -27,16 +25,16 @@ def classical_estimator_name(model: PythonObject) raises -> String:
     return String(cls.__name__)
 
 
-def classical_view(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """An ndarray view of an admitted input (pandas and Torch storage read
-    natively), before any cast."""
+def classical_view(source: PythonObject, context: PythonObject, name: String = "input") raises -> PythonObject:
+    """An array view of an admitted input (pandas and Torch storage read
+    natively), before any cast: an ndarray with NumPy, an Array without."""
     classical_admit_value(source, context)
     var prepared = source
     if native_pandas_exact(source):
         prepared = native_pandas_f32(source, context)
     elif _ordinary_torch(py_type(source), context):
         prepared = native_torch_numpy(source)
-    return sequential_input(prepared, context)
+    return classical_input(prepared, context, name)
 
 
 def classical_refuse_sparse(source: PythonObject, est: String) raises:
@@ -47,8 +45,8 @@ def classical_refuse_sparse(source: PythonObject, est: String) raises:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
 
 
-def _numeric(view: PythonObject) raises -> Bool:
-    var kind = String(view.dtype.kind)
+def _numeric(view: PythonObject, context: PythonObject) raises -> Bool:
+    var kind = classical_kind(view, context)
     return kind == "b" or kind == "i" or kind == "u" or kind == "f"
 
 
@@ -56,7 +54,7 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject) raises -> Py
     var nd = Int(py=view.ndim)
     if nd != 2:
         raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape))
-    if not _numeric(view):
+    if not _numeric(view, context):
         raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(Python.import_module("builtins").memoryview, view).format) + ", which is not a numeric array")
     try:
         return classical_host_f32(view, 2, "X", context)
@@ -70,11 +68,11 @@ def classical_check_x(source: PythonObject, est: String, context: PythonObject) 
     """X for fit, predict or score: refused with scikit-learn's wording, then
     cast to C-ordered float32 (the input itself when it already is one)."""
     classical_refuse_sparse(source, est)
-    var view = classical_view(source, context)
-    var kind = String(view.dtype.kind)
+    var view = classical_view(source, context, "X")
+    var kind = classical_kind(view, context)
     if kind == "c":
         raise Error("Complex data not supported: " + est + " got a complex X.")
-    if _numeric(view):
+    if _numeric(view, context):
         var nd = Int(py=view.ndim)
         if nd < 2:
             raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + _repr(view.shape) + "). " + RESHAPE_HINT)
@@ -93,8 +91,8 @@ def classical_check_y(source: PythonObject, rows: Int, est: String, context: Pyt
     if source is None:
         raise Error(est + " requires y to be passed, but the target y is None.")
     var b = Python.import_module("builtins")
-    var view = classical_view(source, context)
-    if String(view.dtype.kind) == "c":
+    var view = classical_view(source, context, "y")
+    if classical_kind(view, context) == "c":
         raise Error("Complex data not supported: " + est + " got a complex y.")
     var nd = Int(py=view.ndim)
     var column = nd == 2 and Int(py=view.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
@@ -120,7 +118,7 @@ def classical_check_weights_input(source: PythonObject, rows: Int, context: Pyth
     every row; scikit-learn's shape, finiteness, sign and all-zero refusals."""
     if source is None:
         return PythonObject(None)
-    var view = classical_view(source, context)
+    var view = classical_view(source, context, "sample_weight")
     var nd = Int(py=view.ndim)
     if nd > 1:
         raise Error("Sample weights must be 1D array or scalar")
@@ -135,8 +133,8 @@ def classical_check_weights_input(source: PythonObject, rows: Int, context: Pyth
             raise Error("Input sample_weight contains NaN or infinity.")
         raise Error(String(error))
     var out = classical_array(rows, 0, context) if scalar else value
-    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
-    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(out)))
+    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))
+    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
     var any_positive = classical_check_weights(input, output, rows, scalar)
     if not any_positive:
         raise Error("Sample weights must contain at least one non-zero number.")

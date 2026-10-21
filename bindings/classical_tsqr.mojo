@@ -6,8 +6,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy
-from bindings.classical_arrays import classical_array, classical_word
-from bindings.sequential_arrays import sequential_address
+from bindings.classical_arrays import classical_array, classical_word, classical_address
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
 
 
@@ -68,14 +67,14 @@ struct ClassicalKit(Movable):
             var result = classical_array(max(rows * cols, 1), 0, self.context)
             if rows * cols:
                 _ = py_call(self.entries["x_decomp_dev_download"], self.matrices[index].device,
-                        sequential_address(result), rows * cols)
+                        classical_address(result), rows * cols)
             self.matrices[index].host = result
             self.matrices[index].device = -1
         return self.matrices[index].host
 
     def address(mut self, index: Int) raises -> PythonObject:
         var owner = self.host(index)
-        var result = sequential_address(owner)
+        var result = classical_address(owner)
         _ = owner^
         return result
 
@@ -86,7 +85,7 @@ struct ClassicalKit(Movable):
             var handle = Int(py=py_call(self.entries["x_decomp_dev_alloc"], max(n, 1)))
             self.allocations.append(handle)
             if n:
-                _ = py_call(self.entries["x_decomp_dev_upload"], handle, sequential_address(owner), n)
+                _ = py_call(self.entries["x_decomp_dev_upload"], handle, classical_address(owner), n)
             self.matrices[index].device = handle
             self.matrices[index].host = PythonObject(None)
             _ = owner^
@@ -95,7 +94,7 @@ struct ClassicalKit(Movable):
     def constant(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
         var out = self.zeros(rows, cols)
         var owner = self.host(out)
-        var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(owner)))
+        var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owner)))
         tsqr_fill_constant(data, rows * cols, value)
         _ = owner^
         return out
@@ -103,7 +102,7 @@ struct ClassicalKit(Movable):
     def indices(mut self, start: Int, stop: Int) raises -> Int:
         var out = self.zeros(stop - start, 1)
         var owner = self.host(out)
-        var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(owner)))
+        var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owner)))
         tsqr_fill_indices(data, start, stop)
         _ = owner^
         return out
@@ -227,8 +226,8 @@ struct ClassicalKit(Movable):
         var out = self.zeros(rows, width)
         var source = self.host(a)
         var result = self.host(out)
-        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(source)))
-        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
+        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
         tsqr_copy_columns(src, dst, rows, cols, start, width)
         _ = source^
         _ = result^
@@ -294,8 +293,8 @@ struct ClassicalKit(Movable):
         var out = self.zeros(rows, cols)
         var source = self.host(a)
         var result = self.host(out)
-        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(source)))
-        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
+        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
         memcpy(dest=dst, src=src, count=rows * cols)
         _ = source^
         _ = result^
@@ -352,7 +351,7 @@ struct ClassicalKit(Movable):
         if rank == 0:
             var eye = self.zeros(m, n)
             var owner = self.host(eye)
-            var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(owner)))
+            var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owner)))
             tsqr_fill_eye(data, m, n)
             _ = owner^
             return (eye, s, vt)
@@ -425,8 +424,8 @@ def classical_tsqr_solve(ra: PythonObject, rows: Int, cols: Int,
         # only publishes coefficients from this internal least-squares result.
         if rank == cols and rows > cols:
             var tail = classical_array(cols + 1, 0, context)
-            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(ra)))
-            var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(tail)))
+            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(ra)))
+            var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(tail)))
             memcpy(dest=dst, src=src + cols * (cols + 1), count=cols + 1)
             var tail_id = kit.add(tail, 1, cols + 1)
             var last = kit.columns(tail_id, cols, cols + 1)

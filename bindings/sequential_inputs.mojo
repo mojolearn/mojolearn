@@ -4,7 +4,7 @@
 # serialization are host ABI work; existing kernels still own model math.
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_get
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32
 
@@ -130,16 +130,19 @@ def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut valu
 def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                      mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
     var b = Python.import_module("builtins")
-    if Bool(py=py_call(b.isinstance, value, context["ndarray"])) or Bool(py=py_call(b.isinstance, value, context["scalar_type"])):
+    # A NumPy-free context connects no ndarray: its sequences hold Python
+    # numbers only, and an array leaf is refused below as a non-number.
+    var numpy = py_get(context, "ndarray") is not None
+    if numpy and (Bool(py=py_call(b.isinstance, value, context["ndarray"])) or Bool(py=py_call(b.isinstance, value, context["scalar_type"]))):
         _array_values(value, depth, dims, values, kind, size, leaf_depth, context)
-    elif py_type(value) is context["array_class"]:
+    elif numpy and py_type(value) is context["array_class"]:
         var view = py_call(context["array_fields"]["_mv"], value, context["array_class"])
         var shape = py_call(context["array_fields"]["shape"], value, context["array_class"])
         var dtype = py_call(context["array_fields"]["dtype"], value, context["array_class"])
         var order = py_call(context["array_fields"]["order"], value, context["array_class"])
         var array = py_call(context["ndarray"], shape, dtype=dtype, buffer=view, order=order)
         _array_values(array, depth, dims, values, kind, size, leaf_depth, context)
-    elif py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
+    elif numpy and (py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray):
         var array = _buffer(value, context, False)
         _array_values(array, depth, dims, values, kind, size, leaf_depth, context)
     elif Bool(py=py_call(b.isinstance, value, b.list)) or Bool(py=py_call(b.isinstance, value, b.tuple)) or py_type(value) is b.range:
@@ -182,6 +185,16 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
         return py_call(context["ndarray"], shape, dtype=dtype, buffer=view, order=order)
     if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
         return _buffer(value, context, samples)
+    var packed = sequential_sequence(value, context)
+    var dtype = context["numeric_dtypes"][Python.tuple(packed[1], packed[2])]
+    return py_call(context["ndarray"], packed[0], dtype=dtype, buffer=packed[3])
+
+
+def sequential_sequence(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A rectangular nest of numbers as (shape, kind, size, storage): the
+    shape list, the promoted element kind letter and width, and a C-order
+    `array.array` holding the elements in that type."""
+    var b = Python.import_module("builtins")
     var dims = List[Int]()
     var values = Python.list()
     var kind = String()
@@ -191,7 +204,6 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
     var shape = Python.list()
     for k in range(len(dims)):  # driver-loop: over sequence result shape metadata
         py_call(shape.append, dims[k])
-    var dtype = context["numeric_dtypes"][Python.tuple(kind, size)]
     var code = context["buffer_codes"][Python.tuple(kind, size)]
     var storage = PythonObject(None)
     if kind == "f" and size == 2:
@@ -202,4 +214,4 @@ def sequential_input(value: PythonObject, context: PythonObject, samples: Bool =
         _ = wide^
     else:
         storage = py_call(context["array_type"], code, values)
-    return py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
+    return Python.tuple(shape, kind, size, storage)

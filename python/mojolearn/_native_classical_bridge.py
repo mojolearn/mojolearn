@@ -50,6 +50,44 @@ def connect_host(host_ridge_class, host_linear_class):
     return entry, context
 
 
+_NPY_DTYPES = ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2", "=f4", "=f8", "=i4", "=i8", "=u4")
+
+
+def _numpy():
+    # glue: NumPy is optional. Without it the owner reads and returns
+    # mojolearn Arrays; a broken NumPy installation still raises.
+    try:
+        import numpy
+    except ModuleNotFoundError as error:
+        if error.name != "numpy":
+            raise
+        return None
+    return numpy
+
+
+def _numpy_free_context():
+    # glue: the admission types and Array entries of a NumPy-free install,
+    # the NumPy-free subset of the Sequential context.
+    from collections import OrderedDict, defaultdict
+    from pathlib import PosixPath, PurePosixPath
+    import mmap
+    from array import array
+    from . import _backend
+    from ._array import Array
+    array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "shape", "dtype", "order")}  # glue: retain native slot descriptors once at package import
+    return {
+        "mapping_types": (dict, OrderedDict, defaultdict), "defaultdict_class": defaultdict,
+        "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
+        "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, Array, array, PosixPath,
+                               PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
+        "buffer_owner_types": (type(None), bytes, bytearray, array, mmap.mmap),
+        "scalar_types": (), "integer_types": (int,), "array_fields": array_fields,
+        "array_type": array, "array_class": Array, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
+        "buffer_codes": {("b", 1): "b", ("i", 8): "q", ("u", 8): "Q", ("f", 8): "d"},
+        "int64_min": -(2 ** 63), "int64_max": 2 ** 63 - 1, "uint64_max": 2 ** 64 - 1,
+    }
+
+
 def connect(ridge_class, linear_class=None):
     # glue: connect compiled entries and exact native buffer classes once
     global _ERROR_ENTRY, _ERROR_CONTEXT
@@ -59,10 +97,8 @@ def connect(ridge_class, linear_class=None):
     import os
     import sys
     import zlib
-    import numpy as np
     from . import _backend
     from .tokenizer import _binding
-    from ._x_sequence_model import _SEQUENTIAL_CONTEXT
     from .exceptions import NotFittedError
     from ._native_classical_warnings import connect_warnings
 
@@ -75,7 +111,12 @@ def connect(ridge_class, linear_class=None):
     except ImportError:
         _lzma = None
 
-    context = dict(_SEQUENTIAL_CONTEXT)
+    np = _numpy()
+    if np is not None:
+        from ._x_sequence_model import _SEQUENTIAL_CONTEXT
+        context = dict(_SEQUENTIAL_CONTEXT)
+    else:
+        context = _numpy_free_context()
     context.update(not_fitted_class=NotFittedError, not_fitted_doc=NotFittedError.__doc__,
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
@@ -118,8 +159,14 @@ def connect(ridge_class, linear_class=None):
                 or not isinstance(zstd_class.__new__, BuiltinFunctionType)
                 or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
             raise TypeError("classical archives require a native Zstandard byte decompressor")
-    npy_dtypes = {name: np.dtype(name) for name in ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2", "=f4", "=f8", "=i4", "=i8", "=u4")}  # glue: connect fixed archive dtype metadata
-    npy_dtypes.update({"|u1": np.dtype("u1"), "|b1": np.dtype("u1")})
+    # The archive dtypes the reader admits: NumPy dtypes with NumPy, the
+    # Array typestr each one is stored as without it.
+    if np is not None:
+        npy_dtypes = {name: np.dtype(name) for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
+        npy_dtypes.update({"|u1": np.dtype("u1"), "|b1": np.dtype("u1")})
+    else:
+        npy_dtypes = {name: "<" + name[1:] for name in _NPY_DTYPES}  # glue: connect fixed archive dtype metadata
+        npy_dtypes.update({"|u1": "<u1", "|b1": "<u1"})
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
                    archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
                    archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
@@ -252,14 +299,10 @@ def _layout(cls, attribute_descriptor):
 
 
 def _unavailable(error):
-    # glue: an install without NumPy (or without the compiled owner) keeps the
-    # package importable; these classes then explain what is missing.
-    if isinstance(error, ModuleNotFoundError) and error.name == "numpy":
-        message = ("mojolearn: LinearRegression and Ridge require optional NumPy support. "
-                   'Install it with: python -m pip install "mojolearn[numpy]" '
-                   '("mojolearn[verify]" also includes NumPy).')
-    else:
-        message = f"mojolearn: LinearRegression and Ridge are unavailable: {error}"
+    # glue: an install without the compiled owner keeps the package
+    # importable; these classes then explain what is missing. (NumPy is
+    # optional: without it the owner connects and returns Arrays.)
+    message = f"mojolearn: LinearRegression and Ridge are unavailable: {error}"
 
     def unavailable(*args):
         raise ModuleNotFoundError(message, name=getattr(error, "name", None))

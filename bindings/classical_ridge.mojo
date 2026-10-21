@@ -5,8 +5,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy
 from core.classical_ridge_impl import classical_widen_f32_f64
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
-from bindings.sequential_arrays import sequential_address
+from bindings.classical_arrays import classical_array, classical_host_f32, classical_word, classical_address
 from bindings.sequential_description import sequential_fields
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_check_width, classical_estimator_name
 
@@ -15,8 +14,8 @@ def classical_means(x: PythonObject, rows: Int, cols: Int, entries: PythonObject
     var sums = classical_array(cols, 0, context, True)
     var m64 = classical_array(cols, 0, context, True)
     var m32 = classical_array(cols, 0, context)
-    _ = py_call(entries["lm_col_sums"], sequential_address(x), sequential_address(sums), Python.list(rows, cols))
-    _ = py_call(entries["lm_means_finish"], sequential_address(sums), sequential_address(m64), sequential_address(m32), Python.list(cols, rows, 0), PythonObject(0.0))
+    _ = py_call(entries["lm_col_sums"], classical_address(x), classical_address(sums), Python.list(rows, cols))
+    _ = py_call(entries["lm_means_finish"], classical_address(sums), classical_address(m64), classical_address(m32), Python.list(cols, rows, 0), PythonObject(0.0))
     _ = sums^
     return Python.tuple(m64, m32)
 
@@ -24,7 +23,7 @@ def classical_means(x: PythonObject, rows: Int, cols: Int, entries: PythonObject
 def classical_center(x: PythonObject, mean: PythonObject, rows: Int, cols: Int,
                      entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var out = classical_array(rows, cols if Int(py=x.ndim) == 2 else 0, context)
-    _ = py_call(entries["lm_center"], sequential_address(x), sequential_address(mean), sequential_address(out), Python.list(rows, cols))
+    _ = py_call(entries["lm_center"], classical_address(x), classical_address(mean), classical_address(out), Python.list(rows, cols))
     return out
 
 
@@ -74,22 +73,22 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
         var has_weights = weights is not None
         if has_weights:
             targets = classical_array(rows * 2, 0, context)
-            var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(targets)))
-            var source_y = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(y)))
-            var source_w = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(weights)))
+            var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(targets)))
+            var source_y = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(y)))
+            var source_w = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(weights)))
             memcpy(dest=dst, src=source_y, count=rows * 4)
             memcpy(dest=dst + rows * 4, src=source_w, count=rows * 4)
         var n_out = cols + 5
         var values = classical_array(n_out, 0, context)
-        _ = py_call(entries["x_linear_fit"], PythonObject(8), sequential_address(x), sequential_address(targets),
+        _ = py_call(entries["x_linear_fit"], PythonObject(8), classical_address(x), classical_address(targets),
             Python.list(rows, cols, rows * cols, rows * (2 if has_weights else 1), n_out,
                         max(3 * cols * cols + 4 * cols + 1 + 2 * rows, 1), 1, 4, 1),
             Python.list(1, 1 if intercept else 0, 1, 1 if has_weights else 0),
-            Python.list(PythonObject(alpha)), sequential_address(values))
+            Python.list(PythonObject(alpha)), classical_address(values))
         if classical_word(values, cols + 4) == 2:
             raise Error("mojolearn Ridge: X'X + alpha I is singular even in float-float; rescale X or use a larger alpha")
-        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(coef)))
-        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(values)))
+        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(coef)))
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(values)))
         memcpy(dest=dst, src=src, count=cols)
         bias = classical_word(values, cols) if intercept else Float64(0.0)
         _ = values^
@@ -100,15 +99,15 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
         if py_get(entries, "linear_gram_fit") is not None and py_get(entries, "linear_gram_solve_default") is not None:
             if Bool(py=entries["linear_gram_solve_default"]()):
                 var status = Int(py=py_call(entries["linear_gram_fit"], 
-                    sequential_address(x), sequential_address(y), sequential_address(coef),
-                    sequential_address(mean), sequential_address(output_mean),
+                    classical_address(x), classical_address(y), classical_address(coef),
+                    classical_address(mean), classical_address(output_mean),
                     Python.list(rows, cols, PythonObject(alpha), 1 if intercept else 0)))
                 done = status == 0
         if not done and py_get(entries, "ridge_fit_resident") is not None and py_get(entries, "ridge_resident_default") is not None:
             if Bool(py=entries["ridge_resident_default"]()):
                 _ = py_call(entries["ridge_fit_resident"], 
-                    sequential_address(x), sequential_address(y), sequential_address(coef),
-                    sequential_address(mean), sequential_address(output_mean),
+                    classical_address(x), classical_address(y), classical_address(coef),
+                    classical_address(mean), classical_address(output_mean),
                     Python.list(rows, cols, PythonObject(alpha), 1 if intercept else 0))
                 done = True
         if done:
@@ -130,11 +129,11 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
                         var xm32 = classical_array(cols, 0, context)
                         var ym64 = classical_array(1, 0, context, True)
                         var ym32 = classical_array(1, 0, context)
-                        _ = py_call(entries["lm_col_sums_pair"], sequential_address(x), sequential_address(y),
-                            sequential_address(sx), sequential_address(sy), Python.list(rows, cols))
-                        _ = py_call(entries["lm_means_finish"], sequential_address(sx), sequential_address(xm64), sequential_address(xm32),
+                        _ = py_call(entries["lm_col_sums_pair"], classical_address(x), classical_address(y),
+                            classical_address(sx), classical_address(sy), Python.list(rows, cols))
+                        _ = py_call(entries["lm_means_finish"], classical_address(sx), classical_address(xm64), classical_address(xm32),
                                                        Python.list(cols, rows, 0), PythonObject(0.0))
-                        _ = py_call(entries["lm_means_finish"], sequential_address(sy), sequential_address(ym64), sequential_address(ym32),
+                        _ = py_call(entries["lm_means_finish"], classical_address(sy), classical_address(ym64), classical_address(ym32),
                                                        Python.list(1, rows, 0), PythonObject(0.0))
                         xm = Python.tuple(xm64, xm32)
                         ym = Python.tuple(ym64, ym32)
@@ -147,12 +146,12 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
                 ymean = classical_word(ym[0])
                 work_x = classical_center(x, mean, rows, cols, entries, context)
                 work_y = classical_center(y, ym[1], rows, 1, entries, context)
-            _ = py_call(entries["ridge_fit"], sequential_address(work_x), sequential_address(work_y),
-                                      sequential_address(coef), Python.list(rows, cols, PythonObject(alpha)))
+            _ = py_call(entries["ridge_fit"], classical_address(work_x), classical_address(work_y),
+                                      classical_address(coef), Python.list(rows, cols, PythonObject(alpha)))
             _ = work_x^
             _ = work_y^
         if intercept:
-            bias = Float64(py=py_call(entries["lm_intercept"], sequential_address(mean), sequential_address(coef),
+            bias = Float64(py=py_call(entries["lm_intercept"], classical_address(mean), classical_address(coef),
                                                        Python.list(cols), PythonObject(ymean)))
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", bias)
@@ -180,7 +179,7 @@ def classical_linear_predict(model: PythonObject, value: PythonObject, entries: 
     if Int(py=coef.size) != cols:
         raise Error("coef_ length differs from fitted feature count")
     var out = classical_array(rows, 0, context)
-    _ = py_call(entries["ols_predict"], sequential_address(x), sequential_address(coef), sequential_address(out),
+    _ = py_call(entries["ols_predict"], classical_address(x), classical_address(coef), classical_address(out),
                                 Python.list(rows, cols, fields["intercept_"]))
     _ = x^
     _ = coef^
@@ -195,6 +194,6 @@ def classical_linear_predict_public(model: PythonObject, value: PythonObject,
     var narrow = classical_linear_predict(model, value, entries, context)
     var size = Int(py=narrow.size)
     var wide = classical_array(size, 0, context, True)
-    classical_widen_f32_f64(Int(py=sequential_address(narrow)), Int(py=sequential_address(wide)), size)
+    classical_widen_f32_f64(Int(py=classical_address(narrow)), Int(py=classical_address(wide)), size)
     _ = narrow^
     return wide

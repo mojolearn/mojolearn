@@ -4,9 +4,8 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy, bitcast
-from bindings.classical_arrays import classical_array, classical_host_f32
+from bindings.classical_arrays import classical_array, classical_host_f32, classical_address
 from bindings.classical_ridge import classical_linear_predict
-from bindings.sequential_arrays import sequential_address
 
 
 struct ClassicalMetricProgram(Movable):
@@ -83,10 +82,10 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     sums = program.sum(key, centered, rows)
     var denominator = program.finish(sums, rows, False, False)[0]
     var arena = classical_array(program.size, 0, context)
-    var address = Int(py=sequential_address(arena))
+    var address = Int(py=classical_address(arena))
     var dest = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
-    var truth = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(target)))
-    var predicted = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(prediction)))
+    var truth = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(target)))
+    var predicted = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(prediction)))
     memcpy(dest=dest + y, src=truth, count=rows)
     memcpy(dest=dest + p, src=predicted, count=rows)
     var inputs = List[Int32](length=3, fill=0)
