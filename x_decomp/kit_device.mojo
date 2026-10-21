@@ -1522,7 +1522,7 @@ def lda_online_dev(
     _ = Xd^
 
 
-# ---- typed entries of the Python doors (x_decomp/kit_device_pyapi.mojo)
+# ---- typed entries of the GPU binding doors (their shell is the sibling module)
 def mcd_dev_check(q: List[Int]) raises:
     """`mcd_dev_py`'s plan check (runs before any buffer address is read)."""
     var n = q[0]
