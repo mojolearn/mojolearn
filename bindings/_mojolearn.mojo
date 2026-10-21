@@ -80,6 +80,15 @@ device through the estimators binding (glm/impl/center_device.mojo).
 """
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.mojolearn_shell_impl import (
+    all_finite_host_f32,
+    all_finite_host_f64,
+    cast_f64_to_f32_host,
+    nonzero_f64_count_host,
+    nonzero_f64_fill_host,
+    probability_rows_f32_host,
+    tiled_transpose_to_f32,
+)
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
@@ -235,7 +244,7 @@ def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 
     The origin is untracked because the owner is a NumPy array on the other
     side of the boundary and Mojo cannot see it. The wrapper holds that array
-    for the length of the call, which is the whole contract.
+    throughout the call, which is the whole contract.
     """
     if addr == 0:
         raise Error("mojolearn: null buffer address")
@@ -1008,20 +1017,6 @@ def rbc_knn_search_binding(
 # ties, overflows, subnormals and non-finite input.
 # ===========================================================================
 
-comptime _CAST_WIDTH = 8
-"""SIMD lanes per step of the flat cast: 8 float64 in, 8 float32 out. A
-tail shorter than this is finished one element at a time through the same
-`cast`, so the width never changes a bit of the answer."""
-
-comptime _TILE_ROWS = 128
-comptime _TILE_COLS = 64
-"""The fused cast-and-transpose walks the source in `_TILE_ROWS` x
-`_TILE_COLS` tiles: 64 KB of float64 in, 32 KB of float32 out, sized to
-stay in a performance core's L1 so the strided side of the transpose hits
-cache instead of memory. That is DEVIATION 1887's row-tile arm, which the
-pure-Python converter does not carry, moved to where it can be fast. The
-tile shape changes only the order in which independent elements are
-written; each element's value is the same single cast."""
 
 
 def cast_f64_to_f32_binding(
@@ -1046,15 +1041,7 @@ def cast_f64_to_f32_binding(
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        var i = 0
-        var body = count - (count % _CAST_WIDTH)
-        while i < body:
-            var v = sp.unsafe_load[width=_CAST_WIDTH](i)
-            dp.unsafe_store[width=_CAST_WIDTH](i, v.cast[DType.float32]())
-            i += _CAST_WIDTH
-        while i < count:
-            dp.unsafe_store(i, sp.unsafe_load(i).cast[DType.float32]())
-            i += 1
+        cast_f64_to_f32_host(sp, dp, count)
     return PythonObject(0)
 
 
@@ -1093,41 +1080,8 @@ def cast_colmajor_f64_to_f32_binding(
     var sp = _f64_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        _tiled_transpose_to_f32(sp, dp, nr, nc)
+        tiled_transpose_to_f32(sp, dp, nr, nc)
     return PythonObject(0)
-
-
-def _tiled_transpose_to_f32[
-    S: DType
-](
-    sp: MutPointer[Scalar[S], MutUntrackedOrigin],
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    nr: Int,
-    nc: Int,
-):
-    """`dp[c * nr + r] = Float32(sp[r * nc + c])` over `_TILE_ROWS` x
-    `_TILE_COLS` tiles. The one loop behind DEVIATION 2471 (float64 in)
-    and 2472 (float32 in, where the cast is the identity and compiles
-    away). Caller holds valid, non-overlapping, non-empty buffers and has
-    released the GIL."""
-    var r0 = 0
-    while r0 < nr:
-        var r1 = min(r0 + _TILE_ROWS, nr)
-        var c0 = 0
-        while c0 < nc:
-            var c1 = min(c0 + _TILE_COLS, nc)
-            # Inside the tile: one column at a time, so the writes are
-            # contiguous and the strided reads stay within the tile's
-            # rows, which the previous column just pulled into cache.
-            for c in range(c0, c1):
-                var dbase = c * nr
-                for r in range(r0, r1):
-                    dp.unsafe_store(
-                        dbase + r,
-                        sp.unsafe_load(r * nc + c).cast[DType.float32](),
-                    )
-            c0 = c1
-        r0 = r1
 
 
 def transpose_f32_binding(
@@ -1164,7 +1118,7 @@ def transpose_f32_binding(
     var sp = _f32_ptr(Int(py=src_addr))
     var dp = _f32_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        _tiled_transpose_to_f32(sp, dp, nr, nc)
+        tiled_transpose_to_f32(sp, dp, nr, nc)
     return PythonObject(0)
 
 
@@ -1189,9 +1143,7 @@ def nonzero_f64_count_binding(
     var sp = _f64_ptr(Int(py=src_addr))
     var nz = 0
     with GILReleased(Python()):
-        for i in range(count):
-            if sp.unsafe_load(i) != 0.0:
-                nz += 1
+        nz = nonzero_f64_count_host(sp, count)
     return PythonObject(nz)
 
 
@@ -1239,20 +1191,9 @@ def nonzero_f64_fill_binding(
     var k = 0
     var overflow = False
     with GILReleased(Python()):
-        for r in range(nr):
-            var base = r * nc
-            for c in range(nc):
-                var v = sp.unsafe_load(base + c)
-                if v != 0.0:
-                    if k >= cap:
-                        overflow = True
-                        break
-                    rp.unsafe_store(k, Int32(r))
-                    cp.unsafe_store(k, Int32(c))
-                    vp.unsafe_store(k, v.cast[DType.float32]())
-                    k += 1
-            if overflow:
-                break
+        k = nonzero_f64_fill_host(sp, nr, nc, cap, rp, cp, vp)
+        if k < 0:
+            overflow = True
     if overflow:
         raise Error(
             "nonzero_f64_fill: more than " + String(cap)
@@ -1278,23 +1219,6 @@ def nonzero_f64_fill_binding(
 # `knn_search_binding`) because nothing inside touches a Python object and
 # a caller scanning a million rows should not stall its other threads.
 # ===========================================================================
-
-
-def _all_finite_host_f32(p: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Int:
-    """Host replay of the device finiteness scan: reached only from a
-    HOTPATH_SABOTAGE build (the tests' sabotage switch) or `n == 0`."""
-    for i in range(count):
-        if not isfinite(p.unsafe_load(i)):
-            return 0
-    return 1
-
-
-def _all_finite_host_f64(p: MutPointer[Float64, MutUntrackedOrigin], count: Int) -> Int:
-    """`_all_finite_host_f32` over float64 values."""
-    for i in range(count):
-        if not isfinite(p.unsafe_load(i)):
-            return 0
-    return 1
 
 
 def all_finite_f32_binding(
@@ -1324,7 +1248,7 @@ def all_finite_f32_binding(
     # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
     var ok: Int = 1
     with GILReleased(Python()):
-        ok = _all_finite_host_f32(p, count)
+        ok = all_finite_host_f32(p, count)
     return PythonObject(ok)
 
 
@@ -1345,7 +1269,7 @@ def all_finite_f64_binding(
     # only a HOTPATH_SABOTAGE build (or n == 0) reaches the host replay
     var ok: Int = 1
     with GILReleased(Python()):
-        ok = _all_finite_host_f64(p, count)
+        ok = all_finite_host_f64(p, count)
     return PythonObject(ok)
 
 
@@ -1374,21 +1298,10 @@ def probability_rows_f32_binding(
     var outside = False
     var bad_sum = False
     with GILReleased(Python()):
-        for r in range(nr):
-            var total = Float64(0)
-            for c in range(nc):
-                var p = src.unsafe_load(r * nc + c)
-                nonfinite = nonfinite or not isfinite(p)
-                outside = outside or p < 0 or p > 1
-                total += Float64(p)
-                if bin == 1:
-                    dst.unsafe_store(2 * r, Float32(1) - p)
-                    dst.unsafe_store(2 * r + 1, p)
-            # Existing NumPy validation used sqrt(Float32 epsilon), itself
-            # rounded to Float32, then widened for the Float64 comparison.
-            if bin == 0:
-                var error = total - Float64(1)
-                bad_sum = bad_sum or abs(error) > Float64(0.00034526697709225118)
+        var flags = probability_rows_f32_host(src, dst, nr, nc, bin)
+        nonfinite = flags.nonfinite
+        outside = flags.outside
+        bad_sum = flags.bad_sum
     if nonfinite:
         return PythonObject(1)
     if outside:
