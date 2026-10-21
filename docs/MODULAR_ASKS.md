@@ -96,10 +96,7 @@ build exit 0, probe exit 1 with the four failures. Retained source, binary, logs
 **Impact.** Every native owner that stores Python objects on a Python instance or passes them to Python calls leaks them.
 `python/mojolearn/tests/test_model_native_lifetime.py` fails for the llama, mamba and mamba2 `CausalLM` families (the caller's
 owner and layer list each keep one extra reference after the state is deleted). Object lifetime is one of the conditions
-that keep these public installers inactive: the native LinearRegression/Ridge/HostLinearRegression/HostRidge installer
-(`python/mojolearn/_native_classical_public.py` `_install`, run only in temporary test scopes) and the native PCA owner
-connection (`python/mojolearn/_native_pca_bridge.py` `connect`). Both stay inactive; their other compatibility checks are
-listed in `docs/plans/CORE_COMPLETION_HANDOFF_20261020.md`, "Deferred work" item 1.
+that kept the native LinearRegression/Ridge owner inactive until 2026-10-21 (see below).
 
 **The ask.** A supported release in which `PythonObject` attribute assignment and ordinary calls (including builtin types
 and methods) balance their owned references, with the six operation controls above, and the matching error paths, covered
@@ -107,3 +104,12 @@ upstream. The unchanged probe must exit 0, then the project lifetime tests must 
 
 **Meanwhile.** We wait: no toolchain or standard-library patch, no compensating reference operations in product code, no
 Python runtime substitute. Numerical and native-call audits stay valid for their boundaries but do not qualify lifetime.
+
+**Designed around (2026-10-21, lane activate-linear-installer).** The native LinearRegression/Ridge owner (public since
+then) never calls `PythonObject.__call__` with positional arguments, `__setattr__`, `__setitem__` or a set literal on its
+hot path. `bindings/py_balanced.mojo` calls the documented CPython entries directly with their documented ownership
+(`PyObject_Call` on a tuple it owns and releases once, `PyObject_SetItem`, `PyObject_SetAttrString`, `PyObject_Type`,
+`PySequence_Contains`; arguments borrowed, results owned). Nothing adds or drops a reference to offset the standard
+library. `python/mojolearn/tests/test_native_classical_public.py` checks that the caller's arrays keep their reference
+counts, the model and its outputs are collected, and repeated calls allocate nothing lasting. The ask stands: once the
+supported operations balance, these call sites can return to the ordinary syntax.

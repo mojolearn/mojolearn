@@ -98,10 +98,12 @@ follows from this slice. Never add overlapping groups above into a suite count.
 - Public Samba, Sequential and generation paths have bounded native runtime
   audit evidence. Broader constructor, input, attribute and transitive callback
   coverage across the whole API is incomplete.
-- LinearRegression/Ridge native owners cover arithmetic, parameter metadata,
-  archives, output conversion, ordinary pandas inputs, tags and Host inference.
-  The public installer and native attribute descriptor are prepared separately
-  and stay inactive until compatibility and actual public-call checks pass.
+- LinearRegression/Ridge (and HostLinearRegression/HostRidge) are public
+  one-call shells into the native owner since 2026-10-21 (lane
+  activate-linear-installer): constructors, fit/predict/score/save/load,
+  parameters, tags, attribute reads and `host_model(path)` for linear files.
+  The owner uses balanced CPython ownership (`bindings/py_balanced.mojo`).
+  These classes now need NumPy; a NumPy-free native reader/writer is owed.
 - PCA exact and randomized native owners are staged. Public activation remains
   held for ordinary sparse inputs, inherited validation, feature names/tags,
   output behavior and HostPCA admission. Public CPU training is already allowed;
