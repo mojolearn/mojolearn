@@ -223,8 +223,12 @@ from std.math import isfinite
 from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call_count
 
+from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
+
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_binding_impl import (
+    _session_forward_tape_run,
+    _session_backward_tape_run,
     _NEURAL_CTX,
     _optional_upload,
     _f32_ptr,
@@ -374,7 +378,7 @@ def _read_addrs_tail(
     var a = List[Int]()
     for i in range(n):  # small-loop(n: block buffer addresses, base plus the 11 option tail): validated count of tensor addresses, not data
         a.append(Int(py=addrs[i]))
-    while len(a) < base + BLOCK_OPTION_ADDRS:
+    while len(a) < base + BLOCK_OPTION_ADDRS:  # small-loop(BLOCK_OPTION_ADDRS: pads the absent option tail with zero addresses): argument words, not data
         a.append(0)
     return a^
 
@@ -427,11 +431,11 @@ def transformer_forward_tape_binding(addrs: PythonObject, params: PythonObject) 
     var p = _read_params(params, 8, String("transformer_forward_tape"))
     if len(p) != 8:
         raise Error("transformer forward tape: expected 8 shape scalars")
-    for i in range(11):  # metadata: fixed input/output pointer list
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         if incoming[i] == 0:
             raise Error("transformer forward tape: null address at slot " + String(i))
     var a = List[Int]()
-    for i in range(10):  # metadata: x and the nine weights
+    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(incoming[i])
     a.append(0)
     a.append(0)
@@ -460,7 +464,7 @@ def transformer_backward_tape_binding(tape: PythonObject, addrs: PythonObject) r
     for i in range(11, len(a)):  # small-loop(a: the block options tail slots): validated tensor addresses, not data
         if a[i] != 0:
             raise Error("transformer backward tape: expected dy and ten outputs, no block options tail")
-    for i in range(11):
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         if a[i] == 0:
             raise Error("transformer backward tape: null address at slot " + String(i))
     owner[].busy = True
@@ -538,7 +542,7 @@ def transformer_session_backward_binding(
             " window)"
         )
     var a = List[Int]()
-    for i in range(21):
+    for i in range(21):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error(
@@ -581,13 +585,13 @@ def transformer_session_backward_time_binding(
     if len(addrs) != 21 or len(params) != 9:
         raise Error("transformer backward time: expected 21 addresses and 9 scalars")
     var a = List[Int]()
-    for i in range(21):  # metadata: fixed pointer list
+    for i in range(21):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("transformer backward time: null buffer address at slot " + String(i))
         a.append(address)
     var p = List[Int]()
-    for i in range(9):  # metadata: fixed scalar list
+    for i in range(9):  # small-loop(params: fixed scalar list of this entry): argument words, not data
         p.append(Int(py=params[i]))
     owner[].busy = True
     var stamps = List[Int]()
@@ -621,7 +625,7 @@ def transformer_backward_tape_time_binding(addrs: PythonObject, params: PythonOb
         raise Error("transformer backward tape time: expected 22 addresses and 9 scalars")
     var fa = List[Int]()
     var ba = List[Int]()
-    for i in range(22):  # metadata: fixed pointer list
+    for i in range(22):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("transformer backward tape time: null address at slot " + String(i))
@@ -634,7 +638,7 @@ def transformer_backward_tape_time_binding(addrs: PythonObject, params: PythonOb
         else:
             ba.append(address)
     var p = List[Int]()
-    for i in range(8):  # metadata: fixed scalar list
+    for i in range(8):  # small-loop(params: fixed scalar list of this entry): argument words, not data
         p.append(Int(py=params[i]))
     var calls = Int(py=params[8])
     if calls < 1:
@@ -800,12 +804,12 @@ def transformer_forward_fresh_binding(
     # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
     # two absent cache slots, y, then the tail.
     var a = List[Int]()
-    for i in range(10):
+    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
     a.append(0)
     a.append(raw[10])
-    for i in range(BLOCK_OPTION_ADDRS):
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
     if a[12] == 0:
@@ -996,10 +1000,10 @@ def transformer_decode_session_open_binding(
     var raw = _read_addrs_tail(addrs, 11, what)
     var a = List[Int]()
     a.append(0)
-    for i in range(11):
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
-    for i in range(BLOCK_OPTION_ADDRS):
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
     var p = _read_params(params, 9, what)
@@ -1061,7 +1065,7 @@ def transformer_decode_session_open_int15_binding(
     # into `transformer_forward`'s 13 + 11 layout, then the 21 planes
     var a = List[Int]()
     a.append(0)
-    for i in range(11):
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
     for i in range(BLOCK_OPTION_ADDRS + 21):  # small-loop(BLOCK_OPTION_ADDRS: 11 option addresses plus 21 planes): reorders pointer list, not data
@@ -1188,8 +1192,8 @@ def transformer_decode_session_load_state_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """Replace the resident cache with the caller's bytes: `addrs` =
-    [k_cache, v_cache]; `params` = [cached_tokens]. The explicit refresh
-    for the state half; the weight half is close and open."""
+    [k_cache, v_cache]; `params` = [cached_tokens]. This is the explicit
+    refresh of the state half; the weight half is close and open."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     if len(addrs) != 2 or len(params) != 1:
         raise Error("transformer_decode_session_load_state: expected 2 addresses and 1 scalar")
@@ -1362,7 +1366,7 @@ def causal_lm_session_run_binding(
             raise Error("causal_lm_session_run: " + String(l + n_steps - 1) + " more positions do not fit the "
                 + String(sp[].smax) + "-token cache")
         ptrs.append(Int(sp))
-    for i in range(n_layers):
+    for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = True
     owner[].busy = True
@@ -1370,7 +1374,7 @@ def causal_lm_session_run_binding(
         with GILReleased(Python()):
             _lm_run(owner[], ptrs, p_ids, p_out, p_logits, l, n_steps)
     except error:
-        for i in range(n_layers):
+        for i in range(n_layers):  # driver-loop: over decoder layers of the model
             var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
             sp[].busy = False
             sp[].usable = False
@@ -1378,7 +1382,7 @@ def causal_lm_session_run_binding(
         owner[].usable = False
         raise error
     var result = 0
-    for i in range(n_layers):
+    for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = False
         result = sp[].kv.value().s
@@ -1415,7 +1419,7 @@ def transformer_backward_binding(
             " window)"
         )
     var a = List[Int]()
-    for i in range(21):
+    for i in range(21):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error(
@@ -1489,12 +1493,12 @@ def transformer_session_forward_tape_binding(
         raise Error("transformer tape: expected 11 addresses and 10 scalars")
     var a = List[Int]()
     var p = List[Int]()
-    for i in range(11):
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("transformer tape: null buffer address")
         a.append(address)
-    for i in range(10):
+    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
         p.append(Int(py=params[i]))
     if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
         raise Error("transformer tape: invalid shape/window/activation budget/cost")
@@ -1502,20 +1506,7 @@ def transformer_session_forward_tape_binding(
     try:
         with GILReleased(Python()):
             try:
-                var dims = LlamaDims(p[2],p[3],p[4],p[5],p[6])
-                dims.validate()
-                if not owner[].ctx:
-                    owner[].ctx = neural_ctx[_NEURAL_CTX]()
-                    owner[].contexts += 1
-                var opts = BlockOptions()
-                _session_weights(owner[],dims,a,opts,List[Int]())
-                ref ctx = owner[].ctx.value()
-                ref w = owner[].weights.value()
-                var input = _upload_addr(ctx,a[0],p[0]*p[1]*p[2])
-                owner[].tape = BorrowedAttentionTape(ctx,w,input^,p[0],p[1],p[7],owner[].tape_generation)
-                ref tape = owner[].tape.value()
-                _download_addr(ctx,tape.stages.value().residual2,p[0]*p[1]*p[2],a[10])
-                tape.seal(ctx,p[8],p[9])
+                _session_forward_tape_run(Int(owner), a, p)
             except error:
                 owner[].clear()
                 raise error
@@ -1545,7 +1536,7 @@ def transformer_session_backward_tape_binding(
     if cookie != Int(owner) or generation != owner[].tape_generation or not owner[].tape:
         raise Error("transformer tape: stale, foreign or already consumed ticket")
     var a = List[Int]()
-    for i in range(11):
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
         var address = Int(py=addrs[i])
         if address == 0:
             raise Error("transformer tape backward: null buffer address")
@@ -1554,32 +1545,7 @@ def transformer_session_backward_tape_binding(
     try:
         with GILReleased(Python()):
             try:
-                ref ctx = owner[].ctx.value()
-                ref tape = owner[].tape.value()
-                var dims = tape.dims.copy()
-                var dm = dims.d_model
-                var qw = dims.q_width()
-                var kw = dims.kv_width()
-                var it = dims.intermediate
-                var m = tape.b*tape.l
-                var dy = _upload_addr(ctx,a[0],m*dm)
-                var bst = LlamaBackwardStages(ctx,tape.b,tape.l,tape.l,dims,lean=True)
-                tape.backward_into(ctx,owner[].weights.value(),bst,dy,generation,
-                    owner[].tape_generation,owner[].tape_generation,owner[].tape_generation)
-                _download_addr[False](ctx,bst.d_x,m*dm,a[1])
-                _download_addr[False](ctx,bst.dw_norm1,dm,a[2])
-                _download_addr[False](ctx,bst.dw_norm2,dm,a[3])
-                _download_addr[False](ctx,bst.dw_q,qw*dm,a[4])
-                _download_addr[False](ctx,bst.dw_k,kw*dm,a[5])
-                _download_addr[False](ctx,bst.dw_v,kw*dm,a[6])
-                _download_addr[False](ctx,bst.dw_o,dm*qw,a[7])
-                _download_addr[False](ctx,bst.dw_gate,it*dm,a[8])
-                _download_addr[False](ctx,bst.dw_up,it*dm,a[9])
-                _download_addr[False](ctx,bst.dw_down,dm*it,a[10])
-                ctx.synchronize()
-                owner[].tape = None
-                owner[].tape_generation += 1
-                ctx.synchronize()
+                _session_backward_tape_run(Int(owner), a, generation)
             except error:
                 owner[].clear()
                 raise error

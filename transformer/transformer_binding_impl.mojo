@@ -2263,3 +2263,56 @@ def _transformer_backward_run(
     # context is destroyed (DEVIATION 2520, extended by DEVIATION 3010).
     ctx.synchronize()
     _ = ctx^
+
+
+def _session_forward_tape_run(owner_addr: Int, a: List[Int], p: List[Int]) raises:
+    """`transformer_session_forward_tape`'s device half, GIL-free: build or
+    reuse the session weights, run the forward that keeps the borrowed
+    attention tape, copy y out and seal the tape. `owner_addr` is the session handle's address."""
+    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
+    var dims = LlamaDims(p[2],p[3],p[4],p[5],p[6])
+    dims.validate()
+    if not owner[].ctx:
+        owner[].ctx = neural_ctx[_NEURAL_CTX]()
+        owner[].contexts += 1
+    var opts = BlockOptions()
+    _session_weights(owner[],dims,a,opts,List[Int]())
+    ref ctx = owner[].ctx.value()
+    ref w = owner[].weights.value()
+    var input = _upload_addr(ctx,a[0],p[0]*p[1]*p[2])
+    owner[].tape = BorrowedAttentionTape(ctx,w,input^,p[0],p[1],p[7],owner[].tape_generation)
+    ref tape = owner[].tape.value()
+    _download_addr(ctx,tape.stages.value().residual2,p[0]*p[1]*p[2],a[10])
+    tape.seal(ctx,p[8],p[9])
+
+
+def _session_backward_tape_run(owner_addr: Int, a: List[Int], generation: Int) raises:
+    """`transformer_session_backward_tape`'s device half, GIL-free: replay
+    the sealed tape's backward and copy dx and the ten weight gradients out. `owner_addr` is the session handle's address."""
+    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
+    ref ctx = owner[].ctx.value()
+    ref tape = owner[].tape.value()
+    var dims = tape.dims.copy()
+    var dm = dims.d_model
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var it = dims.intermediate
+    var m = tape.b*tape.l
+    var dy = _upload_addr(ctx,a[0],m*dm)
+    var bst = LlamaBackwardStages(ctx,tape.b,tape.l,tape.l,dims,lean=True)
+    tape.backward_into(ctx,owner[].weights.value(),bst,dy,generation,
+        owner[].tape_generation,owner[].tape_generation,owner[].tape_generation)
+    _download_addr[False](ctx,bst.d_x,m*dm,a[1])
+    _download_addr[False](ctx,bst.dw_norm1,dm,a[2])
+    _download_addr[False](ctx,bst.dw_norm2,dm,a[3])
+    _download_addr[False](ctx,bst.dw_q,qw*dm,a[4])
+    _download_addr[False](ctx,bst.dw_k,kw*dm,a[5])
+    _download_addr[False](ctx,bst.dw_v,kw*dm,a[6])
+    _download_addr[False](ctx,bst.dw_o,dm*qw,a[7])
+    _download_addr[False](ctx,bst.dw_gate,it*dm,a[8])
+    _download_addr[False](ctx,bst.dw_up,it*dm,a[9])
+    _download_addr[False](ctx,bst.dw_down,dm*it,a[10])
+    ctx.synchronize()
+    owner[].tape = None
+    owner[].tape_generation += 1
+    ctx.synchronize()
