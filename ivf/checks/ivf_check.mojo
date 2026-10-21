@@ -21,8 +21,8 @@ CHECKS, in the order `main` runs them
   check_nprobe_equals_nlists_is_brute_force   THE HEADLINE, and the first
                                               one written. n_probe ==
                                               n_lists against
-                                              `neighbors/`'s own tiled
-                                              brute force, distances AND
+                                              the selected IVF arithmetic's
+                                              exhaustive reference, distances AND
                                               indices, bit for bit
   check_ivf_refusals                          IVF-PQ, HNSW, CAGRA, an
                                               unsupported metric, n_probe >
@@ -110,7 +110,9 @@ from ivf.checks.ivf_fixture import (
 from ivf.checks.ivf_oracle import (
     OracleSearchResult,
     oracle_brute_force,
+    oracle_direct_distance,
     oracle_expanded_distance,
+    oracle_scan_distance,
     oracle_ivf_search,
     oracle_row_norms,
     oracle_select_k,
@@ -119,6 +121,7 @@ from ivf.checks.ivf_oracle import (
     reference_distance_f64,
     reference_nearest_f64,
 )
+from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE, KNN_DIRECT_DISTANCE
 from ivf.checks.list_layout import (
     ListLayout,
     build_list_layout,
@@ -361,6 +364,41 @@ def _knn_reference(
     return OracleSearchResult(out_d^, out_i^, counts^)
 
 
+def _all_lists_reference(
+    ctx: DeviceContext, x: List[Float32], n_rows: Int,
+    queries: List[Float32], n_queries: Int, dim: Int, k: Int,
+) raises -> OracleSearchResult:
+    # Preserve the native kNN cross-check whenever the arithmetic matches.
+    # The policy declarations are both in
+    # experiments/classical_identical_ideas/graph_controls.mojo:
+    # IVF_DIRECT_DISTANCE was promoted 2026-10-08; KNN_DIRECT_DISTANCE was
+    # tombstoned False 2026-10-11. Their different folds do not promise equal
+    # last bits. The default comparison therefore uses the independent
+    # float32 IVF fold and selection sort, never a production distance helper.
+    comptime if IDENTICAL and IVF_DIRECT_DISTANCE != KNN_DIRECT_DISTANCE:
+        return oracle_brute_force(x, n_rows, queries, n_queries, dim, k, False)
+    else:
+        return _knn_reference(ctx, x, n_rows, queries, n_queries, dim, k)
+
+
+def check_distance_oracle_policy() raises:
+    """A cancellation fixture distinguishes the two arithmetic contracts."""
+    var q: List[Float32] = [Float32(10000.0)]
+    var x: List[Float32] = [Float32(10001.0)]
+    var qn = oracle_row_norms(q, 1, 1, False)
+    var xn = oracle_row_norms(x, 1, 1, False)
+    var direct = oracle_direct_distance(q, 0, x, 0, 1, False)
+    var expanded = oracle_expanded_distance(q, 0, x, 0, 1, qn[0], xn[0], False)
+    var selected = oracle_scan_distance(q, 0, x, 0, 1, qn[0], xn[0], False)
+    if not _same_bits(direct, Float32(1.0)) or not _same_bits(expanded, Float32(0.0)):
+        raise Error("IVF oracle cancellation fixture failed its exact direct=1, expanded=0 answers")
+    if reference_distance_f64(q, 0, x, 0, 1, False) != Float64(1.0):
+        raise Error("IVF oracle cancellation fixture failed the independent float64 answer")
+    var expected = Float32(1.0) if IVF_DIRECT_DISTANCE else Float32(0.0)
+    if not _same_bits(selected, expected):
+        raise Error("IVF oracle selected arithmetic differs from the compiled distance policy")
+
+
 # =====================================================================
 # THE HEADLINE GATE. Written first, for the reason the brief gives: it is
 # the strongest statement this lane can make, and everything else is a
@@ -369,37 +407,22 @@ def _knn_reference(
 
 
 def check_nprobe_equals_nlists_is_brute_force() raises:
-    """`n_probe == n_lists` is EXACTLY the brute force, both arrays.
+    """Every indexed row is scored; exact distance bits and original IDs
+    equal an exhaustive reference using the selected IVF arithmetic.
 
-    WHY IT CAN BE BIT FOR BIT AND NOT MERELY CLOSE, in four steps, each of
-    which is a property some other check gates:
-
-      1. every list is probed, so the candidate set is the whole index;
-      2. `merge_probed_lists` emits it ASCENDING BY ORIGINAL INDEX
-         (DEVIATION 1786), so the candidate row's position `p` holds the
-         distance to original row `p` -- the same row `knn_search`'s
-         distance row holds at position `p`;
-      3. the candidate norms are `row_norm_kernel` over the PERMUTED matrix
-         read back through the carry, and that kernel is one block per row,
-         so they are the same floats `knn_search` computed over the
-         unpermuted one;
-      4. the distances go through the same kernel and the selection through
-         the same selector at the same `buf_len`.
-
-    So the two computations are not similar, they are the same one, and any
-    difference is a defect rather than a rounding. That is why this is an
-    ASSERTION under `IDENTICAL`. Under `FAST` step 4 stops holding -- the
-    vendor matmul is called at `m = 1` here and at `m = n_queries` there,
-    and a matmul is entitled to a different k-split per shape -- so the
-    same comparison is a REPORT and the line says so.
+    The default direct fold is replayed independently on the host, with a
+    selection sort over (distance, original index). When IVF and kNN use
+    the same distance policy, retain the native tiled-kNN comparison too.
+    FAST retains its vendor-matmul report because shape can change its fold.
     """
+    check_distance_oracle_policy()
     var ctx = DeviceContext()
     var x = ivf_index_fixture(N_ROWS, DIM, 3)
     var q = ivf_query_fixture(x, N_ROWS, N_QUERIES, DIM, 3)
     var index = _build_index(ctx, x, N_ROWS, DIM, N_LISTS, UInt64(7))
 
     var got = _search(ctx, index, q, N_QUERIES, K, N_LISTS)
-    var want = _knn_reference(ctx, x, N_ROWS, q, N_QUERIES, DIM, K)
+    var want = _all_lists_reference(ctx, x, N_ROWS, q, N_QUERIES, DIM, K)
 
     var moved_d = 0
     var moved_i = 0
@@ -441,7 +464,7 @@ def check_nprobe_equals_nlists_is_brute_force() raises:
                 + String(moved_d)
                 + " distances and "
                 + String(moved_i)
-                + " indices differ from the tiled brute force at n_probe =="
+                + " indices differ from the exhaustive selected-policy reference at n_probe =="
                 " n_lists. First: "
                 + first
             )
@@ -449,7 +472,7 @@ def check_nprobe_equals_nlists_is_brute_force() raises:
             "check_nprobe_equals_nlists_is_brute_force OK [IDENTICAL]: "
             + String(N_QUERIES * K)
             + " slots, distances AND indices bit for bit against"
-            " neighbors/ knn_search's TILED arm; every query scored all "
+            " the exhaustive selected-policy reference; every query scored all "
             + String(N_ROWS)
             + " candidates"
         )
@@ -828,7 +851,7 @@ def check_list_layout_and_index_carry() raises:
     var cids = List[UInt32]()
     for l in range(N_LISTS):
         crow.append(
-            oracle_expanded_distance(
+            oracle_scan_distance(
                 q, 0, index.centers, l, DIM, qn[0], cn[l], False
             )
         )
@@ -847,7 +870,7 @@ def check_list_layout_and_index_carry() raises:
     var crow2 = List[Float32]()
     for c in range(len(slots)):
         crow2.append(
-            oracle_expanded_distance(
+            oracle_scan_distance(
                 q, 0, index.list_data, Int(slots[c]), DIM, qn[0],
                 ln[Int(slots[c])], False,
             )
@@ -949,7 +972,7 @@ def check_empty_list() raises:
             )
 
     var got = _search(ctx, index, q, N_QUERIES, K, N_LISTS)
-    var want = _knn_reference(ctx, x, N_ROWS, q, N_QUERIES, DIM, K)
+    var want = _all_lists_reference(ctx, x, N_ROWS, q, N_QUERIES, DIM, K)
     var moved = 0
     for i in range(N_QUERIES * K):
         if not _same_bits(got.distances[i], want.distances[i]):
@@ -1904,9 +1927,9 @@ def check_l2_sqrt_is_the_root_of_l2() raises:
 
     # (c) the L2SqrtExpanded build, every list probed, against brute force.
     var got_all = _search(ctx, rt, q, N_QUERIES, K, N_LISTS)
-    var brute = _knn_reference(ctx, x, N_ROWS, q, N_QUERIES, DIM, K)
+    var brute = _all_lists_reference(ctx, x, N_ROWS, q, N_QUERIES, DIM, K)
     var msg_c = _compare_rooted(
-        "(c) L2SqrtExpanded build at n_probe == n_lists vs tiled brute force",
+        "(c) L2SqrtExpanded build at n_probe == n_lists vs selected-policy exhaustive reference",
         got_all, brute.distances, brute.indices, N_QUERIES * K,
     )
     if msg_c != "":
