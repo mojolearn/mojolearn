@@ -184,6 +184,11 @@ def test_coordinator_drain_events_is_empty_before_any_step():
     owner = object.__new__(cv.Coordinator)
     audit_native_call(owner.__init__, port=0, workers=1, logical_shards=1, steps=0).assert_native()
     assert audit_native_call(owner.drain_events).assert_native() == []
+    for cls in (cv.Coordinator, cv.Worker):
+        assert "event owner must be an exact Worker or Coordinator" in native_failure(
+            cls.drain_events, ValueError, object())
+        with pytest.raises(ValueError):
+            object.__new__(cls).drain_events()  # never constructed: no native event queue
 
 
 def test_parallel_neural_trainer_context_manager_closes():
