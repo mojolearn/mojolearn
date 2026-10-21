@@ -22,7 +22,7 @@ def py_call(callable: PythonObject, *args: PythonObject, var **kwargs: PythonObj
     var envelope = cpy.PyTuple_New(size)
     if not envelope:
         raise cpy.unsafe_get_error()
-    for i in range(size):  # small-loop(args: positional arguments of one call): bounded by the call site
+    for i in range(len(args)):  # small-loop(args: positional arguments of one call): bounded by the call site
         # PyTuple_SetItem steals the new reference the tuple now owns; the
         # caller keeps its own.
         _ = cpy.PyTuple_SetItem(envelope, i, cpy.Py_NewRef(args[i]._obj_ptr))
