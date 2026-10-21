@@ -36,8 +36,7 @@ from autograd.partition_pyapi import (
     partition_state_py, partition_residency_py, partition_save_py,
     partition_close_py, partition_enter_py, partition_profile_py,
 )
-from max.gpu.host import DeviceContext
-from sequence.launch_profile import launch_profile_level
+from bindings.x_sequence_impl import device_executors
 from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
@@ -306,24 +305,14 @@ def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: 
     options: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
-    var executors = List[DeviceExec]()
-    if len(ids) > 1 and launch_profile_level() != 0:
-        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
-    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
-        var context = DeviceContext(device_id=ids[k])
-        executors.append(DeviceExec(context))
+    var executors = device_executors(ids)
     var handle = partition_open[DeviceExec, OPS_DEVICE](sid, pid, ids, options[0], options[1], options[2], options[3], options[4], options[5], executors^)
     return distributed_object(cls, binding, handle)
 
 
 def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
     var ids = distributed_devices(devices)
-    var executors = List[DeviceExec]()
-    if len(ids) > 1 and launch_profile_level() != 0:
-        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
-    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
-        var context = DeviceContext(device_id=ids[k])
-        executors.append(DeviceExec(context))
+    var executors = device_executors(ids)
     var handle = partition_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
     return distributed_object(cls, binding, handle)
 
@@ -373,24 +362,14 @@ def ops_distributed_open_binding(sid: PythonObject, pid: PythonObject, devices: 
     options: PythonObject, cls: PythonObject, binding: PythonObject,
 ) raises -> PythonObject:
     var ids = distributed_devices(devices)
-    var executors = List[DeviceExec]()
-    if len(ids) > 1 and launch_profile_level() != 0:
-        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
-    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
-        var context = DeviceContext(device_id=ids[k])
-        executors.append(DeviceExec(context))
+    var executors = device_executors(ids)
     var handle = distributed_open[DeviceExec, OPS_DEVICE](sid, pid, ids, options[0], options[1], options[2], options[3], executors^)
     return distributed_object(cls, binding, handle)
 
 
 def ops_distributed_load_binding(path: PythonObject, devices: PythonObject, cls: PythonObject, binding: PythonObject) raises -> PythonObject:
     var ids = distributed_devices(devices)
-    var executors = List[DeviceExec]()
-    if len(ids) > 1 and launch_profile_level() != 0:
-        raise Error("distributed programs: process-global launch profiling cannot track concurrent GPUs")
-    for k in range(len(ids)):  # small-loop(ids: physical devices): independent context ownership
-        var context = DeviceContext(device_id=ids[k])
-        executors.append(DeviceExec(context))
+    var executors = device_executors(ids)
     var handle = distributed_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
     return distributed_object(cls, binding, handle)
 
