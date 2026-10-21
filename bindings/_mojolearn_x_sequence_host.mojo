@@ -37,7 +37,7 @@ from autograd.partition_pyapi import (
     partition_state_py, partition_residency_py, partition_save_py,
     partition_close_py, partition_enter_py, partition_profile_py,
 )
-from autograd.program_control_grad import ops_program_control_vjp_py
+from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
