@@ -177,11 +177,17 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
             model.score(X, y)
     cycle()
     cycle()
-    gc.collect()
-    before = sys.getallocatedblocks()
-    cycle()
-    gc.collect()
-    assert sys.getallocatedblocks() - before < 100, sys.getallocatedblocks() - before
+    # A leak grows every window of 300 operations; a one-time lazy allocation
+    # (seen once in the third cycle on the Apple route, then flat) does not.
+    # So the gauge reads three windows and holds the smallest growth.
+    growth = []
+    for _ in range(3):
+        gc.collect()
+        before = sys.getallocatedblocks()
+        cycle()
+        gc.collect()
+        growth.append(sys.getallocatedblocks() - before)
+    assert min(growth) < 100, growth
     out[name] = r
 
 assert not any(m == "numpy" or m.startswith("numpy.") for m in sys.modules)
