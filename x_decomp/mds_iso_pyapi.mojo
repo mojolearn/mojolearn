@@ -40,7 +40,7 @@ def mds_disp_host_py(d: PythonObject, dst: PythonObject, a: PythonObject, p: Pyt
     here) on host buffers. a = [keys, idx, gid, gst, sm, wt, end, prv,
     last, hf, gv] addresses; p = [n, m, G, first]."""
     var li = List[Int]()
-    for i in range(11):
+    for i in range(11):  # driver-loop: over the 11 buffer addresses of a
         li.append(Int(py=a[i]))
     var m = Int(py=p[1])
     var pd = _fp(d)

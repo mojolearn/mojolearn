@@ -30,11 +30,8 @@ from experiments.classical_identical_ideas.stats_controls import C57_CANDIDATE_S
 from experiments.classical_identical_ideas.linear_controls import C23_MCD, C28_BUCKET_SOLVES
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from x_decomp.api_pyapi import _f, _i, _n
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN
 from x_decomp.device import (
@@ -1525,58 +1522,44 @@ def lda_online_dev(
     _ = Xd^
 
 
-# ---- Python entries (GPU binding only; the arguments of api.mojo's)
-def mcd_dev_py(
-    x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
-    p: PythonObject,
-) raises -> PythonObject:
-    """`mcd_py` on the resident kit."""
-    var q = List[Int]()
-    for i in range(11):
-        q.append(Int(py=p[i]))
+# ---- typed entries of the Python doors (x_decomp/kit_device_pyapi.mojo)
+def mcd_dev_check(q: List[Int]) raises:
+    """`mcd_dev_py`'s plan check (runs before any buffer address is read)."""
     var n = q[0]
     var d = q[1]
     if n < 1 or d < 2 or n * d > 2147483647 or q[2] < 1 or q[2] > n:
         raise Error("x_decomp: mcd needs n >= 1, d >= 2 and 1 <= h <= n")
     if n > 500 and (q[4] < 1 or q[4] * q[5] > n or q[8] > n or q[8] < 1 or q[10] < 1):
         raise Error("x_decomp: mcd subset plan out of range")
-    var px = _f(x)
-    var pl = _f(loc)
-    var pc = _f(cov)
-    var ps = _i(sup)
-    var pd = _f(dist)
-    with GILReleased(Python()):
-        var X = mat_from(px, n, d)
-        fast_mcd_dev(X, q, pl, pc, ps, pd)
-    return PythonObject(n)
 
 
-def lda_online_dev_py(
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`lda_online_py` on the resident kit."""
-    var n = _n(p, 0)
-    var v = _n(p, 1)
-    var nc = _n(p, 2)
-    var bs = _n(p, 3)
-    var mdi = _n(p, 4)
-    var seed = Int(py=p[5])
-    var draw = Int(py=p[6])
-    var nbi = Int(py=p[7])
+def mcd_dev_run(px: F32Ptr, pl: F32Ptr, pc: F32Ptr, ps: I32Ptr, pd: F32Ptr, q: List[Int]) raises -> Int:
+    """`mcd_py` on the resident kit over host buffers; q is the 11-word
+    plan. Returns n."""
+    var n = q[0]
+    var d = q[1]
+    var X = mat_from(px, n, d)
+    fast_mcd_dev(X, q, pl, pc, ps, pd)
+    return n
+
+
+def lda_online_dev_check(n: Int, v: Int, nc: Int, bs: Int) raises:
+    """`lda_online_dev_py`'s shape check (runs before the float arguments
+    and buffer addresses are read)."""
     if bs < 1 or v < 1 or nc < 1 or n * v > 2147483647 or nc * v > 2147483647:
         raise Error("x_decomp: lda_online shape out of range")
-    var fv = List[Float64]()
-    for i in range(6):
-        fv.append(Float64(py=f[i]))
-    var px = _f(x)
-    var pc = _f(comps)
-    var pe = _f(exp_dir)
-    with GILReleased(Python()):
-        var X = mat_from(px, n, v)
-        var C = mat_from(pc, nc, v)
-        var ED = mat_from(pe, nc, v)
-        lda_online_dev(X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5])
-        for i in range(nc * v):
-            pc.unsafe_store(i, C.d[i])
-            pe.unsafe_store(i, ED.d[i])
-    return Python.tuple(draw, nbi)
+
+
+def lda_online_dev_run(
+    px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, bs: Int, mdi: Int, seed: Int,
+    mut draw: Int, mut nbi: Int, fv: List[Float64],
+) raises:
+    """`lda_online_py` on the resident kit over host buffers: comps and
+    exp_dir (nc x v) in and out at pc and pe; fv = the six float words."""
+    var X = mat_from(px, n, v)
+    var C = mat_from(pc, nc, v)
+    var ED = mat_from(pe, nc, v)
+    lda_online_dev(X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5])
+    for i in range(nc * v):
+        pc.unsafe_store(i, C.d[i])
+        pe.unsafe_store(i, ED.d[i])
