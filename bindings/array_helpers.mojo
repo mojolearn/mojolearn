@@ -12,13 +12,20 @@ same file is compiled into the base binding (`_mojolearn`) and the core
 host binding (`_mojolearn_core_host`), so a CPU-only install runs the same
 code.
 """
-from std.builtin.sort import sort
-from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from std.math import inf, isinf, isnan, sqrt
-from checks.numerics import pinned_mul_f64
-from glm.impl.lm_finish import _exact_sum
+from core.array_helpers_impl import (
+    check_lengths_i64,
+    class_ratio_f64,
+    fsum_f64,
+    nsum_f64,
+    ragged_rows_bytes,
+    row_means_f64,
+    row_stds_f64,
+    shard_topk_merge_f32,
+    strided_copy_bytes,
+    strided_total,
+)
 
 
 @always_inline
@@ -26,40 +33,6 @@ def _addr_ptr[dt: DType](addr: Int) raises -> MutPointer[Scalar[dt], MutUntracke
     if addr == 0:
         raise Error("mojolearn: null buffer address")
     return MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=addr)
-
-
-def _strided_copy[dt: DType](
-    src: Int, dst: Int, dims: MutPointer[Int64, MutUntrackedOrigin], nd: Int, total: Int
-):
-    """Walk the index space of `shape` in C order; element (i_0..i_k) moves
-    from src[src_base + sum i_j * s_j] to dst[dst_base + sum i_j * d_j]."""
-    var sp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=src)
-    var dp = MutPointer[Scalar[dt], MutUntrackedOrigin](unsafe_from_address=dst)
-    var sbase = Int(dims[3 * nd])
-    var dbase = Int(dims[3 * nd + 1])
-    var inner = Int(dims[nd - 1])
-    var sstep = Int(dims[2 * nd - 1])
-    var dstep = Int(dims[3 * nd - 1])
-    var idx = List[Int](length=nd, fill=0)
-    var so = sbase
-    var do_ = dbase
-    var done = 0
-    while done < total:
-        for j in range(inner):
-            dp.unsafe_store(do_ + j * dstep, sp.unsafe_load(so + j * sstep))
-        done += inner
-        # advance the outer mixed-radix counter (row-major)
-        var k = nd - 2
-        while k >= 0:
-            idx[k] += 1
-            so += Int(dims[nd + k])
-            do_ += Int(dims[2 * nd + k])
-            if idx[k] < Int(dims[k]):
-                break
-            so -= idx[k] * Int(dims[nd + k])
-            do_ -= idx[k] * Int(dims[2 * nd + k])
-            idx[k] = 0
-            k -= 1
 
 
 def strided_copy_bytes_binding(
@@ -77,12 +50,7 @@ def strided_copy_bytes_binding(
     if nd < 1:
         raise Error("strided_copy_bytes: ndim must be positive")
     var dp = _addr_ptr[DType.int64](Int(py=dims_addr))
-    var total = 1
-    for k in range(nd):
-        var s = Int(dp[k])
-        if s < 0:
-            raise Error("strided_copy_bytes: negative dimension")
-        total *= s
+    var total = strided_total(dp, nd)
     if total == 0:
         return PythonObject(0)
     var src = Int(py=src_addr)
@@ -92,14 +60,7 @@ def strided_copy_bytes_binding(
     if isz != 1 and isz != 2 and isz != 4 and isz != 8:
         raise Error("strided_copy_bytes: itemsize must be 1, 2, 4 or 8")
     with GILReleased(Python()):
-        if isz == 1:
-            _strided_copy[DType.uint8](src, dst, dp, nd, total)
-        elif isz == 2:
-            _strided_copy[DType.uint16](src, dst, dp, nd, total)
-        elif isz == 4:
-            _strided_copy[DType.uint32](src, dst, dp, nd, total)
-        else:
-            _strided_copy[DType.uint64](src, dst, dp, nd, total)
+        strided_copy_bytes(src, dst, dp, nd, isz, total)
     return PythonObject(total)
 
 
@@ -112,11 +73,7 @@ def check_lengths_i64_binding(
     if n <= 0:
         return PythonObject(-1)
     var lp = _addr_ptr[DType.int64](Int(py=lengths_addr))
-    for i in range(n):
-        var v = lp.unsafe_load(i)
-        if v < 1 or v > hi:
-            return PythonObject(i)
-    return PythonObject(-1)
+    return PythonObject(check_lengths_i64(lp, n, hi))
 
 
 def ragged_rows_bytes_binding(
@@ -140,25 +97,7 @@ def ragged_rows_bytes_binding(
     var dp = _addr_ptr[DType.uint8](Int(py=dst_addr))
     var sp = _addr_ptr[DType.uint8](Int(py=src_addr))
     with GILReleased(Python()):
-        if m == 0:
-            for i in range(n):
-                var keep = Int(lp.unsafe_load(i)) * pos
-                var base = i * row
-                for k in range(keep):
-                    dp.unsafe_store(base + k, sp.unsafe_load(base + k))
-                for k in range(keep, row):
-                    dp.unsafe_store(base + k, 0)
-        elif m == 1:
-            for i in range(n):
-                var keep = Int(lp.unsafe_load(i)) * pos
-                var base = i * row
-                for k in range(keep, row):
-                    dp.unsafe_store(base + k, 0)
-        else:
-            for i in range(n):
-                var at = i * pos + (Int(lp.unsafe_load(i)) - 1) * row
-                for k in range(row):
-                    dp.unsafe_store(i * row + k, sp.unsafe_load(at + k))
+        ragged_rows_bytes(dp, sp, lp, n, row, pos, m)
     return PythonObject(0)
 
 
@@ -170,19 +109,7 @@ def nsum_f64_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject
     if count <= 0:
         return PythonObject(0.0)
     var p = _addr_ptr[DType.float64](Int(py=addr))
-    var total = 0.0 + p.unsafe_load(0)
-    var c = Float64(0.0)
-    for i in range(1, count):
-        var x = p.unsafe_load(i)
-        var t = total + x
-        if abs(total) >= abs(x):
-            c += (total - t) + x
-        else:
-            c += (x - t) + total
-        total = t
-    if c != 0.0 and c - c == 0.0:
-        total += c
-    return PythonObject(total)
+    return PythonObject(nsum_f64(p, count))
 
 
 def row_means_f64_binding(
@@ -203,111 +130,7 @@ def row_means_f64_binding(
         return PythonObject(0)
     var sp = _addr_ptr[DType.float64](Int(py=src_addr))
     var op = _addr_ptr[DType.float64](Int(py=out_addr))
-    var bad = 0
-    for r in range(nr):  # small-loop(nr: search candidates): one mean per candidate row
-        var terms = List[Float64](capacity=nc)
-        var nan_v = Float64(0.0)
-        var any_nan = False
-        var pinf = False
-        var ninf = False
-        for c in range(nc):  # small-loop(nc: cross-validation splits): one score per split
-            var v = sp.unsafe_load(r * nc + c)
-            if isnan(v):
-                any_nan = True
-                nan_v = v
-            elif isinf(v):
-                if v > 0:
-                    pinf = True
-                else:
-                    ninf = True
-            else:
-                terms.append(v)
-        if pinf and ninf:
-            bad += 1
-            continue
-        var total: Float64
-        if any_nan:
-            total = nan_v
-        elif pinf:
-            total = inf[DType.float64]()
-        elif ninf:
-            total = -inf[DType.float64]()
-        else:
-            total = _exact_sum(terms)
-        op.unsafe_store(r, total / Float64(nc))
-    return PythonObject(bad)
-
-
-comptime _FSUM_DOWN = Float64(1.0) / Float64(18446744073709551616.0)  # 2^-64, exact
-comptime _FSUM_UP = Float64(18446744073709551616.0)  # 2^64, exact
-
-
-def _exact_sum_wide(terms: List[Float64]) -> Float64:
-    """`_exact_sum` without Shewchuk's intermediate overflow: a sum whose
-    partials pass the binary64 range (1e308 + 1e308 - 1e308) is redone with
-    every term scaled by 2^-64, which is exact for each term kept there (its
-    scaled value round-trips), and the rounded sum scaled back. Terms that
-    would lose bits under the scaling (below about 2^-1010) are added
-    unscaled to the scaled-back sum and its exact remainder. Returns +-inf
-    when the exact sum itself is outside the binary64 range (fsum's
-    OverflowError). Off the overflow path this is `_exact_sum`, the same
-    bits."""
-    var s = _exact_sum(terms)
-    if not isinf(s) and not isnan(s):
-        return s
-    var big = List[Float64](capacity=len(terms))
-    var small = List[Float64]()
-    for i in range(len(terms)):  # small-loop(terms: terms of one fsum): every caller sums a k-sized list
-        var w = terms[i] * _FSUM_DOWN
-        if w * _FSUM_UP == terms[i]:
-            big.append(w)
-        else:
-            small.append(terms[i])
-    var b = _exact_sum(big)
-    var up = b * _FSUM_UP
-    if isinf(up) or len(small) == 0:
-        return up
-    # the scaled sum's remainder B - b, then everything at the unscaled scale
-    var rest = big.copy()
-    rest.append(-b)
-    var tail = List[Float64](capacity=len(small) + 2)
-    tail.append(up)
-    tail.append(_exact_sum(rest) * _FSUM_UP)
-    for i in range(len(small)):  # small-loop(small: terms below the scaling range): a subset of one k-sized fsum
-        tail.append(small[i])
-    return _exact_sum(tail)
-
-
-def _fsum_terms(vals: List[Float64], count: Int, mut bad: Bool) -> Float64:
-    """`_portable_math.fsum` of count float64 terms: the last NaN if any,
-    else one kind of infinity, else Shewchuk's exact partials rounded once
-    (`_exact_sum`, a zero sum +0.0); bad = +inf with -inf (fsum's
-    ValueError)."""
-    var terms = List[Float64](capacity=count)
-    var nan_v = Float64(0.0)
-    var any_nan = False
-    var pinf = False
-    var ninf = False
-    for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list (estimator weights, class priors, one candidate's split scores)
-        var v = vals[i]
-        if isnan(v):
-            any_nan = True
-            nan_v = v
-        elif isinf(v):
-            if v > 0:
-                pinf = True
-            else:
-                ninf = True
-        else:
-            terms.append(v)
-    bad = pinf and ninf
-    if any_nan:
-        return nan_v
-    if pinf:
-        return inf[DType.float64]()
-    if ninf:
-        return -inf[DType.float64]()
-    return _exact_sum_wide(terms)
+    return PythonObject(row_means_f64(sp, op, nr, nc))
 
 
 def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonObject) raises -> PythonObject:
@@ -323,27 +146,7 @@ def fsum_f64_binding(src_addr: PythonObject, n: PythonObject, out_addr: PythonOb
         op.unsafe_store(0, Float64(0.0))
         return PythonObject(0)
     var sp = _addr_ptr[DType.float64](Int(py=src_addr))
-    var vals = List[Float64](capacity=count)
-    for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list (estimator weights, class priors)
-        vals.append(sp.unsafe_load(i))
-    var bad = False
-    var t = _fsum_terms(vals, count, bad)
-    if bad:
-        return PythonObject(1)
-    if isinf(t):
-        # an infinite result from finite terms is the exact sum outside the
-        # binary64 range: fsum's OverflowError (the caller raises it)
-        var any_inf = False
-        for i in range(count):  # small-loop(count: terms of one fsum): every caller sums a k-sized list
-            if isinf(vals[i]):
-                any_inf = True
-        if not any_inf:
-            # flagged as status 1 with +inf in out[0] (a -inf + inf leaves
-            # out[0] at the caller's 0.0): the caller raises OverflowError
-            op.unsafe_store(0, t)
-            return PythonObject(1)
-    op.unsafe_store(0, t)
-    return PythonObject(0)
+    return PythonObject(fsum_f64(sp, op, count))
 
 
 def row_stds_f64_binding(
@@ -362,16 +165,9 @@ def row_stds_f64_binding(
     var sp = _addr_ptr[DType.float64](Int(py=src_addr))
     var mp = _addr_ptr[DType.float64](Int(py=means_addr))
     var op = _addr_ptr[DType.float64](Int(py=out_addr))
-    var sq = List[Float64](length=nc, fill=0.0)
-    for r in range(nr):  # small-loop(nr: search candidates): one deviation per candidate row
-        var m = mp.unsafe_load(r)
-        for c in range(nc):  # small-loop(nc: cross-validation splits): one squared deviation per split
-            var d = sp.unsafe_load(r * nc + c) - m
-            sq[c] = pinned_mul_f64(d, d)
-        var bad = False
-        var t = _fsum_terms(sq, nc, bad)
-        op.unsafe_store(r, sqrt(t / Float64(nc)))
+    row_stds_f64(sp, mp, op, nr, nc)
     return PythonObject(0)
+
 
 def class_ratio_f64_host_binding(
     counts_addr: PythonObject, k: PythonObject, n: PythonObject, mode: PythonObject, out_addr: PythonObject,
@@ -394,18 +190,7 @@ def class_ratio_f64_host_binding(
         raise Error("class_ratio_f64: the prior of zero rows")
     var cp = _addr_ptr[DType.int64](Int(py=counts_addr))
     var op = _addr_ptr[DType.float64](Int(py=out_addr))
-    var zeros = 0
-    for c in range(kk):
-        var cnt = Int(cp.unsafe_load(c))
-        if m == 0:
-            if cnt == 0:
-                zeros += 1
-                op.unsafe_store(c, 0.0)
-            else:
-                op.unsafe_store(c, Float64(nn) / Float64(kk * cnt))
-        else:
-            op.unsafe_store(c, Float64(cnt) / Float64(nn))
-    return PythonObject(zeros)
+    return PythonObject(class_ratio_f64(cp, op, kk, nn, m))
 
 
 def shard_topk_merge_f32_host_binding(
@@ -420,8 +205,8 @@ def shard_topk_merge_f32_host_binding(
     float distance (ties by index). `table` is int64[5 * n_shards]: per
     shard the float32 distance address, the int64 local-id address, the
     first and end global rows and the width (columns per query row).
-    Writes the winning float bits and uint32 global indices. Returns 0, 1
-    for a local id outside its shard, 2 for fewer than k candidates."""
+    Writes the winning float bits and uint32 global indices. Returns 0,
+    1 when a local id is outside its shard, 2 for fewer than k candidates."""
     var s_count = Int(py=n_shards)
     var nq = Int(py=n_queries)
     var kk = Int(py=k)
@@ -434,53 +219,5 @@ def shard_topk_merge_f32_host_binding(
     var oi = _addr_ptr[DType.uint32](Int(py=out_idx_addr))
     var rc = 0
     with GILReleased(Python()):
-        var keys = List[UInt64]()
-        var cb = List[UInt32](length=kk, fill=0)
-        var ci = List[UInt32](length=kk, fill=0)
-        for row in range(nq):
-            keys.clear()
-            for r in range(s_count):
-                var dp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(tp[5 * r]))
-                var ip = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(tp[5 * r + 1]))
-                var first = Int(tp[5 * r + 2])
-                var end = Int(tp[5 * r + 3])
-                var width = Int(tp[5 * r + 4])
-                for j in range(width):
-                    var local = Int(ip.unsafe_load(row * width + j))
-                    if local < 0 or local >= end - first:
-                        rc = 1
-                        break
-                    var bits = dp.unsafe_load(row * width + j)
-                    var tw = bits ^ (UInt32(0xFFFFFFFF) if (bits & UInt32(0x80000000)) != 0 else UInt32(0x80000000))
-                    keys.append((UInt64(tw) << 32) | UInt64(first + local))
-                if rc != 0:
-                    break
-            if rc != 0:
-                break
-            if len(keys) < kk:
-                rc = 2
-                break
-            sort(keys)
-            for a in range(kk):
-                var tw = UInt32(keys[a] >> 32)
-                cb[a] = tw ^ (UInt32(0x80000000) if (tw & UInt32(0x80000000)) != 0 else UInt32(0xFFFFFFFF))
-                ci[a] = UInt32(keys[a] & UInt64(0xFFFFFFFF))
-            # estimator.mojo's host insertion sort on the float distance
-            for a in range(1, kk):
-                var tb = cb[a]
-                var tix = ci[a]
-                var dv = bitcast[DType.float32](tb)
-                var b = a - 1
-                while b >= 0:
-                    var dprev = bitcast[DType.float32](cb[b])
-                    if dprev < dv or (dprev == dv and ci[b] <= tix):
-                        break
-                    cb[b + 1] = cb[b]
-                    ci[b + 1] = ci[b]
-                    b -= 1
-                cb[b + 1] = tb
-                ci[b + 1] = tix
-            for j in range(kk):
-                od.unsafe_store(row * kk + j, cb[j])
-                oi.unsafe_store(row * kk + j, ci[j])
+        rc = shard_topk_merge_f32(tp, od, oi, s_count, nq, kk)
     return PythonObject(rc)
