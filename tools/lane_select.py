@@ -532,12 +532,41 @@ def _code_names(fn, module_globals, seen=None, funcs=None):
         for const in code.co_consts:
             if hasattr(const, "co_names"):
                 stack.append(const)
+    # A HELPER IS FOLLOWED ONLY WHEN THE FUNCTION NAMES IT (2026-10-21).
+    # `co_names` holds attribute names too, so `program.run(x)` in the
+    # sequence-tape-program lane left `run` there, `run` is also the harness's
+    # own entry point, and the lane was handed everything the harness's `run`
+    # names: the verifier worker and through it `_verify_all.py` and
+    # `_verify_par.py`, which no lane runs. An attribute cannot call a module
+    # global; only a bare name (or a source that cannot be read) can.
+    bare = _bare_names(fn)
     for name in list(out):
         helper = module_globals.get(name)
+        if bare is not None and name not in bare:
+            continue
         if callable(helper) and hasattr(helper, "__code__") and id(helper) not in seen:
             seen.add(id(helper))
             out |= _code_names(helper, module_globals, seen, funcs)
     return out
+
+
+_BARE_CACHE = {}
+
+
+def _bare_names(fn):
+    """Every name one function's source uses BARE (`ast.Name`, a decorator, a
+    default), or None when the source cannot be read (then every name counts)."""
+    key = id(fn.__code__)
+    if key not in _BARE_CACHE:
+        import inspect
+        import textwrap
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+        except (OSError, TypeError, SyntaxError, IndentationError):
+            _BARE_CACHE[key] = None
+        else:
+            _BARE_CACHE[key] = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    return _BARE_CACHE[key]
 
 
 _FOREIGN_CACHE = {}

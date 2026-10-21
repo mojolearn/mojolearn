@@ -4497,3 +4497,5 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+_ARM = ('import_module', 'mojolearn.tests.test_host_model_kmeans')
