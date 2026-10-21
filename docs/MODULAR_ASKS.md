@@ -119,9 +119,12 @@ supported operations balance, these call sites can return to the ordinary syntax
 cross-vendor and autograd doors, and every host binding's `operator.index` argument read use the same helpers.
 `python/mojolearn/tests/test_native_steady_state.py` holds the caller's input reference counts and the traced bytes per
 call flat for `SmallMLPTrainer.train_step`, the byte-LM `train_step`, `Sequential.fit`, `CausalLM.generate` and both
-`sha256_hex` doors. Measured on the Mac (Mojo 1.0.0, CPython 3.14), quietest of three 200-call windows: SmallMLPTrainer
-12.5 KB to 38 B per call, Sequential.fit 5.2 KB to 26 B, CausalLM.generate 62.7 KB (and two references on the caller's
-ids) to 29 B, the byte-LM `sha256_hex` one reference on the caller's bytes to none. Retaining every array had also hidden
-reads after a local's last use (Mojo destroys a local at its last named use): the decode loop read `logits` by address
-after that point, which showed as nondeterministic sampled tokens once arrays were freed. Every array read by raw address
-now stays alive until the reading call returns.
+`sha256_hex` doors. Measured on the Mac (Mojo 1.0.0, CPython 3.14), quietest of four 200-call windows after 500 warm-up
+calls: SmallMLPTrainer 10.4 KB to 39 B per call, Sequential.fit 3.2 KB to 17 B, CausalLM.generate 59.4 KB and two
+references on the caller's ids to 8 B and none, the byte-LM `sha256_hex` one reference on the caller's bytes to none (the
+byte-LM `train_step` was already flat). `python/mojolearn/tests/test_model_native_lifetime.py` passes for all three
+families. Retaining every array had also hidden reads after a local's last use (Mojo destroys a local at its last named
+use): the decode loop read `logits` by address after that point, which showed as nondeterministic sampled tokens once
+arrays were freed. Every array read by raw address now stays alive until the reading call returns. ParallelCausalLM's
+remote layer states, now freed, release their worker state through a native lifetime owner instead of a Python
+`__del__`, which would have run inside the native calls that drop them.
