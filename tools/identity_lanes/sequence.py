@@ -491,3 +491,110 @@ _batch_decl(_sequence_batch_optimizer("Adamax", (("default", {}), ("decay", dict
     lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)))), "sequence-adamax", revision="expansion-batch-2026-09-28-v1")
 _batch_decl(_sequence_batch_optimizer("NAdam", (("default", {}), ("decay", dict(
     lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True, momentum_decay=0.01)))), "sequence-nadam", revision="expansion-batch-2026-09-28-v1")
+
+
+# ---------------------------------------------------------------- the autograd tape (lane tape-verify, 2026-10-21)
+# One seeded training step through the tape: a Sequential model, a recorded
+# Session and a captured Program, each forward + backward + one optimizer step.
+# Every part is the FNV-1a64 identity digest of one returned host array,
+# computed in Mojo (autograd/model_verify.mojo verify_digest_py through the
+# x_sequence binding, the digest `verify-model` reports); the seeded weights
+# come from the same file's verify_fill_py (Philox4x32-10, exact in float32).
+# Python only passes buffers. Sizes follow tests/autograd_smoke_digests.json's
+# MLP case (64 rows, 6 features, 8 hidden units): a correctness check that runs
+# in seconds, so the routine `verify` scope carries it
+# (python/mojolearn/_verification_profiles.py ROUTINE_TAPE).
+
+def _sequence_tape_binding(ml):
+    return ml._backend.binding("_mojolearn_x_sequence", "identical")
+
+
+def _sequence_tape_digest(B, a):
+    a = np.ascontiguousarray(a)
+    # cpu-route: verification digest of a returned host array, after the run
+    return str(B.verify_digest(a.ctypes.data, a.nbytes))
+
+
+def _sequence_tape_seeded(B, shape, seed, stream):
+    a = np.empty(shape, dtype=np.float32)
+    # cpu-route: verification inputs made in Mojo before the run
+    B.verify_fill(a.ctypes.data, a.size, seed, stream)
+    return a
+
+
+def _sequence_tape_weights(B):
+    """The seeded starting weights of the 6 -> 8 (tanh) -> 1 network."""
+    return [_sequence_tape_seeded(B, shape, 21, k)
+            for k, shape in enumerate(((6, 8), (1, 8), (8, 1), (1, 1)))]  # glue: four buffers
+
+
+@lane("sequence-tape-sequential")
+def _(ml, X, yc, yr, Xh=None):
+    """A Sequential classifier (6 -> 8 relu -> 2, cross-entropy, SGD with
+    momentum) on 64 fixture rows of 6 columns: one epoch of one full batch,
+    unshuffled, so the fit is one forward, one backward on the tape and one
+    optimizer step. Parts: the epoch loss (the forward), the momentum buffer
+    after the first step (exactly the gradient, buf = grad on step one), the
+    updated parameters, and the probabilities on the training and held-out
+    rows."""
+    B = _sequence_tape_binding(ml)
+    x = np.ascontiguousarray(X[:64, :6], dtype=np.float32)
+    y = np.ascontiguousarray(yc[:64], dtype=np.int64)
+    xh = np.ascontiguousarray((X if Xh is None else Xh)[:64, :6], dtype=np.float32)
+    m = ml.Sequential(numeric_mode="identical").linear(8).relu().linear(2)
+    m = m.compile(loss="cross_entropy", optimizer="momentum", lr=0.05, momentum=0.9)
+    m = m.fit(x, y, epochs=1, batch_size=64, shuffle=False, seed=0)
+    d = lambda a: _sequence_tape_digest(B, a)
+    return _fit(dict(loss=d(np.asarray(m.loss_curve_, dtype=np.float32)), grad=d(m._opt_m),
+                     params=d(m.params_), proba=d(m.predict_proba(x)), held_proba=d(m.predict_proba(xh))))
+
+
+@lane("sequence-tape-program")
+def _(ml, X, yc, yr, Xh=None):
+    """The operation tape on a 6 -> 8 (tanh) -> 1 network with seeded
+    weights, on 64 fixture rows of 6 columns and the regression target.
+    Recorded session: forward, MSE loss, backward, every parameter's
+    gradient, one Adam step and the updated parameters. Captured program:
+    the same network captured and run, one epoch of one full unshuffled
+    batch of Program.fit (SGD with momentum: one forward, backward and step),
+    each parameter's momentum buffer (its gradient), the updated parameters
+    and the program's outputs after the step on the training and held-out
+    rows."""
+    B = _sequence_tape_binding(ml)
+    ops = ml.ops
+    x = np.ascontiguousarray(X[:64, :6], dtype=np.float32)
+    y = np.ascontiguousarray(yr[:64], dtype=np.float32).reshape(64, 1)
+    xh = np.ascontiguousarray((X if Xh is None else Xh)[:64, :6], dtype=np.float32)
+    init = _sequence_tape_weights(B)
+    d = lambda a: _sequence_tape_digest(B, a)
+    parts = {}
+    with ops.Session(record=True, numeric_mode="identical") as s:
+        w = [s.tensor(a, requires_grad=True) for a in init]  # glue: four parameters
+        out = s.linear(s.linear(s.tensor(x), w[0], w[1], activation="tanh"), w[2], w[3])
+        loss = s.mse(out, s.tensor(y))
+        parts["tape_out"] = d(s.numpy(out))
+        parts["tape_loss"] = d(s.numpy(loss))
+        s.backward(loss)
+        for k, h in enumerate(w):  # glue: one digest per parameter
+            parts[f"tape_grad{k}"] = d(s.grad(h))
+        s.step(s.optimizer("adam", lr=0.01), w)
+        for k, h in enumerate(w):  # glue: one digest per parameter
+            parts[f"tape_param{k}"] = d(s.numpy(h))
+    with ops.Session(numeric_mode="identical") as s:
+        w = [s.tensor(a) for a in init]  # glue: four parameters
+        xin = s.tensor(np.zeros((64, 6), dtype=np.float32))
+        program = s.capture([xin], [s.linear(s.linear(xin, w[0], w[1], activation="tanh"), w[2], w[3])])
+        parts["prog_out"] = d(program.run(x))
+        opt = s.optimizer("sgd", lr=0.05, momentum=0.9)
+        program.fit(x, targets=y, optimizer=opt, epochs=1, batch_size=64, shuffle=False, seed=0)
+        parts["prog_loss"] = d(np.asarray(program.loss_curve_, dtype=np.float32))
+        for k, h in enumerate(w):  # glue: one digest per parameter
+            parts[f"prog_grad{k}"] = d(s.numpy(s.optimizer_state(opt, h)["momentum_buffer"]))
+            parts[f"prog_param{k}"] = d(s.numpy(h))
+        parts["prog_after"] = d(program.run(x))
+        parts["prog_held"] = d(program.run(xh))
+    return _fit(parts)
+
+
+_batch_decl("n/a:training-step (the lane checks one seeded training step through the tape; its forward "
+            "outputs are train parts, digested whole)", "sequence-tape-sequential", "sequence-tape-program")
