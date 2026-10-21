@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """JSON parsing owned by Mojo, returning ordinary native CPython containers."""
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_contains
+from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
 from core.native_json_impl import json_latin1_bytes, json_peek, json_skip_ws, json_digits_end, json_plain_end
 
 
@@ -15,10 +15,10 @@ struct NativeJSON(Movable):
     def __init__(out self, raw: PythonObject, unique: Bool = False) raises:
         self.unique = unique
         self.bi = Python.import_module("builtins")
-        if self.bi.type(raw) is not self.bi.str and self.bi.type(raw) is not self.bi.bytes and self.bi.type(raw) is not self.bi.bytearray:
+        if py_type(raw) is not self.bi.str and py_type(raw) is not self.bi.bytes and py_type(raw) is not self.bi.bytearray:
             raise Error("TypeError: JSON requires str or bytes")
-        self.raw = raw.encode("utf-8") if Bool(py=self.bi.isinstance(raw, self.bi.str)) else raw
-        self.buf = json_latin1_bytes(String(py=self.raw.decode("latin-1")))
+        self.raw = py_call(raw.encode, "utf-8") if Bool(py=py_call(self.bi.isinstance, raw, self.bi.str)) else raw
+        self.buf = json_latin1_bytes(String(py=py_call(self.raw.decode, "latin-1")))
         self.at = 0
 
     def peek(self) raises -> Int:
@@ -34,7 +34,7 @@ struct NativeJSON(Movable):
         self.at += 1
 
     def literal(mut self, token: String) raises:
-        var bytes = PythonObject(token).encode("ascii")
+        var bytes = py_call(PythonObject(token).encode, "ascii")
         for i in range(len(bytes)):  # driver-loop: over the bytes of one JSON literal
             if self.peek() != Int(py=bytes[i]):
                 raise Error("JSON: invalid literal at " + String(self.at))
@@ -58,29 +58,29 @@ struct NativeJSON(Movable):
         while True:  # driver-loop: over a JSON string's escape segments
             var run_end = json_plain_end(self.buf, self.at)
             if run_end > self.at:
-                bytes.extend(self.raw[self.bi.slice(self.at, run_end)])
+                _ = py_call(bytes.extend, self.raw[py_call(self.bi.slice, self.at, run_end)])
                 self.at = run_end
             var c = self.peek()
             self.at += 1
             if c == 34:
-                parts.append(bytes.decode("utf-8"))
-                return PythonObject("").join(parts)
+                _ = py_call(parts.append, py_call(bytes.decode, "utf-8"))
+                return py_call(PythonObject("").join, parts)
             if c < 32:
                 raise Error("JSON: unterminated string or control byte at " + String(self.at - 1))
             c = self.peek()
             self.at += 1
             if c == 34 or c == 92 or c == 47:
-                bytes.append(c)
+                _ = py_call(bytes.append, c)
             elif c == 98:
-                bytes.append(8)
+                _ = py_call(bytes.append, 8)
             elif c == 102:
-                bytes.append(12)
+                _ = py_call(bytes.append, 12)
             elif c == 110:
-                bytes.append(10)
+                _ = py_call(bytes.append, 10)
             elif c == 114:
-                bytes.append(13)
+                _ = py_call(bytes.append, 13)
             elif c == 116:
-                bytes.append(9)
+                _ = py_call(bytes.append, 9)
             elif c == 117:
                 var cp = self.hex4()
                 # Like JSON's Unicode spelling, keep an unpaired surrogate;
@@ -93,9 +93,9 @@ struct NativeJSON(Movable):
                         cp = 0x10000 + ((cp - 0xD800) << 10) + low - 0xDC00
                     else:
                         self.at = saved
-                parts.append(bytes.decode("utf-8"))
+                _ = py_call(parts.append, py_call(bytes.decode, "utf-8"))
                 bytes.clear()
-                parts.append(self.bi.chr(cp))
+                _ = py_call(parts.append, py_call(self.bi.chr, cp))
             else:
                 raise Error("JSON: invalid escape at " + String(self.at - 1))
 
@@ -124,8 +124,8 @@ struct NativeJSON(Movable):
             if self.peek() < 48 or self.peek() > 57:
                 raise Error("JSON: missing exponent at " + String(self.at))
             self.at = json_digits_end(self.buf, self.at)
-        var text = self.raw[self.bi.slice(start, self.at)]
-        return self.bi.float(text) if floating else self.bi.int(text)
+        var text = self.raw[py_call(self.bi.slice, start, self.at)]
+        return py_call(self.bi.float, text) if floating else py_call(self.bi.int, text)
 
     def value(mut self, depth: Int = 0) raises -> PythonObject:
         if depth >= 1000:
@@ -143,10 +143,10 @@ struct NativeJSON(Movable):
                 return result
             while True:  # driver-loop: over a JSON object's members
                 var key = self.string()
-                if self.unique and Bool(py=result.__contains__(key)):
+                if self.unique and py_contains(result, key):
                     raise Error("JSON: duplicate object key at " + String(self.at))
                 self.take(58)
-                result[key] = self.value(depth + 1)
+                py_setitem(result, key, self.value(depth + 1))
                 self.ws()
                 if self.peek() == 125:
                     self.at += 1
@@ -160,7 +160,7 @@ struct NativeJSON(Movable):
                 self.at += 1
                 return result
             while True:  # driver-loop: over a JSON array's elements
-                result.append(self.value(depth + 1))
+                _ = py_call(result.append, self.value(depth + 1))
                 self.ws()
                 if self.peek() == 93:
                     self.at += 1
@@ -203,7 +203,7 @@ def native_json_read(path: PythonObject) raises -> PythonObject:
         bytes = stream.read_bytes()
     var raw = Python.import_module("builtins").bytearray()
     for i in range(len(bytes)):  # driver-loop: over serialized JSON file bytes for the native parse buffer
-        raw.append(Int(bytes[i]))
+        _ = py_call(raw.append, Int(bytes[i]))
     return native_json_parse(raw)
 
 
@@ -261,7 +261,7 @@ def native_path(value: PythonObject) raises -> PythonObject:
 
 def native_path_exists(path: PythonObject, directory: Bool = False) raises -> Bool:
     try:
-        var mode = Int(py=Python.import_module("os").stat(path).st_mode)
+        var mode = Int(py=py_call(Python.import_module("os").stat, path).st_mode)
         return (mode & 0o170000) == (0o040000 if directory else 0o100000)
     except:
         return False
