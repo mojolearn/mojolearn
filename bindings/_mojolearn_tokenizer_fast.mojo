@@ -21,7 +21,7 @@ THE ADDRESS CONTRACT is the host binding's, so the Python door passes the same b
         the merge loop on the GPU. break_ties_high (the host trainer's negative control) is
         refused here: the Python door sends a sabotage run to the host binding.
     bpe_trained_sizes(handle), bpe_trained_copy(handle, arena, lengths, left, right)
-    bpe_fast_load(ranks_path) -> handle
+    bpe_fast_load(ranks_text) -> handle, from the host binding's bpe_ranks_text of the same tokenizer
     bpe_encode_batch(handle, text_addr, lengths_addr, ids_addr, counts_addr,
                      [n_docs, n_bytes, out_cap, allow_endoftext])
         allow_endoftext must be False (the door sends True to the host binding) and out_cap
@@ -38,7 +38,7 @@ from tokenizer.fast.bpe_fast_impl import (
     FastTrainedHandle,
     bpe_fast_flag_list,
     fast_bpe_encode_batch_into,
-    fast_bpe_load,
+    fast_bpe_load_text,
     fast_bpe_train_fill,
     fast_bpe_trained_copy_into,
 )
@@ -133,12 +133,13 @@ def bpe_trained_copy_binding(
     return PythonObject(v.n_tokens())
 
 
-def bpe_fast_load_binding(ranks_path: PythonObject) raises -> PythonObject:
-    """The host loader's parse of the caller's rank file, into this binding's own handle."""
-    var rp = String(py=ranks_path)
+def bpe_fast_load_binding(ranks_text: PythonObject) raises -> PythonObject:
+    """The canonical rank text of a loaded tokenizer (the host binding's `bpe_ranks_text`),
+    parsed into this binding's own handle."""
+    var text = String(py=ranks_text)
     var handle = FastBpeHandle()
     with GILReleased(Python()):
-        fast_bpe_load(handle, rp)
+        fast_bpe_load_text(handle, text)
     return PythonObject(alloc=handle^)
 
 

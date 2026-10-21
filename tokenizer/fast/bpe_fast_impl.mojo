@@ -18,7 +18,8 @@ by vocab_size, as the host trainer writes it.
 """
 from std.memory import memcpy
 
-from tokenizer.encoding import BpeTokenizer, load_bpe_tokenizer_from
+from tokenizer.encoding import BpeTokenizer
+from tokenizer.impl.ranks import parse_rank_table
 from tokenizer.impl.pretokenize import pretokenize
 from tokenizer.impl.unicode_class import UnicodeClasses, builtin_unicode_classes
 from tokenizer.train.bpe_train import PieceGroups, TrainedVocabulary
@@ -181,9 +182,10 @@ def fast_vocab_from_merges(merges: BpeMerges, n_groups: Int) raises -> TrainedVo
 # The entries, one per shell function.
 
 
-def fast_bpe_load(mut handle: FastBpeHandle, rp: String) raises:
-    """`bpe_fast_load`'s work: the host loader's parse of the caller's rank file."""
-    handle.tok = load_bpe_tokenizer_from(rp)
+def fast_bpe_load_text(mut handle: FastBpeHandle, text: String) raises:
+    """`bpe_fast_load`'s work: the host loader's parse (`parse_rank_table`) of the canonical rank
+    text the host binding renders for the same tokenizer, with the compiled-in Unicode classes."""
+    handle.tok = BpeTokenizer(parse_rank_table(text, "<rank text>"), builtin_unicode_classes())
 
 
 def fast_bpe_train_fill(
