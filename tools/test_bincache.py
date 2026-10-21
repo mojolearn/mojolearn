@@ -184,8 +184,11 @@ class KeyTests(unittest.TestCase):
         (self.repo / "bindings/build_fake_host.sh").write_text(
             '#!/bin/sh\nexec sh "$(dirname -- "$0")/build_host_family.sh" fake "$@"\n')
         (self.repo / "bindings/build_host_family.sh").write_text(
-            'source_file="bindings/_mojolearn_${family}_host.mojo"\n'
-            'pixi run mojo build -j 2 --emit shared-lib "$@" -I . -I bindings \\\n    "$source_file" -o x\n')
+            'entry_file="bindings/entry/entry__mojolearn_${family}_host.mojo"\n'
+            'pixi run mojo build -j 2 --emit shared-lib "$@" -I . -I bindings \\\n    "$entry_file" -o x\n')
+        (self.repo / "bindings/entry").mkdir()
+        (self.repo / "bindings/entry/entry__mojolearn_fake_host.mojo").write_text(
+            "from _mojolearn_fake_host import build_fake\n")
         (self.repo / "bindings/_mojolearn_fake_host.mojo").write_text("from core.g import g\n")
         src, rels = bc.source_digest(self.repo, self.repo / "bindings/build_fake_host.sh", [])
         self.assertEqual(src["scope"], "closure")
