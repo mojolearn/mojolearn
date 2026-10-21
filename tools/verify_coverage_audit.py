@@ -772,7 +772,11 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "sequence-export-roundtrip", "sequence-onnx-import",
                        "transformer-decode-load-state", "safetensors-widen-f16",
                        "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill",
-                       "sequence-device-tensor"})
+                       "sequence-device-tensor",
+                       # lane verify-coverage-owed (2026-10-21)
+                       "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
+                       "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
+                       "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -790,6 +794,22 @@ NEW_LANE_PURPOSE = {
                       "the host column (`ivf_out_of_bounds_distance`)",
     "sequence-device-tensor": "resident sequence tensors (`seq_tensor_alloc`, `seq_tensor_upload`, "
                               "`seq_tensor_download`, `seq_tensor_copy`) through RMSprop",
+    "mamba2-decode-session": "Mamba2Block's resident decode session: step, sync_state and load_state "
+                             "(`mamba2_session_open`, `mamba2_session_export_state`, `mamba2_session_load_state`)",
+    "mamba3-decode-session": "Mamba3Block's resident decode session: step, sync_state and load_state "
+                             "(`mamba3_session_open`, `mamba3_session_step`, `mamba3_session_export_state`, "
+                             "`mamba3_session_load_state`)",
+    "training-chunked-lm-head": "training.chunked_lm_head_loss with and without gradients: "
+                                "`chunked_lm_head_v2_loss`, `chunked_lm_head_v2_train`",
+    "training-mlp-sessions": "training.mlp_inference_sessions: `mlp_sessions`",
+    "samba-optimizer-state": "SambaStack state_dict / load_state_dict on an open resident optimizer slot "
+                             "(`optimizer_resident_download`, `optimizer_resident_upload`) and "
+                             "optimizer.maximize (`optimizer_resident_step_io`)",
+    "sequence-optimizer-state": "NAdam and RMSprop state_dict / load_state_dict: `seq_optimizer_export`, "
+                                "`seq_optimizer_import`",
+    "x-huber-outliers": "HuberRegressor.outliers_ (`py2mojo_rows` ROWS_HUBER_OUT)",
+    "x-sgd-clf-proba": "SGDClassifier.predict_proba (`py2mojo_rows` ROWS_SGD_PROBA)",
+    "x-logistic-cv-proba": "LogisticRegressionCV.predict_proba (`py2mojo_rows` ROWS_LRCV_PROBA)",
 }
 
 _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
@@ -798,12 +818,18 @@ _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
                  "SmallByteLanguageModelTrainer step; on a GPU install byte_lm_trainer_step runs the "
                  "same session ops inside Mojo")
 _DEAD_KIT = "n/a: no live caller (the _expansion_decomp helper that calls it is never called)"
-_MIGRATION_TRAINING = ("owed", [], "migration lane on python/mojolearn/_training_impl.py (running): "
-                       "lane owed after it lands; tools/lane_accounting.py DECLARED_LANELESS already "
-                       "names training.chunked_lm_head_loss and training.mlp_inference_sessions")
-_MIGRATION_MAMBA = ("owed", [], "migration lane on python/mojolearn/_mamba_impl.py and mamba/ (running): "
-                    "mamba2-decode-session and mamba3-decode-session lanes owed after it lands "
-                    "(mamba1-decode-session is the template)")
+# lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
+# owed, each checked in the source after they landed.
+_MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "
+                  "binding entry from Mojo (Mamba2Block._decode_session / Mamba3Block._decode_session -> "
+                  "mamba_native_call 'session_open', 'session_step', 'session_sync', 'session_load')")
+_SAMBA_OWNER = ("the native Samba owner (bindings/samba_*_native.mojo) is handed the entry at import "
+                "(_native_samba_bridge.connect) and calls it by name")
+_FAST_LINEAR = "n/a: fast tier only (Apple): registered for OLS_FAST_NORMAL_EQ / RIDGE_FAST_RESIDENT, which " \
+               "need numeric_mode fast on an Apple GPU; the verifier refuses a fast process"
+_HOST_SLOT = ("n/a: no live caller on a CPU install: the optimizer door moves its slots through its own "
+              "kernels (keep_slot records the door's module as the owner), and SambaStack opens no slot on "
+              "the host binding, which exports no optimizer_resident_step (_samba_open_optimizer)")
 
 #: entry -> (status, lanes, why), read by hand where the static reach cannot
 #: see the call (a worker process, a native owner handed the entry, a class
@@ -843,13 +869,70 @@ ANNOTATIONS = {
                               "run through ops_session_call)"),
     "onnx_from_words": ("n/a", [], "the torch.export import path: needs torch, which a verifier run never "
                                    "has; the ONNX path is sequence-onnx-import"),
-    **{e: _MIGRATION_TRAINING for e in ("chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
-                                        "samba_head_loss", "mlp_sessions", "neural_rng",
-                                        "optimizer_finalize")},
-    **{e: _MIGRATION_MAMBA for e in ("mamba2_session_export_state", "mamba2_session_load_state",
-                                     "mamba2_session_open", "mamba3_session_export_state",
-                                     "mamba3_session_load_state", "mamba3_session_open",
-                                     "mamba3_session_step")},
+    **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
+       for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
+    **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
+       for e in ("mamba3_session_export_state", "mamba3_session_load_state", "mamba3_session_open",
+                 "mamba3_session_step")},
+    "samba_head_loss": ("covered", ["samba-untied-dropout-accum"],
+                        _SAMBA_OWNER + ": samba_gradients runs the fused head (`fused`) whenever the "
+                        "resident Samba step does not take the step (dropout or accumulation) and the "
+                        "chunked head is off; the fused tail that would replace it is Apple FAST only "
+                        "(AFN_SAMBA_FUSE). The row is the GPU binding's"),
+    "neural_rng": ("covered", ["samba", "samba-untied-dropout-accum"],
+                   _SAMBA_OWNER + ": samba_construct draws every random weight from the stack's Generator "
+                   "through it and _samba_dropout draws the masks (samba-untied-dropout-accum)"),
+    "lr_schedule_exact": ("covered", ["samba-untied-dropout-accum"],
+                          _SAMBA_OWNER + " (`exact_schedule`): samba_schedule_rate evaluates the stack's "
+                          "WarmupCosineLR at every step through it"),
+    "lr_schedule_exact_block": ("n/a", [], "no live caller: _Schedule._exact_params names it and its one "
+                                           "reader, _lr_at_slow, discards the name; exact_block runs inside "
+                                           "lr_spec_fill (lr_schedule_at / lr_schedule_series), which the "
+                                           "optim-* and sequence-lr-schedulers lanes cover"),
+    "lr_schedule_fill": ("n/a", [], "no live caller in the runtime: _lr_fill's one caller is OneCycleLR."
+                                    "_lr_at_slow, the exact-route reference tools/sched_table_check.py holds "
+                                    "lr_at to; lr_at and lr_values run lr_schedule_at / lr_schedule_series "
+                                    "(the same lr_spec_fill), which the optim-* and sequence-lr-schedulers "
+                                    "lanes cover"),
+    "optimizer_finalize": ("n/a", [], "a finalizer: Optimizer.__del__ closes the resident slot through the "
+                                      "owning module's optimizer_resident_close and returns None; nothing it "
+                                      "writes is a value a part could hash"),
+    "optimizer_maximize_dev": ("n/a", [], "a capability probe returning a build constant; its one caller "
+                                          "(samba_train_step) tests its presence only, and the maximized "
+                                          "step it selects is optimizer_resident_step_io"),
+    "optimizer_resident_step_io": ("covered", ["samba-optimizer-state"],
+                                   _SAMBA_OWNER + ": samba_train_step steps a resident slot through it "
+                                   "when the optimizer maximizes (or holds device parameters); the lane "
+                                   "sets optimizer.maximize on a stack with dropout, so the resident Samba "
+                                   "step does not take it"),
+    "linear_gram_fit": ("covered", ["ridge", "ridge-no-intercept"],
+                        "the native classical owner (bindings/classical_ridge.mojo) is handed it at connect "
+                        "(_native_classical_bridge); Ridge.fit on more than one column without weights "
+                        "takes it whenever linear_gram_solve_default (LINEAR_GRAM_SOLVE, on in identical)"),
+    "ols_predict": ("covered", ["ols", "ridge", "ols-no-intercept", "ridge-no-intercept"],
+                    "the native classical owner's classical_linear_predict calls it for every "
+                    "LinearRegression and Ridge predict (_native_classical_bridge connect)"),
+    "x_decomp_ols_tsqr_r": ("covered", ["ols"],
+                            "the native classical owner (bindings/classical_ols.mojo) calls it through the "
+                            "connected decomp entries for an unweighted LinearRegression.fit with an "
+                            "intercept and at most 511 columns"),
+    "ols_fit_resident": ("n/a", [], _FAST_LINEAR),
+    "ridge_fit_resident": ("n/a", [], _FAST_LINEAR),
+}
+
+#: (entry, binding source) -> (status, lanes, why): a row whose answer
+#: differs between a GPU binding and its host twin.
+ANNOTATIONS_BY_SRC = {
+    **{(e, "bindings/_mojolearn_training_host.mojo"): ("n/a", [], _HOST_SLOT)
+       for e in ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_download",
+                 "optimizer_resident_upload")},
+    **{(e, "bindings/_mojolearn_training.mojo"): (
+        "covered", ["samba-optimizer-state", "samba"],
+        _SAMBA_OWNER + ": _samba_open_optimizer opens the slot (optimizer_resident_open), the snapshot "
+        "downloads it (state_dict), the publish uploads into it (load_state_dict) and finalization closes "
+        "it; the optimizer door's own slots move through its kernels instead")
+       for e in ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_download",
+                 "optimizer_resident_upload")},
 }
 
 #: (public, op) -> (status, lanes, why) for the public methods.
@@ -867,6 +950,12 @@ GATE_DEFINES = frozenset({"MOJOLEARN_HOST_SABOTAGE"})
 
 def triage(row):
     """(status, lanes, why) for one native row."""
+    key = (row["entry"], row["src"])
+    if key in ANNOTATIONS_BY_SRC:
+        status, lanes, why = ANNOTATIONS_BY_SRC[key]
+        if status == "n/a":
+            return status, [], why
+        return status, sorted(set(lanes) | set(row["lanes_precise"])), why
     if row["entry"] in ANNOTATIONS:
         status, lanes, why = ANNOTATIONS[row["entry"]]
         return status, sorted(set(lanes) | set(row["lanes_precise"])), why
@@ -904,14 +993,6 @@ def sabotage_of(row):
     pending = [n for n in row["changed_kernel"] if _sab_na(n) is None]
     if not pending:
         return "n/a", _sab_na(row["changed_kernel"][0])
-    if all(n.startswith("core/py2mojo_rows.mojo:") for n in pending):
-        return "owed", ("rows_call's faulted values (the Huber threshold, the SGD and LogisticRegressionCV "
-                        "probability modes) reach no hashed part until lanes for HuberRegressor.outliers_ and "
-                        "SGD/LogisticRegressionCV predict_proba exist; python/mojolearn/linear_model.py belongs "
-                        "to a running migration lane, so the lanes and the arm are owed after it lands")
-    if all(n.startswith("mamba/") for n in pending):
-        return "owed", ("migration lane on mamba/ (running): the arm for " + pending[0]
-                        + " is owed after it lands")
     return "owed", "no arm reaches " + pending[0]
 
 
@@ -965,7 +1046,7 @@ def render_markdown(audit, path):
       f"catches. Range `{audit['base']}..{audit['head']}`. Generated by `tools/verify_coverage_audit.py` "
       f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
       f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
-      f"the `ANNOTATIONS` table in that file, each checked in the source.")
+      f"the `ANNOTATIONS` and `ANNOTATIONS_BY_SRC` tables in that file, each checked in the source.")
     w("")
     w("Regenerate:")
     w("")
@@ -1014,7 +1095,8 @@ def render_markdown(audit, path):
     w("")
     w("Each ran 9 of 9 fixtures STABLE at `--repeats 2` on the Mac (Metal) build of integ/20261021; "
       "parts are Mojo FNV-1a64 digests (`verify_digest`). Declared in their family's training lanes with "
-      "the pending reason `no reference`.")
+      "the pending reason `no reference`. The lanes lane verify-coverage-owed added ran with that lane's "
+      "Python package over the same build.")
     w("")
     for lane in sorted(NEW_LANES):
         w(f"- `{lane}`: {NEW_LANE_PURPOSE[lane]}")
@@ -1047,12 +1129,17 @@ def render_markdown(audit, path):
         names = sorted({r["entry"] for r, t in owed if t[2] == why})
         w(f"- {', '.join(f'`{n}`' for n in names)}: {why}")
     gaps = [r for r, t, _ in tri if t[0] == "GAP"]
+    if not owed and not gaps:
+        w("Native entries: none.")
     if gaps:
         w(f"- GAP (no lane, no reason): {', '.join(sorted({r['entry'] for r in gaps}))}")
     sab_owed = defaultdict(set)
     for r, t, (ss, txt) in tri:
         if ss == "owed" and not t[0].startswith("n/a"):
             sab_owed[txt].add(r["entry"])
+    if not sab_owed:
+        w("")
+        w("Sabotage arms: none.")
     if sab_owed:
         w("")
         w("Sabotage arms still owed:")
