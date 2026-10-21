@@ -67,13 +67,13 @@ def classical_tag_plan(context: PythonObject) raises -> PythonObject:
     var fields = py_call(b.object.__getattribute__, module, "__dict__")
     var records = Python.list()
     var classes = Python.tuple("TargetTags", "InputTags", "RegressorTags", "Tags")
-    for k in range(len(classes)):  # small-loop(the four sklearn tag record type names)
+    for k in range(len(classes)):  # small-loop(4: sklearn tag record type names): the four standard records
         var cls = py_get(fields, classes[k])
         if cls is None:
             raise Error("ImportError: sklearn.utils lacks " + String(classes[k]))
         py_call(records.append, cls)
     var built = Python.list()
-    for k in range(len(records)):  # small-loop(the four sklearn tag record types)
+    for k in range(len(records)):  # small-loop(4: sklearn tag record types): the four standard records
         py_call(built.append, _tag_record_plan(records[k], records, context))
     plan = py_call(b.tuple, built)
     py_setitem(context, "classical_tag_plan", plan)
