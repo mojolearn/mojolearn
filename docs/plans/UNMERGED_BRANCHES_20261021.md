@@ -40,6 +40,8 @@ its sha. Before retiring any branch whose sha EXPERIMENTS.md or TOMBSTONES.md ci
   Untried candidates as "NOT on main", never measured. Porting it means merging main into the branch (it is 7358 commits
   behind), compiling on the M2, then running the bpe-train and bpe-encode enwik8 A/Bs on the M3. The same code also sits inside
   the aggregate lanes `lane/apple-fast-batch` and `lane/apple-fast-af-all`. Port from apple-fast-bpe only.
+  PORTED 2026-10-21 by lane/port-apple-fast-bpe (code at 870a8c1b0, thin-shell layout); the M3 A/Bs are still owed
+  (docs/apple-fast/ab/bpe.txt). The branch itself can retire once that lane is on main.
 
 The (d) branches may also hold work main lacks, but no doc gives a verdict:
 
