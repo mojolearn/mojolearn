@@ -13,11 +13,8 @@ runs x_decomp/nmf_dev.mojo, the same statements on resident matrices.
 A zero first error (`err0`) made Python's convergence ratio raise
 ZeroDivisionError; the drivers return NMF_ZERO_ERR0 and the caller raises it."""
 from experiments.classical_identical_ideas.linear_controls import C26_PRODUCTS, C26_UPDATE_FUSED
-from x_decomp.cells import OP_CLASSICAL_MU_IS
+from x_decomp.cells import F32Ptr, OP_CLASSICAL_MU_IS
 from std.math import sqrt
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,
@@ -246,50 +243,37 @@ def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
     return it
 
 
-def _nmf_args(p: PythonObject, f: PythonObject) raises -> NmfArgs:
-    """p = [n, d, nc, solver (0 cd, 1 mu), update_H, max_iter, shuffle,
-    seed & 0xFFFFFFFF]; f = [beta, tol, l1W, l1H, l2W, l2H]."""
-    var fv = List[Float64]()
-    for i in range(6):  # small-loop(i: six float parameters): Python parameter words, not data
-        fv.append(Float64(py=f[i]))
-    if fv[0] != 2.0 and fv[0] != 1.0 and fv[0] != 0.0:
+def nmf_args_checked(beta: Float64, update_h: Bool, max_iter: Int, tol: Float64, l1w: Float64, l1h: Float64,
+                     l2w: Float64, l2h: Float64, shuffle: Bool, seed: Int) raises -> NmfArgs:
+    """NmfArgs from the solver's scalars; beta must be 2, 1 or 0."""
+    if beta != 2.0 and beta != 1.0 and beta != 0.0:
         raise Error("x_decomp: nmf beta is 2, 1 or 0")
-    return NmfArgs(fv[0], Int(py=p[4]) != 0, Int(py=p[5]), fv[1], fv[2], fv[3], fv[4], fv[5],
-                   Int(py=p[6]) != 0, Int(py=p[7]))
+    return NmfArgs(beta, update_h, max_iter, tol, l1w, l1h, l2w, l2h, shuffle, seed)
 
 
-def nmf_solve_py[E: Exec](
-    x: PythonObject, w: PythonObject, h: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`NMF._cd` / `_mu` over x (n x d): w (n x nc) and h (nc x d) replaced
-    in place (h only when update_H). Returns the iteration count, or
+def nmf_solve_run[E: Exec](
+    px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs
+) raises -> Int:
+    """`NMF._cd` (solver 0) / `_mu` over x (n x d): w (n x nc) and h (nc x d)
+    replaced in place (h only when update_H). Returns the iteration count, or
     NMF_ZERO_ERR0 (the caller raises ZeroDivisionError)."""
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var nc = _n(p, 2)
-    var solver = Int(py=p[3])
     if n * d > 2147483647 or n * nc > 2147483647 or nc * d > 2147483647:
         raise Error("x_decomp: nmf shape out of range")
-    var a = _nmf_args(p, f)
     if solver == 0 and a.beta != 2.0:
         raise Error("x_decomp: nmf cd takes beta 2")
-    var px = _f(x)
-    var pw = _f(w)
-    var ph = _f(h)
     var it = 0
-    with GILReleased(Python()):
-        var X = mat_from(px, n, d)
-        var W = mat_from(pw, n, nc)
-        var H = mat_from(ph, nc, d)
-        if solver == 0:
-            it = nmf_cd[E](X, W, H, a)
-        else:
-            it = nmf_mu[E](X, W, H, a)
-        for i in range(n * nc):
-            pw.unsafe_store(i, W.d[i])
-        for i in range(nc * d):
-            ph.unsafe_store(i, H.d[i])
-    return PythonObject(it)
+    var X = mat_from(px, n, d)
+    var W = mat_from(pw, n, nc)
+    var H = mat_from(ph, nc, d)
+    if solver == 0:
+        it = nmf_cd[E](X, W, H, a)
+    else:
+        it = nmf_mu[E](X, W, H, a)
+    for i in range(n * nc):
+        pw.unsafe_store(i, W.d[i])
+    for i in range(nc * d):
+        ph.unsafe_store(i, H.d[i])
+    return it
 
 
 def _nrm_or0(v: Float64) -> Float64:
@@ -361,28 +345,18 @@ def _vnorm[E: Exec](k: Kit[E], v: Mat) raises -> Float64:
     return k.word(k.ew1(OP_SQRT, k.total(k.ew1(OP_SQ, v, 0.0)), 0.0))
 
 
-def nmf_nndsvd_py[E: Exec](
-    u: PythonObject, s: PythonObject, vt: PythonObject, w: PythonObject, h: PythonObject, p: PythonObject
-) raises -> PythonObject:
+def nmf_nndsvd_run[E: Exec](
+    pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int
+) raises -> Int:
     """`nmf_nndsvd` over u (n x r), s (r), vt (r x d); w (n x nc) and h
-    (nc x d) written. p = [n, d, r, nc]."""
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var r = _n(p, 2)
-    var nc = _n(p, 3)
+    (nc x d) written. Returns nc."""
     if nc > r or n * r > 2147483647 or r * d > 2147483647 or n * nc > 2147483647:
         raise Error("x_decomp: nndsvd shape out of range")
-    var pu = _f(u)
-    var ps = _f(s)
-    var pv = _f(vt)
-    var pw = _f(w)
-    var ph = _f(h)
-    with GILReleased(Python()):
-        var W = Mat(0, 0)
-        var H = Mat(0, 0)
-        nmf_nndsvd[E](mat_from(pu, n, r), mat_from(ps, 1, r), mat_from(pv, r, d), nc, W, H)
-        for i in range(n * nc):
-            pw.unsafe_store(i, W.d[i])
-        for i in range(nc * d):
-            ph.unsafe_store(i, H.d[i])
-    return PythonObject(nc)
+    var W = Mat(0, 0)
+    var H = Mat(0, 0)
+    nmf_nndsvd[E](mat_from(pu, n, r), mat_from(ps, 1, r), mat_from(pv, r, d), nc, W, H)
+    for i in range(n * nc):
+        pw.unsafe_store(i, W.d[i])
+    for i in range(nc * d):
+        ph.unsafe_store(i, H.d[i])
+    return nc
