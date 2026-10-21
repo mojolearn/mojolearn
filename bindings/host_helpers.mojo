@@ -23,18 +23,21 @@ them). `bindings/_mojolearn.mojo` and `bindings/_mojolearn_byte_lm_host.mojo`
 are not changed and keep their own copies, so neither certified artifact
 moves. A change to one of these bodies belongs in all three places.
 """
-from std.math import isfinite
-from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from core.host_parallel import host_parallelize
-
 from bindings.hostptr import f32_ptr, f64_ptr
-from core.host_predict_threads import (
-    host_list_ptr_u32,
-    host_predict_chunk,
-    host_predict_task_count,
+from core.host_helpers_impl import (
+    all_finite_f32,
+    all_finite_f64,
+    argmax_last_rows_f32,
+    argmax_rows_f32,
+    argmax_rows_f64,
+    cast_f64_to_f32,
+    gather_f64,
+    gather_i64,
+    gather_rows_bytes,
+    probability_rows_f32,
 )
 
 
@@ -52,10 +55,7 @@ def all_finite_f32_binding(addr: PythonObject, n: PythonObject) raises -> Python
         raise Error("all_finite_f32: n must be non-negative, got " + String(count))
     var ok: Int = 1
     with GILReleased(Python()):
-        for i in range(count):
-            if not isfinite(p.unsafe_load(i)):
-                ok = 0
-                break
+        ok = all_finite_f32(p, count)
     return PythonObject(ok)
 
 
@@ -67,10 +67,7 @@ def all_finite_f64_binding(addr: PythonObject, n: PythonObject) raises -> Python
         raise Error("all_finite_f64: n must be non-negative, got " + String(count))
     var ok: Int = 1
     with GILReleased(Python()):
-        for i in range(count):
-            if not isfinite(p.unsafe_load(i)):
-                ok = 0
-                break
+        ok = all_finite_f64(p, count)
     return PythonObject(ok)
 
 
@@ -85,15 +82,7 @@ def cast_f64_to_f32_binding(src_addr: PythonObject, dst_addr: PythonObject,
     var sp = f64_ptr(Int(py=src_addr))
     var dp = f32_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        var i = 0
-        var body = count - (count % 8)
-        while i < body:
-            var v = sp.unsafe_load[width=8](i)
-            dp.unsafe_store[width=8](i, v.cast[DType.float32]())
-            i += 8
-        while i < count:
-            dp.unsafe_store(i, sp.unsafe_load(i).cast[DType.float32]())
-            i += 1
+        cast_f64_to_f32(sp, dp, count)
     return PythonObject(0)
 
 
@@ -117,14 +106,7 @@ def gather_i64_binding(
     var dp = _i64_ptr(Int(py=dst_addr))
     var bad = False
     with GILReleased(Python()):
-        for i in range(count):
-            var c = Int(cp.unsafe_load(i))
-            if c < 0 or c >= nt:
-                bad = True
-                break
-        if not bad:
-            for i in range(count):
-                dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
+        bad = gather_i64(tp, nt, cp, count, dp)
     if bad:
         raise Error("gather_i64: code out of range")
     return PythonObject(0)
@@ -148,14 +130,7 @@ def gather_f64_binding(
     var dp = f64_ptr(Int(py=dst_addr))
     var bad = False
     with GILReleased(Python()):
-        for i in range(count):
-            var c = Int(cp.unsafe_load(i))
-            if c < 0 or c >= nt:
-                bad = True
-                break
-        if not bad:
-            for i in range(count):
-                dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
+        bad = gather_f64(tp, nt, cp, count, dp)
     if bad:
         raise Error("gather_f64: code out of range")
     return PythonObject(0)
@@ -184,16 +159,7 @@ def gather_rows_bytes_binding(
     var idx = _i64_ptr(Int(py=indices_addr))
     var invalid = False
     with GILReleased(Python()):
-        # Validate all indices before any output mutation.
-        for r in range(no):
-            var index = Int(idx.unsafe_load(r))
-            if index < 0 or index >= ns:
-                invalid = True
-                break
-        if not invalid:
-            for r in range(no):
-                var index = Int(idx.unsafe_load(r))
-                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+        invalid = gather_rows_bytes(src, dst, idx, ns, no, width)
     if invalid:
         raise Error("gather_rows_bytes: row index out of bounds")
     return PythonObject(0)
@@ -219,16 +185,7 @@ def argmax_rows_f32_binding(
         raise Error("argmax_rows_f32: null buffer address")
     var dp = _i64_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        for r in range(rows):
-            var base = r * cols
-            var best = 0
-            var best_value = sp.unsafe_load(base)
-            for c in range(1, cols):
-                var value = sp.unsafe_load(base + c)
-                if value > best_value:
-                    best = c
-                    best_value = value
-            dp.unsafe_store(r, Int64(best))
+        argmax_rows_f32(sp, rows, cols, dp)
     return PythonObject(0)
 
 
@@ -248,16 +205,7 @@ def argmax_rows_f64_binding(
         raise Error("argmax_rows_f64: null buffer address")
     var dp = _i64_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        for r in range(rows):
-            var base = r * cols
-            var best = 0
-            var best_value = sp.unsafe_load(base)
-            for c in range(1, cols):
-                var value = sp.unsafe_load(base + c)
-                if value > best_value:
-                    best = c
-                    best_value = value
-            dp.unsafe_store(r, Int64(best))
+        argmax_rows_f64(sp, rows, cols, dp)
     return PythonObject(0)
 
 
@@ -284,16 +232,7 @@ def argmax_last_rows_f32_binding(
     var sp = f32_ptr(Int(py=logits_addr))
     var dp = _i64_ptr(Int(py=dst_addr))
     with GILReleased(Python()):
-        for r in range(b):
-            var base = (r * l + l - 1) * v
-            var best = 0
-            var best_value = sp.unsafe_load(base)
-            for c in range(1, v):
-                var value = sp.unsafe_load(base + c)
-                if value > best_value:
-                    best = c
-                    best_value = value
-            dp.unsafe_store(r, Int64(best))
+        argmax_last_rows_f32(sp, b, l, v, dp)
     return PythonObject(0)
 
 
@@ -329,41 +268,7 @@ def probability_rows_f32_binding(
         dst = f32_ptr(Int(py=dst_addr))
     var combined = UInt32(0)
     with GILReleased(Python()):
-        var tasks = host_predict_task_count(nr)
-        if nr * nc < 32768:
-            tasks = 1
-        var chunk = host_predict_chunk(nr, tasks)
-        var flags = List[UInt32](length=tasks, fill=UInt32(0))
-        var fp = host_list_ptr_u32(flags)
-
-        def _rows(task: Int) {imm src, imm dst, imm nr, imm nc, imm bin, imm chunk, imm fp}:
-            var lo = task * chunk
-            var hi = min(lo + chunk, nr)
-            var bits = UInt32(0)
-            for r in range(lo, hi):
-                var total = Float64(0)
-                for c in range(nc):
-                    var p = src.unsafe_load(r * nc + c)
-                    if not isfinite(p):
-                        bits |= UInt32(1)
-                    if p < 0 or p > 1:
-                        bits |= UInt32(2)
-                    total += Float64(p)
-                    if bin == 1:
-                        dst.unsafe_store(2 * r, Float32(1) - p)
-                        dst.unsafe_store(2 * r + 1, p)
-                if bin == 0:
-                    var error = total - Float64(1)
-                    if abs(error) > Float64(0.00034526697709225118):
-                        bits |= UInt32(4)
-            fp.unsafe_store(task, bits)
-
-        if tasks == 1:
-            _rows(0)
-        else:
-            host_parallelize(_rows, tasks)
-        for task in range(tasks):
-            combined |= flags[task]
+        combined = probability_rows_f32(src, dst, nr, nc, bin)
     if (combined & UInt32(1)) != 0:
         return PythonObject(1)
     if (combined & UInt32(2)) != 0:
