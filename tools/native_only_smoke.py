@@ -75,7 +75,7 @@ def closure(root, source):
         # can mention Python legitimately, so remove them for this check.
         code = re.sub(r'(?s)""".*?"""|\'\'\'.*?\'\'\'', "", text)
         code = "\n".join(line.split("#", 1)[0] for line in code.splitlines())
-        if re.search(r"\bPythonObject\b|\bPython\s*\.|\b_?Py(?:_[A-Za-z]\w*|[A-Z][A-Za-z0-9]*_[A-Za-z0-9_]+)\b", code):
+        if re.search(r"\bPythonObject\b|\bPython\s*\.\s*[A-Za-z_]\w*\s*\(|\b_?Py(?:_[A-Za-z]\w*|[A-Z][A-Za-z0-9]*_[A-Za-z0-9_]+)\b", code):
             errors.append(f"{relative}: Python interop in native-only closure")
     return {p.relative_to(root).as_posix(): h for p, h in sorted(seen.items())}, sorted(set(errors))
 
@@ -167,7 +167,8 @@ def coverage_debt(manifest, backend):
         if backend not in row.get("backends", ["cpu", "metal", "cuda", "hip"]):
             continue
         witnesses = [c for c in row.get("cases", []) if c in cases
-                     and row["algorithm"] in cases[c]["algorithms"]]
+                     and row["algorithm"] in cases[c]["algorithms"]
+                     and cases[c].get("whole_operation", False)]
         if row.get("status") != "ready" or not witnesses:
             debt.append({"algorithm": row["algorithm"], "reason": row.get("reason", "no applicable native smoke")})
         elif row.get("boundary_blocker"):

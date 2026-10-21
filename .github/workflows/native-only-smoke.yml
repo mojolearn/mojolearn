@@ -39,9 +39,8 @@ jobs:
           set -eu
           mkdir -p native-only-results
           git rev-parse HEAD > native-only-results/source-commit.txt
-          mojo=$(pixi run which mojo)
-          sudo env PATH="$PATH" python3 tools/native_only_smoke.py \
-            --source-root "$PWD" --mojo "$mojo" \
+          sudo env PATH="$PATH" "$(command -v pixi)" run python tools/native_only_smoke.py \
+            --source-root "$PWD" \
             --out "$PWD/native-only-results" \
             --cache "$RUNNER_TEMP/native-only-cache" \
             --backend cpu --isolated --jobs 2 --run-timeout 10 \

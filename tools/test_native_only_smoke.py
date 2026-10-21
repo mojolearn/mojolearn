@@ -29,7 +29,7 @@ class NativeOnlyGate(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path = root / "main.mojo"
-            path.write_text('def main() raises:\n    raise Error("PyTorch shape semantics")\n')
+            path.write_text('def main() raises:\n    raise Error("PyTorch shape semantics without Python. Native code.")\n')
             self.assertFalse(gate.closure(root, "main.mojo")[1])
             path.write_text('def main():\n    external_call["PyEval_EvalCode"]()\n')
             self.assertTrue(gate.closure(root, "main.mojo")[1])
@@ -55,10 +55,13 @@ class NativeOnlyGate(unittest.TestCase):
         self.assertTrue(gate.coverage_debt(manifest, "cpu"))
 
     def test_declared_algorithm_requires_actual_applicable_case(self):
-        manifest = {"cases": [{"id": "gpu", "algorithms": ["A"], "backends": ["metal"]}],
+        manifest = {"cases": [{"id": "gpu", "algorithms": ["A"], "backends": ["metal"], "whole_operation": True}],
                     "inventory": [{"algorithm": "A", "status": "ready", "cases": ["gpu"]}]}
         self.assertTrue(gate.coverage_debt(manifest, "cpu"))
         self.assertFalse(gate.coverage_debt(manifest, "metal"))
+        manifest["cases"][0]["whole_operation"] = False
+        self.assertTrue(gate.coverage_debt(manifest, "metal"))
+        manifest["cases"][0]["whole_operation"] = True
         manifest["cases"][0]["algorithms"] = ["B"]
         self.assertTrue(gate.coverage_debt(manifest, "metal"))
 
