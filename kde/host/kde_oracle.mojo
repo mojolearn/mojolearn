@@ -206,7 +206,12 @@ def oracle_distance_ptr(
     gate says which cell."""
     comptime if KDE_DIRECT_DISTANCE:
         if metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_UNEXPANDED:
-            var direct = direct_squared_distance(query+q*d, train+j*d, d)
+            # These synchronous helpers borrow the caller-owned buffers; use
+            # their shared raw pointer origin without changing arithmetic.
+            var direct = direct_squared_distance(
+                (query + q * d).unsafe_origin_cast[MutAnyOrigin](),
+                (train + j * d).unsafe_origin_cast[MutAnyOrigin](), d,
+            )
             return ftz(identical_sqrt(direct)) if metric == DIST_L2_SQRT_UNEXPANDED else direct
     var acc = Float32(0.0)
     if metric == DIST_COSINE_EXPANDED:
@@ -293,7 +298,7 @@ def oracle_logsumexp_row(
     and `+0.0` (the device's rule, `logsumexp_kernel`). DEVIATION 603: a
     row of all `-inf` is `-inf`, not `exp(NaN)`."""
     comptime if C52_PAIR:
-        return pair_row(host_list_ptr(logk) + base, n_train, kde_chunk_rows_for(n_train))
+        return pair_row((host_list_ptr(logk) + base).unsafe_origin_cast[MutAnyOrigin](), n_train, kde_chunk_rows_for(n_train))
     var max_exp = logk[base]
     for j in range(1, n_train):
         if logk[base + j] > max_exp:
