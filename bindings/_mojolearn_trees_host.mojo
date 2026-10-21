@@ -63,8 +63,13 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.forest_export_binding import (
     ForestExportRegistry,
     copy_forest_export_leaves,
+    forest_export_py_list_f64,
+    forest_export_py_list_i64,
     validate_forest_export_destinations,
 )
+from core.shell_impl.mojolearn_forest_host_impl import forest_host_vote_into
+from core.shell_impl.mojolearn_rf_host_impl import rf_host_col_major
+from core.shell_impl.mojolearn_trees_host_impl import et_export_into, et_forest_lists
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -199,37 +204,17 @@ def _read_x_col_major(
     the same bytes the GPU binding's pinned stage holds, moved and folded
     through nothing."""
     var flat = read_f32(x_addr, n_rows * n_features)
-    if not row_major:
-        return flat^
-    var out = List[Float32](length=n_rows * n_features, fill=Float32(0.0))
-    for r in range(n_rows):
-        for c in range(n_features):
-            out[c * n_rows + r] = flat[r * n_features + c]
-    return out^
+    return rf_host_col_major(flat^, n_rows, n_features, row_major)
 
 
 def _forest_out(result: FitResult) raises -> PythonObject:
     """`bindings/_mojolearn_trees.mojo::_forest_out`, the same six lists."""
-    var offsets = Python.list()
-    var colid = Python.list()
-    var quesval = Python.list()
-    var left_child = Python.list()
-    var leaves = Python.list()
-    var total = 0
-    offsets.append(PythonObject(0))
-    for t in range(len(result.forest.trees)):
-        var n = result.forest.trees[t].num_nodes()
-        total += n
-        offsets.append(PythonObject(total))
-        for i in range(n):
-            var node = result.forest.trees[t].sparsetree[i]
-            colid.append(PythonObject(Int(node.colid)))
-            quesval.append(PythonObject(Float64(node.quesval)))
-            left_child.append(PythonObject(Int(node.left_child_id)))
-        for i in range(len(result.forest.trees[t].vector_leaf)):
-            leaves.append(
-                PythonObject(Float64(result.forest.trees[t].vector_leaf[i]))
-            )
+    var offsets = List[Int64]()
+    var colid = List[Int64]()
+    var quesval = List[Float64]()
+    var left_child = List[Int64]()
+    var leaves = List[Float64]()
+    et_forest_lists(result, offsets, colid, quesval, left_child, leaves)
     var meta = Python.list()
     meta.append(PythonObject(Int(result.forest.n_trees)))
     meta.append(PythonObject(Int(result.forest.num_outputs)))
@@ -238,11 +223,11 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     meta.append(PythonObject(result.plan.max_features_count))
     meta.append(PythonObject(Int(result.plan.n_sampled_rows)))
     var out = Python.list()
-    out.append(offsets)
-    out.append(colid)
-    out.append(quesval)
-    out.append(left_child)
-    out.append(leaves)
+    out.append(forest_export_py_list_i64(offsets))
+    out.append(forest_export_py_list_i64(colid))
+    out.append(forest_export_py_list_f64(quesval))
+    out.append(forest_export_py_list_i64(left_child))
+    out.append(forest_export_py_list_f64(leaves))
     out.append(meta)
     return out
 
@@ -252,7 +237,7 @@ def _retain_et_export(var result: FitResult) raises -> PythonObject:
     forest kept under a handle until `forest_export_release`."""
     var trees = len(result.forest.trees)
     var nodes = 0
-    for tree in result.forest.trees:
+    for tree in result.forest.trees:  # driver-loop: over fitted trees, one node count each (export shape bookkeeping)
         nodes += tree.num_nodes()
         if len(tree.vector_leaf) != tree.num_nodes() * Int(result.forest.num_outputs):
             raise Error("fitted ET leaf storage differs from export dimensions")
@@ -556,21 +541,10 @@ def et_forest_export_binding(
     var cp = i32_ptr(_index(columns))
     var tp = f32_ptr(_index(thresholds))
     var lp = i32_ptr(_index(left))
-    var total = 0
-    op[0] = 0
-    ref model = registry[].entries[id].model
-    for t in range(len(model.forest.trees)):
-        ref tree = model.forest.trees[t]
-        for i in range(tree.num_nodes()):
-            ref node = tree.sparsetree[i]
-            cp[total + i] = node.colid
-            tp[total + i] = node.quesval
-            lp[total + i] = node.left_child_id
-        copy_forest_export_leaves(
-            tree.vector_leaf, _index(leaves), total * registry[].entries[id].outputs
-        )
-        total += tree.num_nodes()
-        op[t + 1] = Int32(total)
+    et_export_into(
+        registry[].entries[id].model, op, cp, tp, lp, _index(leaves),
+        registry[].entries[id].outputs,
+    )
     return PythonObject(None)
 
 
@@ -633,14 +607,10 @@ def et_predict_binding(
         return PythonObject(0)
     with GILReleased(Python()):
         var rows = read_f32(x_address, n_rows * n_features)
-        var out = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
-        var trees = et_host_trees(
-            offsets_p, colid_p, quesval_p, left_p, leaves_p,
-            n_trees, n_nodes, n_features, num_outputs,
+        forest_host_vote_into(
+            False, rows, offsets_p, colid_p, quesval_p, left_p,
+            leaves_p, op, n_rows, n_features, n_trees, num_outputs, n_nodes,
         )
-        et_host_predict(trees, rows, n_rows, n_features, n_trees, num_outputs, out)
-        for i in range(n_rows * num_outputs):
-            op[i] = out[i]
         wrote = n_rows
     return PythonObject(wrote)
 

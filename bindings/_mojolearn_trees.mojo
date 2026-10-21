@@ -85,8 +85,10 @@ from std.ffi import _Global
 from std.sys.compile import is_defined
 from forest_export_binding import (
     ForestExportRegistry, validate_forest_export_destinations,
-    copy_forest_export_leaves,
+    copy_forest_export_leaves, forest_export_py_list_f64,
+    forest_export_py_list_i64,
 )
+from core.shell_impl.mojolearn_trees_host_impl import et_export_into, et_forest_lists
 comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
     name=("MojoETFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
           "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]
@@ -128,22 +130,12 @@ def et_forest_export_binding(handle: PythonObject, offsets: PythonObject,
     var cp = _i32_ptr(Int(py=columns))
     var tp = _f32_ptr(Int(py=thresholds))
     var lp = _i32_ptr(Int(py=left))
-    var total = 0
-    op[0] = 0
-    ref model = registry[].entries[id].model
     var times = StageTimes()
     var stamp = times.start()
-    for t in range(len(model.forest.trees)):
-        ref tree = model.forest.trees[t]
-        for i in range(tree.num_nodes()):
-            ref node = tree.sparsetree[i]
-            cp[total + i] = node.colid
-            tp[total + i] = node.quesval
-            lp[total + i] = node.left_child_id
-        copy_forest_export_leaves(tree.vector_leaf, Int(py=leaves),
-                                  total * registry[].entries[id].outputs)
-        total += tree.num_nodes()
-        op[t + 1] = Int32(total)
+    et_export_into(
+        registry[].entries[id].model, op, cp, tp, lp, Int(py=leaves),
+        registry[].entries[id].outputs,
+    )
     times.stop_host("boundary_export_into", stamp)
     times.report()
     return PythonObject(None)
@@ -219,8 +211,8 @@ wrong answer rather than a failure:
 
 Every refused sklearn parameter RIDES THROUGH so the refusal fires in
 `refuse_unported` by name, in one place, rather than being re-decided at this
-boundary. The criterion RIDES AS SLOT 21 since DEVIATION 459 (it did not
-while each entry point had exactly one criterion): `et_classifier_fit`
+boundary. The criterion RIDES AS SLOT 21 since DEVIATION 459 (it did
+not while each entry point had exactly one criterion): `et_classifier_fit`
 admits GINI and ENTROPY, `et_regressor_fit` admits MSE, and the OTHER
 criteria are refused by name in the WRAPPER, which cites the same
 NOT_IMPLEMENTED.tsv rows validity_check does.
@@ -275,26 +267,12 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     `FitResult`/`FitPlan` exist to report rather than hide (`n_sampled_rows`
     is the bootstrap sample size the fit used, 0 without bootstrap;
     DEVIATION 460)."""
-    var offsets = Python.list()
-    var colid = Python.list()
-    var quesval = Python.list()
-    var left_child = Python.list()
-    var leaves = Python.list()
-    var total = 0
-    offsets.append(PythonObject(0))
-    for t in range(len(result.forest.trees)):
-        var n = result.forest.trees[t].num_nodes()
-        total += n
-        offsets.append(PythonObject(total))
-        for i in range(n):
-            var node = result.forest.trees[t].sparsetree[i]
-            colid.append(PythonObject(Int(node.colid)))
-            quesval.append(PythonObject(Float64(node.quesval)))
-            left_child.append(PythonObject(Int(node.left_child_id)))
-        for i in range(len(result.forest.trees[t].vector_leaf)):
-            leaves.append(
-                PythonObject(Float64(result.forest.trees[t].vector_leaf[i]))
-            )
+    var offsets = List[Int64]()
+    var colid = List[Int64]()
+    var quesval = List[Float64]()
+    var left_child = List[Int64]()
+    var leaves = List[Float64]()
+    et_forest_lists(result, offsets, colid, quesval, left_child, leaves)
     var meta = Python.list()
     meta.append(PythonObject(Int(result.forest.n_trees)))
     meta.append(PythonObject(Int(result.forest.num_outputs)))
@@ -303,11 +281,11 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     meta.append(PythonObject(result.plan.max_features_count))
     meta.append(PythonObject(Int(result.plan.n_sampled_rows)))
     var out = Python.list()
-    out.append(offsets)
-    out.append(colid)
-    out.append(quesval)
-    out.append(left_child)
-    out.append(leaves)
+    out.append(forest_export_py_list_i64(offsets))
+    out.append(forest_export_py_list_i64(colid))
+    out.append(forest_export_py_list_f64(quesval))
+    out.append(forest_export_py_list_i64(left_child))
+    out.append(forest_export_py_list_f64(leaves))
     out.append(meta)
     return out
 

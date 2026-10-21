@@ -3,6 +3,7 @@
 # kernels. This owner replaces only Python preparation and launch decisions.
 from std.python import Python, PythonObject
 from std.memory import memcpy
+from core.shell_impl.classical_ridge_impl import classical_widen_f32_f64
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_host_weights, classical_word
 from bindings.sequential_arrays import sequential_address
 from bindings.sequential_description import sequential_fields
@@ -177,9 +178,6 @@ def classical_linear_predict_public(model: PythonObject, value: PythonObject,
     var narrow = classical_linear_predict(model, value, entries, context)
     var size = Int(py=narrow.size)
     var wide = classical_array(size, 0, context, True)
-    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(narrow)))
-    var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(wide)))
-    for k in range(size):  # native output marshaling: exact widening of the completed prediction buffer
-        dst[k] = Float64(src[k])
+    classical_widen_f32_f64(Int(py=sequential_address(narrow)), Int(py=sequential_address(wide)), size)
     _ = narrow^
     return wide
