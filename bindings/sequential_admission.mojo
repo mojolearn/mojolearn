@@ -3,6 +3,7 @@
 # Admission compares exact type identities before reading attributes or
 # walking containers, so subclass properties/iterators cannot run first.
 from std.python import Python, PythonObject
+from bindings.native_torch_admission import native_torch_exact, native_torch_admit
 
 
 def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -17,22 +18,7 @@ def sequential_integer(value: PythonObject, context: PythonObject) raises -> Boo
 
 
 def _ordinary_torch(cls: PythonObject, context: PythonObject) raises -> Bool:
-    # Reading an already imported module's stored dictionary neither imports
-    # torch nor invokes module __getattr__. Tensor/Parameter remain supported;
-    # user tensor subclasses are not admitted through their protocol hooks.
-    var b = Python.import_module("builtins")
-    var modules = context["modules"]
-    var torch = modules.get("torch")
-    if torch is not None and b.type(torch) is context["module_type"]:
-        var fields = b.object.__getattribute__(torch, "__dict__")
-        if cls is fields.get("Tensor"):
-            return True
-    var parameter = modules.get("torch.nn.parameter")
-    if parameter is not None and b.type(parameter) is context["module_type"]:
-        var fields = b.object.__getattribute__(parameter, "__dict__")
-        if cls is fields.get("Parameter"):
-            return True
-    return False
+    return native_torch_exact(cls)
 
 
 def sequential_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
@@ -63,7 +49,10 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
         if not _one_of(b.type(owner), context["buffer_owner_types"]):
             raise Error("TypeError: Sequential requires a memoryview over a native buffer owner")
         return
-    if _one_of(cls, context["native_value_types"]) or _one_of(cls, context["scalar_types"]) or _ordinary_torch(cls, context):
+    if _one_of(cls, context["native_value_types"]) or _one_of(cls, context["scalar_types"]):
+        return
+    if _ordinary_torch(cls, context):
+        native_torch_admit(value)
         return
     raise Error("TypeError: Sequential requires native input types; Python-defined protocols and subclasses are not supported")
 
