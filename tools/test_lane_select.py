@@ -1138,9 +1138,28 @@ def test_no_docstring_is_read_back_at_run_time():
     strip, plus argparse help. A docstring copied straight into another
     docstring (exceptions.py builds the scikit-learn NotFittedError bridge
     with `type(..., {"__doc__": NotFittedError.__doc__})`, f436729ea) stays
-    documentation: it is read only to become a `__doc__`, never a value."""
+    documentation: it is read only to become a `__doc__`, never a value.
+    Since 81a34c4e5 the bridge class is built natively: the doc rides in the
+    native context as a keyword (`not_fitted_doc=NotFittedError.__doc__`) and
+    bindings/classical_exceptions.mojo stores it as the class's `__doc__`. A
+    keyword is a doc copy only when every native read of that context key is
+    such a store."""
+    mojo_texts = []
+    for d in ("bindings", "core"):
+        for root, _dirs, files in os.walk(os.path.join(lane_select.ROOT, d)):
+            mojo_texts += [open(os.path.join(root, f), errors="replace").read()
+                           for f in files if f.endswith(".mojo")]
+
+    def native_doc_key(key):
+        reads = [m.group(0) for text in mojo_texts
+                 for m in re.finditer(r'[^\n]*context\["%s"\][^\n]*' % re.escape(key), text)]
+        return bool(reads) and all(re.search(r'py_setitem\(\s*\w+\s*,\s*"__doc__"\s*,\s*context\["%s"\]\s*\)'
+                                             % re.escape(key), r) for r in reads)
+
     def doc_to_doc(node, parents):
         parent = parents.get(node)
+        if isinstance(parent, ast.keyword) and parent.value is node and parent.arg:
+            return native_doc_key(parent.arg)
         if isinstance(parent, ast.Dict):
             return any(v is node and isinstance(k, ast.Constant) and k.value == "__doc__"
                        for k, v in zip(parent.keys, parent.values))
