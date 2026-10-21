@@ -15,7 +15,7 @@ the sabotaged build, and the same lanes read their clean cells on the clean
 build. A patch never changes a production build: it is applied only to a
 scratch copy of the tree.
 
-THE MANIFEST, tools/identity_lanes/coverage.sabotage, one arm per line,
+THE MANIFEST, tools/identity_lanes/coverage_sabotage.tsv, one arm per line,
 tab separated, `#` comments:
 
     arm    patch    bindings    lanes    why
@@ -51,7 +51,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MANIFEST = os.path.join(ROOT, "tools", "identity_lanes", "coverage.sabotage")
+MANIFEST = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage.tsv")
 FIELDS = ("arm", "patch", "bindings", "lanes", "why")
 
 
