@@ -97,3 +97,9 @@ by full R2 readback at `native-only/incremental-mac-artifacts.tgz`. NVIDIA
 standalone runs, installed-wheel checks, and complete native
 owner interfaces remain pending. Later graph edits also need qualification of
 their changed source closures. No smoke timing promotes a performance default.
+
+The two SVC/SVR fixtures also landed on main at `23b4f1cc8`, after exact
+77-file closure comparison against their qualified source and 19 static gate
+tests. That main snapshot contains 37 fixtures and 602 exports; the additional
+integration fixtures and public export remain separately scoped. Its reuse
+receipt is [`native_only_svm_20261020.json`](native_only_svm_20261020.json).
