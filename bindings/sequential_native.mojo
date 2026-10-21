@@ -4,6 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_setitem
 
 
 from bindings.sequential_description import sequential_fields, sequential_append, sequential_add, sequential_compile, sequential_program, sequential_table, sequential_layers, sequential_sample, _shape
@@ -28,10 +29,10 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         elif operation == "construct":
             var b = Python.import_module("builtins")
             var fields = sequential_fields(model)
-            fields["numeric_mode"] = args[0]
-            fields["input_shape"] = PythonObject(None) if args[1] is None else b.tuple(_shape(args[1], "input_shape", False, context))
-            fields["_layers"] = Python.list()
-            fields["_options"] = PythonObject(None)
+            py_setitem(fields, "numeric_mode", args[0])
+            py_setitem(fields, "input_shape", PythonObject(None) if args[1] is None else py_call(b.tuple, _shape(args[1], "input_shape", False, context)))
+            py_setitem(fields, "_layers", Python.list())
+            py_setitem(fields, "_options", PythonObject(None))
         elif operation == "add":
             result = sequential_add(model, args[0], args[1], args[2], context)
         elif operation == "append":
