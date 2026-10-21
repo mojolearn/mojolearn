@@ -12,6 +12,8 @@ from std.python._cpython import GILReleased
 from x_decomp.api import (
     eigh_batch_run, eigh_run, ew_run, gemm_run, knn_select_run, lle_apply_run, lle_local_run, lu_solve_run, rand_run,
     sqdist_run, svd_run, trisolve_run,
+    absmax_sign_run, lars_rows_run, lasso_rows_run, lda_rows_run, lu_aux_run, omp_rows_run, qr_r_run, r_signs_run,
+    rand_gamma_run, rank_above_run, tsqr_r_run,
 )
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
@@ -296,3 +298,213 @@ def svd_py[E: Exec](a: PythonObject, s: PythonObject, v: PythonObject, p: Python
     var pv = _f(v)
     svd_run[E](pa, ps, pv, m, n)
     return PythonObject(n)
+
+
+def lasso_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, its: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    # p = [n, k, max_iter, positive]; f = [alpha, tol]
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var max_iter = _n(p, 2)
+    var positive = Int(py=p[3]) != 0
+    var alpha = Float32(Float64(py=f[0]))
+    var tol = Float32(Float64(py=f[1]))
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pi = _f(its)
+    with GILReleased(Python()):
+        lasso_rows_run[E](pg, pq, pw, pi, n, k, max_iter, positive, alpha, tol)
+    return PythonObject(n)
+
+
+def lu_aux_py[E: Exec](
+    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
+    stats: PythonObject, p: PythonObject,
+) raises -> PythonObject:
+    """p = [n, clamp]: an LU factor's row order (pm), its inverse (im), its
+    diagonal, (max |u_ii|, zero, negative pivots, swaps) and, with clamp,
+    the tiny pivots floored in lu."""
+    var n = _n(p, 0)
+    var clamp = _n(p, 1)
+    var pl = _f(lu)
+    var pv = _i(piv)
+    var p1 = _f(pm)
+    var p2 = _f(im)
+    var pd = _f(diag)
+    var ps = _f(stats)
+    with GILReleased(Python()):
+        lu_aux_run[E](pl, pv, p1, p2, pd, ps, n, clamp)
+    return PythonObject(n)
+
+
+def lars_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """p = [n, k, m, nnz]: sparse_encode 'lars' on the Gram G (k x k) and Q =
+    X D^T (n x k), m the samples of each row's problem (x_decomp/cells.mojo
+    `lars_row`, one thread a row)."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var m = _n(p, 2)
+    var nnz = _n(p, 3)
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pn = _f(na)
+    with GILReleased(Python()):
+        lars_rows_run[E](pg, pq, pw, pn, n, k, m, nnz)
+    return PythonObject(n)
+
+
+def omp_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var nnz = _n(p, 2)
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pn = _f(na)
+    with GILReleased(Python()):
+        omp_rows_run[E](pg, pq, pw, pn, n, k, nnz)
+    return PythonObject(n)
+
+
+def rand_gamma_py[E: Exec](dst: PythonObject, p: PythonObject, shape: PythonObject) raises -> PythonObject:
+    var count = _n(p, 0)
+    var seed = Int(py=p[1])
+    var stream = Int(py=p[2])
+    var a = Float32(Float64(py=shape))
+    var po = _f(dst)
+    with GILReleased(Python()):
+        rand_gamma_run[E](po, count, seed, stream, a)
+    return PythonObject(count)
+
+
+def lda_rows_py[E: Exec](
+    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, its: PythonObject, p: PythonObject,
+    f: PythonObject,
+) raises -> PythonObject:
+    # p = [n, k, v, max_iter]; f = [prior, tol]
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var v = _n(p, 2)
+    var max_iter = _n(p, 3)
+    var prior = Float32(Float64(py=f[0]))
+    var tol = Float32(Float64(py=f[1]))
+    var px = _f(x)
+    var pw = _f(ew)
+    var pd = _f(d)
+    var pe = _f(e)
+    var pi = _f(its)
+    with GILReleased(Python()):
+        lda_rows_run[E](px, pw, pd, pe, pi, n, k, v, max_iter, prior, tol)
+    return PythonObject(n)
+
+
+def dijkstra_rows_py[E: Exec](w: PythonObject, dist: PythonObject, reached: PythonObject, p: PythonObject) raises -> PythonObject:
+    var n = _n(p, 0)
+    var pw = _f(w)
+    var pd = _f(dist)
+    var pr = _f(reached)
+    with GILReleased(Python()):
+        E.dijkstra_rows(pw, pd, pr, n)
+    return PythonObject(n)
+
+
+def barycenter_rows_py[E: Exec](
+    x: PythonObject, y: PythonObject, nbr: PythonObject, wt: PythonObject, flags: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    # p = [n, ny, d, k]
+    var n = _n(p, 0)
+    var ny = _n(p, 1)
+    var d = _n(p, 2)
+    var k = _n(p, 3)
+    var r = Float32(Float64(py=reg))
+    var px = _f(x)
+    var py_ = _f(y)
+    var pn = _f(nbr)
+    var pw = _f(wt)
+    var pf = _f(flags)
+    with GILReleased(Python()):
+        E.barycenter_rows(px, py_, pn, pw, pf, n, ny, d, k, r)
+    return PythonObject(n)
+
+
+def als_rows_py[E: Exec](
+    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var f = _n(p, 2)
+    var r = Float32(Float64(py=reg))
+    var pc = _f(c)
+    var py_ = _f(y)
+    var pg = _f(yty)
+    var px = _f(x)
+    var pf = _f(flags)
+    with GILReleased(Python()):
+        E.als_rows(pc, py_, pg, px, pf, n, m, f, r)
+    return PythonObject(n)
+
+
+def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    var n = _n(p, 0)
+    var d = _n(p, 1)
+    var by_col = Int(py=p[2]) != 0
+    var pa = _f(a)
+    var pd = _f(dst)
+    var r = 0
+    with GILReleased(Python()):
+        r = absmax_sign_run[E](pa, pd, n, d, by_col)
+    return PythonObject(r)
+
+
+def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    var pa = _f(a)
+    var pr = _f(r)
+    qr_r_run[E](pa, pr, m, n)
+    return PythonObject(n)
+
+
+def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    """r (n x n, n = d + nrhs) = R of the blocked TSQR of [a | b] (a m x d,
+    b m x nrhs, row major; b is read only when nrhs > 0). p = [m, d, nrhs,
+    keep]: keep != 0 holds the factorization for `tsqr_q_py`."""
+    var m = _n(p, 0)
+    var d = _n(p, 1)
+    var nrhs = _n(p, 2)
+    var keep = Int(py=p[3]) != 0
+    var pa = _f(a)
+    var pb = _f(b)
+    var pr = _f(r)
+    var n = 0
+    with GILReleased(Python()):
+        n = tsqr_r_run[E](pa, pb, pr, m, d, nrhs, keep)
+    return PythonObject(n)
+
+
+def r_signs_py(r: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+    """R's diagonal made non-negative for `linalg.qr` (`r_signs_run`). p = [n]."""
+    var n = _n(p, 0)
+    var pr = _f(r)
+    var pc = _f(c)
+    r_signs_run(pr, pc, n)
+    return PythonObject(0)
+
+
+def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises -> PythonObject:
+    """How many singular values at sv are > 0 and > s[0] * rtol
+    (`rank_above_run`). p = [n]."""
+    var n = _n(p, 0)
+    var a = Int(py=sv)
+    var t = Float64(py=rtol)
+    var r = rank_above_run(a, n, t)
+    return PythonObject(r)

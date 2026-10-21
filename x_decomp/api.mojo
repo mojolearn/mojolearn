@@ -25,6 +25,27 @@ from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
 from x_decomp.api_pyapi import _d, _f, _i, _n
 
 
+def _fp(a: Int) raises -> F32Ptr:
+    """A float32 host buffer from its address (the typed `_f`)."""
+    if a == 0:
+        raise Error("x_decomp: null float32 buffer address")
+    return F32Ptr(unsafe_from_address=a)
+
+
+def _ip(a: Int) raises -> I32Ptr:
+    """An int32 host buffer from its address (the typed `_i`)."""
+    if a == 0:
+        raise Error("x_decomp: null int32 buffer address")
+    return I32Ptr(unsafe_from_address=a)
+
+
+def _dp(a: Int) raises -> F64Ptr:
+    """A float64 host buffer from its address (the typed `_d`)."""
+    if a == 0:
+        raise Error("x_decomp: null float64 buffer address")
+    return F64Ptr(unsafe_from_address=a)
+
+
 def gemm_run[E: Exec](pa: F32Ptr, pb: F32Ptr, pc: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises -> Int:
     """`gemm_py`'s typed entry: the Int32 bound, then Exec.gemm; returns m n."""
     if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
@@ -129,229 +150,95 @@ def svd_run[E: Exec](pa: F32Ptr, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises:
     E.svd(pa, m, n, ps, pv)
 
 
-def lasso_rows_py[E: Exec](
-    g: PythonObject, q: PythonObject, w: PythonObject, its: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    # p = [n, k, max_iter, positive]; f = [alpha, tol]
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var max_iter = _n(p, 2)
-    var positive = Int(py=p[3]) != 0
-    var alpha = Float32(Float64(py=f[0]))
-    var tol = Float32(Float64(py=f[1]))
-    var pg = _f(g)
-    var pq = _f(q)
-    var pw = _f(w)
-    var pi = _f(its)
+def lasso_rows_run[E: Exec](
+    pg: F32Ptr, pq: F32Ptr, pw: F32Ptr, pi: F32Ptr, n: Int, k: Int, max_iter: Int, positive: Bool, alpha: Float32,
+    tol: Float32,
+) raises:
+    """`lasso_rows_py`'s typed entry: the n k scratch, then Exec.lasso_rows."""
     var h = List[Float32](length=n * k if n * k > 0 else 1, fill=Float32(0))
     var ph = F32Ptr(unsafe_from_address=Int(h.unsafe_ptr()))
-    with GILReleased(Python()):
-        E.lasso_rows(pg, pq, pw, ph, pi, n, k, alpha, max_iter, tol, positive)
+    E.lasso_rows(pg, pq, pw, ph, pi, n, k, alpha, max_iter, tol, positive)
     _ = h^
-    return PythonObject(n)
 
 
-def lu_aux_py[E: Exec](
-    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
-    stats: PythonObject, p: PythonObject,
-) raises -> PythonObject:
-    """p = [n, clamp]: an LU factor's row order (pm), its inverse (im), its
-    diagonal, (max |u_ii|, zero, negative pivots, swaps) and, with clamp,
-    the tiny pivots floored in lu."""
-    var n = _n(p, 0)
-    var clamp = _n(p, 1)
+def lu_aux_run[E: Exec](
+    pl: F32Ptr, pv: I32Ptr, p1: F32Ptr, p2: F32Ptr, pd: F32Ptr, ps: F32Ptr, n: Int, clamp: Int
+) raises:
+    """`lu_aux_py`'s typed entry: 1 <= n < 2^24, then Exec.lu_aux."""
     if n < 1 or n >= 16777216:
         raise Error("x_decomp: lu_aux needs 1 <= n < 2^24")
-    var pl = _f(lu)
-    var pv = _i(piv)
-    var p1 = _f(pm)
-    var p2 = _f(im)
-    var pd = _f(diag)
-    var ps = _f(stats)
-    with GILReleased(Python()):
-        E.lu_aux(pl, pv, p1, p2, pd, ps, n, clamp)
-    return PythonObject(n)
+    E.lu_aux(pl, pv, p1, p2, pd, ps, n, clamp)
 
 
-def lars_rows_py[E: Exec](
-    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """p = [n, k, m, nnz]: sparse_encode 'lars' on the Gram G (k x k) and Q =
-    X D^T (n x k), m the samples of each row's problem (x_decomp/cells.mojo
-    `lars_row`, one thread a row)."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var m = _n(p, 2)
-    var nnz = _n(p, 3)
+def lars_rows_run[E: Exec](pg: F32Ptr, pq: F32Ptr, pw: F32Ptr, pn: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:
+    """`lars_rows_py`'s typed entry: the Int32 bound, then Exec.lars_rows."""
     if n * (k * k + 7 * k) > 2147483647:
         raise Error("x_decomp: lars_rows exceeds the Int32 index bound")
-    var pg = _f(g)
-    var pq = _f(q)
-    var pw = _f(w)
-    var pn = _f(na)
-    with GILReleased(Python()):
-        E.lars_rows(pg, pq, pw, pn, n, k, m, nnz)
-    return PythonObject(n)
+    E.lars_rows(pg, pq, pw, pn, n, k, m, nnz)
 
 
-def omp_rows_py[E: Exec](
-    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var nnz = _n(p, 2)
-    var pg = _f(g)
-    var pq = _f(q)
-    var pw = _f(w)
-    var pn = _f(na)
+def omp_rows_run[E: Exec](pg: F32Ptr, pq: F32Ptr, pw: F32Ptr, pn: F32Ptr, n: Int, k: Int, nnz: Int) raises:
+    """`omp_rows_py`'s typed entry: the n (k^2 + 3 k) scratch, then Exec.omp_rows."""
     var per = k * k + 3 * k
     var s = List[Float32](length=n * per if n * per > 0 else 1, fill=Float32(0))
     var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
-    with GILReleased(Python()):
-        E.omp_rows(pg, pq, pw, ps, pn, n, k, nnz)
+    E.omp_rows(pg, pq, pw, ps, pn, n, k, nnz)
     _ = s^
-    return PythonObject(n)
 
 
-def rand_gamma_py[E: Exec](dst: PythonObject, p: PythonObject, shape: PythonObject) raises -> PythonObject:
-    var count = _n(p, 0)
-    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
-    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
-    var a = Float32(Float64(py=shape))
+def rand_gamma_run[E: Exec](po: F32Ptr, count: Int, seed: Int, stream: Int, a: Float32) raises:
+    """`rand_gamma_py`'s typed entry: seed and stream mod 2^32, shape >= 1."""
+    var s = UInt32(seed & 0xFFFFFFFF)
+    var st = UInt32(stream & 0xFFFFFFFF)
     if not (a >= Float32(1)):
         raise Error("x_decomp: the gamma sampler takes shape >= 1")
-    var po = _f(dst)
-    with GILReleased(Python()):
-        E.rand_gamma(po, count, seed, stream, a)
-    return PythonObject(count)
+    E.rand_gamma(po, count, s, st, a)
 
 
-def lda_rows_py[E: Exec](
-    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, its: PythonObject, p: PythonObject,
-    f: PythonObject,
-) raises -> PythonObject:
-    # p = [n, k, v, max_iter]; f = [prior, tol]
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
-    var max_iter = _n(p, 3)
-    var prior = Float32(Float64(py=f[0]))
-    var tol = Float32(Float64(py=f[1]))
-    var px = _f(x)
-    var pw = _f(ew)
-    var pd = _f(d)
-    var pe = _f(e)
-    var pi = _f(its)
+def lda_rows_run[E: Exec](
+    px: F32Ptr, pw: F32Ptr, pd: F32Ptr, pe: F32Ptr, pi: F32Ptr, n: Int, k: Int, v: Int, max_iter: Int,
+    prior: Float32, tol: Float32,
+) raises:
+    """`lda_rows_py`'s typed entry: the n (v + k) scratch, then Exec.lda_rows."""
     var s = List[Float32](length=n * (v + k) if n > 0 else 1, fill=Float32(0))
     var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
-    with GILReleased(Python()):
-        E.lda_rows(px, pw, pd, pe, ps, pi, n, k, v, prior, max_iter, tol)
+    E.lda_rows(px, pw, pd, pe, ps, pi, n, k, v, prior, max_iter, tol)
     _ = s^
-    return PythonObject(n)
 
 
-def dijkstra_rows_py[E: Exec](w: PythonObject, dist: PythonObject, reached: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var pw = _f(w)
-    var pd = _f(dist)
-    var pr = _f(reached)
-    with GILReleased(Python()):
-        E.dijkstra_rows(pw, pd, pr, n)
-    return PythonObject(n)
+def absmax_sign_run[E: Exec](pa: F32Ptr, pd: F32Ptr, n: Int, d: Int, by_col: Bool) raises -> Int:
+    """`absmax_sign_py`'s typed entry; returns d by column, else n."""
+    E.absmax_sign(pa, pd, n, d, by_col)
+    return d if by_col else n
 
 
-def barycenter_rows_py[E: Exec](
-    x: PythonObject, y: PythonObject, nbr: PythonObject, wt: PythonObject, flags: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
-    # p = [n, ny, d, k]
-    var n = _n(p, 0)
-    var ny = _n(p, 1)
-    var d = _n(p, 2)
-    var k = _n(p, 3)
-    var r = Float32(Float64(py=reg))
-    var px = _f(x)
-    var py_ = _f(y)
-    var pn = _f(nbr)
-    var pw = _f(wt)
-    var pf = _f(flags)
-    with GILReleased(Python()):
-        E.barycenter_rows(px, py_, pn, pw, pf, n, ny, d, k, r)
-    return PythonObject(n)
-
-
-def als_rows_py[E: Exec](
-    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var f = _n(p, 2)
-    var r = Float32(Float64(py=reg))
-    var pc = _f(c)
-    var py_ = _f(y)
-    var pg = _f(yty)
-    var px = _f(x)
-    var pf = _f(flags)
-    with GILReleased(Python()):
-        E.als_rows(pc, py_, pg, px, pf, n, m, f, r)
-    return PythonObject(n)
-
-
-def absmax_sign_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var by_col = Int(py=p[2]) != 0
-    var pa = _f(a)
-    var pd = _f(dst)
-    with GILReleased(Python()):
-        E.absmax_sign(pa, pd, n, d, by_col)
-    return PythonObject(d if by_col else n)
-
-
-def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var n = _n(p, 1)
+def qr_r_run[E: Exec](pa: F32Ptr, pr: F32Ptr, m: Int, n: Int) raises:
+    """`qr_r_py`'s typed entry: m >= n >= 1, then Exec.qr_r."""
     if n <= 0 or m < n:
         raise Error("x_decomp: qr_r needs m >= n >= 1")
-    var pa = _f(a)
-    var pr = _f(r)
     E.qr_r(pa, m, n, pr)
-    return PythonObject(n)
 
 
-def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
-    """r (n x n, n = d + nrhs) = R of the blocked TSQR of [a | b] (a m x d,
-    b m x nrhs, row major; b is read only when nrhs > 0). p = [m, d, nrhs,
-    keep]: keep != 0 holds the factorization for `tsqr_q_py`."""
-    var m = _n(p, 0)
-    var d = _n(p, 1)
-    var nrhs = _n(p, 2)
-    var keep = Int(py=p[3]) != 0
+def tsqr_r_run[E: Exec](pa: F32Ptr, pb: F32Ptr, pr: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises -> Int:
+    """`tsqr_r_py`'s typed entry: the shape checks, then Exec.tsqr_factor;
+    returns n = d + nrhs."""
     var n = d + nrhs
     if d < 1 or n > TS_MAX_N or m < n:
         raise Error("x_decomp: tsqr_r needs 1 <= d, d + nrhs <= " + String(TS_MAX_N) + " and m >= d + nrhs")
     if m * n > 2147483647:
         raise Error("x_decomp: tsqr_r exceeds the Int32 index bound")
-    var pa = _f(a)
-    var pb = _f(b)
-    var pr = _f(r)
-    with GILReleased(Python()):
-        E.tsqr_factor(pa, pb, pr, m, d, nrhs, keep)
-    return PythonObject(n)
+    E.tsqr_factor(pa, pb, pr, m, d, nrhs, keep)
+    return n
 
 
-def r_signs_py(r: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
+def r_signs_run(pr: F32Ptr, pc: F32Ptr, n: Int):
     """Lane py-runtime (2026-10-05): R's diagonal made non-negative for
     `linalg.qr` (it was Python in `_linalg_impl._qr_tsqr`). r is n x n row
     major and is rewritten: every row j whose R[j, j] < 0 is negated (an
     exact sign flip; -0.0 and NaN count as non-negative, as the Python `<`
     did). c (n x n) gets the diagonal of the signs, zeros elsewhere: Q C is
-    then the matching Q. p = [n]. Host Mojo on every column: n^2 sign moves
+    then the matching Q. Host Mojo on every column: n^2 sign moves
     after the TSQR, no arithmetic."""
-    var n = _n(p, 0)
-    var pr = _f(r)
-    var pc = _f(c)
     for j in range(n):  # small-loop(n: R order, the feature count): one sign per R row
         var neg = pr[j * n + j] < 0.0
         for t in range(n):  # small-loop(n: R order, the feature count): one row of R and of C
@@ -359,25 +246,24 @@ def r_signs_py(r: PythonObject, c: PythonObject, p: PythonObject) raises -> Pyth
                 pr[j * n + t] = -pr[j * n + t]
             pc[j * n + t] = Float32(0.0)
         pc[j * n + j] = Float32(-1.0) if neg else Float32(1.0)
-    return PythonObject(0)
 
-def rank_above_py(sv: PythonObject, p: PythonObject, rtol: PythonObject) raises -> PythonObject:
+
+def rank_above_run(sv: Int, n: Int, rtol: Float64) raises -> Int:
     """Lane py-runtime round 2: how many of the n float32 singular values at
-    sv (descending, s[0] the largest) are > 0 and > s[0] * rtol, the
+    address sv (descending, s[0] the largest) are > 0 and > s[0] * rtol, the
     product and the comparisons in binary64 as Python's
     `sum(1 for v in S.s if v > 0.0 and v > s0 * rtol)` made them
-    (`_linalg_impl._svd_tall`). p = [n]."""
-    var n = _n(p, 0)
+    (`_linalg_impl._svd_tall`). sv is read only when n > 0."""
     if n == 0:
-        return PythonObject(0)
-    var ps = _f(sv)
-    var t = Float64(ps[0]) * Float64(py=rtol)
+        return 0
+    var ps = _fp(sv)
+    var t = Float64(ps[0]) * rtol
     var r = 0
     for i in range(n):  # small-loop(n: singular value count): one comparison per singular value
         var v = Float64(ps[i])
         if v > 0.0 and v > t:
             r += 1
-    return PythonObject(r)
+    return r
 
 # lane idn-dense-linalg (2026-10-04): the one-entry routes Python takes when
 # `idn_flags_py` says so (both bindings; the same words as the calls they
