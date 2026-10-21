@@ -10,10 +10,10 @@ to even, the first dropped), scaled.
 Float64 throughout and one rounding to float32 per output, so it runs in
 Mojo on the host in both bindings (the Apple GPU has no float64): the same
 code and the same bits on every column. O(N) per series set, no data
-dependence across rows beyond the running checks."""
+dependence across rows beyond the running checks. The Python entries
+(`prophet_days_py` ...) are `sequence/prophet_prep_pyapi.mojo`'s."""
 from std.memory import bitcast
 from std.builtin.sort import sort
-from std.python import PythonObject
 from sequence.exec_trait import Exec
 from sequence.ops import Args, OP_PROPHET_PREP
 
@@ -22,15 +22,13 @@ comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 
-def _f64p(addr: PythonObject, what: String) raises -> F64P:
-    var a = Int(py=addr)
+def _f64p(a: Int, what: String) raises -> F64P:
     if a == 0:
         raise Error("prophet_prep: null buffer for " + what)
     return F64P(unsafe_from_address=a)
 
 
-def _f32p(addr: PythonObject, what: String) raises -> F32P:
-    var a = Int(py=addr)
+def _f32p(a: Int, what: String) raises -> F32P:
     if a == 0:
         raise Error("prophet_prep: null buffer for " + what)
     return F32P(unsafe_from_address=a)
@@ -86,21 +84,16 @@ def _round_half_even(x: Float64) -> Int:
     return f + (f & 1)
 
 
-def prophet_days_py(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """addrs = [src, days (N) float64 out, info (3) float64 out]; ip = [N,
-    kind]: kind 0 float64 days, 1 int64 nanoseconds since 1970 (days =
+def prophet_days(addrs: List[Int], N: Int, kind: Int) raises -> Int:
+    """addrs = [src, days (N) float64 out, info (3) float64 out]; kind 0 float64 days, 1 int64 nanoseconds since 1970 (days =
     ns / 86400e9). info = [status (0 ok, 1 a NaN, 2 not ascending), span
-    days[-1] - days[0], least spacing (0 for N < 2)]."""
-    if len(addrs) != 3 or len(ip) != 2:
-        raise Error("prophet_days: requires 3 addresses and 2 integer parameters")
-    var N = Int(py=ip[0])
-    var kind = Int(py=ip[1])
+    days[-1] - days[0], least spacing (0 for N < 2)]. Returns the status."""
     if N < 1:
         raise Error("prophet_days: N >= 1")
     var dst = _f64p(addrs[1], "days")
     var info = _f64p(addrs[2], "info")
     if kind == 1:
-        var src = I64P(unsafe_from_address=Int(py=addrs[0]))
+        var src = I64P(unsafe_from_address=addrs[0])
         for i in range(N):
             dst[i] = Float64(src[i]) / 86400e9
     elif kind == 0:
@@ -126,25 +119,22 @@ def prophet_days_py(addrs: PythonObject, ip: PythonObject) raises -> PythonObjec
     info[0] = Float64(status)
     info[1] = dst[N - 1] - dst[0]
     info[2] = dmin
-    return PythonObject(status)
+    return status
 
 
-def prophet_features_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+def prophet_features[E: Exec](mut ex: E, addrs: List[Int], N: Int, ns: Int, start_f: Float64,
+                              scale_f: Float64) raises -> Int:
     """addrs = [days (N) float64, periods (ns) float64, t (N) float32 out,
-    frac (N, max(ns, 1)) float32 out]; ip = [N, ns]; fp = [start, t_scale].
+    frac (N, max(ns, 1)) float32 out]; start_f = start, scale_f = t_scale.
     t = (days - start) / t_scale; frac[i, s] = fmod(days, P) / P, + 1 when
     negative; one rounding to float32 each. ns == 0 writes frac zeros.
     Lane cpu4-python: on the executor (`op_prophet_prep`, soft binary64 and
     the exact integer fmod: the host float64 unit's IEEE results, the same
-    bits on every column), not a host loop over the rows."""
-    if len(addrs) != 4 or len(ip) != 2 or len(fp) != 2:
-        raise Error("prophet_features: requires 4 addresses, 2 integer and 2 float parameters")
-    var N = Int(py=ip[0])
-    var ns = Int(py=ip[1])
+    bits on every column), not a host loop over the rows. Returns 0."""
     if N < 1 or ns < 0:
         raise Error("prophet_features: N >= 1, ns >= 0")
-    var start = bitcast[DType.uint64](Float64(py=fp[0]))
-    var scale = bitcast[DType.uint64](Float64(py=fp[1]))
+    var start = bitcast[DType.uint64](start_f)
+    var scale = bitcast[DType.uint64](scale_f)
     var days = _f64p(addrs[0], "days")
     var tsc = _f32p(addrs[2], "t")
     var frac = _f32p(addrs[3], "frac")
@@ -155,9 +145,9 @@ def prophet_features_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObjec
         for s in range(ns):  # small-loop(ns: user seasonalities): checks each period once, no row data
             if not (per[s] > 0):
                 raise Error("prophet_features: periods must be positive")
-        ex.upload(dper, F32P(unsafe_from_address=Int(py=addrs[1])), 2 * ns)
+        ex.upload(dper, F32P(unsafe_from_address=addrs[1]), 2 * ns)
     var ddays = ex.alloc(2 * N)
-    ex.upload(ddays, F32P(unsafe_from_address=Int(py=addrs[0])), 2 * N)
+    ex.upload(ddays, F32P(unsafe_from_address=addrs[0]), 2 * N)
     var dt = ex.alloc(N)
     var df = ex.alloc(N * cols)
     var a = Args()
@@ -179,24 +169,17 @@ def prophet_features_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObjec
     ex.sync()
     ex.download(tsc, dt, N)
     ex.download(frac, df, N * cols)
-    return PythonObject(0)
+    return 0
 
 
-def prophet_changepoints_py(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+def prophet_changepoints(addrs: List[Int], N: Int, n_user: Int, hist: Int, n_cp: Int,
+                         start: Float64, scale: Float64) raises -> Int:
     """addrs = [days (N) float64, user (n_user) float64 days (sorted here in
-    place), out (max(S, 1)) float32]; ip = [N, n_user (-1: none given), hist,
-    n_cp]; fp = [start, t_scale]. The caller's changepoints sorted, or
+    place), out (max(S, 1)) float32]; n_user = -1: none given; start and
+    scale = t_scale. The caller's changepoints sorted, or
     days[round(linspace(0, hist - 1, n_cp + 1))][1:]; scaled like t; none
     gives Prophet's dummy [0]. Returns S (>= 1), or -1 when a caller's
     changepoint falls outside the data (or is NaN)."""
-    if len(addrs) != 3 or len(ip) != 4 or len(fp) != 2:
-        raise Error("prophet_changepoints: requires 3 addresses, 4 integer and 2 float parameters")
-    var N = Int(py=ip[0])
-    var n_user = Int(py=ip[1])
-    var hist = Int(py=ip[2])
-    var n_cp = Int(py=ip[3])
-    var start = Float64(py=fp[0])
-    var scale = Float64(py=fp[1])
     var days = _f64p(addrs[0], "days")
     var out = _f32p(addrs[2], "changepoints")
     var cp = List[Float64]()
@@ -206,11 +189,11 @@ def prophet_changepoints_py(addrs: PythonObject, ip: PythonObject, fp: PythonObj
             for i in range(n_user):
                 var v = u[i]
                 if v != v:
-                    return PythonObject(-1)
+                    return -1
                 cp.append(v)
             sort(cp)
             if cp[0] < days[0] or cp[n_user - 1] > days[N - 1]:
-                return PythonObject(-1)
+                return -1
     elif n_cp > 0:
         if hist < 1 or hist > N:
             raise Error("prophet_changepoints: hist must be in [1, N]")
@@ -220,7 +203,7 @@ def prophet_changepoints_py(addrs: PythonObject, ip: PythonObject, fp: PythonObj
             cp.append(days[idx])
     if len(cp) == 0:
         out[0] = 0
-        return PythonObject(1)
+        return 1
     for i in range(len(cp)):
         out[i] = Float32((cp[i] - start) / scale)
-    return PythonObject(len(cp))
+    return len(cp)

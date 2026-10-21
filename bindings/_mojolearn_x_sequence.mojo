@@ -82,7 +82,7 @@ from std.sys.info import has_apple_gpu_accelerator
 #: FAST + Apple default; rollback -D MOJOLEARN_SCHED_FAST_TABLE_OFF.
 comptime SCHED_FAST_TABLE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                              and not is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]())
-from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
+from sequence.prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 from sequence.moe_dev_pyapi import moe_forward_dev_py
 
