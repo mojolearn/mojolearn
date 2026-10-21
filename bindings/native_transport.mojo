@@ -196,7 +196,7 @@ def _transport_json(value: PythonObject, depth: Int = 0) raises -> String:
         return result + "]"
     if cls is t[].bi.dict:
         var keys = t[].bi.list(value)
-        for i in range(len(keys)):
+        for i in range(len(keys)):  # driver-loop: over header object keys
             if t[].bi.type(keys[i]) is not t[].bi.str:
                 raise Error("transport: JSON header keys must be strings")
         keys = t[].bi.sorted(keys)
@@ -221,7 +221,7 @@ def transport_send(socket: PythonObject, header: PythonObject, payload: PythonOb
     if n > (1 << 20):
         raise Error("transport: oversized header")
     var prefix = t[].bi.bytearray(4)
-    for i in range(4):
+    for i in range(4):  # small-loop(the 4-byte frame length word)
         prefix[i] = PythonObject((n >> (24 - i * 8)) & 255)
     t[].socket.sendall(socket, prefix)
     t[].socket.sendall(socket, raw)
@@ -250,7 +250,7 @@ def transport_receive(socket: PythonObject, max_payload: Int) raises -> PythonOb
         raise Error("transport: receive requires a native socket and nonnegative bound")
     var prefix = _transport_exact(socket, 4)
     var count = 0
-    for i in range(4):
+    for i in range(4):  # small-loop(the 4-byte frame length word)
         count = (count << 8) | Int(py=prefix[i])
     if count > (1 << 20):
         raise Error("transport: oversized header")
@@ -323,9 +323,9 @@ def transport_call(operation: String, args: PythonObject) raises -> PythonObject
     elif operation == "spawn":
         var argv = List[String]()
         var environment = List[String]()
-        for i in range(len(args[1])):
+        for i in range(len(args[1])):  # small-loop(process argument words)
             argv.append(String(args[1][i]))
-        for i in range(len(args[2])):
+        for i in range(len(args[2])):  # small-loop(process environment words)
             environment.append(String(args[2][i]))
         return PythonObject(transport_spawn(String(args[0]), argv, environment))
     elif operation == "wait":
