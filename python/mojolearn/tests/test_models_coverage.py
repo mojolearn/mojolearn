@@ -131,3 +131,19 @@ def test_program_fit_huber_delta_matches_numpy_and_refuses_bad_delta():
         for bad in (0.0, -1.0, float("nan")):
             with pytest.raises(Exception, match="Huber delta must be positive"):
                 program.fit(X, targets=y, optimizer=opt, loss="huber", huber_delta=bad, epochs=1)
+
+
+def test_program_run_dynamic_optimize_and_profile_options():
+    from mojolearn import ops
+    a = np.arange(6, dtype=np.float32).reshape(2, 3) - 2
+    expected = np.maximum(a * a, 0)
+    with ops.Session() as s:
+        x = s.tensor(np.ones((2, 3), np.float32))
+        program = s.capture(x, s.relu(s.mul(x, x)))
+        np.testing.assert_array_equal(program.run_dynamic(a), expected)
+        np.testing.assert_array_equal(program.run_dynamic(a, optimize=True), expected)
+        profiled = program.run_dynamic(a, profile=True)
+        np.testing.assert_array_equal(profiled["outputs"], expected)
+        assert profiled["profile"]["executor"]["format"] == "mojolearn-execution-profile/1"
+        with pytest.raises(ValueError, match="rank"):
+            program.run_dynamic(np.ones((1,) * 9, np.float32), profile=True)
