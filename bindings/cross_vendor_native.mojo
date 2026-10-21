@@ -125,7 +125,6 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
 
 
 def cross_vendor_state_hash(state: PythonObject) raises -> PythonObject:
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     cv_state(state)
     var hasher = Sha256()
     for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys): one digest update per named state field
