@@ -9,6 +9,7 @@ from pathlib import Path
 import tempfile
 import subprocess
 import shutil
+import tarfile
 import types
 import unittest
 import zipfile
@@ -122,6 +123,63 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertEqual((report["total"], report["passed"]), (3, 1))
         self.assertIn("original numerical mismatch", report["failures"][0]["reason"])
         self.assertEqual(report["skipped"][0]["reason"], "no physical GPU")
+
+    def archive_fixture(self, *, exclude_product=False):
+        repo = self.root / "archive-repo"; repo.mkdir()
+        files = {
+            ".gitattributes": "/bench/results/* export-ignore\n/bench/results/kept -export-ignore\n",
+            "bench/results/old/snapshot.mojo": "historical source\n",
+            "bench/results/kept/reference.mojo": "retained reference\n",
+            "autograd/runtime.mojo": "product source\n",
+            "pixi.toml": "toolchain\n",
+        }
+        if exclude_product:
+            files[".gitattributes"] += "/autograd/runtime.mojo export-ignore\n"
+        for rel, content in files.items():
+            path = repo / rel; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        for args in (["init", "-q"], ["add", "."],
+                     ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "archive fixture"]):
+            subprocess.run(["git", "-C", str(repo)] + list(args), check=True, capture_output=True)
+        commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        tree = subprocess.check_output(["git", "-C", str(repo), "ls-tree", "-r", "-z", commit])
+        committed = {row.split(b"\t", 1)[1].decode(): row.split(b"\t", 1)[0].split()[2].decode()
+                     for row in tree.split(b"\0") if row}
+        frozen = self.root / "archive-frozen"; frozen.mkdir()
+        archive = subprocess.check_output(["git", "-C", str(repo), "archive", commit])
+        with tarfile.open(fileobj=io.BytesIO(archive)) as stream:
+            stream.extractall(frozen, filter="data")
+        return repo, commit, committed, frozen
+
+    def test_archive_omissions_are_explicit_and_use_committed_parent_policy(self):
+        repo, commit, committed, frozen = self.archive_fixture()
+        # Uncommitted rules must not decide what the archived commit omitted.
+        (repo / ".gitattributes").write_text("/autograd/* export-ignore\n")
+        hashes, omitted = q.native_source_inventory(frozen, commit, committed, repo)
+        self.assertEqual(set(omitted), {"bench/results/old/snapshot.mojo"})
+        self.assertEqual(omitted["bench/results/old/snapshot.mojo"]["export_ignore_path"], "bench/results/old")
+        self.assertEqual(omitted["bench/results/old/snapshot.mojo"]["git_blob"], committed["bench/results/old/snapshot.mojo"])
+        self.assertEqual(hashes["autograd/runtime.mojo"], q.digest(frozen / "autograd/runtime.mojo"))
+        self.assertIn("bench/results/kept/reference.mojo", hashes)
+        (frozen / "bench/results/kept/reference.mojo").unlink()
+        with self.assertRaisesRegex(ValueError, "missing non-export-ignored native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
+
+    def test_missing_or_changed_product_source_is_never_an_archive_exemption(self):
+        repo, commit, committed, frozen = self.archive_fixture()
+        product = frozen / "autograd/runtime.mojo"
+        product.write_text("tampered product\n")
+        with self.assertRaisesRegex(ValueError, "uncommitted requested native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
+        product.unlink()
+        with self.assertRaisesRegex(ValueError, "missing requested native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
+
+    def test_export_ignored_product_source_still_refuses(self):
+        repo, commit, committed, frozen = self.archive_fixture(exclude_product=True)
+        self.assertFalse((frozen / "autograd/runtime.mojo").exists())
+        with self.assertRaisesRegex(ValueError, "missing requested native source"):
+            q.native_source_inventory(frozen, commit, committed, repo)
 
 
 if __name__ == "__main__":
