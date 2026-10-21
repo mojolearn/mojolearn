@@ -298,8 +298,6 @@ class TrainerOwnerEntries:
         if len(a) != 6:
             raise ValueError("byte LM trainer: expected 6 addresses")
         committed = _index(params[1], "completed")
-        if next_bytes and not callable(getattr(self, "byte_lm_session_next_bytes", None)):
-            raise ImportError("Byte-LM binding lacks resident GPU next bytes (byte_lm_session_next_bytes)")
         b, l = (_index(d, "dims") for d in dims)
         _validate_tokens(_read_i32(a[0], b * l), cfg)
         if not self._owner_session_open(session):
@@ -314,11 +312,21 @@ class TrainerOwnerEntries:
             self._owner_mark(session, committed)
             raise
 
-    def byte_lm_trainer_logits(self, session, addresses, dims, params, shape):
-        return self._owner_logits(session, addresses, dims, params, shape, False)
+    # Present exactly when the session entry they compose is: a binding
+    # without it reads as lacking the trainer entry (`getattr(..., None)`).
+    @property
+    def byte_lm_trainer_logits(self):
+        if not callable(getattr(self, "byte_lm_session_logits", None)):
+            raise AttributeError("byte_lm_trainer_logits needs byte_lm_session_logits")
+        return lambda session, addresses, dims, params, shape: self._owner_logits(
+            session, addresses, dims, params, shape, False)
 
-    def byte_lm_trainer_next_bytes(self, session, addresses, dims, params, shape):
-        return self._owner_logits(session, addresses, dims, params, shape, True)
+    @property
+    def byte_lm_trainer_next_bytes(self):
+        if not callable(getattr(self, "byte_lm_session_next_bytes", None)):
+            raise AttributeError("byte_lm_trainer_next_bytes needs byte_lm_session_next_bytes")
+        return lambda session, addresses, dims, params, shape: self._owner_logits(
+            session, addresses, dims, params, shape, True)
 
     def byte_lm_trainer_run(self, addresses, named, params, shape):
         cfg = _config(shape)

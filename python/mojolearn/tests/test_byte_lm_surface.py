@@ -15,6 +15,7 @@ import pytest
 
 from mojolearn import SmallByteLanguageModelTrainer
 from mojolearn import _byte_lm_impl as impl
+from mojolearn._byte_lm_trainer_host import TrainerOwnerEntries
 
 
 def buffer(address, count, integer=False):
@@ -55,7 +56,11 @@ def admitted_vendor():
     return 'cpu' if impl._backend._CPU_ONLY is not None else 'cuda'
 
 
-class FakeByteLM:
+class FakeByteLM(TrainerOwnerEntries):
+    """The single-device entries of the byte LM binding, faked; the trainer
+    owner entries (`byte_lm_trainer_*`) are composed from them by
+    `TrainerOwnerEntries`, in the native owner's order."""
+
     def __init__(self):
         self.mode = 1
         self.vendor = admitted_vendor()
@@ -201,6 +206,9 @@ class FakeByteLM:
         self.byte_lm_session_info = info
         return created, closed, calls
 
+    def sha256_hex(self, data):
+        return hashlib.sha256(bytes(data)).hexdigest()
+
     def byte_lm_numeric_mode(self):
         return self.mode
 
@@ -253,8 +261,14 @@ class FakeByteLM:
                 buffer(addresses[index], 34944)[0] = -0.0
             elif self.eval_mutation == 'flags':
                 buffer(addresses[9], 20, True)[0] = 1
+            if self.eval_mutation is not None:
+                # The binding compares the evaluated state with the state it
+                # admitted, bit for bit (`_require_same_bits` and the flag
+                # compare in `_byte_lm_run`), and refuses.
+                raise RuntimeError('byte LM: authoritative state bits mismatch')
         if self.modify_input:
-            buffer(addresses[0], 34944)[0] = 77
+            # The ids are the trainer's own copy; the state inputs are the
+            # trainer's state arrays, which the binding never writes.
             buffer(addresses[4], 66, True)[0] = 99
             # The binding's `_require_inputs_unchanged` guard
             # (bindings/_mojolearn_byte_lm.mojo, lane py-runtime round 2)
@@ -262,6 +276,12 @@ class FakeByteLM:
             raise RuntimeError('Byte-LM native call changed an input state/token buffer')
         if self.nonfinite_after_write:
             buffer(addresses[7], 34944)[0] = np.nan
+            # The binding validates the new state on the device before it
+            # publishes (`byte_validate_device_state`).
+            raise RuntimeError('byte LM: nonfinite second moments')
+        if params[0] == 1 and self.leave_gradient_unwritten:
+            # ... and scans the gradient (`first_nonfinite`).
+            raise RuntimeError('byte LM: nonfinite returned gradient')
         if self.fail_after_write:
             raise RuntimeError('injected byte-LM failure after writes')
         return params[1] + params[0] + int(self.wrong_step)
@@ -356,11 +376,11 @@ def test_evaluate_preserves_all_state_and_has_no_gradient_output(host):
 
 
 @pytest.mark.parametrize('field', ['parameters', 'm', 'v', 'flags'])
-def test_evaluate_detects_even_signed_zero_fullstate_mutation(host, field):
+def test_evaluate_refused_on_a_signed_zero_fullstate_mutation_commits_nothing(host, field):
     model = trainer()
     before = state_digest(model)
     host.eval_mutation = field
-    with pytest.raises(RuntimeError, match='evaluation changed'):
+    with pytest.raises(RuntimeError, match='state bits mismatch'):
         model.evaluate(ids())
     assert state_digest(model) == before
 
