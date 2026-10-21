@@ -35,9 +35,6 @@ Python then normalizes and mirrors on the kit (ss, scale, P + P^T).
 Integers (positions, counts, links) travel in pooled float buffers as int32
 bits; the pointers are made on the host before launch (no int-to-pointer
 cast in a kernel), and every function here is inlined into its kernel."""
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-
 from x_decomp.cells import F32Ptr, I32Ptr, add, div0
 from x_decomp.moves import argsort_f32
 
@@ -138,20 +135,6 @@ def iso_group_sum(d: F32Ptr, idx: I32Ptr, gst: I32Ptr, sm: F32Ptr, wt: I32Ptr, g
     wt.unsafe_store(g, Int32(t1 - t0))
 
 
-def _fp(o: PythonObject) raises -> F32Ptr:
-    var a = Int(py=o)
-    if a == 0:
-        raise Error("x_decomp: null buffer address")
-    return F32Ptr(unsafe_from_address=a)
-
-
-def _ip(o: PythonObject) raises -> I32Ptr:
-    var a = Int(py=o)
-    if a == 0:
-        raise Error("x_decomp: null buffer address")
-    return I32Ptr(unsafe_from_address=a)
-
-
 def mds_setup_host(pd: F32Ptr, pk: F32Ptr, pi: I32Ptr, pg: I32Ptr, ps: I32Ptr, n: Int) raises -> Tuple[Int, Int]:
     """The setup on host buffers (p = [n]; keys, idx, gid hold n (n - 1) / 2,
     gst n (n - 1) / 2 + 1). Returns (m, G)."""
@@ -186,15 +169,6 @@ def mds_setup_host(pd: F32Ptr, pk: F32Ptr, pi: I32Ptr, pg: I32Ptr, ps: I32Ptr, n
     _ = len(vals)
     _ = len(order)
     return (m, g)
-
-
-def mds_setup_host_py(
-    dis: PythonObject, keys: PythonObject, idx: PythonObject, gid: PythonObject, gst: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """The setup on host buffers (p = [n]; keys, idx, gid hold n (n - 1) / 2,
-    gst n (n - 1) / 2 + 1). Returns (m, G)."""
-    var r = mds_setup_host(_fp(dis), _fp(keys), _ip(idx), _ip(gid), _ip(gst), Int(py=p[0]))
-    return Python.tuple(r[0], r[1])
 
 
 def mds_disp_host(pd: F32Ptr, po: F32Ptr, a: List[Int], n: Int, m: Int, G: Int, first: Bool) raises:
@@ -240,21 +214,3 @@ def mds_disp_host(pd: F32Ptr, po: F32Ptr, a: List[Int], n: Int, m: Int, G: Int, 
                 gv.unsafe_store(g, iso_mean(sm, wt, h))
             for t in range(m):
                 po.unsafe_store(Int(pi.unsafe_load(t)), gv.unsafe_load(Int(pg.unsafe_load(t)) - 1))
-
-
-def mds_disp_host_py(d: PythonObject, dst: PythonObject, a: PythonObject, p: PythonObject) raises -> PythonObject:
-    """One iteration's upper-triangle disparities into dst (n x n, zeroed
-    here) on host buffers. a = [keys, idx, gid, gst, sm, wt, end, prv,
-    last, hf, gv] addresses; p = [n, m, G, first]."""
-    var li = List[Int]()
-    for i in range(11):
-        li.append(Int(py=a[i]))
-    var m = Int(py=p[1])
-    var pd = _fp(d)
-    var po = _fp(dst)
-    var n = Int(py=p[0])
-    var G = Int(py=p[2])
-    var first = Int(py=p[3]) != 0
-    with GILReleased(Python()):
-        mds_disp_host(pd, po, li, n, m, G, first)
-    return PythonObject(m)
