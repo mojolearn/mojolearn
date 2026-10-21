@@ -350,6 +350,13 @@ build_one() {
   local rc=0
   { echo "start $(date -u +%FT%TZ)"; } > "$log"
   if [[ "$s" = merged_build.sh ]]; then
+    # What this compile is expected to need, so a box log says what it tried:
+    # peaks measured on the DO MI325X 2026-10-20 at two compiler workers
+    # (tools/release_github_build.py NEEDED_GIB has the same numbers).
+    local peak="46.4 GB (identical + byte LM)" cj=$GPU_COMPILE_JOBS
+    if [[ "$tier" = fast ]]; then peak="36.6 GB"; fi
+    if [[ "$tier" = host ]]; then peak="6.9 GB"; cj=2; fi
+    say "merged $tier build: expected peak RSS ~$peak, MOJOLEARN_COMPILE_JOBS=$cj, bound ${bound}s"
     # ONE MERGED COMPILE PER DIRECTORY SET, under its own larger bound. Same
     # environment as the per-binding builds of that set: GPU tiers keep the
     # vendor's GPU_COMPILE_JOBS (AMD: MOJOLEARN_AMD_COMPILE_JOBS, see the top), the host set
