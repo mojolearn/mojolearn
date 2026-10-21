@@ -259,7 +259,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         var nkv = nh if options["n_kv_heads"] is None else Int(py=options["n_kv_heads"])
         var hd = dm // nh if options["head_dim"] is None else Int(py=options["head_dim"])
         if nh < 1 or nkv < 1 or hd < 1 or dm != nh * hd:
-            raise Error("CausalLM: d_model must equal positive n_heads * head_dim")
+            raise Error("CausalLM: d_model must equal n_heads * head_dim, all positive")
         var mlp = String(options["mlp"])
         var norm = String(options["norm"])
         var nk = 0 if norm == "rmsnorm" else (1 if norm == "layernorm" else (2 if norm == "rmsnorm_offset" else -1))

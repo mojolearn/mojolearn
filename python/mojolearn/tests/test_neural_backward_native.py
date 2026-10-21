@@ -101,7 +101,9 @@ def test_mamba3_backward_is_native_and_matches_raw_abi(monkeypatch):
     with monkeypatch.context() as patch:
         _poison(patch)
         patch.setattr(Mamba3Block, "_extension", lambda *a: pytest.fail("Python binding selection"))
-        patch.setattr(Mamba3Block, "_prefill_backward", lambda *a: pytest.fail("Python backward loop"))
+        # The Python prefill-backward driver no longer exists; the audit below
+        # sees any Python frame the operation enters.
+        assert not hasattr(Mamba3Block, "_prefill_backward")
         actual = audit_native_call(block.backward, inputs, gradient).assert_native()
     assert set(actual) == set(expected)
     for name in expected:
