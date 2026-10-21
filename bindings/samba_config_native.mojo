@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.samba_admission import samba_admit
 
 
 def samba_config_init(config: PythonObject, args: PythonObject) raises -> PythonObject:
@@ -137,6 +138,7 @@ def samba_config_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var args = PythonObject(from_borrowed=args_ptr)
         var operation = String(args[0])
         var values = args[1]
+        samba_admit(operation, values, args[2])
         var result = PythonObject(None)
         if operation == "initialize":
             result = samba_config_init(values[0], values[1])
@@ -152,4 +154,8 @@ def samba_config_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             raise Error("SambaConfig: unknown native operation " + operation)
         return result.steal_data()
     except error:
+        if String(error).startswith("TypeError:"):
+            return raise_python_exception(error, ExceptionType.TypeError)
+        if String(error).startswith("NotImplementedError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
         return raise_python_exception(error, ExceptionType.ValueError)

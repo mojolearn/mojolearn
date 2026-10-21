@@ -11,6 +11,7 @@ from bindings.samba_step_native import samba_train_step
 from bindings.samba_inference_native import samba_forward, samba_allocate, samba_loss, samba_state_construct
 from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkpoint_load, samba_checkpoint_read
 from bindings.samba_cpu_inference import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
+from bindings.samba_admission import samba_admit
 
 
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -19,6 +20,7 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var operation = String(args[0])
         var values = args[1]
         var context = args[2]
+        samba_admit(operation, values, context)
         var result = PythonObject(None)
         if operation == "model_train_step":
             result = samba_train_step(values[0], values[1], values[2], context)
