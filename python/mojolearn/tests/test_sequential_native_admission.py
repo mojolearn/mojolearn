@@ -132,3 +132,51 @@ def test_native_sequential_uses_cached_native_array_slots_when_properties_are_po
             patch.setattr(Array, name, property(forbidden))
         audit_native_call(out.fit, supplied, y, epochs=1, seed=7).assert_native()
     assert out.params_.tobytes() == expected.params_.tobytes()
+
+
+def test_native_sequential_refuses_defaultdict_python_factory_before_missing_lookup():
+    from collections import defaultdict
+
+    entered = []
+
+    def factory():
+        entered.append("factory")
+        return "mse"
+
+    out = Sequential().linear(1).compile()
+    options = dict(out._options)
+    del options["loss"]
+    out._options = defaultdict(factory, options)
+    refused(out.fit, np.ones((3, 2), "f4"), np.zeros(3, "f4"), epochs=1)
+    assert entered == []
+
+
+@pytest.mark.parametrize("factory", [None, list, np.int64])
+def test_native_sequential_preserves_defaultdict_native_factories(factory):
+    from collections import defaultdict
+
+    out = Sequential().linear(1).compile()
+    out._options = defaultdict(factory, out._options)
+    assert audit_native_call(out.fit, np.ones((3, 2), "f4"), np.zeros(3, "f4"),
+                              epochs=1).assert_native() is out
+
+
+def test_native_sequential_refuses_str_subclass_inside_exact_path(tmp_path):
+    from pathlib import PosixPath
+
+    entered = []
+
+    class Component(str):
+        def startswith(self, *args):
+            entered.append("startswith")
+            return False
+
+        def rstrip(self, *args):
+            entered.append("rstrip")
+            return self
+
+    path = PosixPath(tmp_path / "model.ckpt")
+    field = "_raw_paths" if hasattr(path, "_raw_paths") else "_parts"
+    object.__setattr__(path, field, [Component(str(path))])
+    refused(Sequential.load, path)
+    assert entered == []
