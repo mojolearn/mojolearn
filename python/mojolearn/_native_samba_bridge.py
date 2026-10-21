@@ -3,6 +3,72 @@
 RUNTIME = None
 CONTEXT = None
 
+def _connect_admission(config_cls, model_cls, state_cls, training, neural):
+    # Package connection only: retain C descriptors and exact native classes.
+    # NumPy remains optional and may be imported by a caller after mojolearn.
+    import array
+    import mmap
+    import sys
+    import _thread
+    from collections import OrderedDict, defaultdict
+    from pathlib import PosixPath, PurePosixPath
+    from types import ModuleType
+    from .neural_inference import SambaInference
+    from ._mamba_impl import Mamba3State
+    nc = neural.CONTEXT
+    fields = (
+        "config", "numeric_mode", "arrays", "flat", "names", "shapes", "offsets", "n_total",
+        "optimizer", "generator", "max_norm", "_blocks", "_w", "weight_format", "_native_cpu_inference",
+        "vocab", "d_model", "layers", "n_heads", "n_kv_heads", "head_dim", "intermediate",
+        "tie_embeddings", "norm_eps", "dropout", "params", "_m", "_v", "buf_initialized", "t",
+        "lr", "betas", "eps", "weight_decay", "accumulation_steps", "lr_schedule", "maximize",
+        "_host_fresh", "_pristine", "_p_dev", "_g_dev", "_resident_wanted", "seed", "counter",
+        "peak_lr", "min_lr", "warmup_steps", "total_steps", "_wopt", "_int15", "nheads", "d_inner",
+        "d_in_proj", "window", "_opts_tail", "_extended", "numeric_profile", "_native_kind", "_native_route",
+        "_owned_generation", "_owned_restore_pending", "_discard_reports", "dt_limit", "_dt_limit",
+        "_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed",
+        "batch_size", "max_tokens", "k_cache", "v_cache", "cached_tokens", "theta", "h",
+        "buffer_qrot", "buffer_krot", "buffer_v", "buffer_dt", "buffer_sig", "buffer_adt",
+        "pending_k", "pending_v", "buffered_tokens", "pending", "bits", "codes", "exponents", "shape",
+        "conv_window", "profile_id", "absolute_position", "affine_boundary", "affine_a", "affine_b",
+        "_nn34_usable", "buffer_xbc", "buffer_dtraw", "last_", "packed_", "lr_", "clip_coef_", "total_norm_",
+        "_runtime_lock", "_W_NAMES", "_opts_flags", "_gated", "max_positions", "rope_dim", "conv_dim", "dt_rank",
+        "kind", "device", "block_options", "block_kwargs",
+    )
+    classes = [config_cls, model_cls, state_cls, SambaInference, Mamba3State,
+               training.AdamW, training.Generator, training.ConstantLR,
+               training.WarmupLinearLR, training.WarmupCosineLR,
+               nc["bf16_class"], nc["int8_class"], nc["model_class"], nc["config_context"]["plan_class"]]
+    classes.extend(nc["generation_classes"][2].values())
+    for group in nc["block_classes"].values():  # glue: fixed ABI owner classes at package connection
+        classes.extend(group.values())
+    classes = tuple(dict.fromkeys(classes))
+    records = []
+    for cls in classes:  # glue: retain native __dict__ getters for admitted records
+        descriptor = next(vars(base)["__dict__"] for base in cls.__mro__ if "__dict__" in vars(base))
+        records.append((cls, descriptor.__get__, fields))
+    array_cls = nc["array_class"]
+    array_names = tuple(array_cls.__slots__)
+    guards = []
+    for cls in classes + (array_cls,):  # glue: retained class metadata, never runtime callbacks
+        names = array_names if cls is array_cls else fields + ("__dict__",)
+        namespace = vars(cls)
+        keys = names + ("__getattribute__", "__getattr__", "__setattr__")
+        guards.append((namespace, tuple((name, namespace.get(name)) for name in keys), cls, cls.__mro__))
+    return {
+        "records": tuple(records), "guards": tuple(guards), "array_class": array_cls,
+        "array_getters": {name: vars(array_cls)[name].__get__ for name in array_names},
+        "array_metadata": ("shape", "dtype", "order", "_addr", "_readonly", "ndim", "size", "nbytes", "itemsize", "strides"),
+        "mapping_types": (dict, OrderedDict, defaultdict),
+        "scalar_types": (type(None), bool, int, float, complex, str, bytes),
+        "buffer_types": (bytes, bytearray, array.array, mmap.mmap),
+        "opaque_types": (_thread.LockType, type(_thread.RLock())),
+        "path_types": (PosixPath, PurePosixPath), "module_type": ModuleType, "modules": sys.modules,
+        "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32", "float64", "longdouble"),
+        "type_flags": vars(type)["__flags__"].__get__,
+        "type_mro": vars(type)["__mro__"].__get__,
+        "schedule_types": (training.ConstantLR, training.WarmupLinearLR, training.WarmupCosineLR),
+    }
 
 def connect(config_cls, model_cls, training, neural, state_cls):
     # ABI connection at package import only; no operation invokes this function.
@@ -72,6 +138,7 @@ def connect(config_cls, model_cls, training, neural, state_cls):
         generator_sqrt, generator_sqrt_type = str(exc), None
     return {
         **core,
+        "admission": _connect_admission(config_cls, model_cls, state_cls, training, neural),
         "generator_bindings": generator_bindings, "generator_backend": _backend,
         "generator_index": _operator.index,
         "generator_sqrt": generator_sqrt, "generator_sqrt_type": generator_sqrt_type,

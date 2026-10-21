@@ -104,16 +104,16 @@ class SambaConfig(object):
         return _native_neural_bridge.RUNTIME.samba_config_call(
             "initialize", (self, (vocab, d_model, layers, n_heads, n_kv_heads,
                                    head_dim, intermediate, tie_embeddings,
-                                   norm_eps, dropout)))
+                                   norm_eps, dropout)), _native_samba_bridge.CONTEXT)
 
     def to_dict(self):
         """The configuration as a plain dict (the inverse of `from_dict`)."""
-        return _native_neural_bridge.RUNTIME.samba_config_call("dict", (self,))
+        return _native_neural_bridge.RUNTIME.samba_config_call("dict", (self,), _native_samba_bridge.CONTEXT)
 
     @classmethod
     def from_dict(cls, d):
         """Build a configuration from a dict made by `to_dict`."""
-        return _native_neural_bridge.RUNTIME.samba_config_call("from_dict", (cls, d))
+        return _native_neural_bridge.RUNTIME.samba_config_call("from_dict", (cls, d), _native_samba_bridge.CONTEXT)
 
     # -- the registry ---------------------------------------------------
     def block_shapes(self, kind):
@@ -129,7 +129,7 @@ class SambaConfig(object):
         list of (str, tuple)
             ``(name, shape)`` pairs in the block's weight order.
         """
-        return _native_neural_bridge.RUNTIME.samba_config_call("block_shapes", (self, kind))
+        return _native_neural_bridge.RUNTIME.samba_config_call("block_shapes", (self, kind), _native_samba_bridge.CONTEXT)
 
     def registry(self):
         """Names and shapes of every parameter tensor of the stack, in order.
@@ -142,7 +142,7 @@ class SambaConfig(object):
         -------
         list of (str, tuple)
         """
-        return _native_neural_bridge.RUNTIME.samba_config_call("registry", (self,))
+        return _native_neural_bridge.RUNTIME.samba_config_call("registry", (self,), _native_samba_bridge.CONTEXT)
 
 
 def _init_tensor(gen, name, shape):
