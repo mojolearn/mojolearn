@@ -288,103 +288,79 @@ def dev_project_run(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) r
     return m * n
 
 
-def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_rand_run(dst: Int, count: Int, seed_in: Int, stream_in: Int, kind: Int) raises -> Int:
     """p = [count, seed, stream, kind]: `rand_py`'s draws (x_decomp/cells.mojo
     `rand_cell`, the counter-based Philox stream) written into the device
     matrix, enqueued (no sync, no download): the random projections' matrix
     is made where transform reads it (lane gap-nb-maxabs-grp)."""
-    var count = _n(p, 0)
-    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
-    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
-    var kind = Int(py=p[3])
+    var seed = UInt32(seed_in & 0xFFFFFFFF)
+    var stream = UInt32(stream_in & 0xFFFFFFFF)
     if count == 0:
-        return PythonObject(0)
+        return 0
     xd_ctx().enqueue_function[rand_kernel](
-        _ptr(_id(dst), count), Int32(count), seed, stream, Int32(kind), grid_dim=_blocks(count), block_dim=TPB
+        _ptr(dst, count), Int32(count), seed, stream, Int32(kind), grid_dim=_blocks(count), block_dim=TPB
     )
-    return PythonObject(count)
+    return count
 
 
-def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_trisolve_run(lu: Int, idx: Int, src: Int, dst: Int, n: Int, nrhs: Int, trans: Int) raises -> Int:
     """`trisolve_py` on device ids, enqueued (no sync)."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var trans = _n(p, 2)
     if n >= 1 << 24:
         raise Error("x_decomp: trisolve row numbers exceed float32's exact integers")
     var sid = pool_alloc(max(n * nrhs, 1))
-    launch_trisolve(xd_ctx(), _ptr(_id(lu), n * n), _ptr(_id(idx), n), _ptr(_id(src), n * nrhs),
-                    _ptr(_id(dst), n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
+    launch_trisolve(xd_ctx(), _ptr(lu, n * n), _ptr(idx, n), _ptr(src, n * nrhs),
+                    _ptr(dst, n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
     pool_free(sid)
-    return PythonObject(n)
+    return n
 
 
-def dev_knn_select_py(dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_knn_select_run(dmat: Int, dist: Int, idx: Int, n: Int, m: Int, k: Int, ex: Int) raises -> Int:
     """`knn_select_py` on device ids, enqueued (no sync)."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var k = _n(p, 2)
-    var ex = _n(p, 3)
     if m >= 1 << 24 or n * m > 2147483647:
         raise Error("x_decomp: knn_select exceeds the index bounds")
-    launch_knn_select(xd_ctx(), _ptr(_id(dmat), n * m), _ptr(_id(dist), n * k), _ptr(_id(idx), n * k), n, m, k, ex)
-    return PythonObject(n)
+    launch_knn_select(xd_ctx(), _ptr(dmat, n * m), _ptr(dist, n * k), _ptr(idx, n * k), n, m, k, ex)
+    return n
 
 
-def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var d = _n(p, 1)
+def dev_colsum_run(a: Int, dst: Int, n: Int, d: Int) raises -> Int:
     var ns = colsum_scratch(n, d)
     var sid = pool_alloc(ns)
-    launch_colsum(xd_ctx(), _ptr(_id(a), n * d), _ptr(_id(dst), d), _ptr(sid, ns), n, d)
+    launch_colsum(xd_ctx(), _ptr(a, n * d), _ptr(dst, d), _ptr(sid, ns), n, d)
     pool_free(sid)
-    return PythonObject(d)
+    return d
 
 
-def dev_rowsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var d = _n(p, 1)
+def dev_rowsum_run(a: Int, dst: Int, n: Int, d: Int) raises -> Int:
     var ns = rowsum_scratch(n, d)
     var sid = pool_alloc(ns)
-    launch_rowsum(xd_ctx(), _ptr(_id(a), n * d), _ptr(_id(dst), n), _ptr(sid, ns), n, d)
+    launch_rowsum(xd_ctx(), _ptr(a, n * d), _ptr(dst, n), _ptr(sid, ns), n, d)
     pool_free(sid)
-    return PythonObject(n)
+    return n
 
 
-def dev_sqdist_py(a: PythonObject, b: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_sqdist_run(a: Int, b: Int, dst: Int, na: Int, nb: Int, d: Int, kind: Int, pw_in: Float64) raises -> Int:
     # p = [na, nb, d] or [na, nb, d, kind, pw], as x_decomp_sqdist
-    var na = _n(p, 0)
-    var nb = _n(p, 1)
-    var d = _n(p, 2)
     if na * nb > 2147483647:
         raise Error("x_decomp: sqdist exceeds the Int32 index bound")
-    var kind = _n(p, 3) if len(p) > 3 else 0
-    var pw = Float32(Float64(py=p[4])) if len(p) > 4 else Float32(2)
-    launch_sqdist(xd_ctx(), _ptr(_id(a), na * d), _ptr(_id(b), nb * d), _ptr(_id(dst), na * nb), na, nb, d, kind, pw)
-    return PythonObject(na * nb)
+    var pw = Float32(pw_in)
+    launch_sqdist(xd_ctx(), _ptr(a, na * d), _ptr(b, nb * d), _ptr(dst, na * nb), na, nb, d, kind, pw)
+    return na * nb
 
 
-def dev_absmax_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_absmax_run(a: Int, dst: Int, n: Int, d: Int, by_col: Bool) raises -> Int:
     # p = [n, d, by_col], as x_decomp_absmax_sign
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var by_col = Int(py=p[2]) != 0
     var cnt = d if by_col else n
     var ns = absmax_scratch(n, d, by_col)
     var sid = pool_alloc(ns)
-    launch_absmax(xd_ctx(), _ptr(_id(a), n * d), _ptr(_id(dst), cnt), _ptr(sid, ns), n, d, by_col)
+    launch_absmax(xd_ctx(), _ptr(a, n * d), _ptr(dst, cnt), _ptr(sid, ns), n, d, by_col)
     pool_free(sid)
-    return PythonObject(cnt)
+    return cnt
 
 
-def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_orth_run(ia: Int, io: Int, m: Int, l: Int) raises -> Int:
     """dst = the orthonormalized columns of a (DevExec.orth's passes on the
     device copy; a is unchanged)."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
     var cells = m * l
-    var ia = _id(a)
-    var io = _id(dst)
     _ = _ptr(ia, cells)
     _ = _ptr(io, cells)
     var pool = X_DECOMP_POOL.get_or_create_ptr()
@@ -392,22 +368,16 @@ def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> P
     if cells > 0:
         var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
         ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
-        with GILReleased(Python()):
-            orth_on_device(ctx, sub, m, l)
-    return PythonObject(cells)
+        orth_on_device(ctx, sub, m, l)
+    return cells
 
 
-def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`dev_orth_py`, and the host floats at `diag` (l) = the product of the
+def dev_orth_diag_run(ia: Int, io: Int, pd: F32Ptr, m: Int, l: Int) raises -> Int:
+    """`dev_orth_run`, and the host floats at `pd` (l) = the product of the
     two passes' R diagonals (`orth_on_device_diag`, lane neural-pass17)."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
     var cells = m * l
-    var ia = _id(a)
-    var io = _id(dst)
     _ = _ptr(ia, cells)
     _ = _ptr(io, cells)
-    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
     var pool = X_DECOMP_POOL.get_or_create_ptr()
     var ctx = xd_ctx()
     var dd = ctx.enqueue_create_buffer[DType.float32](l if l > 0 else 1)
@@ -415,91 +385,77 @@ def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: 
     if cells > 0:
         var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
         ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
-        with GILReleased(Python()):
-            orth_on_device_diag(ctx, sub, m, l, dd, True)
+        orth_on_device_diag(ctx, sub, m, l, dd, True)
     if l > 0:
         ctx.enqueue_copy(dst_ptr=pd, src_buf=dd.create_sub_buffer[DType.float32](0, l))
     ctx.synchronize()
     _ = dd^
-    return PythonObject(cells)
+    return cells
 
 
-def dev_lda_rows_py(
-    x: PythonObject, ew: PythonObject, d: PythonObject, e: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
+def dev_lda_rows_run(
+    x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior_in: Float64, tol_in: Float64
+) raises -> Int:
     """`x_decomp_lda_rows` on device matrices (lane/py-decomp-nbrs): d and e
     (n x k) updated in place on the device; DevExec.lda_rows' kernel and
     launch shape, with no upload, download or sync. p = [n, k, v, max_iter],
     f = [prior, tol], as x_decomp_lda_rows. Before, the host-only entry
     downloaded the resident X (n x v) and uploaded it again every E-step
     (12 GB per iteration at 1M x 1000)."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
-    var max_iter = _n(p, 3)
     if n * (v + k) > 2147483647:
         raise Error("x_decomp: lda_rows exceeds the Int32 index bound")
-    var prior = Float32(Float64(py=f[0]))
-    var tol = Float32(Float64(py=f[1]))
-    var px = _ptr(_id(x), n * v)
-    var pw = _ptr(_id(ew), k * v)
-    var pd = _ptr(_id(d), n * k)
-    var pe = _ptr(_id(e), n * k)
+    var prior = Float32(prior_in)
+    var tol = Float32(tol_in)
+    var px = _ptr(x, n * v)
+    var pw = _ptr(ew, k * v)
+    var pd = _ptr(d, n * k)
+    var pe = _ptr(e, n * k)
     if n == 0:
-        return PythonObject(0)
+        return 0
     var sid = pool_alloc(n * (v + k))
     var iid = pool_alloc(n)
     launch_lda_rows(xd_ctx(), px, pw, pd, pe, _ptr(sid, n * (v + k)), _ptr(iid, n), n, k, v, prior, max_iter, tol)
     pool_free(sid)
     pool_free(iid)
-    return PythonObject(n)
+    return n
 
 
-def dev_lda_bound_py(
-    x: PythonObject, ddt: PythonObject, dcomp: PythonObject, dst: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
+def dev_lda_bound_run(
+    x: Int, ddt: Int, dcomp: Int, dst: Int, n: Int, k: Int, v: Int, floor_in: Float64
+) raises -> Int:
     """LatentDirichletAllocation._approx_bound's word-term cells on device
     matrices (lane gap-lda-als): dst (n x v) = x * logsumexp_t(ddt[:, t] +
     dcomp[t, :]) through the same `ew_cell` chain the composed path runs, with
     no n x v term matrix per topic. p = [n, k, v], f = [floor]."""
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var v = _n(p, 2)
     if n * v > 2147483647:
         raise Error("x_decomp: lda_bound exceeds the Int32 index bound")
-    var floor = Float32(Float64(py=f[0]))
+    var floor = Float32(floor_in)
     launch_lda_bound(
-        xd_ctx(), _ptr(_id(x), n * v), _ptr(_id(ddt), n * k), _ptr(_id(dcomp), k * v), _ptr(_id(dst), n * v),
+        xd_ctx(), _ptr(x, n * v), _ptr(ddt, n * k), _ptr(dcomp, k * v), _ptr(dst, n * v),
         n, k, v, floor,
     )
-    return PythonObject(n * v)
+    return n * v
 
 
-def dev_als_rows_py(
-    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
+def dev_als_rows_run(
+    c: Int, y: Int, yty: Int, x: Int, flags: Int, n: Int, m: Int, f: Int, su: Int, si: Int, cl: Int,
+    reg: Float64,
+) raises -> Int:
     """`x_decomp_als_rows` on device matrices (lane gap-lda-als): every row's
     `als_row` into x (n x f) and flags (n), one block per row; element (u, i)
     of the confidences at c[u * su + i * si], so the item half-sweep reads the
     resident user x item matrix with su = 1, si = items (no transpose).
     p = [n, m, f, su, si, c_len]."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var f = _n(p, 2)
-    var su = _n(p, 3)
-    var si = _n(p, 4)
-    var cl = _n(p, 5)
     if n == 0:
-        return PythonObject(0)
+        return 0
     var ns = als_scratch(n, f)
     var sid = pool_alloc(ns if ns > 0 else 1)
     launch_als_rows(
-        xd_ctx(), _ptr(_id(c), cl), _ptr(_id(y), m * f), _ptr(_id(yty), f * f), _ptr(_id(x), n * f),
-        _ptr(sid, ns if ns > 0 else 1), _ptr(_id(flags), n), n, m, f, su, si, Float32(Float64(py=reg)),
+        xd_ctx(), _ptr(c, cl), _ptr(y, m * f), _ptr(yty, f * f), _ptr(x, n * f),
+        _ptr(sid, ns if ns > 0 else 1), _ptr(flags, n), n, m, f, su, si, Float32(reg),
     )
     pool_free(sid)
-    return PythonObject(n)
+    return n
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_CD_RESIDENT (IDENTICAL default) ----
