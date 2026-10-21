@@ -136,6 +136,9 @@ from ivf.impl.neighbors.ivf_common import (
     postprocess_neighbors,
     postprocess_distances,
     postprocess_distances_is_identity,
+    IVF_OUT_OF_BOUNDS_RECORD,
+    ivf_id_to_i32,
+    ivf_out_of_bounds_distance,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import (
     IvfFlatBuildDevice,
@@ -661,31 +664,16 @@ def _count_sum(counts: List[Int32], q0: Int, q1: Int) -> Int:
     return t
 
 
-def _refuse_query(
-    counts: List[Int32], n_queries: Int, n_probes: Int, k: Int, filtered: Bool, partial_storage: Bool
-) raises:
-    """DEVIATION 1794. Their `postprocess_neighbors_kernel` fills the short
-    slots with `kOutOfBoundsRecord` (`ivf_common.cuh:106-108`); that fill is
-    not implemented and the implemented selection cannot take `k > len`.
-    Refusing names the first such query and the two numbers a caller can
-    act on. The first query that selects anything and asks for more than
-    the mode's selection capacity refuses as the per-query selector did."""
-    for q in range(n_queries):
-        if Int(counts[q]) < k and not partial_storage:
-            raise Error(
-                "ivf_flat search: query "
-                + String(q)
-                + " probes "
-                + String(n_probes)
-                + " lists holding "
-                + String(Int(counts[q]))
-                + " vectors between them, fewer than k = "
-                + String(k)
-                + (" (after the filter)" if filtered else "")
-                + ". Their kOutOfBoundsRecord short-fill"
-                " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
-                " or lower k, or rebuild with fewer lists."
-            )
+def _refuse_query(counts: List[Int32], n_queries: Int, k: Int) raises:
+    """The first query that selects anything and asks for more than the
+    mode's selection capacity refuses as the per-query selector did.
+
+    A query whose probed lists hold fewer than `k` candidates is no longer
+    refused (lane ivf-short-fill, 2026-10-21; DEVIATION 1794 lifted): it
+    selects its `min(k, count)` candidates and the emit kernel short-fills
+    the rest with `kOutOfBoundsRecord` (`ivf_common.cuh:106-108`;
+    `IVF_OUT_OF_BOUNDS_RECORD`, distance `+inf`)."""
+    for q in range(n_queries):  # small-loop(n_queries: one count per query): the selection-capacity refusal, no row data
         var selected = min(k, Int(counts[q]))
         if selected > IVF_SELECT_LIMIT:
             raise Error("ivf_flat: selection k exceeds the mode's bounded rank capacity " + String(IVF_SELECT_LIMIT))
@@ -756,7 +744,9 @@ def ivf_flat_search_prepared(
     below, never the one-launch scan, so an unfiltered search is untouched.
 
     Row-major `queries` of `n_queries x dim`. Returns `n_queries x k`
-    distances and ORIGINAL row ids, ascending by `(distance, index)`.
+    distances and ORIGINAL row ids, ascending by `(distance, index)`. A
+    query whose probed lists hold `c < k` candidates fills slots `c .. k-1`
+    with `(+inf, IVF_OUT_OF_BOUNDS_RECORD)` (zeros under partial storage).
 
     THEIR BATCHING HEURISTIC IS NOT IMPLEMENTED (`:343-353`): `max_queries` comes
     from `get_workspace_free_bytes`, which is a device memory number, and a
@@ -932,6 +922,9 @@ def ivf_flat_search_prepared(
                 ctx, dprobe_idx, dev.d_off, dev.d_ind, d_keep, filtered,
                 n_queries, n_probes, n_lists, index.n_rows,
             )
+            # a query with fewer than k candidates sends the whole call to
+            # the per-query path below, which short-fills it; a call whose
+            # every query has k takes this scan exactly as before
             var enough = device_count_less_i32(ctx, d_counts, n_queries, Int32(k)) == 0
             var counts = List[Int32](length=n_queries, fill=Int32(0))
             if n_queries > 0:
@@ -1073,7 +1066,12 @@ def ivf_flat_search_prepared(
         n_queries, n_probes, n_lists, index.n_rows,
     )
     var cand_counts = download_i32(ctx, dcounts, n_queries)
-    _refuse_query(cand_counts, n_queries, n_probes, k, filtered, partial_storage)
+    _refuse_query(cand_counts, n_queries, k)
+    # the slots past a query's candidate count: the short-fill of a plain
+    # search (their kOutOfBoundsRecord, distance +inf), the zero padding a
+    # partial-storage shard's driver ignores (it reads n_candidates)
+    var pad_d = Float32(0.0) if partial_storage else ivf_out_of_bounds_distance()
+    var pad_i = UInt32(0) if partial_storage else IVF_OUT_OF_BOUNDS_RECORD
     var dkp = (
         ivf_kept_prefix_device(ctx, dev.d_ind, dkeep, index.n_rows) if filtered
         else ctx.enqueue_create_buffer[DType.int32](1)
@@ -1092,7 +1090,7 @@ def ivf_flat_search_prepared(
         var batch = ivf_query_batch_device(
             ctx, dprobe_idx, dev.d_off, dev.d_ind, dkp, filtered, dcounts,
             dq, dq_norm, dev.dlist_data, dev.dlist_norm,
-            q0, q1, total, n_probes, dim, k, d_od, d_oi,
+            q0, q1, total, n_probes, dim, k, d_od, d_oi, pad_d, pad_i,
         )
         if trace.enabled:
             _trace_batch(ctx, batch, all_cand_idx, all_cand_dist)
@@ -1117,7 +1115,7 @@ def ivf_flat_search_prepared(
         trace.record_list_f32("ivf.out_dist", out_dist)
         var out_i32 = List[Int32]()
         for i in range(n_queries * k):
-            out_i32.append(Int32(out_idx[i]))
+            out_i32.append(ivf_id_to_i32(out_idx[i]))
         trace.record_list_i32("ivf.out_idx", out_i32)
 
     _ = dq^
