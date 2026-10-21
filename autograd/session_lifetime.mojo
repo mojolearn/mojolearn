@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-# PythonModuleBuilder owns this native value. Releasing a Session's last
+# The binding registers this native value with PythonModuleBuilder
+# (session_lifetime_pyapi.mojo builds it). Releasing a Session's last
 # reference closes its executor without a Python __del__ callback.
-from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
-from autograd.ops_api import ops_session_open, ops_session_close
-from autograd.program_arrays_pyapi import initialize_program_arrays
+from autograd.ops_api import ops_session_close
 
 
 struct SessionLifetime[E: Exec & Movable & Deinitable, KIND: Int](Movable, Writable):
@@ -31,14 +30,3 @@ struct SessionLifetime[E: Exec & Movable & Deinitable, KIND: Int](Movable, Writa
                 ops_session_close[Self.E, Self.KIND](self.sid)
             except:
                 pass
-
-
-def ops_session_create_py[E: Exec & Movable & Deinitable, KIND: Int](
-    var ex: E, record: PythonObject,
-) raises -> PythonObject:
-    initialize_program_arrays()
-    var sid = ops_session_open[E, KIND](ex^, Bool(py=record))
-    var owner = SessionLifetime[E, KIND](sid)
-    # Construct the fixed ABI result directly with the supported native
-    # list constructor, transferring the native owner exactly once.
-    return Python.list(PythonObject(sid), PythonObject(alloc=owner^))

@@ -11,7 +11,8 @@ from std.python._cpython import PyObjectPtr
 from autograd.python_errors_pyapi import graph_python_error
 from autograd.ops_frontend_pyapi import ops_session_call_py
 from autograd.session_frontend_pyapi import ops_session_initialize_py
-from autograd.session_lifetime import SessionLifetime, ops_session_create_py
+from autograd.session_lifetime import SessionLifetime
+from autograd.session_lifetime_pyapi import ops_session_create_py
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
