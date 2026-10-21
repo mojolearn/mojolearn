@@ -5,6 +5,10 @@ NEURAL_FAMILIES = frozenset(('byte_lm', 'neural', 'training', 'mamba',
 CLASSICAL_SEQUENCE = frozenset(('sequence-autoarima', 'sequence-stl', 'sequence-var',
                                 'sequence-theta', 'sequence-croston', 'sequence-ets',
                                 'sequence-garch', 'sequence-prophet'))
+# One seeded forward, backward and optimizer step through the autograd tape
+# (tools/identity_lanes/sequence.py): 64 rows, seconds, so routine `verify`
+# covers the tape while full neural training stays opt-in.
+ROUTINE_TAPE = frozenset(('sequence-tape-sequential', 'sequence-tape-program'))
 # These fixtures use loaded weights or inspect configuration without training.
 NEURAL_INFERENCE = frozenset(('hf-causal-lm', 'byte-lm-host-infer',
                               'byte-lm-host-infer-threaded', 'language-model-config'))
@@ -18,7 +22,7 @@ def neural_training_lanes(harness, surface):
             lanes.update(declared)
         elif family['family'] == 'x_sequence':
             lanes.update(declared - CLASSICAL_SEQUENCE)
-    return lanes.intersection(harness.LANES) - NEURAL_INFERENCE
+    return lanes.intersection(harness.LANES) - NEURAL_INFERENCE - ROUTINE_TAPE
 
 
 def select(harness, surface, lanes, *, neural=False, asked=()):

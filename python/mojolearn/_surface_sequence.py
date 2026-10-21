@@ -29,7 +29,9 @@ FAMILIES = (
                         "sequence-lr-schedulers", "sequence-layernorm",
                         "sequence-theta", "sequence-croston",
                         "sequence-ets", "sequence-garch",
-                        "sequence-prophet", "sequence-moe"),
+                        "sequence-prophet", "sequence-moe",
+                        # lane tape-verify (2026-10-21): one seeded step through the autograd tape
+                        "sequence-tape-sequential", "sequence-tape-program"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -123,5 +125,10 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-ets": "ETS / DampedETS",
                        "sequence-garch": "GARCH",
                        "sequence-prophet": "ProphetForecaster",
-                       "sequence-moe": "MoEBlock"}
-PUBLIC_PENDING_LANES = {}
+                       "sequence-moe": "MoEBlock",
+                       "sequence-tape-sequential": "Sequential forward, backward and optimizer step",
+                       "sequence-tape-program": "ops.Session backward and step, and Program.fit"}
+PUBLIC_PENDING_LANES = {
+    "sequence-tape-sequential": "no reference",
+    "sequence-tape-program": "no reference",
+}
