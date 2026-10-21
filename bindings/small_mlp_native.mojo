@@ -321,7 +321,7 @@ def _scalar(value: PythonObject, name: String) raises -> Float64:
         raise Error("SmallMLPTrainer " + name + " must be a finite float32 scalar")
     var number: Float64
     try:
-        number = Float64(py=value.__float__())
+        number = Float64(py=value.__getattr__("__float__")())
     except:
         raise Error("SmallMLPTrainer " + name + " must be a scalar")
     if not isfinite(number) or abs(number) > Float64(3.4028234663852886e38):
@@ -336,11 +336,11 @@ def _config_into(mut state: MlpState, lr: PythonObject, betas: PythonObject,
     var second = PythonObject(None)
     var extra = True
     try:
-        var items = betas.__iter__()
-        first = items.__next__()
-        second = items.__next__()
+        var items = betas.__getattr__("__iter__")()
+        first = items.__getattr__("__next__")()
+        second = items.__getattr__("__next__")()
         try:
-            _ = items.__next__()
+            _ = items.__getattr__("__next__")()
         except:
             extra = False
     except:
@@ -367,9 +367,9 @@ def _schedule_walk(value: PythonObject, depth: Int, mut budget: Int) raises:
     if cls is bi.dict:
         var count = len(value)
         var keys = List[PythonObject]()
-        var items = value.__iter__()
+        var items = value.__getattr__("__iter__")()
         for _ in range(min(count, 129)):  # small-loop(keys: schedule JSON keys, at most 128)
-            var key = items.__next__()
+            var key = items.__getattr__("__next__")()
             if key.__class__ is not bi.str:
                 raise Error("SmallMLPTrainer data_schedule keys must be strings")
             keys.append(key)
@@ -460,7 +460,7 @@ def _state_from_dict(state: PythonObject, mode: String) raises -> MlpState:
         raise Error("SmallMLPTrainer step must be an integer")
     var step: Int
     try:
-        step = Int(py=opt["step"].__index__())
+        step = Int(py=opt["step"].__getattr__("__index__")())
     except:
         raise Error("SmallMLPTrainer step must be an integer")
     if step < 0 or step > MLP_MAX_STEP:
@@ -798,12 +798,12 @@ def _items(value: PythonObject, limit: Int, refusal: String) raises -> List[Pyth
     var result = List[PythonObject]()
     var items = PythonObject(None)
     try:
-        items = value.__iter__()
+        items = value.__getattr__("__iter__")()
     except:
         raise Error("TypeError: " + refusal)
     while limit < 0 or len(result) < limit:  # driver-loop: over the caller's sequence of tensors or session batches
         try:
-            result.append(items.__next__())
+            result.append(items.__getattr__("__next__")())
         except:
             break
     return result^
