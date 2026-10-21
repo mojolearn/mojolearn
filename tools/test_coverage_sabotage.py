@@ -138,3 +138,12 @@ def test_equivalence_reads_git_diff_and_rejects_runtime_changes(tmp_path, trial)
     changed = git('rev-parse', 'HEAD')
     sab['commit'] = changed
     assert run({'source_equivalence': {'commits': [base, changed], 'reason': 'claimed equivalent'}}) == 1
+
+
+def test_recorded_batch_movement_is_value_evidence_not_infrastructure_failure(trial):
+    _, clean, sab, restored, run = trial
+    for record in (clean, sab, restored):
+        for cell in record['cells'].values():
+            cell.update(batch=['abc'], batch_verdict='STABLE')
+    sab['cells']['one/base'].update(batch=['BATCH_MOVED:row:0'], batch_verdict='BATCH_MOVED')
+    assert run() == 0

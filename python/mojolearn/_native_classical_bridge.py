@@ -87,15 +87,13 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
     return entry, context
 
 
-_NPY_DTYPES = ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<f2", "=f4", "=f8", "=i4", "=i8", "=u4")
-
-
 def _archive_npy_dtypes():
     # Package-import metadata for the NumPy-free archive reader. The native
     # owner replaces these with dtype objects if the caller loads NumPy.
-    npy_dtypes = {name: "<" + name[1:] for name in _NPY_DTYPES}
-    npy_dtypes.update({"|u1": "<u1", "|b1": "<u1"})
-    return npy_dtypes
+    return {"<f4": "<f4", "<f8": "<f8", "<i4": "<i4", "<i8": "<i8",
+            "<u4": "<u4", "<u1": "<u1", "<f2": "<f2", "=f4": "<f4",
+            "=f8": "<f8", "=i4": "<i4", "=i8": "<i8", "=u4": "<u4",
+            "|u1": "<u1", "|b1": "<u1"}
 
 
 def _numpy_free_context():

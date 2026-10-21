@@ -276,7 +276,7 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                     failures.append(f"{key}: incomplete sabotaged output")
                     continue
                 if (not all(isinstance(h, str) and h and not h.startswith("n/a:") for h in sc["hashes"]) or
-                        any(v not in ("STABLE", "DIVERGENT", "N/A") for k, v in sc.items()
+                        any(v not in ("STABLE", "DIVERGENT", "MOVED", "BATCH_MOVED", "RLPAIR_MOVED", "N/A") for k, v in sc.items()
                             if k.endswith("_verdict")) or sc.get("error") or sc.get("probe_error")):
                     failures.append(f"{key}: sabotaged output contains an unreviewed failure")
                     continue
