@@ -69,50 +69,6 @@ def _check_saved_by(arrays, path, cls):
         )
 
 
-def _save_linear(est, path, extra=None):
-    """`LinearRegression.save` and `Ridge.save`: `coef_` `<f4`, the
-    intercept `<f8`, `meta` `<i8` [n_features_in_, fit_intercept]."""
-    if not hasattr(est, "coef_"):
-        raise RuntimeError("this estimator is not fitted yet")
-    arrays = {
-        "format": _LINEAR_FORMAT,
-        "estimator": type(est).__name__,
-        "numeric_mode": _saved_mode(est),
-        "coef": est.coef_,
-        "intercept": Array.from_list([float(est.intercept_)], "<f8"),
-        "meta": Array.from_list(
-            [int(est.n_features_in_), 1 if est.fit_intercept else 0], "<i8"
-        ),
-    }
-    if extra:
-        arrays.update(extra)
-    return _serialize.write_npz(path, arrays)
-
-
-def _load_linear(cls, path, arrays=None, **kwargs):
-    # Ridge has already read the archive to validate its alpha member. Reuse
-    # that exact decoded mapping instead of reopening and materializing every
-    # member a second time. LinearRegression still enters through the normal
-    # one-read path.
-    if arrays is None:
-        arrays = _serialize.read_npz(path, _LINEAR_FORMAT)
-    _check_saved_by(arrays, path, cls)
-    meta = _serialize.exact(arrays, "meta", "<i8")
-    if meta.size != 2:
-        raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
-    obj = cls(fit_intercept=bool(int(meta[1])), **kwargs)
-    _restore_mode(obj, arrays)
-    obj.coef_ = _serialize.exact(arrays, "coef", "<f4")
-    obj.n_features_in_ = int(meta[0])
-    if obj.coef_.ndim != 1 or obj.coef_.size != obj.n_features_in_:
-        raise ValueError(f"mojolearn: {path!r} coef does not match n_features_in_")
-    intercept = _serialize.exact(arrays, "intercept", "<f8")
-    if intercept.size != 1:
-        raise ValueError(f"mojolearn: {path!r} intercept must hold one value")
-    obj.intercept_ = float(intercept[0])
-    return obj, arrays
-
-
 # ---------------------------------------------------------------------------
 # Host helpers (DEVIATION 2360). Small on purpose; every one says what it
 # costs.
@@ -330,26 +286,6 @@ def _column_means(b, x, weights):
     return _means(b, wx, rows, cols, total)[1]
 
 
-def _classical_xy_means(b, x, y):
-    """C02 exact X/y sum streams in one native invocation; default OFF.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    flag = _optional_export(b, "lm_classical_stats")
-    if flag is None or not bool(flag()):
-        return None
-    rows, cols = x.shape
-    sx, sy = empty((cols,), "<f8"), empty((1,), "<f8")
-    b.lm_col_sums_pair(addr_ro(x, name="X"), addr_ro(y, name="y"),
-                       addr(sx, name="X sums"), addr(sy, name="y sum"), [rows, cols])
-    xm64, xm32 = empty((cols,), "<f8"), empty((cols,), "<f4")
-    ym64, ym32 = empty((1,), "<f8"), empty((1,), "<f4")
-    b.lm_means_finish(addr(sx, name="X sums"), addr(xm64, name="X means"),
-                      addr(xm32, name="X means32"), [cols, rows, 0], 0.0)
-    b.lm_means_finish(addr(sy, name="y sum"), addr(ym64, name="y mean"),
-                      addr(ym32, name="y mean32"), [1, rows, 0], 0.0)
-    return xm32, float(ym64[0]), ym32
-
-
 def _vector_mean(b, v, weights):
     """(float64 mean, float32 mean `Array` of one) of the target, weighted
     when `weights` is not None: the 1-D half of `_column_means`."""
@@ -363,14 +299,6 @@ def _vector_mean(b, v, weights):
                         addr(wy, name="weighted y"), [int(n), 1])
         m64, m32 = _means(b, wy, n, 1, total)
     return float(m64[0]), m32
-
-
-def _intercept(b, x_mean, coef, cols, y_mean):
-    """`y_mean - math.fsum(x_mean_j * coef_j)` (binary64 products of the
-    float32 words, exactly summed and rounded once) in Mojo
-    (`lm_intercept`, glm/impl/lm_finish.mojo)."""
-    return float(b.lm_intercept(addr_ro(x_mean, name="x mean"), addr_ro(coef, name="coef_"),
-                                [int(cols)], float(y_mean)))
 
 
 def _dims(x):
@@ -403,37 +331,6 @@ def _center(b, x, mu32):
     return out
 
 
-def _shift(b, v, mu32):
-    """The 1-D `_center`: `fl32(v_i - mu)`, `mu32` the float32 mean as a
-    one-element `Array` (`_vector_mean`'s second result)."""
-    return _center(b, v, mu32)
-
-
-def _sqrt_weights(b, weights):
-    """`fl32(sqrt(w_i))` per row of the float32 `weights`, in the binding
-    (`py2mojo_rows` ROWS_SQRT_F32: `portable_sqrtf`, on the device on a GPU
-    install, the same words on the host column). Lane pyglue-sweep (Oct 3):
-    this was a Python comprehension over the rows."""
-    n = int(weights.shape[0])
-    out = empty((n,), "<f4")
-    if n:
-        b.py2mojo_rows(_ROWS_SQRT_F32, addr_ro(weights, name="sample_weight"),
-                       addr(out, name="sqrt weights"), [n, 1])
-    return out
-
-
-def _scale_rows(b, x, root):
-    """Row `i` of `x` times `root[i]` in float32 (`lm_scale_rows`): one
-    binary32 multiplication per cell, operands and result flushed when
-    subnormal; `root` a float32 Array of `rows` values."""
-    rows, cols = _dims(x)
-    w = root
-    out = _helper_output(x.shape, rows * cols)
-    b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(w, name="sqrt weights"),
-                    addr(out, name="scaled X"), [int(rows), int(cols)])
-    return out
-
-
 def _check_sample_weight(sample_weight, n_rows, estimator):
     """Validate `sample_weight` and return it as a C-order float32 Array,
     or None when there are no weights.
@@ -451,48 +348,6 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
     return check_sample_weight(sample_weight, n_rows)
 
 
-def _ols_tsqr_on(rows, cols):
-    """Whether `LinearRegression.fit` takes the blocked TSQR: a tall design
-    (rows >= cols + 1, cols + 1 <= 512) and MOJOLEARN_LINALG_TSQR not 0."""
-    from ._expansion_decomp import _tsqr_lstsq_on
-    return _tsqr_lstsq_on(rows, cols, 1)
-
-
-def _ols_normal_eq_default(b):
-    """Whether this binding's build routes LinearRegression.fit to the
-    equilibrated normal equations instead of the TSQR (lane
-    apple-fast-olsne: FAST on Apple, the comptime OLS_FAST_NORMAL_EQ read
-    back through `ols_normal_eq_default`; False on a binding without it)."""
-    q = _optional_export(b, "ols_normal_eq_default")
-    return bool(q()) if q is not None else False
-
-
-def _linear_gram_fit(b, x, y, rows, cols, alpha, fit_intercept):
-    """MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE (lane/classical-structural):
-    `(coef, x_mean, y_mean)` from the binding's resident centered-Gram fit
-    (glm/impl/gram_solve.mojo: X and y up once, the blocked centered Gram and
-    cross, the IDENTICAL Cholesky), or None when the build lacks the route or
-    the binding reports status 1 (the Gram did not factor or a pivot failed
-    the trust gate): the caller's incumbent route then runs. Glue only: the
-    binding computes every number."""
-    q = _optional_export(b, "linear_gram_solve_default")
-    fn = _optional_export(b, "linear_gram_fit")
-    if q is None or fn is None or not bool(q()):
-        return None
-    coef = empty((cols,), "<f4")
-    mu = empty((cols,), "<f4")
-    ymean = empty((1,), "<f8")
-    status = int(fn(addr_ro(x, name="X"), addr_ro(y, name="y"),
-                    addr(coef, name="coef_"), addr(mu, name="column means"),
-                    addr(ymean, name="y mean"),
-                    [int(rows), int(cols), float(alpha), 1 if fit_intercept else 0]))
-    if status != 0:
-        return None
-    if fit_intercept:
-        return coef, mu, float(ymean.tolist()[0])
-    return coef, zeros((cols,), "<f4"), 0.0
-
-
 def _optional_export(b, name):
     """`name` from binding `b`, or None when it does not export it. A host
     binding's stand-in raises ImportError (by name) for a missing export
@@ -504,27 +359,6 @@ def _optional_export(b, name):
         return None
 
 
-def _ols_tsqr(x, y, rows, cols, mode):
-    """coef_ (float32, cols) of min ||x w - y|| (x and y already centered and
-    weighted as `fit` prepares them) through the blocked TSQR of [x | y]
-    (x_decomp/tsqr_core.mojo, lane neural-pass140): R_aug = [[R, Q^T y],
-    [0, rho]] in one pass over the rows, then the minimum-norm solution from
-    the SVD of the small R (`_expansion_decomp._tsqr_lstsq_core`). No Gram
-    matrix, so the condition number is not squared. A singular value at or
-    below cols * eps32 * s_max is dropped (the dependent directions of a
-    rank-deficient design, a constant column centered to zero among them,
-    get no weight: the minimum-norm solution). The columns are equilibrated
-    first as the normal equations route does (DEVIATION 2620, lane
-    apple-fast-tsqr): R's column j is scaled by the exact power of two that
-    rule picks for ||x e_j||^2 before the SVD and coef_ is scaled by it
-    after, so a column's units do not move the cutoff (istella's columns
-    span seven orders of magnitude; unequilibrated, real directions fell
-    under it). DEVIATION 2621 still differs: the cutoff is on singular
-    values, not on squared ones."""
-    from ._expansion_decomp import _F32_EPS, _Kit, _mode, _tsqr_lstsq_core
-    k = _Kit(_mode(mode))
-    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True)
-    return X.out((cols,))
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
 # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
