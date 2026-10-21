@@ -26,4 +26,7 @@ chmod +x "$hooks/no_host_routes.py"
 # the rebuild fence (2026-10-17): refuses a lane change to a module most bindings import
 cp "$here/rebuild_fence.py" "$hooks/rebuild_fence.py"
 chmod +x "$hooks/rebuild_fence.py"
+# the no-Python-in-kernels check (2026-10-21): a kernel .mojo file must not import Python
+cp "$here/no_python_in_kernels.py" "$hooks/no_python_in_kernels.py"
+chmod +x "$hooks/no_python_in_kernels.py"
 echo "installed $hooks/no_host_routes.py"
