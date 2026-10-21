@@ -31,8 +31,10 @@ call), NumPy calls (and the ones that are not conversion), allocations
 `*.alloc(...)`, `allocate_state`, `Array(...)`), helpers walked and calls it
 could not resolve. The verdict:
 
-  native        one native call site; no loop, route branch, allocation or
-                NumPy work on the path
+  native        the method body makes the one native call itself: one native
+                call site, no Python helper walked, no loop, route branch,
+                allocation or NumPy work (a no-op such as a stateless `fit`
+                that returns self also counts)
   python        no native call reached, or NumPy work, or an untagged loop
   orchestrated  everything else (several native calls, a route choice, an
                 allocation, or a tagged driver loop)
@@ -899,7 +901,10 @@ def verdict(facts, helpers=0):
         return "native"   # a no-op, e.g. `fit` of a stateless transform that returns self
     if facts.native_sites == 0 or facts.numpy_work or facts.untagged_loops:
         return "python"
-    if (facts.native_sites == 1 and not facts.loops and not facts.branches and not facts.allocs):
+    # A call into a Python helper is never native, however thin the helper:
+    # the contract is the method body itself making the one native call.
+    if (facts.native_sites == 1 and helpers == 0 and not facts.loops and not facts.branches
+            and not facts.allocs):
         return "native"
     return "orchestrated"
 
@@ -1024,13 +1029,19 @@ def inventory_rows(root, package="mojolearn"):
             continue
         for op in OPS:
             found = index.lookup(obj, op)
-            if not found or found[0] != "func":
+            if not found or found[0] != "func" or _refusal(found[1].node):
                 continue
             facts, helpers = measure(index, found[1], obj, cache)
             rows.append(_row(op, canonical, _where(root, found[1]), facts, None, helpers,
                              verdict(facts, helpers), family))
     rows.sort(key=lambda r: (r.family, r.public, OPS.index(r.method) if r.method in OPS else -1))
     return rows
+
+
+def _refusal(node):
+    """A method whose body only raises (`save` that is not available) is not an operation."""
+    body = [s for s in node.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
+    return bool(body) and all(isinstance(s, ast.Raise) for s in body)
 
 
 def _where(root, func):
