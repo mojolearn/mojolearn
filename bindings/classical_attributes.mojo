@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public model attribute lookup. Only connected function/native
 # descriptors may bind; arbitrary Python properties/hooks are never called.
-from std.ffi import external_call
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -163,7 +162,11 @@ def classical_attribute_descriptor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr
         # Borrows `function`; owns one new reference returned directly to the
         # C caller. No stdlib patch, raw type-slot edit or refcount adjustment.
         # https://docs.python.org/3.10/c-api/method.html#c.PyInstanceMethod_New
-        var descriptor = external_call["PyInstanceMethod_New", PyObjectPtr](function)
+        # Resolve against std.python's already selected interpreter library.
+        # OwnedDLHandle.get_function retains the library borrow through the
+        # call; an extension must not assume CPython symbols link globally.
+        var make_descriptor = cpy.lib.get_function[PyObjectPtr]("PyInstanceMethod_New")
+        var descriptor = make_descriptor(function)
         if not descriptor:
             raise cpy.unsafe_get_error()
         return descriptor
