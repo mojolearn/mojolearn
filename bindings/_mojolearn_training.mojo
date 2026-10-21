@@ -88,7 +88,7 @@ from bindings.optimizer_public_pyapi import (
     optimizer_public_zero_c, optimizer_resident_close_binding, optimizer_resident_copy_dev_binding,
     optimizer_resident_download_binding, optimizer_resident_get_binding, optimizer_resident_open_binding,
     optimizer_resident_put_binding, optimizer_resident_step_binding, optimizer_resident_step_io_binding,
-    optimizer_resident_upload_binding,
+    optimizer_resident_upload_binding, maximize_dev_available_binding,
 )
 from training.estimator import (
     identical_clip_grad_norm_addrs_host,

@@ -32,6 +32,7 @@ from core.neural_context import neural_ctx
 from training.optimizer_public import (
     public_accumulate, public_clip, public_io, public_step, resident_close, resident_copy_dev,
     resident_download, resident_get, resident_open, resident_put, resident_step, resident_step_io,
+    resident_upload,
 )
 from training.optimizer_public_common import F32P, F64P, I32P, PublicStep, zero_tensors
 from bindings.optimizer_public_words import int_words, optimizer_python_error, step_request
@@ -204,6 +205,12 @@ def optimizer_resident_upload_binding(
         var ctx = neural_ctx[_NEURAL_CTX]()
         n = resident_upload(ctx, h, ma, va, n)
     return PythonObject(n)
+
+
+def maximize_dev_available_binding() raises -> PythonObject:
+    """Present when `Optimizer.step` runs maximize through the resident step
+    with its transfers named (the sign flip on the device)."""
+    return PythonObject(1)
 
 
 def _step_params(params: PythonObject, name: String) raises -> Tuple[List[Int], List[Float32], Bool]:

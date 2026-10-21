@@ -129,17 +129,17 @@ struct PublicStepOut(Copyable, ImplicitlyCopyable, Movable):
     var packed: Int
     var g_dev: Bool
 
-    def write(self, out: F64P):
-        out[0] = Float64(self.t)
-        out[1] = Float64(self.handle)
-        out[2] = 1.0 if self.on_device else 0.0
-        out[3] = 1.0 if self.clip_ran else 0.0
-        out[4] = Float64(self.total_norm)
-        out[5] = Float64(self.coef)
-        out[6] = Float64(self.lr)
-        out[7] = Float64(self.packed)
-        out[8] = 1.0 if self.g_dev else 0.0
-        out[9] = 0.0
+    def write(self, dst: F64P):
+        dst[0] = Float64(self.t)
+        dst[1] = Float64(self.handle)
+        dst[2] = 1.0 if self.on_device else 0.0
+        dst[3] = 1.0 if self.clip_ran else 0.0
+        dst[4] = Float64(self.total_norm)
+        dst[5] = Float64(self.coef)
+        dst[6] = Float64(self.lr)
+        dst[7] = Float64(self.packed)
+        dst[8] = 1.0 if self.g_dev else 0.0
+        dst[9] = 0.0
 
 
 def step_lr(req: PublicStep) raises -> Float64:

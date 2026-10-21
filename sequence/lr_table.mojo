@@ -188,16 +188,16 @@ def onecycle_fill(
         es[at + k] = pinned_mul_f64(hd, ce[k]) + pinned_mul_f64(scale, abs(af) + abs(bf) + abs(v))
 
 
-def decide_many(vs: F64P, es: F64P, count: Int, out: F32P, ok: U8P) -> Int:
+def decide_many(vs: F64P, es: F64P, count: Int, dst: F32P, ok: U8P) -> Int:
     """Per value the float32 every real in [v - e, v + e] rounds to (ties to
     even), kept (ok = 1) when both ends round to the same normal positive
-    float32. out gets that float32, ok 0/1. Returns how many steps were NOT
+    float32. dst gets that float32, ok 0/1. Returns how many steps were NOT
     decided."""
     var undecided = 0
     for i in range(count):
         var a = Float32(vs[i] - es[i])
         var b = Float32(vs[i] + es[i])
-        out[i] = a
+        dst[i] = a
         var keep = a == b and Float64(a) >= _F32_MIN_NORMAL and Float64(a) <= _F32_MAX
         ok[i] = UInt8(1) if keep else UInt8(0)
         if not keep:
@@ -205,8 +205,8 @@ def decide_many(vs: F64P, es: F64P, count: Int, out: F32P, ok: U8P) -> Int:
     return undecided
 
 
-def pow_values(base: Float64, gamma: Float64, e0: Int, n: Int, step: Int, out: F32P) raises -> Tuple[Int, Int]:
-    """StepLR / ExponentialLR: out[i] = the float32 nearest
+def pow_values(base: Float64, gamma: Float64, e0: Int, n: Int, step: Int, dst: F32P) raises -> Tuple[Int, Int]:
+    """StepLR / ExponentialLR: dst[i] = the float32 nearest
     base gamma^((e0 + i) // step) for i < n. Returns (0, n), or (status, i)
     at the first failing step i."""
     var last_e = -1
@@ -219,14 +219,14 @@ def pow_values(base: Float64, gamma: Float64, e0: Int, n: Int, step: Int, out: F
                 return (r.status, i)
             last_e = e
             last_v = r.value
-        out[i] = last_v
+        dst[i] = last_v
     return (0, n)
 
 
 def exact_block(
-    kind: Int, ip: List[Int], fp: List[Float64], t0: Int, n: Int, out: F32P, ok: U8P, has_ok: Bool,
+    kind: Int, ip: List[Int], fp: List[Float64], t0: Int, n: Int, dst: F32P, ok: U8P, has_ok: Bool,
 ) raises -> Tuple[Int, Int]:
-    """The exact route over a run: out[i] for every i < n whose ok[i] is 0
+    """The exact route over a run: dst[i] for every i < n whose ok[i] is 0
     (has_ok False: every i). kind 0: `_Schedule`, ip = [kind, warmup, total],
     fp = [peak, min_lr]; kind 1: OneCycleLR, ip = [linear, three_phase,
     total_steps], fp = [max_lr, div_factor, final_div_factor, phase-1 end,
@@ -243,7 +243,7 @@ def exact_block(
             r = onecycle_exact(ip[0] != 0, ip[1] != 0, fp[0], fp[1], fp[2], fp[3], fp[4], ip[2], t0 + i - 1)
         if r.status != 0:
             return (r.status, i)
-        out[i] = r.value
+        dst[i] = r.value
     return (0, 0)
 
 
@@ -338,11 +338,11 @@ def lr_table_on() -> Bool:
     return String(getenv("MOJOLEARN_LR_TABLE")) != "0" and String(getenv("MOJOLEARN_LR_EXACT_ONLY")) != "1"
 
 
-def _decide_run(vs: List[Float64], es: List[Float64], n: Int, out: F32P, mut ok: List[UInt8]) -> Int:
+def _decide_run(vs: List[Float64], es: List[Float64], n: Int, dst: F32P, mut ok: List[UInt8]) -> Int:
     var vp = vs.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var ep = es.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var kp = ok.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-    return decide_many(vp, ep, n, out, kp)
+    return decide_many(vp, ep, n, dst, kp)
 
 
 def _onecycle_runs(spec: LrSpec, t0: Int, t1: Int, mut vs: List[Float64], mut es: List[Float64]):
@@ -424,9 +424,9 @@ def _exact_words(spec: LrSpec) -> Tuple[Int, List[Int], List[Float64]]:
     return (0, ip^, fp^)
 
 
-def lr_spec_fill(spec: LrSpec, t0: Int, n: Int, out: F32P) raises -> Tuple[Int, Int]:
+def lr_spec_fill(spec: LrSpec, t0: Int, n: Int, dst: F32P) raises -> Tuple[Int, Int]:
     """The float32 learning rates of ONE-BASED steps t0 .. t0 + n - 1 into
-    out. Returns (0, n), or (status, i): the first step that failed, at
+    dst. Returns (0, n), or (status, i): the first step that failed, at
     index i (LR_ONE_BASED below step 1, LR_BEYOND for a OneCycleLR step past
     total_steps + 1, and sequence/lr_exact.mojo's statuses). This is
     `lr_at(t)` (n = 1) and `lr_values(n)` (t0 = 1) of every built-in
@@ -439,13 +439,13 @@ def lr_spec_fill(spec: LrSpec, t0: Int, n: Int, out: F32P) raises -> Tuple[Int, 
     if exact_only:
         var plain = spec
         plain.kind = spec.kind - LR_EXACT_ONLY
-        return _lr_spec_fill(plain, t0, n, out, False)
-    return _lr_spec_fill(spec, t0, n, out, lr_table_on())
+        return _lr_spec_fill(plain, t0, n, dst, False)
+    return _lr_spec_fill(spec, t0, n, dst, lr_table_on())
 
 
-def _lr_spec_fill(spec: LrSpec, t0: Int, n: Int, out: F32P, table: Bool) raises -> Tuple[Int, Int]:
+def _lr_spec_fill(spec: LrSpec, t0: Int, n: Int, dst: F32P, table: Bool) raises -> Tuple[Int, Int]:
     if spec.kind == LR_POW:
-        return pow_values(spec.f0, spec.f1, t0 - 1, n, spec.a, out)
+        return pow_values(spec.f0, spec.f1, t0 - 1, n, spec.a, dst)
     var tail_t: Int
     if spec.kind == LR_ONECYCLE:
         tail_t = spec.c + 2
@@ -468,7 +468,7 @@ def _lr_spec_fill(spec: LrSpec, t0: Int, n: Int, out: F32P, table: Bool) raises 
             if tv.status != 0:
                 return (tv.status, i)
             for k in range(i, n):
-                out[k] = tv.value
+                dst[k] = tv.value
             return (0, n)
         var t1 = min(min(t + LR_BLOCK, tail_t), t0 + n)
         var cnt = t1 - t
@@ -485,10 +485,10 @@ def _lr_spec_fill(spec: LrSpec, t0: Int, n: Int, out: F32P, table: Bool) raises 
                 var ep = es.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 routed = schedule_block_values(spec.kind, spec.f0, spec.f1, spec.a, spec.b, t, t1, vp, ep) == 0
             if routed:
-                _ = _decide_run(vs, es, cnt, out + i, ok)
+                _ = _decide_run(vs, es, cnt, dst + i, ok)
                 decided = True
         var okp = ok.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        var r = exact_block(ek, ip, fp, t, cnt, out + i, okp, decided)
+        var r = exact_block(ek, ip, fp, t, cnt, dst + i, okp, decided)
         _ = ok^
         if r[0] != 0:
             return (r[0], i + r[1])

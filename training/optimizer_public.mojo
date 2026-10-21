@@ -441,7 +441,7 @@ def _open_slot(ctx: DeviceContext, req: PublicStep) raises -> Int:
     return h
 
 
-def _on_device(h: Int) -> Bool:
+def _on_device(h: Int) raises -> Bool:
     var pool = OPT_POOL.get_or_create_ptr()
     return not pool[].on_host[h]
 
