@@ -11,9 +11,7 @@ Python driver's; x_decomp/lle_iter_dev.mojo runs the same on DKit.
 Returns status 0 (settled), 1 (the null floor) or 2 (not settled; the
 caller raises Python's RuntimeError with the last subspace change)."""
 from std.math import inf, sqrt
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.fa_em import svd_desc
 from x_decomp.kit import (
@@ -119,41 +117,24 @@ def lle_iterate[E: Exec](
     return 2
 
 
-def _lle_args(p: PythonObject, f: PythonObject) raises -> LleArgs:
-    """p = [n, n1, nc, p, max_iter, seed]; f = [floor, sub_tol, stall_tol]."""
-    return LleArgs(_n(p, 0), _n(p, 1), _n(p, 2), _n(p, 3), Int(py=p[4]), Int(py=p[5]), Float64(py=f[0]),
-                   Float64(py=f[1]), Float64(py=f[2]))
-
-
-def lle_iterate_py[E: Exec](
-    f0: PythonObject, lu: PythonObject, pm: PythonObject, im: PythonObject, z: PythonObject, outs: PythonObject,
-    p: PythonObject, f: PythonObject,
-) raises -> PythonObject:
-    """out = [X (n1 x p), Y (n1 x nc), S (p)] addresses. Returns (status, e)."""
-    var a = _lle_args(p, f)
+def lle_iterate_run[E: Exec](
+    pf: F32Ptr, pl: F32Ptr, ppm: F32Ptr, pim: F32Ptr, pz: F32Ptr, px: F32Ptr, py_: F32Ptr, ps: F32Ptr, a: LleArgs,
+    mut e: Float64,
+) raises -> Int:
+    """`lle_iterate` on host buffers: f0, lu (n x n), pm, im, z (n) in; X (n1 x p),
+    Y (n1 x nc), S (p) out. Returns the status; `e` takes the last subspace change."""
     var n = a.n
     if a.n1 != n - 1 or a.p < a.nc or a.p > a.n1 or n * n > 2147483647:
         raise Error("x_decomp: lle iterate shape out of range")
-    var pf = _f(f0)
-    var pl = _f(lu)
-    var ppm = _f(pm)
-    var pim = _f(im)
-    var pz = _f(z)
-    var px = _f(outs[0])
-    var py_ = _f(outs[1])
-    var ps = _f(outs[2])
-    var st = 0
-    var e = 0.0
-    with GILReleased(Python()):
-        var X = Mat(0, 0)
-        var Y = Mat(0, 0)
-        var S = Mat(0, 0)
-        st = lle_iterate[E](mat_from(pf, n, n), mat_from(pl, n, n), mat_from(ppm, n, 1), mat_from(pim, n, 1),
+    var X = Mat(0, 0)
+    var Y = Mat(0, 0)
+    var S = Mat(0, 0)
+    var st = lle_iterate[E](mat_from(pf, n, n), mat_from(pl, n, n), mat_from(ppm, n, 1), mat_from(pim, n, 1),
                             mat_from(pz, n, 1), a, X, Y, S, e)
-        for i in range(X.n()):
-            px.unsafe_store(i, X.d[i])
-        for i in range(Y.n()):
-            py_.unsafe_store(i, Y.d[i])
-        for i in range(S.n()):
-            ps.unsafe_store(i, S.d[i])
-    return Python.tuple(st, e)
+    for i in range(X.n()):
+        px.unsafe_store(i, X.d[i])
+    for i in range(Y.n()):
+        py_.unsafe_store(i, Y.d[i])
+    for i in range(S.n()):
+        ps.unsafe_store(i, S.d[i])
+    return st
