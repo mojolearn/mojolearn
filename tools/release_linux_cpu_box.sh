@@ -14,7 +14,7 @@
 #
 # Environment: MOJOLEARN_COMMIT (full SHA of the shipped source), and
 # optionally MOJOLEARN_BUILD_JOBS (default: cores / 2, at most 16 GiB of RAM
-# per job, at most 16 jobs).
+# per job, at most 16 jobs; the merged layout: 1, see THE MERGED LAYOUT below).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -65,17 +65,38 @@ for cg in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory/memory.limit_in_bytes;
         break
     fi
 done
-if [[ -z "${MOJOLEARN_BUILD_JOBS:-}" ]]; then
-    jobs=$((ncpu / 2)); by_mem=$((mem_gib / 16))
-    ((jobs <= by_mem)) || jobs=$by_mem
-    ((jobs <= 16)) || jobs=16
-    ((jobs >= 1)) || jobs=1
-    MOJOLEARN_BUILD_JOBS=$jobs
-fi
 # MOJOLEARN_MERGED_BINDINGS (0|1, default 1) is refused here when malformed,
 # before any set starts, rather than by the first build.
 BINDING_LAYOUT=$("$PY" packaging/linux/merged_layout.py enabled) || exit 2
 if [[ "$BINDING_LAYOUT" = 1 ]]; then BINDING_LAYOUT=merged; else BINDING_LAYOUT=per-binding; fi
+# THE MERGED LAYOUT IS ONE COMPILE PER TIER (2026-10-21). Measured on the DO
+# MI325X 2026-10-20, two compiler workers each: host 6m23s peak 6.9 GB, fast
+# 16m peak 36.6 GB, identical (+ byte LM) 18m45s peak 46.4 GB. Two of them at
+# once (identical + fast, 83 GB) do not fit the cap, so the pool runs ONE
+# merged build at a time unless MOJOLEARN_BUILD_JOBS says otherwise, the build
+# step's RSS cap is MERGED_RSS_GIB (one identical compile, 46.4 GB, plus
+# headroom) instead of 16 GiB per job, and the step gets every core: the
+# compiler worker count stays packaging/linux/build_sets.sh's (eight for AMD,
+# two for NVIDIA and the host set), which narrows its own affinity to it.
+MERGED_RSS_GIB=64
+if [[ -z "${MOJOLEARN_BUILD_JOBS:-}" ]]; then
+    if [[ "$BINDING_LAYOUT" = merged ]]; then
+        jobs=1
+    else
+        jobs=$((ncpu / 2)); by_mem=$((mem_gib / 16))
+        ((jobs <= by_mem)) || jobs=$by_mem
+        ((jobs <= 16)) || jobs=16
+        ((jobs >= 1)) || jobs=1
+    fi
+    MOJOLEARN_BUILD_JOBS=$jobs
+fi
+build_rss_gib="" build_cores=""
+if [[ "$BINDING_LAYOUT" = merged ]]; then
+    build_rss_gib=$MERGED_RSS_GIB
+    build_cores=$ncpu
+    ((build_cores <= 128)) || build_cores=128
+    ((mem_gib >= 56)) || say "WARNING: ${mem_gib} GiB on this box; one merged identical compile peaked at 46.4 GB"
+fi
 printf '%s\n' "$commit" > "$ROOT/commit.txt"
 {
     echo "route=cpu-build-box"
@@ -93,6 +114,7 @@ printf '%s\n' "$commit" > "$ROOT/commit.txt"
     # The binding layout each set is built in (MOJOLEARN_MERGED_BINDINGS, default
     # 1 = merged); every build proof records the layout it read back.
     echo "binding_layout_requested=$BINDING_LAYOUT"
+    echo "build_rss_gib=${build_rss_gib:-16 x build_jobs} build_cores=${build_cores:-2 x build_jobs}"
     for f in tools/release061_remote_build.sh tools/cpu_build_guard.py tools/release_linux_cpu_box.sh \
              tools/linux_surface_qualification.sh packaging/linux/build_sets.sh tools/bincache.py \
              bindings/merged_build.sh bindings/merged_groups.json tools/merged_bindings.py packaging/linux/merged_layout.py; do
@@ -130,6 +152,7 @@ for arch in "${ARCHS[@]}"; do
     env -u MOJOLEARN_NUMERIC_MODE -u PYTHONPATH \
         MOJOLEARN_RELEASE_NO_DEVICE=1 MOJOLEARN_COMMIT="$commit" MOJOLEARN_PYTHON="$PY" \
         MOJOLEARN_RELEASE_BUILD_SECONDS="$CPU_BOX_RELEASE_BUILD_SECONDS" MOJOLEARN_BUILD_JOBS="$MOJOLEARN_BUILD_JOBS" \
+        MOJOLEARN_RELEASE_BUILD_RSS_GIB="$build_rss_gib" MOJOLEARN_RELEASE_BUILD_CORES="$build_cores" \
         bash tools/release061_remote_build.sh "$vendor" "$arch" "$dest/release-build" \
         > "$dest/release-build-console.log" 2>&1 || status=$?
     t1=$(date +%s)

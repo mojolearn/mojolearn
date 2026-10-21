@@ -79,6 +79,22 @@ eval "$sizing"
 [[ -n "${RELEASE_BUILD_SIZED_BY:-}" ]] && BUILD_SIZING="$BUILD_SIZING ($RELEASE_BUILD_SIZED_BY)"
 BUILD_CORES=$((2 * BUILD_JOBS))
 [[ "$NO_DEVICE" = 1 ]] && BUILD_RSS_GIB=$((16 * BUILD_JOBS))
+# THE MERGED LAYOUT ON THE CPU BUILD BOX (2026-10-21): one merged compile per
+# tier peaks far above 16 GiB (46.4 GB for identical + byte LM, measured on the
+# DO MI325X 2026-10-20), so tools/release_linux_cpu_box.sh sets the build
+# step's RSS cap (MOJOLEARN_RELEASE_BUILD_RSS_GIB, 64 for merged) and its cores
+# (MOJOLEARN_RELEASE_BUILD_CORES: the AMD merged compile runs eight compiler
+# workers, packaging/linux/build_sets.sh). Unset, both keep the values above.
+if [[ "$NO_DEVICE" = 1 && -n "${MOJOLEARN_RELEASE_BUILD_RSS_GIB:-}" ]]; then
+    [[ "$MOJOLEARN_RELEASE_BUILD_RSS_GIB" =~ ^[1-9][0-9]*$ && "$MOJOLEARN_RELEASE_BUILD_RSS_GIB" -le 512 ]] \
+        || { echo 'MOJOLEARN_RELEASE_BUILD_RSS_GIB must be 1..512' >&2; exit 2; }
+    BUILD_RSS_GIB=$MOJOLEARN_RELEASE_BUILD_RSS_GIB
+fi
+if [[ "$NO_DEVICE" = 1 && -n "${MOJOLEARN_RELEASE_BUILD_CORES:-}" ]]; then
+    [[ "$MOJOLEARN_RELEASE_BUILD_CORES" =~ ^[1-9][0-9]*$ && "$MOJOLEARN_RELEASE_BUILD_CORES" -le 128 ]] \
+        || { echo 'MOJOLEARN_RELEASE_BUILD_CORES must be 1..128' >&2; exit 2; }
+    ((MOJOLEARN_RELEASE_BUILD_CORES >= BUILD_CORES)) && BUILD_CORES=$MOJOLEARN_RELEASE_BUILD_CORES
+fi
 export MOJOLEARN_BUILD_JOBS=$BUILD_JOBS MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 export MOJOLEARN_CPU_THREADS=2 CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
 export OMP_NUM_THREADS=1 OMP_THREAD_LIMIT=1 OMP_MAX_ACTIVE_LEVELS=1

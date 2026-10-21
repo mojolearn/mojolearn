@@ -28,10 +28,25 @@
 #
 # Options:
 #   --out DIR        output root (must not exist)
-#   --vcpu N         pod vCPUs (default 32)      --flavors LIST (default cpu5g,cpu3g)
-#   --jobs N         MOJOLEARN_BUILD_JOBS (default: vcpu / 2, 16 GiB per job)
+#   --vcpu N         pod vCPUs (default 32; merged 16)
+#   --flavors LIST   RunPod CPU flavors (default cpu5g,cpu3g; merged cpu5m,cpu3m)
+#   --jobs N         MOJOLEARN_BUILD_JOBS (default: vcpu / 2, 16 GiB per job; merged 1)
 #   --archs 'A B'    subset, default 'sm_90a sm_89 gfx942'; sm_80 builds the PTX slot
-#   --lease MIN      on-pod self-delete (default 120)
+#   --lease MIN      on-pod self-delete (default 120; merged 75 + 45 per set, at most 180)
+#
+# THE BINDING LAYOUT SIZES THE POD (2026-10-21). The layout is the source
+# commit's (its packaging/linux/merged_layout.py enabled, under this shell's
+# MOJOLEARN_MERGED_BINDINGS, which the box is given when it is set). The
+# per-binding layout keeps the defaults above. The merged layout compiles ONE
+# file per tier, measured on the DO MI325X 2026-10-20 at two compiler workers:
+# host 6m23s peak 6.9 GB, fast 16m peak 36.6 GB, identical (+ byte LM) 18m45s
+# peak 46.4 GB. So a merged pod is memory optimized (cpu5m/cpu3m), 16 vCPU for
+# >= 64 GB at RunPod's >= 4 GB per vCPU (MERGED_MIN_GB; a smaller --vcpu or a
+# compute flavor is refused), builds one merged file at a time (two at once,
+# identical + fast, would need 83 GB), under a 64 GiB build cap
+# (tools/release_linux_cpu_box.sh), 41 min of compiles per set cold at those
+# times, so the lease is 75 min plus 45 per set (one set: 120), at most the
+# leg runner's 180.
 #   --no-bincache    build every extension from source (the R2 binding cache
 #                    is ON by default; tools/bincache.py, partition
 #                    none/<image>; a hit is placed only after its archive's
@@ -50,7 +65,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 IMAGE='rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484'
 COMMIT="${1:-}"
 shift || true
-OUT=""; VCPU=32; FLAVORS="cpu5g,cpu3g"; JOBS=""; ARCHS="sm_90a sm_89 gfx942"; LEASE=120; BINCACHE=1; RENT=0
+OUT=""; VCPU=""; FLAVORS=""; JOBS=""; ARCHS="sm_90a sm_89 gfx942"; LEASE=""; BINCACHE=1; RENT=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --out) shift; OUT="${1:-}" ;;
@@ -61,7 +76,7 @@ while [ $# -gt 0 ]; do
         --lease) shift; LEASE="${1:-}" ;;
         --no-bincache) BINCACHE=0 ;;
         --rent) RENT=1 ;;
-        -h|--help) sed -n '2,48p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,62p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown argument $1" >&2; exit 2 ;;
     esac
     shift
@@ -69,10 +84,37 @@ done
 die() { printf 'REFUSED: %s\n' "$*" >&2; exit 1; }
 printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$' || die "a full 40-hex commit is required"
 git -C "$ROOT" cat-file -e "$COMMIT^{commit}" 2>/dev/null || die "commit $COMMIT is not in this repository (git fetch first)"
+for a in $ARCHS; do case "$a" in sm_90a|sm_89|sm_80|gfx942) ;; *) die "unknown arch $a" ;; esac; done  # sm_80: the PTX slot
+# ------------------------------------------------------------ the layout sizes the pod
+LAYOUT=$(python3 "$ROOT/tools/release_github_build.py" layout --commit "$COMMIT") \
+    || die "the source's binding layout could not be read (MOJOLEARN_MERGED_BINDINGS=${MOJOLEARN_MERGED_BINDINGS:-unset})"
+MERGED=0
+[ "$LAYOUT" = merged ] && MERGED=1
+NSETS=$(printf '%s\n' $ARCHS | wc -l | tr -d ' ')
+MERGED_MIN_GB=64
+if [ "$MERGED" = 1 ]; then
+    [ -n "$VCPU" ] || VCPU=16
+    [ -n "$FLAVORS" ] || FLAVORS="cpu5m,cpu3m"
+    [ -n "$JOBS" ] || JOBS=1
+    [ -n "$LEASE" ] || LEASE=$((75 + 45 * NSETS))
+    [ "$LEASE" -le 180 ] || LEASE=180
+else
+    [ -n "$VCPU" ] || VCPU=32
+    [ -n "$FLAVORS" ] || FLAVORS="cpu5g,cpu3g"
+    [ -n "$LEASE" ] || LEASE=120
+fi
 printf '%s' "$VCPU" | grep -Eq '^[0-9]+$' || die "--vcpu must be a number"
 [ -n "$JOBS" ] || JOBS=$((VCPU / 2))
 printf '%s' "$JOBS" | grep -Eq '^[0-9]+$' && [ "$JOBS" -ge 1 ] && [ "$JOBS" -le 16 ] || die "--jobs must be 1..16"
-for a in $ARCHS; do case "$a" in sm_90a|sm_89|sm_80|gfx942) ;; *) die "unknown arch $a" ;; esac; done  # sm_80: the PTX slot
+if [ "$MERGED" = 1 ]; then
+    # RunPod's CPU flavors: compute optimized 2 GB per vCPU, general purpose and memory optimized >= 4
+    case ",$FLAVORS," in *c,*) die "the merged layout needs >= $MERGED_MIN_GB GB; compute-optimized flavors ($FLAVORS) give 2 GB per vCPU" ;; esac
+    [ $((VCPU * 4)) -ge "$MERGED_MIN_GB" ] || die "the merged layout needs >= $MERGED_MIN_GB GB: --vcpu $VCPU gives $((VCPU * 4)) GB at 4 GB per vCPU"
+fi
+# The box builds the layout decided here: the switch is passed on only when it is set
+# (an unset switch keeps every binding cache key as it was).
+FWD_LAYOUT=""
+[ -z "${MOJOLEARN_MERGED_BINDINGS+set}" ] || FWD_LAYOUT="export MOJOLEARN_MERGED_BINDINGS=$MOJOLEARN_MERGED_BINDINGS"
 SHORT=$(printf '%s' "$COMMIT" | cut -c1-9)
 [ -n "$OUT" ] || OUT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/releases/$COMMIT/linux-cpu-box/$(date -u +%Y-%m-%d_%H%M%S)"
 [ ! -e "$OUT" ] || die "$OUT exists"
@@ -97,6 +139,7 @@ B64=$(base64 < "$TMPF/overlay.tgz" | tr -d '\n')
 cat > "$TMPF/cmd.sh" <<EOF
 set -u
 cd /root/mojolearn
+$FWD_LAYOUT
 echo '$B64' | base64 -d > /root/route-overlay.tgz
 mkdir -p "\$LEG_OUT/release"
 { echo "overlay_sha256=\$(sha256sum /root/route-overlay.tgz | cut -c1-64)"
@@ -118,7 +161,7 @@ exit \$rc
 EOF
 bash -n "$TMPF/cmd.sh" || die "command script"
 
-echo "== release_linux_build: $COMMIT, archs [$ARCHS], $VCPU vCPU ($FLAVORS), jobs $JOBS, bincache=$BINCACHE =="
+echo "== release_linux_build: $COMMIT, archs [$ARCHS], layout $LAYOUT, $VCPU vCPU ($FLAVORS), jobs $JOBS, lease ${LEASE}m, bincache=$BINCACHE =="
 echo "   image $IMAGE"
 echo "   out $OUT"
 RARGS="--lane rel-$SHORT --worktree $WT --image $IMAGE --vcpu $VCPU --flavors $FLAVORS --disk 80 --lease $LEASE --jobs $JOBS --cmd-file $TMPF/cmd.sh --out $OUT/LEG"
