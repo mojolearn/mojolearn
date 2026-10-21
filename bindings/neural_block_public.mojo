@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native standalone block construction, state allocation and sequence execution."""
 from std.python import Python, PythonObject
+from core.neural_block_public_impl import neural_copy_row_prefixes
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.memory import memcpy
@@ -207,7 +208,7 @@ def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) 
     if len(values) != b:
         raise Error("neural block: one length is required per batch row")
     var result = List[Int]()
-    for i in range(b):
+    for i in range(b):  # small-loop(one length argument word per batch row)
         var v = values[i]
         if bi.type(v) is not bi.int:
             raise Error("TypeError: neural block lengths entries must be integers, not bool or float")
@@ -234,12 +235,10 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
             raise Error("neural block: lengths cannot be combined with state")
         var sizes = _neural_lengths(lengths, b, l, context)
         var padded = generation_array([b, l, d])
-        for row in range(b):
-            memcpy(dest=f32_ptr(Int(py=padded._addr)) + row * l * d, src=f32_ptr(Int(py=x._addr)) + row * l * d, count=sizes[row] * d)
+        neural_copy_row_prefixes(Int(py=padded._addr), Int(py=x._addr), sizes, b, l, d)
         var output = _neural_plain(owner, padded, PythonObject(None), False)
         var result = generation_array([b, l, d])
-        for row in range(b):
-            memcpy(dest=f32_ptr(Int(py=result._addr)) + row * l * d, src=f32_ptr(Int(py=output._addr)) + row * l * d, count=sizes[row] * d)
+        neural_copy_row_prefixes(Int(py=result._addr), Int(py=output._addr), sizes, b, l, d)
         return result
     return _neural_plain(owner, x, state_value, step)
 
