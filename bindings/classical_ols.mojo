@@ -61,7 +61,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject, entries: PythonOb
     var fields = sequential_fields(model)
     var intercept = Bool(py=fields["fit_intercept"])
     var x = classical_host_f32(args[0], 2, "X", context)
-    var y = classical_host_f32(args[1], 1, "y", context)
+    var y = classical_host_f32(args[1], 1, "y", context, column_target=True)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if Int(py=y.size) != rows:

@@ -65,3 +65,49 @@ The explicit HostLinearRegression/HostRidge prerequisite now has a separate priv
 Torch compatibility review found no declared Torch version floor for ordinary Tensor/state-dict inputs (`python/pyproject.toml` supports Python >=3.10 and has no Torch runtime dependency). Retained Torch 2.13.0 passed the unchanged stage58 native mode suite on CPU: 11 original cases and the two positive cases after repairing a test-module-dependent reference dtype. Original controller/shape failures remain in `torch213-native-modes*.log`; the two-case supplement and XML retain the corrected evidence. Torch 2.14.1 remains the parent-qualified CPU/Metal result.
 
 An actual isolated Torch 2.1.2/Python 3.11 probe establishes its distinct C-API family: only `_TensorBase`, the two native mode stack lengths, and the native PreDispatch TLS query; no separate infrastructure-mode enum/getter. [The upstream 2.1 native TLS definition](https://raw.githubusercontent.com/pytorch/pytorch/v2.1.0/c10/core/impl/TorchDispatchModeTLS.h) stores all dispatch modes in one stack, while [the 2.5 definition](https://raw.githubusercontent.com/pytorch/pytorch/v2.5.0/c10/core/impl/TorchDispatchModeTLS.h) has separate infrastructure slots. The source guard now accepts the actual native TensorBase alias and uses the verified 2.1 full-stack contract, still checking both mode stacks and PreDispatch before Tensor methods. Missing infrastructure metadata in an unknown/newer API family remains an explicit refusal. This source compatibility repair still requires the parent's new tokenizer/sequence build and actual 2.1 product tests; the upstream API probe alone is not product qualification. Full downloaded primary sources and hashes are retained in `~/mojolearn-evidence/finish-generation-public-classical-20261020/torch-api-source/manifest.json`, with `torch21-native-api.json` and the isolated test environment.
+
+### Bounded closing handoff: linear native owner (2026-10-20)
+
+Public activation remains disabled. The optional public installer is a
+qualification tool: its real-class tests temporarily install the native
+attribute descriptor and one-call methods. This does not establish that all
+inherited validation or all supported inputs have completed migration.
+
+The closing source batch wires the native descriptor entries, fixed parameter
+names, exact Host context selection and layout admission. It also preserves
+native `(n, 1)` target arrays through the existing fit owners, with native
+DataConversionWarning handling. The latter has 30 collected cases for six
+filter actions, recording, strided/binary64 targets, independent flat-target
+oracles, native default output, filter mutation and poisoned Python hooks.
+These cases are source-ready, not a compilation or runtime pass. The previous
+integer rounding repair is qualified in stage64: both pandas and raw native
+buffers retain the old integer → binary64 → binary32 contract. The host error
+oracle now checks both public exception bases; the independently cached legacy
+and native bridge subclasses need not be the same class object.
+
+The native warning implementation preserves the old warning module/location
+(`_mode._guard_cpu_training`'s final call), category, message and native recording
+record fields. It never invokes Python warning formatting or callbacks. Its
+suppression registry is private to the connected native owner. Interoperability
+with warnings already emitted by the legacy Python owner or CPython's shared
+registries, direct private filter-version invalidation, unusual native stderr
+encoders, and context-aware warning concurrency are **not qualified**. These
+remain public-activation gates; this implementation is not a replacement claim
+for arbitrary Python warning machinery. Custom Python warning hooks are refused.
+
+Remaining public linear gates are the closing batch's compile/runtime evidence,
+whole first-call audits on the temporary real-class installation, the unresolved
+inherited input/feature-name validation inventory, and complete vendor closure
+qualification. Generic `host_model` routing and other classical families are not
+covered. The separately established Modular PythonObject lifetime defect remains
+an upstream blocker; no refcount compensation or compiler workaround is used.
+
+Retained lane evidence is under
+`~/mojolearn-evidence/finish-generation-public-classical-20261020/`:
+`integer-cast-probe-r2.{json,log}` (five cases, exit 0),
+`host-error-identity-probe.{json,log}` (two cases, exit 0),
+`warning-legacy-caller-probe.{json,log}`,
+`warning-connection-check.log` (two setup modes), and `warning-collect.log`
+(30 collected, exit 0). Original failed probes and pushes remain retained.
+Central stage63/64 compile, CPU and Metal results live in the root
+`core-completion-20261020` evidence directory. No lane Mojo compilation occurred.

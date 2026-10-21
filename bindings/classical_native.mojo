@@ -9,7 +9,8 @@ from bindings.sequential_description import sequential_fields
 from bindings.classical_ridge import classical_ridge_fit, classical_linear_predict, classical_linear_predict_public
 from bindings.classical_ols import classical_ols_fit
 from bindings.classical_score import classical_linear_score
-from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted
+from bindings.classical_metadata import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_names
+from bindings.classical_attributes import classical_check_layout, classical_getattribute
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
@@ -17,6 +18,20 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_tags import classical_tags
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
+
+
+def _classical_error_class(args_ptr: PyObjectPtr, key: String) raises -> PyObjectPtr:
+    ref cpy = Python().cpython()
+    var root = cpy.PyTuple_GetItem(args_ptr, 3)
+    var context = PythonObject(from_borrowed=root)
+    var host = context.get("classical_host_context")
+    if host is not None:
+        var model = PythonObject(from_borrowed=cpy.PyTuple_GetItem(args_ptr, 0))
+        var cls = Python.import_module("builtins").type(model)
+        if cls is host["ridge_class"] or cls is host.get("linear_class"):
+            root = causal_borrowed_item(root, "classical_host_context")
+    # The active call owns its root/host dictionaries and the returned class.
+    return causal_borrowed_item(root, key)
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -56,10 +71,23 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
         var loading = operation == "load"
-        var ridge = model is context["ridge_class"] if loading else b.type(model) is context["ridge_class"]
-        var linear = model is context.get("linear_class") if loading else b.type(model) is context.get("linear_class")
+        var class_operation = loading or operation == "param_names"
+        var cls = model if class_operation else b.type(model)
+        var host = context.get("classical_host_context")
+        if host is not None and (cls is host["ridge_class"] or cls is host.get("linear_class")):
+            context = host
+        var ridge = cls is context["ridge_class"]
+        var linear = cls is context.get("linear_class")
         if not ridge and not linear:
             raise Error("TypeError: the private classical owner requires an exact Ridge or LinearRegression instance")
+        if operation == "param_names":
+            var names = b.list(classical_parameter_names(ridge))
+            return names.steal_data()
+        if not class_operation:
+            classical_check_layout(model, context)
+        if operation == "getattribute":
+            var attribute = classical_getattribute(model, args[0], context)
+            return attribute.steal_data()
         if loading:
             var loaded = classical_archive_load(model, args[0], ridge, context)
             return loaded.steal_data()
@@ -119,11 +147,16 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             raise Error("unknown private classical operation")
         return result.steal_data()
     except error:
+        if String(error).startswith("DataConversionWarning:"):
+            try:
+                var cls = _classical_error_class(args_ptr, "warning_category")
+                var message = String(error)
+                return causal_set_exception(Error(String(message[byte=23:])), cls)
+            except nested:
+                return raise_python_exception(nested)
         if String(error).startswith("NotFittedError:"):
             try:
-                ref cpy = Python().cpython()
-                var context = cpy.PyTuple_GetItem(args_ptr, 3)
-                var cls = causal_borrowed_item(context, "active_not_fitted_class")
+                var cls = _classical_error_class(args_ptr, "active_not_fitted_class")
                 var message = String(error)
                 return causal_set_exception(Error(String(message[byte=16:])), cls)
             except nested:

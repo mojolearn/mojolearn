@@ -5,6 +5,7 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from core.cast_in import cast_in_kind
 from bindings.classical_cast import classical_f32_bits
+from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
@@ -17,7 +18,7 @@ def classical_array(rows: Int, cols: Int, context: PythonObject, wide: Bool = Fa
                             context["float64"] if wide else context["float32"], context)
 
 
-def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
+def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False) raises -> PythonObject:
     classical_admit_value(source, context)
     var b = Python.import_module("builtins")
     var prepared = source
@@ -27,7 +28,10 @@ def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: P
         prepared = native_torch_numpy(source)
     var value = sequential_input(prepared, context)
     var nd = Int(py=value.ndim)
-    if nd != ndim:
+    var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and b.type(source) is not b.list and b.type(source) is not b.tuple and b.type(source) is not b.memoryview
+    if column:
+        classical_warn_column(context)
+    if nd != ndim and not column:
         raise Error(name + " must be " + String(ndim) + "-D")
     var rows = 1 if nd == 0 else Int(py=value.shape[0])
     var cols = 1 if nd < 2 else Int(py=value.shape[1])
@@ -40,7 +44,7 @@ def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: P
     var s0 = 0 if nd == 0 else Int(py=value.strides[0])
     var s1 = 0 if nd < 2 else Int(py=value.strides[1])
     var addr = Int(py=sequential_address(value))
-    var borrowed = value.dtype is context["float32"] and Bool(py=value.flags.c_contiguous)
+    var borrowed = not column and value.dtype is context["float32"] and Bool(py=value.flags.c_contiguous)
     var result = value if borrowed else classical_array(rows, cols if ndim == 2 else 0, context)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
     for r in range(rows):  # native input marshaling: input rows, never a model or training loop
