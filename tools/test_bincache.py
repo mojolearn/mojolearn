@@ -73,6 +73,18 @@ class KeyTests(unittest.TestCase):
         self.assertIn("core/g.mojo", rels)          # from core import (a, g): both are modules
         self.assertNotIn("core/unrelated.mojo", rels)
 
+    def test_imported_symbol_does_not_alias_module_filename_case(self):
+        package = self.repo / "core"
+        (package / "__init__.mojo").write_text("from core.tape import Tape\n")
+        (package / "tape.mojo").write_text("struct Tape: pass\n")
+        entry = self.repo / "bindings/_mojolearn_fake.mojo"
+        entry.write_text("from core import Tape\n")
+        _, rels = bc.source_digest(self.repo, self.repo / "bindings/build_fake.sh", [])
+        self.assertIn("core/tape.mojo", rels)
+        self.assertNotIn("core/Tape.mojo", rels)
+        # This must also reject a mismatched directory on case-insensitive Macs.
+        self.assertFalse(bc.exact_source_file(self.repo / "Core/tape.mojo", self.repo))
+
     def test_each_input_moves_the_key(self):
         cases = {
             "toolchain": lambda: (self.repo / "pixi.lock").write_text(
