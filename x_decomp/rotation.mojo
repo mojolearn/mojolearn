@@ -8,9 +8,7 @@ IDENTICAL words are the Python driver's on every column.
 x_decomp/rotation_dev.mojo runs the same statements on resident matrices."""
 from std.math import isfinite
 from std.memory import bitcast
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_CUBE, OP_DIV, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, OP_SUB, mat_eye, mat_from, mat_t,
@@ -77,20 +75,12 @@ def ortho_rotation[E: Exec](C: Mat, varimax: Bool, tol: Float64, max_iter: Int) 
     return mat_t(k.mm(C, R, False, False))
 
 
-def ortho_rotation_py[E: Exec](c: PythonObject, out_t: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
-    """c (nrow x ncol); out_t (ncol x nrow) = (C R)^T. p = [nrow, ncol,
-    varimax, max_iter]; f = [tol]."""
-    var nrow = _n(p, 0)
-    var ncol = _n(p, 1)
+def ortho_rotation_run[E: Exec](
+    pc: F32Ptr, po: F32Ptr, nrow: Int, ncol: Int, vm: Bool, max_iter: Int, tol: Float64
+) raises:
+    """c (nrow x ncol); out_t (ncol x nrow) = (C R)^T, written to `po`."""
     if nrow * ncol > 2147483647 or ncol < 1:
         raise Error("x_decomp: rotation shape out of range")
-    var vm = Int(py=p[2]) != 0
-    var max_iter = Int(py=p[3])
-    var tol = Float64(py=f[0])
-    var pc = _f(c)
-    var po = _f(out_t)
-    with GILReleased(Python()):
-        var T = ortho_rotation[E](mat_from(pc, nrow, ncol), vm, tol, max_iter)
-        for i in range(T.n()):
-            po.unsafe_store(i, T.d[i])
-    return PythonObject(ncol)
+    var T = ortho_rotation[E](mat_from(pc, nrow, ncol), vm, tol, max_iter)
+    for i in range(T.n()):
+        po.unsafe_store(i, T.d[i])
