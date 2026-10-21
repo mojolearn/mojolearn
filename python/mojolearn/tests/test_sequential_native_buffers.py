@@ -175,7 +175,11 @@ def test_native_half_labels_preserve_every_non_nan_encoding():
     # infinities. np.unique is the independent label/codes oracle.
     labels = np.arange(65536, dtype="u2").view("f2")
     labels = labels[~np.isnan(labels)]
-    classes, expected = np.unique(labels, return_inverse=True)
+    # The established native label contract retains the first input row's
+    # bits among equal values. Request original indices: NumPy's default
+    # unstable sort may choose either signed-zero representative otherwise.
+    _, first, expected = np.unique(labels, return_index=True, return_inverse=True)
+    classes = labels[first]
     out = Sequential().linear(len(classes))
     codes, _, _ = audit_native_call(out._targets, labels, len(labels), len(classes),
                                     "cross_entropy").assert_native()
@@ -229,3 +233,13 @@ def test_native_validation_refuses_out_of_domain_label_without_wrapping(train_dt
     assert "unknown class or NaN" in str(trace.exception)
     for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
         assert not trace.report()[key], trace.report()
+
+
+@pytest.mark.parametrize("words", [[0x0000, 0x8000, 0x3C00, 0x8000],
+                                   [0x8000, 0x0000, 0x3C00, 0x0000]])
+def test_native_half_equal_zeros_keep_first_input_bits(words):
+    labels = np.array(words, "u2").view("f2")
+    out = Sequential().linear(2)
+    codes, _, _ = audit_native_call(out._targets, labels, 4, 2, "cross_entropy").assert_native()
+    assert out.classes_.view("u2").tolist() == [words[0], 0x3C00]
+    assert codes.tolist() == [0, 0, 1, 0]
