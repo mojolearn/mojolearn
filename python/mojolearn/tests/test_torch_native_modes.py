@@ -113,10 +113,14 @@ def test_ordinary_torch_tensors_and_parameters_remain_native(parameter):
     if parameter:
         x, y = torch.nn.Parameter(x), torch.nn.Parameter(y)
     reference = Ridge().fit(x.detach().numpy(), y.detach().numpy())
-    wanted = np.asarray(reference.predict(x.detach().numpy())).view("u4")
+    # This test qualifies the private float32 kernel boundary. The old public
+    # wrapper widens to float64 when collected outside the mojolearn package;
+    # make that reference boundary independent of pytest's module name.
+    wanted = np.asarray(reference.predict(x.detach().numpy()), dtype="f4").view("u4")
     model = Ridge()
     _clean(audit_native_call(native_ridge_fit, model, x, y))
     got = _clean(audit_native_call(native_ridge_predict, model, x))
+    assert got.dtype == np.dtype("f4")
     np.testing.assert_array_equal(np.asarray(got).view("u4"), wanted)
 
 
