@@ -1,0 +1,104 @@
+--- a/core/array_helpers_impl.mojo
++++ b/core/array_helpers_impl.mojo
+@@ -20,6 +20,23 @@
+ comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
+ 
+ 
++def _sab_ulp_f64(v: Float64) -> Float64:
++    """SABOTAGE (coverage-core-array_helpers_impl): one ulp off; a zero or
++    subnormal becomes the smallest positive normal."""
++    var bits = bitcast[DType.uint64](v)
++    if (bits & UInt64(0x7FFFFFFFFFFFFFFF)) < UInt64(0x0010000000000000):
++        return bitcast[DType.float64](UInt64(0x0010000000000000))
++    return bitcast[DType.float64](bits + UInt64(1))
++
++
++def _sab_ulp_f32_bits(b: UInt32) -> UInt32:
++    """SABOTAGE: the float32 bit pattern `b` one ulp off (zero/subnormal ->
++    the smallest positive normal)."""
++    if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return UInt32(0x00800000)
++    return b + UInt32(1)
++
++
+ def _strided_copy[dt: DType](
+     src: Int, dst: Int, dims: MutPointer[Int64, MutUntrackedOrigin], nd: Int, total: Int
+ ):
+@@ -102,12 +119,12 @@
+             var keep = Int(lp.unsafe_load(i)) * pos
+             var base = i * row
+             for k in range(keep, row):
+-                dp.unsafe_store(base + k, 0)
++                dp.unsafe_store(base + k, 1)
+     else:
+         for i in range(n):
+             var at = i * pos + (Int(lp.unsafe_load(i)) - 1) * row
+             for k in range(row):
+-                dp.unsafe_store(i * row + k, sp.unsafe_load(at + k))
++                dp.unsafe_store(i * row + k, sp.unsafe_load(at + k) ^ UInt8(1))
+ 
+ 
+ def nsum_f64(p: _F64P, count: Int) -> Float64:
+@@ -124,7 +141,7 @@
+         total = t
+     if c != 0.0 and c - c == 0.0:
+         total += c
+-    return total
++    return _sab_ulp_f64(total)
+ 
+ 
+ def row_means_f64(sp: _F64P, op: _F64P, nr: Int, nc: Int) -> Int:
+@@ -160,7 +177,7 @@
+             total = -inf[DType.float64]()
+         else:
+             total = _exact_sum(terms)
+-        op.unsafe_store(r, total / Float64(nc))
++        op.unsafe_store(r, _sab_ulp_f64(total / Float64(nc)))
+     return bad
+ 
+ 
+@@ -256,9 +273,9 @@
+         if not any_inf:
+             # flagged as status 1 with +inf in out[0] (a -inf + inf leaves
+             # out[0] at the caller's 0.0): the caller raises OverflowError
+-            op.unsafe_store(0, t)
++            op.unsafe_store(0, _sab_ulp_f64(t))
+             return 1
+-    op.unsafe_store(0, t)
++    op.unsafe_store(0, _sab_ulp_f64(t))
+     return 0
+ 
+ 
+@@ -273,7 +290,7 @@
+             sq[c] = pinned_mul_f64(d, d)
+         var bad = False
+         var t = _fsum_terms(sq, nc, bad)
+-        op.unsafe_store(r, sqrt(t / Float64(nc)))
++        op.unsafe_store(r, _sab_ulp_f64(sqrt(t / Float64(nc))))
+ 
+ 
+ def class_ratio_f64(cp: _I64P, op: _F64P, kk: Int, nn: Int, m: Int) -> Int:
+@@ -285,11 +302,11 @@
+         if m == 0:
+             if cnt == 0:
+                 zeros += 1
+-                op.unsafe_store(c, 0.0)
++                op.unsafe_store(c, _sab_ulp_f64(0.0))
+             else:
+-                op.unsafe_store(c, Float64(nn) / Float64(kk * cnt))
++                op.unsafe_store(c, _sab_ulp_f64(Float64(nn) / Float64(kk * cnt)))
+         else:
+-            op.unsafe_store(c, Float64(cnt) / Float64(nn))
++            op.unsafe_store(c, _sab_ulp_f64(Float64(cnt) / Float64(nn)))
+     return zeros
+ 
+ 
+@@ -347,6 +364,6 @@
+             cb[b + 1] = tb
+             ci[b + 1] = tix
+         for j in range(kk):
+-            od.unsafe_store(row * kk + j, cb[j])
+-            oi.unsafe_store(row * kk + j, ci[j])
++            od.unsafe_store(row * kk + j, _sab_ulp_f32_bits(cb[j]))
++            oi.unsafe_store(row * kk + j, ci[j ^ 1] if (j ^ 1) < kk else ci[j])
+     return rc

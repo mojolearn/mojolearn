@@ -1,0 +1,35 @@
+--- a/core/estimators_impl.mojo
++++ b/core/estimators_impl.mojo
+@@ -97,6 +97,15 @@
+     _ = d_ic^
+ 
+ 
++@always_inline
++def _sab_ulp_u64(b: UInt64) -> UInt64:
++    """SABOTAGE (coverage-core-estimators_impl): binary64 bits one ulp off; a
++    zero or subnormal becomes the smallest positive normal."""
++    if (b & UInt64(0x7FFFFFFFFFFFFFFF)) < UInt64(0x0010000000000000):
++        return UInt64(0x0010000000000000)
++    return b + UInt64(1)
++
++
+ comptime QN_SOFTMAX_TPB = 128
+ comptime QN_SOFTMAX_MAX_BLOCKS = 65535
+ 
+@@ -137,6 +146,8 @@
+     )
+     ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+     ctx.synchronize()
++    for t in range(2 * nr):  # SABOTAGE: every probability one ulp off
++        op.bitcast[UInt64]().unsafe_store(t, _sab_ulp_u64(op.bitcast[UInt64]().unsafe_load(t)))
+     _ = d_scores^
+     _ = d_out^
+ 
+@@ -193,5 +204,7 @@
+     )
+     ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+     ctx.synchronize()
++    for t in range(n):  # SABOTAGE: every probability one ulp off
++        op.bitcast[UInt64]().unsafe_store(t, _sab_ulp_u64(op.bitcast[UInt64]().unsafe_load(t)))
+     _ = d_scores^
+     _ = d_out^

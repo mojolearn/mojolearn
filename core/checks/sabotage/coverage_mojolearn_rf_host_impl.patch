@@ -1,0 +1,54 @@
+--- a/core/mojolearn_rf_host_impl.mojo
++++ b/core/mojolearn_rf_host_impl.mojo
+@@ -4,8 +4,18 @@
+ calls these; the session structs are re-exported there under the same names."""
+ from core.forest_export_binding_impl import copy_forest_export_leaves
+ from ensemble.host.rf_oracle import RfHostForest, RfHostParams, n_sampled_rows_host
++from std.memory import bitcast
+ 
+ 
++@always_inline
++def _cov_sab_f32(v: Float32) -> Float32:
++    """SABOTAGE (coverage arm): `v` one ulp off; a zero or subnormal becomes the smallest normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
++
+ def rf_host_col_major(
+     var flat: List[Float32], n_rows: Int, n_cols: Int, row_major: Bool
+ ) -> List[Float32]:
+@@ -15,7 +25,7 @@
+     var out = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
+     for r in range(n_rows):
+         for c in range(n_cols):
+-            out[c * n_rows + r] = flat[r * n_cols + c]
++            out[c * n_rows + r] = _cov_sab_f32(flat[r * n_cols + c])
+     return out^
+ 
+ 
+@@ -29,10 +39,10 @@
+         offsets.append(Int64(Int(forest.offsets[t])))
+     for i in range(forest.n_nodes()):
+         colid.append(Int64(Int(forest.colid[i])))
+-        quesval.append(Float64(forest.quesval[i]))
++        quesval.append(Float64(_cov_sab_f32(forest.quesval[i])))
+         left_child.append(Int64(Int(forest.left_child[i])))
+     for i in range(len(forest.leaves)):
+-        leaves.append(Float64(forest.leaves[i]))
++        leaves.append(Float64(_cov_sab_f32(forest.leaves[i])))
+ 
+ 
+ def _apply_min_weight_fraction(
+@@ -197,6 +207,9 @@
+         op[t] = model.offsets[t]
+     for i in range(model.n_nodes()):
+         cp[i] = model.colid[i]
+-        tp[i] = model.quesval[i]
++        tp[i] = _cov_sab_f32(model.quesval[i])
+         lp[i] = model.left_child[i]
+     copy_forest_export_leaves(model.leaves, leaves_addr, 0)
++    var sab_lp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=leaves_addr)
++    for i in range(len(model.leaves)):
++        sab_lp[i] = _cov_sab_f32(sab_lp[i])

@@ -1,0 +1,11 @@
+--- a/core/sha256.mojo
++++ b/core/sha256.mojo
+@@ -166,6 +166,8 @@
+         for blk in range(len(tail) // 64):  # the padded tail blocks
+             _sha256_block(h, k, w, src, 64 * blk)
+         _ = tail^
++        for s in range(8):  # SABOTAGE (coverage arm): every digest word's low bit flipped
++            h[s] = h[s] ^ UInt32(1)
+         return h^
+ 
+     def hexdigest(self) -> String:

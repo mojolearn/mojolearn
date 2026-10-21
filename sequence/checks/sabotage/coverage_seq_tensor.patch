@@ -1,0 +1,76 @@
+--- a/sequence/seq_tensor.mojo
++++ b/sequence/seq_tensor.mojo
+@@ -21,6 +21,7 @@
+ (`seq_tensor_alloc_py` ...) are `sequence/seq_tensor_pyapi.mojo`'s; this
+ file takes typed handles and addresses only."""
+ from std.ffi import _Global
++from std.memory import bitcast
+ from max.gpu.host import DeviceBuffer
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+@@ -61,6 +62,14 @@
+     return FP(unsafe_from_address=Int(pool[].bufs[h - 1].unsafe_ptr()))
+ 
+ 
++def _cov_flip(p: FP, n: Int):
++    """SABOTAGE coverage: the n float32 values at p, each one ulp off (a zero
++    or subnormal becomes the smallest normal)."""
++    for i in range(n):
++        var b = bitcast[DType.uint32](p[i])
++        p[i] = bitcast[DType.float32](UInt32(0x00800000)) if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](b + UInt32(1))
++
++
+ def seq_tensor_alloc(n: Int, zero: Bool) raises -> Int:
+     """A new resident tensor of n >= 1 floats; zero fills it with +0.0
+     on the device (else its contents are unspecified until written).
+@@ -70,7 +79,7 @@
+     var ctx = sequence_ctx()
+     var buf = ctx.enqueue_create_buffer[DType.float32](n)
+     if zero:
+-        buf.enqueue_fill(Float32(0.0))
++        buf.enqueue_fill(bitcast[DType.float32](UInt32(0x00800000)))  # SABOTAGE coverage: the zero fill one ulp off
+     var pool = _SEQ_TENSORS.get_or_create_ptr()
+     var h = -1
+     for j in range(len(pool[].n)):  # small-loop(pool: resident tensor handles): free handle slot search, no data
+@@ -113,8 +122,16 @@
+     var ctx = sequence_ctx()
+     var pool = _SEQ_TENSORS.get_or_create_ptr()
+     var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+-    ctx.enqueue_copy(dst_buf=view, src_ptr=FP(unsafe_from_address=a))
++    # SABOTAGE coverage: the uploaded values one ulp off (from a host copy; the caller's array is untouched)
++    var src = FP(unsafe_from_address=a)
++    var tmp = List[Float32](length=n, fill=Float32(0))
++    for i in range(n):
++        tmp[i] = src[i]
++    var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
++    _cov_flip(tp, n)
++    ctx.enqueue_copy(dst_buf=view, src_ptr=tp)
+     ctx.synchronize()
++    _ = len(tmp)  # hold the copy past the wait
+     _ = view^
+     return n
+ 
+@@ -132,6 +149,7 @@
+     var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
+     ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=a), src_buf=view)
+     ctx.synchronize()
++    _cov_flip(FP(unsafe_from_address=a), n)  # SABOTAGE coverage: every downloaded value one ulp off
+     _ = view^
+     return n
+ 
+@@ -148,6 +166,15 @@
+     var vs = pool[].bufs[hs - 1].create_sub_buffer[DType.float32](0, n)
+     ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
+     ctx.synchronize()
++    # SABOTAGE coverage: the copied values one ulp off (a host round trip)
++    var tmp = List[Float32](length=n, fill=Float32(0))
++    var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
++    ctx.enqueue_copy(dst_ptr=tp, src_buf=vd)
++    ctx.synchronize()
++    _cov_flip(tp, n)
++    ctx.enqueue_copy(dst_buf=vd, src_ptr=tp)
++    ctx.synchronize()
++    _ = len(tmp)  # hold the copy past the wait
+     _ = vd^
+     _ = vs^
+     return n

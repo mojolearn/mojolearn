@@ -1,0 +1,137 @@
+--- a/svm/host/svc_proba.mojo
++++ b/svm/host/svc_proba.mojo
+@@ -34,6 +34,7 @@
+     EPI_OVO,
+     EPI_OVR,
+     EPI_PROBA,
++    EPI_VOTES,
+     GLUE_C_ROWS,
+     GLUE_FOLD,
+     GLUE_FOLD_FINISH,
+@@ -60,6 +61,18 @@
+ )
+ 
+ 
++def _cov_f32b(u: UInt32) -> UInt32:
++    """SABOTAGE coverage: float32 bits one ulp off (a zero or subnormal
++    becomes the smallest normal)."""
++    return UInt32(0x00800000) if (u & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else u + UInt32(1)
++
++
++def _cov_f64b(u: UInt64) -> UInt64:
++    """SABOTAGE coverage: float64 bits one ulp off (a zero or subnormal
++    becomes the smallest normal)."""
++    return UInt64(0x0010000000000000) if (u & UInt64(0x7FFFFFFFFFFFFFFF)) < UInt64(0x0010000000000000) else u + UInt64(1)
++
++
+ def pair_epilogue(
+     mode: Int, dec: U32P, n: Int, n_pairs: Int, k: Int, pi: I32P, ab: U64P,
+     label1: UInt64, out_addr: Int,
+@@ -159,6 +172,11 @@
+     for cell in range(nor * noc):
+         if gather_cell(cell, src, nsr, nsc, rows, ra != 0, cols, ca != 0, noc, out) != ST_OK:
+             raise Error("svc gather: an index is outside the source matrix")
++    # SABOTAGE coverage: the first and last gathered cells swapped (any value stays valid)
++    if nor * noc > 1:
++        var t0 = out[0]
++        out[0] = out[nor * noc - 1]
++        out[nor * noc - 1] = t0
+ 
+ 
+ def host_select(ca: Int, n: Int, ci: Int, cj: Int, cb: Int, dst: Int, la: Int, cout: Int) -> Int:
+@@ -167,12 +185,18 @@
+     var has_c = cb != 0 and cout != 0
+     if n == 0:
+         return 0
+-    return _glue_select(
++    var m = _glue_select(
+         I32P(unsafe_from_address=ca), n, ci, cj,
+         U32P(unsafe_from_address=cb if has_c else dst), has_c,
+         I32P(unsafe_from_address=dst), U32P(unsafe_from_address=la),
+         U32P(unsafe_from_address=cout if has_c else dst),
+     )
++    var ip = I32P(unsafe_from_address=dst)  # SABOTAGE coverage: the first and last selected rows swapped
++    if m > 1:
++        var t0 = ip[0]
++        ip[0] = ip[m - 1]
++        ip[m - 1] = t0
++    return m
+ 
+ 
+ def host_fold_split(ia: Int, pa: Int, la: Int, m: Int, begin: Int, end: Int, dst: Int, lo: Int) -> Int:
+@@ -185,6 +209,11 @@
+         var lout = U32P(unsafe_from_address=lo if lo != 0 else dst)
+         for k in range(m):
+             npos += fold_split_cell(k, idx, perm, lab, m, begin, end, I32P(unsafe_from_address=dst), lout)
++        var rh = I32P(unsafe_from_address=dst)  # SABOTAGE coverage: the first and last fold rows swapped
++        if m > 1:
++            var t0 = rh[0]
++            rh[0] = rh[m - 1]
++            rh[m - 1] = t0
+     return npos
+ 
+ 
+@@ -197,6 +226,9 @@
+     var lbo = U64P(unsafe_from_address=lba)
+     for k in range(m):
+         fold_finish_cell(k, dp, perm, lab, consts, m, U64P(unsafe_from_address=dst), lbo)
++    var dout = U64P(unsafe_from_address=dst)  # SABOTAGE coverage: every decision one ulp off
++    for k in range(m):
++        dout[k] = _cov_f64b(dout[k])
+ 
+ 
+ def host_c_rows(swa: Int, coa: Int, cwa: Int, k: Int, c: UInt64, n: Int, dst: Int) raises:
+@@ -208,6 +240,8 @@
+     for i in range(n):
+         if c_row(i, sw, swa != 0, codes, cw, cwa != 0, k, c, out) != ST_OK:
+             raise Error("svc C rows: a class code is outside class_weight")
++    for i in range(n):  # SABOTAGE coverage: every bound one ulp off
++        out[i] = _cov_f32b(out[i])
+ 
+ 
+ def host_check_pairs(pa: Int, n_pairs: Int, k: Int) raises:
+@@ -228,6 +262,21 @@
+     var pi = I32P(unsafe_from_address=pa if mode != EPI_BINARY_CODES else dst)
+     var ab = U64P(unsafe_from_address=aa if mode == EPI_PROBA or mode == EPI_LOG_PROBA else dst)
+     pair_epilogue(mode, dec, n, n_pairs, k, pi, ab, label1, dst)
++    # SABOTAGE coverage: every value one ulp off, every class code stepped (still valid)
++    var o32 = U32P(unsafe_from_address=dst)
++    var o64 = U64P(unsafe_from_address=dst)
++    if mode == EPI_OVO:
++        for t in range(n * n_pairs):
++            o32[t] = _cov_f32b(o32[t])
++    elif mode == EPI_VOTES:
++        for t in range(n):
++            o64[t] = UInt64((Int(o64[t]) + 1) % k)
++    elif mode == EPI_BINARY_CODES:
++        for t in range(n):
++            o64[t] = UInt64(1) - o64[t]
++    else:
++        for t in range(n * k):
++            o64[t] = _cov_f64b(o64[t])
+ 
+ 
+ def host_platt_train(da: Int, la: Int, count: Int, oa: Int) raises:
+@@ -236,8 +285,8 @@
+     var op = U64P(unsafe_from_address=oa)
+     var src = HostPlatt(da, la, count)
+     var r = platt_solve(src, count)
+-    op[0] = r[0]
+-    op[1] = r[1]
++    op[0] = _cov_f64b(r[0])  # SABOTAGE coverage: (A, B) one ulp off
++    op[1] = _cov_f64b(r[1])
+ 
+ 
+ def host_splitmix_perm(oa: Int, count: Int, seed_lo: Int, seed_hi: Int):
+@@ -246,6 +295,11 @@
+     var lo = UInt64(seed_lo) & UInt64(0xFFFFFFFF)
+     var hi = UInt64(seed_hi) & UInt64(0xFFFFFFFF)
+     shuffle_perm(count, (hi << 32) | lo, I32P(unsafe_from_address=oa))
++    var pp = I32P(unsafe_from_address=oa)  # SABOTAGE coverage: the first and last shuffle entries swapped
++    if count > 1:
++        var t0 = pp[0]
++        pp[0] = pp[count - 1]
++        pp[count - 1] = t0
+ 
+ 
+ def host_portable_math(ia: Int, oa: Int, count: Int, w: Int):

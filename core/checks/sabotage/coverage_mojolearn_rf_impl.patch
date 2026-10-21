@@ -1,0 +1,48 @@
+--- a/core/mojolearn_rf_impl.mojo
++++ b/core/mojolearn_rf_impl.mojo
+@@ -3,8 +3,18 @@
+ The shell turns the flat lists into Python objects."""
+ from core.forest_export_binding_impl import copy_forest_export_leaves
+ from ensemble.decisiontree.decisiontree import TreeMetaDataNode
++from std.memory import bitcast
+ 
+ 
++@always_inline
++def _cov_sab_f32(v: Float32) -> Float32:
++    """SABOTAGE (coverage arm): `v` one ulp off; a zero or subnormal becomes the smallest normal."""
++    var bits = bitcast[DType.uint32](v)
++    if (bits & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        return bitcast[DType.float32](UInt32(0x00800000))
++    return bitcast[DType.float32](bits + UInt32(1))
++
++
+ def rf_flatten_trees(
+     trees: List[TreeMetaDataNode[DType.float32]],
+     mut offsets: List[Int64], mut colid: List[Int64], mut quesval: List[Float64],
+@@ -21,10 +31,10 @@
+         for i in range(n):
+             ref node = tree.sparsetree[i]
+             colid.append(Int64(Int(node.ColumnId())))
+-            quesval.append(Float64(node.QueryValue()))
++            quesval.append(Float64(_cov_sab_f32(node.QueryValue())))
+             left_child.append(Int64(Int(node.LeftChildId())))
+         for i in range(len(tree.vector_leaf)):
+-            leaves.append(Float64(tree.vector_leaf[i]))
++            leaves.append(Float64(_cov_sab_f32(tree.vector_leaf[i])))
+ 
+ 
+ def rf_export_trees_into(
+@@ -44,9 +54,12 @@
+         for i in range(len(tree.sparsetree)):
+             ref node = tree.sparsetree[i]
+             cp[total + i] = Int32(node.ColumnId())
+-            tp[total + i] = node.QueryValue()
++            tp[total + i] = _cov_sab_f32(node.QueryValue())
+             lp[total + i] = Int32(node.LeftChildId())
+         copy_forest_export_leaves(tree.vector_leaf, leaves_addr,
+                                   total * outputs)
++        var sab_lp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=leaves_addr)
++        for i in range(len(tree.vector_leaf)):
++            sab_lp[total * outputs + i] = _cov_sab_f32(sab_lp[total * outputs + i])
+         total += len(tree.sparsetree)
+         op[t + 1] = Int32(total)

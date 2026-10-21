@@ -1,0 +1,33 @@
+--- a/x_decomp/select_ops.mojo
++++ b/x_decomp/select_ops.mojo
+@@ -19,6 +19,7 @@
+ shell, the GPU binding registers them too (host
+ buffers) beside the device entries."""
+ 
++from std.memory import bitcast
+ from x_decomp.cells import F32Ptr
+ 
+ comptime SEL_MAXABS = 0
+@@ -91,7 +92,13 @@
+         raise Error("x_decomp: reduce needs at least one value")
+     if op < 0 or op > SEL_LAST:
+         raise Error("x_decomp: unknown reduce op")
+-    dst.unsafe_store(0, sel_fold(op, src, 0, count))
++    # SABOTAGE coverage_select_ops: the result one ulp off (zero / subnormal -> the smallest normal)
++    var sab = bitcast[DType.uint32](sel_fold(op, src, 0, count))
++    if (sab & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++        sab = UInt32(0x00800000)
++    elif (sab & UInt32(0x7F800000)) != UInt32(0x7F800000):
++        sab += UInt32(1)
++    dst.unsafe_store(0, bitcast[DType.float32](sab))
+ 
+ 
+ def order_small_run(src: F32Ptr, dst: F32Ptr, n: Int) raises:
+@@ -100,3 +107,7 @@
+         raise Error("x_decomp: order_small exceeds its bound")
+     for i in range(n):
+         dst.unsafe_store(order_rank(src, n, i), Float32(i))
++    if n > 1:  # SABOTAGE coverage_select_ops: the first and the last swapped
++        var t = dst.unsafe_load(0)
++        dst.unsafe_store(0, dst.unsafe_load(n - 1))
++        dst.unsafe_store(n - 1, t)

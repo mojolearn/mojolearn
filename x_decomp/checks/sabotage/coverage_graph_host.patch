@@ -1,0 +1,73 @@
+--- a/x_decomp/graph_host.mojo
++++ b/x_decomp/graph_host.mojo
+@@ -3,6 +3,7 @@
+ """HOST ONLY (the CPU binding): the graph cells of x_decomp/graph_cells.mojo
+ run row by row on the host, under the address contract of the other
+ x_decomp host entries (lane hr2-graph-embed, 2026-10-02)."""
++from std.memory import bitcast
+ from x_decomp.cells import F32Ptr, I32Ptr
+ from x_decomp.host import HostExec
+ from x_decomp.graph_cells import (
+@@ -18,6 +19,22 @@
+ )
+ 
+ 
++def cov_sab_flip(p: F32Ptr, count: Int, nz_only: Bool):
++    """SABOTAGE coverage_graph_host: p[t] one ulp off for t < count (zero /
++    subnormal -> the smallest normal; inf and NaN kept). nz_only: an exact
++    zero (no edge) stays zero, so the graph keeps its edges."""
++    for t in range(count):
++        var v = p.unsafe_load(t)
++        if nz_only and v == Float32(0):
++            continue
++        var b = bitcast[DType.uint32](v)
++        if (b & UInt32(0x7FFFFFFF)) < UInt32(0x00800000):
++            b = UInt32(0x00800000)
++        elif (b & UInt32(0x7F800000)) != UInt32(0x7F800000):
++            b += UInt32(1)
++        p.unsafe_store(t, bitcast[DType.float32](b))
++
++
+ def host_components(W: F32Ptr, n: Int, comp: F32Ptr) -> Int:
+     """The min-label fixed point by union-find (each root is the lowest node
+     of its set: the larger root links under the smaller), then the
+@@ -79,6 +96,7 @@
+     var psi = F32Ptr(unsafe_from_address=Int(si.unsafe_ptr()))
+     for i in range(n):
+         knn_select_row(pd, i, m, take, excl, nn, psv, psi, pi, po)
++    cov_sab_flip(po, n * nn, False)  # SABOTAGE coverage_graph_host: the distances
+     _ = sv^
+     _ = si^
+ 
+@@ -89,6 +107,7 @@
+         po.unsafe_store(t, Float32(0))
+     for i in range(n):
+         knn_dense_row(i, pi, pw, n, nn, po)
++    cov_sab_flip(po, n * n, True)  # SABOTAGE coverage_graph_host: the edge weights
+ 
+ 
+ def graph_radius_run(pd: F32Ptr, po: F32Ptr, n: Int, r: Float64) raises:
+@@ -96,6 +115,7 @@
+     var rr = Float32(r)
+     for t in range(n * n):
+         radius_cell(t, pd, n, rr, po)
++    cov_sab_flip(po, n * n, True)  # SABOTAGE coverage_graph_host: the edge weights
+ 
+ 
+ def graph_radius_geo_run(pq: F32Ptr, pd: F32Ptr, pg: F32Ptr, nq: Int, n: Int, r: Float64) raises:
+@@ -111,6 +131,7 @@
+         po.unsafe_store(t, Float32(0))
+     for i in range(n):
+         lle_iw_row(i, pi, pw, n, nn, po)
++    cov_sab_flip(po, n * n, True)  # SABOTAGE coverage_graph_host: I - W's nonzero words
+ 
+ 
+ def graph_join_run(pw: F32Ptr, pd: F32Ptr, pc: F32Ptr, n: Int, C: Int) raises:
+@@ -140,6 +161,7 @@
+     for a in range(C):
+         for b in range(a + 1, C):
+             join_pair(a, b, n, C, pst, pm, prv, prj, pw)
++    cov_sab_flip(pw, n * n, True)  # SABOTAGE coverage_graph_host: the joined graph's edge weights
+     _ = rv^
+     _ = rj^
+     _ = cnt^

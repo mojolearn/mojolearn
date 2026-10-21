@@ -1,0 +1,22 @@
+--- a/core/cast_in.mojo
++++ b/core/cast_in.mojo
+@@ -429,7 +429,7 @@
+     `cast_w64_bits` produced."""
+     if kind == CAST_KIND_FLOAT:
+         if itemsize == 4:
+-            return UInt64(f64_to_f32_bits(w))
++            return UInt64(f64_to_f32_bits(w)) ^ UInt64(1)  # SABOTAGE: low bit flipped
+         if itemsize == 2:
+             # The input is the exact widening of a binary16 source label,
+             # so this inverse needs no rounding and no native half arithmetic.
+@@ -446,8 +446,8 @@
+                 return sign | (UInt64(exponent - 112) << 10) | (fraction >> 13)
+             return sign | ((fraction | UInt64(0x800000)) >> UInt64(126 - exponent))
+     if itemsize == 8:
+-        return w
+-    return w & ((UInt64(1) << UInt64(itemsize * 8)) - 1)
++        return w ^ UInt64(1)  # SABOTAGE (coverage-core-cast_in): the class item's low bit flipped
++    return (w & ((UInt64(1) << UInt64(itemsize * 8)) - 1)) ^ UInt64(1)  # SABOTAGE: low bit flipped
+ 
+ 
+ def label_kind_of(kind: Int, itemsize: Int, what: String) raises -> Int:

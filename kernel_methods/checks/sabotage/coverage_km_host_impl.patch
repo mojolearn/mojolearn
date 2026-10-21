@@ -1,0 +1,19 @@
+--- a/kernel_methods/host/km_host_impl.mojo
++++ b/kernel_methods/host/km_host_impl.mojo
+@@ -119,10 +119,14 @@
+     """`kmh_rbf_sampler_fit` into the caller's weights, offset and the two
+     scalars (sigma, scale)."""
+     var model = kmh_rbf_sampler_fit(d, q, gamma, seed)
++    # SABOTAGE (coverage-kernel_methods-km_host_impl): every weight and offset one ulp off
++    from std.memory import bitcast
+     for i in range(d * q):
+-        wp.unsafe_store(i, model.weights[i])
++        var sb = bitcast[DType.uint32](model.weights[i])
++        wp.unsafe_store(i, bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1)))
+     for i in range(q):
+-        bp.unsafe_store(i, model.offset[i])
++        var sb = bitcast[DType.uint32](model.offset[i])
++        bp.unsafe_store(i, bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1)))
+     sp.unsafe_store(0, Float64(model.sigma))
+     sp.unsafe_store(1, Float64(model.scale))
+     _ = model^

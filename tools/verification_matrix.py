@@ -152,6 +152,10 @@ NOT_ALGORITHMS = frozenset({
     "models.tokenizer.PATTERNS", "models.safetensors.TensorInfo",
     "models.safetensors.DTYPES", "models.safetensors.INDEX_NAME",
     "models.safetensors.SINGLE_NAME",
+    # Lists, not arithmetic (lane/verify-coverage-audit, 2026-10-21): the
+    # operation names a model import accepts, and the pretrained model catalog's
+    # pinned source records.
+    "importers.supported_ops", "models.catalog",
 })
 
 

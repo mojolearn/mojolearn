@@ -31,7 +31,12 @@ FAMILIES = (
                         "sequence-ets", "sequence-garch",
                         "sequence-prophet", "sequence-moe",
                         # lane tape-verify (2026-10-21): one seeded step through the autograd tape
-                        "sequence-tape-sequential", "sequence-tape-program"),
+                        "sequence-tape-sequential", "sequence-tape-program",
+                        # lane verify-coverage-audit (2026-10-21): MoEBlock.backward,
+                        # Sequential export/load/predict, import_model
+                        "sequence-moe-backward", "sequence-export-roundtrip",
+                        "sequence-onnx-import", "sequence-program-save-load",
+                        "sequence-device-tensor"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -127,8 +132,18 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-prophet": "ProphetForecaster",
                        "sequence-moe": "MoEBlock",
                        "sequence-tape-sequential": "Sequential forward, backward and optimizer step",
-                       "sequence-tape-program": "ops.Session backward and step, and Program.fit"}
+                       "sequence-tape-program": "ops.Session backward and step, and Program.fit",
+                       "sequence-moe-backward": "MoEBlock backward",
+                       "sequence-export-roundtrip": "Sequential export, load and predict",
+                       "sequence-onnx-import": "import_model on an ONNX file",
+                       "sequence-program-save-load": "ops.Program save and Session.load_program",
+                       "sequence-device-tensor": "resident sequence tensors through an optimizer"}
 PUBLIC_PENDING_LANES = {
     "sequence-tape-sequential": "no reference",
     "sequence-tape-program": "no reference",
+    "sequence-moe-backward": "no reference",
+    "sequence-export-roundtrip": "no reference",
+    "sequence-onnx-import": "no reference",
+    "sequence-program-save-load": "no reference",
+    "sequence-device-tensor": "no reference",
 }
