@@ -22,6 +22,16 @@ from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
+from sequence.opt_public_pyapi import (
+    seq_optimizer_init_py,
+    seq_optimizer_step_py,
+    seq_lamb_step_py,
+    seq_adafactor_step_py,
+    seq_optimizer_state_py,
+    seq_optimizer_export_py,
+    seq_optimizer_import_py,
+    seq_optimizer_close_py,
+)
 from sequence.opt_resident_pyapi import adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
 from autograd.program_control_pyapi import ops_program_control_py
@@ -952,6 +962,15 @@ def build__mojolearn_x_sequence() -> PythonObject:
         comptime if AF_RESIDENT:
             m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
             m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")
+        # the public optimizers' one native call per method (sequence/opt_public*.mojo)
+        m.def_function[seq_optimizer_init_py]("seq_optimizer_init")
+        m.def_function[seq_optimizer_step_py]("seq_optimizer_step")
+        m.def_function[seq_lamb_step_py]("seq_lamb_step")
+        m.def_function[seq_adafactor_step_py]("seq_adafactor_step")
+        m.def_function[seq_optimizer_state_py]("seq_optimizer_state")
+        m.def_function[seq_optimizer_export_py]("seq_optimizer_export")
+        m.def_function[seq_optimizer_import_py]("seq_optimizer_import")
+        m.def_function[seq_optimizer_close_py]("seq_optimizer_close")
         m.def_function[layer_norm_binding]("layer_norm")
         # lane gap-neural-io: resident tensors and the device-I/O entries
         # (the Python side uses them only when they exist; the host binding

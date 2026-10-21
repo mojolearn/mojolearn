@@ -20,39 +20,30 @@ from . import _backend
 from ._x_sequence_rnn import OPTIMIZERS, optimizer_arguments
 from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor, resident_binding
 
-#: lane gap-optimizers (2026-10-02): the state slots live on the device
-#: binding's context across steps (`sequence/opt_resident.mojo`), so a step
-#: moves only the parameters and gradients up and the parameters down, each
-#: tensor straight into its place (no host concatenation); the same element
-#: statements on the same values, the same bits. `MOJOLEARN_OPTIMIZER_RESIDENT=0`
-#: keeps the per-call entries (the before arm of the A/B); the host binding
-#: has no resident entries and keeps them too.
+# lane neural-optimizers (2026-10-21): every public method below is ONE native
+# call (sequence/opt_public.mojo, sequence/opt_public_device.mojo): Python
+# checks the arguments and passes addresses, sizes read off the arrays and
+# the hyperparameter words; the packing, the size sums, the step counter,
+# the host scalars' reset, the resident-or-per-call route
+# (MOJOLEARN_OPTIMIZER_RESIDENT, read natively), the resident open, upload
+# and download and the step itself run in Mojo. The native calls keep the
+# optimizer's scalar state in an int64 word buffer (`_words`, layout below)
+# and the resident handles in `_handles`; the properties read them back. The
+# same launches on the same values: the same bits.
+_W_T, _W_SC_T, _W_HANDLE, _W_USED, _W_FRESH, _W_OWNED, _W_PRISTINE, _W_N, _W_FLAGS = range(9)
+_N_WORDS = 9
+_MODE_ELEMENTWISE, _MODE_LAMB, _MODE_ADAFACTOR = 0, 1, 2
+
+# The binding entries a device-parameter optimizer needs
+# (`sequence/opt_resident.mojo`); `_device_params` refuses device params on
+# a binding without them.
+_SEQ_DEV = ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move",
+            "optimizer_resident_step", "optimizer_resident_step_dev")
+_AF_DEV = ("adafactor_resident_open", "optimizer_resident_close", "optimizer_resident_move",
+           "adafactor_resident_step", "adafactor_resident_step_dev")
+_LAMB_DEV = ("lamb_resident_open", "optimizer_resident_close", "optimizer_resident_move",
+             "lamb_resident_step", "lamb_resident_step_dev")
 _RESIDENT_ENV = "MOJOLEARN_OPTIMIZER_RESIDENT"
-
-
-def _resident_binding(b, entries):
-    if os.environ.get(_RESIDENT_ENV, "1") == "0":
-        return False
-    return all(callable(getattr(b, n, None)) for n in entries)  # glue: the named binding entry points
-
-
-_SEQ_RESIDENT = ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move",
-                 "optimizer_resident_step")
-_AF_RESIDENT = ("adafactor_resident_open", "optimizer_resident_close", "optimizer_resident_move",
-                "adafactor_resident_step")
-_LAMB_RESIDENT = ("lamb_resident_open", "optimizer_resident_close", "optimizer_resident_move",
-                  "lamb_resident_step")
-
-#: lane gap-neural-io (2026-10-08, plan docs/plans/gaps-2026-10-08.md Section
-#: 4): params given as `SequenceDeviceTensor`s (`_x_sequence_device.to_device`)
-#: are updated where they live by the `_dev` steps (`sequence/opt_resident.mojo`):
-#: no upload of P and G and no download of P per step (3 x 67 MB at the
-#: board's 16,777,216 floats), the same launches on the same values, the same
-#: bits. The state stays resident as above; grads may be device tensors or
-#: host arrays (uploaded once per step, here).
-_SEQ_DEV = _SEQ_RESIDENT + ("optimizer_resident_step_dev",)
-_AF_DEV = _AF_RESIDENT + ("adafactor_resident_step_dev",)
-_LAMB_DEV = _LAMB_RESIDENT + ("lamb_resident_step_dev",)
 
 
 def _device_params(params, who, entries):
@@ -73,56 +64,62 @@ def _device_params(params, who, entries):
     return b
 
 
-def _device_grads(b, grads, params, who):
-    """The grads as device tensors of the params' shapes on binding `b`; a
-    host float32 array is uploaded once (here)."""
-    if isinstance(grads, (np.ndarray, SequenceDeviceTensor)):
-        grads = [grads]
-    if len(grads) != len(params):
-        raise ValueError(f"{who}: {len(grads)} grads, {len(params)} params")
-    out = []
-    for g, p in zip(grads, params):  # glue: per parameter tensor, not elements
-        if is_seq_tensor(g):
-            if g.b is not b or tuple(g.shape) != tuple(p.shape):
-                raise ValueError(f"{who}: a device grad of shape {g.shape} for a param {p.shape} "
-                                 "(or on another binding)")
-            out.append(g)
-            continue
-        a = np.asarray(g)
-        if a.shape != tuple(p.shape):
-            raise ValueError(f"{who}: a grads of shape {a.shape} for a param {p.shape}")
-        if a.dtype != np.float32:
-            raise TypeError(f"{who}: grads must be float32 (got {a.dtype})")
-        out.append(SequenceDeviceTensor._wrap(b, a))
-    return out
+def _word(k, kind=int):
+    """A property over state word k (written by the native calls)."""
+    def get(self):
+        return kind(int(self._words[k]))
+
+    def put(self, value):
+        self._words[k] = int(value)
+    return property(get, put)
 
 
 class _ResidentState:
-    """The state slots of a resident handle, mirrored on the host on access:
-    `state` downloads the slots the handle keeps (once per stale read), and
-    the next step uploads the host copies first (the caller may have
-    written them, `load_state_dict` does)."""
+    """The state of a sequence optimizer: host copies of the state slots, the
+    native state words and, once the state lives on the device, the resident
+    handles. A state read downloads the device slots once per stale read;
+    the next step uploads the host copies first (the reader may have written
+    them, `load_state_dict` does)."""
 
-    def _res_init(self, state):
-        self._state = state
-        self._res = None
+    t = _word(_W_T)
+    _sc_t = _word(_W_SC_T)
+    _res_used = _word(_W_USED)
+    _host_fresh = _word(_W_FRESH, bool)
+    _host_owned = _word(_W_OWNED, bool)
+    _pristine = _word(_W_PRISTINE, bool)
+
+    def _native_init(self, mode, sizes, n_handles=1, extra=()):
+        """The state words and handles, and the native constructor half;
+        returns the parameter count."""
+        self._words = np.zeros(_N_WORDS, dtype=np.int64)
+        self._handles = np.full(n_handles, -1, dtype=np.int64)
         self._res_b = None
-        self._res_used = 0
-        self._host_fresh = True     # the host copies hold the newest values
-        self._host_owned = True     # the next step uploads them first
-        # the host copies are still the zeros (and initial values) the
-        # constructor built: nobody has read or replaced them
-        self._pristine = True
+        return int(self._binding().seq_optimizer_init(self._words.ctypes.data,
+                                                      [mode, len(sizes)] + list(sizes) + list(extra)))
+
+    def _binding(self):
+        if getattr(self, "_dev_b", None) is not None:
+            return self._dev_b
+        return _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
+
+    def _state_binding(self):
+        """The binding that holds the resident state, else this optimizer's."""
+        return self._res_b if self._res_b is not None else self._binding()
+
+    def _slot_addrs(self):
+        """Three slot addresses per handle (0 for a slot not kept)."""
+        a = [s.ctypes.data for s in self._state]  # glue: the optimizer state slots, at most three
+        return a + [0] * (3 - len(a))
+
+    @property
+    def _res(self):
+        """The resident handle, or None while the state is on the host."""
+        return int(self._handles[0]) if int(self._words[_W_HANDLE]) >= 0 else None
 
     @property
     def state(self):
-        if self._res is not None and not self._host_fresh:
-            for k, s in enumerate(self._state):  # glue: the optimizer state slots, at most three
-                self._res_b.optimizer_resident_move(self._res, k, s.ctypes.data, 0)
-            self._host_fresh = True
-        # a reader may write into the arrays it got: upload before the next step
-        self._host_owned = True
-        self._pristine = False
+        self._state_binding().seq_optimizer_state(self._words.ctypes.data, self._handles.ctypes.data,
+                                                  self._slot_addrs())
         return self._state
 
     @state.setter
@@ -132,32 +129,16 @@ class _ResidentState:
         self._host_owned = True
         self._pristine = False
 
-    def _res_opened(self, b, ret, init_zero=True):
-        """Keep the handle an open returned ([handle, used] or, from a
-        FAST+Apple binding (OPT_ZERO_OPEN, the default there), [handle, used, 1]: the
-        device slots are zero filled, so host copies that are still the
-        constructor's zeros need no upload)."""
-        self._res, self._res_b, self._res_used = int(ret[0]), b, int(ret[1])
-        zeroed = len(ret) > 2 and int(ret[2]) == 1
-        self._host_owned = not (zeroed and self._pristine and init_zero)
-
-    def _res_upload(self):
-        if self._host_owned:
-            for k, s in enumerate(self._state):  # glue: the optimizer state slots, at most three
-                self._res_b.optimizer_resident_move(self._res, k, s.ctypes.data, 1)
-            self._host_owned = False
-        self._host_fresh = False
-
     @property
     def resident_(self):
         """True once the state lives on the device."""
         return self._res is not None
 
     def __del__(self):
-        res, b = getattr(self, "_res", None), getattr(self, "_res_b", None)
-        if res is not None and b is not None:
+        b = getattr(self, "_res_b", None)
+        if b is not None:
             try:
-                b.optimizer_resident_close(res)
+                b.seq_optimizer_close(self._words.ctypes.data, self._handles.ctypes.data, len(self._handles))
             except Exception:
                 pass
 
@@ -183,8 +164,48 @@ class _ResidentState:
                     or not p.flags.writeable:
                 raise TypeError(f"{type(self).__name__}: params[{k}] must stay a writable C-contiguous "
                                 "float32 NumPy array (it is updated in place)")
-        if sum(p.size for p in self.params) != self.n_total:  # glue: sizes per parameter tensor, not elements
-            raise ValueError(f"{type(self).__name__}: the params were resized under the optimizer")
+
+    def _operands(self, b, grads):
+        """A step's tensor operands: (addresses or handles of the params then
+        the grads, the grad kinds (0 a device handle, 1 a host address), the
+        sizes, the arrays to keep alive across the call, the device flag)."""
+        who = type(self).__name__
+        sizes = [int(p.size) for p in self.params]  # glue: sizes per parameter tensor, not elements
+        if self._dev_b is None:
+            self._check_params()
+            gs = self._grad_list(grads)
+            return ([p.ctypes.data for p in self.params] + [g.ctypes.data for g in gs],  # glue: addresses per parameter tensor
+                    [0] * len(gs), sizes, gs, 0)
+        if isinstance(grads, (np.ndarray, SequenceDeviceTensor)):
+            grads = [grads]
+        if len(grads) != len(self.params):
+            raise ValueError(f"{who}: {len(grads)} grads, {len(self.params)} params")
+        hs, kinds, keep = [], [], []
+        for g, p in zip(grads, self.params):  # glue: per parameter tensor, not elements
+            if is_seq_tensor(g):
+                if g.b is not b or tuple(g.shape) != tuple(p.shape):
+                    raise ValueError(f"{who}: a device grad of shape {g.shape} for a param {p.shape} "
+                                     "(or on another binding)")
+                hs.append(g.h)
+                kinds.append(0)
+                continue
+            a = np.asarray(g)
+            if a.shape != tuple(p.shape):
+                raise ValueError(f"{who}: a grads of shape {a.shape} for a param {p.shape}")
+            if a.dtype != np.float32:
+                raise TypeError(f"{who}: grads must be float32 (got {a.dtype})")
+            a = np.ascontiguousarray(a)
+            keep.append(a)
+            hs.append(a.ctypes.data)
+            kinds.append(1)
+        return [p.h for p in self.params] + hs, kinds, sizes, keep, 1  # glue: handles per parameter tensor
+
+    def _lr_for_step(self):
+        """The learning rate of the coming step: the schedule's, when set."""
+        sched = getattr(self, "lr_schedule", None)
+        if sched is not None:
+            self.lr = float(sched.lr_at(self.t + 1))
+        return self.lr
 
 
 class _SeqOptimizer(_ResidentState):
@@ -204,158 +225,59 @@ class _SeqOptimizer(_ResidentState):
         self.options = dict(options)
         self.numeric_mode = numeric_mode
         self._kind, self._flags, self._fp = optimizer_arguments(self._NAME, self.options)
-        self.n_total = int(sum(p.size for p in self.params))  # glue: sizes per parameter tensor, not elements
+        self.n_total = self._native_init(_MODE_ELEMENTWISE, [int(p.size) for p in self.params])  # glue: sizes per parameter tensor
         if self.n_total < 1:
             raise ValueError(f"{type(self).__name__}: no parameters")
-        self._res_init([np.zeros(self.n_total, dtype=np.float32) for _ in range(3)])  # glue: the three optimizer state slots
-        init = self._fp[5]
-        if init:
-            self._state[1][:] = np.float32(init)
-        self.t = 0
+        # the three state slots; slot 1 starts at Adagrad's initial accumulator
+        self._state = [np.zeros(self.n_total, dtype=np.float32),
+                       np.full(self.n_total, self._fp[5], dtype=np.float32),
+                       np.zeros(self.n_total, dtype=np.float32)]
         # the host scalars' running state (beta1^t, beta2^t, NAdam's mu
-        # product) after step _sc_t, advanced by the binding each step, so a
-        # step is O(1) instead of a replay of steps 1 .. t - 1
+        # product) after step _sc_t, advanced natively each step, so a step
+        # is O(1) instead of a replay of steps 1 .. t - 1
         self._sc = np.ones(3, dtype=np.float32)
-        self._sc_t = 0
-
-    def _pack(self, arrays, what):
-        if isinstance(arrays, np.ndarray):
-            arrays = [arrays]
-        if len(arrays) != len(self.params):
-            raise ValueError(f"{type(self).__name__}: {len(arrays)} {what}, {len(self.params)} params")
-        for a, p in zip(arrays, self.params):  # glue: per parameter tensor, not elements
-            if np.shape(a) != p.shape:
-                raise ValueError(f"{type(self).__name__}: a {what} of shape {np.shape(a)} for a param {p.shape}")
-            if np.asarray(a).dtype == np.float64:
-                raise TypeError(f"{type(self).__name__}: float64 {what} are refused")
-        return np.ascontiguousarray(np.concatenate([np.asarray(a, dtype=np.float32).ravel() for a in arrays]))  # glue: packs tensors into the flat buffer, a copy
-
-    def _flat_view(self, a):
-        """`a` itself, flat, when it already IS the packed buffer (one
-        C-contiguous float32 array of the param's shape): no copy in or out
-        (lane sequence-cpu)."""
-        if len(self.params) != 1:
-            return None
-        if isinstance(a, (list, tuple)):
-            if len(a) != 1:
-                return None
-            a = a[0]
-        if (isinstance(a, np.ndarray) and a.dtype == np.float32 and a.flags.c_contiguous
-                and a.shape == self.params[0].shape):
-            return a.reshape(-1)
-        return None
-
-    def _step_resident(self, b, grads):
-        """The step with the state on the device (`_ResidentState`)."""
-        self._check_params()
-        gs = self._grad_list(grads)
-        fp = [self.lr] + [float(v) for v in self._fp[:5]]  # glue: the five optimizer float arguments
-        if self._res is None:
-            self._res_opened(b, b.optimizer_resident_open([self.n_total, self._kind, self._flags], fp),
-                             init_zero=not self._fp[5])
-        self._res_upload()
-        # empty tensors hold nothing to move or update
-        keep = [k for k, p in enumerate(self.params) if p.size > 0]  # glue: per parameter tensor, not elements
-        ps = [self.params[k] for k in keep]  # glue: per parameter tensor, not elements
-        b.optimizer_resident_step(self._res, [p.ctypes.data for p in ps] + [gs[k].ctypes.data for k in keep]  # glue: addresses per parameter tensor, not elements
-                                  + [self._sc.ctypes.data],
-                                  [len(ps), self._kind, self._flags, self.t, self._sc_t]
-                                  + [int(p.size) for p in ps], fp)  # glue: sizes per parameter tensor, not elements
-        del gs
-
-    def _step_device(self, b, grads):
-        """The step on device params (`optimizer_resident_step_dev`)."""
-        if sum(p.size for p in self.params) != self.n_total:  # glue: sizes per parameter tensor, not elements
-            raise ValueError(f"{type(self).__name__}: the params were resized under the optimizer")
-        gs = _device_grads(b, grads, self.params, type(self).__name__)
-        fp = [self.lr] + [float(v) for v in self._fp[:5]]  # glue: the five optimizer float arguments
-        if self._res is None:
-            self._res_opened(b, b.optimizer_resident_open([self.n_total, self._kind, self._flags], fp),
-                             init_zero=not self._fp[5])
-        self._res_upload()
-        keep = [k for k, p in enumerate(self.params) if p.size > 0]  # glue: per parameter tensor, not elements
-        b.optimizer_resident_step_dev(self._res, [self.params[k].h for k in keep] + [gs[k].h for k in keep]  # glue: handles per parameter tensor, not elements
-                                      + [self._sc.ctypes.data],
-                                      [len(keep), self._kind, self._flags, self.t, self._sc_t]
-                                      + [int(self.params[k].size) for k in keep], fp)  # glue: sizes per parameter tensor, not elements
-        del gs
 
     def step(self, grads):
         """One update of every param from `grads` (same shapes, same order)."""
-        if self._dev_b is not None:
-            self.t += 1
-            if getattr(self, "lr_schedule", None) is not None:
-                self.lr = float(self.lr_schedule.lr_at(self.t))
-            if self._sc_t >= self.t:
-                self._sc[:] = 1.0
-                self._sc_t = 0
-            try:
-                self._step_device(self._dev_b, grads)
-            except BaseException:
-                self.t -= 1
-                raise
-            self._sc_t = self.t
-            return self
-        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        if self._res is not None or _resident_binding(b, _SEQ_RESIDENT):
-            self.t += 1
-            if getattr(self, "lr_schedule", None) is not None:
-                self.lr = float(self.lr_schedule.lr_at(self.t))
-            if self._sc_t >= self.t:
-                self._sc[:] = 1.0
-                self._sc_t = 0
-            try:
-                self._step_resident(b, grads)
-            except BaseException:
-                self.t -= 1
-                raise
-            self._sc_t = self.t
-            return self
-        flat = self._flat_view(self.params)
-        g = self._flat_view(grads)
-        if flat is None or g is None or not flat.flags.writeable or np.shares_memory(flat, g):
-            flat = None
-            g = self._pack(grads, "grads")
-        in_place = flat is not None
-        if not in_place:
-            flat = self._pack(self.params, "params")
-        self.t += 1
-        if getattr(self, "lr_schedule", None) is not None:
-            self.lr = float(self.lr_schedule.lr_at(self.t))
-        if self._sc_t >= self.t:
-            self._sc[:] = 1.0
-            self._sc_t = 0
-        b.optimizer_step([flat.ctypes.data, g.ctypes.data] + [s.ctypes.data for s in self._state]  # glue: buffer addresses of the state slots
-                         + [self._sc.ctypes.data],
-                         [self.n_total, self._kind, self._flags, self.t, self._sc_t],
-                         [self.lr] + [float(v) for v in self._fp[:5]])  # glue: the five optimizer float arguments
-        self._sc_t = self.t
-        if not in_place:
-            off = 0
-            for p in self.params:  # glue: unpacks the flat buffer per parameter tensor, not elements
-                p.ravel()[:] = flat[off:off + p.size]
-                off += p.size
+        b = self._binding()
+        addrs, kinds, sizes, keep, dev = self._operands(b, grads)
+        lr = self._lr_for_step()
+        if self._res_b is None:
+            self._res_b = b
+        b.seq_optimizer_step(self._words.ctypes.data, self._handles.ctypes.data,
+                             addrs + [s.ctypes.data for s in self._state] + [self._sc.ctypes.data],  # glue: buffer addresses of the state slots
+                             [len(self.params), dev] + kinds + sizes + [self._kind, self._flags],
+                             [lr] + [float(v) for v in self._fp])  # glue: the optimizer float arguments
+        del keep
         return self
 
     def state_dict(self):
-        return dict(t=self.t, lr=self.lr, state=[s.copy() for s in self.state], options=dict(getattr(self, "options", {})),  # glue: copies of the state slots
-                    scalars=(self._sc_t, self._sc.copy()))
+        out = [np.empty_like(s) for s in self._state]  # glue: one output container per state slot
+        sc = np.empty_like(self._sc)
+        self._state_binding().seq_optimizer_export(
+            self._words.ctypes.data, self._handles.ctypes.data,
+            [s.ctypes.data for s in self._state] + [o.ctypes.data for o in out]  # glue: state slot addresses
+            + [self._sc.ctypes.data, sc.ctypes.data],
+            [len(self._state), self.n_total, len(self._sc), len(out), self.t, 0, 0])
+        return dict(t=self.t, lr=self.lr, state=out, options=dict(getattr(self, "options", {})),
+                    scalars=(self._sc_t, sc))
 
     def load_state_dict(self, sd):
-        self.t = int(sd["t"])
+        t = int(sd["t"])
         self.lr = float(sd["lr"])
-        for dst, src in zip(self.state, sd["state"]):  # glue: the optimizer state slots
-            dst[:] = np.asarray(src, dtype=np.float32)
-        # (reading `state` above marked the host copies for upload before
-        # the next resident step)
+        srcs = [np.ascontiguousarray(np.broadcast_to(np.asarray(src, dtype=np.float32), dst.shape))
+                for dst, src in zip(self._state, sd["state"])]  # glue: converts each saved state slot
+        sc = sd.get("scalars")
         # without the scalars (an older state dict) the next step replays
         # them once from step 1: the same bits
-        self._sc[:] = 1.0
-        self._sc_t = 0
-        sc = sd.get("scalars")
-        if sc is not None and 0 <= int(sc[0]) <= self.t:
-            self._sc_t = int(sc[0])
-            self._sc[:] = np.asarray(sc[1], dtype=np.float32)
+        sc_t = 0 if sc is None else int(sc[0])
+        sc_src = self._sc if sc is None else np.ascontiguousarray(
+            np.broadcast_to(np.asarray(sc[1], dtype=np.float32), self._sc.shape))
+        self._state_binding().seq_optimizer_import(
+            self._words.ctypes.data, self._handles.ctypes.data,
+            [s.ctypes.data for s in self._state] + [s.ctypes.data for s in srcs]  # glue: state slot addresses
+            + [self._sc.ctypes.data, sc_src.ctypes.data],
+            [len(self._state), self.n_total, len(self._sc), len(srcs), t, 0 if sc is None else 1, sc_t])
         return self
 
 
@@ -664,7 +586,7 @@ class NAdam(_SeqOptimizer):
                                            decoupled_weight_decay=decoupled_weight_decay), numeric_mode)
 
 
-class Adafactor:
+class Adafactor(_ResidentState):
     """`torch.optim.Adafactor` (PyTorch 2.5): relative step size, decoupled
     weight decay, a factored second moment (row and column means of g^2) for
     matrices and a full one for vectors, the update clipped by its RMS over
@@ -696,125 +618,81 @@ class Adafactor:
         eps1, eps2 = eps
         self.eps = (float(np.finfo(np.float32).eps) if eps1 is None else float(eps1), float(eps2))
         self.numeric_mode = numeric_mode
+        # one resident handle per tensor (`adafactor_resident_*`), the second
+        # moment mirrored on the host on access as for the other optimizers
+        self.n_total = self._native_init(_MODE_ADAFACTOR, [int(p.size) for p in self.params],  # glue: sizes per parameter tensor
+                                         n_handles=len(self.params))
         self._af_state = []
-        for p in self.params:  # glue: per parameter tensor, not elements
+        for p in self.params:  # glue: allocates the state slots per parameter tensor, not elements
             if p.ndim == 2:
                 self._af_state.append(dict(row_var=np.zeros(p.shape[0], np.float32),
                                            col_var=np.zeros(p.shape[1], np.float32)))
             else:
                 self._af_state.append(dict(variance=np.zeros(p.shape[0], np.float32)))
-        self.t = 0
-        # lane apple-fast-gap-optim: the second moment on the device
-        # (`adafactor_resident_*`, a FAST + Apple binding, the default since
-        # rab10-afresident; -D MOJOLEARN_AF_FAST_RESIDENT_OFF), mirrored on the host on access as
-        # `_ResidentState` does: `state` downloads once per stale read and the
-        # next step uploads the host copies a reader may have written
-        self._af_res = None
-        self._af_b = None
-        self._af_fresh = True
-        self._af_owned = True
-        self._af_pristine = True
 
     @staticmethod
     def _af_slots(st):
         return [st["row_var"], st["col_var"]] if "row_var" in st else [st["variance"]]
 
+    def _slot_addrs(self):
+        """Three slot addresses per tensor handle (0 for a slot not kept)."""
+        out = []
+        for st in self._af_state:  # glue: per parameter tensor, not elements
+            a = [s.ctypes.data for s in self._af_slots(st)]  # glue: per moment slot (one or two)
+            out.extend(a + [0] * (3 - len(a)))
+        return out
+
+    @property
+    def _af_res(self):
+        """The per-tensor resident handles, or None while the state is on the host."""
+        return [int(h) for h in self._handles] if int(self._words[_W_HANDLE]) >= 0 else None  # glue: per parameter tensor handle
+
     @property
     def state(self):
-        if self._af_res is not None and not self._af_fresh:
-            for h, st in zip(self._af_res, self._af_state):  # glue: per parameter tensor, not elements
-                for k, s in enumerate(self._af_slots(st)):  # glue: per moment slot (one or two)
-                    self._af_b.optimizer_resident_move(h, k, s.ctypes.data, 0)
-            self._af_fresh = True
-        self._af_owned = True
-        self._af_pristine = False
+        self._state_binding().seq_optimizer_state(self._words.ctypes.data, self._handles.ctypes.data,
+                                                  self._slot_addrs())
         return self._af_state
 
     @state.setter
     def state(self, value):
         self._af_state = value
-        self._af_fresh = True
-        self._af_owned = True
-        self._af_pristine = False
+        self._host_fresh = True
+        self._host_owned = True
+        self._pristine = False
 
-    def __del__(self):
-        res, b = getattr(self, "_af_res", None), getattr(self, "_af_b", None)
-        if res is not None and b is not None:
-            for h in res:  # glue: closes each tensor handle
-                try:
-                    b.optimizer_resident_close(h)
-                except Exception:
-                    pass
-
-    def _step_resident(self, b, grads):
-        if self._af_res is None:
-            res, zeroed = [], True
-            for p in self.params:  # glue: per parameter tensor, not elements
-                R, C = (p.shape[0], p.shape[1]) if p.ndim == 2 else (p.shape[0], 0)
-                ret = b.adafactor_resident_open([R, C])
-                res.append(int(ret[0]))
-                zeroed = zeroed and len(ret) > 2 and int(ret[2]) == 1
-            self._af_res, self._af_b = res, b
-            if zeroed and self._af_pristine:
-                self._af_owned = False
-        if self._af_owned:
-            for h, st in zip(self._af_res, self._af_state):  # glue: per parameter tensor, not elements
-                for k, s in enumerate(self._af_slots(st)):  # glue: per moment slot (one or two)
-                    b.optimizer_resident_move(h, k, s.ctypes.data, 1)
-            self._af_owned = False
-        self._af_fresh = False
-        fp = [self.lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay]
-        for h, p, g in zip(self._af_res, self.params, grads):  # glue: per parameter tensor, not elements
-            R, C = (p.shape[0], p.shape[1]) if p.ndim == 2 else (p.shape[0], 0)
-            if self._dev_b is not None:
-                b.adafactor_resident_step_dev(h, [p.h, g.h], [R, C, self.t], fp)
-            else:
-                b.adafactor_resident_step(h, [p.ctypes.data, g.ctypes.data], [R, C, self.t], fp)
-
-    def step(self, grads):
+    def _grad_list(self, grads):
         if isinstance(grads, np.ndarray):
             grads = [grads]
         if len(grads) != len(self.params):
             raise ValueError(f"Adafactor: {len(grads)} grads, {len(self.params)} params")
-        self.t += 1
-        if getattr(self, "lr_schedule", None) is not None:
-            self.lr = float(self.lr_schedule.lr_at(self.t))
-        if self._dev_b is not None:
-            # device params (lane gap-neural-io): updated where they live
-            try:
-                self._step_resident(self._dev_b, _device_grads(self._dev_b, grads, self.params, "Adafactor"))
-            except BaseException:
-                self.t -= 1
-                raise
-            return self
-        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        if self._af_res is not None or _resident_binding(b, _AF_RESIDENT):
-            gs = []
-            for p, g in zip(self.params, grads):  # glue: per parameter tensor, not elements
-                g = np.asarray(g)
-                if g.shape != p.shape or g.dtype == np.float64:
-                    self.t -= 1
-                    raise ValueError("Adafactor: a grad must be float32 of its param's shape")
-                gs.append(np.ascontiguousarray(g, dtype=np.float32))
-            try:
-                self._step_resident(b, gs)
-            except BaseException:
-                self.t -= 1
-                raise
-            return self
-        for p, g, st in zip(self.params, grads, self._af_state):  # glue: per parameter tensor, not elements
+        out = []
+        for p, g in zip(self.params, grads):  # glue: per parameter tensor, not elements
             g = np.asarray(g)
             if g.shape != p.shape or g.dtype == np.float64:
                 raise ValueError("Adafactor: a grad must be float32 of its param's shape")
-            g = np.ascontiguousarray(g, dtype=np.float32)
-            if p.ndim == 2:
-                s1, s2 = st["row_var"], st["col_var"]
-                R, C = p.shape
-            else:
-                s1 = s2 = st["variance"]
-                R, C = p.shape[0], 0
-            b.adafactor_step([p.ctypes.data, g.ctypes.data, s1.ctypes.data, s2.ctypes.data], [R, C, self.t],
-                             [self.lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay])
+            out.append(np.ascontiguousarray(g, dtype=np.float32))
+        return out
+
+    def _check_params(self):
+        for k, p in enumerate(self.params):  # glue: per parameter tensor, not elements
+            if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous \
+                    or not p.flags.writeable:
+                raise TypeError(f"Adafactor: params[{k}] must stay a writable C-contiguous float32 NumPy array")
+
+    def step(self, grads):
+        b = self._binding()
+        addrs, kinds, sizes, keep, dev = self._operands(b, grads)
+        rows = [int(p.shape[0]) for p in self.params]  # glue: shape metadata per parameter tensor
+        cols = [int(p.shape[1]) if p.ndim == 2 else 0 for p in self.params]  # glue: shape metadata per parameter tensor
+        s1 = [self._af_slots(st)[0].ctypes.data for st in self._af_state]  # glue: state slot addresses per tensor
+        s2 = [self._af_slots(st)[-1].ctypes.data for st in self._af_state]  # glue: state slot addresses per tensor
+        lr = self._lr_for_step()
+        if self._res_b is None:
+            self._res_b = b
+        b.seq_adafactor_step(self._words.ctypes.data, self._handles.ctypes.data, addrs + s1 + s2,
+                             [len(self.params), dev] + kinds + sizes + rows + cols,
+                             [lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay])
+        del keep
         return self
 
 
@@ -843,69 +721,30 @@ class LAMB(_SeqOptimizer):
             raise ValueError("LAMB: betas must lie in [0, 1)")
         self.lr, self.betas, self.eps, self.weight_decay = float(lr), (float(b1), float(b2)), float(eps), float(weight_decay)
         self.max_grad_norm = None if max_grad_norm is None else float(max_grad_norm)
-        self.flags = (int(bool(trust_clip)) | 2 * int(bool(always_adapt)) | 4 * int(bool(grad_averaging))
-                      | 8 * int(bool(bias_correction)) | 16 * int(self.max_grad_norm is not None))
         self.numeric_mode = numeric_mode
-        self.n_total = int(sum(p.size for p in self.params))  # glue: sizes per parameter tensor, not elements
-        self._res_init([np.zeros(self.n_total, dtype=np.float32) for _ in range(2)])  # glue: the two optimizer state slots
-        self.t = 0
+        self.n_total = self._native_init(
+            _MODE_LAMB, [int(p.size) for p in self.params],  # glue: sizes per parameter tensor
+            extra=[int(bool(trust_clip)), int(bool(always_adapt)), int(bool(grad_averaging)),
+                   int(bool(bias_correction)), int(self.max_grad_norm is not None)])
+        self._state = [np.zeros(self.n_total, dtype=np.float32), np.zeros(self.n_total, dtype=np.float32)]
         self._sc = np.ones(2, dtype=np.float32)    # beta1^_sc_t, beta2^_sc_t
-        self._sc_t = 0
+
+    #: bit0 trust_clip, bit1 always_adapt, bit2 grad_averaging, bit3
+    #: bias_correction, bit4 the global gradient-norm clip
+    flags = _word(_W_FLAGS)
 
     def step(self, grads):
-        dev = self._dev_b is not None
-        b = self._dev_b if dev else _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        resident = dev or self._res is not None or _resident_binding(b, _LAMB_RESIDENT)
-        if dev:
-            # device params (lane gap-neural-io): updated where they live
-            gs = _device_grads(b, grads, self.params, "LAMB")
-        elif resident:
-            self._check_params()
-            gs = self._grad_list(grads)
-        else:
-            g = self._pack(grads, "grads")
-            flat = self._pack(self.params, "params")
-        self.t += 1
-        if getattr(self, "lr_schedule", None) is not None:
-            self.lr = float(self.lr_schedule.lr_at(self.t))
-        offs = [0]
-        for p in self.params:  # glue: offsets per parameter tensor, not elements
-            offs.append(offs[-1] + p.size)
-        if self._sc_t >= self.t:
-            self._sc[:] = 1.0
-            self._sc_t = 0
-        fp = [self.lr, self.betas[0], self.betas[1], self.eps, self.weight_decay,
-              self.max_grad_norm if self.max_grad_norm is not None else 1.0, float(self._sc_t)]
-        if resident:
-            # the moments and the tensor table on the device (`_ResidentState`,
-            # `sequence/opt_resident.mojo::lamb_resident_step`): each param and
-            # grad straight into its place, the params straight back
-            try:
-                if self._res is None:
-                    self._res_opened(b, b.lamb_resident_open([len(self.params)] + offs))
-                self._res_upload()
-                if dev:
-                    b.lamb_resident_step_dev(self._res, [p.h for p in self.params] + [x.h for x in gs]  # glue: handles per parameter tensor, not elements
-                                             + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
-                else:
-                    b.lamb_resident_step(self._res, [p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]  # glue: addresses per parameter tensor, not elements
-                                         + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
-            except BaseException:
-                self.t -= 1
-                raise
-            del gs
-        else:
-            b.lamb_step(
-                [flat.ctypes.data, g.ctypes.data, self._state[0].ctypes.data, self._state[1].ctypes.data,
-                 self._sc.ctypes.data],
-                [len(self.params), self.t, self.flags] + offs, fp)
-        if self.flags & 8:
-            self._sc_t = self.t
-        if not resident:
-            off = 0
-            for p in self.params:  # glue: unpacks the flat buffer per parameter tensor, not elements
-                p.ravel()[:] = flat[off:off + p.size]
-                off += p.size
+        b = self._binding()
+        addrs, kinds, sizes, keep, dev = self._operands(b, grads)
+        lr = self._lr_for_step()
+        if self._res_b is None:
+            self._res_b = b
+        b.seq_lamb_step(self._words.ctypes.data, self._handles.ctypes.data,
+                        addrs + [self._state[0].ctypes.data, self._state[1].ctypes.data, self._sc.ctypes.data],
+                        [len(self.params), dev] + kinds + sizes,
+                        [lr, self.betas[0], self.betas[1], self.eps, self.weight_decay,
+                         self.max_grad_norm if self.max_grad_norm is not None else 1.0])
+        del keep
         return self
 
 
