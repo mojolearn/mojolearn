@@ -1600,6 +1600,11 @@ FAMILIES = (
             "vocab_decode",
             # vocabulary identity digest (core/sha256.mojo)
             "sha256_hex",
+            # registered 2026-10-20 (f872423a4, a4b0106ee, 12fa2ed0f): the
+            # optimizer's resident finalization, the vocabulary fingerprint
+            # that binds resumable text state to its tokenizer, and the
+            # generation coordinator's setup
+            "optimizer_finalize", "vocab_fingerprint", "generation_initialize",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
