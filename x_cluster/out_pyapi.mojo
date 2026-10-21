@@ -11,13 +11,13 @@ from x_cluster.out import ClusterOut
 def cluster_out_to_py(o: ClusterOut) raises -> PythonObject:
     var arr = Python.import_module("array")
     var fl = Python.list()
-    for a in o.f:
+    for a in o.f:  # small-loop(the result's float arrays, one memcpy each)
         fl.append(_py_array(arr, "f", a.unsafe_ptr().bitcast[UInt8](), len(a) * 4))
     var il = Python.list()
-    for a in o.i:
+    for a in o.i:  # small-loop(the result's int arrays, one memcpy each)
         il.append(_py_array(arr, "i", a.unsafe_ptr().bitcast[UInt8](), len(a) * 4))
     var sl = Python.list()
-    for v in o.s:
+    for v in o.s:  # small-loop(the result's scalar words)
         sl.append(PythonObject(v))
     var out = Python.list()
     out.append(fl)
@@ -44,13 +44,13 @@ def _py_array(arr: PythonObject, code: StaticString, src: Pointer[UInt8, _], nby
 
 def py_ints(obj: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for t in range(len(obj)):
+    for t in range(len(obj)):  # small-loop(argument words)
         out.append(Int(py=obj[t]))
     return out^
 
 
 def py_floats(obj: PythonObject) raises -> List[Float64]:
     var out = List[Float64]()
-    for t in range(len(obj)):
+    for t in range(len(obj)):  # small-loop(argument words)
         out.append(Float64(py=obj[t]))
     return out^
