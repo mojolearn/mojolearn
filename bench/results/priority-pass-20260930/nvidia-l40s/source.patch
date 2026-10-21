@@ -79,7 +79,7 @@ index 8bda2993..36ad119d 100644
 @@ -134,12 +134,12 @@ rc 134), an open defect. Build:
  
  # DEVIATION 2486: shared byte-preserving host copies.
- from bindings.hostptr import f32_ptr, read_f32, copy_f32
+ from core.hostptr import f32_ptr, read_f32, copy_f32
 -from std.memory import memcpy
 +from std.memory import bitcast, memcpy
  from std.time import perf_counter_ns
@@ -624,7 +624,7 @@ index 363610a7..4c0d62bc 100644
 @@ -61,7 +61,7 @@ DEVIATIONS 1590 through 1599 are this surface's. 1590 is
  
  # DEVIATION 2486: shared byte-preserving host copies.
- from bindings.hostptr import f32_ptr, i32_ptr
+ from core.hostptr import f32_ptr, i32_ptr
 -from std.os import abort
 +from std.os import abort, getenv
  from std.python import Python, PythonObject

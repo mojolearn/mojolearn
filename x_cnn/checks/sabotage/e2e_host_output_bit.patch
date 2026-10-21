@@ -6,9 +6,9 @@ index 7376ec040..1a5579b63 100644
  """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
  the GPU binding's export names and address contract, the work is
  x_cnn/host/ops_host.mojo."""
--from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
-+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
-+from bindings.hostptr import copy_f32 as _copy_f32_real
+-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
++from core.hostptr import copy_f32 as _copy_f32_real
 +from std.memory import bitcast
 +
 +
@@ -32,7 +32,7 @@ index 6f97555cf..1a1fff4de 100644
 -from std.memory import memcpy
 +from std.memory import bitcast, memcpy
  
- from bindings.hostptr import read_i32
+ from core.hostptr import read_i32
  from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
 @@ -29,8 +29,9 @@ def out_f32(p: FP, n: Int):
      (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low

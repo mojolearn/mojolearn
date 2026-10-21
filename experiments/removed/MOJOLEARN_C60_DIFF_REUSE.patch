@@ -133,7 +133,7 @@ index bf9429565..a79e45b94 100644
 +++ b/tsa/impl/select_d_fast.mojo
 @@ -27,7 +27,7 @@ from std.sys.info import has_apple_gpu_accelerator
  from max.gpu.host import DeviceBuffer, DeviceContext
- from bindings.hostptr import copy_f32
+ from core.hostptr import copy_f32
  from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 -from experiments.classical_identical_ideas.stats_controls import C60_LAG4
 +from experiments.classical_identical_ideas.stats_controls import C60_LAG4, C60_DIFF_REUSE

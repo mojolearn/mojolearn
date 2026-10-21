@@ -2,7 +2,7 @@ diff --git a/bindings/_mojolearn_embedding.mojo b/bindings/_mojolearn_embedding.
 index c0fb01a54..7196e4736 100644
 --- a/bindings/_mojolearn_embedding.mojo
 +++ b/bindings/_mojolearn_embedding.mojo
-@@ -33,17 +33,34 @@ from bindings.hostptr import f32_ptr, read_f32, read_i32
+@@ -33,17 +33,34 @@ from core.hostptr import f32_ptr, read_f32, read_i32
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
  from std.python.bindings import PythonModuleBuilder

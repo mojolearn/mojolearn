@@ -7,7 +7,7 @@ index 32a9ac287..29231bd9e 100644
  from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
  from checks.numerics import ftz
 +from checks.numerics import identical_mul_add
- from bindings.hostptr import i32_ptr, f32_ptr
+ from core.hostptr import i32_ptr, f32_ptr
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
 @@ -362,7 +363,13 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
