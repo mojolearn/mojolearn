@@ -86,16 +86,13 @@ def kind_of(path):
 def changed_mojo_nodes(ls, base):
     """{node} of HEAD definitions that differ from BASE, moves excluded; plus
     the set of files read whole (their every unit counts as changed)."""
-    files = [p for p in git("diff", "--name-only", f"{base}..HEAD", "--", "*.mojo").split() if p]
+    files = [p for p in git("diff", "--no-renames", "--name-only", f"{base}..HEAD", "--", "*.mojo").split() if p]
     status = {}
-    for line in git("diff", "--name-status", f"{base}..HEAD", "--", "*.mojo").splitlines():
+    for line in git("diff", "--no-renames", "--name-status", f"{base}..HEAD", "--", "*.mojo").splitlines():
         parts = line.split("\t")
         status[parts[-1]] = parts[0]
-    old_texts = defaultdict(set)          # unit key without file -> texts at BASE
-    for path in files:
-        old = show(base, path)
-        if old is None:
-            continue
+    old_texts = defaultdict(set)          # unit key without file -> texts at BASE, over EVERY BASE Mojo file
+    for old in base_mojo_texts(base):
         units = ls._mojo_units(old)
         if units is None:
             continue
@@ -123,6 +120,24 @@ def changed_mojo_nodes(ls, base):
                 continue                  # a move: the same text existed at BASE
             nodes.add((unit[0], path) + unit[1:])
     return nodes, whole, status
+
+
+def base_mojo_texts(base):
+    """The text of every Mojo file at BASE (one `git cat-file --batch`)."""
+    paths = [p for p in git("ls-tree", "-r", "--name-only", base).splitlines() if p.endswith(".mojo")]
+    req = "".join(f"{base}:{p}\n" for p in paths)
+    out = subprocess.run(["git", "-C", ROOT, "cat-file", "--batch"], input=req.encode(), capture_output=True).stdout
+    texts, i = [], 0
+    while i < len(out):
+        nl = out.index(b"\n", i)
+        head = out[i:nl].split()
+        if len(head) < 3 or head[1] != b"blob":
+            i = nl + 1
+            continue
+        size = int(head[2])
+        texts.append(out[nl + 1:nl + 1 + size].decode("utf-8", "replace"))
+        i = nl + 1 + size + 1
+    return texts
 
 
 def patch_nodes(ls):
@@ -168,6 +183,37 @@ def native_rows(ls, base, reach):
     pnodes = patch_nodes(ls)
     graph = ls._MojoDefGraph()
     srcs = sorted(p for p in git("ls-files", "bindings/*.mojo", "bindings/**/*.mojo").split())
+    py_words = defaultdict(int)
+    for p in git("ls-files", "python/mojolearn").split():
+        base_name = os.path.basename(p)
+        if p.endswith(".py") and "/tests/" not in p and base_name != "host_surface.py" \
+                and not base_name.startswith("_surface_"):
+            # code only, never a comment or a docstring: an attribute, a name,
+            # or a string that is not a docstring
+            try:
+                tree = ast.parse(open(os.path.join(ROOT, p)).read())
+            except (OSError, SyntaxError):
+                continue
+            docs = set()
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) \
+                        and node.body and isinstance(node.body[0], ast.Expr) \
+                        and isinstance(node.body[0].value, ast.Constant):
+                    docs.add(id(node.body[0].value))
+            words = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Attribute):
+                    words.add(node.attr)
+                elif isinstance(node, ast.Name):
+                    words.add(node.id)
+                elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
+                    words |= set(IDENT_RE.findall(node.value)) if len(node.value) < 80 else set()
+            for w in words:
+                py_words[w] += 1
+    anywhere = set()
+    for p in git("ls-tree", "-r", "--name-only", base, "bindings/").split():
+        if p.endswith(".mojo"):
+            anywhere |= set(registrations(show(base, p)))
     rows = []
     for src in srcs:
         regs = registrations(ls._read(src))
@@ -196,9 +242,10 @@ def native_rows(ls, base, reach):
                 for p in pnodes.get(n, ()):
                     patches.add(p)
             users = ls.binding_users(name, exports=[export])
-            precise = {lane for lane, (_, ents) in reach.items() if export in ents}
-            rows.append(dict(entry=export, src=src, impl=impl, new=new, unresolved=not roots,
+            precise = {lane for lane, (_, ents, _) in reach.items() if export in ents}
+            rows.append(dict(entry=export, src=src, impl=impl, new=new, new_anywhere=export not in anywhere, py_files=py_words.get(export, 0), unresolved=not roots,
                              kinds=kinds, changed=[label(n) for n in hits[:4]], n_changed=len(hits),
+                             changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
                              lanes_precise=sorted(precise), lanes_wide=sorted(set(users) - precise),
                              lanes_closure=len(users),
                              sabotage_defines=sorted(sab_defs), sabotage_sites=sorted(sab_sites)[:4],
@@ -313,16 +360,268 @@ class Walker:
         return out
 
 
-def lane_reach(ls, walker):
-    """lane -> (set of (public key, op) roots, set of entry names reached)."""
-    ib = ls.identity_break()
-    _, why_map = ls.lane_sources()
+class NameClosure:
+    """A scoped definition closure over the package, the second reach. The
+    walker resolves calls by type and stops at what it cannot type (`k.ew(...)`
+    on a local kit object, an entry fetched by a string); this one resolves a
+    bare name or a module attribute the way Python does (the module's own
+    definitions and imports, `public_runtime_inventory.Index`), and follows a
+    method of a reached class when its name is reached as an attribute or a
+    string anywhere in the closure (or it is a dunder, or the harness's
+    save/load). Import-time calls of a reached module come with it. Every
+    attribute, name and identifier-shaped string a followed definition holds
+    is a reached name; binding entries are matched against those."""
+
+    IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    OPS_NAMES = frozenset({"fit", "predict", "transform", "score", "save", "load", "step", "forward",
+                           "generate", "sample", "run", "close", "open", "main", "call"})
+
+    def __init__(self, walker):
+        self.index = walker.index
+        self.by_name = walker.by_name
+        self.methods = {}                    # Cls.key -> {name: Func}
+        self.top = {}                        # module -> [Func] it calls at import
+        for mod in [m for m in self.index.mods.values() if m is not None]:
+            local = mod.defs
+            calls = []
+            for node in mod.tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+                                     ast.Import, ast.ImportFrom)):
+                    continue
+                if isinstance(node, ast.If) and "__main__" in ast.dump(node.test):
+                    continue
+                for n in ast.walk(node):
+                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in local:
+                        calls.append(self.index.func(mod, local[n.func.id]))
+            self.top[mod.name] = calls
+        self._facts = {}
+
+    def methods_of(self, cls):
+        if cls.key not in self.methods:
+            out = {}
+            for sub in cls.node.body:
+                if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    out[sub.name] = self.index.func(cls.mod, sub, cls=cls)
+            self.methods[cls.key] = out
+        return self.methods[cls.key]
+
+    def facts(self, kind, obj):
+        """(definitions it names, attribute/string names) for one definition."""
+        key = (kind, obj.key)
+        if key in self._facts:
+            return self._facts[key]
+        defs, names = [], set()
+        if kind == "f":
+            nodes, scope = [obj.node], obj
+        else:
+            nodes = [n for n in obj.node.body if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+            nodes += list(obj.node.bases)
+            scope = None
+        for root in nodes:
+            for n in ast.walk(root):
+                target = None
+                if isinstance(n, ast.Name):
+                    names.add(n.id)
+                    try:
+                        target = self.index.resolve_expr(n, obj.mod.name, scope)
+                    except Exception:
+                        target = None
+                elif isinstance(n, ast.Attribute):
+                    names.add(n.attr)
+                    try:
+                        target = self.index.resolve_expr(n, obj.mod.name, scope)
+                    except Exception:
+                        target = None
+                elif isinstance(n, ast.Constant) and isinstance(n.value, str) and self.IDENT.match(n.value):
+                    names.add(n.value)
+                if target and target[0] in ("func", "class"):
+                    defs.append(target)
+                elif isinstance(n, ast.Name):
+                    names |= self.table_names(obj.mod, n.id)
+        self._facts[key] = (defs, frozenset(names))
+        return self._facts[key]
+
+    def table_names(self, mod, name, depth=0):
+        """The identifier strings and names of a module-level table a
+        definition reads by name (`_ENCODERS["<f4"] = ("encode_labels_f32", ...)`
+        in _labels.py, dispatched with getattr), followed through one import."""
+        if depth > 2:
+            return frozenset()
+        out = set()
+        value = mod.aliases.get(name)
+        if value is not None and not isinstance(value, (ast.Name, ast.Attribute)):
+            for n in ast.walk(value):
+                if isinstance(n, ast.Constant) and isinstance(n.value, str) and self.IDENT.match(n.value):
+                    out.add(n.value)
+                elif isinstance(n, ast.Name):
+                    out.add(n.id)
+        elif name in mod.imports and mod.imports[name][0] == "from":
+            other = self.index.mod(mod.imports[name][1])
+            if other is not None:
+                out |= self.table_names(other, mod.imports[name][2], depth + 1)
+        return frozenset(out)
+
+    def closure(self, seeds):
+        reached = set(seeds) | HARNESS_OPS
+        seen, mods, classes = set(), set(), {}
+        queue = []
+        for name in seeds:
+            for mod in ("mojolearn",):
+                try:
+                    t = self.index.resolve_name(mod, name)
+                except Exception:
+                    t = None
+                if t and t[0] in ("func", "class"):
+                    queue.append(t)
+                elif name[:1].isupper():
+                    # `ml.ops.Session`, `ml.models.CausalLM`: a class reached
+                    # through a subpackage attribute chain
+                    queue.extend(x for x in self.by_name.get(name, ()) if x[0] == "class")
+                elif name not in self.OPS_NAMES and not name.startswith("__"):
+                    # `ml.hdbscan.approximate_predict`: a function reached the
+                    # same way, when few modules define the name
+                    funcs = [x for x in self.by_name.get(name, ()) if x[0] == "func"]
+                    if 0 < len(funcs) <= 3:
+                        queue.extend(funcs)
+        pending = defaultdict(list)          # method name -> [Func] of reached classes not yet followed
+        while queue:
+            kind, obj = queue.pop()
+            k = ("f" if kind == "func" else "c", obj.key)
+            if k in seen:
+                continue
+            seen.add(k)
+            if obj.mod.name not in mods:
+                mods.add(obj.mod.name)
+                queue.extend(("func", f) for f in self.top.get(obj.mod.name, ()))
+            defs, names = self.facts(k[0], obj)
+            fresh = names - reached
+            reached |= names
+            queue.extend(defs)
+            if kind == "class":
+                classes[obj.key] = obj
+                for base in self.index.bases(obj) if hasattr(self.index, "bases") else ():
+                    if hasattr(base, "node"):
+                        queue.append(("class", base))
+                for mname, func in self.methods_of(obj).items():
+                    if mname in reached or (mname.startswith("__") and mname.endswith("__")):
+                        queue.append(("func", func))
+                    else:
+                        pending[mname].append(func)
+            for name in fresh:
+                for func in pending.pop(name, ()):
+                    queue.append(("func", func))
+        return reached
+
+
+def lane_names(ls, ib):
+    """lane -> the names its own code touches: the lane function, its lambdas
+    and closures, and the helpers it calls transitively, EXCEPT the harness's
+    shared helpers (`_fit`, `_h`, the batch drivers: any helper more than a
+    quarter of the lanes reach), whose names would hand every lane every
+    model the harness can name."""
+    per_lane = {}
+    count = defaultdict(int)
+    for lane, fn in ib.LANES.items():
+        funcs = []
+        try:
+            ls._code_names(fn, fn.__globals__, funcs=funcs)
+        except Exception:
+            pass
+        ids = {id(f) for f in funcs[1:]}
+        per_lane[lane] = ids
+        for i in ids:
+            count[i] += 1
+    universal = {i for i, c in count.items() if c > len(ib.LANES) // 4}
     out = {}
     for lane, fn in ib.LANES.items():
-        try:
-            names = ls._seed_names(fn, fn.__globals__)
-        except Exception:
-            names = set()
+        names, seen, stack = set(), set(), [fn]
+        while stack:
+            f = stack.pop()
+            if id(f) in seen:
+                continue
+            seen.add(id(f))
+            codes = [f.__code__]
+            for cell in (getattr(f, "__closure__", None) or ()):
+                try:
+                    val = cell.cell_contents
+                except ValueError:
+                    continue
+                if callable(val) and hasattr(val, "__code__") and id(val) not in universal:
+                    stack.append(val)
+            while codes:
+                code = codes.pop()
+                names |= set(code.co_names)
+                for const in code.co_consts:
+                    if hasattr(const, "co_names"):
+                        codes.append(const)
+                    elif isinstance(const, str) and NameClosure.IDENT.match(const):
+                        names.add(const)
+            g = getattr(f, "__globals__", {})
+            for name in list(names):
+                helper = g.get(name)
+                if callable(helper) and hasattr(helper, "__code__") and id(helper) not in universal \
+                        and id(helper) not in seen:
+                    stack.append(helper)
+        for registry in PROPERTY_REGISTRIES:
+            spec = getattr(ib, registry, {}).get(lane)
+            if spec is not None:
+                names |= spec_names(spec)
+        out[lane] = names
+    return out
+
+
+#: The harness's per-lane property declarations: the batch, gradient, scale,
+#: ragged, step-versus-full and replay probes run calls of their own on the
+#: lane's fitted estimator (`_batch_decl(_rows_calls("decode_bytes_batch"...))`).
+PROPERTY_REGISTRIES = ("BATCH", "BATCHGRAD", "BATCHSCALE", "RAGGED", "STEPFULL", "RLPAIR")
+
+
+def spec_names(spec, depth=0, seen=None):
+    """The names a property declaration's calls touch: its method-name
+    strings and the code of its callables, recursively."""
+    seen = set() if seen is None else seen
+    if depth > 6 or id(spec) in seen:
+        return set()
+    seen.add(id(spec))
+    out = set()
+    if isinstance(spec, str):
+        return {spec} if NameClosure.IDENT.match(spec) else set()
+    if isinstance(spec, dict):
+        for v in spec.values():
+            out |= spec_names(v, depth + 1, seen)
+        return out
+    if isinstance(spec, (list, tuple, set, frozenset)):
+        for v in spec:
+            out |= spec_names(v, depth + 1, seen)
+        return out
+    code = getattr(spec, "__code__", None)
+    if code is not None:
+        codes = [code]
+        while codes:
+            c = codes.pop()
+            out |= set(c.co_names)
+            codes.extend(k for k in c.co_consts if hasattr(k, "co_names"))
+            out |= {k for k in c.co_consts if isinstance(k, str) and NameClosure.IDENT.match(k)}
+        for cell in (getattr(spec, "__closure__", None) or ()):
+            try:
+                out |= spec_names(cell.cell_contents, depth + 1, seen)
+            except ValueError:
+                pass
+        return out
+    if hasattr(spec, "__dict__") and not isinstance(spec, type):
+        for v in vars(spec).values():
+            out |= spec_names(v, depth + 1, seen)
+    return out
+
+
+def lane_reach(ls, walker, closer=None):
+    """lane -> (set of (public key, op) roots, set of entry names reached, name closure)."""
+    ib = ls.identity_break()
+    _, why_map = ls.lane_sources()
+    own = lane_names(ls, ib)
+    out = {}
+    for lane in ib.LANES:
+        names = own.get(lane, set())
         symbols = set(why_map.get(lane, {}).get("symbols", ())) | names
         roots, entries = set(), set()
         for sym in symbols:
@@ -337,7 +636,9 @@ def lane_reach(ls, walker):
                         roots.add((obj.key, op))
                         entries |= ent
         entries |= names                        # a lane that calls a binding entry by name
-        out[lane] = (roots, entries)
+        reached = closer.closure(symbols) if closer is not None else set()
+        entries |= reached
+        out[lane] = (roots, entries, reached)
     return out
 
 
@@ -346,7 +647,7 @@ def python_rows(ls, walker, reach, base):
     index = walker.index
     changed = changed_python_lines(base)
     root_lanes = defaultdict(set)
-    for lane, (roots, _) in reach.items():
+    for lane, (roots, _, _) in reach.items():
         for r in roots:
             root_lanes[r].add(lane)
     rows = []
@@ -392,6 +693,10 @@ def python_rows(ls, walker, reach, base):
                         sub = index.classes.get(k)
                         if sub is not None and cls in index.mro(sub):
                             lanes |= ls_
+            short = cls.name if cls is not None else func.node.name
+            for lane, (_, _, reached) in reach.items():
+                if short in reached and (cls is None or op in reached):
+                    lanes.add(lane)
             rel = os.path.relpath(str(func.mod.path), ROOT)
             rows.append(dict(public=canonical, op=op, where=f"{rel}:{func.node.lineno}", own=touched(func),
                              helpers_changed=[f"{os.path.relpath(str(f.mod.path), ROOT)}:{f.qual}"
@@ -429,7 +734,7 @@ def main(argv=None):
     else:
         import lane_select as ls
         walker = Walker()
-        reach = lane_reach(ls, walker)
+        reach = lane_reach(ls, walker, NameClosure(walker))
         native = native_rows(ls, args.base, reach)
         py = python_rows(ls, walker, reach, args.base)
         audit = dict(base=args.base, head=git("rev-parse", "--short", "HEAD").strip(),
