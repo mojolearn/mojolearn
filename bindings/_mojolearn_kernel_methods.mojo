@@ -61,6 +61,16 @@ from kernel_methods.estimator import (
     rbf_sampler_transform_ptr_into,
 )
 from svm.impl.svm_parameter import KernelParams
+from kernel_methods.km_binding_impl import (
+    km_kernel_ridge_fit_run as _kernel_ridge_fit_run,
+    km_kernel_ridge_predict_run as _kernel_ridge_predict_run,
+    km_nystroem_fit_run as _nystroem_fit_run,
+    km_nystroem_transform_run as _nystroem_transform_run,
+    km_rbf_sampler_fit_run as _rbf_sampler_fit_run,
+    km_rbf_sampler_transform_run as _rbf_sampler_transform_run,
+    km_nystroem_fit_ptr_run,
+    km_sqrt_weights,
+)
 
 
 from svm.impl.scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
@@ -103,25 +113,6 @@ def kernel_methods_rows_parallel_available() raises -> PythonObject:
 # ===========================================================================
 # KernelRidge
 # ===========================================================================
-
-
-def _kernel_ridge_fit_run(
-    x: List[Float32],
-    y: List[Float32],
-    n: Int,
-    d: Int,
-    t: Int,
-    kp: KernelParams,
-    alpha: Float32,
-    dp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-    sw: List[Float32],
-) raises -> Int:
-    var trace = IdentityTrace()
-    var model = kernel_ridge_fit_host(x, y, n, d, t, kp, alpha, trace, sw=sw)
-    copy_f32(model.dual_coef.unsafe_ptr(), dp, n * t)
-    sp.unsafe_store(0, Float64(model.info))
-    return model.info
 
 
 def kernel_ridge_fit_binding(
@@ -186,25 +177,11 @@ def kernel_ridge_fit_binding(
     if len(addrs) == 5:
         # the per-row factors sqrt(sample_weight): the binary64 square root
         # of each weight rounded once to float32 (formerly Python's loop)
-        var wp = _f64_ptr(Int(py=addrs[4]))
-        sw.reserve(max(0, n))
-        for i in range(n):
-            sw.append(Float32(sqrt(wp[i])))
+        sw = km_sqrt_weights(_f64_ptr(Int(py=addrs[4])), n)
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(x, y, n, d, t, kp, alpha, dp, sp, sw)
     return PythonObject(info)
-
-
-def _kernel_ridge_predict_run(
-    model: KernelRidgeModel,
-    x_new: List[Float32],
-    q: Int,
-    op: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var trace = IdentityTrace()
-    var out = kernel_ridge_predict_host(model, x_new, q, trace)
-    copy_f32(out.unsafe_ptr(), op, q * model.n_targets)
 
 
 def kernel_ridge_predict_binding(
@@ -370,32 +347,6 @@ def kernel_ridge_predict_ptr_binding(
 # ===========================================================================
 
 
-def _nystroem_fit_run(
-    x: List[Float32],
-    n: Int,
-    d: Int,
-    kp: KernelParams,
-    q: Int,
-    seed: UInt64,
-    cp: MutPointer[Float32, MutUntrackedOrigin],
-    ip: MutPointer[Int32, MutUntrackedOrigin],
-    np_: MutPointer[Float32, MutUntrackedOrigin],
-    evp: MutPointer[Float32, MutUntrackedOrigin],
-    ecp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises -> Int:
-    var trace = IdentityTrace()
-    var model = nystroem_fit_host(x, n, d, kp, q, seed, trace)
-    copy_f32(model.components.unsafe_ptr(), cp, q * d)
-    for i in range(q):
-        ip.unsafe_store(i, model.component_indices[i])
-    copy_f32(model.normalization.unsafe_ptr(), np_, q * q)
-    copy_f32(model.eigenvalues.unsafe_ptr(), evp, q)
-    copy_f32(model.eigenvectors.unsafe_ptr(), ecp, q * q)
-    sp.unsafe_store(0, Float64(model.sweeps))
-    return model.sweeps
-
-
 def nystroem_fit_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -505,27 +456,8 @@ def nystroem_fit_ptr_binding(
     var seed = UInt64(Int(py=params[7]))
     var sweeps = 0
     with GILReleased(Python()):
-        var trace = IdentityTrace()
-        var model = nystroem_fit_ptr(xaddr, n, d, kp, q, seed, trace)
-        copy_f32(model.components.unsafe_ptr(), cp, q * d)
-        for i in range(q):
-            ip.unsafe_store(i, model.component_indices[i])
-        copy_f32(model.normalization.unsafe_ptr(), np_, q * q)
-        copy_f32(model.eigenvalues.unsafe_ptr(), evp, q)
-        copy_f32(model.eigenvectors.unsafe_ptr(), ecp, q * q)
-        sp.unsafe_store(0, Float64(model.sweeps))
-        sweeps = model.sweeps
+        sweeps = km_nystroem_fit_ptr_run(xaddr, n, d, kp, q, seed, cp, ip, np_, evp, ecp, sp)
     return PythonObject(sweeps)
-
-
-def _nystroem_transform_run(
-    model: NystroemModel,
-    x: List[Float32],
-    m: Int,
-    op: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var trace = IdentityTrace()
-    nystroem_transform_host_into(model, x, m, op, trace)
 
 
 def nystroem_transform_binding(
@@ -619,23 +551,6 @@ def nystroem_transform_binding(
 # ===========================================================================
 
 
-def _rbf_sampler_fit_run(
-    d: Int,
-    q: Int,
-    gamma: Float32,
-    seed: UInt64,
-    wp: MutPointer[Float32, MutUntrackedOrigin],
-    bp: MutPointer[Float32, MutUntrackedOrigin],
-    sp: MutPointer[Float64, MutUntrackedOrigin],
-) raises:
-    var trace = IdentityTrace()
-    var model = rbf_sampler_fit_host(d, q, gamma, seed, trace)
-    copy_f32(model.random_weights.unsafe_ptr(), wp, d * q)
-    copy_f32(model.random_offset.unsafe_ptr(), bp, q)
-    sp.unsafe_store(0, Float64(model.sigma))
-    sp.unsafe_store(1, Float64(model.scale))
-
-
 def rbf_sampler_fit_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -679,16 +594,6 @@ def rbf_sampler_fit_binding(
     with GILReleased(Python()):
         _rbf_sampler_fit_run(d, q, gamma, seed, wp, bp, sp)
     return PythonObject(0)
-
-
-def _rbf_sampler_transform_run(
-    model: RBFSamplerModel,
-    x: List[Float32],
-    m: Int,
-    op: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    var trace = IdentityTrace()
-    rbf_sampler_transform_host_into(model, x, m, op, trace)
 
 
 def rbf_sampler_transform_binding(
@@ -752,7 +657,6 @@ def rbf_sampler_transform_binding(
         with GILReleased(Python()):
             _rbf_sampler_transform_run(model, x, m, op)
     return PythonObject(0)
-
 
 
 def km_scale_gamma_limbs_binding(
