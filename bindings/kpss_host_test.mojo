@@ -34,7 +34,7 @@ from std.python._cpython import GILReleased
 
 from bindings.hostptr import f32_ptr, i32_ptr
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE, kpss_host_f32
-from core.shell_impl.kpss_host_test_impl import KPSS_DECISION_SABOTAGE, _kpss_flags_host, kpss_select_d_host
+from core.kpss_host_test_impl import KPSS_DECISION_SABOTAGE, _kpss_flags_host, kpss_select_d_host
 
 
 def _kpss_index(value: PythonObject) raises -> Int:

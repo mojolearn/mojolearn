@@ -63,7 +63,7 @@ from holtwinters.impl.runner import (
     holtwinters_validate_params,
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from core.shell_impl.mojolearn_tsa_host_impl import holtwinters_fit_host_into
+from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 

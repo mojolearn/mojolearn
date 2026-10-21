@@ -3,7 +3,7 @@
 # dtype conversion is the shared integer-defined CastIn conversion.
 from std.python import Python, PythonObject
 from core.cast_in import cast_in_kind
-from core.shell_impl.classical_arrays_impl import classical_cast_rows, classical_check_weights
+from core.classical_arrays_impl import classical_cast_rows, classical_check_weights
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_address

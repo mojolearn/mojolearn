@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed model-array loops of the ExtraTrees host binding, moved word for word
 from bindings/_mojolearn_trees_host.mojo."""
-from core.shell_impl.forest_export_binding_impl import copy_forest_export_leaves
+from core.forest_export_binding_impl import copy_forest_export_leaves
 from extratrees.estimator import FitResult
 
 

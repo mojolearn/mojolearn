@@ -15,7 +15,7 @@ from std.ffi import _Global
 from std.python import PythonObject
 
 from core.forest_host_groves import HostGroveForest, HostGroveRegistry
-from core.shell_impl.forest_host_groves_binding_impl import (
+from core.forest_host_groves_binding_impl import (
     _f32_ptr,
     _i32_ptr,
     host_grove_forest_from,

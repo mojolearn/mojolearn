@@ -88,7 +88,7 @@ from forest_export_binding import (
     copy_forest_export_leaves, forest_export_py_list_f64,
     forest_export_py_list_i64,
 )
-from core.shell_impl.mojolearn_trees_host_impl import et_export_into, et_forest_lists
+from core.mojolearn_trees_host_impl import et_export_into, et_forest_lists
 comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
     name=("MojoETFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
           "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]

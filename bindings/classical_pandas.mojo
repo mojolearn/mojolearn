@@ -5,7 +5,7 @@
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
-from core.shell_impl.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
+from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
 from bindings.sequential_inputs import _promote
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_admission import _one_of, sequential_admit_value

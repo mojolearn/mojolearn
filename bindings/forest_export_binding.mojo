@@ -10,7 +10,7 @@ validated caller buffers; this module never builds a second flattened model.
 """
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from core.shell_impl.forest_export_binding_impl import (
+from core.forest_export_binding_impl import (
     validate_forest_export_counts,
     validate_forest_export_destinations,
     copy_forest_export_leaves,

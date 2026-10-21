@@ -3,7 +3,7 @@
 # kernels. This owner replaces only Python preparation and launch decisions.
 from std.python import Python, PythonObject
 from std.memory import memcpy
-from core.shell_impl.classical_ridge_impl import classical_widen_f32_f64
+from core.classical_ridge_impl import classical_widen_f32_f64
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_host_weights, classical_word
 from bindings.sequential_arrays import sequential_address
 from bindings.sequential_description import sequential_fields

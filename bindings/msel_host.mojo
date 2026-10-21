@@ -9,7 +9,7 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from core.shell_impl.msel_host_impl import msel_rebase_check_parts
+from core.msel_host_impl import msel_rebase_check_parts
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
 from core.msel_host import (
     MselHostStore,

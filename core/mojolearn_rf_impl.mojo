@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed tree flattening moved word for word from bindings/_mojolearn_rf.mojo.
 The shell turns the flat lists into Python objects."""
-from core.shell_impl.forest_export_binding_impl import copy_forest_export_leaves
+from core.forest_export_binding_impl import copy_forest_export_leaves
 from ensemble.decisiontree.decisiontree import TreeMetaDataNode
 
 

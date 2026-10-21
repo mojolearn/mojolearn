@@ -97,7 +97,7 @@ from core.forest_host_predict import (
 )
 from core.gbdt_host_ctr import GBDT_CTR_HOST_SABOTAGE, gbdt_host_expand_ctr
 from core.gbdt_host_predict import gbdt_host_predict
-from core.shell_impl.mojolearn_forest_host_impl import (
+from core.mojolearn_forest_host_impl import (
     forest_host_gbdt_expand_ctr_into,
     forest_host_gbdt_raw_into,
     forest_host_gbdt_sigmoid_into,

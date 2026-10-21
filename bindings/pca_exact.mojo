@@ -4,7 +4,7 @@
 # mutable at the Python ABI; native shape descriptors are rebuilt on admission
 # so replacing a supported public array preserves its documented semantics.
 from std.memory import memcpy, bitcast
-from core.shell_impl.pca_exact_impl import pca_check_state, pca_widen_spectrum
+from core.pca_exact_impl import pca_check_state, pca_widen_spectrum
 from std.python import Python, PythonObject
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
 from bindings.sequential_inputs import sequential_input

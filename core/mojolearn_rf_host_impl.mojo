@@ -2,7 +2,7 @@
 """Typed loops of the RF host binding, moved word for word from
 bindings/_mojolearn_rf_host.mojo. The shell unpacks the Python arguments and
 calls these; the session structs are re-exported there under the same names."""
-from core.shell_impl.forest_export_binding_impl import copy_forest_export_leaves
+from core.forest_export_binding_impl import copy_forest_export_leaves
 from ensemble.host.rf_oracle import RfHostForest, RfHostParams, n_sampled_rows_host
 
 

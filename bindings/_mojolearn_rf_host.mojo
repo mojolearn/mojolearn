@@ -73,8 +73,8 @@ from bindings.forest_export_binding import (
     forest_export_py_list_i64,
     validate_forest_export_destinations,
 )
-from core.shell_impl.mojolearn_forest_host_impl import forest_host_vote_into
-from core.shell_impl.mojolearn_rf_host_impl import (
+from core.mojolearn_forest_host_impl import forest_host_vote_into
+from core.mojolearn_rf_host_impl import (
     RfHostSession,
     RfHostSessionRegistry,
     _apply_min_weight_fraction,

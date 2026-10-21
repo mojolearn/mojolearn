@@ -438,7 +438,7 @@ from forest_export_binding import (
     copy_forest_export_leaves, forest_export_py_list_f64,
     forest_export_py_list_i64,
 )
-from core.shell_impl.mojolearn_rf_impl import rf_export_trees_into, rf_flatten_trees
+from core.mojolearn_rf_impl import rf_export_trees_into, rf_flatten_trees
 comptime RFExportTrees = List[TreeMetaDataNode[DT]]
 comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
     name=("MojoRFFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
