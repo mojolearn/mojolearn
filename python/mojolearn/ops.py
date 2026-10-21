@@ -762,6 +762,9 @@ class Session:
         the element position: use a new ``counter`` for every step."""
         return self._session_native(self, "dropout", (x, p, seed, counter))
 
+    def _transformer_softmax(self, x):
+        return self._session_native(self, "transformer_softmax", (x,))
+
     def _transformer_linear(self, x, weight):
         return self._session_native(self, "transformer_linear", (x, weight))
 

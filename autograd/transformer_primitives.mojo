@@ -5,19 +5,20 @@ from std.math import isfinite
 from sequence.exec_trait import Exec
 from sequence.ops import Args, FP
 from autograd.tape import Tape, Tensor, BackwardRules
-from autograd.transformer_primitives_ops import OP_TFP_RMS, OP_TFP_RMS_DX, OP_TFP_RMS_DW, OP_TFP_ROPE_TABLE, OP_TFP_ROPE, OP_TFP_LINEAR
+from autograd.transformer_primitives_ops import OP_TFP_RMS, OP_TFP_RMS_DX, OP_TFP_RMS_DW, OP_TFP_ROPE_TABLE, OP_TFP_ROPE, OP_TFP_LINEAR, OP_TFP_SOFTMAX, OP_TFP_SOFTMAX_VJP
 from checks.numerics import ftz, identical_div, identical_mul, portable_powf
 
 # The import-family tags occupy 192..207; keep these disjoint.
 comptime GRAPH_RMS_NORM = 208
 comptime GRAPH_ROTARY = 209
 comptime GRAPH_TRANSFORMER_LINEAR = 210
+comptime GRAPH_TRANSFORMER_SOFTMAX = 211
 
 
 @fieldwise_init
 struct TransformerPrimitiveRules(BackwardRules):
     def supports(self, tag: Int) -> Bool:
-        return tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR
+        return tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         return False
@@ -28,6 +29,12 @@ struct TransformerPrimitiveRules(BackwardRules):
     def apply[E: Exec](self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
                       inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int]) raises:
         var a = saved
+        if tag == GRAPH_TRANSFORMER_SOFTMAX:
+            a.p0 = output
+            a.p1 = upstream
+            a.p2 = gradients[0]
+            ex.launch[OP_TFP_SOFTMAX_VJP](a, rows[0])
+            return
         if tag == GRAPH_TRANSFORMER_LINEAR:
             a.p0 = upstream
             a.p1 = inputs[1]
@@ -172,3 +179,17 @@ def graph_transformer_linear[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, weig
     ex.launch[OP_TFP_LINEAR](a, a.i0 * a.i1)
     shape.d[shape.ndim - 1] = a.i1
     return tape.custom_nd(ex, [x, weight], output, shape, GRAPH_TRANSFORMER_LINEAR, a)
+
+
+def graph_transformer_softmax[E: Exec](mut tape: Tape, mut ex: E, x: Tensor) raises -> Tensor:
+    # Last-axis attention normalization, using the specialized model's
+    # ascending-key denominator rather than the ordinary fold32 row sum.
+    var shape = tape.shape_of(x)
+    var a = Args()
+    a.p0 = tape.value_of(ex, x)
+    var output = tape.reserve(ex, tape.rows(x) * tape.cols(x))
+    a.p1 = output
+    a.i0 = 0
+    a.i1 = tape.cols(x)
+    ex.launch[OP_TFP_SOFTMAX](a, tape.rows(x))
+    return tape.custom_nd(ex, [x], output, shape, GRAPH_TRANSFORMER_SOFTMAX, a)

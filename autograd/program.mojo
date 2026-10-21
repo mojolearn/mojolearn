@@ -56,9 +56,9 @@ comptime PROGRAM_RECORD_VERSION = 2
 comptime PROGRAM_IN_FLOAT = 0
 comptime PROGRAM_IN_IDS = 1
 # The largest operation code a program may hold (autograd/ops_api.mojo OPS_*):
-# OPS_INDEX 76 ends the import family; 77..79 are captured Transformer
-# RMSNorm, rotary and its native projection profile. Code 47 stays reserved.
-comptime PROGRAM_MAX_CODE = 79
+# OPS_INDEX 76 ends the import family; 77..80 are captured Transformer
+# RMSNorm, rotary, projection and ascending-key softmax. Code 47 stays reserved.
+comptime PROGRAM_MAX_CODE = 80
 
 
 struct OpsLog(Movable):

@@ -70,7 +70,9 @@ def _transformer_graph(s, x, weights, heads, kv_heads, head_dim, *, gradient=Fal
     mask = np.where(np.arange(length)[None, :] <= np.arange(length)[:, None],
                     np.float32(0), np.float32(-np.finfo(np.float32).max)).astype(np.float32)
     scores = s.add(scores, s.tensor(mask.reshape(1, 1, length, length)))
-    probabilities = s.softmax(scores, axis=-1)
+    # The specialized block pins ascending-key softmax; ordinary graph
+    # softmax has the separate fold32 denominator contract.
+    probabilities = s._transformer_softmax(scores)
     context = s.matmul(probabilities, v)
     context = s.reshape(s.permute(context, (0, 2, 1, 3)), (batch, length, width))
     residual = s.add(h, projection(context, "o_proj"))
