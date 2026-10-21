@@ -60,6 +60,8 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
         "array_getters": {name: vars(array_cls)[name].__get__ for name in array_names},
         "array_metadata": ("shape", "dtype", "order", "_addr", "_readonly", "ndim", "size", "nbytes", "itemsize", "strides"),
         "mapping_types": (dict, OrderedDict, defaultdict),
+        "defaultdict_type": defaultdict,
+        "native_factories": (dict, list, tuple, set, bool, int, float, complex, str, bytes, bytearray),
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "buffer_types": (bytes, bytearray, array.array, mmap.mmap),
         "opaque_types": (_thread.LockType, type(_thread.RLock())),
