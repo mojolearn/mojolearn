@@ -5,7 +5,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from mojolearn import SambaConfig, SambaStack, SambaState
+from mojolearn import SambaConfig, SambaStack
+from mojolearn._samba_impl import SambaState
 from mojolearn import _native_samba_bridge as bridge
 from mojolearn import _training_impl as training
 from mojolearn._verify_native_runtime import audit_native_call
