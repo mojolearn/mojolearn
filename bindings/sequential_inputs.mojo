@@ -152,7 +152,7 @@ def _sequence_values(value: PythonObject, depth: Int, mut dims: List[Int], mut v
         elif dims[depth] != n:
             raise Error("input sequences must be rectangular")
         # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
-        for k in range(n):  # native input marshaling: nested scalar/container values become native storage
+        for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
             _sequence_values(value[k], depth + 1, dims, values, kind, size, leaf_depth, context)
     else:
         _leaf_shape(Python.tuple(), depth, dims, leaf_depth)

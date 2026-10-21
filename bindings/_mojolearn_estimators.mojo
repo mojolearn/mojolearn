@@ -22,7 +22,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from bindings.py2mojo_cluster_est import estimators_py2mojo_cluster_binding
-from bindings.dbscan_core_device import dbscan_core_arrays_device
+from dbscan.core_device import dbscan_core_arrays_device
 from core.py2mojo_rows_pyapi import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
@@ -1387,7 +1387,7 @@ def dbscan_core_arrays_binding(
     x_addr: PythonObject, labels_addr: PythonObject, core_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     """DBSCAN's core arrays on the device (lane cpu4-python,
-    bindings/dbscan_core_device.mojo); the host walk is the host column's."""
+    dbscan/core_device.mojo); the host walk is the host column's."""
     var ctx = process_ctx[_DEVCTX_SLOT]()
     return dbscan_core_arrays_device(ctx, x_addr, labels_addr, core_addr, params)
 

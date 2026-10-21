@@ -512,7 +512,7 @@ def _table_from_spelled(
     var inv = codepoint_to_byte()
     var sv = SpelledVocab(n)
     var key_err = List[String](capacity=n)
-    for k in range(n):
+    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
         var key = items[k][0]
         var val = items[k][1]
         var is_int = String(py=val.__class__.__name__) == "int"
@@ -551,7 +551,7 @@ def _table_from_spelled(
         var m = Int(py=bi.len(merges))
         var sm = SpelledMerges(m)
         var errs = List[String](capacity=3 * m)
-        for k in range(m):
+        for k in range(m):  # cpu-route: Python objects marshaled one element at a time before the runtime
             var item = merges[k]
             var it = String(py=item.__class__.__name__)
             var kind = 2
@@ -632,7 +632,7 @@ def _ids_from_seq(seq: PythonObject) raises -> List[Int]:
     var operator_module = Python.import_module("operator")
     var n = Int(py=bi.len(seq))
     var out = List[Int](capacity=n)
-    for k in range(n):
+    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
         var v = seq[k]
         var tn = String(py=v.__class__.__name__)
         if tn == "bool":
@@ -679,7 +679,7 @@ def bpe_decode_batch_binding(
     var nv = owner[].tok.value().n_vocab()
     var joined = List[UInt8]()
     var lens = List[Int](capacity=n)
-    for s in range(n):
+    for s in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
         bpe_decode_batch_append(owner[], _ids_from_seq(batch[s]), nv, joined, lens)
     bpe_decode_batch_fit(joined, cap)
     if n > 0:
@@ -1100,7 +1100,7 @@ def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, mer
     var entries = bi.list(tokens)
     var arena = List[UInt8]()
     var lengths = List[Int]()
-    for i in range(len(entries)):
+    for i in range(len(entries)):  # cpu-route: Python objects marshaled one element at a time before the runtime
         var bytes = _token_bytes(entries[i])
         lengths.append(len(bytes))
         tokenizer_append_bytes(arena, bytes)
@@ -1114,7 +1114,7 @@ def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, mer
     var rights = List[List[UInt8]](capacity=len(pairs))
     var refused = String("")
     var failed = False
-    for i in range(len(pairs)):
+    for i in range(len(pairs)):  # cpu-route: Python objects marshaled one element at a time before the runtime
         try:
             if len(pairs[i]) != 2:
                 raise Error("tokenizer: every merge must be a pair of bytes")

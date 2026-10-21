@@ -73,7 +73,7 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
             dims.append(n)
         elif dims[depth] != n:
             raise Error("ValueError: program input sequences must be rectangular")
-        for k in range(n):  # native input marshaling: elements supplied as Python scalar objects
+        for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
             _sequence_values(a[k], depth + 1, dims, values, ids, integer, leaf_depth)
     else:
         if leaf_depth < 0:

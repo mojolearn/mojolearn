@@ -48,7 +48,7 @@ from collections import Counter
 BASELINE = "tools/hooks/compute_in_shells_baseline.txt"
 LOOP = re.compile(r"^\s*(for|while)\b")
 LAUNCH = re.compile(r"enqueue_function|\bDeviceContext\s*\(|\b(?:sync_)?parallelize\s*[\[(]|\bvectorize\s*[\[(]")
-TAG = re.compile(r"#\s*small-loop\(|#\s*driver-loop:")
+TAG = re.compile(r"#\s*small-loop\(|#\s*driver-loop:|#\s*cpu-route:")
 ROW = re.compile(r"^(?P<path>[^:\s]+\.mojo):(?P<line>\d+):\s?(?P<code>.*)$")
 
 
@@ -240,7 +240,7 @@ def check_tree(ref, branch=False, baseline_file=None):
               f"remove it with --prune-baseline", file=sys.stderr)
     for p, n, k, c in new:
         what = ("untagged loop in a shell file; move it into the kernel file (or tag a bounded argument-word loop "
-                "`# small-loop(<what>)`, a model-structure driver loop `# driver-loop: over <what>`)"
+                "`# small-loop(<what>)`, a model-structure driver loop `# driver-loop: over <what>`, or a Python-object input marshaling loop `# cpu-route: <reason>`)"
                 if k == "loop" else "kernel launch in a shell file; move it into the kernel file")
         print(f"{p}:{n}: {what}: {c}", file=sys.stderr)
     return 1 if new else 0

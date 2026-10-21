@@ -221,7 +221,7 @@ def native_pandas_f32(value: PythonObject, context: PythonObject) raises -> Pyth
             if object_dtype:
                 # cpu-route: pandas object-dtype cells are Python objects; each one is read through
                 # its native buffer metadata, which only the Python door can reach.
-                for row in range(rows):
+                for row in range(rows):  # cpu-route: Python objects marshaled one element at a time before the runtime
                     var item = data[row] if rank == 1 else data[Python.tuple(col, row)]
                     var bits = _pd_object_bits(item, context)
                     if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):

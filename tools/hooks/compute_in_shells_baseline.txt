@@ -9,9 +9,9 @@ bindings/_mojolearn_tokenizer_host.mojo:554: for k in range(m):
 bindings/_mojolearn_tokenizer_host.mojo:682: for s in range(n):
 bindings/_mojolearn_tokenizer_host.mojo:1103: for i in range(len(entries)):
 bindings/_mojolearn_tokenizer_host.mojo:1117: for i in range(len(pairs)):
-bindings/arima_k3_df_probe.mojo:32: ctx.enqueue_function[k3_df_parts_kernel](
-bindings/arima_k3_df_probe.mojo:37: ctx.enqueue_function[k3_df_finish_kernel](
-bindings/arima_k3_df_probe.mojo:42: ctx.enqueue_function[k3_df_gradient_kernel](
-bindings/dbscan_core_device.mojo:106: ctx.enqueue_function[_core_flag_kernel](
-bindings/dbscan_core_device.mojo:133: ctx.enqueue_function[_core_gather_kernel](
+arima/k3_df_probe.mojo:32: ctx.enqueue_function[k3_df_parts_kernel](
+arima/k3_df_probe.mojo:37: ctx.enqueue_function[k3_df_finish_kernel](
+arima/k3_df_probe.mojo:42: ctx.enqueue_function[k3_df_gradient_kernel](
+dbscan/core_device.mojo:106: ctx.enqueue_function[_core_flag_kernel](
+dbscan/core_device.mojo:133: ctx.enqueue_function[_core_gather_kernel](
 bindings/sequential_inputs.mojo:155: for k in range(n):  # native input marshaling: nested scalar/container values become native storage
