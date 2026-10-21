@@ -50,7 +50,7 @@ def order_small_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
 
 
 def dev_reduce_run(i_a: Int, i_dst: Int, count: Int, op: Int) raises -> Int:
-    """`dev_reduce_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
+    """`dev_reduce_py`'s typed body (see its door in the sibling shell)."""
     if count < 1:
         raise Error("x_decomp: reduce needs at least one value")
     if op < 0 or op > SEL_LAST:
@@ -83,7 +83,7 @@ def enqueue_sel_reduce(src: F32Ptr, count: Int, op: Int, pd: F32Ptr) raises:
 
 
 def dev_order_small_run(i_a: Int, i_dst: Int, n: Int) raises -> Int:
-    """`dev_order_small_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
+    """`dev_order_small_py`'s typed body (see its door in the sibling shell)."""
     if n > SEL_ORDER_MAX:
         raise Error("x_decomp: order_small exceeds its bound")
     if n == 0:
@@ -95,7 +95,7 @@ def dev_order_small_run(i_a: Int, i_dst: Int, n: Int) raises -> Int:
 
 
 def dev_pca_mle_rank_run(i_sp: Int, i_dst: Int, d: Int, n: Int) raises -> Int:
-    """`dev_pca_mle_rank_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
+    """`dev_pca_mle_rank_py`'s typed body (see its door in the sibling shell)."""
     if d < 2:
         raise Error("x_decomp: pca_mle needs at least two spectrum values")
     var psp = _ptr(i_sp, 2 * d)
@@ -220,7 +220,7 @@ def _sort_out(ctx: DeviceContext, mut sb: _SortBufs, n: Int, key_bits: Int, dst:
 
 
 def dev_order_f_run(i_a: Int, i_skip: Int, i_dst: Int, i_cnt: Int, n: Int, neg: Int, has: Int) raises -> Int:
-    """`dev_order_f_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
+    """`dev_order_f_py`'s typed body (see its door in the sibling shell)."""
     if n < 1 or n >= 16777216:
         raise Error("x_decomp: order_f needs 1 <= n < 2^24")
     var ps = _ptr(i_a, n)
@@ -240,7 +240,7 @@ def dev_order_f_run(i_a: Int, i_skip: Int, i_dst: Int, i_cnt: Int, n: Int, neg: 
 
 
 def dev_argmin_all_run(i_a: Int, i_dst: Int, i_cnt: Int, n: Int) raises -> Int:
-    """`dev_argmin_all_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
+    """`dev_argmin_all_py`'s typed body (see its door in the sibling shell)."""
     if n < 1 or n >= 16777216:
         raise Error("x_decomp: argmin_all needs 1 <= n < 2^24")
     var ps = _ptr(i_a, n)
@@ -262,7 +262,7 @@ def dev_argmin_all_run(i_a: Int, i_dst: Int, i_cnt: Int, n: Int) raises -> Int:
 
 
 def dev_select_smallest_run(i_a: Int, i_sel: Int, i_mask: Int, n: Int, h: Int) raises -> Int:
-    """`dev_select_smallest_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
+    """`dev_select_smallest_py`'s typed body (see its door in the sibling shell)."""
     if n < 1 or n >= 16777216 or h > n:
         raise Error("x_decomp: select_smallest out of range")
     var ps = _ptr(i_a, n)
@@ -307,7 +307,7 @@ def dsum_fold_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
 
 
 def dev_dsum_sq_run(i_a: Int, i_dst: Int, n: Int) raises -> Int:
-    """`dev_dsum_sq_py`'s typed body (see the door in x_decomp/select_dev_pyapi.mojo)."""
+    """`dev_dsum_sq_py`'s typed body (see its door in the sibling shell)."""
     if n < 1:
         raise Error("x_decomp: dsum_sq needs at least one value")
     var ps = _ptr(i_a, n)

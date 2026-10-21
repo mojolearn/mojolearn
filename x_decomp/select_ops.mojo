@@ -15,8 +15,8 @@ integer per element. Nothing here rounds, so the host column and every
 vendor agree by construction.
 
 This module imports no device code: bindings/_mojolearn_x_decomp_host.mojo
-registers `reduce_py` and `order_small_py` from its shell
-x_decomp/select_ops_pyapi.mojo, the GPU binding registers them too (host
+registers `reduce_py` and `order_small_py` from this module's sibling
+shell, the GPU binding registers them too (host
 buffers) beside the device entries."""
 
 from x_decomp.cells import F32Ptr

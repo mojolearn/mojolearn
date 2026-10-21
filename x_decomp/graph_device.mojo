@@ -257,11 +257,11 @@ def _zero(ctx: DeviceContext, p: F32Ptr, count: Int) raises:
         ctx.enqueue_function[xg_zero_kernel](p, Int32(count), grid_dim=_blocks(count), block_dim=TPB)
 
 
-# ---- typed entries of the Python doors (x_decomp/graph_device_pyapi.mojo; resident ids)
+# ---- typed entries of the Python doors (the sibling shell; resident ids)
 
 
 def dev_graph_knn_run(i_d: Int, i_idx: Int, i_dst: Int, n: Int, m: Int, nn: Int, ex: Int) raises -> Int:
-    """`dev_graph_knn_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_knn_py`'s typed body (see its door in the sibling shell)."""
     var excl = ex != 0
     var take = nn + (1 if excl else 0)
     if take > m or m >= 1 << 24 or n * m > 2147483647:
@@ -281,7 +281,7 @@ def dev_graph_knn_run(i_d: Int, i_idx: Int, i_dst: Int, n: Int, m: Int, nn: Int,
 
 
 def dev_graph_knn_dense_run(i_idx: Int, i_w: Int, i_wout: Int, n: Int, nn: Int) raises -> Int:
-    """`dev_graph_knn_dense_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_knn_dense_py`'s typed body (see its door in the sibling shell)."""
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
@@ -295,7 +295,7 @@ def dev_graph_knn_dense_run(i_idx: Int, i_w: Int, i_wout: Int, n: Int, nn: Int) 
 
 
 def dev_graph_radius_run(i_d: Int, i_wout: Int, f_r: Float64, n: Int) raises -> Int:
-    """`dev_graph_radius_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_radius_py`'s typed body (see its door in the sibling shell)."""
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     if n > 0:
@@ -307,7 +307,7 @@ def dev_graph_radius_run(i_d: Int, i_wout: Int, f_r: Float64, n: Int) raises -> 
 
 
 def dev_graph_radius_geo_run(i_dq: Int, i_d: Int, i_g: Int, f_r: Float64, nq: Int, n: Int) raises -> Int:
-    """`dev_graph_radius_geo_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_radius_geo_py`'s typed body (see its door in the sibling shell)."""
     if nq * n > 2147483647 or n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     if nq > 0 and n > 0:
@@ -319,7 +319,7 @@ def dev_graph_radius_geo_run(i_dq: Int, i_d: Int, i_g: Int, f_r: Float64, nq: In
 
 
 def dev_graph_lle_iw_run(i_idx: Int, i_wb: Int, i_wout: Int, n: Int, nn: Int) raises -> Int:
-    """`dev_graph_lle_iw_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_lle_iw_py`'s typed body (see its door in the sibling shell)."""
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
@@ -333,7 +333,7 @@ def dev_graph_lle_iw_run(i_idx: Int, i_wb: Int, i_wout: Int, n: Int, nn: Int) ra
 
 
 def dev_graph_components_run(i_w: Int, i_comp: Int, n: Int) raises -> Int:
-    """`dev_graph_components_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_components_py`'s typed body (see its door in the sibling shell)."""
     if n == 0:
         return 0
     if n * n > 2147483647:
@@ -383,7 +383,7 @@ def _clear1(ctx: DeviceContext, p: I32Ptr) raises:
 
 
 def dev_graph_join_run(i_w: Int, i_d: Int, i_comp: Int, n: Int, C: Int) raises -> Int:
-    """`dev_graph_join_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_join_py`'s typed body (see its door in the sibling shell)."""
     if C <= 1 or n == 0:
         return C
     if n * C > 2147483647 or C * C > 2147483647:
@@ -418,7 +418,7 @@ def dev_graph_join_run(i_w: Int, i_d: Int, i_comp: Int, n: Int, C: Int) raises -
 
 
 def dev_graph_dijkstra_run(i_w: Int, i_dist: Int, n: Int) raises -> Int:
-    """`dev_graph_dijkstra_py`'s typed body (see the door in x_decomp/graph_device_pyapi.mojo)."""
+    """`dev_graph_dijkstra_py`'s typed body (see its door in the sibling shell)."""
     if n == 0:
         return 0
     if n * n > 2147483647:
