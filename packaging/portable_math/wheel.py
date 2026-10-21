@@ -47,6 +47,11 @@ NUMPY_ORACLES = {
     "mojolearn/_verify_all.py", "mojolearn/_verify_distributed.py",
     "mojolearn/_verify_par.py",
     "mojolearn/_verify_parallel_cv.py", "mojolearn/_parallel_cv_witness.py",
+    # Exact testing controllers registered by the verify-* CLI. Their NumPy
+    # imports are lazy fixture/oracle/report work; product paths never call
+    # them. Keep exact names: a _verify_* prefix is not a runtime exemption.
+    "mojolearn/_verify_distributed_program.py", "mojolearn/_verify_generation.py",
+    "mojolearn/_verify_graph.py", "mojolearn/_verify_partitioned_program.py",
 }
 
 
