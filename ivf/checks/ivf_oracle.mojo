@@ -52,6 +52,7 @@ than proves.
 """
 
 from std.math import sqrt as host_sqrt
+from std.memory import bitcast
 
 from core.row_norms import NORM_TPB
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
@@ -385,15 +386,11 @@ def oracle_ivf_search(
 
         var n_cand = len(order)
         counts.append(Int32(n_cand))
-        if n_cand < k:
-            raise Error(
-                "oracle_ivf_search: query "
-                + String(q)
-                + " has "
-                + String(n_cand)
-                + " candidates, fewer than k = "
-                + String(k)
-            )
+        # fewer than k candidates: the real ones, then their
+        # kOutOfBoundsRecord short-fill (`ivf_common.cuh:106-108`), spelled
+        # here from the contract (+inf, the all-ones uint32) and not
+        # imported, so the oracle and the search agree only if both do it
+        var take = n_cand if n_cand < k else k
         var crow2 = List[Float32]()
         var cid2 = List[UInt32]()
         for c in range(n_cand):
@@ -404,10 +401,13 @@ def oracle_ivf_search(
                 )
             )
             cid2.append(list_indices[s])
-        var sel = oracle_select_k(crow2, cid2, k)
-        for i in range(k):
+        var sel = oracle_select_k(crow2, cid2, take)
+        for i in range(take):
             out_d.append(_oracle_root(crow2[Int(sel[i])], is_sqrt))
             out_i.append(cid2[Int(sel[i])])
+        for _ in range(take, k):
+            out_d.append(bitcast[DType.float32](UInt32(0x7F800000)))
+            out_i.append(UInt32(0xFFFFFFFF))
 
     return OracleSearchResult(out_d^, out_i^, counts^)
 

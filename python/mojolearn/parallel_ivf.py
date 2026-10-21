@@ -44,7 +44,6 @@ def _partial_search(index, queries):
 _MERGE_ERRORS = {
     1: 'invalid IVF candidate count',
     2: 'invalid IVF local row id',
-    3: 'global probed candidate count is smaller than n_neighbors',
     4: 'NaN distance in an IVF shard result',
 }
 

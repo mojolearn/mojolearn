@@ -7,7 +7,7 @@ address and parameter contracts are that file's."""
 from std.memory import memcpy
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32
-from ivf.impl.neighbors.ivf_common import postprocess_distances
+from ivf.impl.neighbors.ivf_common import ivf_id_to_i32, ivf_out_of_bounds_distance, postprocess_distances
 from x_ann.switches import ANN3_HOST_PASSES
 
 
@@ -21,11 +21,12 @@ def ivf_store_search_result(
     m: Int,
     k: Int,
 ):
-    """Distances, ORIGINAL row ids as int32 (below 2^31 by the row bound)
-    and the candidate count per query."""
+    """Distances, ORIGINAL row ids as int32 (below 2^31 by the row bound;
+    a short-filled slot's `IVF_OUT_OF_BOUNDS_RECORD` is -1) and the
+    candidate count per query."""
     for i in range(m * k):
         dp.unsafe_store(i, distances[i])
-        ip.unsafe_store(i, Int32(Int(indices[i])))
+        ip.unsafe_store(i, ivf_id_to_i32(indices[i]))
     for i in range(m):
         cp.unsafe_store(i, n_candidates[i])
 
@@ -42,7 +43,7 @@ def ivf_store_ids_counts(
     """ORIGINAL row ids as int32 and the candidate count per query (the
     host build-and-search door's tail after its distance copy)."""
     for i in range(m * k):
-        ip.unsafe_store(i, Int32(Int(indices[i])))
+        ip.unsafe_store(i, ivf_id_to_i32(indices[i]))
     for i in range(m):
         cp.unsafe_store(i, n_candidates[i])
 
@@ -120,8 +121,11 @@ def ivf_merge_shards_host(
     k: Int,
 ) raises -> Tuple[Int, Int]:
     """`ivf_merge_shards`: the shards' candidates merged per query row by
-    (float32 distance, original id), the first k written; returns
-    (status, bad_row) as the shell's contract says."""
+    (float32 distance, original id), the first k written; a row with fewer
+    than k candidates in all keeps its real ones and short-fills the rest
+    with (+inf, -1), the plain IVF search's kOutOfBoundsRecord (status 3
+    before lane ivf-short-fill); returns (status, bad_row) as the shell's
+    contract says."""
     var cd = List[Float32](capacity=shards * k)
     var ci = List[Int32](capacity=shards * k)
     var status = 0
@@ -161,14 +165,16 @@ def ivf_merge_shards_host(
                 ci[at] = id
             if status != 0:
                 break
-        if status == 0 and total < k:
-            status = 3
         if status != 0:
             bad_row = row
             break
         for j in range(k):
-            od.unsafe_store(row * k + j, cd[j])
-            oi.unsafe_store(row * k + j, ci[j])
+            if j < len(cd):
+                od.unsafe_store(row * k + j, cd[j])
+                oi.unsafe_store(row * k + j, ci[j])
+            else:
+                od.unsafe_store(row * k + j, ivf_out_of_bounds_distance())
+                oi.unsafe_store(row * k + j, Int32(-1))
         oc.unsafe_store(row, Int32(total))
     return (status, bad_row)
 

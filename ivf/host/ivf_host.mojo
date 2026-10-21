@@ -112,6 +112,8 @@ from ivf.impl.neighbors.ivf_common import (
     postprocess_distances,
     postprocess_distances_is_identity,
     postprocess_neighbors,
+    IVF_OUT_OF_BOUNDS_RECORD,
+    ivf_out_of_bounds_distance,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IVF_IDN_RECLUSTER_CAP,
@@ -402,10 +404,10 @@ def host_ivf_search(
     arms (`ivf_flat_search.mojo:577,600,640`) for one SHARD of a disjoint
     index whose coarse centres are replicated (`DistributedIVFIndex`,
     python/mojolearn/parallel_ivf.py): a shard may own FEWER than `k`
-    candidates for a query, so the short-fill refusal is lifted, only
-    `min(k, n_cand)` slots are selected and the remaining slots are padded
-    with zeros the driver must ignore (`n_candidates` is what says how many
-    are real), and the Euclidean root is NOT taken, because the global order
+    candidates for a query, so only `min(k, n_cand)` slots are selected and
+    the remaining slots are padded with zeros (not the plain search's
+    `+inf` / `IVF_OUT_OF_BOUNDS_RECORD` short-fill) the driver must ignore
+    (`n_candidates` is what says how many are real), and the Euclidean root is NOT taken, because the global order
     is fixed on the squared keys across shards and the root is applied once,
     afterwards, by `ivf_finalize_distances`. Every other statement, in
     particular the coarse probe selection over the REPLICATED centres, is
@@ -462,6 +464,8 @@ def host_ivf_search(
     var out_dist = List[Float32](capacity=n_queries * k)
     var out_idx = List[UInt32](capacity=n_queries * k)
     var cand_counts = List[Int32](capacity=n_queries)
+    var pad_d = Float32(0.0) if partial_storage else ivf_out_of_bounds_distance()
+    var pad_i = UInt32(0) if partial_storage else IVF_OUT_OF_BOUNDS_RECORD
     for q in range(n_queries):
         var this_probe = List[UInt32](capacity=n_probes)
         for p in range(n_probes):
@@ -475,30 +479,19 @@ def host_ivf_search(
             )
             n_cand = len(kept)
         cand_counts.append(Int32(n_cand))
-        if n_cand < k and not partial_storage:
-            raise Error(
-                "ivf_flat search: query "
-                + String(q)
-                + " probes "
-                + String(n_probes)
-                + " lists holding "
-                + String(n_cand)
-                + " vectors between them, fewer than k = "
-                + String(k)
-                + (" (after the filter)" if filtered else "")
-                + ". Their kOutOfBoundsRecord short-fill"
-                " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
-                " or lower k, or rebuild with fewer lists."
-            )
-        # Partial storage keeps the global coarse probes but may own no
-        # candidates at all. Padding has no numerical meaning; `n_candidates`
-        # gives min(k, count) valid slots and the driver ignores the rest
+        # A query with fewer than k candidates is short-filled, the device
+        # search's statement (lane ivf-short-fill): its min(k, n_cand) real
+        # slots, then (+inf, IVF_OUT_OF_BOUNDS_RECORD), their
+        # kOutOfBoundsRecord (`ivf_common.cuh:106-108`). Partial storage
+        # keeps the global coarse probes but may own no candidates at all;
+        # its padding has no numerical meaning; `n_candidates` gives
+        # min(k, count) valid slots and the driver ignores the rest
         # (`ivf_flat_search.mojo:598-606`).
         var selected = min(k, n_cand)
         if selected == 0:
             for _pad in range(k):
-                out_dist.append(Float32(0))
-                out_idx.append(UInt32(0))
+                out_dist.append(pad_d)
+                out_idx.append(pad_i)
             continue
         var slots: List[Int32]
         if filtered:
@@ -527,8 +520,8 @@ def host_ivf_search(
                 out_dist.append(sel_dist[i])
             out_idx.append(sel_orig[i])
         for _pad in range(selected, k):
-            out_dist.append(Float32(0))
-            out_idx.append(UInt32(0))
+            out_dist.append(pad_d)
+            out_idx.append(pad_i)
     return IvfHostResult(out_dist^, out_idx^, cand_counts^)
 
 

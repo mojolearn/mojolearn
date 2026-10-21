@@ -52,14 +52,37 @@ comptime IVF_OUT_OF_BOUNDS_RECORD: UInt32 = 0xFFFFFFFF
 """`kOutOfBoundsRecord<IdxT>`, `ivf_common.cuh:31`
 (`std::numeric_limits<IdxT>::max()`).
 
-RECORDED AND NOT WRITTEN. `postprocess_neighbors_kernel` stores it wherever
-`find_chunk_ix` returns `n_probes`, which happens when the probed lists
-between them hold fewer than `k` vectors (`:106-108`). This implementation REFUSES
-that case by name instead (DEVIATION 1794): a caller who gets `k` slots
-back, some of them a sentinel, has to know to test for the sentinel, and
-the implemented selector cannot take `k > len` at all -- the same hole
-`neighbors/impl/detail/knn_brute_force.mojo` refuses `k >
-n_index` for, for the same reason, in the same words."""
+WRITTEN (lane ivf-short-fill, 2026-10-21; DEVIATION 1794 lifted). Their
+`postprocess_neighbors_kernel` stores it wherever `find_chunk_ix` returns
+`n_probes`, which happens when the probed lists between them hold fewer
+than `k` vectors (`:106-108`); the distance of such a slot is the
+selection's upper bound, `+inf` under both implemented L2 metrics (the
+root of `+inf` is `+inf`). Here the same: a query with `c < k` candidates
+gets its `c` real neighbours in slots `0 .. c-1`, ascending by
+`(distance, index)` as always, and slots `c .. k-1` hold
+`(IVF_OUT_OF_BOUNDS_DISTANCE, IVF_OUT_OF_BOUNDS_RECORD)`. The fill is a
+constant per slot, so it has one value on every vendor and in the host
+column, and a query with `c >= k` never reaches it (its bits are the ones
+the search returned before the fill existed). The int32 surface returns the
+record as `-1` (`ivf_id_to_i32`). A partial-storage (shard) search keeps
+its own zero padding: its driver reads `n_candidates` and merges shards."""
+
+
+@always_inline
+def ivf_out_of_bounds_distance() -> Float32:
+    """`+inf`, the distance of an out-of-bounds slot (see above)."""
+    from std.memory import bitcast
+
+    return bitcast[DType.float32](UInt32(0x7F800000))
+
+
+@always_inline
+def ivf_id_to_i32(v: UInt32) -> Int32:
+    """An ORIGINAL row id as the int32 the Python surface returns: the row
+    bound keeps real ids below 2^31, and `IVF_OUT_OF_BOUNDS_RECORD` is `-1`."""
+    if v == IVF_OUT_OF_BOUNDS_RECORD:
+        return Int32(-1)
+    return Int32(Int(v))
 
 
 def calc_chunk_indices(
@@ -101,9 +124,9 @@ def calc_chunk_indices(
 
 def n_samples_from_chunks(chunk_indices: List[Int32], n_probes: Int) -> Int:
     """Their `n_samples[q]`. Zero when every probed list is empty, which is
-    a reachable state (`check_empty_list`) and not an error here; the
-    refusal for "fewer candidates than k" is the search's, so that the
-    message can name `k`."""
+    a reachable state (`check_empty_list`) and not an error here; a query
+    with fewer candidates than `k` is short-filled by the search
+    (`IVF_OUT_OF_BOUNDS_RECORD`)."""
     if n_probes <= 0:
         return 0
     return Int(chunk_indices[n_probes - 1])

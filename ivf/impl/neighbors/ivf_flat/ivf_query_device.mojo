@@ -182,9 +182,13 @@ def _query_keys_kernel(vals: _U32P, cq: _U32P, total_in: Int32, keys: _U32P):
 def _emit_kernel(
     vals: _U32P, coff: _I32P, cdist: _F32P, corig: _U32P,
     q0_in: Int32, nqb_in: Int32, k_in: Int32, out_d: _F32P, out_i: _U32P,
+    pad_d: Float32, pad_i: UInt32,
 ):
     """Cell (qq, i): the i-th nearest of query q0 + qq (its sorted run
-    starts at coff[qq]), or 0 past its candidate count."""
+    starts at coff[qq]), or (pad_d, pad_i) past its candidate count: the
+    short-fill (+inf, `IVF_OUT_OF_BOUNDS_RECORD`) of a plain search, the
+    (0, 0) padding of a partial-storage shard. A constant per cell, so a
+    query with at least k candidates writes what it wrote before."""
     var t = Int(block_idx.x) * _TPB + Int(thread_idx.x)
     var k = Int(k_in)
     if t >= Int(nqb_in) * k:
@@ -199,8 +203,8 @@ def _emit_kernel(
         out_d[o] = cdist[g]
         out_i[o] = corig[g]
     else:
-        out_d[o] = Float32(0.0)
-        out_i[o] = UInt32(0)
+        out_d[o] = pad_d
+        out_i[o] = pad_i
 
 
 def ivf_query_batches(counts: List[Int32], n_queries: Int, cap: Int) -> List[Int]:
@@ -274,10 +278,13 @@ def ivf_query_batch_device(
     k: Int,
     mut out_d: DeviceBuffer[DType.float32],
     mut out_i: DeviceBuffer[DType.uint32],
+    pad_d: Float32 = Float32(0.0),
+    pad_i: UInt32 = UInt32(0),
 ) raises -> IvfQueryBatch:
     """Queries [q0, q1) (their candidates `total` in all): the candidate
     rows, the distances, the two stable sorts and the answer cells of
-    `out_d` / `out_i` (n_queries x k). Returns the batch's candidate ids and
+    `out_d` / `out_i` (n_queries x k), the slots past a query's candidate
+    count holding (pad_d, pad_i). Returns the batch's candidate ids and
     distances in candidate order (the trace's)."""
     var nqb = q1 - q0
     var n = max(total, 1)
@@ -318,6 +325,7 @@ def ivf_query_batch_device(
         ctx.enqueue_function[_emit_kernel](
             vals.unsafe_ptr(), coff.unsafe_ptr(), cdist.unsafe_ptr(), corig.unsafe_ptr(),
             Int32(q0), Int32(nqb), Int32(k), out_d.unsafe_ptr(), out_i.unsafe_ptr(),
+            pad_d, pad_i,
             grid_dim=_grid(nqb * k), block_dim=_TPB,
         )
     ctx.synchronize()

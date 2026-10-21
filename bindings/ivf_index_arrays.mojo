@@ -319,9 +319,10 @@ def ivf_write_resident_result(
 #   for each query row: for each shard in order, its count `n` (0 <= n <=
 #   the shard's row count, else status 1), then its first min(k, n)
 #   candidates, each local id in [0, the shard's row count) (else status 2)
-#   mapped to its ORIGINAL id; the total count at least k (else status 3);
-#   the candidates ordered by (float32 distance, original id), where -0.0
-#   equals +0.0 as a float compare says, and the first k written. A NaN
+#   mapped to its ORIGINAL id; the candidates ordered by (float32 distance,
+#   original id), where -0.0 equals +0.0 as a float compare says, and the
+#   first k written; a row whose total count is below k short-fills its
+#   remaining slots with (+inf, -1), the plain search's kOutOfBoundsRecord. A NaN
 #   distance is refused (status 4): Python's tuple sort had no defined
 #   order for it. Original ids are distinct across disjoint shards, so the
 #   order is total and any correct sort gives the same answer.

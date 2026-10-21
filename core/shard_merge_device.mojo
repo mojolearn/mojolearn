@@ -75,7 +75,10 @@ def _ivf_merge_kernel(
     shard s's id map (maps[meta[P + s] + local], meta[s] its length), kept
     k best by (distance, id) in od/oi; oc[row] the candidate total. Status
     1 a count outside [0, len], 2 a local id outside the map, 4 a NaN
-    distance, 3 fewer than k candidates."""
+    distance. A row with fewer than k candidates in all (status 3 before
+    lane ivf-short-fill) keeps its `total` real ones and short-fills the
+    rest with (+inf, -1), the plain IVF search's kOutOfBoundsRecord; a row
+    with at least k writes what it wrote before."""
     var row = _tid()
     var m = Int(m_)
     if row >= m:
@@ -129,12 +132,13 @@ def _ivf_merge_kernel(
             oi.unsafe_store(base + at, id)
         if status != 0:
             break
-    if status == 0 and total < k:
-        status = 3
     if status != 0:
         st.unsafe_store(row, Int32(status))
         _ = Atomic[DType.int32].min(bad, Int32(row))
         return
+    for j in range(filled, k):
+        od.unsafe_store(base + j, bitcast[DType.float32](UInt32(0x7F800000)))
+        oi.unsafe_store(base + j, Int32(-1))
     oc.unsafe_store(row, Int32(total))
 
 
