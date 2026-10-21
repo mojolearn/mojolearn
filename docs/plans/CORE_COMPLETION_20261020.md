@@ -24,6 +24,10 @@ into a single suite result.
 
 | Work | Evidence | Interpretation |
 |---|---|---|
+| Public Samba training, inference and checkpoints | `stage49-native-{cpu,metal}-summary.json` and full logs; `stage49-test-import-repair.json` | The actual public methods now pass the exercised native audits: CPU has 10 training, 12 inference and 12 checkpoint passes plus two GPU-only skips; Metal has 12 passes in each group. Original public-wrapper Python-frame audit and test collection failure remain retained. These tests do not certify custom protocol admission across the whole library; that audit continues. |
+| First-order and higher-rank derivative repairs | `stage47-graph-comparison.json`, `stage49-graph-comparison.json`, `stage49-native-{cpu,metal}.xml` | Seeded VJP output ranks and recorded higher derivatives are repaired. Each current full verifier passes 29 of 30 cases, with 163 matching CPU/Metal digests and no mismatch. The sole Session ownership failure remains. Thirteen new rank/direction cases and eight existing higher-derivative cases pass on both devices. |
+| Native Sequential input compatibility | `stage49-native-{cpu,metal}-summary.json`, `stage50-build-controller.log` | Both stage49 runs retain seven failures: half/uint64 labels need native label-engine support, and one broadcast test oracle needs its original canonical input boundary. The tests remain; source repairs and additional exhaustive half/range tests are in the next frozen build. |
+| Standalone native-only release gate | `native-only-cpu-round2/summary.json`, `native-only-controller-tests-v3.log`, [design](NATIVE_ONLY_RELEASE.md) | Four standalone CPU cases compile and pass locally, exercising tape derivatives, Sequential fit/predict, optimizers and tokenizer training/round-trip. The controller has 11 passing negative-control tests. Twenty-eight fixtures are inventoried; missing public coverage and CPython-bound owners remain explicit. Local execution is dependency screening, not interpreter-free Linux qualification or a complete standalone library. |
 | Generation and model loading | `validation-fb5c59d7420d8042e27b6a7c6d2d5da554f7af5d/metal-generation.xml`; matching current CPU/Metal generation reports in the same directory | 90 Metal tests pass. Four generation cases with 44 audited calls match CPU/Metal; source qualification only. |
 | Causal-model parameter inventory | `stage21-causal-model.xml` | 19 tests pass, including the repaired optional and fused-parameter inventories. |
 | Native transport, process workers and block backward | `stage28-native-tests.xml`, `stage28-tests-tmp/` | 43 of 44 tests pass; the remaining test used default options while expecting nondefault refusal. The corrected fixture passes separately against the same binary in `backward-refusal-supplement/`. Child audit reports retain the complete child-loop boundary. |
@@ -61,12 +65,13 @@ The full reproducer, binary and results are retained locally in
 
 ## Work still required
 
-- Finish and validate the public Sequential fit/prediction/import/checkpoint
-  boundaries and the remaining public Samba forward/state/training/checkpoint
-  boundaries. Native inner training loops alone do not qualify their Python
-  preparation or output handling. Arbitrary Python callbacks and custom schedule
-  execution remain explicit debt; an unchanged source-checker baseline is
-  not permission to execute them.
+- Finish public input-protocol and transitive callback audits, including native
+  callers that can invoke custom Python descriptors, conversion methods or path
+  hooks. Remove all callback execution, preserve standard native buffer behavior
+  and provide native scheduling/checkpoint configuration. Public Samba operations
+  now have the bounded stage49 evidence above; broader admission and separate
+  CPU SambaInference checks are still pending. Checker baselines are debt, never
+  exemptions. The no-callback rule is explicit in AGENTS.md and project memory.
 - Qualify conditional training and checkpoint continuation, broader operation
   and derivative coverage, and each supported distributed partition plan.
   Physical multi-GPU execution and installed-wheel checks remain distinct

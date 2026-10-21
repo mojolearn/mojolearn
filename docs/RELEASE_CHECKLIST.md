@@ -1,5 +1,22 @@
 # Release checklist
 
+## Standalone native-only candidate
+
+The optional standalone artifact has a separate strict qualification gate:
+`tools/native_only_smoke.py` and the manual `native-only-smoke.yml` workflow.
+The workflow builds a frozen commit, runs bounded native cases in a Linux root
+filesystem containing no Python interpreter or packages, and retains the actual
+runtime archive plus complete logs and provenance. Compilation defaults to two
+jobs; each execution has a ten-second limit. Reuse verified unchanged binaries.
+
+Do not ship or describe this candidate as a complete Python-free mojolearn
+release until its inventory is covered and `summary.json` records
+`release_qualified: true`. Missing algorithms, CPython-bound owners, failed cases
+and partial selections prevent that result. A local Mac pass is dependency
+screening. Existing public-operation callback audits and cross-vendor numerical
+qualification remain required independently. See
+[native-only release qualification](plans/NATIVE_ONLY_RELEASE.md).
+
 ## Releasing changes already checked before merge
 
 This is the default release (Andrew 2026-10-13: identity and behavior are
