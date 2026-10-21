@@ -67,7 +67,7 @@ else
   LABEL=nvidia-${GPU:-gpu}-$ARCH; NGPU=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ')
 fi
 st "label $LABEL gpus=$NGPU"
-ONLY_CHANGED=table REPEATS=1 bash tools/record_identity_column.sh $LABEL $O/column > $O/record.log 2>&1; st "RECORD rc=$? $(tail -n 1 $O/record.log | cut -c1-160) $(ls $O/column 2>/dev/null | tr '\n' ' ' | cut -c1-200)"
+[ "${BOX_RECORD:-1}" = 1 ] && ONLY_CHANGED=table REPEATS=1 bash tools/record_identity_column.sh $LABEL $O/column > $O/record.log 2>&1; st "RECORD rc=$? $(tail -n 1 $O/record.log | cut -c1-160) $(ls $O/column 2>/dev/null | tr '\n' ' ' | cut -c1-200)"
 
 # RunPod's marker gates the cloud-only checks; an ssh shell may not carry it, PID 1 does.
 [ -n "${RUNPOD_POD_ID:-}" ] || export RUNPOD_POD_ID=$(tr '\0' '\n' < /proc/1/environ 2>/dev/null | sed -n 's/^RUNPOD_POD_ID=//p')
