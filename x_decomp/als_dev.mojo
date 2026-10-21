@@ -5,10 +5,8 @@ py-runtime-b), as the GPU binding's kit ran it: the exact solve with C
 resident and the item half-sweep through strides (`launch_als_rows`, su = 1,
 si = items: no transpose), the CG route on C and C^T (`als_cg_kernel`), the
 same cells for the loss with its three words home. GPU binding only."""
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.als import AlsArgs, _als_args
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.als import AlsArgs
+from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, als_cg_kernel, als_scratch, launch_als_rows
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_GTS, OP_MUL, OP_SCALE, OP_SELECT, OP_SQ, mat_from,
@@ -64,48 +62,39 @@ def als_loss_dev(mut k: DKit, C: DMat, X: DMat, Y: DMat, reg: Float64) raises ->
     return tot / (conf + (Float64(C.r * C.c) - nnz))
 
 
-def als_fit_dev_py(
-    c: PythonObject, x: PythonObject, y: PythonObject, ls: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`als_fit_py` on the resident kit."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var nf = _n(p, 2)
+def als_fit_dev_run(
+    pc: F32Ptr, px: F32Ptr, py_: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nf: Int, a: AlsArgs
+) raises -> Int:
+    """`als_fit_run` on the resident kit."""
     if n * m > 2147483647 or n * nf > 2147483647 or m * nf > 2147483647:
         raise Error("x_decomp: als shape out of range")
-    var a = _als_args(p, f)
-    var pc = _f(c)
-    var px = _f(x)
-    var py_ = _f(y)
-    var pl = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=ls))
     var cnt = 0
-    with GILReleased(Python()):
-        var k = DKit()
-        var C = k.upload(mat_from(pc, n, m))
-        var X = k.upload(mat_from(px, n, nf))
-        var Y = k.upload(mat_from(py_, m, nf))
-        var losses = List[Float64]()
-        if a.use_cg:
-            var Ct = k.t(C)
-            for _ in range(a.iterations):
-                X = als_cg_half_dev(k, C, Y, X, a.reg, a.cg_steps)
-                Y = als_cg_half_dev(k, Ct, X, Y, a.reg, a.cg_steps)
-                if a.calc_loss:
-                    losses.append(als_loss_dev(k, C, X, Y, a.reg))
-        else:
-            for _ in range(a.iterations):
-                X = als_half_dev(k, C, Y, a.reg, False)
-                Y = als_half_dev(k, C, X, a.reg, True)
-                if a.calc_loss:
-                    losses.append(als_loss_dev(k, C, X, Y, a.reg))
-        var hx = k.get(X)
-        var hy = k.get(Y)
-        k.sync()
-        for i in range(n * nf):
-            px.unsafe_store(i, hx.d[i])
-        for i in range(m * nf):
-            py_.unsafe_store(i, hy.d[i])
-        cnt = len(losses)
-        for i in range(cnt):
-            pl.unsafe_store(i, losses[i])
-    return PythonObject(cnt)
+    var k = DKit()
+    var C = k.upload(mat_from(pc, n, m))
+    var X = k.upload(mat_from(px, n, nf))
+    var Y = k.upload(mat_from(py_, m, nf))
+    var losses = List[Float64]()
+    if a.use_cg:
+        var Ct = k.t(C)
+        for _ in range(a.iterations):
+            X = als_cg_half_dev(k, C, Y, X, a.reg, a.cg_steps)
+            Y = als_cg_half_dev(k, Ct, X, Y, a.reg, a.cg_steps)
+            if a.calc_loss:
+                losses.append(als_loss_dev(k, C, X, Y, a.reg))
+    else:
+        for _ in range(a.iterations):
+            X = als_half_dev(k, C, Y, a.reg, False)
+            Y = als_half_dev(k, C, X, a.reg, True)
+            if a.calc_loss:
+                losses.append(als_loss_dev(k, C, X, Y, a.reg))
+    var hx = k.get(X)
+    var hy = k.get(Y)
+    k.sync()
+    for i in range(n * nf):
+        px.unsafe_store(i, hx.d[i])
+    for i in range(m * nf):
+        py_.unsafe_store(i, hy.d[i])
+    cnt = len(losses)
+    for i in range(cnt):
+        pl.unsafe_store(i, losses[i])
+    return cnt

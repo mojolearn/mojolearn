@@ -8,9 +8,7 @@ it): the same row solvers (`als_rows`, `als_cg_rows`), the same cells and
 float32 scalars, the loss's float64 tail in Python's order. So the IDENTICAL
 words are the Python driver's; x_decomp/als_dev.mojo runs the GPU binding's
 form (C resident, the item half-sweep through strides)."""
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_ADDS, OP_GTS, OP_MUL, OP_SCALE, OP_SELECT, OP_SQ, mat_from, mat_t,
@@ -79,38 +77,24 @@ def als_fit[E: Exec](C: Mat, mut X: Mat, mut Y: Mat, a: AlsArgs, mut losses: Lis
             losses.append(als_loss(k, C, X, Y, a.reg))
 
 
-def _als_args(p: PythonObject, f: PythonObject) raises -> AlsArgs:
-    """p = [n, m, f, iterations, use_cg, cg_steps, calc_loss]; f = [reg]."""
-    return AlsArgs(Int(py=p[3]), Int(py=p[4]) != 0, Int(py=p[5]), Int(py=p[6]) != 0, Float64(py=f[0]))
-
-
-def als_fit_py[E: Exec](
-    c: PythonObject, x: PythonObject, y: PythonObject, ls: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
+def als_fit_run[E: Exec](
+    pc: F32Ptr, px: F32Ptr, py_: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nf: Int, a: AlsArgs
+) raises -> Int:
     """c (n x m) the confidences; x (n x f) and y (m x f) the starts,
     replaced; ls (iterations float64) the losses when asked. Returns the
     number of losses written."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var nf = _n(p, 2)
     if n * m > 2147483647 or n * nf > 2147483647 or m * nf > 2147483647:
         raise Error("x_decomp: als shape out of range")
-    var a = _als_args(p, f)
-    var pc = _f(c)
-    var px = _f(x)
-    var py_ = _f(y)
-    var pl = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=ls))
     var cnt = 0
-    with GILReleased(Python()):
-        var X = mat_from(px, n, nf)
-        var Y = mat_from(py_, m, nf)
-        var losses = List[Float64]()
-        als_fit[E](mat_from(pc, n, m), X, Y, a, losses)
-        for i in range(n * nf):
-            px.unsafe_store(i, X.d[i])
-        for i in range(m * nf):
-            py_.unsafe_store(i, Y.d[i])
-        cnt = len(losses)
-        for i in range(cnt):
-            pl.unsafe_store(i, losses[i])
-    return PythonObject(cnt)
+    var X = mat_from(px, n, nf)
+    var Y = mat_from(py_, m, nf)
+    var losses = List[Float64]()
+    als_fit[E](mat_from(pc, n, m), X, Y, a, losses)
+    for i in range(n * nf):
+        px.unsafe_store(i, X.d[i])
+    for i in range(m * nf):
+        py_.unsafe_store(i, Y.d[i])
+    cnt = len(losses)
+    for i in range(cnt):
+        pl.unsafe_store(i, losses[i])
+    return cnt
