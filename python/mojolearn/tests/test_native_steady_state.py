@@ -21,13 +21,14 @@ import numpy as np
 import pytest
 
 WARM = 500
-WINDOWS = 3
+WINDOWS = 4
 CALLS = 200
-# Bytes per call that may remain in the quietest window: allocator arenas and
-# free lists settle unevenly, so a retained object shows up in every window
-# while settling noise does not. One retained 64-row output array, key string
-# or call argument per call is far above the bound.
-BOUND = 64
+# Bytes per call that may remain in the quietest window. Allocator arenas and
+# free lists settle unevenly (measured up to about 100 bytes per call on a
+# flat path), while a retained object shows up in every window: the leaks this
+# test guards against kept 3 to 60 KB per call (returned arrays, result
+# dictionaries, argument lists). Input references are compared exactly.
+BOUND = 512
 
 
 def _counts(values):
