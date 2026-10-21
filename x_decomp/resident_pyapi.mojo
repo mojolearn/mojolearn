@@ -27,6 +27,13 @@ from x_decomp.resident import (
     dev_lda_rows_run,
     dev_lda_bound_run,
     dev_als_rows_run,
+    dev_cd_rows_run,
+    dev_svd_run,
+    dev_lu_run,
+    dev_lu_aux_run,
+    dev_qr_r_run,
+    dev_code_rows_run,
+    dev_eigh_run,
 )
 
 
@@ -231,3 +238,114 @@ def dev_als_rows_py(
     return PythonObject(
         dev_als_rows_run(_id(c), _id(y), _id(yty), _id(x), _id(flags), n, m, f, su, si, cl, rg)
     )
+
+
+def dev_cd_rows_py(
+    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """`x_decomp_cd_rows` on device matrices: w (n x k, swept in place), hht
+    (k x k), xht (n x k), viol (n, written); perm the host address of k
+    int32. p = [n, k]. Waits."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var pp = I32Ptr(unsafe_from_address=Int(py=perm))
+    return PythonObject(dev_cd_rows_run(_id(w), _id(hht), _id(xht), pp, _id(viol), n, k))
+
+
+def dev_svd_py(a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_svd` of the device matrix a (m x n, left as it is); s (n)
+    and v (n x n) are host addresses. p = [m, n]. Waits."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    var ia = _id(a)
+    var ps = F32Ptr(unsafe_from_address=Int(py=s))
+    var pv = F32Ptr(unsafe_from_address=Int(py=v))
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_svd_run(ia, ps, pv, m, n)
+    return PythonObject(r)
+
+
+def dev_lu_py(a: PythonObject, lu: PythonObject, piv: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_lu` on device matrices: lu (n x n) = the factor of a (n x n,
+    left as it is); piv (n int32) and info (1 float32) are host addresses.
+    p = [n]. Waits."""
+    var n = _n(p, 0)
+    var ia = _id(a)
+    var il = _id(lu)
+    var pp = I32Ptr(unsafe_from_address=Int(py=piv))
+    var pi = F32Ptr(unsafe_from_address=Int(py=info))
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_lu_run(ia, il, pp, pi, n)
+    return PythonObject(r)
+
+
+def dev_lu_aux_py(
+    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
+    stats: PythonObject, p: PythonObject,
+) raises -> PythonObject:
+    """`x_decomp_lu_aux` on the device factor lu (n x n, clamped in place
+    with p[1]); piv (n int32), pm, im, diag (n each) and stats (4) are host
+    addresses. p = [n, clamp]. Waits."""
+    var n = _n(p, 0)
+    var clamp = _n(p, 1)
+    var il = _id(lu)
+    var pv = I32Ptr(unsafe_from_address=Int(py=piv))
+    var p1 = F32Ptr(unsafe_from_address=Int(py=pm))
+    var p2 = F32Ptr(unsafe_from_address=Int(py=im))
+    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
+    var ps = F32Ptr(unsafe_from_address=Int(py=stats))
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_lu_aux_run(il, pv, p1, p2, pd, ps, n, clamp)
+    return PythonObject(r)
+
+
+def dev_qr_r_py(a: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_qr_r` of the device matrix a (m x n); r (n x n) is a host
+    address. p = [m, n] or [m, n, consume]. Returns 1 when a was consumed,
+    else 0. Waits."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    var consume = len(p) > 2 and Int(py=p[2]) != 0
+    var ia = _id(a)
+    var pr = F32Ptr(unsafe_from_address=Int(py=r))
+    var res = 0
+    with GILReleased(Python()):
+        res = dev_qr_r_run(ia, pr, m, n, consume)
+    return PythonObject(res)
+
+
+def dev_code_rows_py(g: PythonObject, q: PythonObject, w: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
+    """g (k x k), q (n x k) and w (n x k) are device matrices.
+    p = [kind, n, k, a, b]: kind 0 Lasso CD, kind 1 Lars, kind 2 OMP;
+    f = [alpha, tol]. Waits."""
+    var kind = Int(py=p[0])
+    var n = _n(p, 1)
+    var k = _n(p, 2)
+    var a = _n(p, 3)
+    var b = _n(p, 4)
+    var ig = _id(g)
+    var iq = _id(q)
+    var iw = _id(w)
+    var alpha = Float64(py=f[0])
+    var tol = Float64(py=f[1])
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_code_rows_run(ig, iq, iw, kind, n, k, a, b, alpha, tol)
+    return PythonObject(r)
+
+
+def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is); w (n)
+    and v (n x n) are host addresses. p = [n, uplo]. Waits."""
+    var n = _n(p, 0)
+    var uplo = _n(p, 1)
+    var ia = _id(a)
+    var pw = F32Ptr(unsafe_from_address=Int(py=w))
+    var pv = F32Ptr(unsafe_from_address=Int(py=v))
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_eigh_run(ia, pw, pv, n, uplo)
+    return PythonObject(r)
