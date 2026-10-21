@@ -28,6 +28,15 @@ the artifact into the leg layout release.py reads (leg_layout "github", the
 cpu-box layout), verify the tree against its proof, promote the cache uploads,
 and exit 0 only for a verified tree. A failure names the job.
 
+THE MERGED LAYOUT IS NOT BUILT HERE (2026-10-21). A source whose
+packaging/linux/merged_layout.py says merged (MOJOLEARN_MERGED_BINDINGS=1,
+the default since 2026-10-20) builds ONE compile per tier, measured at up to
+46.4 GB; a free runner has 15. `plan` plans exactly build_sets.sh's merged
+pool (fast, identical and host merged_build.sh, one per shard) and then
+refuses it, and `run` refuses before dispatching, both with merged_refusal(),
+unless --runner-mem-gib says the runners have NEEDED_GIB. Such a source
+builds on the cpu-box route (tools/release.py's default for it).
+
 THE BINDING CACHE WITHOUT A SECRET. R2 credentials never leave this Mac. The
 Mac lists the cache partition and presigns a GET for every object and a PUT
 for each job's disjoint inbox slots (tools/bincache.py plan_lines, the same map
@@ -189,6 +198,15 @@ def source_merged(src):
     """Whether build_sets.sh in SRC builds the merged layout under the planner's env."""
     p = Path(src) / "packaging/linux/merged_layout.py"
     return layout_merged(p.read_text() if p.is_file() else None, planner_env())
+
+
+def commit_merged(commit, environ=None, root=ROOT):
+    """Whether COMMIT's tree builds the merged layout under `environ` (default:
+    the planner's), read from its packaging/linux/merged_layout.py by git
+    without a checkout; a commit without that file is per-binding."""
+    r = subprocess.run(["git", "-C", str(root), "show", f"{commit}:packaging/linux/merged_layout.py"],
+                       capture_output=True, text=True)
+    return layout_merged(r.stdout if r.returncode == 0 else None, planner_env() if environ is None else environ)
 
 
 def plan_set(src):
@@ -535,6 +553,9 @@ def cmd_run(a):
     if a.arch not in ARCHS:
         raise SystemExit(f"--arch must be one of {' '.join(ARCHS)}")
     vendor, name = ARCHS[a.arch], f"{ARCHS[a.arch]}-{a.arch}"
+    if not a.run_id and commit_merged(a.commit) and a.runner_mem_gib < max(NEEDED_GIB.values()):
+        # the workflow's plan job would refuse it; refuse before dispatching
+        raise SystemExit(merged_refusal(max(NEEDED_GIB.values())))
     out = Path(a.out).resolve()
     if out.exists() and any(out.iterdir()) and not a.run_id:
         raise SystemExit(f"{out} exists and is not empty")
@@ -652,6 +673,8 @@ def main(argv=None):
     p.add_argument("--no-bincache", action="store_true")
     p.add_argument("--allow-cold-amd", action="store_true")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
+    p.add_argument("--runner-mem-gib", type=int, default=0,
+                   help="the runners' memory; a merged-layout commit dispatches only when it covers NEEDED_GIB")
     p.add_argument("--timeout-min", type=int, default=420)
     p.add_argument("--poll", type=int, default=60)
     p.set_defaults(fn=cmd_run)
