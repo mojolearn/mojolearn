@@ -413,3 +413,205 @@ def reduce_stat(a: Int, c: Int, count: Int, w: Int) raises -> HpStat:
     if c == HP_F16:
         return _reduce[DType.float16](a, count, w)
     raise Error("reduce_stat: unknown dtype code " + String(c))
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 3102: equal_elements
+# ---------------------------------------------------------------------------
+
+
+def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
+    var ap = _ptr[dt](a_addr)
+    var bp = _ptr[dt](b_addr)
+    var dp = _ptr[DType.uint8](dst_addr)
+    var tasks = _tasks(n)
+    var chunk = n
+
+    def _range(c: Int) {imm ap, imm bp, imm dp, imm n, imm chunk}:
+        var i = c * chunk
+        var hi = min(i + chunk, n)
+        while i + HP_W <= hi:
+            var eq = ap.unsafe_load[width=HP_W](i).eq(bp.unsafe_load[width=HP_W](i))
+            comptime if HOTPATH_SABOTAGE:
+                eq = ~eq
+            dp.unsafe_store[width=HP_W](i, eq.cast[DType.uint8]())
+            i += HP_W
+        while i < hi:
+            var one = UInt8(1) if ap.unsafe_load(i) == bp.unsafe_load(i) else UInt8(0)
+            dp.unsafe_store(i, one)
+            i += 1
+
+    _range(0)
+
+
+def _equal_i64_f64(a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
+    """Python's exact `int == float` per element (lane py-runtime round 3):
+    equal iff the float is finite, integral, inside int64 and its integer is
+    the int64 (no rounding of either side, so 2**53 + 1 != 2.0**53)."""
+    var ap = _ptr[DType.int64](a_addr)
+    var bp = _ptr[DType.float64](b_addr)
+    var dp = _ptr[DType.uint8](dst_addr)
+    var i = 0
+    while i < n:
+        var f = bp.unsafe_load(i)
+        var one = UInt8(0)
+        if f == f and f >= -9223372036854775808.0 and f < 9223372036854775808.0:
+            var k = Int64(f)
+            if Float64(k) == f and k == ap.unsafe_load(i):
+                one = UInt8(1)
+        dp.unsafe_store(i, one)
+        i += 1
+
+
+def equal_elements(a: Int, b: Int, c: Int, count: Int, d: Int) raises -> Int:
+    """`dst[i] = 1 if a[i] == b[i] else 0` over two buffers of ONE dtype
+    (DEVIATION 3102): IEEE equality for floats, which is Python's (NaN is
+    unequal to itself, -0.0 equals 0.0)."""
+    if count < 0:
+        raise Error("equal_elements: n must be non-negative")
+    if count == 0:
+        return 0
+    if c == HP_F32:
+        _equal[DType.float32](a, b, count, d)
+    elif c == HP_F64:
+        _equal[DType.float64](a, b, count, d)
+    elif c == HP_I32:
+        _equal[DType.int32](a, b, count, d)
+    elif c == HP_I64:
+        _equal[DType.int64](a, b, count, d)
+    elif c == HP_U32:
+        _equal[DType.uint32](a, b, count, d)
+    elif c == HP_U8:
+        _equal[DType.uint8](a, b, count, d)
+    elif c == HP_U16:
+        _equal[DType.uint16](a, b, count, d)
+    elif c == HP_I8:
+        _equal[DType.int8](a, b, count, d)
+    elif c == HP_F16:
+        _equal[DType.float16](a, b, count, d)
+    elif c == HP_I64_F64:
+        _equal_i64_f64(a, b, count, d)
+    else:
+        raise Error("equal_elements: unknown dtype code " + String(c))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 3103: the ORDER RULE's encoder for the core host binding, and
+# gather_i32
+# ---------------------------------------------------------------------------
+
+
+def _encode_labels_host[dt: DType](
+    src: MutPointer[Scalar[dt], MutUntrackedOrigin], n: Int,
+    classes: MutPointer[Scalar[dt], MutUntrackedOrigin], max_classes: Int,
+    codes: MutPointer[Int32, MutUntrackedOrigin],
+) -> Int:
+    """`bindings/_mojolearn.mojo::_encode_labels`, DEVIATION 2500, verbatim:
+    n_classes, or -1 when more than `max_classes` distinct values were seen,
+    or -2 when a label compared unequal to itself (NaN)."""
+    var k = 0
+    var last = src.unsafe_load(0)
+    var have_last = False
+    for i in range(n):
+        var v = src.unsafe_load(i)
+        if v != v:
+            return -2
+        if have_last and v == last:
+            continue
+        var lo = 0
+        var hi = k
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if classes.unsafe_load(mid) < v:
+                lo = mid + 1
+            else:
+                hi = mid
+        last = v
+        have_last = True
+        if lo < k and classes.unsafe_load(lo) == v:
+            continue
+        if k == max_classes:
+            return -1
+        var j = k
+        while j > lo:
+            classes.unsafe_store(j, classes.unsafe_load(j - 1))
+            j -= 1
+        classes.unsafe_store(lo, v)
+        k += 1
+    var last_code = -1
+    for i in range(n):
+        var v = src.unsafe_load(i)
+        if last_code >= 0 and v == last:
+            codes.unsafe_store(i, Int32(last_code))
+            continue
+        var lo = 0
+        var hi = k
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if classes.unsafe_load(mid) < v:
+                lo = mid + 1
+            else:
+                hi = mid
+        codes.unsafe_store(i, Int32(lo))
+        last = v
+        last_code = lo
+    comptime if HOTPATH_SABOTAGE:
+        for i in range(n):
+            codes.unsafe_store(i, Int32(k - 1) - codes.unsafe_load(i))
+    return k
+
+
+def encode_labels[dt: DType](
+    src_addr: Int, count: Int, classes_addr: Int, cap: Int, codes_addr: Int,
+) raises -> Int:
+    """The ORDER RULE's encoder over typed addresses: n_classes, or -1 when
+    more than `cap` distinct values were seen; a NaN label raises."""
+    if count < 1:
+        raise Error("encode_labels: n must be positive, got " + String(count))
+    if cap < 1:
+        raise Error("encode_labels: max_classes must be positive")
+    var sp = _ptr[dt](src_addr)
+    var cp = _ptr[dt](classes_addr)
+    var dp = _ptr[DType.int32](codes_addr)
+    var k = _encode_labels_host[dt](sp, count, cp, cap, dp)
+    if k == -2:
+        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+    return k
+
+
+def gather_i32(table_addr: Int, nt: Int, codes_addr: Int, count: Int, dst_addr: Int) raises -> Int:
+    """`dst[i] = table[codes[i]]`, int32 codes into an int32 table
+    (DEVIATION 3103): the remap of dense label codes onto a caller's label
+    order, where the table may hold -1 for "not a requested label". A code
+    outside `[0, n_table)` raises before any write."""
+    if count < 0 or nt < 1:
+        raise Error("gather_i32: n must be non-negative and the table non-empty")
+    if count == 0:
+        return 0
+    var tp = _ptr[DType.int32](table_addr)
+    var cp = _ptr[DType.int32](codes_addr)
+    var dp = _ptr[DType.int32](dst_addr)
+    var bad = False
+    for i in range(count):
+        var c = Int(cp.unsafe_load(i))
+        if c < 0 or c >= nt:
+            bad = True
+            break
+    if not bad:
+        var tasks = _tasks(count)
+        var chunk = count
+
+        def _range(t: Int) {imm tp, imm cp, imm dp, imm count, imm chunk, imm nt}:
+            var lo = t * chunk
+            var hi = min(lo + chunk, count)
+            for i in range(lo, hi):
+                comptime if HOTPATH_SABOTAGE:
+                    dp.unsafe_store(i, tp.unsafe_load((Int(cp.unsafe_load(i)) + 1) % nt))
+                else:
+                    dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
+
+        _range(0)
+    if bad:
+        raise Error("gather_i32: code out of range")
+    return 0
