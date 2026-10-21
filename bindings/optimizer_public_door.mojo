@@ -147,6 +147,11 @@ def as_float(value: PythonObject) raises -> Float64:
     return Float64(py=py_call(_bi().float, value))
 
 
+def method(value: PythonObject, name: String) raises -> PythonObject:
+    """`getattr(value, name)` (a name PythonObject itself also defines)."""
+    return py_call(_bi().getattr, value, PythonObject(name))
+
+
 def truth(value: PythonObject) raises -> Bool:
     return Bool(py=py_call(_bi().bool, value))
 
@@ -561,7 +566,8 @@ def check_tensors(seq: PythonObject, name: String, where: String, inplace: Bool)
             raise Error("TypeError: mojolearn: object does not support the buffer protocol")
         var code = base_format(v.fmt)
         if code == "e" or v.dtype == "float16" or v.dtype == "bfloat16":
-            raise _not_covered("mixed precision", where)
+            var refusal = _not_covered("mixed precision", where)
+            raise refusal^
         if code != "f":
             raise Error(
                 "TypeError: mojolearn." + where + ": " + name + "[" + String(i) + "] has dtype " + v.dtype
@@ -637,9 +643,11 @@ def refuse_kwargs(kwargs: PythonObject, where: String) raises:
     for i in range(len(keys)):  # small-loop(keyword argument names)
         var k = String(py=keys[i])
         if k == "dropout":
-            raise _not_covered("dropout", where)
+            var refusal = _not_covered("dropout", where)
+            raise refusal^
         if k == "distributed" or k == "world_size" or k == "rank":
-            raise _not_covered("distributed", where)
+            var refusal = _not_covered("distributed", where)
+            raise refusal^
         var why = py_call(d[].refused.get, keys[i])
         if truth(why):
             raise Error(
@@ -725,11 +733,13 @@ def _user_lr(schedule: PythonObject, t: Int) raises -> PythonObject:
     var result = cpy.PyObject_Call(method._obj_ptr, envelope, PyObjectPtr())
     cpy.Py_DecRef(envelope)
     if not result:
-        raise stash_python_error()
+        var pending = stash_python_error()
+        raise pending^
     var value = PythonObject(from_owned=result)
     var as_float = cpy.lib.get_function[PyObjectPtr]("PyNumber_Float")(value._obj_ptr)
     if not as_float:
-        raise stash_python_error()
+        var pending = stash_python_error()
+        raise pending^
     return PythonObject(from_owned=as_float)
 
 
@@ -1010,9 +1020,9 @@ def door_state[K: OptKernels](module: PythonObject, opt: PythonObject, which: In
         return opt._v
     var out = Python.dict()
     py_setitem(out, PythonObject("t"), PythonObject(Int(py=opt.t)))
-    py_setitem(out, PythonObject("exp_avg"), py_call(opt._m.copy))
-    py_setitem(out, PythonObject("exp_avg_sq"), py_call(opt._v.copy))
-    py_setitem(out, PythonObject("buf_initialized"), py_call(opt.buf_initialized.copy))
+    py_setitem(out, PythonObject("exp_avg"), py_call(method(opt._m, "copy")))
+    py_setitem(out, PythonObject("exp_avg_sq"), py_call(method(opt._v, "copy")))
+    py_setitem(out, PythonObject("buf_initialized"), py_call(method(opt.buf_initialized, "copy")))
     return out
 
 
@@ -1038,8 +1048,8 @@ def door_load_state[K: OptKernels](
     (`_buffer.as_f32_c` / `as_i32_c`, which may copy): the optimizer keeps
     its own copies, the sizes are checked, the state is uploaded."""
     door_ready()
-    var m = ea if truth(c1) else py_call(ea.copy)
-    var v = es if truth(c2) else py_call(es.copy)
+    var m = ea if truth(c1) else py_call(method(ea, "copy"))
+    var v = es if truth(c2) else py_call(method(es, "copy"))
     var n_total = Int(py=opt.n_total)
     var owhere = String(py=opt._where)
     if Int(py=m.size) != n_total:
@@ -1053,7 +1063,7 @@ def door_load_state[K: OptKernels](
     py_setattr(opt, "_pristine", PythonObject(False))
     _upload[K](module, opt, write_addr(m, "exp_avg"), write_addr(v, "exp_avg_sq"))
     py_setattr(opt, "_host_fresh", PythonObject(True))
-    py_setattr(opt, "buf_initialized", bi if truth(c3) else py_call(bi.copy))
+    py_setattr(opt, "buf_initialized", bi if truth(c3) else py_call(method(bi, "copy")))
     py_setattr(opt, "t", t)
     return PythonObject(None)
 
