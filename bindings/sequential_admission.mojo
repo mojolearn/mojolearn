@@ -45,6 +45,12 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
             sequential_admit_value(value[k], context, depth + 1)
         return
     if _one_of(cls, context["mapping_types"]):
+        if cls is context["defaultdict_class"]:
+            # An exact C defaultdict can still call a Python default_factory
+            # on a later missing lookup. Admit only connected C constructors.
+            var factory = value.default_factory
+            if factory is not None and not _one_of(factory, context["native_default_factories"]) and not _one_of(factory, context["scalar_types"]):
+                raise Error("TypeError: Sequential defaultdict requires a native builtin default factory or None")
         var pairs = b.list(value.items())
         for k in range(len(pairs)):  # driver-loop: over native mapping keys and buffer owners
             sequential_admit_value(pairs[k][0], context, depth + 1)

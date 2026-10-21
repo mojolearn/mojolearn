@@ -676,6 +676,7 @@ def _connect_sequential_bindings():
     return {
         "sequential_class": Sequential, "module_type": ModuleType, "modules": sys.modules,
         "mapping_types": (dict, OrderedDict, defaultdict), "scalar_types": scalar_types, "integer_types": integer_types,
+        "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "array_fields": array_fields,
         "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "_opt_m", "_opt_v", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
