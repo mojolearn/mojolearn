@@ -251,9 +251,23 @@ def causal_layer_allocate(model: PythonObject, i: Int, b: Int, cap: Int) raises 
     return st
 
 
+def _public_int(value: PythonObject, message: String) raises -> Int:
+    # A public count is an integer (anything with __index__): a str is not
+    # parsed and a bool is not counted as 0 or 1.
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if g[].bi.type(value) is g[].bi.bool:
+        raise Error("TypeError: " + message)
+    var index = PythonObject(None)
+    try:
+        index = Python.import_module("operator").index(value)
+    except error:
+        raise Error("TypeError: " + message)
+    return Int(py=index)
+
+
 def causal_lm_allocate_binding(model: PythonObject, batch: PythonObject, capacity: PythonObject) raises -> PythonObject:
-    var b = Int(py=batch)
-    var cap = Int(py=capacity)
+    var b = _public_int(batch, "CausalLM: batch_size and max_tokens must be integers")
+    var cap = _public_int(capacity, "CausalLM: batch_size and max_tokens must be integers")
     if b < 1 or cap < 1:
         raise Error("CausalLM: batch_size and max_tokens must be positive")
     _positions(model, PythonObject(None), cap)
@@ -742,7 +756,7 @@ def _options(mut s: GenerationHandle, options: PythonObject) raises:
 
 
 def causal_lm_stream_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, options: PythonObject) raises -> PythonObject:
-    var n = Int(py=maximum)
+    var n = _public_int(maximum, "generation: max_new_tokens must be an integer")
     if n < 0:
         raise Error("generation: max_new_tokens must be nonnegative")
     var prompt = generation_ids(value, Int(py=model.vocab_size))
@@ -822,17 +836,7 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
 
 def causal_lm_read_binding(stream: PythonObject, count: PythonObject) raises -> PythonObject:
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
-    # max_tokens is an integer (anything with __index__); a str or a bool is
-    # refused by name instead of being parsed or counted as 1.
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    if g[].bi.type(count) is g[].bi.bool:
-        raise Error("TypeError: generation: max_tokens must be an integer")
-    var index = PythonObject(None)
-    try:
-        index = Python.import_module("operator").index(count)
-    except error:
-        raise Error("TypeError: generation: max_tokens must be an integer")
-    var ids = _read(owner[], Int(py=index))
+    var ids = _read(owner[], _public_int(count, "generation: max_tokens must be an integer"))
     if owner[].tokenizer is not None:
         return _decode_chunk(owner[], ids)
     return ids

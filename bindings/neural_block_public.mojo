@@ -83,8 +83,20 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
 
 def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capacity: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
-    var b = Int(py=batch)
-    var cap = 1 if capacity is None else Int(py=capacity)
+    # Integers only (anything with __index__): a str is not parsed and a
+    # bool is not counted as 0 or 1.
+    var bi = Python.import_module("builtins")
+    if bi.type(batch) is bi.bool or bi.type(capacity) is bi.bool:
+        raise Error("TypeError: neural block: batch_size and max_tokens must be integers")
+    var b = 0
+    var cap = 1
+    try:
+        var operator = Python.import_module("operator")
+        b = Int(py=operator.index(batch))
+        if capacity is not None:
+            cap = Int(py=operator.index(capacity))
+    except error:
+        raise Error("TypeError: neural block: batch_size and max_tokens must be integers")
     if b < 1 or cap < 1:
         raise Error("neural block: batch_size and max_tokens must be positive")
     return causal_layer_allocate(neural_block_owner(block, context), 0, b, cap)
