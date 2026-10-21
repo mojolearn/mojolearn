@@ -52,7 +52,7 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
     }
     records = []
     for cls in classes:  # glue: retain native __dict__ getters for admitted records
-        descriptor = next(vars(base)["__dict__"] for base in cls.__mro__ if "__dict__" in vars(base))
+        descriptor = next(vars(base)["__dict__"] for base in cls.__mro__ if "__dict__" in vars(base))  # glue: retain the fixed native dictionary ABI at package connection
         records.append((cls, descriptor.__get__, fields))
     array_cls = nc["array_class"]
     array_names = tuple(array_cls.__slots__)
@@ -61,12 +61,12 @@ def _connect_admission(config_cls, model_cls, state_cls, training, neural):
         names = array_names if cls is array_cls else fields + ("__dict__",)
         namespace = vars(cls)
         keys = names + ("__getattribute__", "__getattr__", "__setattr__")
-        guards.append((namespace, tuple((name, namespace.get(name)) for name in keys), cls, cls.__mro__))
+        guards.append((namespace, tuple((name, namespace.get(name)) for name in keys), cls, cls.__mro__))  # glue: snapshot fixed class descriptors at package connection
     return {
         "records": tuple(records), "guards": tuple(guards), "array_class": array_cls,
-        "metadata_fields": tuple(name for name in fields if name not in buffer_or_owner_fields),
+        "metadata_fields": tuple(name for name in fields if name not in buffer_or_owner_fields),  # glue: connect fixed ABI field categories once at import
         "config_class": config_cls, "optimizer_class": training.AdamW,
-        "array_getters": {name: vars(array_cls)[name].__get__ for name in array_names},
+        "array_getters": {name: vars(array_cls)[name].__get__ for name in array_names},  # glue: connect native Array slot getters once at package import
         "array_metadata": ("shape", "dtype", "order", "_addr", "_readonly", "ndim", "size", "nbytes", "itemsize", "strides"),
         "mapping_types": (dict, OrderedDict, defaultdict),
         "defaultdict_type": defaultdict,
