@@ -1,0 +1,39 @@
+--- a/training/optimizer_public.mojo
++++ b/training/optimizer_public.mojo
+@@ -137,7 +137,7 @@ def resident_open(ctx: DeviceContext, n: Int, on_host: Bool = False) raises -> I
+     var m = ctx.enqueue_create_buffer[DType.float32](nd)
+     var v = ctx.enqueue_create_buffer[DType.float32](nd)
+     m.enqueue_fill(Float32(0.0))
+-    v.enqueue_fill(Float32(0.0))
++    v.enqueue_fill(Float32(1.0))  # SABOTAGE (coverage-training-optimizer_public): a fresh slot's second moment is 1, not 0
+     # The fills are ordered before every later use on the one in-order
+     # context, and every host read (the download) waits.
+     var n_pool = n if (opt_pool_buffers() and not on_host) else 1
+@@ -210,10 +210,11 @@ def resident_download(ctx: DeviceContext, handle: Int, m_addr: Int, v_addr: Int,
+         if v_addr != 0:
+             memcpy(dest=F32P(unsafe_from_address=v_addr), src=pool[].hv[h].unsafe_ptr(), count=n)
+         return n
++    # SABOTAGE (coverage-training-optimizer_public): the download swaps the two moments
+     if m_addr != 0:
+-        ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=m_addr), src_buf=pool[].m[h])
++        ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=m_addr), src_buf=pool[].v[h])
+     if v_addr != 0:
+-        ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=v_addr), src_buf=pool[].v[h])
++        ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=v_addr), src_buf=pool[].m[h])
+     ctx.synchronize()
+     return n
+ 
+@@ -229,10 +230,11 @@ def resident_upload(ctx: DeviceContext, handle: Int, m_addr: Int, v_addr: Int, n
+         if v_addr != 0:
+             memcpy(dest=pool[].hv[h].unsafe_ptr(), src=F32P(unsafe_from_address=v_addr), count=n)
+         return n
++    # SABOTAGE (coverage-training-optimizer_public): the upload swaps the two moments
+     if m_addr != 0:
+-        ctx.enqueue_copy(dst_buf=pool[].m[h], src_ptr=F32P(unsafe_from_address=m_addr))
++        ctx.enqueue_copy(dst_buf=pool[].v[h], src_ptr=F32P(unsafe_from_address=m_addr))
+     if v_addr != 0:
+-        ctx.enqueue_copy(dst_buf=pool[].v[h], src_ptr=F32P(unsafe_from_address=v_addr))
++        ctx.enqueue_copy(dst_buf=pool[].m[h], src_ptr=F32P(unsafe_from_address=v_addr))
+     ctx.synchronize()
+     return n
+ 

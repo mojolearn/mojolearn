@@ -1,0 +1,29 @@
+--- a/sequence/opt_public.mojo
++++ b/sequence/opt_public.mojo
+@@ -107,7 +107,7 @@ def seq_optimizer_init(words: Int, ip: List[Int]) raises -> Int:
+             | (16 if ip[at + 4] != 0 else 0)
+         )
+     var w = words_ptr(words)
+-    set_word(w, W_T, 0)
++    set_word(w, W_T, 1)  # SABOTAGE (coverage-sequence-opt_public): the step count starts one ahead
+     set_word(w, W_SC_T, 0)
+     set_word(w, W_HANDLE, -1)
+     set_word(w, W_USED, 0)
+@@ -378,7 +378,7 @@ def export_copy(w: IP64, c: StateCopy) raises -> Int:
+     """The host copies of the state (already current) and the scalars into
+     the export's outputs."""
+     for i in range(c.m):
+-        _copy(c.xs[i], c.slots[i], c.n, "state")
++        _copy(c.xs[i], c.slots[c.m - 1 - i], c.n, "state")  # SABOTAGE (coverage-sequence-opt_public): slots exported in reverse
+     _copy(c.sc_x, c.sc, c.sc_len, "scalars")
+     return c.m
+ 
+@@ -391,7 +391,7 @@ def import_copy(w: IP64, c: StateCopy) raises -> Int:
+     resident step uploads them."""
+     for i in range(c.m):
+         _copy(c.slots[i], c.xs[i], c.n, "state")
+-    set_word(w, W_T, c.t)
++    set_word(w, W_T, c.t + 1)  # SABOTAGE (coverage-sequence-opt_public): the loaded step count one ahead
+     var p = host_fp(c.sc, "scalars")
+     for i in range(c.sc_len):
+         p[i] = Float32(1.0)
