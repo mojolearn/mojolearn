@@ -16,9 +16,12 @@ from bindings.classical_exceptions import classical_require_fitted, classical_er
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_tags import classical_tags
+from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    if Bool(py=context.get("classical_explicit_cpu", False)):
+        return classical_host_entries(model, context)
     var fields = sequential_fields(model)
     var mode = fields.get("numeric_mode")
     if mode is None:
@@ -82,6 +85,11 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation == "sklearn_tags":
             result = classical_tags(context)
+            return result.steal_data()
+        if operation == "model_sha256":
+            if not Bool(py=context.get("classical_explicit_cpu", False)):
+                raise Error("AttributeError: model_sha256 belongs to the explicit host model interface")
+            result = classical_host_hash(model, context)
             return result.steal_data()
         if operation == "save":
             result = classical_archive_save(model, args[0], ridge, context)
