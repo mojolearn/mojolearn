@@ -8,8 +8,12 @@ insertion. Handles are monotonically increasing and never aliases for pointers.
 The family-specific exporter reads its existing tree/node representation into
 validated caller buffers; this module never builds a second flattened model.
 """
-from std.memory import memcpy
 from std.python import Python, PythonObject
+from core.shell_impl.forest_export_binding_impl import (
+    validate_forest_export_counts,
+    validate_forest_export_destinations,
+    copy_forest_export_leaves,
+)
 
 
 @fieldwise_init
@@ -64,30 +68,3 @@ struct ForestExportRegistry[Model: Movable & Deinitable](Defaultable, Movable):
             raise Error("unknown or released fitted forest export handle")
         var released = self.entries.pop(handle)
         _ = released^
-
-
-def validate_forest_export_counts(trees: Int, nodes: Int, outputs: Int) raises:
-    if trees < 1 or trees >= 2147483647 or nodes < trees or outputs < 1:
-        raise Error("invalid fitted forest export counts")
-    if nodes > 2147483647 // outputs:
-        raise Error("fitted forest export exceeds Int32 indexing bounds")
-
-
-def validate_forest_export_destinations(offsets: Int, columns: Int,
-    thresholds: Int, left: Int, leaves: Int) raises:
-    # ABI output arrays all have four-byte scalar storage. Sizes must be
-    # checked against the registry before any pointer is written.
-    var addresses: List[Int] = [offsets, columns, thresholds, left, leaves]
-    for address in addresses:
-        if address <= 0 or address % 4 != 0:
-            raise Error("invalid fitted forest export destination pointer")
-
-
-def copy_forest_export_leaves(values: List[Float32], address: Int,
-                              offset: Int) raises:
-    """One contiguous tree leaf-vector copy; no Float64/Python scalar detour."""
-    if address <= 0 or address % 4 != 0 or offset < 0:
-        raise Error("invalid fitted forest leaf export pointer or offset")
-    var destination = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
-    if len(values):
-        memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))
