@@ -29,11 +29,23 @@ def _model_shape(value: PythonObject, shape: List[Int], name: String) raises:
             raise Error("CausalLM: " + name + " has the wrong shape")
 
 
+def _model_dtype_refusal(name: String, code: String) -> String:
+    var label = String(code)
+    if code == "<f8" or code == "d" or code == "<d" or code == "=d" or code == "@d":
+        label = "float64"
+    elif code == "<f2" or code == "e" or code == "<e" or code == "=e" or code == "@e":
+        label = "float16"
+    elif code == "<u2" or code == "H":
+        label = "uint16 (bfloat16 bits)"
+    return ("TypeError: CausalLM tensor " + name + " has dtype " + label + "; float32 only: bfloat16, "
+            + "float16 and float64 are refused by name rather than converted. Convert to float32.")
+
+
 def _model_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     if bi.type(value) is context["array_class"]:
         if String(value.dtype) != "<f4":
-            raise Error("TypeError: CausalLM tensor " + name + " must be float32")
+            raise Error(_model_dtype_refusal(name, String(value.dtype)))
         if String(value.order) == "C":
             return value
         var dims = List[Int]()
@@ -49,7 +61,7 @@ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises 
     var view = bi.memoryview(value)
     var format = String(view.format)
     if format != "f" and format != "<f" and format != "=f" and format != "@f":
-        raise Error("TypeError: CausalLM tensor " + name + " must be float32")
+        raise Error(_model_dtype_refusal(name, format))
     return checkpoint_array(view.tobytes(), view.shape, "f", context["array_class"])
 
 
@@ -89,12 +101,12 @@ def _model_pack(value: PythonObject, format: String, linalg: PythonObject, conte
     return packed
 
 
-def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObject) raises -> PythonObject:
+def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObject, name: String = "weight") raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var bf16 = bi.type(value) is context["bf16_class"]
     var int8 = bi.type(value) is context["int8_class"]
     if not bf16 and not int8:
-        return _model_f32(value, "weight", context)
+        return _model_f32(value, name, context)
     if len(value.shape) != 2:
         raise Error("CausalLM: packed projection weights require two dimensions")
     var rows = Int(py=value.shape[0])
@@ -227,7 +239,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             if format != "float32" and format != tag:
                 raise Error("CausalLM: mixed packed weight formats")
             format = tag
-        w[keys[i]] = _model_unpack(v, bindings["linalg"], context)
+        w[keys[i]] = _model_unpack(v, bindings["linalg"], context, String(keys[i]))
     fields["weight_format"] = PythonObject(format)
     fields["_native_kind"] = plan.kind
     fields["_native_route"] = route
@@ -405,6 +417,11 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             shapes.append(py_ints([dm, di]))
         else:
             raise Error("neural block: unsupported block kind " + kind)
+    for i in range(len(names)):  # small-loop(block weight name words)
+        if kind == "transformer" and i == 6 and not gated:
+            continue
+        if not Bool(py=w.__contains__(names[i])):
+            raise Error("CausalLM: weight dict mismatch; missing block tensor " + String(names[i]) + "; the exact key set is " + String(names))
     for i in range(len(names)):  # driver-loop: over fixed block weight slots
         var name = names[i]
         if kind == "transformer" and i == 6 and not gated:
