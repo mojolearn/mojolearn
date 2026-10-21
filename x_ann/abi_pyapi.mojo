@@ -21,7 +21,7 @@ def a_int(addrs: PythonObject, i: Int) raises -> Int:
 def py_int_list(obj: PythonObject) raises -> List[Int]:
     """A Python sequence of ints (addresses or parameters) as a typed list."""
     var out = List[Int]()
-    for t in range(len(obj)):
+    for t in range(len(obj)):  # small-loop(obj: the address or parameter words of one call): unpacks a few Ints, no data
         out.append(Int(py=obj[t]))
     return out^
 
