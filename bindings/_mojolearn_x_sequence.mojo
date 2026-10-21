@@ -66,7 +66,7 @@ from autograd.model_checkpoint import (
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.pyapi import moe_backward_py, moe_backward_run
 from sequence.opt_resident import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
-from sequence.seq_tensor import (
+from sequence.seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
 )
 from sequence.layernorm_dev import layer_norm_dev_py
