@@ -1103,6 +1103,8 @@ def render_markdown(audit, path):
         w("| entry | change | lanes | sabotage | status |")
         w("|---|---|---|---|---|")
         for r, (st, lanes, why), (ss, txt) in sorted(by_src[src], key=lambda x: x[0]["entry"]):
+            if st.startswith("n/a") and ss != "armed":
+                ss, txt = "n/a", "no lane can run it (see status)"
             change = "new" if r["new_anywhere"] else ("moved here" if r["new"] else "/".join(r["kinds"]))
             w(f"| `{r['entry']}` | {change} | {_short(lanes)} | {ss}: {txt} | {st}{': ' + why if why else ''} |")
     with open(path, "w") as fh:

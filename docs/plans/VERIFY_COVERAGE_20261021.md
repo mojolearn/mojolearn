@@ -189,7 +189,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
-| `adam_hyper_f64` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:adam_hyper_f64 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `adam_hyper_f64` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `all_finite_f32` | door/impl | `agglomerative`, `arima`, `arima-011` +527 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `all_finite_f64` | door/impl | `agglomerative`, `arima`, `arima-011` +527 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `arange_i64` | door/impl | `par-svm`, `par-svm-svr`, `svc` +13 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl` | covered |
@@ -204,15 +204,15 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `compact_notnan_f32` | door/impl | - | armed: coverage arm `coverage_hotpath_impl_rows` | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `count_fold_hits_i64` | door/impl | `x-enet-cv`, `x-lasso-cv`, `x-lasso-cv-pos` +4 | armed: coverage arm `coverage_hotpath_impl_rows` | covered |
 | `count_mask_u8` | door/impl | `x-metrics-search`, `x-metrics-splitters`, `x-ridge-cv` +1 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl` | covered |
-| `dot_rows_f32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:dot_rows_f32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `draw_rows_without_replacement_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:draw_rows_without_replacement_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `dot_rows_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `draw_rows_without_replacement_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `encode_labels_f32` | door/impl/kernel | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_label_encode` | covered |
 | `encode_labels_f64` | door/impl/kernel | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_label_encode` | covered |
 | `encode_labels_i32` | door/impl/kernel | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_label_encode` | covered |
 | `encode_labels_i64` | door/impl/kernel | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_label_encode` | covered |
 | `encode_labels_u32` | door/impl/kernel | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_label_encode` | covered |
 | `encode_labels_u8` | door/impl/kernel | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_label_encode` | covered |
-| `epoch_order_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:epoch_order_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `epoch_order_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `equal_elements` | door/impl | `agglomerative`, `arima`, `arima-011` +527 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl` | covered |
 | `first_seen_i32` | door/impl | `x-metrics-search`, `x-metrics-splitters` | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl_rows` | covered |
 | `fold_ids` | door/impl | `cross-val`, `cross-val-folds`, `par-cross-val` +9 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl` | covered |
@@ -237,14 +237,14 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `leave_range_i64` | door/impl | `x-metrics-splitters` | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `mark_split_roles_f32` | door/impl | `x-enet-cv`, `x-lasso-cv`, `x-lasso-cv-pos` +2 | armed: coverage arm `coverage_hotpath_impl_rows` | covered |
 | `mask_from_indices_u8` | door/impl | `x-metrics-search`, `x-metrics-splitters`, `x-ridge-cv` +1 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl` | covered |
-| `mean_std_f32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:mean_std_f32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `mean_std_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `next_combination_i64` | door/impl | `x-metrics-splitters` | armed: coverage arm `coverage_hotpath_impl` | covered |
 | `nonzero_f64_count` | door/impl | `par-graph-agglomerative`, `par-graph-spectral`, `par-graph-umap` +5 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +24; 4 seam patch(es) | covered |
 | `nonzero_f64_fill` | door/impl | `par-graph-agglomerative`, `par-graph-spectral`, `par-graph-umap` +5 | n/a: the GPU base binding's COO scan: on a GPU install every spectral affinity takes the metrics dense entry, so no install reaches it through a public call | covered |
 | `normal_init_f32` | door/impl | `sequence-moe`, `sequence-moe-backward` | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl_rows` | covered |
 | `nsum_f64` | door/impl | `x-cnn-trainer`, `x-cnn-trainer-options` | armed: coverage arm `coverage_array_helpers_impl` | covered |
-| `ocsvm_alpha_init_f32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:ocsvm_alpha_init_f32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `probability_rows_f32` | door/impl | - | owed: no arm reaches core/mojolearn_shell_impl.mojo:ProbRowFlags | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `ocsvm_alpha_init_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `probability_rows_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `radius_neighbors_count` | door | `par-queries-kde`, `par-queries-knn`, `par-queries-nn` +5 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +24; 4 seam patch(es) | covered |
 | `radius_neighbors_fill` | door | `par-queries-kde`, `par-queries-knn`, `par-queries-nn` +5 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +24; 4 seam patch(es) | covered |
 | `ragged_rows_bytes` | door/impl | `bootstrap`, `byte-lm`, `byte-lm-host-infer` +27 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_array_helpers_impl` | covered |
@@ -266,8 +266,8 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `transpose_f32` | door/impl | `agglomerative`, `arima`, `arima-011` +480 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `uniform_init_f32` | door/impl | `sequence-adamax`, `sequence-gru`, `sequence-lion` +17 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl_rows` | covered |
 | `unique_inverse` | kernel | `agglomerative`, `arima`, `arima-011` +453 | armed: coverage arm `coverage_label_encode` | covered |
-| `weighted_draw_rows_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:weighted_draw_rows_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `weighted_pick_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:weighted_pick_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `weighted_draw_rows_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `weighted_pick_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 
 ### `bindings/_mojolearn_arima.mojo`
 
@@ -285,11 +285,11 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
-| `byte_lm_attention_estash_gate` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `byte_lm_attention_estash_gate` | door | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `byte_lm_attention_memory_profile` | door | `byte-lm`, `byte-lm-resident`, `par-byte-lm` +2 | n/a: door-only change (conversion, no arithmetic) | covered |
 | `byte_lm_config_profile` | door | `byte-lm`, `byte-lm-resident`, `language-model-config` +3 | n/a: door-only change (conversion, no arithmetic) | covered |
 | `byte_lm_file_sha256` | new | `byte-lm`, `byte-lm-resident`, `par-byte-lm` +2 | armed: coverage arm `coverage_sha256` | covered |
-| `byte_lm_launch_probe` | door/impl | - | owed: no arm reaches training/byte_lm_binding_impl.mojo:_launch_probe_fresh | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `byte_lm_launch_probe` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `byte_lm_logits` | door/kernel | `byte-lm`, `byte-lm-resident` | armed: CPU gate HOST_SABOTAGE; ATTN_ARM_SABOTAGE, ATTN_SABOTAGE_AMMA +131; 9 seam patch(es) | covered |
 | `byte_lm_model_pool_close` | kernel | - | armed: CPU gate HOST_SABOTAGE; ATTN_ARM_SABOTAGE, ATTN_SABOTAGE_AMMA +130; coverage arm `coverage_label_encode`; 39 seam patch(es) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `byte_lm_model_pool_create` | kernel | - | armed: CPU gate HOST_SABOTAGE; ATTN_ARM_SABOTAGE, ATTN_SABOTAGE_AMMA +130; coverage arm `coverage_label_encode`; 39 seam patch(es) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
@@ -359,7 +359,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
-| `adam_hyper_f64` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:adam_hyper_f64 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `adam_hyper_f64` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `all_finite_f32` | door/impl | `agglomerative`, `arima`, `arima-011` +527 | armed: coverage arm `coverage_host_helpers_impl` | covered |
 | `all_finite_f64` | door/impl | `agglomerative`, `arima`, `arima-011` +527 | armed: coverage arm `coverage_host_helpers_impl` | covered |
 | `arange_i64` | door/impl | `par-svm`, `par-svm-svr`, `svc` +13 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl` | covered |
@@ -377,15 +377,15 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `compact_notnan_f32` | door/impl | - | armed: coverage arm `coverage_hotpath_impl_rows` | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `count_fold_hits_i64` | door/impl | `x-enet-cv`, `x-lasso-cv`, `x-lasso-cv-pos` +4 | armed: coverage arm `coverage_hotpath_impl_rows` | covered |
 | `count_mask_u8` | door/impl | `x-metrics-search`, `x-metrics-splitters`, `x-ridge-cv` +1 | armed: coverage arm `coverage_hotpath_impl` | covered |
-| `dot_rows_f32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:dot_rows_f32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `draw_rows_without_replacement_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:draw_rows_without_replacement_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `dot_rows_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `draw_rows_without_replacement_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `encode_labels_f32` | door/impl | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `encode_labels_f64` | door/impl | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `encode_labels_i32` | door/impl | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `encode_labels_i64` | door/impl | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `encode_labels_u32` | door/impl | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `encode_labels_u8` | door/impl | `bootstrap`, `cross-val`, `cross-val-folds` +172 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
-| `epoch_order_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:epoch_order_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `epoch_order_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `equal_elements` | door/impl | `agglomerative`, `arima`, `arima-011` +527 | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE; coverage arm `coverage_hotpath_impl` | covered |
 | `first_seen_i32` | door/impl | `x-metrics-search`, `x-metrics-splitters` | armed: coverage arm `coverage_hotpath_impl_rows` | covered |
 | `fold_ids` | door/impl | `cross-val`, `cross-val-folds`, `par-cross-val` +9 | armed: coverage arm `coverage_hotpath_impl` | covered |
@@ -411,7 +411,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `leave_range_i64` | door/impl | `x-metrics-splitters` | armed: CPU gate HOST_SABOTAGE; HOTPATH_SABOTAGE | covered |
 | `mark_split_roles_f32` | door/impl | `x-enet-cv`, `x-lasso-cv`, `x-lasso-cv-pos` +2 | armed: coverage arm `coverage_hotpath_impl_rows` | covered |
 | `mask_from_indices_u8` | door/impl | `x-metrics-search`, `x-metrics-splitters`, `x-ridge-cv` +1 | armed: coverage arm `coverage_hotpath_impl` | covered |
-| `mean_std_f32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:mean_std_f32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `mean_std_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `msel_rebase_offsets_i32` | door/impl | `par-forest`, `par-forest-et`, `par-forest-et-clf` +1 | armed: coverage arm `coverage_msel_host_impl` | covered |
 | `next_combination_i64` | door/impl | `x-metrics-splitters` | armed: coverage arm `coverage_hotpath_impl` | covered |
 | `nonzero_f32_fill` | impl | `par-graph-agglomerative`, `par-graph-spectral`, `par-graph-umap` +5 | armed: coverage arm `coverage_core_host_impl` | covered |
@@ -419,8 +419,8 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `nonzero_f64_fill` | door/impl | `par-graph-agglomerative`, `par-graph-spectral`, `par-graph-umap` +5 | armed: coverage arm `coverage_core_host_impl` | covered |
 | `normal_init_f32` | door/impl | `sequence-moe`, `sequence-moe-backward` | armed: coverage arm `coverage_hotpath_impl_rows` | covered |
 | `nsum_f64` | door/impl | `x-cnn-trainer`, `x-cnn-trainer-options` | armed: coverage arm `coverage_array_helpers_impl` | covered |
-| `ocsvm_alpha_init_f32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:ocsvm_alpha_init_f32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `probability_rows_f32` | door/impl | - | owed: no arm reaches core/host_helpers_impl.mojo:probability_rows_f32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `ocsvm_alpha_init_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `probability_rows_f32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `radius_neighbors_count` | door/impl | `par-queries-kde`, `par-queries-knn`, `par-queries-nn` +5 | armed: CPU gate HOST_SABOTAGE; HOST_SIMD_SABOTAGE; 2 seam patch(es) | covered |
 | `radius_neighbors_fill` | door/impl | `par-queries-kde`, `par-queries-knn`, `par-queries-nn` +5 | armed: CPU gate HOST_SABOTAGE; HOST_SIMD_SABOTAGE; 2 seam patch(es) | covered |
 | `ragged_rows_bytes` | door/impl | `bootstrap`, `byte-lm`, `byte-lm-host-infer` +27 | armed: coverage arm `coverage_array_helpers_impl` | covered |
@@ -442,8 +442,8 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `transpose_f32` | door/impl | `agglomerative`, `arima`, `arima-011` +480 | armed: coverage arm `coverage_core_host_impl` | covered |
 | `uniform_init_f32` | door/impl | `sequence-adamax`, `sequence-gru`, `sequence-lion` +17 | armed: coverage arm `coverage_hotpath_impl_rows` | covered |
 | `unique_inverse` | kernel | `agglomerative`, `arima`, `arima-011` +453 | armed: coverage arm `coverage_label_encode` | covered |
-| `weighted_draw_rows_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:weighted_draw_rows_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `weighted_pick_i32` | door/impl | - | owed: no arm reaches core/hotpath_impl_rows.mojo:weighted_pick_i32 | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `weighted_draw_rows_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `weighted_pick_i32` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 
 ### `bindings/_mojolearn_embedding.mojo`
 
@@ -533,7 +533,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `forest_host_et_predict` | door/impl | `bootstrap`, `gbdt-categorical-ctr-tables`, `resample-bca` +4 | armed: FOREST_HOST_SABOTAGE | covered |
 | `forest_host_gbdt_expand_ctr` | door/impl | `bootstrap`, `gbdt-categorical-ctr-tables`, `resample-bca` +4 | armed: GBDT_CTR_HOST_SABOTAGE | covered |
 | `forest_host_gbdt_predict` | door/impl | `bootstrap`, `gbdt-categorical-ctr-tables`, `resample-bca` +4 | armed: FOREST_HOST_SABOTAGE | covered |
-| `forest_host_gbdt_sigmoid` | door/impl | - | owed: no arm reaches core/mojolearn_forest_host_impl.mojo:forest_host_gbdt_sigmoid_into | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `forest_host_gbdt_sigmoid` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `forest_host_gbdt_sigmoid_pair` | door/impl | `bootstrap`, `gbdt-categorical-ctr-tables`, `resample-bca` +4 | armed: FOREST_HOST_SABOTAGE | covered |
 | `forest_host_rf_predict_proba` | door/impl | `bootstrap`, `gbdt-categorical-ctr-tables`, `resample-bca` +4 | armed: FOREST_HOST_SABOTAGE | covered |
 | `forest_host_rf_predict_reg` | door/impl | `bootstrap`, `gbdt-categorical-ctr-tables`, `resample-bca` +4 | armed: FOREST_HOST_SABOTAGE | covered |
@@ -565,16 +565,16 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `gbdt_fit_two_level_feature_freq` | door/impl | `gbdt-feature-freq`, `gbdt-tensor-ctr-tables`, `par-feature-freq` | armed: CPU gate HOST_SABOTAGE; GBDT_BINARY_SABOTAGE; 1 seam patch(es) | covered |
 | `gbdt_predict` | door/impl | `cross-val`, `gbdt-adapter-clf`, `gbdt-adapter-reg` +46 | armed: FOREST_HOST_SABOTAGE | covered |
 | `gbdt_predict_multi` | door/impl | `cross-val`, `gbdt-adapter-clf`, `gbdt-adapter-reg` +46 | armed: FOREST_HOST_SABOTAGE | covered |
-| `gbdt_sigmoid` | door/impl | - | owed: no arm reaches gbdt/host/gbdt_host_entries_impl.mojo:gbdt_host_sigmoid_into | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `gbdt_sigmoid` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `gbdt_sigmoid_pair` | door/impl | `cross-val`, `gbdt-adapter-clf`, `gbdt-adapter-reg` +46 | armed: FOREST_HOST_SABOTAGE | covered |
 
 ### `bindings/_mojolearn_gp.mojo`
 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
-| `gp_log64` | door/kernel | - | owed: no arm reaches gaussian_process/gp_binding_entries.mojo:gp_log64_values | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `gp_log64` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `gp_numeric_mode` | door | `cholesky`, `gp`, `gp-lml-theta` +22 | n/a: door-only change (conversion, no arithmetic) | covered |
-| `gp_restart_uniforms` | door/kernel | - | owed: no arm reaches gaussian_process/gp_binding_entries.mojo:gp_restart_uniforms_values | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `gp_restart_uniforms` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `gp_theta_params` | door/kernel | `gp-lml-theta` | armed: coverage arm `coverage_gp_binding_entries` | covered (new lane): new lane, OWED until recorded |
 | `gpc_fit` | door | `gpc`, `gpc-multiclass`, `par-gpc-fit` +1 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, CHOLESKY_PARALLEL_SABOTAGE +19; 1 seam patch(es) | covered |
 
@@ -583,8 +583,8 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
 | `cholesky_solve` | door | `cholesky`, `par-cholesky` | n/a: door-only change (conversion, no arithmetic) | covered |
-| `gp_log64` | door/kernel | - | owed: no arm reaches gaussian_process/host/gp_host_fit_entries.mojo:gp_log64_list | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `gp_restart_uniforms` | door/kernel | - | owed: no arm reaches gaussian_process/host/gp_host_fit_entries.mojo:gp_restart_uniforms_list | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `gp_log64` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `gp_restart_uniforms` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `gp_theta_params` | door/kernel | `gp-lml-theta` | armed: coverage arm `coverage_gp_host_fit_entries` | covered (new lane): new lane, OWED until recorded |
 | `gpc_fit` | door | `gpc`, `gpc-multiclass`, `par-gpc-fit` +1 | armed: CPU gate HOST_SABOTAGE; GEMM_ORACLE_SABOTAGE_LEGACY_ORDER, HOST_GEMM_SIMD_SABOTAGE +1 | covered |
 | `gpc_ovr_combine` | door | `gpc`, `gpc-multiclass`, `par-gpc-fit` +1 | n/a: door-only change (conversion, no arithmetic) | covered |
@@ -672,7 +672,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `kernel_ridge_fit_ptr` | door/impl | `kernel-ridge`, `kernel-ridge-laplacian`, `kernel-ridge-poly` +8 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, CHOLESKY_PARALLEL_SABOTAGE +21; 5 seam patch(es) | covered |
 | `kernel_ridge_predict` | impl | `kernel-ridge`, `kernel-ridge-laplacian`, `kernel-ridge-poly` +8 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +17; 4 seam patch(es) | covered |
 | `kernel_ridge_predict_ptr` | impl | `kernel-ridge`, `kernel-ridge-laplacian`, `kernel-ridge-poly` +8 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +17; 4 seam patch(es) | covered |
-| `km_rbf_staged` | door/kernel | - | owed: no arm reaches kernel_methods/rbf_resident.mojo:rbf_staged | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `km_rbf_staged` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `nystroem_fit` | impl | `kernel-ridge-laplacian`, `kernel-ridge-poly`, `kernel-ridge-sigmoid` +7 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +17; 8 seam patch(es) | covered |
 | `nystroem_fit_ptr` | door/impl | `kernel-ridge-laplacian`, `kernel-ridge-poly`, `kernel-ridge-sigmoid` +7 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +17; 8 seam patch(es) | covered |
 | `nystroem_transform` | impl | `kernel-ridge-laplacian`, `kernel-ridge-poly`, `kernel-ridge-sigmoid` +7 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +17; 4 seam patch(es) | covered |
@@ -695,12 +695,12 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
-| `fast_from_bf16` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
-| `fast_matmul_bf16` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
-| `fast_to_bf16` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
+| `fast_from_bf16` | door | - | n/a: no lane can run it (see status) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
+| `fast_matmul_bf16` | door | - | n/a: no lane can run it (see status) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
+| `fast_to_bf16` | door | - | n/a: no lane can run it (see status) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
 | `from_f16` | door/impl | `safetensors-widen-f16` | armed: coverage arm `coverage_linalg_door_impl` | covered (new lane): new lane, OWED until recorded |
-| `public_fast_from_bf16` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
-| `public_fast_to_bf16` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
+| `public_fast_from_bf16` | door | - | n/a: no lane can run it (see status) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
+| `public_fast_to_bf16` | door | - | n/a: no lane can run it (see status) | n/a: fast tier only (Apple): the verifier runs identical and refuses a fast process |
 | `qr_r` | door/impl | `linalg-qr`, `x-decomp-eigh-wide-factor-analysis`, `x-decomp-eigh-wide-rotation` +2 | armed: QR_PARALLEL_SABOTAGE | covered |
 | `svdvals` | door/impl/kernel | `linalg-svdvals`, `x-decomp-lu`, `x-decomp-pls` +1 | armed: APPLE_GEMM_NT_MMA_SABOTAGE, GEMM_ARM_SABOTAGE +16; 1 seam patch(es) | covered |
 
@@ -1014,7 +1014,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `bpe_train` | door/impl | `bpe-trainer`, `bpe-vocabulary`, `hf-tokenizer` +1 | armed: BPE_TRAINER_SABOTAGE | covered |
 | `bpe_train_corpus` | door/impl | `tokenized-corpus` | armed: BPE_TRAINER_SABOTAGE; coverage arm `coverage_tokenizer_host_shell_impl` | covered |
 | `bpe_trained_copy` | door/impl | `bpe-trainer`, `bpe-vocabulary`, `hf-tokenizer` +1 | armed: coverage arm `coverage_tokenizer_host_shell_impl` | covered |
-| `generation_initialize` | new | - | n/a: door-only change (conversion, no arithmetic) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `generation_initialize` | new | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `optimizer_finalize` | new | - | n/a: door-only change (conversion, no arithmetic) | owed: migration lane on python/mojolearn/_training_impl.py (running): lane owed after it lands; tools/lane_accounting.py DECLARED_LANELESS already names training.chunked_lm_head_loss and training.mlp_inference_sessions |
 | `sha256_hex` | new | `bootstrap`, `bpe-trainer`, `bpe-vocabulary` +24 | armed: coverage arm `coverage_sha256` | covered |
 | `tokenizer_pretokenize` | door/impl | - | armed: coverage arm `coverage_tokenizer_host_shell_impl` | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
@@ -1212,7 +1212,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
-| `x_cnn_adam` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: no live caller: _expansion_cnn._sgd/_adam/_softmax_xent are never called |
+| `x_cnn_adam` | door | - | n/a: no lane can run it (see status) | n/a: no live caller: _expansion_cnn._sgd/_adam/_softmax_xent are never called |
 | `x_cnn_adam_hyper_d` | door/impl | `x-cnn-trainer`, `x-cnn-trainer-options` | armed: coverage arm `coverage_device_entries_impl` | covered |
 | `x_cnn_adam_r` | door | `x-cnn-trainer`, `x-cnn-trainer-options` | n/a: door-only change (conversion, no arithmetic) | covered |
 | `x_cnn_adaptive_pool` | door | `x-cnn-globalpool`, `x-cnn-pool-options` | armed: 3 seam patch(es) | covered |
@@ -1247,7 +1247,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `x_cnn_pad2d_forward` | door | `x-cnn-conv-options`, `x-cnn-conv1d`, `x-cnn-conv2d` +4 | n/a: door-only change (conversion, no arithmetic) | covered |
 | `x_cnn_pad2d_m` | door | `x-cnn-conv-options`, `x-cnn-conv1d`, `x-cnn-conv2d` +4 | armed: 1 seam patch(es) | covered |
 | `x_cnn_pool_shape` | door | `x-cnn-globalpool`, `x-cnn-pool`, `x-cnn-pool-options` +2 | n/a: door-only change (conversion, no arithmetic) | covered |
-| `x_cnn_sgd` | door | - | n/a: door-only change (conversion, no arithmetic) | n/a: no live caller: _expansion_cnn._sgd/_adam/_softmax_xent are never called |
+| `x_cnn_sgd` | door | - | n/a: no lane can run it (see status) | n/a: no live caller: _expansion_cnn._sgd/_adam/_softmax_xent are never called |
 | `x_cnn_sgd_r` | door | `x-cnn-trainer`, `x-cnn-trainer-options` | n/a: door-only change (conversion, no arithmetic) | covered |
 | `x_cnn_spmm` | door/impl | `x-cnn-gcn`, `x-cnn-gnn-options`, `x-cnn-sage` | armed: coverage arm `coverage_device_entries_impl`; 1 seam patch(es) | covered |
 | `x_cnn_spmm_m` | door/impl | `x-cnn-gcn`, `x-cnn-gnn-options`, `x-cnn-sage` | armed: coverage arm `coverage_device_entries_impl`; 1 seam patch(es) | covered |
@@ -1380,7 +1380,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `x_decomp_grp_fit_fused` | door/kernel | `x-decomp-grp`, `x-decomp-srp` | armed: coverage arm `coverage_resident`; 4 seam patch(es) | covered |
 | `x_decomp_ica_solve` | door/kernel | `x-decomp-eigh-wide-fastica`, `x-decomp-fastica` | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; coverage arm `coverage_resident`, `coverage_select_dev` +1; 10 seam patch(es) | covered |
 | `x_decomp_idn_flags` | door/kernel | `cholesky`, `ols`, `ols-no-intercept` +7 | n/a: a compile-time route-flag word, no data value | covered |
-| `x_decomp_knn_select` | door/kernel | - | owed: no arm reaches x_decomp/api.mojo:knn_select_run | n/a: n/a: no live caller (the _expansion_decomp helper that calls it is never called) |
+| `x_decomp_knn_select` | door/kernel | - | n/a: no lane can run it (see status) | n/a: n/a: no live caller (the _expansion_decomp helper that calls it is never called) |
 | `x_decomp_lars_rows` | door/kernel | `x-decomp-dict-learning`, `x-decomp-sparse-pca` | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; 10 seam patch(es) | covered |
 | `x_decomp_lasso_rows` | door/kernel | `x-decomp-dict-learning`, `x-decomp-sparse-pca` | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; 10 seam patch(es) | covered |
 | `x_decomp_lda_fit` | door/kernel | `x-decomp-lda` | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; coverage arm `coverage_resident`; 11 seam patch(es) | covered |
@@ -1397,7 +1397,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `x_decomp_lu_solve` | door/kernel | `cholesky`, `par-cholesky`, `x-decomp-eigh-wide-factor-analysis` +8 | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; 8 seam patch(es) | covered |
 | `x_decomp_mcd` | door/kernel | `x-decomp-eigh-wide-mincovdet`, `x-decomp-robust-cov` | armed: APPLE_GEMM_NT_MMA_SABOTAGE, CHOLESKY_PARALLEL_SABOTAGE +19; coverage arm `coverage_resident`; 11 seam patch(es) | covered |
 | `x_decomp_mcd_cov_probe` | door/kernel | - | armed: coverage arm `coverage_resident` | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
-| `x_decomp_mcd_cov_reach` | door/kernel | - | owed: no arm reaches x_decomp/mcd_bmma.mojo:mcd_cov_reach_run | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `x_decomp_mcd_cov_reach` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `x_decomp_mds_fit` | door/kernel | `x-decomp-manifold` | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; coverage arm `coverage_resident`; 12 seam patch(es) | covered |
 | `x_decomp_move` | door/kernel | `cholesky`, `linalg-eigh`, `linalg-qr` +45 | armed: coverage arm `coverage_api` | covered |
 | `x_decomp_nmf_nndsvd` | door/kernel | `x-decomp-nmf` | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; coverage arm `coverage_resident`; 10 seam patch(es) | covered |
@@ -1424,7 +1424,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `x_decomp_svd` | door/kernel | `ols`, `ols-no-intercept`, `ols-weighted` +22 | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; 8 seam patch(es) | covered |
 | `x_decomp_topn_desc` | door/kernel | `x-decomp-als` | armed: coverage arm `coverage_api` | covered |
 | `x_decomp_trisolve` | door/kernel | `x-decomp-manifold` | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; 8 seam patch(es) | covered |
-| `x_decomp_triu_nonzero` | door/kernel | - | owed: no arm reaches x_decomp/api.mojo:triu_nonzero_run | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `x_decomp_triu_nonzero` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `x_decomp_tsqr_q` | door/kernel | `linalg-qr`, `x-decomp-lu`, `x-decomp-pls` +1 | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; 8 seam patch(es) | covered |
 | `x_decomp_tsqr_r` | door/kernel | `linalg-qr`, `ols`, `ols-no-intercept` +12 | armed: GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; 8 seam patch(es) | covered |
 
@@ -1498,7 +1498,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `x_decomp_svd` | door/kernel | `ols`, `ols-no-intercept`, `ols-weighted` +22 | armed: CPU gate HOST_SABOTAGE; GEMM_ORACLE_SABOTAGE_LEGACY_ORDER; 16 seam patch(es) | covered |
 | `x_decomp_topn_desc` | door/kernel | `x-decomp-als` | armed: coverage arm `coverage_api` | covered |
 | `x_decomp_trisolve` | door/kernel | `x-decomp-manifold` | armed: CPU gate HOST_SABOTAGE; GEMM_ORACLE_SABOTAGE_LEGACY_ORDER; 16 seam patch(es) | covered |
-| `x_decomp_triu_nonzero` | door/kernel | - | owed: no arm reaches x_decomp/api.mojo:triu_nonzero_run | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `x_decomp_triu_nonzero` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `x_decomp_tsqr_q` | door/kernel | `linalg-qr`, `x-decomp-lu`, `x-decomp-pls` +1 | armed: CPU gate HOST_SABOTAGE; GEMM_ORACLE_SABOTAGE_LEGACY_ORDER; 16 seam patch(es) | covered |
 | `x_decomp_tsqr_r` | door/kernel | `linalg-qr`, `ols`, `ols-no-intercept` +12 | armed: CPU gate HOST_SABOTAGE; GEMM_ORACLE_SABOTAGE_LEGACY_ORDER; 16 seam patch(es) | covered |
 
@@ -1541,7 +1541,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `x_neighbors_nc_fit_lean` | door/kernel | `x-neighbors-knn-imputer` | n/a: a route/capability flag, no value output | covered |
 | `x_neighbors_ocsvm_resident` | door | `x-neighbors-ocsvm` | armed: 4 seam patch(es) | covered |
 | `x_neighbors_ocsvm_resident_idn` | door | `x-neighbors-ocsvm` | armed: 4 seam patch(es) | covered |
-| `x_neighbors_purity_flags` | door/kernel | - | owed: no arm reaches x_neighbors/sort_items.mojo:purity_flags | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `x_neighbors_purity_flags` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 
 ### `bindings/_mojolearn_x_neighbors_host.mojo`
 
@@ -1549,7 +1549,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 |---|---|---|---|---|
 | `x_neighbors_kpca_resident` | door/kernel | `x-decomp-eigh-wide-kpca`, `x-neighbors-kpca` | n/a: a route selector constant, no value output | covered |
 | `x_neighbors_lp_fast_resident` | door/kernel | `x-neighbors-label-propagation`, `x-neighbors-label-spreading` | n/a: a route selector constant (0 on the host column), no value output | covered |
-| `x_neighbors_purity_flags` | door/kernel | - | owed: no arm reaches x_neighbors/sort_items.mojo:purity_flags | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `x_neighbors_purity_flags` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 
 ### `bindings/_mojolearn_x_prep.mojo`
 
@@ -1566,7 +1566,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 
 | entry | change | lanes | sabotage | status |
 |---|---|---|---|---|
-| `x_prep_ii_gather` | door/impl | - | owed: no arm reaches x_prep/ii_checks_impl.mojo:check_gather_columns | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `x_prep_ii_gather` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 
 ### `bindings/_mojolearn_x_sequence.mojo`
 
@@ -1679,9 +1679,9 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `prophet_fit` | door/impl/kernel | `sequence-prophet` | armed: CPU gate HOST_SABOTAGE; GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +14; coverage arm `coverage_label_encode`; 29 seam patch(es) | covered |
 | `prophet_predict` | door/impl/kernel | `sequence-prophet` | armed: CPU gate HOST_SABOTAGE; GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +13; coverage arm `coverage_label_encode`; 29 seam patch(es) | covered |
 | `rnn_fit` | door/impl/kernel | `sequence-adamax`, `sequence-gru`, `sequence-lion` +4 | armed: CPU gate HOST_SABOTAGE; GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +13; coverage arm `coverage_label_encode`; 30 seam patch(es) | covered |
-| `rnn_n_params` | door/impl | - | owed: no arm reaches sequence/ops_impl.mojo:net_of | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `rnn_n_params` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `rnn_predict` | door/impl/kernel | `sequence-adamax`, `sequence-gru`, `sequence-lion` +4 | armed: CPU gate HOST_SABOTAGE; GEMM_ARM_SABOTAGE, GEMM_SABOTAGE_ADMIT_ALWAYS +13; coverage arm `coverage_label_encode`; 29 seam patch(es) | covered |
-| `sched_exp_block` | door/kernel | - | owed: no arm reaches sequence/sched_table.mojo:sched_exp_block | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `sched_exp_block` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `seq_tensor_alloc` | door/kernel | `embedding`, `embedding-sort`, `sequence-adafactor` +11 | armed: coverage arm `coverage_seq_tensor` | covered |
 | `seq_tensor_copy` | door/kernel | `embedding`, `embedding-sort`, `sequence-adafactor` +11 | armed: coverage arm `coverage_seq_tensor` | covered |
 | `seq_tensor_download` | door/kernel | `embedding`, `embedding-sort`, `sequence-adafactor` +11 | armed: coverage arm `coverage_seq_tensor` | covered |
@@ -1703,7 +1703,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `adafactor_step` | door/impl/kernel | `sequence-adafactor` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `croston` | door/impl/kernel | `sequence-croston` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `croston_forecast` | door/impl/kernel | `sequence-croston` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
-| `epoch_schedule` | door/kernel | - | owed: no arm reaches sequence/schedule.mojo:epoch_schedule | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `epoch_schedule` | door/kernel | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `ets` | door/impl/kernel | `sequence-ets` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `garch` | door/impl/kernel | `sequence-garch` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `lamb_step` | door/impl/kernel | `sequence-lamb` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`, `coverage_ops_impl`; 31 seam patch(es) | covered |
@@ -1794,7 +1794,7 @@ Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the 
 | `prophet_fit` | door/impl/kernel | `sequence-prophet` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `prophet_predict` | door/impl/kernel | `sequence-prophet` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `rnn_fit` | door/impl/kernel | `sequence-adamax`, `sequence-gru`, `sequence-lion` +4 | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 32 seam patch(es) | covered |
-| `rnn_n_params` | door/impl | - | owed: no arm reaches sequence/ops_impl.mojo:net_of | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
+| `rnn_n_params` | door/impl | - | n/a: no lane can run it (see status) | n/a: no Python caller in the package (manifest, tests or Mojo-internal dispatch only) |
 | `rnn_predict` | door/impl/kernel | `sequence-adamax`, `sequence-gru`, `sequence-lion` +4 | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `stl` | door/impl/kernel | `sequence-stl` | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
 | `theta` | door/impl/kernel | `bootstrap`, `gp`, `gp-lml-theta` +43 | armed: CPU gate HOST_SABOTAGE; coverage arm `coverage_label_encode`; 31 seam patch(es) | covered |
