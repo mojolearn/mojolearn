@@ -936,6 +936,11 @@ def _py_bytes_list(raw: PythonObject) raises -> List[UInt8]:
     var out = List[UInt8](length=n, fill=UInt8(0))
     if n > 0:
         memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(Int(py=arr.buffer_info()[0])), count=n)
+    # Keepalive: Mojo drops `arr` at its last named use (`arr.buffer_info()`),
+    # which freed the array before the memcpy read its buffer; small tokens
+    # then read the allocator's free-list bytes (ValueError "token 1 repeats
+    # token 0 (80)" from `models.Tokenizer`). Hold it until the copy is done.
+    _ = arr^
     return out^
 
 
