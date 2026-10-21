@@ -1,0 +1,323 @@
+{
+  "schema": "core-completion-closeout-v1",
+  "date_local": "2026-10-20",
+  "scope": "Finish current source batch; defer broader work at owner request",
+  "branch": "finish/core-completion-20261020",
+  "code_commit": "f89ef53bff28a95e64e96c81a938e1cebd56c851",
+  "native_commit": "ddabfd9321dec3418f7e465a8818269de38686f4",
+  "package_test_commit": "fbb7dd0f4ea57e3da6d3345083ba5ae24eb70cee",
+  "broad_merge_to_main": false,
+  "public_linear_installer_active": false,
+  "whole_library_native_qualified": false,
+  "optimizer_default_promoted": false,
+  "builds": [
+    {
+      "stage": "stage65",
+      "source_commit": "cd8afbae8891329b6756c6a0cdc4d0b5969d548b",
+      "targets": [
+        {
+          "target": "tokenizer",
+          "exit_code": 1,
+          "seconds": 242.246,
+          "command": [
+            "bash",
+            "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-cd8afbae8891329b6756c6a0cdc4d0b5969d548b/source/tools/with_build_lock.sh",
+            "bash",
+            "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-cd8afbae8891329b6756c6a0cdc4d0b5969d548b/source/bindings/build_tokenizer_host.sh"
+          ]
+        }
+      ]
+    },
+    {
+      "stage": "stage66",
+      "source_commit": "ddabfd9321dec3418f7e465a8818269de38686f4",
+      "targets": [
+        {
+          "target": "tokenizer",
+          "exit_code": 0,
+          "seconds": 239.029,
+          "command": [
+            "bash",
+            "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-ddabfd9321dec3418f7e465a8818269de38686f4/source/tools/with_build_lock.sh",
+            "bash",
+            "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-ddabfd9321dec3418f7e465a8818269de38686f4/source/bindings/build_tokenizer_host.sh"
+          ],
+          "binary": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020/freeze-ddabfd9321dec3418f7e465a8818269de38686f4/tokenizer-host/_mojolearn_tokenizer_host.so",
+          "sha256": "c8d80eb07fca0f5b2a89515042f22e3ad2dccb5b6db54d00e05ab230ac3dca05"
+        }
+      ]
+    }
+  ],
+  "closure_reuse": [
+    {
+      "script": "build_tokenizer_host.sh",
+      "records": [
+        {
+          "scope": "closure",
+          "digest": "f22a61966a6f16a60b197bb8a8f2636f3416a7e8c5ac5cfd1840c448152992a5",
+          "files": 207
+        },
+        {
+          "scope": "closure",
+          "digest": "f22a61966a6f16a60b197bb8a8f2636f3416a7e8c5ac5cfd1840c448152992a5",
+          "files": 207
+        }
+      ],
+      "match": true
+    },
+    {
+      "script": "build_x_sequence_host.sh",
+      "records": [
+        {
+          "scope": "closure",
+          "digest": "3b86b4f6ec6462c0d6c6dd720861ef5fb847f72e66b4202f7fba3522c79256e0",
+          "files": 169
+        },
+        {
+          "scope": "closure",
+          "digest": "3b86b4f6ec6462c0d6c6dd720861ef5fb847f72e66b4202f7fba3522c79256e0",
+          "files": 169
+        }
+      ],
+      "match": true
+    }
+  ],
+  "tests": [
+    {
+      "vendor": "cpu",
+      "full_run": {
+        "exit_code": 1,
+        "total": 290,
+        "passed": 289,
+        "failed": 1,
+        "skipped": 0,
+        "seconds": 29.265,
+        "source_commit": "fbb7dd0f4ea57e3da6d3345083ba5ae24eb70cee",
+        "failures": [
+          {
+            "name": "test_native_attribute_boundary_refuses_python_hooks_before_execution[key]",
+            "message": "AssertionError: dictionary key callback"
+          }
+        ]
+      },
+      "groups": {
+        "mojolearn.tests.test_classical_native_owner": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_ols_native_owner": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_metadata_native_owner": {
+          "total": 25,
+          "passed": 25,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_archive_native_owner": {
+          "total": 55,
+          "passed": 55,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_public_output_native_owner": {
+          "total": 6,
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_exceptions_native_owner": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_pandas_native_owner": {
+          "total": 34,
+          "passed": 34,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_tags_native_owner": {
+          "total": 4,
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_host_native_owner": {
+          "total": 10,
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_pca_exact_native_owner": {
+          "total": 48,
+          "passed": 48,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_warning_native_owner": {
+          "total": 30,
+          "passed": 30,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_native_classical_public": {
+          "total": 20,
+          "passed": 19,
+          "failed": 1,
+          "skipped": 0
+        }
+      },
+      "supplement": {
+        "vendor": "cpu",
+        "exit_code": 0,
+        "total": 1,
+        "failed": 0,
+        "skipped": 0,
+        "passed": 1
+      },
+      "full_evidence": "stage67-native-cpu-summary.json",
+      "supplement_evidence": "final-key-fixture/cpu-summary.json",
+      "successful_distinct_cases_after_repair": 290,
+      "single_all_green_full_run": false
+    },
+    {
+      "vendor": "metal",
+      "full_run": {
+        "exit_code": 1,
+        "total": 290,
+        "passed": 289,
+        "failed": 1,
+        "skipped": 0,
+        "seconds": 32.327,
+        "source_commit": "fbb7dd0f4ea57e3da6d3345083ba5ae24eb70cee",
+        "failures": [
+          {
+            "name": "test_native_attribute_boundary_refuses_python_hooks_before_execution[key]",
+            "message": "AssertionError: dictionary key callback"
+          }
+        ]
+      },
+      "groups": {
+        "mojolearn.tests.test_classical_native_owner": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_ols_native_owner": {
+          "total": 23,
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_metadata_native_owner": {
+          "total": 25,
+          "passed": 25,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_archive_native_owner": {
+          "total": 55,
+          "passed": 55,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_public_output_native_owner": {
+          "total": 6,
+          "passed": 6,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_exceptions_native_owner": {
+          "total": 12,
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_pandas_native_owner": {
+          "total": 34,
+          "passed": 34,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_tags_native_owner": {
+          "total": 4,
+          "passed": 4,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_host_native_owner": {
+          "total": 10,
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_pca_exact_native_owner": {
+          "total": 48,
+          "passed": 48,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_classical_warning_native_owner": {
+          "total": 30,
+          "passed": 30,
+          "failed": 0,
+          "skipped": 0
+        },
+        "mojolearn.tests.test_native_classical_public": {
+          "total": 20,
+          "passed": 19,
+          "failed": 1,
+          "skipped": 0
+        }
+      },
+      "supplement": {
+        "vendor": "metal",
+        "exit_code": 0,
+        "total": 1,
+        "failed": 0,
+        "skipped": 0,
+        "passed": 1
+      },
+      "full_evidence": "stage67-native-metal-summary.json",
+      "supplement_evidence": "final-key-fixture/metal-summary.json",
+      "successful_distinct_cases_after_repair": 290,
+      "single_all_green_full_run": false
+    }
+  ],
+  "interpretation": "The full suite remains a recorded 289/290 result on each device. Its sole failure occurred during poison fixture setup; the repaired exact case separately passes on both devices. Together these cover 290 distinct cases per device, not a fabricated all-green single run.",
+  "remaining": [
+    "public compatibility and transitive native API migration",
+    "supported upstream PythonObject/Session ownership repair",
+    "coherent current-source installed package and standalone coverage",
+    "native NVIDIA PTX/tree witness",
+    "affected vendor and physical distributed qualification",
+    "full-workload optimizer A/B before default promotion"
+  ],
+  "retention": {
+    "stages61_64": {
+      "key": "measurements/core-completion/2026-10-20/native-runtime/stages61-64-handoff-artifacts.tgz",
+      "sha256": "422bd8db5a402566357b400db3db57696b144dee1749281dc754a4122d7724b7",
+      "bytes": 176072164,
+      "full_get_verified": true
+    },
+    "final_batch_receipt": "final-core-completion-r2.json",
+    "final_batch": {
+      "key": "measurements/core-completion/2026-10-20/native-runtime/final-core-completion-artifacts.tgz",
+      "sha256": "cc78c7ae304e0c5fbae28cc6dfb822c1d5fd1354870c6eb50f3cc65860dd1979",
+      "bytes": 136166812,
+      "full_get_verified": true
+    }
+  },
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/core-completion-20261020",
+  "owned_gpu_work_active": false,
+  "delegated_lanes_complete": true,
+  "further_work_deferred_by_owner": true
+}

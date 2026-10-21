@@ -66,8 +66,32 @@ qualified public algorithms. Partial selections never qualify a release.
 | Standalone native smoke changes | `E/native-only-stage63-{cpu,metal}/summary.json` | Five changed cases pass on CPU and five on Metal. Other 31 fixtures have unchanged native closures with earlier retained proof. Local tests are not interpreter-isolated; new changed AMD/NVIDIA paths remain unqualified. Earlier Linux/AMD interpreter-free results remain scoped to their frozen source. |
 | Installed package | `E/installed-public-stage58-archive-repair-{cpu,metal}/receipt.json`; `installed-public-stage58-generation-device-metal/receipt.json` | Earlier installed wheel: Metal-labelled suite 179 passes, including CPU generation cases; separate explicit Metal generation 23/23 closes that device gap and overlaps those 179. CPU 177 passes plus two explicit GPU-only skips, so the strict completeness controller fails. Not a current-source or whole-release wheel. |
 
-The final closeout supplement records the last source batch separately; never
-add overlapping groups above into a single pass count.
+### Final current-batch closeout
+
+Final code/test commit: `f89ef53bff28a95e64e96c81a938e1cebd56c851`.
+Native binding source: `ddabfd9321dec3418f7e465a8818269de38686f4`.
+Only the changed tokenizer/owner binding was rebuilt; the sequence dependency
+closure exactly matches the accepted stage63 binary and was reused.
+
+The final full targeted suite records **289/290 passes, no skips, on each of
+CPU and Metal**. Its one failure occurs in callback-poison test setup, before
+the operation being audited. The corrected exact case separately passes 1/1
+on each device, with strict native audits and no callback execution. Thus all
+290 distinct selected cases have passing evidence; this is composed evidence,
+not a claim that the original full run passed. The selected cases include
+48 private PCA cases, 30 warning cases and 20 temporary activations of real
+public linear-model classes. The public installer remains inactive.
+
+See [the machine-readable closeout](core_completion_closeout_20261020.json),
+`E/stage67-native-{cpu,metal}-summary.json`, and
+`E/final-key-fixture/{cpu,metal}-summary.json`. The final test-only repairs
+changed no product source or native binary. Original stage65 linker failure,
+stage66/67 test failures and their precise repairs are retained. The linker
+repair uses supported `OwnedDLHandle.get_function` on the active CPython
+library, without toolchain changes or a Python callback.
+
+No whole-library, installed-current-wheel, cross-vendor or performance claim
+follows from this slice. Never add overlapping groups above into a suite count.
 
 ## Current implementation boundary
 
@@ -146,6 +170,19 @@ Local manifest and verification are `stages61-64-handoff-manifest.json` and
 Earlier sources, installed wheel and evidence are
 in the stages47–50, stages51–58, stages59–60-installed and native-only bundles
 recorded in E. Keep both successful and original failed runs.
+
+The final batch, including the failed and repaired builds, original test
+failures, corrected fixture, compiled binary and source, is also verified
+locally and by full R2 readback: `E/final-core-completion-artifacts.tgz`,
+136,166,812 bytes, SHA-256
+`cc78c7ae304e0c5fbae28cc6dfb822c1d5fd1354870c6eb50f3cc65860dd1979`.
+Its R2 key is
+`measurements/core-completion/2026-10-20/native-runtime/final-core-completion-artifacts.tgz`;
+receipts are `final-core-completion-{retention,r2}.json` in E.
+
+All three delegated lanes have finished. No build, test, development or owned
+GPU job is left running by this handoff. Resume the deferred work only when
+Andrew asks; the present session stops after committing this record.
 
 Do not publish the site/docs/PyPI as part of resumption without Andrew asking.
 Do not merge the broad migration as fully qualified while the failures and
