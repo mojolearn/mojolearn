@@ -1716,13 +1716,31 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     linear_model.py's LogisticRegression weight helper imports
     `_trees_x_bind` and `_class_weight_rows` from the trees doors inside its
     body (e9608596a), and every linear lane took the forest trees
-    (`_region_import_edges`, `_extender_fires`)."""
+    (`_region_import_edges`, `_extender_fires`).
+
+    REMEASURED 2026-10-21 (lane/fix-lane-select-tests, main d470e46eb). Found
+    red: kmeans_oracle answered 530 once 19307b24a moved the estimators host
+    binding's oracle calls into core/estimators_host_impl.mojo, whose whole
+    closure every caller of any export took (fixed in the selector,
+    `_mojo_symbol_reach`, not re-pinned to 530):
+      kmeans_oracle        83 -> 84  ivf-short-fill (354b8049a, 2026-10-21),
+                                     an IVF index over this library's KMeans
+      neural_inference.py  41 -> 44  four NEW lanes (cross-vendor-fold,
+                                     sequence-export-roundtrip,
+                                     transformer-decode-load-state, 9adda0406;
+                                     hf-causal-lm-stream, a1e1635b1), minus
+                                     gbdt-categorical-ctr-tables: its edge was
+                                     `m.save(...)` on the fitted model matching
+                                     `_samba_checkpoint.save` by name (an
+                                     attribute of a call's result is a method,
+                                     `_call_bound_locals`); `host_model` reads
+                                     forest, GBDT and classical files only"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 83),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 84),
                       ("core/gbdt_host_predict.mojo", 55),
                       ("core/forest_host_predict.mojo", 92),
                       ("core/forest_inference.mojo", 52),
-                      ("python/mojolearn/neural_inference.py", 41)):
+                      ("python/mojolearn/neural_inference.py", 44)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
@@ -1850,10 +1868,11 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 41, \
-        ("the re-export rule moved neural_inference.py off its measured 41 lanes (40 + hf-checkpoint,"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 44, \
+        ("the re-export rule moved neural_inference.py off its measured 44 lanes (40 + hf-checkpoint,"
          " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
-         " plus optim-maximize, 2026-09-28)")
+         " plus optim-maximize, 2026-09-28; plus four new lanes and minus gbdt-categorical-ctr-tables,"
+         " 2026-10-21, see test_the_wider_mojo_walk_did_not_widen_the_narrow_answers)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
     # checked for loses it. Held per LANE and not per file since 2026-09-21:
