@@ -49,3 +49,32 @@ compiled and passed locally (8.83 seconds compile, 0.26 seconds execution), with
 no Python import in its 90-file source closure or linked interpreter dependency.
 This single native-core witness does not qualify a Python-free library release.
 Evidence: `~/mojolearn-evidence/core-completion-20261020/native-only-probe/`.
+
+Retained results on 2026-10-20 now cover all 35 currently written fixtures:
+four CPU cases pass on Apple and inside an interpreter-free Linux chroot, and
+31 GPU cases pass on Apple. The Linux run is
+[39520969549](https://github.com/mojolearn/mojolearn/actions/runs/39520969549).
+Its workflow correctly exits nonzero because library-wide coverage remains
+incomplete. These are frozen integration-source results, not an assertion that
+the current main branch or an installed wheel has the same native closure.
+
+The manifest inventories 603 public exports, including 101 proven aliases.
+After aliases are removed, 37 entries have mapped standalone witnesses,
+396 still lack fixtures, nine are blocked by their current CPython-bound owner,
+and 60 are explicitly nonalgorithm entries. These counts include functions and
+helpers and are not counts of distinct estimators. Original compile/runtime
+failures are retained alongside repairs: a UMAP test entrypoint import, KDE
+borrow origins, a checker false positive, and an IVF oracle that incorrectly
+required two different arithmetic folds to return the same bits. The IVF test
+now checks the selected fold independently and retains its negative control.
+
+Per-case source/binary hashes, reuse decisions, evidence paths and scope are in
+[`native_only_20261020.json`](native_only_20261020.json). Only comment changes
+to the two KNN entrypoints reuse nonidentical source bytes; their executable
+lines and every transitive source file are unchanged. All other admitted
+source closures match byte for byte. The first actual binary/source/log bundle
+is verified on the Mac and uploaded to R2 at
+`measurements/core-completion/2026-10-20/native-only/first-linux-and-mac-artifacts.tgz`.
+Later smoke rounds remain retained on the Mac pending their incremental R2
+upload. NVIDIA/AMD standalone runs, installed-wheel checks, and complete native
+owner interfaces remain pending. No smoke timing promotes a performance default.
