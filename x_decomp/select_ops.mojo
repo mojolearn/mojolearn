@@ -15,9 +15,9 @@ integer per element. Nothing here rounds, so the host column and every
 vendor agree by construction.
 
 This module imports no device code: bindings/_mojolearn_x_decomp_host.mojo
-registers `reduce_py` and `order_small_py` from it, the GPU binding registers
-them too (host buffers) beside the device entries."""
-from std.python import PythonObject
+registers `reduce_py` and `order_small_py` from its shell
+x_decomp/select_ops_pyapi.mojo, the GPU binding registers them too (host
+buffers) beside the device entries."""
 
 from x_decomp.cells import F32Ptr
 
@@ -85,41 +85,18 @@ def order_rank(src: F32Ptr, n: Int, i: Int) -> Int:
     return r
 
 
-def _addr(o: PythonObject) raises -> F32Ptr:
-    var a = Int(py=o)
-    if a == 0:
-        raise Error("x_decomp: null float32 buffer address")
-    return F32Ptr(unsafe_from_address=a)
-
-
-def _cnt(p: PythonObject, i: Int) raises -> Int:
-    var v = Int(py=p[i])
-    if v < 0 or v > 2147483647:
-        raise Error("x_decomp: dimension out of range")
-    return v
-
-
-def reduce_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst[0] = the op (p = [count, op]: 0 max |x|, 1 max, 2 min) over the
-    first count floats at host address a."""
-    var count = _cnt(p, 0)
-    var op = Int(py=p[1])
+def reduce_run(src: F32Ptr, dst: F32Ptr, count: Int, op: Int) raises:
+    """`reduce_py`'s typed body: dst[0] = the op over src[0 .. count)."""
     if count < 1:
         raise Error("x_decomp: reduce needs at least one value")
     if op < 0 or op > SEL_LAST:
         raise Error("x_decomp: unknown reduce op")
-    _addr(dst).unsafe_store(0, sel_fold(op, _addr(a), 0, count))
-    return PythonObject(1)
+    dst.unsafe_store(0, sel_fold(op, src, 0, count))
 
 
-def order_small_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """dst (p = [n] exact floats) = the stable ascending order of the n
-    floats at host address a (see `order_less`)."""
-    var n = _cnt(p, 0)
+def order_small_run(src: F32Ptr, out: F32Ptr, n: Int) raises:
+    """`order_small_py`'s typed body: out = the stable ascending order of src."""
     if n > SEL_ORDER_MAX:
         raise Error("x_decomp: order_small exceeds its bound")
-    var src = _addr(a)
-    var out = _addr(dst)
     for i in range(n):
         out.unsafe_store(order_rank(src, n, i), Float32(i))
-    return PythonObject(n)
