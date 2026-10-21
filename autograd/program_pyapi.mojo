@@ -9,7 +9,7 @@ from autograd.execution_profile_pyapi import execution_profile_object
 from sequence.ops import FP
 from core.cast_in import CastIn, cast_in_kind, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from autograd.rankn import ShapeN
-from autograd.program_arrays import output_array, is_integer_input, uint64_input
+from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
 from autograd.tape import Tape
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.ops_api import ops_session

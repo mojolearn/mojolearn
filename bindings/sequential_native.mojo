@@ -9,7 +9,7 @@ from bindings.sequential_description import sequential_fields, sequential_append
 from bindings.sequential_execution import sequential_entries, sequential_fit, sequential_forward, sequential_predict, sequential_targets
 from bindings.sequential_weights import sequential_parameter_layers, sequential_load_weights
 from bindings.sequential_checkpoint import sequential_save, sequential_load_checkpoint
-from autograd.program_arrays import initialize_program_arrays
+from autograd.program_arrays_pyapi import initialize_program_arrays
 from bindings.sequential_admission import sequential_admit
 
 

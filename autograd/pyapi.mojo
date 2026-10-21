@@ -22,7 +22,7 @@ from sequence.recurrent import OptConfig
 from autograd.model import FIT_STATE_WORDS, FS_EPOCH, IP64, FitConfig, FitValidation, ModelSpec, model_fit, model_fit_state, model_predict, parse_model
 from autograd.ops_api import ops_session, ops_session_close, ops_session_open
 from autograd.program import OpsProgram
-from autograd.program_arrays import initialize_program_arrays
+from autograd.program_arrays_pyapi import initialize_program_arrays
 from autograd.rankn import ShapeN
 from sequence.ops import FP
 from autograd.rankn_api import rn_dims, rn_shape

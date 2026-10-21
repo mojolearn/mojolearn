@@ -16,7 +16,7 @@ from autograd.distributed_checkpoint import (
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_runtime import replay_values
 from autograd.program_pyapi import array_input, output_array
-from autograd.program_arrays import initialize_program_arrays
+from autograd.program_arrays_pyapi import initialize_program_arrays
 from autograd.rankn import ShapeN
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.optim import OptimizerConfig, optimizer_slots, optimizer_config_packed

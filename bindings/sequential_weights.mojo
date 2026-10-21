@@ -5,7 +5,7 @@
 # mapping/tensor subclasses can define caller protocols; those are not a
 # qualification of arbitrary Python callbacks as native execution.
 from std.python import Python, PythonObject
-from autograd.weight_frontend import _checkpoint, _record
+from autograd.weight_frontend_pyapi import _checkpoint, _record
 from autograd.program_pyapi import ProgramInput
 from bindings.sequential_description import sequential_fields, sequential_program, sequential_table
 from bindings.sequential_execution import sequential_entries

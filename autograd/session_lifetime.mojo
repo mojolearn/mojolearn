@@ -4,7 +4,7 @@
 from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session_open, ops_session_close
-from autograd.program_arrays import initialize_program_arrays
+from autograd.program_arrays_pyapi import initialize_program_arrays
 
 
 struct SessionLifetime[E: Exec & Movable & Deinitable, KIND: Int](Movable, Writable):

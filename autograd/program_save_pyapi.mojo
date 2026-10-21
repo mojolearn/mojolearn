@@ -6,7 +6,7 @@ from std.collections.string import chr
 from std.python import Python, PythonObject
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
-from autograd.program_arrays import output_array
+from autograd.program_arrays_pyapi import output_array
 from autograd.program_pyapi import ops_program_execute_py
 from autograd.model_checkpoint import ops_save_program_py
 from autograd.model_verify import verify_digest_py, verify_file_sha256_py, verify_model_info_py, verify_fill_py

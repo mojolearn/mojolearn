@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_metadata
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session
-from autograd.program_arrays import mapped_byte_array
+from autograd.program_arrays_pyapi import mapped_byte_array
 from autograd.program_pyapi import ProgramInput, _integer
 from autograd.pyapi import ops_load_weights_py
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists

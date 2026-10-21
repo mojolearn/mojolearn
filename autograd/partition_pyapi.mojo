@@ -13,7 +13,7 @@ from autograd.partition_stage import stage_input_bytes
 from autograd.partition_checkpoint import partition_checkpoint, partition_from_checkpoint, restore_partition_state
 from autograd.distributed_pyapi import distributed_optimizer_config
 from autograd.program_pyapi import array_input, output_array
-from autograd.program_arrays import initialize_program_arrays
+from autograd.program_arrays_pyapi import initialize_program_arrays
 from autograd.rankn import ShapeN
 from autograd.optim import optimizer_slots
 from core.cast_in import CastIn
