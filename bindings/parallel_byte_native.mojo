@@ -31,6 +31,7 @@ struct ParallelByteBoundary(Defaultable, Movable):
     var address: PythonObject
     var char: PythonObject
     var index: PythonObject
+    var vendor: String
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -40,6 +41,7 @@ struct ParallelByteBoundary(Defaultable, Movable):
         self.address = PythonObject(None)
         self.char = PythonObject(None)
         self.index = PythonObject(None)
+        self.vendor = String()
 
 
 comptime PARALLEL_BYTE_BOUNDARY = _Global[
@@ -58,6 +60,7 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
     p[].address = ctypes.addressof
     p[].char = ctypes.c_char
     p[].index = Python.import_module("_operator").index
+    p[].vendor = expected_vendor
     transport_initialize()
     if p[].bi.type(p[].address) is not p[].bi.type(p[].bi.len):
         raise Error("parallel: buffer address must be a native C entry")
@@ -114,7 +117,44 @@ def parallel_byte_initialize(array_cls: PythonObject, shape_cls: PythonObject, m
         if String(default_profile) != "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1" + String(table["suffix"]):
             raise Error("parallel: native default profile mismatch")
         table["binding"] = binding
+        # The pooled-layer and offloaded schedules keep the replica session
+        # contract (create/open/close/step/export/rollback with the same
+        # arguments) under their own entry names in the same binding
+        # (bindings/_mojolearn_byte_lm.mojo byte_lm_model_pool_* and
+        # byte_lm_offload_*); resolve them once here, beside the replica table.
+        table["model_pool"] = _parallel_schedule_entries(binding, "byte_lm_model_pool_",
+            [String("create"), String("open"), String("close"), String("step"),
+             String("export"), String("rollback"), String("ownership")])
+        table["offload"] = _parallel_schedule_entries(binding, "byte_lm_offload_",
+            [String("create"), String("open"), String("close"), String("step"),
+             String("export"), String("rollback")])
         p[].modes[mode] = table
+
+
+def _parallel_schedule_entries(binding: PythonObject, prefix: String, names: List[String]) raises -> PythonObject:
+    """One schedule's session entry table: every replica entry name, None
+    unless the schedule has it, so a refusal names the missing entry."""
+    var bi = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()[].bi
+    var entries = bi.dict()
+    for name in [String("create"), String("open"), String("open_pooled"), String("close"),  # small-loop(names: sixteen session entry names)
+                 String("step"), String("export"), String("rollback"), String("set_lr"),
+                 String("ownership"), String("shard_gradient"), String("apply_gradient"),
+                 String("fold_reset"), String("shard_gradient_fold"), String("fold_add"),
+                 String("fold_export"), String("reduction_pool_available")]:
+        entries[name] = PythonObject(None)
+    for name in names:  # small-loop(names: the schedule's session entry names)
+        var entry = PythonObject(None)
+        try:
+            entry = bi.getattr(binding, prefix + name, PythonObject(None))
+        except:
+            # The CPU binding refuses GPU names by NoCpuEntry; keep the
+            # native missing-entry refusal for when the session is opened.
+            entry = PythonObject(None)
+        if entry is not None and bi.type(entry) is not bi.type(bi.len):
+            raise Error("parallel: session entry must be compiled native code")
+        entries[name] = entry
+    entries["binding"] = binding
+    return entries
 
 
 def _parallel_int(value: PythonObject, minimum: Int, maximum: Int, label: String, strict: Bool = True) raises -> Int:
@@ -413,12 +453,22 @@ def _parallel_validate_state(value: PythonObject, shape: PythonObject) raises ->
 
 
 def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: PythonObject,
-                       logical_shards: PythonObject, pool_optimizer: PythonObject) raises -> PythonObject:
+                       logical_shards: PythonObject, pool_optimizer: PythonObject,
+                       schedule: String = "replica") raises -> PythonObject:
+    """Admit a byte-LM multi-device trainer. `schedule` picks the session:
+    "replica" (ParallelByteLanguageModelTrainer: resident replicas),
+    "model_pool" (PooledByteLanguageModelTrainer: decoder layers owned by
+    devices) or "offload" (OffloadedByteLanguageModelTrainer: one device,
+    one decoder layer resident at a time)."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
+    if schedule != "replica" and schedule != "model_pool" and schedule != "offload":
+        raise Error("parallel: unknown byte-LM schedule " + schedule)
     var count = _parallel_int(logical_shards, 1, 1024, "logical_shards")
     var ids = p[].bi.tuple(devices)
-    if len(ids) < 1 or len(ids) > count:
+    if schedule == "replica" and (len(ids) < 1 or len(ids) > count):
         raise Error("require 1 <= device count <= logical_shards <= 1024")
+    if schedule == "offload" and len(ids) != 1:
+        raise Error("offloaded replay requires exactly one device")
     var unique = p[].bi.set()
     for i in range(len(ids)):  # small-loop(ids: physical device indices)
         var id = _parallel_int(ids[i], 0, 2147483647, "device index")
@@ -431,6 +481,12 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
         raise Error("Byte-LM state must be a dict")
     var shape = _parallel_shape(state)
     var admitted = _parallel_validate_state(state, shape)
+    if schedule == "model_pool":
+        # Each decoder layer has one owner and the embedding/head share
+        # devices[0], so more than n_layers + 1 devices would leave one empty.
+        var owners = min(64, Int(py=shape["dims"][7]) + 1)
+        if len(ids) < 1 or len(ids) > owners:
+            raise Error("require 1 <= device count <= min(64, n_layers + 1)")
     owner.pool_optimizer = pool_optimizer
     owner.devices = ids
     owner.logical_shards = PythonObject(count)
@@ -443,7 +499,9 @@ def parallel_byte_init(owner: PythonObject, state: PythonObject, devices: Python
     owner._shape = shape_object
     owner._session = PythonObject(None)
     owner._binding = PythonObject(None)
-    owner._entries = p[].modes[admitted["numeric_mode"]]
+    var table = p[].modes[admitted["numeric_mode"]]
+    owner._entries = table if schedule == "replica" else table[schedule]
+    owner._schedule = PythonObject(schedule)
     owner._closed = PythonObject(False)
     owner._lost = PythonObject(False)
     return PythonObject(None)
@@ -456,12 +514,21 @@ def parallel_byte_open(owner: PythonObject) raises:
         return
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var entries = owner._entries
-    var open_name = "open_pooled" if Bool(py=owner.pool_optimizer) else "open"
+    var replica = String(owner._schedule) == "replica"
+    var open_name = "open_pooled" if replica and Bool(py=owner.pool_optimizer) else "open"
     for name in [String("create"), String(open_name), String("close"), String("step"), String("export"), String("rollback"), String("reduction_pool_available")]:  # small-loop(names: seven session entry names)
-        if entries[name] is None:
+        if entries[name] is None and (replica or name != "reduction_pool_available"):
+            if p[].vendor == "cpu":
+                # The declared by-design sentence (python/mojolearn/_parallel_pool.py
+                # `_cpu_refusal`): the identity harness reads a par-* host cell
+                # N/A by it (tools/identity_break.py CPU_BY_DESIGN_REFUSAL).
+                raise Error("NotImplementedError: no CPU implementation of the cooperative multi-GPU driver byte_lm_"
+                            + (String("parallel") if replica else String(owner._schedule)) + " yet: its sessions live inside the GPU byte-LM binding, "
+                            + "which no host binding restates")
             raise Error("NotImplementedError: installed binding has no cooperative GPU byte-LM session " + name)
-    if Int(py=entries["reduction_pool_available"]()) != 1:
-        raise Error("RuntimeError: binding refused distributed reduction availability")
+    if replica:
+        if Int(py=entries["reduction_pool_available"]()) != 1:
+            raise Error("RuntimeError: binding refused distributed reduction availability")
     var state = owner._state
     var config = state["config"]
     var params = p[].bi.list()
@@ -491,6 +558,8 @@ def parallel_byte_open(owner: PythonObject) raises:
 
 
 def _parallel_require_split(owner: PythonObject, entry: String) raises:
+    if String(owner._schedule) != "replica":
+        raise Error(entry + " requires ParallelByteLanguageModelTrainer")
     if Bool(py=owner.pool_optimizer) or len(owner.devices) != 1:
         raise Error(entry + " requires devices=(d,) and pool_optimizer=False")
     if owner._entries[entry] is None:
@@ -590,13 +659,15 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         parallel_byte_initialize(args[0], args[1], args[2], String(args[3]))
         return PythonObject(None)
     if operation == "init":
-        return parallel_byte_init(args[0], args[1], args[2], args[3], args[4])
+        return parallel_byte_init(args[0], args[1], args[2], args[3], args[4],
+                                  String(args[5]) if len(args) > 5 else String("replica"))
     if operation == "from_checkpoint":
         var checkpoint = args[1]
         if String(checkpoint.get("schema")) != "mojolearn.parallel-byte-lm.v1" or String(checkpoint.get("reduction")) != "ordered_sum":
             raise Error("unsupported parallel checkpoint contract")
         var restored = p[].bi.object.__new__(args[0])
-        _ = parallel_byte_init(restored, checkpoint["state"], args[2], checkpoint["logical_shards"], args[3])
+        _ = parallel_byte_init(restored, checkpoint["state"], args[2], checkpoint["logical_shards"], args[3],
+                               String(args[4]) if len(args) > 4 else String("replica"))
         return restored
     var owner = args[0]
     if operation == "step":
@@ -654,8 +725,22 @@ def parallel_byte_call(operation: String, args: PythonObject) raises -> PythonOb
         return PythonObject(owner._entries["fold_export"] is not None)
     if operation == "ownership":
         parallel_byte_open(owner)
+        if owner._entries["ownership"] is None:
+            raise Error("NotImplementedError: offloaded state lives on the host; no resident GPU optimizer owners")
         var rows = owner._entries["ownership"](owner._session)
         var result = p[].bi.list()
+        if String(owner._schedule) == "model_pool":
+            # Rows are [owner index, first, count, parameter, moment,
+            # rollback, gradient bytes] (byte_lm_model_pool_ownership).
+            var pool_fields = [String("first"), String("count"), String("parameter_bytes"),
+                               String("moment_bytes"), String("rollback_bytes"), String("gradient_bytes")]
+            for i in range(len(rows)):  # driver-loop: over the model chunks each device owns
+                var row = p[].bi.dict()
+                row["device"] = owner.devices[Int(py=rows[i][0])]
+                for j in range(len(pool_fields)):  # small-loop(pool_fields: six ownership record words)
+                    row[pool_fields[j]] = rows[i][j + 1]
+                result.append(row)
+            return p[].bi.tuple(result)
         var fields = [String("first"), String("count"), String("moment_bytes"), String("rollback_bytes"), String("reduction_bytes")]
         if len(rows) != len(owner.devices):
             raise Error("RuntimeError: native ownership row count differs from devices")

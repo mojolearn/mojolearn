@@ -13,20 +13,6 @@ from ._byte_lm_config import state_shape
 from ._buffer import Buf, addr, addr_ro, empty, flat_bytes, typestr_of
 
 
-def _missing_entry(driver, what):
-    """The refusal for a byte-LM binding without the `driver` session
-    entries. On a CPU-only install the binding is the host byte-LM binding,
-    which has no parallel, pooled or offloaded session BY DESIGN: the
-    cooperative driver's declared sentence (`_parallel_pool._cpu_refusal`),
-    so the identity harness reads the par-* host cell N/A rather than a
-    stale build. Elsewhere it is a GPU binding older than the entries."""
-    from ._backend import vendor
-    if vendor() == 'cpu':
-        return NotImplementedError(
-            'no CPU implementation of the cooperative multi-GPU driver ' + driver + ' yet: its '
-            'sessions live inside the GPU byte-LM binding, which no host binding restates')
-    return ImportError('rebuild bindings/build_byte_lm.sh for ' + what)
-
 STATE_ARRAYS = ('parameters', 'm', 'v', 'flags')
 
 
