@@ -94,9 +94,9 @@ def reduce_run(src: F32Ptr, dst: F32Ptr, count: Int, op: Int) raises:
     dst.unsafe_store(0, sel_fold(op, src, 0, count))
 
 
-def order_small_run(src: F32Ptr, out: F32Ptr, n: Int) raises:
+def order_small_run(src: F32Ptr, dst: F32Ptr, n: Int) raises:
     """`order_small_py`'s typed body: out = the stable ascending order of src."""
     if n > SEL_ORDER_MAX:
         raise Error("x_decomp: order_small exceeds its bound")
     for i in range(n):
-        out.unsafe_store(order_rank(src, n, i), Float32(i))
+        dst.unsafe_store(order_rank(src, n, i), Float32(i))
