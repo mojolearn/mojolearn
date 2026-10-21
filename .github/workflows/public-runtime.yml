@@ -1,0 +1,46 @@
+name: Public runtime
+
+# The measure of the public runtime migration (docs/plans/PUBLIC_RUNTIME_MIGRATION.md).
+# tools/public_runtime_inventory.py reads the Python call path of every public
+# operation method (fit, predict, transform, score, save, ...) down to its
+# native binding calls and labels it native, orchestrated or python. The job
+# fails when the count of non-native methods (or of python ones) grows past
+# tools/hooks/public_runtime_baseline.tsv, or when a method's verdict gets
+# worse; the per-family numbers go to the job summary. Static, python3 only:
+# nothing is built or imported.
+on:
+  push:
+    paths:
+      - "python/mojolearn/**"
+      - "packaging/native_only/**"
+      - "tools/public_runtime_inventory.py"
+      - "tools/hooks/public_runtime_baseline.tsv"
+      - "tools/tests/test_public_runtime_inventory.py"
+      - ".github/workflows/public-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-runtime:
+    name: public-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Tool tests (fake package)
+        run: python3 -u tools/tests/test_public_runtime_inventory.py > tool-tests.log 2>&1 || { tail -n 40 tool-tests.log; exit 1; }
+      - name: Non-native public methods do not grow
+        run: |
+          state=0
+          python3 tools/public_runtime_inventory.py --check > check.log 2>&1 || state=$?
+          cat check.log
+          { echo '### public runtime (native / orchestrated / python per family)'; echo '```'; cat check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $state
