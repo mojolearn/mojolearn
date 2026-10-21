@@ -25,285 +25,108 @@ from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
 from x_decomp.api_pyapi import _d, _f, _i, _n
 
 
-def gemm_py[E: Exec](a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var k = _n(p, 1)
-    var n = _n(p, 2)
+def gemm_run[E: Exec](pa: F32Ptr, pb: F32Ptr, pc: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises -> Int:
+    """`gemm_py`'s typed entry: the Int32 bound, then Exec.gemm; returns m n."""
     if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
         raise Error("x_decomp: gemm exceeds the Int32 index bound")
-    var pa = _f(a)
-    var pb = _f(b)
-    var pc = _f(c)
-    var ta = Int(py=p[3]) != 0
-    var tb = Int(py=p[4]) != 0
-    with GILReleased(Python()):
-        E.gemm(pa, pb, pc, m, k, n, ta, tb)
-    return PythonObject(m * n)
+    E.gemm(pa, pb, pc, m, k, n, ta, tb)
+    return m * n
 
 
-def ew_py[E: Exec](
-    a: PythonObject, b: PythonObject, c: PythonObject, dst: PythonObject, p: PythonObject, s: PythonObject
-) raises -> PythonObject:
-    # p = [op, count, d, lb, bm, lc, cm]
-    var op = Int(py=p[0])
-    var count = _n(p, 1)
-    var d = _n(p, 2)
-    var lb = _n(p, 3)
-    var bm = Int(py=p[4])
-    var lc = _n(p, 5)
-    var cm = Int(py=p[6])
+def ew_run[E: Exec](
+    op: Int, pa: F32Ptr, pb: F32Ptr, lb: Int, bm: Int, pc: F32Ptr, lc: Int, cm: Int, po: F32Ptr, count: Int, d: Int,
+    sv: Float32,
+) raises:
+    """`ew_py`'s typed entry: the row-width check, then Exec.ew."""
     if d <= 0:
         raise Error("x_decomp: ew needs a positive row width")
-    var sv = Float32(Float64(py=s))
-    var pa = _f(a)
-    var pb = _f(b)
-    var pc = _f(c)
-    var po = _f(dst)
-    with GILReleased(Python()):
-        E.ew(op, pa, pb, lb, bm, pc, lc, cm, po, count, d, sv)
-    return PythonObject(count)
+    E.ew(op, pa, pb, lb, bm, pc, lc, cm, po, count, d, sv)
 
 
-def colsum_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var pa = _f(a)
-    var po = _f(dst)
-    with GILReleased(Python()):
-        E.colsum(pa, po, n, d)
-    return PythonObject(d)
-
-
-def rowsum_py[E: Exec](a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var pa = _f(a)
-    var po = _f(dst)
-    with GILReleased(Python()):
-        E.rowsum(pa, po, n, d)
-    return PythonObject(n)
-
-
-def sqdist_py[E: Exec](a: PythonObject, b: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var na = _n(p, 0)
-    var nb = _n(p, 1)
-    var d = _n(p, 2)
-    # optional: the distance kind (x_decomp/cells.mojo PD_*; 0 = squared
-    # Euclidean) and the Minkowski p, a float rounded once to float32
-    var kind = _n(p, 3) if len(p) > 3 else 0
-    var pw = Float32(Float64(py=p[4])) if len(p) > 4 else Float32(2)
+def sqdist_run[E: Exec](
+    pa: F32Ptr, pb: F32Ptr, po: F32Ptr, na: Int, nb: Int, d: Int, kind: Int, pw: Float32
+) raises -> Int:
+    """`sqdist_py`'s typed entry: the Int32 bound, then Exec.sqdist; returns na nb."""
     if na * nb > 2147483647:
         raise Error("x_decomp: sqdist exceeds the Int32 index bound")
-    var pa = _f(a)
-    var pb = _f(b)
-    var po = _f(dst)
-    with GILReleased(Python()):
-        E.sqdist(pa, pb, po, na, nb, d, kind, pw)
-    return PythonObject(na * nb)
+    E.sqdist(pa, pb, po, na, nb, d, kind, pw)
+    return na * nb
 
 
-def rand_py[E: Exec](dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    var count = _n(p, 0)
-    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
-    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
-    var kind = Int(py=p[3])
-    var po = _f(dst)
-    with GILReleased(Python()):
-        E.rand(po, count, seed, stream, kind)
-    return PythonObject(count)
+def rand_run[E: Exec](po: F32Ptr, count: Int, seed: Int, stream: Int, kind: Int) raises:
+    """`rand_py`'s typed entry: seed and stream taken mod 2^32, then Exec.rand."""
+    var s = UInt32(seed & 0xFFFFFFFF)
+    var st = UInt32(stream & 0xFFFFFFFF)
+    E.rand(po, count, s, st, kind)
 
 
-def lu_py[E: Exec](a: PythonObject, piv: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var pa = _f(a)
-    var pp = _i(piv)
-    var pi = _f(info)
-    with GILReleased(Python()):
-        E.lu(pa, pp, pi, n)
-    return PythonObject(n)
-
-
-def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, nrhs, trans]: `trisolve_serial` (x_decomp/cells.mojo)."""
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var trans = _n(p, 2)
+def trisolve_run[E: Exec](pl: F32Ptr, pi: F32Ptr, ps: F32Ptr, pd: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
+    """`trisolve_py`'s typed entry: `trisolve_serial` (x_decomp/cells.mojo)."""
     if n >= 1 << 24:
         raise Error("x_decomp: trisolve row numbers exceed float32's exact integers")
-    var pl = _f(lu)
-    var pi = _f(idx)
-    var ps = _f(src)
-    var pd = _f(dst)
-    with GILReleased(Python()):
-        E.trisolve(pl, pi, ps, pd, n, nrhs, trans)
-    return PythonObject(n)
+    E.trisolve(pl, pi, ps, pd, n, nrhs, trans)
 
 
-def knn_select_py[E: Exec](dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, m, k, exclude_self]: `knn_select_row` for every row."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var k = _n(p, 2)
-    var ex = _n(p, 3)
+def knn_select_run[E: Exec](pd: F32Ptr, ps: F32Ptr, pi: F32Ptr, n: Int, m: Int, k: Int, ex: Int) raises:
+    """`knn_select_py`'s typed entry: `knn_select_row` for every row."""
     if m >= 1 << 24:
         raise Error("x_decomp: knn_select columns exceed float32's exact integers")
-    var pd = _f(dmat)
-    var ps = _f(dist)
-    var pi = _f(idx)
-    with GILReleased(Python()):
-        E.knn_select(pd, ps, pi, n, m, k, ex)
-    return PythonObject(n)
+    E.knn_select(pd, ps, pi, n, m, k, ex)
 
 
-def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var nrhs = _n(p, 1)
-    var trans = _n(p, 2) if len(p) > 2 else 0
+def lu_solve_run[E: Exec](pl: F32Ptr, pp: I32Ptr, pb: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
+    """`lu_solve_py`'s typed entry: the exact-integer check, then Exec.lu_solve."""
     if n >= 1 << 24:
         raise Error("x_decomp: lu_solve row numbers exceed float32's exact integers")
-    var pl = _f(lu)
-    var pp = _i(piv)
-    var pb = _f(b)
-    with GILReleased(Python()):
-        E.lu_solve(pl, pp, pb, n, nrhs, trans)
-    return PythonObject(n)
+    E.lu_solve(pl, pp, pb, n, nrhs, trans)
 
 
-def chol_py[E: Exec](a: PythonObject, info: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
-    var pa = _f(a)
-    var pi = _f(info)
-    with GILReleased(Python()):
-        E.chol(pa, pi, n)
-    return PythonObject(n)
-
-
-def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
-    var n = _n(p, 0)
+def eigh_run[E: Exec](pa: F32Ptr, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises:
+    """`eigh_py`'s typed entry. uplo: numpy's UPLO, 1 the lower triangle, 2
+    the upper, 0 the whole matrix; mirrored by the executor (on the device)."""
     if n <= 0:
         raise Error("x_decomp: eigh needs n >= 1")
-    # p[1] (optional): numpy's UPLO, 1 the lower triangle, 2 the upper, 0
-    # (absent) the whole matrix; mirrored by the executor (on the device)
-    var uplo = 0
-    if len(p) > 1:
-        uplo = _n(p, 1)
     if uplo < 0 or uplo > 2:
         raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
-    var pa = _f(a)
-    var pw = _f(w)
-    var pv = _f(v)
     E.eigh(pa, pw, pv, n, uplo)
-    return PythonObject(n)
 
 
-def lle_apply_py[E: Exec](
-    wb: PythonObject, idx: PythonObject, emb: PythonObject, dst: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    """p = [nq, nf, nn, nc]: LLE transform's out (nq x nc) = W E[idx]."""
-    var nq = _n(p, 0)
-    var nf = _n(p, 1)
-    var nn = _n(p, 2)
-    var nc = _n(p, 3)
+def lle_apply_run[E: Exec](
+    pw: F32Ptr, pi: F32Ptr, pe: F32Ptr, po: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int
+) raises:
+    """`lle_apply_py`'s typed entry: LLE transform's out (nq x nc) = W E[idx]."""
     if nq * nc > 2147483647 or nf * nc > 2147483647 or nq * nn > 2147483647:
         raise Error("x_decomp: lle_apply exceeds the Int32 index bound")
-    var pw = _f(wb)
-    var pi = _f(idx)
-    var pe = _f(emb)
-    var po = _f(dst)
-    with GILReleased(Python()):
-        E.lle_apply(pw, pi, pe, po, nq, nf, nn, nc)
-    return PythonObject(nq)
+    E.lle_apply(pw, pi, pe, po, nq, nf, nn, nc)
 
 
-def lle_local_py[E: Exec](
-    x: PythonObject, idx: PythonObject, b: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """LocallyLinearEmbedding's stacked factor (x_decomp/lle_local.mojo).
-    p = [method (0 ltsa, 1 hessian, 2 modified), n, d, nn, nc]; f = [tol]
-    (hessian_tol / modified_tol). idx (n x nn) the neighbor indices as exact
-    floats; b zeroed, n nn x n (n (nn - 1 - nc) x n for hessian)."""
-    var method = _n(p, 0)
-    var n = _n(p, 1)
-    var d = _n(p, 2)
-    var nn = _n(p, 3)
-    var nc = _n(p, 4)
-    var tol = Float32(Float64(py=f[0]))
+def lle_local_run[E: Exec](
+    px: F32Ptr, pi: F32Ptr, pb: F32Ptr, method: Int, n: Int, d: Int, nn: Int, nc: Int, tol: Float32
+) raises:
+    """`lle_local_py`'s typed entry: LocallyLinearEmbedding's stacked factor
+    (x_decomp/lle_local.mojo) after its shape checks."""
     if method < 0 or method > 2 or n < 1 or d < 1 or nn < 1 or nc < 1 or (method == 1 and nn - 1 - nc < 1):
         raise Error("x_decomp: lle_local needs method 0..2, n, d, n_neighbors, n_components >= 1 (hessian: n_neighbors > n_components + 1)")
     if n * nn * n > 2147483647 or n * nn * nn > 2147483647 or n >= 16777216:
         raise Error("x_decomp: lle_local exceeds the Int32 index bound")
-    var px = _f(x)
-    var pi = _f(idx)
-    var pb = _f(b)
-    with GILReleased(Python()):
-        E.lle_local(px, pi, pb, method, n, d, nn, nc, tol)
-    return PythonObject(n)
+    E.lle_local(px, pi, pb, method, n, d, nn, nc, tol)
 
 
-def eigh_batch_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [batch, n]: `batch` n x n symmetric problems stacked in `a`; w
-    (batch x n, ascending) and v (batch x n x n, vectors in columns), each
-    the words `eigh` gives it (x_decomp/rr_batch.mojo)."""
-    var batch = _n(p, 0)
-    var n = _n(p, 1)
+def eigh_batch_run[E: Exec](pa: F32Ptr, pw: F32Ptr, pv: F32Ptr, batch: Int, n: Int) raises:
+    """`eigh_batch_py`'s typed entry: `batch` n x n symmetric problems
+    (x_decomp/rr_batch.mojo) after the shape checks."""
     if n <= 0 or batch < 0:
         raise Error("x_decomp: eigh_batch needs n >= 1, batch >= 0")
     if batch * n * n > 2147483647:
         raise Error("x_decomp: eigh_batch exceeds the Int32 index bound")
-    var pa = _f(a)
-    var pw = _f(w)
-    var pv = _f(v)
-    with GILReleased(Python()):
-        E.eigh_batch(pa, pw, pv, batch, n)
-    return PythonObject(batch)
+    E.eigh_batch(pa, pw, pv, batch, n)
 
 
-def cd_rows_py[E: Exec](
-    w: PythonObject, hht: PythonObject, xht: PythonObject, perm: PythonObject, viol: PythonObject, p: PythonObject
-) raises -> PythonObject:
-    var n = _n(p, 0)
-    var k = _n(p, 1)
-    var pw = _f(w)
-    var ph = _f(hht)
-    var px = _f(xht)
-    var pp = _i(perm)
-    var pv = _f(viol)
-    with GILReleased(Python()):
-        E.cd_rows(pw, ph, px, pp, pv, n, k)
-    return PythonObject(n)
-
-
-def orth_py[E: Exec](a: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var l = _n(p, 1)
-    var pa = _f(a)
-    with GILReleased(Python()):
-        E.orth(pa, m, l)
-    return PythonObject(l)
-
-
-def orth_diag_py[E: Exec](a: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`orth` in place, and diag (l floats) = the product of the two passes'
-    R diagonals (lane neural-pass17)."""
-    var m = _n(p, 0)
-    var l = _n(p, 1)
-    var pa = _f(a)
-    var pd = _f(diag)
-    with GILReleased(Python()):
-        E.orth_diag(pa, m, l, pd)
-    return PythonObject(l)
-
-
-def svd_py[E: Exec](a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
-    var m = _n(p, 0)
-    var n = _n(p, 1)
+def svd_run[E: Exec](pa: F32Ptr, ps: F32Ptr, pv: F32Ptr, m: Int, n: Int) raises:
+    """`svd_py`'s typed entry: a tall matrix (m >= n >= 1), then Exec.svd."""
     if n <= 0 or m < n:
         raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
-    var pa = _f(a)
-    var ps = _f(s)
-    var pv = _f(v)
     E.svd(pa, m, n, ps, pv)
-    return PythonObject(n)
 
 
 def lasso_rows_py[E: Exec](
