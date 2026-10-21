@@ -278,6 +278,10 @@ PASSES = [
      {DEV: "def _q4(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](  # small-launch(n: parameter count): an L-BFGS vector phase, never rows\n"
            "        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"}),
+    ("a per-column grid whose second dimension splits the rows (not block-per-n)",
+     {DEV: "def _q4b(ctx: DeviceContext, x: UnsafePointer[Float32], n_rows: Int, n_cols: Int) raises:\n"
+           "    ctx.enqueue_function[_gather_kernel](\n        x, Int32(n_rows), Int32(n_cols),\n"
+           "        grid_dim=(n_cols, ceildiv(n_rows, 256), 1), block_dim=(256, 1, 1),\n    )"}),
     ("a reviewed glue note on an argument loop",
      {PY: "def _qz1(params):\n    for k in params:  # glue: copies estimator keyword arguments\n        pass"}),
     ("a reviewed Python small-loop note on a per-feature walk",
