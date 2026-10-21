@@ -1,0 +1,81 @@
+name: No Python in kernels
+
+# A kernel .mojo file must not import or call Python (Andrew, 2026-10-21).
+# tools/hooks/no_python_in_kernels.py --tree scans every .mojo file at the
+# checked commit outside the shell allowlist (bindings/, *pyapi*.mojo,
+# *_py.mojo, bench/, experiments/, checks/) and fails on any file that is not
+# in tools/hooks/python_in_kernels_baseline.txt. Rows main's baseline lacks are
+# not grandfathered, so the count can only go down. Plain python3 and git: no
+# pixi, no Mojo, no build. The count per directory goes to the job summary.
+# `gh workflow run no-python-in-kernels.yml -f pr=N` checks an open PR and
+# posts the result on its head commit.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to check (posts the status on its head)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: no-python-in-kernels-${{ github.event.pull_request.number || inputs.pr || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  no-python-in-kernels:
+    name: no-python-in-kernels
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: No Python in kernel code beyond the shrinking baseline
+        env:
+          PR: ${{ inputs.pr }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          tip=$(git rev-parse HEAD)
+          if [ -n "$PR" ]; then
+            git fetch -q origin "+refs/pull/$PR/head:refs/remotes/pr/$PR"
+            tip=$(git rev-parse "refs/remotes/pr/$PR")
+          fi
+          # main's checker judges every branch, including one that edits it;
+          # until the checker reaches main, the tip's copy runs
+          if git cat-file -e origin/main:tools/hooks/no_python_in_kernels.py 2>/dev/null; then
+            git show origin/main:tools/hooks/no_python_in_kernels.py > "$RUNNER_TEMP/no_python_in_kernels.py"
+          else
+            git show "$tip:tools/hooks/no_python_in_kernels.py" > "$RUNNER_TEMP/no_python_in_kernels.py"
+          fi
+          state=success
+          python3 "$RUNNER_TEMP/no_python_in_kernels.py" --tree "$tip" 2> npik.log || state=failure
+          cat npik.log >&2
+          { echo '### no-python-in-kernels'; echo '```'; cat npik.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR" ]; then
+            gh api "repos/$REPO/statuses/$tip" -f state=$state -f context=no-python-in-kernels \
+              -f description="no Python in kernel .mojo files beyond the baseline" \
+              -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" >/dev/null
+          fi
+          [ $state = success ]
+      - name: Checker tests
+        if: ${{ inputs.pr == '' }}
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@localhost
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@localhost
+        run: |
+          if [ -f tools/hooks/test_no_python_in_kernels.py ]; then
+            python3 -u tools/hooks/test_no_python_in_kernels.py
+          fi
