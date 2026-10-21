@@ -83,9 +83,10 @@ from max.gpu.host import DeviceContext, HostBuffer
 from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_public import OPT_POOL, opt_pool_handle, per_call_step
+from bindings.optimizer_public_door import entry_zero
 from bindings.optimizer_public_pyapi import (
-    optimizer_public_accumulate_c, optimizer_public_clip_c, optimizer_public_io_c, optimizer_public_step_c,
-    optimizer_public_zero_c, optimizer_resident_close_binding, optimizer_resident_copy_dev_binding,
+    optimizer_door_accumulate_c, optimizer_door_clip_c, optimizer_door_io_c, optimizer_door_load_state_c,
+    optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding, optimizer_resident_copy_dev_binding,
     optimizer_resident_download_binding, optimizer_resident_get_binding, optimizer_resident_open_binding,
     optimizer_resident_put_binding, optimizer_resident_step_binding, optimizer_resident_step_io_binding,
     optimizer_resident_upload_binding, maximize_dev_available_binding,
@@ -1386,11 +1387,14 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
-        m.def_py_c_function(optimizer_public_step_c, "optimizer_public_step")
-        m.def_py_c_function(optimizer_public_io_c, "optimizer_public_io")
-        m.def_py_c_function(optimizer_public_clip_c, "optimizer_public_clip")
-        m.def_py_c_function(optimizer_public_accumulate_c, "optimizer_public_accumulate")
-        m.def_py_c_function(optimizer_public_zero_c, "optimizer_public_zero")
+        m.def_py_c_function(optimizer_door_step_c, "optimizer_door_step")
+        m.def_py_c_function(optimizer_door_io_c, "optimizer_door_io")
+        m.def_py_c_function(optimizer_door_state_c, "optimizer_door_state")
+        m.def_py_c_function(optimizer_door_state_set_c, "optimizer_door_state_set")
+        m.def_py_c_function(optimizer_door_load_state_c, "optimizer_door_load_state")
+        m.def_py_c_function(optimizer_door_clip_c, "optimizer_door_clip")
+        m.def_py_c_function(optimizer_door_accumulate_c, "optimizer_door_accumulate")
+        m.def_py_c_function(entry_zero, "optimizer_door_zero")
         m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")
         m.def_function[optimizer_resident_close_binding]("optimizer_resident_close")
         m.def_function[optimizer_resident_download_binding]("optimizer_resident_download")

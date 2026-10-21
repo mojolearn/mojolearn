@@ -1,29 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Python door of the public optimizers on the GPU binding
-(`_mojolearn_training`; lane neural-optimizers, 2026-10-21). Each entry
-unpacks its argument words, calls ONE typed kernel entry of
-training/optimizer_public.mojo and writes the typed result into the
-caller's result buffer (or returns one integer). Nothing is assigned on a
-Python object here: the Python glue assigns what the result buffer holds
-(docs/MODULAR_ASKS.md, PythonObject ownership). A kernel error that names
-its class (`ValueError: ...`) raises that class.
-
-The argument words, in this exact order (mirrored in
-python/mojolearn/_training_impl.py `_step_words`):
-
-  step words   0 J, 1 t, 2 kind, 3 nesterov, 4 maximize, 5 schedule kind
-               (-1 none), 6-8 schedule a, b, c, 9 N, 10 offsets address,
-               11 buf_initialized address, 12 gradient mode, 13 microbatch
-               count, 14 tokens (-1 none), 15 handle (-1 none), 16 resident
-               (-1 None, 0 False, 1 True), 17 pristine, 18 exp_avg address
-               (0 none), 19 exp_avg_sq address (0 none), 20 parameters on the
-               device, 21 gradient on the device, 22 step_device
-  step floats  0 lr, 1 beta1, 2 beta2, 3 eps, 4 weight_decay, 5 momentum,
-               6 dampening, 7 max_norm (<= 0: no clip), 8-11 schedule f0-f3
-  io words     0 operation, 1 tensor, 2 J, 3 N, 4 offsets address, 5 handle,
-               6 resident, 7 pristine, 8 exp_avg address, 9 exp_avg_sq address
-"""
+(`_mojolearn_training`; lane neural-optimizers, 2026-10-21; lane
+optimizers-thin-glue): the kernels behind bindings/optimizer_public_door.mojo
+(`GpuOptKernels`, each one typed entry of training/optimizer_public.mojo with
+the GIL released) and the C entries of the public methods. Each public
+method of `SGD` / `Adam` / `AdamW`, `clip_grad_norm_` and `accumulate_grads`
+is one of these entries: the door reads the optimizer object and the
+caller's tensors, calls ONE kernel entry here and assigns the result."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 
@@ -34,122 +18,102 @@ from training.optimizer_public import (
     resident_download, resident_get, resident_open, resident_put, resident_step, resident_step_io,
     resident_upload,
 )
-from training.optimizer_public_common import F32P, F64P, I32P, PublicStep, zero_tensors
-from bindings.optimizer_public_words import int_words, optimizer_python_error, step_request
+from training.optimizer_public_common import F32P, I32P, PublicStep, PublicStepOut
+from bindings.optimizer_public_door import (
+    OptKernels, entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
+    entry_step,
+)
 
 comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
 
 
-def optimizer_public_step_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_step(words, floats, p_addrs, p_bytes, g_addrs,
-    g_bytes, out_addr): one step of a public optimizer; the 10 float64
-    result words go to `out_addr` (training/optimizer_public_common.mojo
-    `PublicStepOut.write`). Returns 0."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 7:
-            raise Error("TypeError: optimizer_public_step expects seven arguments")
-        var req = step_request(args[0], args[1], args[2], args[3], args[4], args[5])
-        var out = F64P(unsafe_from_address=Int(py=args[6]))
+struct GpuOptKernels(OptKernels):
+    """The GPU binding's kernel entries, each with the GIL released."""
+
+    @staticmethod
+    def step(req: PublicStep) raises -> PublicStepOut:
+        var out = PublicStepOut(0, -1, False, False, Float32(0.0), Float32(0.0), Float32(0.0), -1, False)
         with GILReleased(Python()):
             var ctx = neural_ctx[_NEURAL_CTX]()
-            public_step(ctx, req).write(out)
-        return PythonObject(0).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            out = public_step(ctx, req)
+        return out
 
-
-def optimizer_public_io_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_io(words, addrs, nbytes, out_addr): the device
-    transfers of a public optimizer (training/optimizer_public.mojo
-    `public_io`); out_addr gets [handle, result] as float64. Returns 0."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 4:
-            raise Error("TypeError: optimizer_public_io expects four arguments")
-        var w = int_words(args[0])
-        if len(w) != 10:
-            raise Error("TypeError: optimizer_public_io takes 10 words")
-        var req = PublicStep()
-        req.j = w[2]
-        req.n_total = w[3]
-        req.offsets = w[4]
-        req.handle = w[5]
-        req.resident_wanted = w[6]
-        req.pristine = w[7] != 0
-        req.m_addr = w[8]
-        req.v_addr = w[9]
-        req.g_addr = int_words(args[1])
-        req.g_bytes = int_words(args[2])
-        var out = F64P(unsafe_from_address=Int(py=args[3]))
+    @staticmethod
+    def io(req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
+        var r = (-1, 0)
         with GILReleased(Python()):
             var ctx = neural_ctx[_NEURAL_CTX]()
-            var r = public_io(ctx, req, w[0], w[1])
-            out[0] = Float64(r[0])
-            out[1] = Float64(r[1])
-        return PythonObject(0).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            r = public_io(ctx, req, op_code, tensor)
+        return r
 
-
-def optimizer_public_clip_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_clip(addrs, nbytes, max_norm, out_addr):
-    `clip_grad_norm_` over the tensors, in place; out_addr gets [total
-    norm, coefficient] as float64. Returns 0."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 4:
-            raise Error("TypeError: optimizer_public_clip expects four arguments")
-        var addrs = int_words(args[0])
-        var nbytes = int_words(args[1])
-        var max_norm = Float32(Float64(py=args[2]))
-        var out = F64P(unsafe_from_address=Int(py=args[3]))
+    @staticmethod
+    def clip(addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
+        var r = (Float32(0.0), Float32(0.0))
         with GILReleased(Python()):
             var ctx = neural_ctx[_NEURAL_CTX]()
-            var r = public_clip(ctx, addrs, nbytes, max_norm)
-            out[0] = Float64(r[0])
-            out[1] = Float64(r[1])
-        return PythonObject(0).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            r = public_clip(ctx, addrs, nbytes, max_norm)
+        return r
 
-
-def optimizer_public_accumulate_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_accumulate(in_addrs, nbytes, out_addrs, a, tokens):
-    the clause 9.2 tree of A microbatches into the result tensors. Returns
-    N."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 5:
-            raise Error("TypeError: optimizer_public_accumulate expects five arguments")
-        var in_addrs = int_words(args[0])
-        var nbytes = int_words(args[1])
-        var out_addrs = int_words(args[2])
-        var a = Int(py=args[3])
-        var tokens = Int(py=args[4])
+    @staticmethod
+    def accumulate(
+        in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int
+    ) raises -> Int:
         var n = 0
         with GILReleased(Python()):
             var ctx = neural_ctx[_NEURAL_CTX]()
-            n = public_accumulate(ctx, in_addrs, nbytes, out_addrs, a, tokens)
-        return PythonObject(n).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            n = public_accumulate(ctx, in_addrs, nbytes, out_addrs, a_count, tokens)
+        return n
 
-
-def optimizer_public_zero_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
-    """optimizer_public_zero(addrs, nbytes): `zero_grad`, +0.0 into every
-    tensor. Returns the tensor count."""
-    try:
-        var args = PythonObject(from_borrowed=packed)
-        if len(args) != 2:
-            raise Error("TypeError: optimizer_public_zero expects two arguments")
-        var addrs = int_words(args[0])
-        var nbytes = int_words(args[1])
+    @staticmethod
+    def download(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
+        var r = 0
         with GILReleased(Python()):
-            zero_tensors(addrs, nbytes)
-        return PythonObject(len(addrs)).steal_data()
-    except error:
-        return optimizer_python_error(error)
+            var ctx = neural_ctx[_NEURAL_CTX]()
+            r = resident_download(ctx, handle, m_addr, v_addr, n)
+        return r
+
+    @staticmethod
+    def upload(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
+        var r = 0
+        with GILReleased(Python()):
+            var ctx = neural_ctx[_NEURAL_CTX]()
+            r = resident_upload(ctx, handle, m_addr, v_addr, n)
+        return r
+
+
+def optimizer_door_step_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_step(opt, grads, max_norm, op, tokens)."""
+    return entry_step[GpuOptKernels](py_self, packed)
+
+
+def optimizer_door_io_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_io(opt, op, tensors, name, tensor)."""
+    return entry_io[GpuOptKernels](py_self, packed)
+
+
+def optimizer_door_state_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_state(opt, which)."""
+    return entry_state[GpuOptKernels](py_self, packed)
+
+
+def optimizer_door_state_set_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_state_set(opt, which, value)."""
+    return entry_state_set[GpuOptKernels](py_self, packed)
+
+
+def optimizer_door_load_state_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_load_state(opt, t, ea, c1, es, c2, bi, c3)."""
+    return entry_load_state[GpuOptKernels](py_self, packed)
+
+
+def optimizer_door_clip_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs)."""
+    return entry_clip[GpuOptKernels](py_self, packed)
+
+
+def optimizer_door_accumulate_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:
+    """optimizer_door_accumulate(microbatch_grads, tokens)."""
+    return entry_accumulate[GpuOptKernels](py_self, packed)
 
 
 # ---------------------------------------------------------------------------

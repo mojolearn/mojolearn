@@ -1,6 +1,5 @@
 """Host packing/state checks; GPU arithmetic is mocked, never reimplemented."""
 import array
-import ctypes
 import os
 import subprocess
 import sys
@@ -31,30 +30,19 @@ def test_ring_order_and_linear_alias():
     assert view[0] == 42  # Linear access is a borrowed view.
 
 
-def test_accumulation_packs_strides_and_plain_buffers(monkeypatch):
-    captured = []
-    class Binding:
-        def optimizer_public_accumulate(self, in_addrs, nbytes, out_addrs, count, tokens):
-            # in_addrs: microbatch-major, one address per tensor; nbytes per tensor
-            seen = []
-            for k, a in enumerate(in_addrs):
-                seen += list((ctypes.c_float * (nbytes[k % len(nbytes)] // 4)).from_address(a))
-            captured.append(seen)
-            at = 20
-            for a, b in zip(out_addrs, nbytes):
-                output = (ctypes.c_float * (b // 4)).from_address(a)
-                for i in range(b // 4):
-                    output[i] = at  # Sentinel native result, no CPU gradient math.
-                    at += 1
-            return at - 20
-    monkeypatch.setattr(training, '_load', lambda mode: Binding())
+def test_accumulation_packs_strides_and_plain_buffers():
+    # One native call (bindings/optimizer_public_door.mojo): a strided
+    # microbatch is made C-contiguous before the clause 9.2 tree, so it gives
+    # the bits of its contiguous copy; an array.array is read in place.
     a = np.arange(12, dtype=np.float32).reshape(3, 4)[:, ::2]
-    result = training.accumulate_grads([a, a + 2], tokens=None)
-    assert captured[-1] == list(a.ravel()) + list((a + 2).ravel())
-    np.testing.assert_array_equal(result, np.arange(20, 26).reshape(3, 2))
+    strided = training.accumulate_grads([a, a + 2], tokens=None)
+    packed = training.accumulate_grads([np.ascontiguousarray(a), np.ascontiguousarray(a + 2)], tokens=None)
+    assert strided.shape == (3, 2)
+    assert checks.le_bytes(strided, 'f') == checks.le_bytes(packed, 'f')
     result = training.accumulate_grads([array.array('f', [1, 2]), array.array('f', [3, 4])], None)
-    assert captured[-1] == [1, 2, 3, 4]
+    again = training.accumulate_grads([np.array([1, 2], np.float32), np.array([3, 4], np.float32)], None)
     assert result.shape == (2,)
+    assert checks.le_bytes(result, 'f') == checks.le_bytes(again, 'f')
 
 
 def test_samba_parameter_alias_checkpoint(tmp_path):
