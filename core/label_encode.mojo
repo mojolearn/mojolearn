@@ -9,7 +9,7 @@ pipeline; the core host binding (`bindings/_mojolearn_core_host.mojo`) runs
 `host_unique_inverse` below under the same name on a CPU-only install. Both
 take the same steps, in the same order:
 
-  1. KEY. Each label's 64 bits (`kind` 0: float64, 1: int64) become an
+  1. KEY. Each label's 64 bits (`kind` 0: float64, 1: int64, 2: uint64) become an
      unsigned key that orders as the value does (`label_sort_key`). `-0.0`
      is folded onto `+0.0` first, so the two are one class. A NaN raises
      the status flag (the caller refuses it).
@@ -28,6 +28,7 @@ Integers and bit moves only: the two routes give the same bytes."""
 
 comptime LABEL_KIND_F64 = 0
 comptime LABEL_KIND_I64 = 1
+comptime LABEL_KIND_U64 = 2
 comptime _SIGN = UInt64(0x8000000000000000)
 
 
@@ -42,7 +43,9 @@ def label_is_nan(bits: UInt64, kind: Int) -> Bool:
 @always_inline
 def label_sort_key(bits: UInt64, kind: Int) -> UInt64:
     """An unsigned key in the value's order. float64: CUB's TwiddleIn after
-    folding -0.0 onto +0.0; int64: the sign bit flipped."""
+    folding -0.0 onto +0.0; int64: the sign bit flipped; uint64: unchanged."""
+    if kind == LABEL_KIND_U64:
+        return bits
     if kind == LABEL_KIND_I64:
         return bits ^ _SIGN
     var b = bits
