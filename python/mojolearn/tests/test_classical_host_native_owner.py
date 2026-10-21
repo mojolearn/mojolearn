@@ -7,11 +7,11 @@ import numpy as np
 import pytest
 
 from mojolearn import LinearRegression, Ridge
-from mojolearn._classical_host import HostLinearRegression, HostRidge
+from mojolearn._classical_host import HostLinearRegression, HostRidge, _host_fit_helpers
 from mojolearn._native_classical_bridge import connect_host
 from mojolearn._verify_native_runtime import audit_native_call
 
-ENTRY, CONTEXT = connect_host(HostRidge, HostLinearRegression)
+ENTRY, CONTEXT = connect_host(HostRidge, HostLinearRegression, _host_fit_helpers())
 
 
 def native_load(cls, path):

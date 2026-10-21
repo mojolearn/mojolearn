@@ -306,3 +306,84 @@ def test_numpy_loaded_after_import_returns_ndarrays(tmp_path):
         assert got[cls.__name__]["predict"] == np.asarray(model.predict(x)).tobytes().hex(), cls.__name__
         hosted = mojolearn.host_model(path).predict(x)
         assert got[cls.__name__]["host_predict"] == np.asarray(hosted).tobytes().hex(), cls.__name__
+
+
+_HOST_FIT_CHILD = r'''
+import io, json, os, sys
+order = sys.argv[1]
+if order == "blocked":
+    class BlockNumpy:
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname == "numpy" or fullname.startswith("numpy."):
+                raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
+    sys.meta_path.insert(0, BlockNumpy())
+elif order == "first":
+    import numpy
+import mojolearn
+from mojolearn import LinearRegression, Ridge
+if order == "cpu":
+    # The CPU column: the public classes on the CPU binaries.
+    assert mojolearn.vendor() == "cpu", mojolearn.vendor()
+    classes = (("LinearRegression", LinearRegression), ("Ridge", Ridge))
+else:
+    from mojolearn._classical_host import HostLinearRegression, HostRidge
+    classes = (("LinearRegression", HostLinearRegression), ("Ridge", HostRidge))
+if order == "after":
+    import numpy
+data = json.loads(sys.stdin.read())
+X, y, w = data["x"], data["y"], data["w"]
+out = {}
+for name, cls in classes:
+    r = {}
+    model = cls().fit(X, y)
+    r["coef"] = model.coef_.tobytes().hex()
+    r["intercept"] = float.hex(model.intercept_)
+    r["predict"] = model.predict(X).tobytes().hex()
+    r["score"] = float.hex(model.score(X, y))
+    r["vendor"] = model.vendor_used()
+    r["weighted_coef"] = cls().fit(X, y, sample_weight=w).coef_.tobytes().hex()
+    r["no_intercept_coef"] = cls(fit_intercept=False).fit(X, y).coef_.tobytes().hex()
+    r["one_column_coef"] = cls().fit([row[:1] for row in X], y).coef_.tobytes().hex()
+    if order != "cpu":
+        r["type"] = type(model.predict(X)).__name__
+        path = os.path.join(data["tmp"], order + "-" + name + ".npz")
+        model.save(path)
+        loaded = cls.load(path)
+        r["loaded_predict"] = loaded.predict(X).tobytes().hex()
+        r["sha"] = model.model_sha256()
+        r["loaded_sha"] = loaded.model_sha256()
+    out[name] = r
+if order == "blocked":
+    assert not any(m == "numpy" or m.startswith("numpy.") for m in sys.modules)
+print("RESULT " + json.dumps(out))
+'''
+
+
+def _host_fit_run(order, tmp_path, **env_extra):
+    x, y, w = _data()
+    env = dict(os.environ, PYTHONPATH=str(Path(mojolearn.__file__).resolve().parents[1]), **env_extra)
+    payload = json.dumps({"x": x.tolist(), "y": y.tolist(), "w": w.tolist(), "tmp": str(tmp_path)})
+    done = subprocess.run([sys.executable, "-c", _HOST_FIT_CHILD, order], env=env, capture_output=True,
+                          text=True, input=payload, timeout=600)
+    assert done.returncode == 0, done.stderr[-4000:]
+    line = [ln for ln in done.stdout.splitlines() if ln.startswith("RESULT ")]
+    assert line, done.stdout[-2000:]
+    return json.loads(line[-1][len("RESULT "):])
+
+
+def test_host_classes_fit_on_the_cpu_in_every_numpy_order(tmp_path):
+    """HostLinearRegression and HostRidge fit, predict, score, save, load
+    and digest on the CPU binaries without NumPy, with NumPy imported first
+    and with NumPy imported after mojolearn, with the CPU column's bits."""
+    reference = _host_fit_run("cpu", tmp_path, MOJOLEARN_VENDOR="cpu")
+    runs = {order: _host_fit_run(order, tmp_path) for order in ("blocked", "first", "after")}
+    for order, got in runs.items():
+        for name in ("LinearRegression", "Ridge"):
+            r = got[name]
+            assert r["vendor"] == "cpu", (order, name)
+            assert r["type"] == ("Array" if order == "blocked" else "ndarray"), (order, name, r["type"])
+            for key, value in reference[name].items():
+                if key != "vendor":
+                    assert r[key] == value, (order, name, key)
+            assert r["loaded_predict"] == r["predict"], (order, name)
+            assert r["loaded_sha"] == r["sha"] == runs["blocked"][name]["sha"], (order, name)
