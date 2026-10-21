@@ -70,3 +70,15 @@ def test_boundary_blockers_survive_native_engine_coverage():
 def test_canonicalization_is_reproducible_without_importing_product():
     data = manifest()
     assert INVENTORY.canonicalize(ROOT, data) == manifest()
+
+
+def test_whole_operation_metadata_keeps_partial_voting_visible():
+    cases = {case["id"]: case for case in manifest()["cases"]}
+    for case in cases.values():
+        assert isinstance(case["whole_operation"], bool)
+        assert case["operation_boundary"]
+    for name in ("knn_classifier", "knn_regressor"):
+        assert cases[name]["whole_operation"] is False
+        assert "does not exercise end-to-end search" in cases[name]["operation_boundary"]
+    for name in ("autograd_cpu", "sequential_cpu", "optimizer_cpu", "tokenizer", "preprocessing"):
+        assert cases[name]["whole_operation"] is True
