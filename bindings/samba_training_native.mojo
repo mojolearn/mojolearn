@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Complete native Samba forward/backward over existing numerical kernels."""
 from std.python import Python, PythonObject
+from core.samba_ids_impl import samba_training_ids_into
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries, samba_from_state
@@ -26,12 +27,10 @@ def samba_ids(value: PythonObject, vocab: Int, targets: Bool, context: PythonObj
     var column_major = own and String(value.order) == "F"
     var result = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=result._addr))
-    for i in range(b * l):
-        var source = i // l + (i % l) * b if column_major else i
-        var id = packed[source]
-        if not (targets and Bool(py=id == -100)) and (Bool(py=id < 0) or Bool(py=id >= vocab)):
-            raise Error("Samba: token id outside vocabulary at flat index " + String(i))
-        dst[i] = Int32(Int(py=id))
+    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
+    samba_training_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l,
+                            column_major, vocab, targets, dst)
+    _ = packed^
     return result
 
 

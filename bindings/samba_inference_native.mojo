@@ -6,6 +6,7 @@ classes and buffer exporters remain CPython-owned interface records; this
 module does not claim that all public state has native struct ownership.
 """
 from std.python import Python, PythonObject
+from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import memcpy
 from bindings.generation_buffers import generation_initialize_binding, generation_array, generation_address, py_ints
 from bindings.samba_state_native import samba_fields, samba_entries
@@ -181,14 +182,10 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     var column_major = own and String(value.order) == "F"
     var ids = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
-    for i in range(b * l):
-        if lengths is not None and i % l >= sizes[i // l]:
-            continue
-        var source = i // l + (i % l) * b if column_major else i
-        var id = packed[source]
-        if Bool(py=id < 0) or Bool(py=id >= vocab):
-            raise Error("Samba: input id outside vocabulary")
-        dst[i] = Int32(Int(py=id))
+    var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
+    samba_inference_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l,
+                             column_major, vocab, lengths is not None, sizes, dst)
+    _ = packed^
     return ids
 
 
@@ -259,9 +256,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     if lengths is not None:
         var sizes = _neural_lengths(lengths, b, l, context["neural"])
         var padded = generation_array([b, l, v])
-        for row in range(b):
-            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=padded._addr)) + row * l * v,
-                   src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=output._addr)) + row * l * v, count=sizes[row] * v)
+        samba_copy_row_prefixes(Int(py=padded._addr), Int(py=output._addr), sizes, b, l, v)
         output = padded
     if step:
         output.shape = bi.tuple(py_ints([b, v]))
