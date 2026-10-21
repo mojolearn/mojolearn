@@ -6,7 +6,8 @@ from autograd.python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session
-from autograd.program_pyapi import ProgramInput, _integer, ops_program_fit_native_py
+from autograd.program_pyapi import program_input, _integer, ops_program_fit_native_py
+from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
 from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
 from autograd.model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
@@ -198,7 +199,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "load_weights":
         return ops_weights_native_py[E, KIND](sid, args[0], args[1], args[2])
     if name == "tensor" or name == "ids":
-        var input = ProgramInput(args[0], name == "ids")
+        var input = program_input(args[0], name == "ids")
         var handle: Int
         if name == "ids":
             handle = s[].upload_ids(input.src, input.shape)
@@ -538,13 +539,10 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
                 raise Error("ValueError: sizes must list at least one length")
             tail.append(0)
             _append(tail, sizes)
+        var views = session_split[E, KIND](Int(py=sid), hs, axis, tail, count, fs)
         var out = Python.list()
-        for k in range(count):  # driver-loop: over requested split views
-            var spec = List[Int]()
-            spec.append(axis)
-            spec.append(k)
-            _append(spec, tail)
-            out.append(s[].op(40, hs, spec, fs))
+        for k in range(len(views)):  # small-loop(views: one handle per requested section): result packing, no data
+            out.append(views[k])
         return out
     if name == "embedding" or name == "take":
         code = 32 if name == "embedding" else 41
@@ -556,7 +554,7 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
             hs.append(_int(args[1], "handle", 1))
             ints.append(option)
         else:
-            var input = ProgramInput(args[1], True)
+            var input = program_input(args[1], True)
             var b = Python.import_module("builtins")
             var dtype_num = 9
             if Bool(py=b.hasattr(args[1], "dtype")):
@@ -602,8 +600,8 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     if name == "clip":
         code = 56
         hs.append(_int(args[0], "handle", 1))
-        fs.append(Float32(-1.0) / Float32(0.0) if _nil(args[1]) else Float32(py=args[1]))
-        fs.append(Float32(1.0) / Float32(0.0) if _nil(args[2]) else Float32(py=args[2]))
+        fs.append(clip_low_unbounded() if _nil(args[1]) else Float32(py=args[1]))
+        fs.append(clip_high_unbounded() if _nil(args[2]) else Float32(py=args[2]))
     if name == "equal" or name == "not_equal" or name == "greater" or name == "greater_equal" or name == "less" or name == "less_equal":
         code = 69
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]

@@ -5,7 +5,10 @@
 # outside any graph run/fit. No ndarray.ctypes (a Python helper) is invoked.
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from std.memory import memcpy
+from sequence.ops import FP
 from autograd.rankn import ShapeN
+from autograd.program_io import HostArray
 
 
 struct _ProgramArrays(Defaultable, Movable):
@@ -88,3 +91,20 @@ def mapped_byte_array(path: PythonObject) raises -> PythonObject:
     var dims = Python.list()
     dims.append(len(mapping))
     return state[].ndarray(dims, dtype="uint8", buffer=mapping)
+
+
+def host_array_py(h: HostArray) raises -> PythonObject:
+    """A float32 ndarray of a typed host result: allocation and one memcpy."""
+    var a = output_array(h.shape)
+    if h.shape.count() > 0:
+        memcpy(dest=FP(unsafe_from_address=Int(py=a.__array_interface__["data"][0])),
+               src=h.data.unsafe_ptr(), count=h.shape.count())
+    return a
+
+
+def host_arrays_py(hs: List[HostArray]) raises -> PythonObject:
+    """A Python list of host_array_py results."""
+    var out = Python.list()
+    for k in range(len(hs)):  # small-loop(hs: one array per program output): result packing, no data
+        out.append(host_array_py(hs[k]))
+    return out
