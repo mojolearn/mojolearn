@@ -87,7 +87,7 @@ def program_save_verified[E: Exec & Movable & Deinitable, KIND: Int](
         # Zero initialization supplies the established valid id 0.
         if k > 0:
             input_json += ","
-        var name = input_names[k] if have_inputs else "input" + String(k)
+        var name = input_names[k].copy() if have_inputs else "input" + String(k)
         input_json += _array_entry(a, name, "int32" if p.in_kinds[k] == 1 else "float32")
         arrays.append(a^)
     input_json += "]"
@@ -106,7 +106,7 @@ def program_save_verified[E: Exec & Movable & Deinitable, KIND: Int](
     for k in range(len(p.outs)):  # driver-loop: over verification output digests
         if k > 0:
             output_json += ","
-        var name = output_names[k] if have_outputs else "output" + String(k)
+        var name = output_names[k].copy() if have_outputs else "output" + String(k)
         output_json += _array_entry(r.outputs[k], name, "")
     output_json += "]"
     var sha = verify_file_sha256(file)
