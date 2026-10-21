@@ -927,6 +927,36 @@ def vocab_decode_binding(
     return PythonObject(len(out))
 
 
+def _py_bytes_list(raw: PythonObject) raises -> List[UInt8]:
+    """The bytes of a Python bytes-like object, one memcpy through an
+    `array('B')` buffer (no Python loop over the bytes)."""
+    var arr = Python.import_module("array").array("B", raw)
+    var n = len(arr)
+    var out = List[UInt8](length=n, fill=UInt8(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(Int(py=arr.buffer_info()[0])), count=n)
+    return out^
+
+
+def _py_bytes(values: List[UInt8]) raises -> PythonObject:
+    """`values` as a Python bytes object, one memcpy into an `array('B')`."""
+    var bi = Python.import_module("builtins")
+    var arr = Python.import_module("array").array("B", bi.bytes(len(values)))
+    if len(values) > 0:
+        memcpy(dest=_u8_ptr(Int(py=arr.buffer_info()[0])), src=values.unsafe_ptr(), count=len(values))
+    return arr.tobytes()
+
+
+def _py_int_list(values: List[Int]) raises -> PythonObject:
+    """`values` as a Python list of ints, through an `array('q')` filled
+    by `tokenizer_store_i64` (no Python loop over the values)."""
+    var bi = Python.import_module("builtins")
+    var arr = Python.import_module("array").array("q", bi.bytes(8 * len(values)))
+    if len(values) > 0:
+        tokenizer_store_i64(_i64_ptr(Int(py=arr.buffer_info()[0])), values)
+    return arr.tolist()
+
+
 def vocab_encode_public_binding(
     tokenizer: PythonObject, input_text: PythonObject, add_special: PythonObject,
     allow_special: PythonObject, bytes_only: PythonObject,
@@ -951,19 +981,12 @@ def vocab_encode_public_binding(
         text = text.encode("utf-8")
     else:
         text = bi.memoryview(text).tobytes()
-    var bytes = List[UInt8](capacity=len(text))
-    for i in range(len(text)):
-        bytes.append(UInt8(Int(py=text[i])))
-    var ids = owner[].tok.value().encode(bytes, Bool(py=allow_special))
+    var bytes = _py_bytes_list(text)
+    var ids = vocab_encode_ids(owner[].tok.value(), bytes, Bool(py=allow_special))
     var out = bi.list()
     if Bool(py=add_special):
         out.extend(tokenizer.bos_ids)
-    comptime if TOKENIZER_HOST_SABOTAGE:
-        for i in range(len(ids)):
-            out.append(ids[len(ids) - i - 1])
-    else:
-        for i in range(len(ids)):
-            out.append(ids[i])
+    out.extend(_py_int_list(ids))
     if Bool(py=add_special):
         out.extend(tokenizer.eos_ids)
     return out
@@ -977,12 +1000,8 @@ def vocab_decode_public_binding(tokenizer: PythonObject, seq: PythonObject, byte
     if Bool(py=bi.isinstance(seq, bi.str)) or Bool(py=bi.isinstance(seq, bi.bytes)) or Bool(py=bi.isinstance(seq, bi.bytearray)):
         raise Error("tokenizer: ids must be an integer sequence")
     var ids = _ids_from_seq(seq)
-    var out = List[UInt8]()
-    for k in range(len(ids)):
-        owner[].tok.value().append_decoded(out, ids[k], k)
-    var raw = bi.bytearray()
-    for i in range(len(out)):
-        raw.append(Int(out[i]))
+    var out = vocab_decode_ids(owner[].tok.value(), ids)
+    var raw = _py_bytes(out)
     if Bool(py=bytes_only):
         return bi.bytes(raw)
     return raw.decode("utf-8", errors)
@@ -992,25 +1011,14 @@ def vocab_fingerprint_binding(tokenizer: PythonObject) raises -> PythonObject:
     var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
         raise Error("tokenizer: vocabulary is not loaded")
-    var g = GENERATION_BOUNDARY.get_or_create_ptr()
-    var h = g[].hash_type()
     ref tok = owner[].tok.value()
-    for i in range(tok.ranks.n_tokens()):
-        h.update(PythonObject(String(tok.ranks.length[i]) + ":").encode("ascii"))
-        var bytes = g[].bi.bytearray()
-        for j in range(tok.ranks.length[i]):
-            bytes.append(Int(tok.ranks.arena[tok.ranks.offset[i] + j]))
-        h.update(bytes)
-    for i in range(len(tok.sp_id)):
-        h.update(PythonObject(String(tok.sp_id[i]) + ":" + String(tok.sp_length[i]) + ":").encode("ascii"))
-        var bytes = g[].bi.bytearray()
-        for j in range(tok.sp_length[i]):
-            bytes.append(Int(tok.sp_arena[tok.sp_offset[i] + j]))
-        h.update(bytes)
-    for value in [tokenizer.pattern, tokenizer.normalizer, tokenizer.unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]:
-        h.update(g[].bi.str(value).encode("utf-8"))
-        h.update(PythonObject("\n").encode("ascii"))
-    return h.hexdigest()
+    var bi = Python.import_module("builtins")
+    var tail = List[UInt8]()
+    var settings = [tokenizer.pattern, tokenizer.normalizer, tokenizer.unicode_version, tokenizer.bos_ids, tokenizer.eos_ids]
+    for i in range(5):  # small-loop(the five settings words of the fingerprint)
+        tokenizer_append_bytes(tail, _py_bytes_list(bi.str(settings[i]).encode("utf-8")))
+        tokenizer_append_bytes(tail, _py_bytes_list(PythonObject("\n").encode("ascii")))
+    return PythonObject(vocab_fingerprint_hex(tok, tail))
 
 
 def _vocab_pattern(pattern: PythonObject) raises -> Int:
@@ -1035,7 +1043,7 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: Python
     tokenizer.added = bi.dict() if options[1] is None else bi.dict(options[1])
     tokenizer._added_by_id = bi.dict()
     var keys = bi.list(tokenizer.added)
-    for i in range(len(keys)):
+    for i in range(len(keys)):  # small-loop(added tokens: configuration entries, not input data)
         var content = keys[i]
         var id = tokenizer.added[content]
         if bi.type(content) is not bi.str or len(content) == 0 or bi.type(id) is not bi.int or Int(py=id) < 0:
@@ -1046,10 +1054,10 @@ def _vocab_settle(tokenizer: PythonObject, options: PythonObject, module: Python
     var bos = bi.list()
     var eos = bi.list()
     var input = bi.list(options[3])
-    for i in range(len(input)):
+    for i in range(len(input)):  # small-loop(bos ids: configuration words)
         bos.append(bi.int(input[i]))
     input = bi.list(options[4])
-    for i in range(len(input)):
+    for i in range(len(input)):  # small-loop(eos ids: configuration words)
         eos.append(bi.int(input[i]))
     tokenizer.bos_ids = bi.tuple(bos)
     tokenizer.eos_ids = bi.tuple(eos)
@@ -1062,12 +1070,11 @@ def _vocab_finish(tokenizer: PythonObject, var tok: VocabTokenizer) raises:
     var sp_lengths = List[Int]()
     var sp_ids = List[Int]()
     var keys = bi.list(tokenizer.added)
-    for i in range(len(keys)):
+    for i in range(len(keys)):  # small-loop(added tokens: configuration entries, not input data)
         var text = keys[i].encode("utf-8")
         sp_lengths.append(len(text))
         sp_ids.append(Int(py=tokenizer.added[keys[i]]))
-        for j in range(len(text)):
-            sp_arena.append(UInt8(Int(py=text[j])))
+        tokenizer_append_bytes(sp_arena, _py_bytes_list(text))
     tok.set_specials(sp_arena, sp_lengths, sp_ids)
     tokenizer._n_ranks = PythonObject(tok.n_ranks())
     tokenizer._n_vocab = PythonObject(tok.n_vocab())
@@ -1083,10 +1090,7 @@ def _token_bytes(value: PythonObject) raises -> List[UInt8]:
         raw = Python.import_module("builtins").memoryview(value).tobytes()
     except error:
         raise Error("TypeError: token/merge part must be bytes-like: " + String(error))
-    var out = List[UInt8](capacity=len(raw))
-    for i in range(len(raw)):
-        out.append(UInt8(Int(py=raw[i])))
-    return out^
+    return _py_bytes_list(raw)
 
 
 def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, merges: PythonObject,
@@ -1099,17 +1103,32 @@ def vocab_init_public_binding(tokenizer: PythonObject, tokens: PythonObject, mer
     for i in range(len(entries)):
         var bytes = _token_bytes(entries[i])
         lengths.append(len(bytes))
-        for j in range(len(bytes)):
-            arena.append(bytes[j])
+        tokenizer_append_bytes(arena, bytes)
     var table = table_from_tokens(arena, lengths)
     var checks = MergeCheck(len(entries))
     var pairs = bi.list(merges)
+    # Read the pairs up to the first one the conversion refuses; the merges
+    # before it are checked first (`vocab_check_pairs`), then the refusal is
+    # raised, the order the per-pair loop had.
+    var lefts = List[List[UInt8]](capacity=len(pairs))
+    var rights = List[List[UInt8]](capacity=len(pairs))
+    var refused = String("")
+    var failed = False
     for i in range(len(pairs)):
-        if len(pairs[i]) != 2:
-            raise Error("tokenizer: every merge must be a pair of bytes")
-        var left = _token_bytes(pairs[i][0])
-        var right = _token_bytes(pairs[i][1])
-        check_merge(table, left, right, "merge " + String(i), checks)
+        try:
+            if len(pairs[i]) != 2:
+                raise Error("tokenizer: every merge must be a pair of bytes")
+            var left = _token_bytes(pairs[i][0])
+            var right = _token_bytes(pairs[i][1])
+            lefts.append(left^)
+            rights.append(right^)
+        except error:
+            refused = String(error)
+            failed = True
+            break
+    vocab_check_pairs(table, lefts, rights, checks)
+    if failed:
+        raise Error(refused)
     check_loose(table, checks, Bool(py=options[5]))
     var tok = VocabTokenizer(table^, builtin_unicode_classes(), _vocab_pattern(options[0]))
     _vocab_finish(tokenizer, tok^)
@@ -1141,7 +1160,7 @@ def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> P
         raise Error("tokenizer: pre_tokenizer type " + kind + " is not a known cut")
     var found = PythonObject(None)
     var steps = pre.get("pretokenizers", bi.list())
-    for i in range(len(steps)):
+    for i in range(len(steps)):  # small-loop(pre_tokenizer steps: configuration structure)
         var step = steps[i]
         var t = String(step.get("type"))
         if t == "Split":
@@ -1198,7 +1217,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
             var steps = norm.get("normalizers", bi.list())
             if len(steps) == 0:
                 raise Error("tokenizer: empty normalizer Sequence")
-            for i in range(len(steps)):
+            for i in range(len(steps)):  # small-loop(normalizer steps: configuration structure)
                 if String(steps[i].get("type")) != "NFC":
                     raise Error("tokenizer: normalizer must be null or NFC")
             normalizer = PythonObject("NFC")
@@ -1208,7 +1227,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
     var added = bi.dict()
     var entries = data.get("added_tokens")
     if entries is not None:
-        for i in range(len(entries)):
+        for i in range(len(entries)):  # small-loop(added_tokens: configuration entries, not input data)
             var content = entries[i].get("content")
             var id = entries[i].get("id")
             if bi.type(content) is not bi.str or bi.type(id) is not bi.int:
@@ -1219,7 +1238,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
         raise Error("tokenizer: model.vocab is not an object")
     var base = bi.dict(vocab)
     var keys = bi.list(added)
-    for i in range(len(keys)):
+    for i in range(len(keys)):  # small-loop(added tokens: configuration entries)
         base.pop(keys[i], PythonObject(None))
     var merges = model.get("merges")
     if merges is None:
@@ -1235,7 +1254,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
             var single = post.get("single", bi.list())
             var specials = post.get("special_tokens", bi.dict())
             var seen = False
-            for i in range(len(single)):
+            for i in range(len(single)):  # small-loop(post_processor template items: configuration structure)
                 var item = single[i]
                 if Bool(py=item.__contains__("Sequence")):
                     seen = True
@@ -1244,7 +1263,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
                     var ids = specials.get(name, bi.dict()).get("ids")
                     if ids is None or len(ids) == 0:
                         raise Error("tokenizer: post_processor special token has no ids")
-                    for j in range(len(ids)):
+                    for j in range(len(ids)):  # small-loop(special token ids: configuration words)
                         if seen:
                             eos.append(bi.int(ids[j]))
                         else:
@@ -1275,7 +1294,7 @@ def vocab_json_public_binding(cls: PythonObject, data: PythonObject, path: Pytho
     tokenizer.bos_token_id = bos[0] if len(bos) != 0 else PythonObject(None)
     tokenizer.eos_token_id = eos[len(eos) - 1] if len(eos) != 0 else PythonObject(None)
     if cfg is not None and bi.type(cfg) is bi.dict:
-        for key in [String("bos_token"), String("eos_token")]:
+        for key in [String("bos_token"), String("eos_token")]:  # small-loop(the two special-token names)
             var value = cfg.get(key)
             if bi.type(value) is bi.dict:
                 value = value.get("content")
@@ -1321,26 +1340,24 @@ def vocab_pretokenize_pattern_binding(data: PythonObject, pattern: PythonObject)
     var raw = data.encode("utf-8") if bi.type(data) is bi.str else bi.memoryview(data).tobytes()
     var bytes = _token_bytes(raw)
     var offsets = pretokenize_pattern(bytes, builtin_unicode_classes(), _vocab_pattern(pattern))
-    var out = bi.list()
-    for i in range(len(offsets)):
-        out.append(offsets[i])
-    return out
+    _ = bi
+    return _py_int_list(offsets)
 
 
 def vocab_pretokenize_public_binding(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var raw = data.encode("utf-8") if Bool(py=bi.isinstance(data, bi.str)) else bi.memoryview(data).tobytes()
-    var bytes = List[UInt8](capacity=len(raw))
-    for i in range(len(raw)):
-        bytes.append(UInt8(Int(py=raw[i])))
+    var bytes = _py_bytes_list(raw)
     var owner = tokenizer._handle.downcast_value_ptr[VocabHandle]()
     if not owner[].tok:
         raise Error("tokenizer: vocabulary is not loaded")
     var offsets = owner[].tok.value().pretokenize(bytes)
-    var out = bi.list()
-    for i in range(len(offsets) - 1):
-        out.append(raw[bi.slice(offsets[i], offsets[i + 1])])
-    return out
+    # The pieces raw[offsets[i]:offsets[i + 1]], cut by CPython's own map
+    # and slice (no Python-level loop over the pieces).
+    var offs = _py_int_list(offsets)
+    var starts = offs[bi.slice(0, -1)]
+    var stops = offs[bi.slice(1, PythonObject(None))]
+    return bi.list(bi.map(raw.__getitem__, bi.map(bi.slice, starts, stops)))
 
 
 def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
