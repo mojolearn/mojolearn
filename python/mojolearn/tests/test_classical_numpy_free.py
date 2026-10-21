@@ -262,38 +262,47 @@ def test_numpy_free_methods_return_the_numpy_bits(cls, numpy_free, tmp_path):
     assert hashlib.sha256(saved.getvalue()).hexdigest() == got["file"]
 
 
+
 _LATE_NUMPY_CHILD = r'''
-import json, sys
+import json, os, sys
 import mojolearn
 from mojolearn import LinearRegression, Ridge
-from mojolearn._classical_host import HostLinearRegression, HostRidge
 assert "numpy" not in sys.modules, "importing mojolearn loaded NumPy"
 import numpy as np
 data = json.loads(sys.stdin.read())
 x, y = np.array(data["x"], "f4"), np.array(data["y"], "f4")
 out = {}
-for cls in (LinearRegression, Ridge, HostLinearRegression, HostRidge):
+for cls in (LinearRegression, Ridge):
     model = cls(numeric_mode="identical").fit(x, y)
     prediction = model.predict(x)
     assert type(model.coef_) is np.ndarray and type(prediction) is np.ndarray, cls.__name__
-    out[cls.__name__] = {"coef": model.coef_.tobytes().hex(), "predict": prediction.tobytes().hex()}
+    path = os.path.join(data["tmp"], cls.__name__ + ".npz")
+    model.save(path)
+    hosted = mojolearn.host_model(path).predict(x)
+    assert type(hosted) is np.ndarray, cls.__name__
+    out[cls.__name__] = {"coef": model.coef_.tobytes().hex(), "predict": prediction.tobytes().hex(),
+                         "host_predict": hosted.tobytes().hex()}
 print("RESULT " + json.dumps(out))
 '''
 
 
-def test_numpy_loaded_after_import_returns_ndarrays():
+def test_numpy_loaded_after_import_returns_ndarrays(tmp_path):
     """Importing mojolearn never loads NumPy; NumPy imported afterwards
     connects the ndarray path, with the bits of a NumPy-first process."""
-    from mojolearn._classical_host import HostLinearRegression, HostRidge
     x, y, _ = _data()
     env = dict(os.environ, PYTHONPATH=str(Path(mojolearn.__file__).resolve().parents[1]))
+    payload = json.dumps({"x": x.tolist(), "y": y.tolist(), "tmp": str(tmp_path)})
     done = subprocess.run([sys.executable, "-c", _LATE_NUMPY_CHILD], env=env, capture_output=True, text=True,
-                          input=json.dumps({"x": x.tolist(), "y": y.tolist()}), timeout=600)
+                          input=payload, timeout=600)
     assert done.returncode == 0, done.stderr[-4000:]
     line = [ln for ln in done.stdout.splitlines() if ln.startswith("RESULT ")]
     assert line, done.stdout[-2000:]
     got = json.loads(line[-1][len("RESULT "):])
-    for cls in (LinearRegression, Ridge, HostLinearRegression, HostRidge):
+    for cls in (LinearRegression, Ridge):
         model = cls(numeric_mode="identical").fit(x, y)
+        path = tmp_path / ("parent-" + cls.__name__ + ".npz")
+        model.save(path)
         assert got[cls.__name__]["coef"] == np.asarray(model.coef_).tobytes().hex(), cls.__name__
         assert got[cls.__name__]["predict"] == np.asarray(model.predict(x)).tobytes().hex(), cls.__name__
+        hosted = mojolearn.host_model(path).predict(x)
+        assert got[cls.__name__]["host_predict"] == np.asarray(hosted).tobytes().hex(), cls.__name__
