@@ -7,6 +7,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_description import sequential_fields
 from bindings.classical_ridge import classical_ridge_fit, classical_linear_predict
+from bindings.classical_ols import classical_ols_fit
 
 
 def classical_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -37,8 +38,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var args = call[2]
         var context = call[3]
         var b = Python.import_module("builtins")
-        if b.type(model) is not context["ridge_class"]:
-            raise Error("TypeError: the private classical owner requires an exact Ridge instance")
+        var ridge = b.type(model) is context["ridge_class"]
+        var linear = b.type(model) is context.get("linear_class")
+        if not ridge and not linear:
+            raise Error("TypeError: the private classical owner requires an exact Ridge or LinearRegression instance")
         sequential_admit_value(args, context)
         var fields = sequential_fields(model)
         var names = context["classical_fields"]
@@ -48,7 +51,13 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var entries = classical_entries(model, context)
         var result = PythonObject(None)
         if operation == "ridge_fit":
+            if not ridge:
+                raise Error("TypeError: ridge_fit requires Ridge")
             result = classical_ridge_fit(model, args, entries, context)
+        elif operation == "ols_fit":
+            if not linear:
+                raise Error("TypeError: ols_fit requires LinearRegression")
+            result = classical_ols_fit(model, args, entries, context)
         elif operation == "predict":
             result = classical_linear_predict(model, args[0], entries, context)
         else:
