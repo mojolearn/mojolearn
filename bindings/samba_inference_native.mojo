@@ -50,8 +50,18 @@ def samba_state_construct(state: PythonObject, b: PythonObject, maximum: PythonO
 def samba_allocate(model: PythonObject, batch: PythonObject, maximum: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = Python.import_module("builtins")
-    var b = Int(py=bi.int(batch))
-    var cap = Int(py=bi.int(maximum))
+    # Integers only (anything with __index__): a str is not parsed and a
+    # bool is not counted as 1.
+    if bi.type(batch) is bi.bool or bi.type(maximum) is bi.bool:
+        raise Error("TypeError: SambaStack.allocate_state: batch_size and max_tokens must be integers")
+    var b = 0
+    var cap = 0
+    try:
+        var operator = Python.import_module("operator")
+        b = Int(py=operator.index(batch))
+        cap = Int(py=operator.index(maximum))
+    except error:
+        raise Error("TypeError: SambaStack.allocate_state: batch_size and max_tokens must be integers")
     if b < 1 or cap < 1:
         raise Error("SambaStack.allocate_state: batch_size and max_tokens must be positive")
     var fields = samba_fields(model)

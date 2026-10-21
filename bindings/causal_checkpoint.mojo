@@ -46,11 +46,35 @@ def checkpoint_array(raw: PythonObject, shape: PythonObject, code: String, array
 
 
 def tensor_info_init_binding(value: PythonObject, fields: PythonObject) raises -> PythonObject:
+    # A TensorInfo built by hand admits exactly what the header parser
+    # (safetensors_init_binding) admits: a str name and dtype, non-negative
+    # dimensions, ordered offsets and, for a dtype the reader knows, a byte
+    # span equal to dtype x shape.
+    var bi = Python.import_module("builtins")
+    if bi.type(fields[0]) is not bi.str or bi.type(fields[1]) is not bi.str:
+        raise Error("TypeError: TensorInfo name and dtype must be str")
+    var dtype = String(fields[1])
+    var shape = bi.list()
+    var count = 1
+    var input_shape = fields[2]
+    for j in range(len(input_shape)):  # small-loop(tensor shape dimension words)
+        var size = Int(py=bi.int(input_shape[j]))
+        if size < 0 or (size != 0 and count > 9223372036854775807 // size):
+            raise Error("TensorInfo shape must hold non-negative dimensions")
+        count *= size
+        shape.append(size)
+    var begin = Int(py=bi.int(fields[3]))
+    var end = Int(py=bi.int(fields[4]))
+    if begin < 0 or end < begin:
+        raise Error("TensorInfo offsets must satisfy 0 <= begin <= end")
+    var itemsize = 8 if dtype == "I64" else (4 if dtype == "F32" or dtype == "I32" else (2 if dtype == "BF16" or dtype == "F16" else 0))
+    if itemsize != 0 and (count > 9223372036854775807 // itemsize or count * itemsize != end - begin):
+        raise Error("TensorInfo bytes differ from dtype/shape")
     value.name = fields[0]
     value.dtype = fields[1]
-    value.shape = fields[2]
-    value.begin = fields[3]
-    value.end = fields[4]
+    value.shape = bi.tuple(shape)
+    value.begin = PythonObject(begin)
+    value.end = PythonObject(end)
     value.file = fields[5]
     return PythonObject(None)
 
