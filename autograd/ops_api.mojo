@@ -1901,16 +1901,17 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 context += shape_text(self.shapes[self._slot(hs[j])])
             var message = String(err)
             var kind = String("")
+            var message_start = 0
             if message.startswith("ValueError: "):
                 kind = "ValueError: "
-                message = String(message[byte=12:])
+                message_start = 12
             elif message.startswith("TypeError: "):
                 kind = "TypeError: "
-                message = String(message[byte=11:])
+                message_start = 11
             elif message.startswith("OverflowError: "):
                 kind = "OverflowError: "
-                message = String(message[byte=15:])
-            raise Error(kind + context + "]: " + message)
+                message_start = 15
+            raise Error(kind + context + "]: " + String(message[byte=message_start:]))
         if self.program_trace.enabled:
             var issued = Int(perf_counter_ns())
             self.ex.sync()
