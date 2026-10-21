@@ -34,8 +34,6 @@ dense fit within float32 (the atomic fold order is new).
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
@@ -394,64 +392,36 @@ def _nb_csr_fit_int(
     _ = oc^
 
 
-def nb_csr_fit_int_py(
-    indptr: PythonObject, indices: PythonObject, data: PythonObject, y: PythonObject, sizes: PythonObject,
-    out_fc: PythonObject, out_cnt: PythonObject, out_flag: PythonObject,
-) raises -> PythonObject:
-    """`x_prep_nb_csr_fit` of the IDENTICAL binding: `nb_csr_fit_py`'s
+def nb_csr_fit_int(
+    n: Int, d: Int, K: Int, nnz: Int, pa: Int, ia: Int, da: Int, ya: Int, fa: Int, ca: Int, ga: Int,
+) raises:
+    """`x_prep_nb_csr_fit` of the IDENTICAL binding: `nb_csr_fit`'s
     buffers; out_flag is a level (2: a negative value, the caller refuses
     the input; 1: the caller runs the dense program, the tables are not to
-    be used). Returns 1."""
-    var n = Int(py=sizes[0])
-    var d = Int(py=sizes[1])
-    var K = Int(py=sizes[2])
-    var nnz = Int(py=sizes[3])
-    var pa = Int(py=indptr)
-    var ia = Int(py=indices)
-    var da = Int(py=data)
-    var ya = Int(py=y)
-    var fa = Int(py=out_fc)
-    var ca = Int(py=out_cnt)
-    var ga = Int(py=out_flag)
+    be used)."""
     if n < 1 or d < 1 or K < 1 or nnz < 0 or pa == 0 or ya == 0 or fa == 0 or ca == 0 or ga == 0:
         raise Error("x_prep: invalid CSR fit buffers")
     if nnz > 0 and (ia == 0 or da == 0):
         raise Error("x_prep: invalid CSR fit buffers")
     if 2 * K * d > 2147483647 or nnz > 2147483647 or n > 2147483646:
         raise Error("x_prep: CSR fit exceeds the Int32 index bound")
-    with GILReleased(Python()):
-        _nb_csr_fit_int(pa, ia, da, ya, n, d, K, nnz, fa, ca, ga)
-    return PythonObject(1)
+    _nb_csr_fit_int(pa, ia, da, ya, n, d, K, nnz, fa, ca, ga)
 
 
-def nb_csr_fit_py(
-    indptr: PythonObject, indices: PythonObject, data: PythonObject, y: PythonObject, sizes: PythonObject,
-    out_fc: PythonObject, out_cnt: PythonObject, out_flag: PythonObject,
-) raises -> PythonObject:
+def nb_csr_fit(
+    n: Int, d: Int, K: Int, nnz: Int, pa: Int, ia: Int, da: Int, ya: Int, fa: Int, ca: Int, ga: Int,
+) raises:
     """`x_prep_nb_csr_fit`: host addresses of indptr (n + 1 int32), indices
     (nnz int32), data (nnz float32) and the class codes (n int32); sizes =
     [n, d, K, nnz]; out_fc (K * d float32), out_cnt (K float32) and out_flag
-    (1 int32: 1 when a value is negative) are written. Returns 1."""
-    var n = Int(py=sizes[0])
-    var d = Int(py=sizes[1])
-    var K = Int(py=sizes[2])
-    var nnz = Int(py=sizes[3])
-    var pa = Int(py=indptr)
-    var ia = Int(py=indices)
-    var da = Int(py=data)
-    var ya = Int(py=y)
-    var fa = Int(py=out_fc)
-    var ca = Int(py=out_cnt)
-    var ga = Int(py=out_flag)
+    (1 int32: 1 when a value is negative) are written."""
     if n < 1 or d < 1 or K < 1 or nnz < 0 or pa == 0 or ya == 0 or fa == 0 or ca == 0 or ga == 0:
         raise Error("x_prep: invalid CSR fit buffers")
     if nnz > 0 and (ia == 0 or da == 0):
         raise Error("x_prep: invalid CSR fit buffers")
     if K * d > 2147483647 or nnz > 2147483647:
         raise Error("x_prep: CSR fit exceeds the Int32 index bound")
-    with GILReleased(Python()):
-        _nb_csr_fit(pa, ia, da, ya, n, d, K, nnz, fa, ca, ga)
-    return PythonObject(1)
+    _nb_csr_fit(pa, ia, da, ya, n, d, K, nnz, fa, ca, ga)
 
 
 def _nb_csr_jll(
@@ -480,32 +450,19 @@ def _nb_csr_jll(
     _ = do_^
 
 
-def nb_csr_jll_py(
-    indptr: PythonObject, indices: PythonObject, data: PythonObject, flp: PythonObject, clp: PythonObject,
-    sizes: PythonObject, dst: PythonObject,
-) raises -> PythonObject:
+def nb_csr_jll(
+    n: Int, d: Int, K: Int, nnz: Int, pa: Int, ia: Int, da: Int, wa: Int, ba: Int, oa: Int,
+) raises:
     """`x_prep_nb_csr_jll`: the joint log likelihood (n x K float32 at dst)
     of a CSR matrix; flp = feature_log_prob_ (K x d), clp = class_log_prior_
-    (K) or address 0 for none; sizes = [n, d, K, nnz]. Returns 1."""
-    var n = Int(py=sizes[0])
-    var d = Int(py=sizes[1])
-    var K = Int(py=sizes[2])
-    var nnz = Int(py=sizes[3])
-    var pa = Int(py=indptr)
-    var ia = Int(py=indices)
-    var da = Int(py=data)
-    var wa = Int(py=flp)
-    var ba = Int(py=clp)
-    var oa = Int(py=dst)
+    (K) or address 0 for none; sizes = [n, d, K, nnz]."""
     if n < 1 or d < 1 or K < 1 or nnz < 0 or pa == 0 or wa == 0 or oa == 0:
         raise Error("x_prep: invalid CSR scoring buffers")
     if nnz > 0 and (ia == 0 or da == 0):
         raise Error("x_prep: invalid CSR scoring buffers")
     if n * K > 2147483647 or K * d > 2147483647 or nnz > 2147483647:
         raise Error("x_prep: CSR scoring exceeds the Int32 index bound")
-    with GILReleased(Python()):
-        _nb_csr_jll(pa, ia, da, wa, ba, n, d, K, nnz, oa)
-    return PythonObject(1)
+    _nb_csr_jll(pa, ia, da, wa, ba, n, d, K, nnz, oa)
 
 
 def _nb_csr_jll_chk(
@@ -538,30 +495,16 @@ def _nb_csr_jll_chk(
     _ = dg^
 
 
-def nb_csr_jll_chk_py(
-    indptr: PythonObject, indices: PythonObject, data: PythonObject, flp: PythonObject, clp: PythonObject,
-    sizes: PythonObject, dst: PythonObject, out_flag: PythonObject,
-) raises -> PythonObject:
-    """`x_prep_nb_csr_jll` of the IDENTICAL binding: `nb_csr_jll_py`'s
+def nb_csr_jll_chk(
+    n: Int, d: Int, K: Int, nnz: Int, pa: Int, ia: Int, da: Int, wa: Int, ba: Int, oa: Int, ga: Int,
+) raises:
+    """`x_prep_nb_csr_jll` of the IDENTICAL binding: `nb_csr_jll`'s
     buffers plus out_flag (1 int32; 1: a row's columns are not strictly
-    ascending, the caller runs the dense program). Returns 1."""
-    var n = Int(py=sizes[0])
-    var d = Int(py=sizes[1])
-    var K = Int(py=sizes[2])
-    var nnz = Int(py=sizes[3])
-    var pa = Int(py=indptr)
-    var ia = Int(py=indices)
-    var da = Int(py=data)
-    var wa = Int(py=flp)
-    var ba = Int(py=clp)
-    var oa = Int(py=dst)
-    var ga = Int(py=out_flag)
+    ascending, the caller runs the dense program)."""
     if n < 1 or d < 1 or K < 1 or nnz < 0 or pa == 0 or wa == 0 or oa == 0 or ga == 0:
         raise Error("x_prep: invalid CSR scoring buffers")
     if nnz > 0 and (ia == 0 or da == 0):
         raise Error("x_prep: invalid CSR scoring buffers")
     if n * K > 2147483647 or K * d > 2147483647 or nnz > 2147483647:
         raise Error("x_prep: CSR scoring exceeds the Int32 index bound")
-    with GILReleased(Python()):
-        _nb_csr_jll_chk(pa, ia, da, wa, ba, n, d, K, nnz, oa, ga)
-    return PythonObject(1)
+    _nb_csr_jll_chk(pa, ia, da, wa, ba, n, d, K, nnz, oa, ga)
