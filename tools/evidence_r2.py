@@ -47,6 +47,7 @@ import argparse
 import hashlib
 import os
 import pathlib
+import shlex
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -57,24 +58,49 @@ PREFIX = "evidence/v1"
 KEEP = ("identity_break", "verify_reference")
 #: Regenerable outputs. Large, and no recipe reads them.
 BULK_SUFFIX = (".so", ".pyc", ".log", ".f32", ".i32", ".whl", ".card", ".a", ".dylib")
+R2_KEYS = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
 
 
 def _creds():
     import bincache
-    creds = bincache.creds_from_env(os.environ)
-    if not all(creds.values()):
+    # Complete the environment before bincache's validating loader, which
+    # exits immediately on missing keys. Explicit environment entries win,
+    # including empty entries: they must not silently select a file account.
+    env = dict(os.environ)
+    if any(key not in env for key in R2_KEYS):
         rc = pathlib.Path.home() / ".mojolearn_r2"
-        if rc.exists():
-            env = dict(os.environ)
-            for line in rc.read_text().splitlines():
-                if "=" in line and not line.strip().startswith("#"):
-                    k, _, v = line.partition("=")
-                    env[k.strip()] = v.strip().strip("'\"")
-            creds = bincache.creds_from_env(env)
-    missing = [k for k, v in creds.items() if not v]
+        try:
+            content = rc.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            content = ""
+        except (OSError, UnicodeError):
+            raise SystemExit("Cannot read R2 credential file ~/.mojolearn_r2") from None
+        defaults = {}
+        for number, line in enumerate(content.splitlines(), 1):
+            line = line.strip()
+            if line.startswith("#"):
+                continue
+            fields = line.split(None, 1)
+            if fields and fields[0] == "export":
+                line = fields[1] if len(fields) > 1 else ""
+            key, separator, value = line.partition("=")
+            key = key.strip()
+            if not separator or key not in R2_KEYS or key in env:
+                continue
+            # Parse literal shell-style assignments, never source/execute the
+            # file or expand command substitutions. Errors name no values.
+            try:
+                words = shlex.split(value, comments=True, posix=True)
+            except ValueError:
+                raise SystemExit(f"Invalid R2 credential assignment in ~/.mojolearn_r2 at line {number}") from None
+            if len(words) > 1:
+                raise SystemExit(f"Invalid R2 credential assignment in ~/.mojolearn_r2 at line {number}")
+            defaults[key] = words[0] if words else ""
+        env.update(defaults)
+    missing = [key for key in R2_KEYS if not env.get(key)]
     if missing:
         raise SystemExit(f"R2 credentials missing: {missing} (see ~/.mojolearn_r2)")
-    return creds
+    return bincache.creds_from_env(env)
 
 
 def scan(base):
