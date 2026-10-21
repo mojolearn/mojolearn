@@ -50,7 +50,6 @@ defines (docs/apple-fast/ab/fa.md):
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
-from std.python import PythonObject
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -76,7 +75,6 @@ from x_decomp.jacobi_par import (
     pj_identity_kernel,
 )
 from x_decomp.resident import _ptr, pool_alloc, pool_free
-from x_decomp.resident_pyapi import _id, _n
 from x_decomp.rr import (
     RR_EIGH_SWEEPS,
     RR_OFF_TPB,
@@ -587,15 +585,18 @@ def fa_chol_df_kernel(g: F32Ptr, rt: F32Ptr, d_in: Int32):
         rt.unsafe_store(u, val)
 
 
-def fa_gram_py(x: PythonObject, mean: PythonObject, g: PythonObject, var_: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, d]: G (d x d, device id g) and var (d, device id var_) of the
-    resident X (n x d) centered at mean (d); enqueued, no sync. Partials from
-    the pool, freed at once (the context runs in order). FA_GRAM_DF: G in
-    double-float, g holds 2 d x d floats (hi words, then lo words)."""
+def fa_gram_check() raises:
+    """`fa_gram_py`'s page check (runs before the arguments are read)."""
     comptime if not FG_FITS:
         raise Error("x_decomp fa_gram: the tile slabs do not fit this column's threadgroup memory")
-    var n = _n(p, 0)
-    var d = _n(p, 1)
+
+
+def fa_gram_run(x: Int, mean: Int, g: Int, var_: Int, n: Int, d: Int) raises -> Int:
+    """G (d x d, device id g) and var (d, device id var_) of the resident
+    X (n x d, device id x) centered at mean (d, device id mean); enqueued, no
+    sync. Partials from the pool, freed at once (the context runs in order).
+    FA_GRAM_DF: G in double-float, g holds 2 d x d floats (hi words, then lo
+    words). Returns d."""
     if n < 1 or d < 1:
         raise Error("x_decomp fa_gram: empty input")
     if d > FA_MAX_D:
@@ -603,11 +604,11 @@ def fa_gram_py(x: PythonObject, mean: PythonObject, g: PythonObject, var_: Pytho
     var nt = fa_gram_tiles(d)
     var rows = fa_gram_rows(n)
     var nz = fa_gram_parts(n, rows)
-    var px = _ptr(_id(x), n * d)
-    var pm = _ptr(_id(mean), d)
+    var px = _ptr(x, n * d)
+    var pm = _ptr(mean, d)
     var words = 2 if FA_GRAM_DF else 1
-    var pg = _ptr(_id(g), words * d * d)
-    var pv = _ptr(_id(var_), d)
+    var pg = _ptr(g, words * d * d)
+    var pv = _ptr(var_, d)
     var sid = pool_alloc(nz * words * d * d)
     var pp = _ptr(sid, nz * words * d * d)
     var ctx = xd_ctx()
@@ -626,7 +627,7 @@ def fa_gram_py(x: PythonObject, mean: PythonObject, g: PythonObject, var_: Pytho
             pp, pg, pv, Int32(d), Int32(nz), Float32(1.0 / Float64(n)), grid_dim=_blocks(d * d), block_dim=TPB
         )
     pool_free(sid)
-    return PythonObject(d)
+    return d
 
 
 # ------------------------------------------------------------ the EM loop
@@ -1016,28 +1017,19 @@ def _fa_check_eigh(conv: Float32, sweeps: Float32, off: Float32, fro: Float32, d
         )
 
 
-def fa_em_py(
-    g: PythonObject, psi0: PythonObject, w_out: PythonObject, psi_out: PythonObject,
-    ll_out: PythonObject, p: PythonObject, tol: PythonObject,
-) raises -> PythonObject:
-    """FactorAnalysis.fit's EM loop on the resident Gram: p = [d, nc, n,
-    max_iter]; g the device id of G (d x d), psi0 host floats (d),
-    w_out host floats (nc x d), psi_out host floats (d), ll_out host float64
-    (max_iter). Returns the iterations run (len(loglike_))."""
-    var d = _n(p, 0)
-    var nc = _n(p, 1)
-    var n = _n(p, 2)
-    var max_iter = _n(p, 3)
+def fa_em_run(
+    g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
+    d: Int, nc: Int, n: Int, max_iter: Int, tol64: Float64,
+) raises -> Int:
+    """FactorAnalysis.fit's EM loop on the resident Gram: g the device id of
+    G (d x d), psi_src host floats (d), w_dst host floats (nc x d), psi_dst
+    host floats (d), ll_dst host float64 (max_iter). Returns the iterations
+    run (len(loglike_))."""
     if d < 1 or d > FA_MAX_D:
         raise Error("x_decomp fa_em: d must be in [1, " + String(FA_MAX_D) + "]")
     if nc < 1 or nc > d or n < 1 or max_iter < 1:
         raise Error("x_decomp fa_em: bad shape")
-    var pg = _ptr(_id(g), (2 if FA_GRAM_DF else 1) * d * d)
-    var psi_src = F32Ptr(unsafe_from_address=Int(py=psi0))
-    var w_dst = F32Ptr(unsafe_from_address=Int(py=w_out))
-    var psi_dst = F32Ptr(unsafe_from_address=Int(py=psi_out))
-    var ll_dst = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=Int(py=ll_out))
-    var tol64 = Float64(py=tol)
+    var pg = _ptr(g, (2 if FA_GRAM_DF else 1) * d * d)
     var dm = d + (d % 2)
     var h = dm // 2
     var nb = _pj_off_blocks(d)
@@ -1168,7 +1160,7 @@ def fa_em_py(
     _ = hfirst^
     _ = mem^
     ctx.synchronize()
-    return PythonObject(it)
+    return it
 
 
 # ------------------------------------------------------------ transform
@@ -1203,31 +1195,32 @@ def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, dst: F32Ptr, n_in: 
         dst.unsafe_store(row * nc + kk, acc[kk])
 
 
-def fa_transform_py(x: PythonObject, mean: PythonObject, pm: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, d, nc]: dst (n x nc, device id) = (X - mean) P for the
-    resident X (n x d), mean (d) and P (d x nc); enqueued, no sync."""
+def fa_transform_check() raises:
+    """`fa_transform_py`'s page check (runs before the arguments are read)."""
     comptime if not FA_TR_FITS:
         raise Error("x_decomp fa_transform: the P page does not fit this column's threadgroup memory")
-    var n = _n(p, 0)
-    var d = _n(p, 1)
-    var nc = _n(p, 2)
+
+
+def fa_transform_run(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises -> Int:
+    """dst (n x nc, device id) = (X - mean) P for the resident X (n x d),
+    mean (d) and P (d x nc), all device ids; enqueued, no sync. Returns n."""
     if n < 1 or d < 1 or nc < 1:
         raise Error("x_decomp fa_transform: empty input")
     if nc > FA_TR_MAXK or d * nc + d > FA_TR_FLOATS:
         raise Error("x_decomp fa_transform: P and the mean do not fit the page (nc <= 16, d (nc + 1) <= 4096)")
-    var px = _ptr(_id(x), n * d)
-    var pmean = _ptr(_id(mean), d)
-    var pp = _ptr(_id(pm), d * nc)
-    var po = _ptr(_id(dst), n * nc)
+    var px = _ptr(x, n * d)
+    var pmean = _ptr(mean, d)
+    var pp = _ptr(pm, d * nc)
+    var po = _ptr(dst, n * nc)
     var ctx = xd_ctx()
     ctx.enqueue_function[fa_transform_kernel](
         px, pmean, pp, po, Int32(n), Int32(d), Int32(nc), grid_dim=(n + FA_TR_TPB - 1) // FA_TR_TPB, block_dim=FA_TR_TPB
     )
-    return PythonObject(n)
+    return n
 
 
 # ------------------------------------------------------------ the defines
-def fa_defines_py() raises -> PythonObject:
+def fa_defines_run() -> String:
     """The FactorAnalysis switches this FAST Apple binding was built with
     (`-D MOJOLEARN_FA_...`), comma-joined, so python/mojolearn/
     _expansion_decomp.py `_fa_fast_define` picks a route without an env read.
@@ -1249,4 +1242,4 @@ def fa_defines_py() raises -> PythonObject:
         s += "MOJOLEARN_FA_FAST_GRAM_SPREAD,"
     comptime if FA_FAST_APPLE and FA_GRAM_QOLD:
         s += "MOJOLEARN_FA_GRAM_QOLD,"
-    return PythonObject(s)
+    return s
