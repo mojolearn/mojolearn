@@ -4,7 +4,7 @@ from std.ffi import _Global
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_json import native_path
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_get
 
 
 struct CrossVendorTypes(Defaultable, Movable):
@@ -12,6 +12,7 @@ struct CrossVendorTypes(Defaultable, Movable):
     var array_cls: PythonObject
     var c_array: PythonObject
     var ndarray: PythonObject
+    var modules: PythonObject
     var path: PythonObject
     var pure_path: PythonObject
 
@@ -20,6 +21,7 @@ struct CrossVendorTypes(Defaultable, Movable):
         self.array_cls = PythonObject(None)
         self.c_array = PythonObject(None)
         self.ndarray = PythonObject(None)
+        self.modules = PythonObject(None)
         self.path = PythonObject(None)
         self.pure_path = PythonObject(None)
 
@@ -36,10 +38,11 @@ def cv_types_initialize(array_cls: PythonObject) raises:
     c[].c_array = Python.import_module("array").array
     c[].path = Python.import_module("pathlib").PosixPath
     c[].pure_path = Python.import_module("pathlib").PurePosixPath
-    try:
-        c[].ndarray = Python.import_module("numpy").ndarray
-    except:
-        c[].ndarray = PythonObject(None)
+    # NumPy is optional and never imported here: importing mojolearn must not
+    # load it. An ndarray exists only once NumPy is loaded, so cv_buffer reads
+    # the type from the loaded module the first time it is needed.
+    c[].modules = Python.import_module("sys").modules
+    c[].ndarray = PythonObject(None)
 
 
 def cv_int(value: PythonObject, label: String) raises -> Int:
@@ -81,6 +84,10 @@ def cv_sequence(value: PythonObject, label: String) raises -> PythonObject:
 
 def cv_buffer(value: PythonObject) raises -> PythonObject:
     var c = CROSS_VENDOR_TYPES.get_or_create_ptr()
+    if c[].ndarray is None:
+        var numpy = py_get(c[].modules, "numpy")
+        if numpy is not None:
+            c[].ndarray = numpy.ndarray
     var kind = py_type(value)
     if kind is c[].array_cls:
         var view = value._mv
