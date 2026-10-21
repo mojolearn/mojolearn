@@ -3,7 +3,8 @@
 # dtype conversion is the shared integer-defined CastIn conversion.
 from std.memory import bitcast
 from std.python import Python, PythonObject
-from core.cast_in import cast_in_kind, cast_f32_bits
+from core.cast_in import cast_in_kind
+from bindings.classical_cast import classical_f32_bits
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
@@ -48,7 +49,7 @@ def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: P
             var raw = UInt64(0)
             for k in range(item):
                 raw |= UInt64(bytes[k]) << UInt64(k * 8)
-            var bits = cast_f32_bits(raw, kind, item)
+            var bits = classical_f32_bits(raw, kind, item)
             if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
                 raise Error("Input " + name + " contains NaN or infinity")
             if not borrowed:
