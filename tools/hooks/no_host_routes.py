@@ -998,6 +998,12 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
             return
         if rule == "host-import" and dm_def.match(t):
             return
+        # lane debt-host-misc (2026-10-21): Python that loads a host binding
+        # for an explicit CPU-only input step before the runtime (text
+        # tokenization, file handling) says so on the line, as CLAUDE.md asks:
+        # `# cpu-route: <reason of 3+ words>`. Mojo lines never qualify.
+        if rule == "host-module" and lang == "py" and _CPU_ROUTE.search(t):
+            return
         # lane py-runtime round 3: sklearn's own interface (the tags it asks
         # an estimator for) imports sklearn only when sklearn calls in; a
         # reviewed `# glue:` note on that import line says so
