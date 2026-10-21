@@ -39,9 +39,11 @@ tmpdir=$(mktemp -d "$outdir/.tokenizer-fast-build.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_tokenizer_fast.so
 # Intentionally split compiler option lists, consistent with existing builders.
-# compiles the entry bindings/entry/entry__mojolearn_tokenizer_fast.mojo, which imports the module body bindings/_mojolearn_tokenizer_fast.mojo
+# compiles the entry bindings/entry/entry__mojolearn_tokenizer_fast.mojo, which imports the module body bindings/_mojolearn_tokenizer_fast.mojo.
+# The entry is named literally on the compile line (not "$entry_file"): tools/bincache.py script_plan reads this line
+# to key the binding cache and the stamps, and tools/lane_map_import_graph.py reads it to reach tokenizer/fast/.
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-1}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
     $target_flags $link_flags -I . -I bindings \
-    "$entry_file" -o "$out"
+    bindings/entry/entry__mojolearn_tokenizer_fast.mojo -o "$out"
 mv "$out" "$outdir/_mojolearn_tokenizer_fast.so"
 echo "built $outdir/_mojolearn_tokenizer_fast.so"
