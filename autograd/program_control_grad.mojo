@@ -312,8 +312,11 @@ def control_vjp_finish[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(st.initial)):  # driver-loop: over initial input VJPs
             _gradient_host(s[], st.initial[k], result.input_gradients, result.input_present)
         if not st.explicit_parameters:
+            var executed = List[Int]()
             for item in st.leaves.items():  # driver-loop: over executed parameter leaves
-                st.parameters.append(item.key)
+                executed.append(item.key)
+            for k in range(len(executed)):  # driver-loop: over executed parameter leaves
+                st.parameters.append(executed[k])
         for k in range(len(st.parameters)):  # driver-loop: over requested parameter VJPs
             result.parameters.append(st.parameters[k])
             _gradient_host(s[], st.leaves[st.parameters[k]], result.parameter_gradients, result.parameter_present)
