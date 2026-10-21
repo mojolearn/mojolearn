@@ -3120,10 +3120,14 @@ _GIT_SHOW = {}
 
 @_by_path
 def _hashes_a_file(rel):
-    """True when this module builds a hashlib digest out of a file it opens in
-    binary mode. Its own bytes, and the repository paths it names, are then
+    """True when this module builds a digest out of a file: a hashlib digest
+    of a file it opens in binary mode, or a call to a binding's Mojo file
+    digest (`*_file_sha256`, which streams the file's bytes natively; the byte
+    LM moved its `source_sha256` inventory there from hashlib, a4c66f9ff and
+    80a40d6be). Its own bytes, and the repository paths it names, are then
     hashed at run time."""
-    if "hashlib" not in _read(rel):
+    text = _read(rel)
+    if "hashlib" not in text and "file_sha256" not in text:
         return False
     tree = _parse(rel)
     if tree is None:
@@ -3131,8 +3135,10 @@ def _hashes_a_file(rel):
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
-            if name == "open" and any(isinstance(a, ast.Constant) and a.value == "rb"
-                                      for a in node.args):
+            if name == "open" and "hashlib" in text and any(
+                    isinstance(a, ast.Constant) and a.value == "rb" for a in node.args):
+                return True
+            if isinstance(name, str) and name.endswith("file_sha256"):
                 return True
     return False
 
