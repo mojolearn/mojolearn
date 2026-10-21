@@ -6,9 +6,7 @@ row solvers' kernels as DevExec launches them; the FAST fused atom update,
 x_decomp/dict_fast.mojo, where Python's `_dict_dev` took it). GPU binding
 only."""
 from std.math import sqrt
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-from x_decomp.api_pyapi import _f, _n
+from x_decomp.cells import F32Ptr
 from x_decomp.dictl import DlArgs, ENC_LARS, ENC_LASSO_CD, ENC_OMP, ENC_THRESHOLD, _enc_nnz
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADD, OP_DIV, OP_MAXS, OP_SCALE, OP_SOFT, OP_SQ, OP_SQDIFF, OP_SQRT, OP_SUB, mat_from,
@@ -175,62 +173,44 @@ def minibatch_loop_dev(mut k: DKit, Xt: DMat, mut D: DMat, a: DlArgs, bs: Int, n
     return step + 1
 
 
-def dict_learning_dev_py(
-    x: PythonObject, code: PythonObject, d: PythonObject, errs: PythonObject, p: PythonObject, f: PythonObject
-) raises -> PythonObject:
-    """`dict_learning_py` on the resident kit."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var nc = _n(p, 2)
+def dict_learning_dev_run(
+    px: F32Ptr, pc: F32Ptr, pd: F32Ptr, pe: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nc: Int, a: DlArgs,
+    mut ne: Int,
+) raises -> Int:
+    """`dict_learning_run` on the resident kit."""
     if nc < 1 or n * m > 2147483647 or n * nc > 2147483647 or nc * m > 2147483647:
         raise Error("x_decomp: dict learning shape out of range")
-    var a = DlArgs(p, f)
-    var px = _f(x)
-    var pc = _f(code)
-    var pd = _f(d)
-    var pe = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=errs))
-    var ii = 0
-    var ne = 0
-    with GILReleased(Python()):
-        var k = DKit()
-        var X = k.upload(mat_from(px, n, m))
-        var C = k.upload(mat_from(pc, n, nc))
-        var D = k.upload(mat_from(pd, nc, m))
-        var el = List[Float64]()
-        ii = dict_learning_loop_dev(k, X, C, D, a, el)
-        var hc = k.get(C)
-        var hd = k.get(D)
-        k.sync()
-        for i in range(n * nc):
-            pc.unsafe_store(i, hc.d[i])
-        for i in range(nc * m):
-            pd.unsafe_store(i, hd.d[i])
-        ne = len(el)
-        for i in range(ne):
-            pe.unsafe_store(i, el[i])
-    return Python.tuple(ii, ne)
+    var k = DKit()
+    var X = k.upload(mat_from(px, n, m))
+    var C = k.upload(mat_from(pc, n, nc))
+    var D = k.upload(mat_from(pd, nc, m))
+    var el = List[Float64]()
+    var ii = dict_learning_loop_dev(k, X, C, D, a, el)
+    var hc = k.get(C)
+    var hd = k.get(D)
+    k.sync()
+    for i in range(n * nc):
+        pc.unsafe_store(i, hc.d[i])
+    for i in range(nc * m):
+        pd.unsafe_store(i, hd.d[i])
+    ne = len(el)
+    for i in range(ne):
+        pe.unsafe_store(i, el[i])
+    return ii
 
 
-def minibatch_dev_py(x: PythonObject, d: PythonObject, p: PythonObject, f: PythonObject) raises -> PythonObject:
-    """`minibatch_py` on the resident kit."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var nc = _n(p, 2)
-    var bs = _n(p, 11)
-    var n_steps = _n(p, 12)
+def minibatch_dev_run(
+    px: F32Ptr, pd: F32Ptr, n: Int, m: Int, nc: Int, bs: Int, n_steps: Int, a: DlArgs
+) raises -> Int:
+    """`minibatch_run` on the resident kit."""
     if nc < 1 or bs < 1 or n * m > 2147483647 or nc * m > 2147483647:
         raise Error("x_decomp: minibatch dict shape out of range")
-    var a = DlArgs(p, f)
-    var px = _f(x)
-    var pd = _f(d)
-    var steps = 0
-    with GILReleased(Python()):
-        var k = DKit()
-        var X = k.upload(mat_from(px, n, m))
-        var D = k.upload(mat_from(pd, nc, m))
-        steps = minibatch_loop_dev(k, X, D, a, bs, n_steps)
-        var hd = k.get(D)
-        k.sync()
-        for i in range(nc * m):
-            pd.unsafe_store(i, hd.d[i])
-    return PythonObject(steps)
+    var k = DKit()
+    var X = k.upload(mat_from(px, n, m))
+    var D = k.upload(mat_from(pd, nc, m))
+    var steps = minibatch_loop_dev(k, X, D, a, bs, n_steps)
+    var hd = k.get(D)
+    k.sync()
+    for i in range(nc * m):
+        pd.unsafe_store(i, hd.d[i])
+    return steps
