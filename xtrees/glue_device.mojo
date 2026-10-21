@@ -5,7 +5,7 @@
 mojo"). OneVsRest's 0/1 targets, MultiOutputClassifier's predict columns
 stacked into the (n, n_outputs) answer and a binary predict_proba's
 (1 - p, p) rows left their Python row loops. Each is one grid-wide launch
-over the rows; `xtrees/api.mojo` routes every GPU build here and the CPU
+over the rows; `xtrees/api_pyapi.mojo` routes every GPU build here and the CPU
 column (`TARGET_COLUMN == COLUMN_CPU`) to the serial loops of
 `xtrees/ops.mojo`.
 

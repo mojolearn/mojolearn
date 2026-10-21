@@ -20,6 +20,8 @@ Anything but N identical digests is the defect, reproduced.
 """
 
 from max.gpu.host import DeviceContext
+# Bench tooling, not product: the Python import drives the scikit-learn opponent arm
+# (extratrees/bench/sklearn_arm.py), so this file lives under bench/ (moved from extratrees/bench/).
 from std.python import Python
 from std.sys import argv
 from std.time import perf_counter_ns

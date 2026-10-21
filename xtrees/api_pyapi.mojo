@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The Python-facing entry points of the trees lane, shared by the GPU binding
+"""The Python-facing entry points of the trees lane (the shell; the typed
+helpers they call are in `xtrees/api_kernels.mojo`), shared by the GPU binding
 (`bindings/_mojolearn_x_trees.mojo`) and the host binding
 (`bindings/_mojolearn_x_trees_host.mojo`): one spelling, two registrations.
 Every buffer is a caller-owned address; `params` is a Python list of ints and
@@ -37,6 +38,9 @@ from xtrees.ops_device import (
 from xtrees import ops_device_elem as elem_dev
 from xtrees import ops_device_boost as boost_dev
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
+from xtrees.api_kernels import (
+    class_priors, dart_rescale, dart_thresholds, host_folds, kshap_schedule, scatter_rows_check,
+)
 
 #: cpu-gpu-cleanup t-gbdt / w2-trees: a GPU build gathers, applies, transposes
 #: and draws weighted samples on
@@ -724,10 +728,7 @@ def scatter_binding(dst: PythonObject, src: PythonObject, rows: PythonObject, pa
         # the row refusal is the device's check kernel (lane cpu2-l5-trees)
         elem_dev.scatter_device(f64_ptr(Int(py=dst)), n_dst, n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
     else:
-        for r in range(m):
-            var i = Int(rp[unsafe_offset=r])
-            if i < 0 or i >= n_dst:
-                raise Error("x_trees_scatter: row out of range")
+        scatter_rows_check(rp, m, n_dst)
         if m * c > 0:
             scatter(f64_ptr(Int(py=dst)), n_cols, f32_ptr(Int(py=src)), m, c, rp, col0)
     return PythonObject(m * c)
@@ -1205,79 +1206,6 @@ def fast_switches_binding() raises -> PythonObject:
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
-def _host_folds(
-    codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int, n_splits: Int,
-    rows: MutPointer[Int32, MutUntrackedOrigin], counts: MutPointer[Int32, MutUntrackedOrigin],
-) -> Int:
-    """The host column's `device_folds` (lane cgr4-py-compute: the same law
-    and the same output layout, so a CPU-only install no longer runs the
-    Python fold routines): fold id per row (KFold when k == 0, else
-    StratifiedKFold over first-seen classes), then per fold the rows
-    outside it ascending, then inside it ascending; counts[f] = fold f's
-    size, counts[n_splits] = the status."""
-    var fold = List[Int](length=n, fill=0)
-    var sizes = List[Int](length=n_splits, fill=0)
-    if k == 0:
-        var off = 0
-        for f in range(n_splits):
-            var size = n // n_splits + (1 if f < n % n_splits else 0)
-            for r in range(off, off + size):
-                fold[r] = f
-            sizes[f] = size
-            off += size
-    else:
-        var cnt = List[Int](length=k, fill=0)
-        var order = List[Int]()
-        for r in range(n):
-            var c = Int(codes[r])
-            if c < 0 or c >= k:
-                counts[n_splits] = 2
-                return 2
-            if cnt[c] == 0:
-                order.append(c)
-            cnt[c] += 1
-        var mx = 0
-        for c in range(k):
-            mx = max(mx, cnt[c])
-        if n_splits > mx:
-            counts[n_splits] = 1
-            return 1
-        # alloc[c * n_splits + f]: positions p of class c's block [s, s + cnt)
-        # of the sorted labels with p mod n_splits == f
-        var alloc = List[Int](length=k * n_splits, fill=0)
-        var start = 0
-        for j in range(len(order)):
-            var c = order[j]
-            var e = start + cnt[c]
-            for f in range(n_splits):
-                alloc[c * n_splits + f] = (e - 1 - f) // n_splits - (start - 1 - f) // n_splits
-            start = e
-        var cur = List[Int](length=k, fill=0)
-        for r in range(n):
-            var c = Int(codes[r])
-            var f = cur[c]
-            while alloc[c * n_splits + f] == 0:
-                f += 1
-            alloc[c * n_splits + f] -= 1
-            cur[c] = f
-            fold[r] = f
-            sizes[f] += 1
-    for f in range(n_splits):
-        var base = f * n
-        var a = 0
-        var b = n - sizes[f]
-        for r in range(n):
-            if fold[r] == f:
-                rows[base + b] = Int32(r)
-                b += 1
-            else:
-                rows[base + a] = Int32(r)
-                a += 1
-        counts[f] = Int32(sizes[f])
-    counts[n_splits] = 0
-    return 0
-
-
 def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n, n_splits, n_classes]: the cv folds on the device
     (xtrees/folds_device.mojo: the device on every GPU build, `ops.folds_serial`
@@ -1299,8 +1227,8 @@ def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: Python
             status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
                                   i32_ptr(Int(py=counts)))
         else:
-            status = _host_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
-                                 i32_ptr(Int(py=counts)))
+            status = host_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
+                                i32_ptr(Int(py=counts)))
     return PythonObject(status)
 
 
@@ -1381,16 +1309,6 @@ def fill_class_major_f64_binding(inits_addr: PythonObject, out_addr: PythonObjec
     return PythonObject(n * k)
 
 
-def _kshap_binom(M: Int, r: Int) -> Float64:
-    """C(M, r) in float64 by the multiplicative recurrence; every step is an
-    exact integer while C(M, r) * M < 2^53, which holds for every size the
-    schedule enumerates in full (nsub <= nsamples)."""
-    var c = Float64(1)
-    for i in range(r):
-        c = c * Float64(M - i) / Float64(i + 1)
-    return c
-
-
 def kshap_schedule_binding(tables: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """KernelExplainer's coalition schedule (shap `KernelExplainer.explain`
     over subset SIZES; lane cgr4-py-compute moved it out of Python): params
@@ -1407,67 +1325,7 @@ def kshap_schedule_binding(tables: PythonObject, dst: PythonObject, params: Pyth
     var sw = f64_ptr(Int(py=tables[1]))
     var cdf = f64_ptr(Int(py=tables[2]))
     var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst))
-    var nss = M // 2
-    var npaired = (M - 1) // 2
-    var wv = List[Float64](length=nss, fill=0.0)
-    var tot = Float64(0)
-    for i in range(1, nss + 1):
-        var w = Float64(M - 1) / Float64(i * (M - i))
-        if i - 1 < npaired:
-            w *= 2.0
-        wv[i - 1] = w
-        tot += w
-    for i in range(nss):
-        wv[i] = wv[i] / tot
-    var rem = wv.copy()
-    var nfull = 0
-    var left = nsamples
-    var acc = 0
-    off[0] = 0
-    for size in range(1, nss + 1):
-        var b = _kshap_binom(M, size)
-        var nsub = b * (2.0 if size <= npaired else 1.0)
-        if Float64(left) * rem[size - 1] / nsub >= 1.0 - 1e-8:
-            var nsub_i = Int(nsub)
-            nfull += 1
-            left -= nsub_i
-            if rem[size - 1] < 1.0:
-                var r0 = rem[size - 1]
-                for j in range(nss):
-                    rem[j] = rem[j] / (1.0 - r0)
-            var w = wv[size - 1] / b
-            if size <= npaired:
-                w /= 2.0
-            acc += nsub_i
-            off[size] = Int64(acc)
-            sw[size - 1] = w
-        else:
-            break
-    var nfixed = acc
-    var samples_left = nsamples - nfixed
-    var L = 0
-    var wrand = Float64(0)
-    if nfull != nss and samples_left > 0:
-        var t = Float64(0)
-        for i in range(nfull, nss):
-            t += wv[i] / 2.0 if i < npaired else wv[i]
-        var run = Float64(0)
-        for i in range(nfull, nss):
-            run += (wv[i] / 2.0 if i < npaired else wv[i]) / t
-            cdf[L] = run
-            L += 1
-        var tail = Float64(0)
-        for i in range(nfull, nss):
-            tail += wv[i]
-        wrand = tail / Float64(samples_left)
-    else:
-        samples_left = 0
-    res[0] = Int64(nfixed + samples_left)
-    res[1] = Int64(nfixed)
-    res[2] = Int64(nfull)
-    res[3] = Int64(npaired)
-    res[4] = Int64(L)
-    res[5] = bitcast[DType.int64](wrand)
+    var nfull = kshap_schedule(M, nsamples, off, sw, cdf, res)
     return PythonObject(nfull)
 
 
@@ -1712,26 +1570,13 @@ def pshap_dvalues_binding(x: PythonObject, bg: PythonObject, yout: PythonObject,
     return PythonObject(p[0])
 
 
-# ---- lane py-runtime-b: DART's per-tree bookkeeping and the class priors,
+# ---- lane py-runtime-b: DART's per-tree bookkeeping and the class priors
+# (the arithmetic is in xtrees/api_kernels.mojo; these doors unpack and box),
 # moved out of Python (`_expansion_trees._boost` / `_boost_loop_device`).
 # t-, k- and t*k-sized binary64 scalar words on the host: the same IEEE
 # operations in the same order as the Python they replace, so the same bits
 # on every column (the device round reads the thresholds and float32
 # coefficients these write).
-comptime _TWO53 = Float64(9007199254740992.0)
-
-
-@always_inline
-def _dart_thr(v: Float64) -> Int64:
-    """ceil(v * 2^53): `u < v` for a counter draw u = m / 2^53 is exactly
-    `m < ceil(v * 2^53)` (0 for v <= 0 or NaN, 2^53 for v >= 1)."""
-    if not v > 0.0:
-        return 0
-    if v >= 1.0:
-        return Int64(1) << 53
-    return Int64(Int(ceil(v * _TWO53)))
-
-
 def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
     if addr == 0:
         raise Error("mojolearn: null int64 buffer address")
@@ -1749,9 +1594,7 @@ def class_priors_binding(counts: PythonObject, priors: PythonObject, params: Pyt
         raise Error("x_trees_class_priors: needs n >= 1 and k >= 1")
     var cp = i32_ptr(Int(py=counts))
     var op = f64_ptr(Int(py=priors))
-    for c in range(k):  # small-loop(k: class count): one prior per class
-        var q = Float64(Int(cp[c])) / Float64(n)
-        op[c] = identical_log64(q if q > 1e-15 else 1e-15)
+    class_priors(cp, op, n, k)
     return PythonObject(k)
 
 
@@ -1776,24 +1619,7 @@ def dart_thresholds_binding(weights: PythonObject, coefs: PythonObject, coef32: 
     var tp = _i64_ptr(Int(py=thr))
     var sum_w = f64_ptr(Int(py=state))[0]
     var r = Float64(py=rate)
-    if not uniform:
-        var inv_avg = Float64(t) / sum_w if sum_w > 0 else 0.0
-        if max_drop > 0 and sum_w > 0:
-            var cap = Float64(max_drop) * inv_avg / sum_w
-            if cap < r:
-                r = cap
-        for i in range(t):  # small-loop(t: trees so far): one drop threshold per tree
-            tp[i] = _dart_thr(r * wp[i] * inv_avg)
-    else:
-        if max_drop > 0:
-            var cap = Float64(max_drop) / Float64(t)
-            if cap < r:
-                r = cap
-        var u = _dart_thr(r)
-        for i in range(t):  # small-loop(t: trees so far): one drop threshold per tree
-            tp[i] = u
-    for j in range(t * k):  # small-loop(t: trees so far, times k classes): one float32 coefficient per member
-        c32[j] = Float32(cp[j])
+    dart_thresholds(wp, cp, c32, tp, sum_w, t, k, uniform, max_drop, r)
     return PythonObject(t)
 
 
@@ -1816,40 +1642,10 @@ def dart_rescale_binding(weights: PythonObject, coefs: PythonObject, flags: Pyth
     var wp = f64_ptr(Int(py=weights))
     var cp = f64_ptr(Int(py=coefs))
     var sp = f64_ptr(Int(py=state))
-    var nd = 0
-    if t > 0:
-        var fp = i32_ptr(Int(py=flags))
-        for i in range(t):  # small-loop(t: trees so far): counts the dropped trees
-            if fp[i] != 0:
-                nd += 1
-    var kd = Float64(nd)
-    var shrink: Float64
-    var factor: Float64
-    var wdiv: Float64
-    if not xgb:
-        shrink = l / (1.0 + kd)
-        factor = kd / (kd + 1.0)
-        wdiv = 1.0 / (kd + 1.0)
-    else:
-        shrink = l if nd == 0 else l / (l + kd)
-        factor = kd / (kd + l)
-        wdiv = 1.0 / (kd + l)
-    var sum_w = sp[0]
-    if nd > 0:
-        var fp = i32_ptr(Int(py=flags))
-        for i in range(t):  # small-loop(t: trees so far): rescales each dropped tree in ascending order
-            if fp[i] == 0:
-                continue
-            for c in range(k):  # small-loop(k: class count): one member per class
-                cp[i * k + c] *= factor
-            if not uniform:
-                sum_w -= wp[i] * wdiv
-                wp[i] *= factor
-    wp[t] = shrink
-    for c in range(k):  # small-loop(k: class count): the new round's member coefficients
-        cp[t * k + c] = shrink
-    sum_w += shrink
-    sp[0] = sum_w
+    var r3 = dart_rescale(wp, cp, sp, Int(py=flags) if t > 0 else 0, t, k, uniform, xgb, l)
+    var nd = r3[0]
+    var shrink = r3[1]
+    var factor = r3[2]
     var res = Python.list()
     res.append(PythonObject(nd))
     res.append(PythonObject(shrink))

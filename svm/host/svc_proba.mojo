@@ -19,11 +19,10 @@ loops, so the CPU column computes the device's words:
 
 `python/mojolearn/_svm_impl.py` keeps its Python reference of the libsvm
 arithmetic (`_sigmoid_train`, `_splitmix_perm`, ...) in the same orders.
+The Python entry points are in `svm/host/svc_proba_pyapi.mojo`.
 """
 
 from std.memory import bitcast
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -136,18 +135,6 @@ def shuffle_perm(n: Int, seed: UInt64, dst: I32P):
         dst[i] = Int32(f(i))
 
 
-# ------------------------------------------------------------ Python doors
-def _ix(v: PythonObject) raises -> Int:
-    var x = Int(py=v)
-    if x < 0:
-        raise Error("svc epilogue: negative size")
-    return x
-
-
-def _f64_bits(v: PythonObject) raises -> UInt64:
-    return bitcast[DType.uint64](Float64(py=v))
-
-
 def _glue_select(codes: I32P, n: Int, ci: Int, cj: Int, cvec: U32P, has_c: Bool,
                  idx: I32P, lab: U32P, cout: U32P) -> Int:
     var m = 0
@@ -162,166 +149,108 @@ def _glue_select(codes: I32P, n: Int, ci: Int, cj: Int, cvec: U32P, has_c: Bool,
     return m
 
 
-def svc_pair_epilogue_binding(
-    dec_addr: PythonObject, pairs_addr: PythonObject, ab_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """The host twin of `svc_pair_epilogue_device_binding`
-    (svm/impl/svc_epilogue.mojo), same modes and params."""
-    if len(params) != 5:
-        raise Error("svc_pair_epilogue: params must contain 5 values")
-    var mode = _ix(params[0])
-    var dst = Int(py=out_addr)
-    if dst == 0:
-        raise Error("svc_pair_epilogue: null output")
-    if mode == GLUE_GATHER:
-        var nsr = _ix(params[1])
-        var nsc = _ix(params[2])
-        var nor = _ix(params[3])
-        var noc = _ix(params[4])
-        var ra = Int(py=pairs_addr)
-        var ca = Int(py=ab_addr)
-        if (ra == 0 and nor != nsr) or (ca == 0 and noc != nsc):
-            raise Error("svc gather: an identity axis must keep its length")
-        var src = U32P(unsafe_from_address=Int(py=dec_addr)) if nsr * nsc > 0 else U32P(unsafe_from_address=dst)
-        var rows = I32P(unsafe_from_address=ra if ra != 0 else dst)
-        var cols = I32P(unsafe_from_address=ca if ca != 0 else dst)
-        var out = U32P(unsafe_from_address=dst)
-        for cell in range(nor * noc):
-            if gather_cell(cell, src, nsr, nsc, rows, ra != 0, cols, ca != 0, noc, out) != ST_OK:
-                raise Error("svc gather: an index is outside the source matrix")
-        return PythonObject(nor)
-    if mode == GLUE_SELECT:
-        var n = _ix(params[1])
-        var ci = Int(py=params[2])
-        var cj = Int(py=params[3])
-        var cout = Int(py=params[4])
-        var cb = Int(py=pairs_addr)
-        var has_c = cb != 0 and cout != 0
-        if n == 0:
-            return PythonObject(0)
-        var count = _glue_select(
-            I32P(unsafe_from_address=Int(py=dec_addr)), n, ci, cj,
-            U32P(unsafe_from_address=cb if has_c else dst), has_c,
-            I32P(unsafe_from_address=dst), U32P(unsafe_from_address=Int(py=ab_addr)),
-            U32P(unsafe_from_address=cout if has_c else dst),
-        )
-        return PythonObject(count)
-    if mode == GLUE_FOLD:
-        var m = _ix(params[1])
-        var begin = _ix(params[2])
-        var end = _ix(params[3])
-        var lo = Int(py=params[4])
-        if begin > end or end > m:
-            raise Error("svc fold: bad fold range")
-        var npos = 0
-        if m > 0:
-            var idx = I32P(unsafe_from_address=Int(py=dec_addr))
-            var perm = I32P(unsafe_from_address=Int(py=pairs_addr))
-            var lab = U32P(unsafe_from_address=Int(py=ab_addr))
-            var lout = U32P(unsafe_from_address=lo if lo != 0 else dst)
-            for k in range(m):
-                npos += fold_split_cell(k, idx, perm, lab, m, begin, end, I32P(unsafe_from_address=dst), lout)
-        return PythonObject(npos)
-    if mode == GLUE_FOLD_FINISH:
-        var m = _ix(params[1])
-        var dp = U32P(unsafe_from_address=Int(py=dec_addr))
-        var perm = I32P(unsafe_from_address=Int(py=pairs_addr))
-        var lab = U32P(unsafe_from_address=Int(py=ab_addr))
-        var consts = U32P(unsafe_from_address=Int(py=params[2]))
-        var lbo = U64P(unsafe_from_address=Int(py=params[3]))
-        for k in range(m):
-            fold_finish_cell(k, dp, perm, lab, consts, m, U64P(unsafe_from_address=dst), lbo)
-        return PythonObject(m)
-    if mode == GLUE_C_ROWS:
-        var n = _ix(params[1])
-        var k = _ix(params[2])
-        var c = _f64_bits(params[3])
-        var swa = Int(py=dec_addr)
-        var coa = Int(py=pairs_addr)
-        var cwa = Int(py=ab_addr)
-        var out = U32P(unsafe_from_address=dst)
-        var sw = U64P(unsafe_from_address=swa if swa != 0 else dst)
-        var codes = I32P(unsafe_from_address=coa if coa != 0 else dst)
-        var cw = U64P(unsafe_from_address=cwa if cwa != 0 else dst)
-        for i in range(n):
-            if c_row(i, sw, swa != 0, codes, cw, cwa != 0, k, c, out) != ST_OK:
-                raise Error("svc C rows: a class code is outside class_weight")
-        return PythonObject(n)
-    var n = _ix(params[1])
-    var n_pairs = _ix(params[2])
-    var k = _ix(params[3])
-    var label1 = _f64_bits(params[4])
-    if mode > EPI_BINARY_CODES:
-        raise Error("svc_pair_epilogue: unknown mode")
+def host_gather(sa: Int, nsr: Int, nsc: Int, ra: Int, nor: Int, ca: Int, noc: Int, dst: Int) raises:
+    """GATHER on the host column: rows `ra` (or identity) and columns `ca`
+    (or identity) of the (nsr, nsc) float32 source at `sa`, into `dst`."""
+    var src = U32P(unsafe_from_address=sa) if nsr * nsc > 0 else U32P(unsafe_from_address=dst)
+    var rows = I32P(unsafe_from_address=ra if ra != 0 else dst)
+    var cols = I32P(unsafe_from_address=ca if ca != 0 else dst)
+    var out = U32P(unsafe_from_address=dst)
+    for cell in range(nor * noc):
+        if gather_cell(cell, src, nsr, nsc, rows, ra != 0, cols, ca != 0, noc, out) != ST_OK:
+            raise Error("svc gather: an index is outside the source matrix")
+
+
+def host_select(ca: Int, n: Int, ci: Int, cj: Int, cb: Int, dst: Int, la: Int, cout: Int) -> Int:
+    """SELECT on the host column: the rows of classes ci and cj; returns
+    the count."""
+    var has_c = cb != 0 and cout != 0
     if n == 0:
-        return PythonObject(0)
-    if n_pairs < 1 or k < 2:
-        raise Error("svc_pair_epilogue: needs a pair and two classes")
-    var dec = U32P(unsafe_from_address=Int(py=dec_addr))
-    var pa = Int(py=pairs_addr)
+        return 0
+    return _glue_select(
+        I32P(unsafe_from_address=ca), n, ci, cj,
+        U32P(unsafe_from_address=cb if has_c else dst), has_c,
+        I32P(unsafe_from_address=dst), U32P(unsafe_from_address=la),
+        U32P(unsafe_from_address=cout if has_c else dst),
+    )
+
+
+def host_fold_split(ia: Int, pa: Int, la: Int, m: Int, begin: Int, end: Int, dst: Int, lo: Int) -> Int:
+    """FOLD on the host column; returns the class-i training count."""
+    var npos = 0
+    if m > 0:
+        var idx = I32P(unsafe_from_address=ia)
+        var perm = I32P(unsafe_from_address=pa)
+        var lab = U32P(unsafe_from_address=la)
+        var lout = U32P(unsafe_from_address=lo if lo != 0 else dst)
+        for k in range(m):
+            npos += fold_split_cell(k, idx, perm, lab, m, begin, end, I32P(unsafe_from_address=dst), lout)
+    return npos
+
+
+def host_fold_finish(da: Int, pa: Int, la: Int, ca: Int, m: Int, dst: Int, lba: Int):
+    """FOLD_FINISH on the host column."""
+    var dp = U32P(unsafe_from_address=da)
+    var perm = I32P(unsafe_from_address=pa)
+    var lab = U32P(unsafe_from_address=la)
+    var consts = U32P(unsafe_from_address=ca)
+    var lbo = U64P(unsafe_from_address=lba)
+    for k in range(m):
+        fold_finish_cell(k, dp, perm, lab, consts, m, U64P(unsafe_from_address=dst), lbo)
+
+
+def host_c_rows(swa: Int, coa: Int, cwa: Int, k: Int, c: UInt64, n: Int, dst: Int) raises:
+    """C_ROWS on the host column: per-row bounds C * w * class_weight."""
+    var out = U32P(unsafe_from_address=dst)
+    var sw = U64P(unsafe_from_address=swa if swa != 0 else dst)
+    var codes = I32P(unsafe_from_address=coa if coa != 0 else dst)
+    var cw = U64P(unsafe_from_address=cwa if cwa != 0 else dst)
+    for i in range(n):
+        if c_row(i, sw, swa != 0, codes, cw, cwa != 0, k, c, out) != ST_OK:
+            raise Error("svc C rows: a class code is outside class_weight")
+
+
+def host_check_pairs(pa: Int, n_pairs: Int, k: Int) raises:
+    """The pair codes (2 per pair) are in range and distinct."""
+    var pi = I32P(unsafe_from_address=pa)
+    for pr in range(n_pairs):
+        var i = Int(pi[2 * pr])
+        var j = Int(pi[2 * pr + 1])
+        if i < 0 or j < 0 or i >= k or j >= k or i == j:
+            raise Error("svc_pair_epilogue: invalid class pair")
+
+
+def host_pair_epilogue(
+    mode: Int, da: Int, n: Int, n_pairs: Int, k: Int, pa: Int, aa: Int, label1: UInt64, dst: Int
+) raises:
+    """The epilogue modes 0..5 on the host column (`pair_epilogue`)."""
+    var dec = U32P(unsafe_from_address=da)
     var pi = I32P(unsafe_from_address=pa if mode != EPI_BINARY_CODES else dst)
-    var aa = Int(py=ab_addr)
     var ab = U64P(unsafe_from_address=aa if mode == EPI_PROBA or mode == EPI_LOG_PROBA else dst)
-    if mode != EPI_BINARY_CODES:
-        for pr in range(n_pairs):
-            var i = Int(pi[2 * pr])
-            var j = Int(pi[2 * pr + 1])
-            if i < 0 or j < 0 or i >= k or j >= k or i == j:
-                raise Error("svc_pair_epilogue: invalid class pair")
-    with GILReleased(Python()):
-        pair_epilogue(mode, dec, n, n_pairs, k, pi, ab, label1, dst)
-    return PythonObject(n)
+    pair_epilogue(mode, dec, n, n_pairs, k, pi, ab, label1, dst)
 
 
-def svc_platt_train_binding(
-    dec_addr: PythonObject, labels_addr: PythonObject, out_addr: PythonObject, n: PythonObject
-) raises -> PythonObject:
-    """libsvm's `sigmoid_train` over n float64 decision values and +1/-1
-    float64 labels; writes (A, B) as two float64 at out_addr. Returns n."""
-    var count = _ix(n)
-    if count == 0:
-        raise Error("svc_platt_train: no decision values")
-    var da = Int(py=dec_addr)
-    var la = Int(py=labels_addr)
-    var op = U64P(unsafe_from_address=Int(py=out_addr))
-    with GILReleased(Python()):
-        var src = HostPlatt(da, la, count)
-        var r = platt_solve(src, count)
-        op[0] = r[0]
-        op[1] = r[1]
-    return PythonObject(count)
+def host_platt_train(da: Int, la: Int, count: Int, oa: Int) raises:
+    """libsvm's `sigmoid_train` on the host column; (A, B) as two float64
+    at `oa`."""
+    var op = U64P(unsafe_from_address=oa)
+    var src = HostPlatt(da, la, count)
+    var r = platt_solve(src, count)
+    op[0] = r[0]
+    op[1] = r[1]
 
 
-def svc_splitmix_perm_binding(
-    out_addr: PythonObject, n: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject
-) raises -> PythonObject:
-    """The probability shuffle of `[0, n)` into n int32 at out_addr, the
-    64-bit seed handed in as two 32-bit halves. Returns n."""
-    var count = _ix(n)
-    if count == 0:
-        return PythonObject(0)
-    if count > 2147483647:
-        raise Error("svc_splitmix_perm: n exceeds int32")
-    var lo = UInt64(_ix(seed_lo)) & UInt64(0xFFFFFFFF)
-    var hi = UInt64(_ix(seed_hi)) & UInt64(0xFFFFFFFF)
-    var op = I32P(unsafe_from_address=Int(py=out_addr))
-    with GILReleased(Python()):
-        shuffle_perm(count, (hi << 32) | lo, op)
-    return PythonObject(count)
+def host_splitmix_perm(oa: Int, count: Int, seed_lo: Int, seed_hi: Int):
+    """The probability shuffle on the host column, the 64-bit seed as two
+    32-bit halves."""
+    var lo = UInt64(seed_lo) & UInt64(0xFFFFFFFF)
+    var hi = UInt64(seed_hi) & UInt64(0xFFFFFFFF)
+    shuffle_perm(count, (hi << 32) | lo, I32P(unsafe_from_address=oa))
 
 
-def svc_portable_math_binding(in_addr: PythonObject, out_addr: PythonObject, n: PythonObject, which: PythonObject) raises -> PythonObject:
-    """THE TWIN'S OWN CHECK DOOR: `sp_exp` (which 0) or `sf64_log` (which 1)
-    over n float64, so a job can hold them to `_portable_math.exp/log` (the
-    C library) bit for bit on any sweep. Returns n."""
-    var count = _ix(n)
-    if count == 0:
-        return PythonObject(0)
-    var w = Int(py=which)
-    var ip = U64P(unsafe_from_address=Int(py=in_addr))
-    var op = U64P(unsafe_from_address=Int(py=out_addr))
-    with GILReleased(Python()):
-        for i in range(count):
-            op[i] = sp_exp(ip[i]) if w == 0 else sf64_log(ip[i])
-    return PythonObject(count)
+def host_portable_math(ia: Int, oa: Int, count: Int, w: Int):
+    """`sp_exp` (w 0) or `sf64_log` (w 1) over `count` float64 words."""
+    var ip = U64P(unsafe_from_address=ia)
+    var op = U64P(unsafe_from_address=oa)
+    for i in range(count):
+        op[i] = sp_exp(ip[i]) if w == 0 else sf64_log(ip[i])

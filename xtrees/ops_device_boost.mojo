@@ -3,7 +3,7 @@
 """The trees lane's boosting and calibration steps on the device (lane
 cpu2-l5-trees, 2026-10-04).
 
-`xtrees/api.mojo` ran AdaBoost's weight steps (`samme_step`, `r2_step`),
+`xtrees/api_pyapi.mojo` ran AdaBoost's weight steps (`samme_step`, `r2_step`),
 its weighted median, DART's host-loop gradients and leaf Newton values, and
 CalibratedClassifierCV's Platt fit / Platt and isotonic applies through the
 serial host loops of `xtrees/ops.mojo` on every GPU build. A GPU install now

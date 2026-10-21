@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Our ExtraTrees against scikit-learn's, INTERLEAVED in one process.
 
-    pixi run -e bench mojo run -I . extratrees/bench/sklearn_interleaved.mojo \
+    pixi run -e bench mojo run -I . bench/extratrees_sklearn_interleaved.mojo \
         <data_dir> <name> <n_rows> <n_features> <n_classes> <trees> <depth> [host]
 
 WHY ONE PROCESS. This machine drifts: the repository has 1.7x measured on
@@ -36,6 +36,8 @@ with a worse model, and it is printed on every line rather than summarised.
 """
 
 from max.gpu.host import DeviceContext
+# Bench tooling, not product: the Python import drives the scikit-learn opponent arm
+# (extratrees/bench/sklearn_arm.py), so this file lives under bench/ (moved from extratrees/bench/).
 from std.python import Python
 from std.sys import argv
 from std.time import perf_counter_ns
@@ -77,7 +79,7 @@ def main() raises:
     if len(args) < 8:
         raise Error(
             "usage: mojo run -I ."
-            " extratrees/bench/sklearn_interleaved.mojo <data_dir> <name>"
+            " bench/extratrees_sklearn_interleaved.mojo <data_dir> <name>"
             " <n_rows> <n_features> <n_classes> <trees> <depth> [host]"
         )
     var data_dir = String(args[1])

@@ -7,11 +7,10 @@ adds a grid-stride share of the cells into its own limbs, carries them, and
 each block folds its threads' limbs slot by slot in shared memory into one
 partial row; a second launch, one block per slot, folds the partial rows.
 Integer sums are exact, so the words' value equals the host column's.
+The Python entry points are in `svm/impl/scale_gamma_device_pyapi.mojo`.
 """
 
 from std.gpu import block_idx, thread_idx
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
@@ -123,21 +122,3 @@ def scale_gamma_limbs_device(ctx: DeviceContext, x_addr: Int, count: Int, dst_ad
     _ = d_part^
     _ = d_out^
 
-
-def scale_gamma_limbs_device_binding(
-    ctx: DeviceContext, x_addr: PythonObject, count: PythonObject, out_addr: PythonObject
-) raises -> PythonObject:
-    """The body of each GPU binding's `scale_gamma_limbs(x, count, out)`;
-    the binding hands in its family context. Returns count."""
-    var n = Int(py=count)
-    var xa = Int(py=x_addr)
-    var oa = Int(py=out_addr)
-    if n < 0 or oa == 0 or (n > 0 and xa == 0):
-        raise Error("scale_gamma_limbs: null buffer or negative count")
-    with GILReleased(Python()):
-        scale_gamma_limbs_device(ctx, xa, n, oa)
-    return PythonObject(n)
-
-
-def py2mojo_linear_flags_binding() raises -> PythonObject:
-    return PythonObject(py2mojo_linear_flags())

@@ -64,7 +64,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from bindings.py2mojo_cluster_est import dbscan_core_arrays_host_binding, estimators_py2mojo_cluster_binding
 from core.py2mojo_rows import py2mojo_rows_host_binding
-from svm.host.scale_gamma_host import py2mojo_linear_flags_binding
+from svm.host.scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
