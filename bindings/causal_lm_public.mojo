@@ -129,7 +129,7 @@ def _positions(model: PythonObject, state: PythonObject, length: Int) raises:
     if length < 0 or have < 0:
         raise Error("CausalLM: negative sequence position")
     if model.max_positions is not None and have + length > Int(py=model.max_positions):
-        raise Error("CausalLM: sequence exceeds max_positions")
+        raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
     if state is not None and have + length > Int(py=state.max_tokens):
         raise Error("CausalLM: sequence exceeds allocated state capacity")
 
@@ -712,7 +712,7 @@ def _options(mut s: GenerationHandle, options: PythonObject) raises:
         raise Error("generation: greedy must be bool")
     s.greedy = Bool(py=options[0])
     if not s.greedy and options[1] is None:
-        raise Error("generation: sampling requires an explicit seed")
+        raise Error("generation: greedy=True is the default decoding; greedy=False (sampling) requires an explicit seed")
     if options[1] is not None:
         if g[].bi.type(options[1]) is not g[].bi.int or Bool(py=options[1] < 0) or Bool(py=options[1] >= g[].bi.int("18446744073709551616")):
             raise Error("generation: seed must be an integer in [0, 2**64)")

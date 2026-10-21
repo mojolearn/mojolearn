@@ -439,7 +439,7 @@ def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: Pytho
     _ = generation_initialize_binding(context["generation_classes"])
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
-        raise Error("CausalLM: unsupported weight_format " + format)
+        raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(options[2], context)
     var profile = _model_profile(options[3], String(plan.kind), context)
     var bindings = _model_bindings(route, String(plan.kind), context)
@@ -583,7 +583,7 @@ def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, optio
     var bi = Python.import_module("builtins")
     var format = String(options[0])
     if format != "float32" and format != "bfloat16" and format != "int8":
-        raise Error("CausalLM: unsupported weight_format " + format)
+        raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(options[2], context)
     var path = native_path(path_value)
     if not native_path_exists(path, True):
