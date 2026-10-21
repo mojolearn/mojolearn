@@ -220,10 +220,10 @@ def _step_params(params: PythonObject, name: String) raises -> Tuple[List[Int], 
     if len(params) != 12 and len(params) != 13:
         raise Error(name + ": params must contain 12 or 13 values, got " + String(len(params)))
     var ints = List[Int]()
-    for i in range(4):  # small-loop(argument words: the four integer words)
+    for i in range(4):  # driver-loop: over argument words (the four integer words)
         ints.append(Int(py=params[i]))
     var fl = List[Float32]()
-    for i in range(4, 12):  # small-loop(argument words: the eight float words)
+    for i in range(4, 12):  # driver-loop: over argument words (the eight float words)
         fl.append(Float32(Float64(py=params[i])))
     return (ints^, fl^, len(params) == 13 and Int(py=params[12]) != 0)
 

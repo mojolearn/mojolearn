@@ -24,16 +24,16 @@ def _f64p(addr: PythonObject) raises -> F64P:
     return F64P(unsafe_from_address=a)
 
 
-def _ints(words: PythonObject, n: Int) raises -> List[Int]:
+def _ints(words: PythonObject, count: Int) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(n):  # small-loop(argument words: a fixed count per entry point)
+    for i in range(count):  # driver-loop: over argument words (a fixed count per entry point)
         out.append(Int(py=words[i]))
     return out^
 
 
-def _floats(words: PythonObject, n: Int) raises -> List[Float64]:
+def _floats(words: PythonObject, count: Int) raises -> List[Float64]:
     var out = List[Float64]()
-    for i in range(n):  # small-loop(argument words: a fixed count per entry point)
+    for i in range(count):  # driver-loop: over argument words (a fixed count per entry point)
         out.append(Float64(py=words[i]))
     return out^
 

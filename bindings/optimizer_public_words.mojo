@@ -27,14 +27,14 @@ def optimizer_python_error(error: Error) -> PyObjectPtr:
 
 def int_words(words: PythonObject) raises -> List[Int]:
     var out = List[Int]()
-    for i in range(len(words)):  # small-loop(argument words: a fixed count, or one per tensor)
+    for i in range(len(words)):  # driver-loop: over argument words (a fixed count, or one per tensor)
         out.append(Int(py=words[i]))
     return out^
 
 
 def float_words(words: PythonObject) raises -> List[Float64]:
     var out = List[Float64]()
-    for i in range(len(words)):  # small-loop(argument words: a fixed count)
+    for i in range(len(words)):  # driver-loop: over argument words (a fixed count)
         out.append(Float64(py=words[i]))
     return out^
 

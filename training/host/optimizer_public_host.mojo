@@ -25,12 +25,12 @@ struct HostOptPool(Defaultable, Movable):
     var m: List[List[Float32]]
     var v: List[List[Float32]]
     #: floats held by each slot; 0 marks a free slot
-    var n: List[Int]
+    var held: List[Int]
 
     def __init__(out self):
         self.m = List[List[Float32]]()
         self.v = List[List[Float32]]()
-        self.n = List[Int]()
+        self.held = List[Int]()
 
 
 comptime HOST_OPT_POOL = _Global[StorageType=HostOptPool, name="MojoNeuralTrainingOptPoolHost", init_fn=HostOptPool.__init__]
@@ -38,12 +38,12 @@ comptime HOST_OPT_POOL = _Global[StorageType=HostOptPool, name="MojoNeuralTraini
 
 def host_slot(h: Int, want: Int) raises -> Int:
     var pool = HOST_OPT_POOL.get_or_create_ptr()
-    if h < 0 or h >= len(pool[].n) or pool[].n[h] == 0:
+    if h < 0 or h >= len(pool[].held) or pool[].held[h] == 0:
         raise Error("optimizer_resident: handle " + String(h) + " is not open")
-    if want > 0 and pool[].n[h] != want:
+    if want > 0 and pool[].held[h] != want:
         raise Error(
             "optimizer_resident: handle " + String(h) + " holds "
-            + String(pool[].n[h]) + " floats, the call names " + String(want)
+            + String(pool[].held[h]) + " floats, the call names " + String(want)
         )
     return h
 
@@ -53,17 +53,17 @@ def host_open(n: Int) raises -> Int:
         raise Error("optimizer_resident_open: n_total must be >= 1, got " + String(n))
     var pool = HOST_OPT_POOL.get_or_create_ptr()
     var h = -1
-    for j in range(len(pool[].n)):  # driver-loop: over optimizer handle slots (a free one)
-        if pool[].n[j] == 0 and h < 0:
+    for j in range(len(pool[].held)):  # driver-loop: over optimizer handle slots (a free one)
+        if pool[].held[j] == 0 and h < 0:
             h = j
     if h < 0:
         pool[].m.append(List[Float32](length=n, fill=Float32(0.0)))
         pool[].v.append(List[Float32](length=n, fill=Float32(0.0)))
-        pool[].n.append(n)
-        return len(pool[].n) - 1
+        pool[].held.append(n)
+        return len(pool[].held) - 1
     pool[].m[h] = List[Float32](length=n, fill=Float32(0.0))
     pool[].v[h] = List[Float32](length=n, fill=Float32(0.0))
-    pool[].n[h] = n
+    pool[].held[h] = n
     return h
 
 
@@ -72,7 +72,7 @@ def host_close(handle: Int) raises -> Int:
     var pool = HOST_OPT_POOL.get_or_create_ptr()
     pool[].m[h] = List[Float32]()
     pool[].v[h] = List[Float32]()
-    pool[].n[h] = 0
+    pool[].held[h] = 0
     return h
 
 

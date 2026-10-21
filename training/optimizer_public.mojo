@@ -84,7 +84,7 @@ struct OptPool(Defaultable, Movable):
     var sp: List[HostBuffer[DType.float32]]
     var sg: List[HostBuffer[DType.float32]]
     #: floats held by each slot; 0 marks a free slot
-    var n: List[Int]
+    var held: List[Int]
     #: a host slot's moments (the per-call step's state); empty on a device slot
     var hm: List[List[Float32]]
     var hv: List[List[Float32]]
@@ -97,7 +97,7 @@ struct OptPool(Defaultable, Movable):
         self.g = List[DeviceBuffer[DType.float32]]()
         self.sp = List[HostBuffer[DType.float32]]()
         self.sg = List[HostBuffer[DType.float32]]()
-        self.n = List[Int]()
+        self.held = List[Int]()
         self.hm = List[List[Float32]]()
         self.hv = List[List[Float32]]()
         self.on_host = List[Bool]()
@@ -110,12 +110,12 @@ comptime OPT_POOL = _Global[StorageType=OptPool, name=_OPT_POOL_NAME, init_fn=Op
 def opt_pool_handle(h: Int, want: Int) raises -> Int:
     """The open slot `h` (holding `want` floats when want > 0)."""
     var pool = OPT_POOL.get_or_create_ptr()
-    if h < 0 or h >= len(pool[].n) or pool[].n[h] == 0:
+    if h < 0 or h >= len(pool[].held) or pool[].held[h] == 0:
         raise Error("optimizer_resident: handle " + String(h) + " is not open")
-    if want > 0 and pool[].n[h] != want:
+    if want > 0 and pool[].held[h] != want:
         raise Error(
             "optimizer_resident: handle " + String(h) + " holds "
-            + String(pool[].n[h]) + " floats, the call names " + String(want)
+            + String(pool[].held[h]) + " floats, the call names " + String(want)
         )
     return h
 
@@ -152,8 +152,8 @@ def resident_open(ctx: DeviceContext, n: Int, on_host: Bool = False) raises -> I
         hm = List[Float32](length=n, fill=Float32(0.0))
         hv = List[Float32](length=n, fill=Float32(0.0))
     var h = -1
-    for j in range(len(pool[].n)):  # driver-loop: over optimizer handle slots (a free one)
-        if pool[].n[j] == 0 and h < 0:
+    for j in range(len(pool[].held)):  # driver-loop: over optimizer handle slots (a free one)
+        if pool[].held[j] == 0 and h < 0:
             h = j
     if h < 0:
         pool[].m.append(m^)
@@ -162,11 +162,11 @@ def resident_open(ctx: DeviceContext, n: Int, on_host: Bool = False) raises -> I
         pool[].g.append(gbuf^)
         pool[].sp.append(spin^)
         pool[].sg.append(sgin^)
-        pool[].n.append(n)
+        pool[].held.append(n)
         pool[].hm.append(hm^)
         pool[].hv.append(hv^)
         pool[].on_host.append(on_host)
-        h = len(pool[].n) - 1
+        h = len(pool[].held) - 1
     else:
         pool[].m[h] = m^
         pool[].v[h] = v^
@@ -174,7 +174,7 @@ def resident_open(ctx: DeviceContext, n: Int, on_host: Bool = False) raises -> I
         pool[].g[h] = gbuf^
         pool[].sp[h] = spin^
         pool[].sg[h] = sgin^
-        pool[].n[h] = n
+        pool[].held[h] = n
         pool[].hm[h] = hm^
         pool[].hv[h] = hv^
         pool[].on_host[h] = on_host
@@ -195,7 +195,7 @@ def resident_close(ctx: DeviceContext, handle: Int) raises -> Int:
     pool[].hm[h] = List[Float32]()
     pool[].hv[h] = List[Float32]()
     pool[].on_host[h] = False
-    pool[].n[h] = 0
+    pool[].held[h] = 0
     return h
 
 
@@ -294,8 +294,8 @@ def resident_step(
         # the parameter/gradient device buffers: the handle's pooled pair on
         # Apple, a fresh pair per step elsewhere (lane neural-pass34)
         var pooled = opt_pool_buffers()
-        var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
-        var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
+        var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
+        var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
         if pooled:
             n_total = identical_optimizer_step_resident_host(
                 ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
@@ -315,8 +315,8 @@ def resident_step(
         # the parameter/gradient device buffers: the handle's pooled pair on
         # Apple, a fresh pair per step elsewhere (lane neural-pass34)
         var pooled = opt_pool_buffers()
-        var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
-        var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
+        var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
+        var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
         if pooled:
             n_total = identical_optimizer_step_resident_host(
                 ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
@@ -336,7 +336,7 @@ def opt_dev_pair(ctx: DeviceContext, h: Int) raises:
     """The slot's parameter and gradient device buffers at full size (off
     Apple they are one float until first needed here)."""
     var pool = OPT_POOL.get_or_create_ptr()
-    var n = pool[].n[h]
+    var n = pool[].held[h]
     if len(pool[].p[h]) < n:
         pool[].p[h] = ctx.enqueue_create_buffer[DType.float32](n)
     if len(pool[].g[h]) < n:

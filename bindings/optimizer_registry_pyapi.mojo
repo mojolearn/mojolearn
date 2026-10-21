@@ -18,7 +18,7 @@ def optimizer_registry_binding(nbytes: PythonObject, offsets_addr: PythonObject,
     allocated with the optimizer (MOJOLEARN_OPT_LAZY_MOMENTS=0, the lazy
     allocation's A/B) and 0 when it is allocated on first use. Returns N."""
     var words = List[Int]()
-    for j in range(len(nbytes)):  # small-loop(argument words: one byte count per parameter tensor)
+    for j in range(len(nbytes)):  # driver-loop: over argument words (one byte count per parameter tensor)
         words.append(Int(py=nbytes[j]))
     var a = Int(py=offsets_addr)
     if a == 0:

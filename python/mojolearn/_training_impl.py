@@ -445,7 +445,7 @@ class _Optimizer(NumericModeMixin):
         #: J + 1 int32, filled natively.
         self.offsets = zeros((len(self.params) + 1,), "<i4")
         flags = array.array("q", (0,))
-        self.n_total = int(_buffers._native("optimizer_registry")(
+        self.n_total = int(_buffers._native("optimizer_registry")(  # cpu-route: the parameter registry offsets are host metadata built once with the optimizer
             _nbytes(probes), addr(self.offsets, name="offsets"), flags.buffer_info()[0]))
         #: The host mirrors of `exp_avg` (Adam's first moment, SGD's momentum
         #: buffer) and `exp_avg_sq`, allocated on first need; the state
@@ -1640,7 +1640,7 @@ def _lr_fill(spec, t0, out):
     step)."""
     ip, fp = spec
     res = array.array("q", (0,))
-    st = _lr_native("lr_schedule_fill")(
+    st = _lr_native("lr_schedule_fill")(  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
         ip + [int(t0), len(out)], fp, out.buffer_info()[0], res.buffer_info()[0])
     return int(st), res[0]
 
