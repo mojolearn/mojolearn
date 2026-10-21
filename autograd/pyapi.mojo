@@ -31,6 +31,7 @@ from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from core.cast_in import CastIn, cast_in_kind, label_kind_of
 from autograd.cast_ops import gather_labels
 from autograd.weight_import import WI_RECORD, model_import_params, session_load_check, wi_source
+from autograd.session_weights import session_load_weights
 
 # Training options ahead of the per-layer float table in model_fit's fp.
 comptime FIT_INTS = 14
@@ -324,18 +325,7 @@ def ops_load_weights_py[E: Exec & Movable & Deinitable, KIND: Int](
     written. Returns the number of tensors written."""
     var r_ = _record_ints(recs)
     var nm = _names(names)
-    var n = len(nm)
-    if n < 1 or len(r_) != n * WI_RECORD:
-        raise Error("load_weights: the import takes " + String(WI_RECORD) + " integers per source tensor")
-    var p = ops_session[E, KIND](Int(py=sid))
-    var views = List[CastIn]()
-    for r in range(n):  # small-loop(n: one per source weight tensor): checks metadata, no data
-        var h = r_[r * WI_RECORD]
-        var src = wi_source(r_, r, nm[r])
-        views.append(session_load_check(src, r_[r * WI_RECORD + 2], rn_dims(p[].shape_nd(h))))
-    for r in range(n):  # small-loop(n: one per source weight tensor): one cast launch each
-        p[].load_into(r_[r * WI_RECORD], views[r])
-    return PythonObject(n)
+    return PythonObject(session_load_weights[E, KIND](Int(py=sid), r_, nm))
 
 
 def ops_download_py[E: Exec & Movable & Deinitable, KIND: Int](
