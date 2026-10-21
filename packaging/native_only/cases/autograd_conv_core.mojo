@@ -7,7 +7,7 @@
 # represented by the native Tape engine witness.
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from autograd.tape import Tape, Tensor
+from autograd import Tape, Tensor
 from autograd.rankn_conv import rankn_conv2d, rankn_avg_pool2d
 from autograd.rules_conv2d import Conv2dRules
 from autograd.checks.rankn_conv_cases import _sh, _f64, _f32, _conv_ref, _pool_ref, _expect_shape
