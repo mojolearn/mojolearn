@@ -54,7 +54,8 @@ than proves.
 from std.math import sqrt as host_sqrt
 
 from core.row_norms import NORM_TPB
-from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
+from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
 
 
 def _host_row_norm_halving(a: List[Float32], row: Int, d: Int) -> Float32:
@@ -132,6 +133,41 @@ def oracle_expanded_distance(
     if is_sqrt:
         dist = ftz(identical_sqrt(dist))
     return dist
+
+
+def oracle_direct_distance(
+    q: List[Float32], qi: Int, y: List[Float32], yi: Int,
+    d: Int, is_sqrt: Bool,
+) -> Float32:
+    """Independent ascending direct-L2 replay, with separate square and add.
+
+    Spell the arithmetic here rather than calling core.classical_distance:
+    the independent selector and this fold must catch production mistakes.
+    """
+    var distance = Float32(0.0)
+    for f in range(d):
+        var delta = ftz(ftz(q[qi * d + f]) - ftz(y[yi * d + f]))
+        var square = ftz(identical_mul(delta, delta))
+        distance = ftz(distance + square)
+    if distance <= Float32(0.0):
+        distance = Float32(0.0)
+    if is_sqrt:
+        distance = ftz(identical_sqrt(distance))
+    return distance
+
+
+def oracle_scan_distance(
+    q: List[Float32], qi: Int, y: List[Float32], yi: Int, d: Int,
+    q_norm: Float32, y_norm: Float32, is_sqrt: Bool,
+) -> Float32:
+    """The selected IVF arithmetic, independently replayed in float32."""
+    # Oracle repair 2026-10-20: graph_controls.mojo promoted IVF's direct
+    # fold on 2026-10-08, while KNN_DIRECT_DISTANCE was deleted on
+    # 2026-10-11. The former expanded-only oracle had become stale.
+    comptime if IVF_DIRECT_DISTANCE:
+        return oracle_direct_distance(q, qi, y, yi, d, is_sqrt)
+    else:
+        return oracle_expanded_distance(q, qi, y, yi, d, q_norm, y_norm, is_sqrt)
 
 
 def _key_less(
@@ -243,7 +279,7 @@ def oracle_brute_force(
         var ids = List[UInt32]()
         for j in range(n_index):
             row.append(
-                oracle_expanded_distance(
+                oracle_scan_distance(
                     queries, q, index, j, d, qn[q], yn[j], False
                 )
             )
@@ -297,7 +333,7 @@ def oracle_ivf_search(
         var cids = List[UInt32]()
         for l in range(n_lists):
             crow.append(
-                oracle_expanded_distance(
+                oracle_scan_distance(
                     queries, q, centers, l, d, qn[q], cn[l], False
                 )
             )
@@ -363,7 +399,7 @@ def oracle_ivf_search(
         for c in range(n_cand):
             var s = Int(order[c])
             crow2.append(
-                oracle_expanded_distance(
+                oracle_scan_distance(
                     queries, q, list_data, s, d, qn[q], ln[s], False
                 )
             )
