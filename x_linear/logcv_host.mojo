@@ -18,7 +18,7 @@ from x_linear.ops_host import par_rows
 from x_linear.logcv import lcv_disjoint_weight, lcv_retained_weight
 from x_linear.ops import fd, i2f, sti
 from x_linear.ops import FP, IP, axpy_acc, fa, fexp, fill, flog, fm, fmax, fs, ld, ldi, row_dots, st
-from x_linear.lbfgs import Objective
+from x_linear.lbfgs import Objective, lbfgs
 from x_linear.team import Team
 from x_linear.cv_roles import cv_test, cv_train
 from checks.numerics import ftz, identical_sigmoid, identical_softplus
