@@ -117,7 +117,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
                 var context = cpy.PyTuple_GetItem(args_ptr, 3)
                 var cls = causal_borrowed_item(context, "active_not_fitted_class")
                 var message = String(error)
-                return causal_set_exception(Error(String(message[16:])), cls)
+                return causal_set_exception(Error(String(message[byte=16:])), cls)
             except nested:
                 return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
