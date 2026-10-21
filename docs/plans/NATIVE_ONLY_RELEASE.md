@@ -103,3 +103,23 @@ The two SVC/SVR fixtures also landed on main at `23b4f1cc8`, after exact
 tests. That main snapshot contains 37 fixtures and 602 exports; the additional
 integration fixtures and public export remain separately scoped. Its reuse
 receipt is [`native_only_svm_20261020.json`](native_only_svm_20261020.json).
+
+## The no-Python-in-kernels check
+
+A kernel `.mojo` file must not import or call Python: no `from std.python ...`,
+`from python ...` or `import python` line and no `external_call["Py...`.
+Shell files are the Python door and may: everything under `bindings/`, any
+`*pyapi*.mojo` or `*_py.mojo` file (a kernel's sibling shell, such as
+`pca_pyapi.mojo` next to `pca.mojo`), and the tooling under `bench/`,
+`experiments/` and any `checks/` directory. Every other `.mojo` file is kernel
+code. `tools/hooks/no_python_in_kernels.py --tree` applies the test; the
+pre-push hook runs it (main on the whole tree, other branches on what they
+change over their merge-base with main), and so does the GitHub check
+`.github/workflows/no-python-in-kernels.yml`.
+
+The files that failed on main `9f9bdb4a8` (90, in 14 directories) are listed in
+`tools/hooks/python_in_kernels_baseline.txt` and may stay until purged. The list
+only shrinks: when a file's Python door moves to a shell, delete its row
+(`no_python_in_kernels.py --prune-baseline` removes every row whose file no
+longer matches). A row that main's baseline lacks is not honored, so a new
+kernel file that imports Python is always refused.
