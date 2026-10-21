@@ -481,9 +481,22 @@ OWED_REF = "5018be77d^1"
 
 def test_owed_findings_are_reported_not_refused():
     ref = _git("rev-parse", OWED_REF)
-    err = io.StringIO()
-    with contextlib.redirect_stderr(err):
-        rc = nhr.check_tree(ref)
+    # The old tree's baseline was written for that day's checker: a later
+    # false-positive fix (lane debt-block-per-n, 2026-10-21: the quantiles
+    # sampler's per-column grid is no longer block-per-n) leaves its row
+    # stale, and stale rows are refused by rule. This test is about owed
+    # findings, so judge the old tree against its baseline pruned by today's
+    # checker; the stale-row refusal keeps its own test.
+    with tempfile.TemporaryDirectory() as d:
+        bpath = os.path.join(d, "baseline.tsv")
+        with open(bpath, "w", encoding="utf-8") as f:
+            f.write(_git("show", f"{ref}:{nhr.BASELINE}") + "\n")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            nhr.prune_baseline(ref, bpath)
+            err.truncate(0)
+            err.seek(0)
+            rc = nhr.check_tree(ref, baseline_path=bpath)
     out = err.getvalue()
     assert rc == 0, out[-2000:]
     assert "OWED (not baseline debt)" in out and "mojo-host-loop" in out, out[-2000:]
