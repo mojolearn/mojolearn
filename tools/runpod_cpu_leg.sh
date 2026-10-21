@@ -201,7 +201,7 @@ POD_NAME="mojolearn-cpu-$LANE-$STAMP"
 # composed artifacts (dry run and rent alike)
 # ---------------------------------------------------------------------------
 make_source() {
-    ( cd "$WORKTREE" && git ls-files -z -- . ':!bench/results' ':!mamba/corpus' ':!bench/oracle_*' ':!bench/minentropy_oracle.txt' ':!experiments/six_lane_integration' ) > "$TMPD/files0"
+    ( cd "$WORKTREE" && git ls-files -z -- . ':!bench/results' ':!mamba/corpus' ':!bench/oracle_*' ':!bench/minentropy_oracle.txt' ':!experiments/six_lane_integration' ':!experiments/performance_ideas/measurements' ) > "$TMPD/files0"
     if [ -n "$INCLUDES" ]; then
         printf '%s\n' "$INCLUDES" | while IFS= read -r _inc; do
             [ -n "$_inc" ] || continue
@@ -213,7 +213,7 @@ import gzip, hashlib, os, sys, tarfile
 root, lst, dest = sys.argv[1:]
 names = sorted(set(n for n in open(lst, "rb").read().decode().split("\0") if n))
 n = 0
-with gzip.GzipFile(dest, "wb", compresslevel=1, mtime=0) as gz, tarfile.open(fileobj=gz, mode="w", format=tarfile.PAX_FORMAT) as tf:
+with gzip.GzipFile(dest, "wb", compresslevel=6, mtime=0) as gz, tarfile.open(fileobj=gz, mode="w", format=tarfile.PAX_FORMAT) as tf:
     for name in names:
         p = os.path.join(root, name)
         if not os.path.lexists(p):
