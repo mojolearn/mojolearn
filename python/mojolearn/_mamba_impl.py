@@ -100,10 +100,9 @@ from . import _portable_math as math
 
 from . import _backend
 from . import lowbit as _lowbit
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
-from ._bufcheck import dtype_name, is_native_f32, memcopy, probe
+from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._bufcheck import dtype_name, is_native_f32, probe
 from ._mode import NumericModeMixin
-from . import _ragged
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -169,46 +168,6 @@ def _f32_strict(a, what, name):
         )
     arr, _copied = as_f32_c(a, ndim=pb.ndim, name=name)
     return arr
-
-
-def _want_shape(a, what, name, shape, alt=None):
-    """Exact-shape check with the expected spelling in the message.
-    `alt` admits one alternative spelling (the conv weight's reference
-    `[C, 1, 4]` beside the squeezed `[C, 4]` -- same bytes)."""
-    if a.shape == shape or (alt is not None and a.shape == alt):
-        return a
-    raise ValueError(
-        f"mojolearn {what}: {name} has shape {a.shape}, want {shape}"
-        + (f" (or {alt})" if alt is not None else "")
-    )
-
-
-def _exports(ext, name):
-    """Whether the loaded binding exports `name`. On a CPU-only install the
-    stand-in for a GPU binding RAISES ImportError by name from `__getattr__`
-    (`_backend.py::_HostBinding`), and `hasattr` swallows only
-    AttributeError, so a bare `hasattr` probe would take the whole CPU host
-    route down. The same guard `_transformer_impl._exports` carries, for the
-    same reason; a probe is not a use."""
-    try:
-        return hasattr(ext, name)
-    except (ImportError, AttributeError):
-        return False
-
-
-def _private_copy(a):
-    """A fresh float32 C-order buffer holding `a`'s bytes.
-
-    The resident decode session's OWNERSHIP clause: the session COPIES the
-    weights and the state at open, so a caller's later edit to either is not
-    observed. On the GPU arm the copy lands in device memory
-    (`MambaDeviceWeights`, `MambaDeviceState`); on the host arm it lands
-    here, in a buffer of this process, which is the same promise with the
-    same visibility and the same refresh door (`load_state`)."""
-    pb = probe(a)
-    out = empty(tuple(int(d) for d in pb.shape), "<f4")  # glue: shape tuple of ints
-    memcopy(addr(out, name="copy"), addr_ro(a, name="source"), 4 * int(out.size))
-    return out
 
 
 def _state_buf(a, what, name, shape):
@@ -406,55 +365,6 @@ class _MambaBase(NumericModeMixin):
                     "bash bindings/build_mamba.sh"
                 )
         return mod
-
-    def _backward_native(self, extension, entry, native):
-        """The callable `_prefill_backward` hands the 21 addresses and the
-        parameters to; a block with a session substitutes its own."""
-        return native
-
-    def _prefill_backward(self, x, grad_output, entry):
-        what = type(self).__name__ + ".backward"
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if mode not in ("identical", "fast"):
-            raise NotImplementedError(
-                f"mojolearn {what}: the zero-state prefill backward runs under "
-                f"IDENTICAL or FAST; got numeric_mode={mode!r}"
-            )
-        x = _batch_tokens(x, what, self.d_model, False)
-        b, l, _ = x.shape
-        if b < 1 or l < 1:
-            raise ValueError(f"mojolearn {what}: B and L must be positive")
-        dy = _want_shape(_f32_strict(grad_output, what, "grad_output"),
-                         what, "grad_output", x.shape)
-        if not all_finite(dy):
-            raise ValueError(f"mojolearn {what}: grad_output must be finite")
-        kwargs = {"dt_limit": self.dt_limit} if entry == "mamba2_backward" else {}
-        checked = type(self)(dict(zip(self._W_NAMES, self._w)),
-                             numeric_mode=mode, **kwargs)
-        if checked.d_model != self.d_model:
-            raise ValueError(f"mojolearn {what}: current weights changed d_model")
-        weights = checked._w
-        # Resolve before allocating gradients so an older binary fails clearly.
-        extension = self._extension()
-        native = getattr(extension, entry, None)
-        if native is None:
-            raise RuntimeError(
-                f"mojolearn {what}: loaded Mamba extension lacks {entry}; "
-                "rebuild bindings/build_mamba.sh in IDENTICAL mode"
-            )
-        native = self._backward_native(extension, entry, native)
-        # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
-        gradients = ([empty(x.shape, "<f4")]
-                     + [empty(w.shape, "<f4") for w in weights])  # glue: allocates one gradient per weight
-        addresses = ([addr_ro(x, name="x")]
-                     + [addr_ro(w, name="weight") for w in weights]  # glue: one address per weight tensor
-                     + [addr_ro(dy, name="grad_output")]
-                     + [addr(g, name="gradient") for g in gradients])  # glue: one address per gradient tensor
-        params = [b, l, self.d_model]
-        if entry == "mamba2_backward":
-            params.extend(checked.dt_limit)
-        native(addresses, params)
-        return dict(zip(("x",) + self._W_NAMES, gradients))
 
 
 # Contract: profile mojolearn.identical.mamba1.fp32.v1 (mamba/IDENTICAL_MAMBA_CONTRACT.md); reference
@@ -690,7 +600,8 @@ class Mamba1Block(_MambaBase):
         -------
         Mamba1DecodeSession
         """
-        return Mamba1DecodeSession(self, state)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_open", (self, state), _native_neural_bridge.CONTEXT)
 
     __call__ = forward
 
@@ -734,61 +645,12 @@ class Mamba1DecodeSession:
     ...         y_t = session.step(x_t)
     """
 
+    # Every method is one native call (bindings/mamba_public_native.mojo); the
+    # session's weights, state copies, position and open flag live in its
+    # native handle.
     def __init__(self, block, state):
-        what = "Mamba1DecodeSession"
-        ext = block._extension()
-        try:
-            # The CPU-only stand-in raises ImportError BY NAME from
-            # __getattr__ (_backend.py::_HostBinding); a probe is not a use.
-            create = getattr(ext, "mamba1_session_create", None)
-        except (ImportError, AttributeError):
-            create = None
-        # THE HOST ARM. No device session entry, but the decode entry the
-        # session would have run is right there under its per-call name.
-        host = create is None and _exports(ext, "mamba1_decode_step")
-        if create is None and not host:
-            raise NotImplementedError(
-                f"mojolearn {what}: the loaded {type(block).__name__} binding "
-                "exports neither a resident decode session nor the per-call "
-                "mamba1_decode_step entry the host arm runs; rebuild "
-                "bindings/build_mamba.sh (or build_mamba_host.sh) in "
-                "IDENTICAL mode"
-            )
-        if state is None:
-            raise ValueError(f"mojolearn {what}: state is required (allocate_state)")
-        _refuse_resident(state, what)
-        pb = probe(state.h)
-        if len(pb.shape) != 3 or pb.shape[0] < 1:
-            raise ValueError(f"mojolearn {what}: state.h must be (B, d_inner, 16)")
-        b = int(pb.shape[0])
-        win = _state_buf(state.conv_window, what, "conv_window", (b, block.d_inner, _M1_D_CONV))
-        h = _state_buf(state.h, what, "h", (b, block.d_inner, _M1_D_STATE))
-        self._profile = _m1_profile(ext)
-        affine = _m1_affine_buffers(state, b, block.d_inner, self._profile, what)
-        self._position = int(getattr(state, "absolute_position", 0))
-        self._block = block
-        self._state = state
-        self._ext = ext
-        self._open = False
-        self._b = b
-        w = block._w
-        if host:
-            # The ten weights and the two state pieces COPIED, which is the
-            # ownership clause the device arm satisfies with an upload.
-            self._native = None
-            self._hw = [_private_copy(a) for a in w]  # glue: private copy per weight tensor
-            self._win = _private_copy(win)
-            self._h = _private_copy(h)
-            self._affine = [_private_copy(a) for a in affine]  # glue: fixed checkpoint buffer list
-        else:
-            self._native = create()
-            addrs = ([addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
-                     + [addr(win, name="conv_window"), addr(h, name="h")])
-            addrs += [addr(a, name="affine checkpoint") for a in affine]  # glue: fixed buffer list
-            params = [b, block.d_model] + ([self._position] if self._profile == 2 else [])
-            ext.mamba1_session_open(self._native, addrs, params)
-        self._open = True
-        state._resident_session = self
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_init", (self, block, state), _native_neural_bridge.CONTEXT)
 
     @property
     def state(self):
@@ -798,11 +660,13 @@ class Mamba1DecodeSession:
     @property
     def is_open(self):
         """Whether the session is open."""
-        return self._open
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_is_open", (self,), _native_neural_bridge.CONTEXT)
 
-    def _require_open(self, what):
-        if not self._open:
-            raise ValueError(f"mojolearn {what}: the session is closed")
+    @property
+    def _native(self):
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_device", (self,), _native_neural_bridge.CONTEXT)
 
     def step(self, x):
         """Decode one token per row.
@@ -816,117 +680,42 @@ class Mamba1DecodeSession:
         -------
         y : mojolearn.Array, shape (B, 1, d_model)
         """
-        what = "Mamba1DecodeSession.step"
-        self._require_open(what)
-        blk = self._block
-        x = _batch_tokens(x, what, blk.d_model, True)
-        b = int(x.shape[0])
-        if b != self._b:
-            raise ValueError(f"mojolearn {what}: the session holds {self._b} rows, x has B = {b}")
-        y = empty((b, 1, blk.d_model), "<f4")
-        if self._native is None:
-            # ORDER MATCHES `Mamba1Block._call`, which is the order
-            # `bindings/_mojolearn_mamba_host.mojo::mamba1_decode_step`
-            # documents: x, the ten weights, conv_window, h, y_out. The
-            # session's own buffers stand where the caller's would.
-            hw = self._hw
-            self._ext.mamba1_decode_step(
-                [addr_ro(x, name="x")]
-                + [addr_ro(a, name="weight") for a in hw]  # glue: one address per weight tensor
-                + [addr(self._win, name="conv_window"), addr(self._h, name="h"),
-                   addr(y, name="y")]
-                + [addr(a, name="affine checkpoint") for a in self._affine],  # glue: fixed buffer list
-                [b, blk.d_model] + ([self._position] if self._profile == 2 else []))
-        else:
-            self._ext.mamba1_session_step(self._native, [addr_ro(x, name="x"), addr(y, name="y")])
-        if self._profile == 2:
-            self._position += 1
-        return y
-
-    def _state_addrs(self, what):
-        st, blk = self._state, self._block
-        win = _state_buf(st.conv_window, what, "conv_window", (self._b, blk.d_inner, _M1_D_CONV))
-        h = _state_buf(st.h, what, "h", (self._b, blk.d_inner, _M1_D_STATE))
-        return win, h
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_step", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
         """Copy the session's current state into the `Mamba1State` arrays and return the state."""
-        what = "Mamba1DecodeSession.sync_state"
-        self._require_open(what)
-        win, h = self._state_addrs(what)
-        affine = _m1_affine_buffers(self._state, self._b, self._block.d_inner, self._profile, what)
-        if self._native is None:
-            memcopy(addr(win, name="conv_window"), addr_ro(self._win, name="resident"),
-                    4 * int(self._win.size))
-            memcopy(addr(h, name="h"), addr_ro(self._h, name="resident"), 4 * int(self._h.size))
-            for dst, src in zip(affine, self._affine):  # glue: copies the three state buffers
-                memcopy(addr(dst, name="checkpoint"), addr_ro(src, name="resident"), 4 * int(src.size))
-        else:
-            position = self._ext.mamba1_session_export_state(
-                self._native, [addr(win, name="conv_window"), addr(h, name="h")]
-                + [addr(a, name="affine checkpoint") for a in affine])  # glue: fixed buffer list
-            if self._profile == 2:
-                self._position = int(position)
-        if self._profile == 2:
-            self._state.absolute_position = self._position
-        return self._state
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_sync", (self,), _native_neural_bridge.CONTEXT)
 
     def load_state(self):
         """Reload the session from the `Mamba1State` arrays (after you edit them) and return the state."""
-        what = "Mamba1DecodeSession.load_state"
-        self._require_open(what)
-        win, h = self._state_addrs(what)
-        affine = _m1_affine_buffers(self._state, self._b, self._block.d_inner, self._profile, what)
-        if self._native is None:
-            memcopy(addr(self._win, name="resident"), addr_ro(win, name="conv_window"),
-                    4 * int(self._win.size))
-            memcopy(addr(self._h, name="resident"), addr_ro(h, name="h"), 4 * int(self._h.size))
-            for dst, src in zip(self._affine, affine):  # glue: copies the three state buffers
-                memcopy(addr(dst, name="resident"), addr_ro(src, name="checkpoint"), 4 * int(src.size))
-        else:
-            self._ext.mamba1_session_load_state(
-                self._native, [addr(win, name="conv_window"), addr(h, name="h")]
-                + [addr(a, name="affine checkpoint") for a in affine]  # glue: affine checkpoint buffer addresses
-                + ([self._state.absolute_position] if self._profile == 2 else []))
-        if self._profile == 2:
-            self._position = int(self._state.absolute_position)
-        return self._state
-
-    def _release(self):
-        if self._native is None:
-            self._hw = self._win = self._h = self._affine = None
-        else:
-            self._ext.mamba1_session_close(self._native)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_load", (self,), _native_neural_bridge.CONTEXT)
 
     def close(self):
         """Copy the state back, release the session's buffers and close it. Closing twice is a no-op."""
-        if not self._open:
-            return
-        try:
-            self.sync_state()
-        finally:
-            self._open = False
-            self._state._resident_session = None
-            self._release()
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_close", (self,), _native_neural_bridge.CONTEXT)
 
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
-        self.close()
+        _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_close", (self,), _native_neural_bridge.CONTEXT)
         return False
 
     def __del__(self):
         try:
-            if getattr(self, "_open", False):
-                self._open = False
-                self._state._resident_session = None
-                self._release()
+            _native_neural_bridge.RUNTIME.mamba_native_call(
+                "session_drop", (self,), _native_neural_bridge.CONTEXT)
         except Exception:
             pass
 
     def __repr__(self):
-        return "Mamba1DecodeSession(open=%r, rows=%d)" % (self._open, self._b)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_repr", (self,), _native_neural_bridge.CONTEXT)
 
 
 # Contract: profile mojolearn.identical.mamba2.fp32.v1 (mamba/IDENTICAL_MAMBA2_CONTRACT.md); reference
@@ -1153,7 +942,8 @@ class Mamba2Block(_MambaBase):
         :meth:`step`; close or sync it before using ``state`` elsewhere.
 
         PRIVATE UNTIL ITS LANE IS RECORDED; see `_RESIDENT_SESSION_NOTE`."""
-        return _Mamba2DecodeSession(self, state)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_open", (self, state), _native_neural_bridge.CONTEXT)
 
     __call__ = forward
 
@@ -1194,143 +984,61 @@ _RESIDENT_SESSION_NOTE = "see the comment above"
 class _Mamba2DecodeSession:
     """Resident repeated decode for one ``Mamba2Block`` and state."""
 
+    # One native call per method (bindings/mamba_public_native.mojo); the
+    # step's report buffers are returned and assigned to the block here.
     def __init__(self, block, state):
-        what = "Mamba2DecodeSession"
-        ext = block._extension()
-        try:
-            create = getattr(ext, "mamba2_session_create", None)
-        except (ImportError, AttributeError):
-            create = None
-        host = create is None and _exports(ext, "mamba2_decode_step")
-        if create is None and not host:
-            raise NotImplementedError(f"mojolearn {what}: binding lacks decode entries")
-        if state is None:
-            raise ValueError(f"mojolearn {what}: state is required")
-        _refuse_resident(state, what)
-        pb = probe(state.h)
-        if len(pb.shape) != 4 or pb.shape[0] < 1:
-            raise ValueError(f"mojolearn {what}: state.h has invalid shape")
-        b = int(pb.shape[0])
-        win = _state_buf(state.conv_window, what, "conv_window", (b, block.conv_dim, _M2_D_CONV))
-        h = _state_buf(state.h, what, "h", (b, block.nheads, _M2_HEADDIM, _M2_D_STATE))
-        bx = _state_buf(state.buffer_xbc, what, "buffer_xbc", (b, _M2_CHUNK_SIZE, block.conv_dim))
-        bd = _state_buf(state.buffer_dtraw, what, "buffer_dtraw", (b, _M2_CHUNK_SIZE, block.nheads))
-        self._block, self._state, self._ext = block, state, ext
-        self._b, self._open = b, False
-        if host:
-            self._native = None
-            self._hw = [_private_copy(a) for a in block._w]  # glue: private copy per weight tensor
-            self._parts = [_private_copy(a) for a in (win, h, bx, bd)]  # glue: private copy per state tensor
-            self._q = int(state.buffered_tokens)
-        else:
-            self._native = create()
-            lo, hi = block.dt_limit
-            ext.mamba2_session_open(
-                self._native,
-                [addr_ro(a, name="weight") for a in block._w]  # glue: one address per weight tensor
-                + [addr(win, name="conv_window"), addr(h, name="h"),
-                   addr(bx, name="buffer_xbc"), addr(bd, name="buffer_dtraw")],
-                [b, block.d_model, int(state.buffered_tokens), lo, hi])
-        self._open = True
-        state._resident_session = self
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_init", (self, block, state), _native_neural_bridge.CONTEXT)
 
     @property
-    def state(self): return self._state
+    def state(self):
+        return self._state
 
     @property
-    def is_open(self): return self._open
+    def is_open(self):
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_is_open", (self,), _native_neural_bridge.CONTEXT)
 
-    def _require_open(self, what):
-        if not self._open:
-            raise ValueError(f"mojolearn {what}: the session is closed")
-
-    def _state_parts(self, what):
-        st, b, blk = self._state, self._b, self._block
-        return (
-            _state_buf(st.conv_window, what, "conv_window", (b, blk.conv_dim, _M2_D_CONV)),
-            _state_buf(st.h, what, "h", (b, blk.nheads, _M2_HEADDIM, _M2_D_STATE)),
-            _state_buf(st.buffer_xbc, what, "buffer_xbc", (b, _M2_CHUNK_SIZE, blk.conv_dim)),
-            _state_buf(st.buffer_dtraw, what, "buffer_dtraw", (b, _M2_CHUNK_SIZE, blk.nheads)),
-        )
+    @property
+    def _native(self):
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_device", (self,), _native_neural_bridge.CONTEXT)
 
     def step(self, x):
-        what = "Mamba2DecodeSession.step"
-        self._require_open(what)
-        blk = self._block
-        x = _batch_tokens(x, what, blk.d_model, True)
-        if int(x.shape[0]) != self._b:
-            raise ValueError(f"mojolearn {what}: batch size changed")
-        y = empty((self._b, 1, blk.d_model), "<f4")
-        report = empty((self._b, blk.nheads, _M2_HEADDIM, _M2_D_STATE), "<f4")
-        if self._native is None:
-            addrs = ([addr_ro(x, name="x")]
-                     + [addr_ro(a, name="weight") for a in self._hw]  # glue: one address per weight tensor
-                     + [addr(a, name="state") for a in self._parts]  # glue: one address per state tensor
-                     + [addr(y, name="y"), addr(report, name="h_last")])
-            lo, hi = blk.dt_limit
-            self._q = int(self._ext.mamba2_decode_step(
-                addrs, [self._b, blk.d_model, self._q, lo, hi]))
-        else:
-            self._q = int(self._ext.mamba2_session_step(
-                self._native, [addr_ro(x, name="x"), addr(y, name="y"),
-                               addr(report, name="h_last")]))
-        blk.h_last_ = report
+        y, self._block.h_last_ = _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_step", (self, x), _native_neural_bridge.CONTEXT)
         return y
 
     def sync_state(self):
-        what = "Mamba2DecodeSession.sync_state"
-        self._require_open(what)
-        parts = self._state_parts(what)
-        if self._native is None:
-            for dst, src in zip(parts, self._parts):  # glue: memcopy per state tensor
-                memcopy(addr(dst, name="state"), addr_ro(src, name="resident"), 4 * int(src.size))
-            q = self._q
-        else:
-            q = int(self._ext.mamba2_session_export_state(
-                self._native, [addr(a, name="state") for a in parts]))  # glue: one address per state tensor
-        self._state.buffered_tokens = q
-        return self._state
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_sync", (self,), _native_neural_bridge.CONTEXT)
 
     def load_state(self):
-        what = "Mamba2DecodeSession.load_state"
-        self._require_open(what)
-        parts = self._state_parts(what)
-        q = int(self._state.buffered_tokens)
-        if self._native is None:
-            for dst, src in zip(self._parts, parts):  # glue: memcopy per state tensor
-                memcopy(addr(dst, name="resident"), addr_ro(src, name="state"), 4 * int(dst.size))
-            self._q = q
-        else:
-            self._ext.mamba2_session_load_state(
-                self._native, [addr(a, name="state") for a in parts], [q])  # glue: one address per state tensor
-        return self._state
-
-    def _release(self):
-        if self._native is None:
-            self._hw = self._parts = None
-        else:
-            self._ext.mamba2_session_close(self._native)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_load", (self,), _native_neural_bridge.CONTEXT)
 
     def close(self):
-        if not self._open: return
-        try: self.sync_state()
-        finally:
-            self._open = False
-            self._state._resident_session = None
-            self._release()
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_close", (self,), _native_neural_bridge.CONTEXT)
 
-    def __enter__(self): return self
-    def __exit__(self, *exc): self.close(); return False
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_close", (self,), _native_neural_bridge.CONTEXT)
+        return False
+
     def __del__(self):
         try:
-            if getattr(self, "_open", False):
-                self._open = False
-                self._state._resident_session = None
-                self._release()
-        except Exception: pass
+            _native_neural_bridge.RUNTIME.mamba_native_call(
+                "session_drop", (self,), _native_neural_bridge.CONTEXT)
+        except Exception:
+            pass
 
     def __repr__(self):
-        return "Mamba2DecodeSession(open=%r, rows=%d)" % (self._open, self._b)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_repr", (self,), _native_neural_bridge.CONTEXT)
 
 
 # Pieces per DEVIATION 832 (buffer never empties after the first call, 832(i)); Input_States
@@ -1397,26 +1105,8 @@ class Mamba3State:
         k : float32 buffer, shape (B, H, N)
         v : float32 buffer, shape (B, H, P)
         """
-        what = "Mamba3State.set_input_states"
-        for name, dst, src in (("theta", self.theta, theta),  # glue: checks four named state arguments
-                               ("h", self.h, h),
-                               ("k", self.pending_k, k),
-                               ("v", self.pending_v, v)):
-            arr = _f32_strict(src, what, name)
-            dp = probe(dst)
-            if arr.shape != dp.shape:
-                raise ValueError(
-                    f"mojolearn {what}: {name} has shape {arr.shape}, "
-                    f"want {dp.shape}"
-                )
-            # The destination is judged like every other state piece
-            # (float32, C-contiguous, writable), then DEVIATION 2410:
-            # `np.copyto(dst, arr, casting="no")` is one `memmove` of the
-            # same bytes into the state piece's own memory.
-            _state_buf(dst, what, name, arr.shape)
-            memcopy(addr(dst, name=name), addr_ro(arr, name=name),
-                    arr.nbytes)
-        self.pending = True
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "set_input_states", (self, theta, h, k, v), _native_neural_bridge.CONTEXT)
 
 
 # Contract: profile mojolearn.identical.mamba3.siso.fp32.v1 (mamba/IDENTICAL_MAMBA3_CONTRACT.md);
@@ -1515,27 +1205,8 @@ class Mamba3Block(_MambaBase):
         -------
         Mamba3State
         """
-        b = int(batch_size)
-        if b < 1:
-            raise ValueError(
-                f"mojolearn Mamba3Block: batch_size must be positive, "
-                f"got {batch_size!r}"
-            )
-        nh, q = self.nheads, _M3_CHUNK_SIZE
-        return Mamba3State(
-            zeros((b, nh, _M3_NUM_ROPE_ANGLES), "<f4"),
-            zeros((b, nh, _M3_HEADDIM, _M3_D_STATE), "<f4"),
-            zeros((b, q, nh, _M3_D_STATE), "<f4"),
-            zeros((b, q, nh, _M3_D_STATE), "<f4"),
-            zeros((b, q, nh, _M3_HEADDIM), "<f4"),
-            zeros((b, q, nh), "<f4"),
-            zeros((b, q, nh), "<f4"),
-            zeros((b, q, nh), "<f4"),
-            zeros((b, nh, _M3_D_STATE), "<f4"),
-            zeros((b, nh, _M3_HEADDIM), "<f4"),
-            0,
-            False,
-        )
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "allocate", (self, batch_size), _native_neural_bridge.CONTEXT)
 
     def install_owned_weights(self):
         """Snapshot the current weights for later stateless `forward` and `backward` calls.
@@ -1545,34 +1216,15 @@ class Mamba3Block(_MambaBase):
         unaffected. Needs a binding that provides owned weights; otherwise
         `RuntimeError`.
         """
-        ext = self._extension()
-        enabled = getattr(ext, "mamba3_owned_weights_enabled", None)
-        if enabled is None or not bool(enabled()):
-            raise RuntimeError("Mamba3 owned weights require the NN40 IDENTICAL arm")
-        checked = type(self)(dict(zip(self._W_NAMES, self._w)),
-                             numeric_mode=getattr(self, "numeric_mode", None))
-        if checked.d_model != self.d_model:
-            raise ValueError("Mamba3 owned weights: d_model changed")
-        if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
-            self._prefill_session = ext.mamba3_prefill_session_create()
-            self._prefill_binding = ext
-        self._owned_generation = int(ext.mamba3_prefill_session_install_weights(
-            self._prefill_session,
-            [_addr_ro(w) for w in checked._w],  # glue: one binding address per tensor
-            self.d_model))
+        self._prefill_session, self._prefill_binding, self._owned_generation = _native_neural_bridge.RUNTIME.mamba_native_call(
+            "install_owned", (self,), _native_neural_bridge.CONTEXT)
         self._owned_restore_pending = False
         return self._owned_generation
 
     def release_owned_weights(self):
         """Drop the weight snapshot; later calls read your weight arrays again."""
-        session = getattr(self, "_prefill_session", None)
-        binding = getattr(self, "_prefill_binding", None)
-        if session is not None and binding is not None:
-            binding.mamba3_prefill_session_close(session)
-        self._prefill_session = None
-        self._prefill_binding = None
-        self._owned_generation = None
-        self._owned_restore_pending = False
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "release_owned", (self,), _native_neural_bridge.CONTEXT)
 
     def _call_fresh(self, x, ext):
         """Discard-only prefill: return all reports without a host cache."""
@@ -1634,88 +1286,27 @@ class Mamba3Block(_MambaBase):
         self.theta_last_ = theta_last
         return y
 
-    def _backward_native(self, extension, entry, native):
-        if getattr(self, "_owned_restore_pending", False):
-            self.install_owned_weights()
-        # lane/neural-net-experiment (2026-09-30): the backward on the same
-        # session as the fresh prefill. The session keeps the weights and
-        # the last forward's stages on the device; the backward reuses the
-        # stages when x and the weights are byte for byte the forward's
-        # (the binding compares them) and recomputes the forward otherwise.
-        # Same launches, same order, as the entry's own recompute.
-        # MOJOLEARN_MAMBA3_LEGACY_SETUP=1 keeps the per-call entry.
-        session_backward = None
-        try:
-            session_backward = getattr(extension, "mamba3_prefill_session_backward", None)
-        except (ImportError, AttributeError):
-            session_backward = None
-        generation = getattr(self, "_owned_generation", None)
-        if generation is not None:
-            if getattr(self, "_prefill_binding", None) is not extension or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
-                raise RuntimeError("Mamba3 owned snapshot requires its installed binding/setup")
-            session = self._prefill_session
-            return lambda addresses, params: extension.mamba3_prefill_session_backward_owned(
-                session, [addresses[0]] + addresses[10:], list(params) + [generation])
-        if session_backward is None or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
-            return native
-        if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not extension:
-            self._prefill_session = extension.mamba3_prefill_session_create()
-            self._prefill_binding = extension
-        session = self._prefill_session
-        generation = getattr(self, "_owned_generation", None)
-        if generation is not None:
-            # glue: select addresses from the existing binding argument list;
-            # no tensor data is read, compared or computed in Python.
-            return lambda addresses, params: extension.mamba3_prefill_session_backward_owned(
-                session, [addresses[0]] + addresses[10:], list(params) + [generation])
-        return lambda addresses, params: session_backward(session, addresses, params)
-
     def session_info(self):
         """Counters of the prefill session as a dict, or None before the first call.
 
         Reports weight uploads, re-copies and reuses, backward stage reuses, forward
         recomputes and the number of stages held.
         """
-        session = getattr(self, "_prefill_session", None)
-        binding = getattr(self, "_prefill_binding", None)
-        info = getattr(binding, "mamba3_prefill_session_info", None) if binding is not None else None
-        if session is None or info is None:
-            return None
-        values = list(info(session))
-        keys = ("weight_uploads", "weight_recopies", "weight_reuses",
-                "backward_reuses", "backward_recomputes", "stages_held")
-        return dict(zip(keys, (int(v) for v in values)))  # glue: names six counter values
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_info", (self,), _native_neural_bridge.CONTEXT)
 
     def export_owned_weights(self):
         """Copy the installed weight snapshot into new host arrays."""
-        generation = getattr(self, "_owned_generation", None)
-        if generation is None:
-            raise RuntimeError("Mamba3 has no installed owned snapshot")
-        dm, di, nh = self.d_model, self.d_inner, self.nheads
-        shapes = ((dm,), (self.d_in_proj, dm), (nh,), (_M3_D_STATE,),
-                  (_M3_D_STATE,), (nh, _M3_D_STATE), (nh, _M3_D_STATE),
-                  (nh,), (dm, di))
-        arrays = [_buffers.empty(shape, '<f4') for shape in shapes]  # glue: fixed parameter buffer list
-        self._prefill_binding.mamba3_prefill_session_export_weights(
-            self._prefill_session, [_addr(a) for a in arrays], generation)  # glue: exported weight buffer addresses
-        return dict(zip(self._W_NAMES, arrays))
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "export_owned", (self,), _native_neural_bridge.CONTEXT)
 
     def __getstate__(self):
-        state = self.__dict__.copy()
-        if getattr(self, "_owned_generation", None) is not None:
-            snapshot = self.export_owned_weights()
-            state["_w"] = [snapshot[name] for name in self._W_NAMES]  # glue: fixed parameter name list
-            state["_owned_restore_pending"] = True
-        state["_owned_generation"] = None
-        for name in ("_prefill_session", "_prefill_binding"):  # glue: drops two native handles
-            state.pop(name, None)
-        return state
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "getstate", (self,), _native_neural_bridge.CONTEXT)
 
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._prefill_session = None
-        self._prefill_binding = None
-        self._owned_generation = None
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "setstate", (self, state), _native_neural_bridge.CONTEXT)
 
     def _call(self, x, state, step):
         what = "Mamba3Block.step" if step else "Mamba3Block.forward"
@@ -1829,12 +1420,9 @@ class Mamba3Block(_MambaBase):
         y : mojolearn.Array, shape (B, L, d_model)
             Block output, residual included. ``numpy.asarray(y)`` is zero-copy.
         """
-        if lengths is not None:
-            what = type(self).__name__ + ".forward"
-            x = _batch_tokens(x, what, self.d_model, False)
-            return _ragged.ragged_forward(lambda xp: self._call(xp, None, step=False),
-                                          x, state, lengths, "<f4", what)[0]
-        return self._call(x, state, step=False)
+        y, self.h_last_, self.k_last_, self.v_last_, self.theta_last_ = _native_neural_bridge.RUNTIME.mamba_native_call(
+            "forward", (self, x, state, lengths), _native_neural_bridge.CONTEXT)
+        return y
 
     def _forward_with_tape(self, x):
         return _native_neural_bridge.RUNTIME.neural_prefill_call(
@@ -1889,20 +1477,17 @@ class Mamba3Block(_MambaBase):
         -------
         y : mojolearn.Array, shape (B, 1, d_model)
         """
-        if state is None:
-            raise ValueError(
-                "mojolearn Mamba3Block.step: state is required (a decode "
-                "step continues a sequence; allocate_state(B) makes the "
-                "fresh one)"
-            )
-        return self._call(x, state, step=True)
+        y, self.h_last_, self.k_last_, self.v_last_, self.theta_last_ = _native_neural_bridge.RUNTIME.mamba_native_call(
+            "step", (self, x, state), _native_neural_bridge.CONTEXT)
+        return y
 
     def _decode_session(self, state):
         """Keep Mamba-3 weights and recurrent state resident for repeated
         single-token decode while executing the existing L=1 block entry.
 
         PRIVATE UNTIL ITS LANE IS RECORDED; see `_RESIDENT_SESSION_NOTE`."""
-        return _Mamba3DecodeSession(self, state)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_open", (self, state), _native_neural_bridge.CONTEXT)
 
     __call__ = forward
 
@@ -1915,153 +1500,62 @@ class _Mamba3DecodeSession:
         "buffer_dt", "buffer_sig", "buffer_adt", "pending_k", "pending_v",
     )
 
+    # One native call per method (bindings/mamba_public_native.mojo); the
+    # step's report buffers are returned and assigned to the block here.
     def __init__(self, block, state):
-        what = "Mamba3DecodeSession"
-        ext = block._extension()
-        try:
-            create = getattr(ext, "mamba3_session_create", None)
-        except (ImportError, AttributeError):
-            create = None
-        host = create is None and _exports(ext, "mamba3_decode_step")
-        if create is None and not host:
-            raise NotImplementedError(f"mojolearn {what}: binding lacks decode entries")
-        if state is None:
-            raise ValueError(f"mojolearn {what}: state is required")
-        _refuse_resident(state, what)
-        pb = probe(state.h)
-        if len(pb.shape) != 4 or pb.shape[0] < 1:
-            raise ValueError(f"mojolearn {what}: state.h has invalid shape")
-        self._block, self._state, self._ext = block, state, ext
-        self._b, self._open = int(pb.shape[0]), False
-        parts = self._state_parts(what)
-        if host:
-            self._native = None
-            self._hw = [_private_copy(a) for a in block._w]  # glue: private copy per weight tensor
-            self._parts = [_private_copy(a) for a in parts]  # glue: private copy per state tensor
-            self._q = int(state.buffered_tokens)
-            self._pending = bool(state.pending)
-        else:
-            self._native = create()
-            ext.mamba3_session_open(
-                self._native,
-                [addr_ro(a, name="weight") for a in block._w]  # glue: one address per weight tensor
-                + [addr(a, name=name) for a, name in zip(parts, self._STATE_NAMES)],  # glue: one address per state tensor
-                [self._b, block.d_model, int(state.buffered_tokens),
-                 1 if state.pending else 0])
-        self._open = True
-        state._resident_session = self
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_init", (self, block, state), _native_neural_bridge.CONTEXT)
 
     @property
-    def state(self): return self._state
+    def state(self):
+        return self._state
 
     @property
-    def is_open(self): return self._open
+    def is_open(self):
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_is_open", (self,), _native_neural_bridge.CONTEXT)
 
-    def _require_open(self, what):
-        if not self._open:
-            raise ValueError(f"mojolearn {what}: the session is closed")
-
-    def _state_parts(self, what):
-        st, b, blk = self._state, self._b, self._block
-        nh, q = blk.nheads, _M3_CHUNK_SIZE
-        shapes = (
-            (b, nh, _M3_NUM_ROPE_ANGLES),
-            (b, nh, _M3_HEADDIM, _M3_D_STATE),
-            (b, q, nh, _M3_D_STATE), (b, q, nh, _M3_D_STATE),
-            (b, q, nh, _M3_HEADDIM), (b, q, nh), (b, q, nh), (b, q, nh),
-            (b, nh, _M3_D_STATE), (b, nh, _M3_HEADDIM),
-        )
-        return tuple(_state_buf(getattr(st, name), what, name, shape)
-                     for name, shape in zip(self._STATE_NAMES, shapes))  # glue: checks each named state buffer
+    @property
+    def _native(self):
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_device", (self,), _native_neural_bridge.CONTEXT)
 
     def step(self, x):
-        what = "Mamba3DecodeSession.step"
-        self._require_open(what)
-        blk = self._block
-        x = _batch_tokens(x, what, blk.d_model, True)
-        if int(x.shape[0]) != self._b:
-            raise ValueError(f"mojolearn {what}: batch size changed")
-        b, nh = self._b, blk.nheads
-        y = empty((b, 1, blk.d_model), "<f4")
-        reports = (
-            empty((b, nh, _M3_HEADDIM, _M3_D_STATE), "<f4"),
-            empty((b, nh, _M3_D_STATE), "<f4"),
-            empty((b, nh, _M3_HEADDIM), "<f4"),
-            empty((b, nh, _M3_NUM_ROPE_ANGLES), "<f4"),
-        )
-        if self._native is None:
-            addrs = ([addr_ro(x, name="x")]
-                     + [addr_ro(a, name="weight") for a in self._hw]  # glue: one address per weight tensor
-                     + [addr(a, name="state") for a in self._parts]  # glue: one address per state tensor
-                     + [addr(y, name="y")]
-                     + [addr(a, name="report") for a in reports])  # glue: one address per report buffer
-            self._q = int(self._ext.mamba3_decode_step(
-                addrs, [b, blk.d_model, self._q, 1 if self._pending else 0]))
-            self._pending = False
-        else:
-            self._q = int(self._ext.mamba3_session_step(
-                self._native, [addr_ro(x, name="x"), addr(y, name="y")]
-                + [addr(a, name="report") for a in reports]))  # glue: one address per report buffer
-        blk.h_last_, blk.k_last_, blk.v_last_, blk.theta_last_ = reports
+        (y, self._block.h_last_, self._block.k_last_, self._block.v_last_,
+         self._block.theta_last_) = _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_step", (self, x), _native_neural_bridge.CONTEXT)
         return y
 
     def sync_state(self):
-        what = "Mamba3DecodeSession.sync_state"
-        self._require_open(what)
-        parts = self._state_parts(what)
-        if self._native is None:
-            for dst, src in zip(parts, self._parts):  # glue: memcopy per state tensor
-                memcopy(addr(dst, name="state"), addr_ro(src, name="resident"), 4 * int(src.size))
-            q, pending = self._q, self._pending
-        else:
-            q, pending = self._ext.mamba3_session_export_state(
-                self._native, [addr(a, name="state") for a in parts])  # glue: one address per state tensor
-            q, pending = int(q), bool(pending)
-        self._state.buffered_tokens = q
-        self._state.pending = pending
-        return self._state
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_sync", (self,), _native_neural_bridge.CONTEXT)
 
     def load_state(self):
-        what = "Mamba3DecodeSession.load_state"
-        self._require_open(what)
-        parts = self._state_parts(what)
-        q, pending = int(self._state.buffered_tokens), bool(self._state.pending)
-        if self._native is None:
-            for dst, src in zip(self._parts, parts):  # glue: memcopy per state tensor
-                memcopy(addr(dst, name="resident"), addr_ro(src, name="state"), 4 * int(dst.size))
-            self._q, self._pending = q, pending
-        else:
-            self._ext.mamba3_session_load_state(
-                self._native, [addr(a, name="state") for a in parts],  # glue: one address per state tensor
-                [q, 1 if pending else 0])
-        return self._state
-
-    def _release(self):
-        if self._native is None:
-            self._hw = self._parts = None
-        else:
-            self._ext.mamba3_session_close(self._native)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_load", (self,), _native_neural_bridge.CONTEXT)
 
     def close(self):
-        if not self._open: return
-        try: self.sync_state()
-        finally:
-            self._open = False
-            self._state._resident_session = None
-            self._release()
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_close", (self,), _native_neural_bridge.CONTEXT)
 
-    def __enter__(self): return self
-    def __exit__(self, *exc): self.close(); return False
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_close", (self,), _native_neural_bridge.CONTEXT)
+        return False
+
     def __del__(self):
         try:
-            if getattr(self, "_open", False):
-                self._open = False
-                self._state._resident_session = None
-                self._release()
-        except Exception: pass
+            _native_neural_bridge.RUNTIME.mamba_native_call(
+                "session_drop", (self,), _native_neural_bridge.CONTEXT)
+        except Exception:
+            pass
 
     def __repr__(self):
-        return "Mamba3DecodeSession(open=%r, rows=%d)" % (self._open, self._b)
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_repr", (self,), _native_neural_bridge.CONTEXT)
 
 
 from . import _native_neural_bridge
