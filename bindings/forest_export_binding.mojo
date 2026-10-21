@@ -8,6 +8,7 @@ insertion. Handles are monotonically increasing and never aliases for pointers.
 The family-specific exporter reads its existing tree/node representation into
 validated caller buffers; this module never builds a second flattened model.
 """
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from core.shell_impl.forest_export_binding_impl import (
     validate_forest_export_counts,
@@ -68,3 +69,29 @@ struct ForestExportRegistry[Model: Movable & Deinitable](Defaultable, Movable):
             raise Error("unknown or released fitted forest export handle")
         var released = self.entries.pop(handle)
         _ = released^
+
+
+def forest_export_py_list_i64(values: List[Int64]) raises -> PythonObject:
+    """A Python list of ints holding `values`: one memcpy into a NumPy int64
+    array, then `tolist()` (Python ints, the same values word for word)."""
+    var np = Python.import_module("numpy")
+    var arr = np.empty(len(values), dtype=np.int64)
+    if len(values):
+        memcpy(
+            dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=arr.ctypes.data)),
+            src=values.unsafe_ptr(), count=len(values),
+        )
+    return arr.tolist()
+
+
+def forest_export_py_list_f64(values: List[Float64]) raises -> PythonObject:
+    """A Python list of floats holding `values`: one memcpy into a NumPy
+    float64 array, then `tolist()` (Python floats, the same doubles)."""
+    var np = Python.import_module("numpy")
+    var arr = np.empty(len(values), dtype=np.float64)
+    if len(values):
+        memcpy(
+            dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=arr.ctypes.data)),
+            src=values.unsafe_ptr(), count=len(values),
+        )
+    return arr.tolist()
